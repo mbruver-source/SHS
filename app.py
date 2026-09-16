@@ -1414,9 +1414,6 @@ class ExportTab(QWidget):
             os.path.dirname(termin_pfad) if termin_pfad else str(termine_ordner())
         )
 
-        veranstaltung_btn = QPushButton("Veranstaltungsdaten bearbeiten…")
-        veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
-
         ergebnisliste_btn = QPushButton("Ergebnisliste (PDF)…")
         ergebnisliste_btn.clicked.connect(self._ergebnisliste_exportieren)
 
@@ -1463,12 +1460,11 @@ class ExportTab(QWidget):
             "Prüfungstag. Der \"Leistungsrichter-Bedarf\" errechnet aus der Teilnehmerzahl "
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
             "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
-            "geplanten Ablauf je Leistungsrichter (eine Seite je Richter) zusammen. Über "
-            "\"Veranstaltungsdaten bearbeiten…\" lassen sich "
+            "geplanten Ablauf je Leistungsrichter (eine Seite je Richter) zusammen. "
             "Vereins-Nr., Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter sowie die "
-            "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
-            "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung und stehen oft erst "
-            "kurz vor dem Prüfungstag fest."
+            "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
+            "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
+            "gepflegt."
         )
         hinweis.setWordWrap(True)
 
@@ -1481,7 +1477,6 @@ class ExportTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("PDF-Ausgabe"))
-        layout.addWidget(veranstaltung_btn)
         layout.addWidget(ergebnisliste_btn)
         layout.addWidget(leere_ergebnisliste_btn)
         layout.addWidget(etiketten_btn)
@@ -1497,29 +1492,6 @@ class ExportTab(QWidget):
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - wird bei jedem Export frisch aus der DB gelesen
-
-    def _veranstaltung_bearbeiten(self) -> None:
-        aktuell = get_veranstaltung(self.conn) or {}
-        dialog = VeranstaltungsDialog(self, vorbelegung=aktuell, bearbeiten=True)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        # Über den gemeinsamen Helfer statt direkt set_veranstaltung, damit das vom
-        # Zeitplan-Tab gepflegte Feld zeitplan_start dabei erhalten bleibt (dieser Dialog
-        # hat dafür bewusst kein eigenes Feld, siehe ZeitplanTab).
-        _aktualisiere_veranstaltung_feld(
-            self.conn,
-            verein=dialog.verein.text().strip(),
-            datum=dialog.datum.text().strip(),
-            ort=dialog.ort.text().strip() or None,
-            vereins_nr=dialog.vereins_nr.text().strip() or None,
-            pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
-            wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
-            wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
-            pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
-            pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
-            pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
-        )
-        self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
     def _export_dateiname(self, praefix: str) -> str:
         return _export_dateiname(self.conn, praefix)
@@ -1633,6 +1605,65 @@ class ExportTab(QWidget):
             self._export_fehler_anzeigen(exc)
             return
         self.status_label.setText(f"{anzahl} Bewertungsbögen gespeichert: {pfad}")
+
+
+class VerwaltungTab(QWidget):
+    """Verwaltungsdaten der Veranstaltung: Verein/Ort/Datum und Zusatzangaben (Vereins-Nr.,
+    Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
+    Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
+    deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
+
+    def __init__(self, conn, parent=None):
+        super().__init__(parent)
+        self.conn = conn
+
+        veranstaltung_btn = QPushButton("Veranstaltungsdaten bearbeiten…")
+        veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
+
+        hinweis = QLabel(
+            "Über \"Veranstaltungsdaten bearbeiten…\" lassen sich Verein, Ort und Datum "
+            "sowie Vereins-Nr., Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter und die "
+            "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
+            "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
+            "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest."
+        )
+        hinweis.setWordWrap(True)
+
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Verwaltung"))
+        layout.addWidget(veranstaltung_btn)
+        layout.addWidget(hinweis)
+        layout.addStretch()
+        layout.addWidget(self.status_label)
+
+    def aktualisieren(self) -> None:
+        pass  # kein Zwischenspeicher - liest bei jedem Öffnen des Dialogs frisch aus der DB
+
+    def _veranstaltung_bearbeiten(self) -> None:
+        aktuell = get_veranstaltung(self.conn) or {}
+        dialog = VeranstaltungsDialog(self, vorbelegung=aktuell, bearbeiten=True)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        # Über den gemeinsamen Helfer statt direkt set_veranstaltung, damit das vom
+        # Zeitplan-Tab gepflegte Feld zeitplan_start dabei erhalten bleibt (dieser Dialog
+        # hat dafür bewusst kein eigenes Feld, siehe ZeitplanTab).
+        _aktualisiere_veranstaltung_feld(
+            self.conn,
+            verein=dialog.verein.text().strip(),
+            datum=dialog.datum.text().strip(),
+            ort=dialog.ort.text().strip() or None,
+            vereins_nr=dialog.vereins_nr.text().strip() or None,
+            pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
+            wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
+            wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
+            pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
+            pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
+            pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
+        )
+        self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
 
 class SicherungErstellenDialog(QDialog):
@@ -1894,13 +1925,17 @@ Art/Leistungsklasse und Startnummer. "Nicht bestanden" wird rot markiert und erh
 Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualisiert die
 Anzeige.</p>
 
+<h3>Reiter "Verwaltung"</h3>
+<p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
+Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
+diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
+Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").</p>
+
 <h3>Reiter "Export"</h3>
 <p>Alle PDF-Ausgaben an einer Stelle: Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
 Etiketten, Statistik, Übersicht für Prüfungsleitung, Leistungsrichter-Bedarf, Zeitplan sowie
-alle Bewertungsbögen gesammelt. "Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum
-und Zusatzangaben nachträglich. "Ablageort öffnen" zeigt den Ordner der zuletzt
-gespeicherten PDFs im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen sich denselben
-Speicherort.</p>
+alle Bewertungsbögen gesammelt. "Ablageort öffnen" zeigt den Ordner der zuletzt gespeicherten
+PDFs im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen sich denselben Speicherort.</p>
 
 <h3>Reiter "Datensicherung"</h3>
 <p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine ZIP-Datei
@@ -2012,6 +2047,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.zeitplan_tab = ZeitplanTab(conn, ablageort)
         self.ergebnis_tab = ErgebnisTab(conn)
         self.auswertung_tab = AuswertungTab(conn)
+        self.verwaltung_tab = VerwaltungTab(conn)
         self.export_tab = ExportTab(conn, pfad, ablageort)
         # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
         # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
@@ -2022,6 +2058,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._tabs.addTab(self.zeitplan_tab, "Zeitplan")
         self._tabs.addTab(self.ergebnis_tab, "Ergebniserfassung")
         self._tabs.addTab(self.auswertung_tab, "Auswertung")
+        self._tabs.addTab(self.verwaltung_tab, "Verwaltung")
         self._tabs.addTab(self.export_tab, "Export")
         self._tabs.addTab(self.datensicherung_tab, "Datensicherung")
         self._tabs.blockSignals(False)
