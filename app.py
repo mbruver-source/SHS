@@ -300,43 +300,64 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
         self.bezahlt = QCheckBox("Prüfungsgebühr bezahlt")
 
-        form = QFormLayout()
-        # Eingabefelder wachsen mit der Dialogbreite mit, statt bei einer
-        # Fenstervergrößerung auf ihrer ursprünglichen Größe stehen zu bleiben.
-        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        form.addRow("Nachname*", self.nachname)
-        form.addRow("Vorname*", self.vorname)
-        form.addRow("Verein", self.verein)
-        form.addRow("Verband", self.verband)
-        form.addRow("Mitgliedsnummer", self.mitgliedsnummer)
-        form.addRow("Straße", self.strasse)
-        form.addRow("Hausnummer", self.hausnummer)
-        form.addRow("PLZ", self.plz)
-        form.addRow("Ort", self.ort)
-        form.addRow("E-Mail", self.email)
-        form.addRow("Telefonnummer", self.telefon)
-        form.addRow("Zwingername", self.zwingername)
-        form.addRow("Rufname Hund*", self.rufname_hund)
-        form.addRow("Geschlecht", self.geschlecht)
-        form.addRow("Widerristhöhe (cm)", self.schulterhoehe)
-        form.addRow("Chip-Nr.", self.chip_nr)
-        form.addRow("Wurftag (JJJJ-MM-TT)", self.wurftag)
-        form.addRow("Startnummer", self.startnummer)
-        form.addRow("Art*", self.art)
-        form.addRow("Leistungsklasse*", self.stufe)
-        form.addRow("Disziplin (nur bei ED)", self.disziplin)
-        form.addRow("Gegenstand 1", _gegenstand_zeile(self.gegenstand_1, self.gegenstand_1_disziplin))
-        form.addRow("Gegenstand 2", _gegenstand_zeile(self.gegenstand_2, self.gegenstand_2_disziplin))
-        form.addRow("Gegenstand 3", _gegenstand_zeile(self.gegenstand_3, self.gegenstand_3_disziplin))
-        form.addRow("", self.bezahlt)
+        # Zwei Spalten nebeneinander statt einer langen Liste untereinander - bei allen
+        # Feldern (inkl. der neuen Verwaltungs-/Kontaktfelder) ging das Fenster sonst in
+        # der Höhe über den Bildschirm hinaus, ohne dass sich der Dialog scrollen ließ.
+        # Links: Angaben zu Halter/Verein/Anschrift/Kontakt. Rechts: Angaben zu Hund und
+        # Prüfungsmeldung. Siehe auch Mockup-Absprache mit Marco.
+        form_links = QFormLayout()
+        form_links.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form_links.addRow("Nachname*", self.nachname)
+        form_links.addRow("Vorname*", self.vorname)
+        form_links.addRow("Verein", self.verein)
+        form_links.addRow("Verband", self.verband)
+        form_links.addRow("Mitgliedsnummer", self.mitgliedsnummer)
+        form_links.addRow("Straße", self.strasse)
+        form_links.addRow("Hausnummer", self.hausnummer)
+        form_links.addRow("PLZ", self.plz)
+        form_links.addRow("Ort", self.ort)
+        form_links.addRow("E-Mail", self.email)
+        form_links.addRow("Telefonnummer", self.telefon)
+
+        gruppe_links = QGroupBox("Halter && Kontakt")
+        gruppe_links.setLayout(form_links)
+
+        form_rechts = QFormLayout()
+        form_rechts.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form_rechts.addRow("Zwingername", self.zwingername)
+        form_rechts.addRow("Rufname Hund*", self.rufname_hund)
+        form_rechts.addRow("Geschlecht", self.geschlecht)
+        form_rechts.addRow("Widerristhöhe (cm)", self.schulterhoehe)
+        form_rechts.addRow("Chip-Nr.", self.chip_nr)
+        form_rechts.addRow("Wurftag (JJJJ-MM-TT)", self.wurftag)
+        form_rechts.addRow("Startnummer", self.startnummer)
+        form_rechts.addRow("Art*", self.art)
+        form_rechts.addRow("Leistungsklasse*", self.stufe)
+        form_rechts.addRow("Disziplin (nur bei ED)", self.disziplin)
+        form_rechts.addRow("Gegenstand 1", _gegenstand_zeile(self.gegenstand_1, self.gegenstand_1_disziplin))
+        form_rechts.addRow("Gegenstand 2", _gegenstand_zeile(self.gegenstand_2, self.gegenstand_2_disziplin))
+        form_rechts.addRow("Gegenstand 3", _gegenstand_zeile(self.gegenstand_3, self.gegenstand_3_disziplin))
+        form_rechts.addRow("", self.bezahlt)
+
+        gruppe_rechts = QGroupBox("Hund && Prüfung")
+        gruppe_rechts.setLayout(form_rechts)
+
+        spalten_zeile = QHBoxLayout()
+        spalten_zeile.addWidget(gruppe_links)
+        spalten_zeile.addWidget(gruppe_rechts)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
+        layout.addLayout(spalten_zeile)
         layout.addWidget(buttons)
+
+        # Feste, bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch
+        # die vielen Felder - passt dadurch auch auf kleinere Bildschirme, ohne dass
+        # gescrollt werden muss. Der Dialog bleibt trotzdem frei in der Größe änderbar.
+        self.resize(780, 640)
 
         self._art_geaendert(self.art.currentText())
 
