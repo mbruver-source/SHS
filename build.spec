@@ -30,6 +30,11 @@ a = Analysis(
     # daher von PyInstaller automatisch mit erkannt und eingepackt - keine weiteren
     # Einträge hier nötig.
     datas=[],
+    # pyzipper (Datensicherung, siehe db.py) importiert pycryptodomex für die
+    # AES-Verschlüsselung - PyInstaller bringt dafür über pyinstaller-hooks-contrib
+    # normalerweise einen eigenen Hook mit und erkennt es automatisch wie reportlab;
+    # falls ein Build dennoch mit einem ModuleNotFoundError für Cryptodome/pyzipper
+    # fehlschlägt, hier "pyzipper" bzw. "Cryptodome" eintragen.
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

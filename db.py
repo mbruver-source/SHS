@@ -17,9 +17,12 @@ from __future__ import annotations
 import datetime
 import re
 import sqlite3
+import zipfile
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+
+import pyzipper
 
 from shs_core import (
     Teilnehmerergebnis,
@@ -835,3 +838,126 @@ def dateiname_vorschlagen(verein: str, datum: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "-", verein or "").strip("-") or "Termin"
     datum_teil = re.sub(r"[^0-9-]", "", datum or "") or "ohne-datum"
     return f"{datum_teil}_{slug}.sqlite"
+
+
+# --- Datensicherung (Export/Import aller Termine als ZIP, optional passwortgeschützt) ---
+#
+# Nutzt pyzipper (reines Python, keine kompilierten Zusatzabhängigkeiten) statt des
+# eingebauten zipfile-Moduls, da zipfile zwar passwortgeschützte ZIPs LESEN, aber keine
+# mit echter (AES-256-)Verschlüsselung SCHREIBEN kann. Ein Backup ohne Passwort wird
+# trotzdem mit dem einfacheren, garantiert überall (z.B. Windows-Explorer) kompatiblen
+# zipfile-Modul erzeugt.
+
+
+class PasswortFalschError(Exception):
+    """Ein Sicherungs-ZIP ist passwortgeschützt und das angegebene Passwort fehlt oder
+    ist falsch (siehe sicherung_inhalt()/sicherung_wiederherstellen())."""
+
+
+def eindeutigen_dateinamen_finden(ordner: Path, gewuenschter_name: str) -> str:
+    """Hängt bei einem im Ordner bereits vergebenen Dateinamen einen Zähler an (z.B.
+    'Termin (2).sqlite'), bis ein noch freier Name gefunden ist - für die Option "als
+    Kopie importieren" beim Wiederherstellen einer Sicherung (siehe app.py)."""
+    ordner = Path(ordner)
+    if not (ordner / gewuenschter_name).exists():
+        return gewuenschter_name
+    ziel = Path(gewuenschter_name)
+    stamm, endung = ziel.stem, ziel.suffix
+    zaehler = 2
+    while (ordner / f"{stamm} ({zaehler}){endung}").exists():
+        zaehler += 1
+    return f"{stamm} ({zaehler}){endung}"
+
+
+def sicherung_erstellen(
+    ziel_pfad: str, passwort: str | None = None, nur_dateien: list[str] | None = None, ordner: Path | None = None
+) -> int:
+    """Erstellt ein ZIP-Backup der Termin-Dateien aus `ordner` (Standard: termine_ordner()).
+
+    nur_dateien: optionale Liste von Dateinamen (nicht volle Pfade) - falls angegeben,
+    werden nur diese gesichert, sonst ALLE *.sqlite-Dateien im Ordner.
+    passwort: falls angegeben (nicht leer), wird das ZIP AES-256-verschlüsselt.
+    Gibt die Anzahl der gesicherten Termin-Dateien zurück.
+    Wirft ValueError, falls es nichts zu sichern gibt.
+    """
+    ordner = ordner or termine_ordner()
+    dateien = sorted(p for p in ordner.glob("*.sqlite") if p.is_file())
+    if nur_dateien is not None:
+        gewaehlt = set(nur_dateien)
+        dateien = [p for p in dateien if p.name in gewaehlt]
+    if not dateien:
+        raise ValueError("Es gibt keine Termine zum Sichern.")
+
+    if passwort:
+        with pyzipper.AESZipFile(
+            ziel_pfad, "w", compression=pyzipper.ZIP_LZMA, encryption=pyzipper.WZ_AES
+        ) as zf:
+            zf.setpassword(passwort.encode("utf-8"))
+            for datei in dateien:
+                zf.write(datei, arcname=datei.name)
+    else:
+        with zipfile.ZipFile(ziel_pfad, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for datei in dateien:
+                zf.write(datei, arcname=datei.name)
+    return len(dateien)
+
+
+def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
+    """Liefert die Namen der Termin-Dateien (*.sqlite) in einem Sicherungs-ZIP, ohne sie
+    zu entpacken - Grundlage für die Konflikterkennung vor dem eigentlichen
+    Wiederherstellen (siehe sicherung_wiederherstellen() und app.py).
+
+    Wirft PasswortFalschError, wenn das ZIP passwortgeschützt ist und `passwort` fehlt
+    oder falsch ist; ValueError, wenn die Datei kein gültiges ZIP ist oder keine
+    Termin-Dateien enthält.
+    """
+    try:
+        with pyzipper.AESZipFile(zip_pfad) as zf:
+            if passwort:
+                zf.setpassword(passwort.encode("utf-8"))
+            namen = [n for n in zf.namelist() if n.lower().endswith(".sqlite")]
+            if not namen:
+                raise ValueError("Das ZIP enthält keine Termin-Dateien (.sqlite).")
+            # Erzwingt die Passwortprüfung sofort (Lesen der ersten Datei), statt erst
+            # beim eigentlichen Wiederherstellen mittendrin zu scheitern.
+            zf.read(namen[0])
+    except RuntimeError as exc:
+        if "password" in str(exc).lower():
+            raise PasswortFalschError(
+                "Das Passwort ist falsch, oder die Datei ist passwortgeschützt und es "
+                "wurde keines angegeben."
+            ) from exc
+        raise
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Das ist keine gültige ZIP-Datei.") from exc
+    return sorted(namen)
+
+
+def sicherung_wiederherstellen(
+    zip_pfad: str, entscheidungen: dict[str, str], passwort: str | None = None, ordner: Path | None = None
+) -> list[str]:
+    """Entpackt ausgewählte Termin-Dateien aus einem Sicherungs-ZIP in `ordner`
+    (Standard: termine_ordner()).
+
+    entscheidungen: {Dateiname im ZIP: Zieldateiname im Zielordner} - ein von
+    sicherung_inhalt() gelieferter Name, der hier NICHT vorkommt, wird übersprungen
+    (z.B. weil der Nutzer diesen Termin beim Konflikt-Dialog übersprungen hat). Bei
+    Namensgleichheit mit einer vorhandenen Datei wird diese überschrieben; für "als Kopie
+    importieren" vorher eindeutigen_dateinamen_finden() für einen freien Zielnamen
+    verwenden. Gibt die Liste der tatsächlich geschriebenen Zieldateinamen zurück.
+    """
+    ordner = ordner or termine_ordner()
+    geschrieben: list[str] = []
+    try:
+        with pyzipper.AESZipFile(zip_pfad) as zf:
+            if passwort:
+                zf.setpassword(passwort.encode("utf-8"))
+            for quelle, ziel in entscheidungen.items():
+                daten = zf.read(quelle)
+                (ordner / ziel).write_bytes(daten)
+                geschrieben.append(ziel)
+    except RuntimeError as exc:
+        if "password" in str(exc).lower():
+            raise PasswortFalschError("Das Passwort ist falsch.") from exc
+        raise
+    return geschrieben

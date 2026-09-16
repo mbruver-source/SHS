@@ -84,6 +84,7 @@ from db import (
     berechne_zeitplan_bloecke,
     dateiname_vorschlagen,
     delete_teilnehmer,
+    eindeutigen_dateinamen_finden,
     eintragen_ergebnis,
     get_veranstaltung,
     init_db,
@@ -94,8 +95,12 @@ from db import (
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
+    PasswortFalschError,
     set_veranstaltung,
     setze_bezahlt,
+    sicherung_erstellen,
+    sicherung_inhalt,
+    sicherung_wiederherstellen,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
@@ -1630,6 +1635,222 @@ class ExportTab(QWidget):
         self.status_label.setText(f"{anzahl} Bewertungsbögen gespeichert: {pfad}")
 
 
+class SicherungErstellenDialog(QDialog):
+    """Fragt vor dem Erstellen einer Sicherung ab, ob das ZIP mit einem Passwort
+    geschützt werden soll (Checkbox, Passwortfeld standardmäßig deaktiviert) - siehe
+    DatensicherungTab._sicherung_erstellen. Ohne Häkchen entsteht ein normales,
+    unverschlüsseltes ZIP."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Sicherung erstellen")
+
+        self.passwort_checkbox = QCheckBox("Mit Passwort schützen")
+
+        self.passwort_feld = QLineEdit()
+        self.passwort_feld.setEchoMode(QLineEdit.Password)
+        self.passwort_feld.setEnabled(False)
+
+        self.passwort_wiederholen_feld = QLineEdit()
+        self.passwort_wiederholen_feld.setEchoMode(QLineEdit.Password)
+        self.passwort_wiederholen_feld.setEnabled(False)
+
+        self.passwort_checkbox.toggled.connect(self.passwort_feld.setEnabled)
+        self.passwort_checkbox.toggled.connect(self.passwort_wiederholen_feld.setEnabled)
+
+        formular = QFormLayout()
+        formular.addRow("Passwort:", self.passwort_feld)
+        formular.addRow("Passwort wiederholen:", self.passwort_wiederholen_feld)
+
+        hinweis = QLabel(
+            "Sichert ALLE Termine aus dem gemeinsamen Termine-Ordner in eine einzige "
+            "ZIP-Datei (nicht nur den aktuell geöffneten Termin). Mit Passwort entsteht "
+            "eine AES-256-verschlüsselte ZIP-Datei - das Passwort wird nicht gespeichert "
+            "und lässt sich nachträglich nicht wiederherstellen, also gut aufbewahren."
+        )
+        hinweis.setWordWrap(True)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._pruefen_und_akzeptieren)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(hinweis)
+        layout.addWidget(self.passwort_checkbox)
+        layout.addLayout(formular)
+        layout.addWidget(buttons)
+
+    def _pruefen_und_akzeptieren(self) -> None:
+        if self.passwort_checkbox.isChecked():
+            if not self.passwort_feld.text():
+                QMessageBox.warning(self, "Passwort fehlt", "Bitte ein Passwort eingeben oder das Häkchen entfernen.")
+                return
+            if self.passwort_feld.text() != self.passwort_wiederholen_feld.text():
+                QMessageBox.warning(self, "Passwörter unterschiedlich", "Die beiden Passwort-Eingaben stimmen nicht überein.")
+                return
+        self.accept()
+
+    def passwort(self) -> str | None:
+        """Gibt das eingegebene Passwort zurück, oder None, wenn kein Passwortschutz
+        gewünscht wurde."""
+        if self.passwort_checkbox.isChecked():
+            return self.passwort_feld.text()
+        return None
+
+
+class DatensicherungTab(QWidget):
+    """Export/Import ALLER Termine als ZIP-Datei (optional passwortgeschützt), unabhängig
+    vom gerade im Hauptfenster geöffneten Termin - Datengrundlage ist immer der komplette
+    Termine-Ordner (termine_ordner()), nicht die aktuelle Datenbankverbindung self.conn
+    der übrigen Tabs. Deckt den bisher fehlenden Datensicherungsweg ab: bislang ließ sich
+    der Termine-Ordner nur manuell (Datei-Explorer) sichern."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        hinweis = QLabel(
+            "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner "
+            f"(„{termine_ordner()}“) als eine einzige ZIP-Datei - nicht nur den gerade "
+            "geöffneten Termin. Für eine Sicherung mit Passwort empfiehlt es sich, das "
+            "Passwort getrennt von der ZIP-Datei selbst aufzubewahren (z.B. nicht im "
+            "selben Ordner)."
+        )
+        hinweis.setWordWrap(True)
+
+        erstellen_btn = QPushButton("Sicherung erstellen (ZIP)…")
+        erstellen_btn.clicked.connect(self._sicherung_erstellen)
+
+        wiederherstellen_btn = QPushButton("Sicherung wiederherstellen (ZIP)…")
+        wiederherstellen_btn.clicked.connect(self._sicherung_wiederherstellen)
+
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Datensicherung"))
+        layout.addWidget(hinweis)
+        layout.addWidget(erstellen_btn)
+        layout.addWidget(wiederherstellen_btn)
+        layout.addStretch()
+        layout.addWidget(self.status_label)
+
+    def aktualisieren(self) -> None:
+        pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner
+
+    def _sicherung_erstellen(self) -> None:
+        dialog = SicherungErstellenDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        passwort = dialog.passwort()
+
+        heute = datetime.date.today().isoformat()
+        vorschlag = os.path.join(os.path.expanduser("~"), f"SHS-Sicherung_{heute}.zip")
+        pfad, _ = QFileDialog.getSaveFileName(self, "Sicherung speichern", vorschlag, "ZIP-Datei (*.zip)")
+        if not pfad:
+            return
+
+        try:
+            anzahl = sicherung_erstellen(pfad, passwort=passwort)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Sicherung nicht möglich", str(exc))
+            return
+        except Exception as exc:  # breiter Fänger, z.B. Zielordner nicht beschreibbar
+            QMessageBox.critical(
+                self, "Sicherung fehlgeschlagen",
+                f"Die Sicherung konnte nicht erstellt werden:\n\n{exc}",
+            )
+            return
+
+        zusatz = ", passwortgeschützt" if passwort else ""
+        self.status_label.setText(f"Sicherung erstellt: {pfad} ({anzahl} Termin(e){zusatz}).")
+
+    def _sicherung_wiederherstellen(self) -> None:
+        zip_pfad, _ = QFileDialog.getOpenFileName(
+            self, "Sicherung auswählen", os.path.expanduser("~"), "ZIP-Datei (*.zip)"
+        )
+        if not zip_pfad:
+            return
+
+        passwort: str | None = None
+        namen: list[str] | None = None
+        for versuch in range(3):
+            try:
+                namen = sicherung_inhalt(zip_pfad, passwort=passwort)
+                break
+            except PasswortFalschError:
+                titel = "Passwort erforderlich" if passwort is None else "Passwort falsch"
+                text = "Diese Sicherung ist passwortgeschützt. Bitte Passwort eingeben:" if passwort is None \
+                    else "Das Passwort war falsch. Bitte erneut eingeben:"
+                eingabe, ok = QInputDialog.getText(self, titel, text, QLineEdit.Password)
+                if not ok:
+                    return
+                passwort = eingabe
+            except ValueError as exc:
+                QMessageBox.warning(self, "Sicherung nicht lesbar", str(exc))
+                return
+        if namen is None:
+            QMessageBox.warning(self, "Passwort falsch", "Das Passwort war auch beim dritten Versuch falsch. Abgebrochen.")
+            return
+
+        ordner = termine_ordner()
+        vorhandene = {p.name for p in ordner.glob("*.sqlite")}
+
+        entscheidungen: dict[str, str] = {}
+        uebersprungen = 0
+        for name in namen:
+            if name not in vorhandene:
+                entscheidungen[name] = name
+                continue
+            aktion = self._konflikt_abfragen(name)
+            if aktion == "ueberschreiben":
+                entscheidungen[name] = name
+            elif aktion == "kopie":
+                entscheidungen[name] = eindeutigen_dateinamen_finden(ordner, name)
+            else:  # "ueberspringen"
+                uebersprungen += 1
+
+        if not entscheidungen:
+            self.status_label.setText("Wiederherstellen abgebrochen: kein Termin ausgewählt.")
+            return
+
+        try:
+            wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Wiederherstellen fehlgeschlagen",
+                f"Die Sicherung konnte nicht wiederhergestellt werden:\n\n{exc}",
+            )
+            return
+
+        hinweis_uebersprungen = f", {uebersprungen} übersprungen" if uebersprungen else ""
+        self.status_label.setText(
+            f"{len(wiederhergestellt)} Termin(e) wiederhergestellt{hinweis_uebersprungen}. "
+            "Neue Termine erscheinen in der Terminübersicht beim nächsten „Anderen Termin öffnen…“."
+        )
+
+    def _konflikt_abfragen(self, dateiname: str) -> str:
+        """Fragt bei einem Namenskonflikt (Termin existiert bereits) nach, wie verfahren
+        werden soll. Gibt "ueberschreiben", "kopie" oder "ueberspringen" zurück."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Termin bereits vorhanden")
+        box.setText(
+            f"Der Termin „{dateiname}“ ist im Termine-Ordner bereits vorhanden.\n\n"
+            "Wie soll damit verfahren werden?"
+        )
+        ueberschreiben_btn = box.addButton("Überschreiben", QMessageBox.AcceptRole)
+        kopie_btn = box.addButton("Als Kopie importieren", QMessageBox.ActionRole)
+        ueberspringen_btn = box.addButton("Überspringen", QMessageBox.RejectRole)
+        box.setDefaultButton(ueberspringen_btn)
+        box.exec()
+
+        geklickt = box.clickedButton()
+        if geklickt is ueberschreiben_btn:
+            return "ueberschreiben"
+        if geklickt is kopie_btn:
+            return "kopie"
+        return "ueberspringen"
+
+
 # Allgemeine Bedienungshilfe (ein Abschnitt je Reiter) - Inhalt mit dem Nutzer vorab
 # abgestimmt, bevor er hier fest eingebaut wurde. Als einfaches HTML statt reinem Text,
 # damit sich die Abschnittsüberschriften im Hilfe-Fenster (siehe HilfeDialog) klar vom
@@ -1680,6 +1901,15 @@ alle Bewertungsbögen gesammelt. "Veranstaltungsdaten bearbeiten…" ändert Ver
 und Zusatzangaben nachträglich. "Ablageort öffnen" zeigt den Ordner der zuletzt
 gespeicherten PDFs im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen sich denselben
 Speicherort.</p>
+
+<h3>Reiter "Datensicherung"</h3>
+<p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine ZIP-Datei
+– nicht nur den gerade geöffneten Termin. "Sicherung erstellen (ZIP)…" fragt zunächst,
+ob die Datei mit einem Passwort geschützt werden soll (dann AES-256-verschlüsselt),
+danach den Speicherort. "Sicherung wiederherstellen (ZIP)…" fragt bei Bedarf nach dem
+Passwort und bei jedem bereits vorhandenen Termin, ob überschrieben, als Kopie
+importiert oder übersprungen werden soll. Ein vergessenes Passwort lässt sich nicht
+wiederherstellen – gut aufbewahren.</p>
 """
 
 
@@ -1783,12 +2013,17 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.ergebnis_tab = ErgebnisTab(conn)
         self.auswertung_tab = AuswertungTab(conn)
         self.export_tab = ExportTab(conn, pfad, ablageort)
+        # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
+        # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
+        # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
+        self.datensicherung_tab = DatensicherungTab()
 
         self._tabs.addTab(self.teilnehmer_tab, "Teilnehmer")
         self._tabs.addTab(self.zeitplan_tab, "Zeitplan")
         self._tabs.addTab(self.ergebnis_tab, "Ergebniserfassung")
         self._tabs.addTab(self.auswertung_tab, "Auswertung")
         self._tabs.addTab(self.export_tab, "Export")
+        self._tabs.addTab(self.datensicherung_tab, "Datensicherung")
         self._tabs.blockSignals(False)
 
         self._vorheriger_tab_index = 0
