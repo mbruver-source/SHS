@@ -384,6 +384,7 @@ class TeilnehmerTab(QWidget):
         super().__init__(parent)
         self.conn = conn
         self._teilnehmer_ids: list[int] = []  # Zeile -> Teilnehmer-ID, parallel zur Tabelle
+        self._teilnehmer_je_zeile: list[dict] = []  # Zeile -> Teilnehmer-Datensatz, für den Filter
 
         self.tabelle = QTableWidget(0, 7)
         self.tabelle.setHorizontalHeaderLabels(
@@ -396,6 +397,22 @@ class TeilnehmerTab(QWidget):
         # Letzte Spalte füllt den restlichen Platz, wenn das Fenster größer ist als
         # die Summe der (an den Inhalt angepassten) Spaltenbreiten.
         self.tabelle.horizontalHeader().setStretchLastSection(True)
+        # Die von Qt automatisch links angezeigte Zeilennummerierung (1, 2, 3, ...) ist
+        # keine echte, überschriebene Spalte und trägt keine zusätzliche Information (die
+        # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
+        # ebenso in der Ergebniserfassung (siehe ErgebnisTab).
+        self.tabelle.verticalHeader().setVisible(False)
+
+        self.filter_combo = QComboBox()
+        # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
+        # Art/LK-Bezeichnungen wie "ED LK 3 Behältnisstrecke"), statt Text abzuschneiden.
+        self.filter_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.filter_combo.currentTextChanged.connect(self._filter_anwenden)
+
+        self.filter_startnummer = QLineEdit()
+        self.filter_startnummer.setPlaceholderText("z.B. 13")
+        self.filter_startnummer.setMaximumWidth(80)
+        self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
         hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
         hinzufuegen_btn.clicked.connect(self._teilnehmer_hinzufuegen)
@@ -421,7 +438,16 @@ class TeilnehmerTab(QWidget):
         button_zeile.addWidget(self.bezahlt_btn)
         button_zeile.addStretch()
 
+        filter_zeile = QHBoxLayout()
+        filter_zeile.addWidget(QLabel("Filter Art/LK:"))
+        filter_zeile.addWidget(self.filter_combo)
+        filter_zeile.addSpacing(16)
+        filter_zeile.addWidget(QLabel("Filter Start-Nr.:"))
+        filter_zeile.addWidget(self.filter_startnummer)
+        filter_zeile.addStretch()
+
         layout = QVBoxLayout(self)
+        layout.addLayout(filter_zeile)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
 
@@ -432,6 +458,17 @@ class TeilnehmerTab(QWidget):
         if 0 <= zeile < len(self._teilnehmer_ids):
             return self._teilnehmer_ids[zeile]
         return None
+
+    def _filter_anwenden(self) -> None:
+        """Blendet Zeilen anhand des aktuellen Filters nur aus/ein (setRowHidden) -
+        entspricht dem gleichnamigen Filter in der Ergebniserfassung (siehe ErgebnisTab)."""
+        filter_wert = self.filter_combo.currentText()
+        filter_startnr = self.filter_startnummer.text().strip()
+        for row, t in enumerate(self._teilnehmer_je_zeile):
+            passt = (
+                filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert
+            ) and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
+            self.tabelle.setRowHidden(row, not passt)
 
     def _auswahl_geaendert(self) -> None:
         hat_auswahl = self._ausgewaehlte_id() is not None
@@ -497,15 +534,15 @@ class TeilnehmerTab(QWidget):
     def aktualisieren(self) -> None:
         teilnehmer = list_teilnehmer(self.conn)
         self._teilnehmer_ids = [t["id"] for t in teilnehmer]
+        self._teilnehmer_je_zeile = teilnehmer
         self.tabelle.setRowCount(len(teilnehmer))
         for row, t in enumerate(teilnehmer):
-            lk_text = f"DK LK {t['stufe']}" if t["art"] == "DK" else f"ED LK {t['stufe']} {t['disziplin']}"
             werte = [
                 str(t["startnummer"] or ""),
                 t["nachname"],
                 t["vorname"],
                 t["rufname_hund"],
-                lk_text,
+                leistungsklasse_label(t),
                 t["verein"] or "",
                 "✓ bezahlt" if t["bezahlt"] else "",
             ]
@@ -516,6 +553,18 @@ class TeilnehmerTab(QWidget):
         # bleiben die Spalten weiterhin von Hand nachziehbar.
         self.tabelle.resizeColumnsToContents()
         self._auswahl_geaendert()
+
+        # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
+        # "Alle" zurückzuspringen (entspricht ErgebnisTab.aktualisieren).
+        bisherige_auswahl = self.filter_combo.currentText()
+        self.filter_combo.blockSignals(True)
+        self.filter_combo.clear()
+        self.filter_combo.addItem("Alle")
+        self.filter_combo.addItems(alle_leistungsklassen(self.conn))
+        index = self.filter_combo.findText(bisherige_auswahl)
+        self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.filter_combo.blockSignals(False)
+        self._filter_anwenden()
 
 
 FARBE_UNGESPEICHERT = QColor("#fff3cd")   # dezentes Gelb - Zeile hat noch nicht gespeicherte Änderungen
@@ -557,6 +606,11 @@ class ErgebnisTab(QWidget):
         self.tabelle = QTableWidget(0, len(spalten))
         self.tabelle.setHorizontalHeaderLabels(spalten)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
+        # Die von Qt automatisch links angezeigte Zeilennummerierung (1, 2, 3, ...) ist
+        # keine echte, überschriebene Spalte und trägt keine zusätzliche Information (die
+        # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
+        # ebenso im Reiter "Teilnehmer" (siehe TeilnehmerTab).
+        self.tabelle.verticalHeader().setVisible(False)
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
@@ -1903,7 +1957,8 @@ Stammdaten, Art (ED/DK), Leistungsklasse, bei ED die Disziplin, bis zu drei Such
 Hinter jedem Gegenstand legst du per Auswahlfeld fest, für welche Disziplin er gilt ("frei",
 wenn keine Zuordnung nötig ist) – das steuert, wo er später auf dem Bewertungsbogen
 erscheint. Die Startnummer wird automatisch vorgeschlagen. "Bezahlt umschalten" setzt den
-Zahlungsstatus des markierten Teilnehmers, ohne den ganzen Dialog zu öffnen.</p>
+Zahlungsstatus des markierten Teilnehmers, ohne den ganzen Dialog zu öffnen. Der Filter
+Art/LK bzw. Start-Nr. (wie in der Ergebniserfassung) blendet Zeilen nur aus.</p>
 
 <h3>Reiter "Zeitplan"</h3>
 <p>Plant den Tagesablauf je Leistungsrichter. Startzeit oben festlegen, dann je Richter eine
