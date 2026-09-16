@@ -380,6 +380,76 @@ class TestDatenbank(unittest.TestCase):
         conn.close()
         self.conn = init_db(self.pfad)  # tearDown erwartet self.conn offen
 
+    def test_migration_ergaenzt_verwaltungs_und_kontaktfelder_in_alter_termin_datei(self):
+        # Simuliert eine Termin-Datei, die vor Einführung der Verwaltungs-/Kontaktdaten
+        # (Verband, Mitgliedsnummer, Wurftag, Straße, Hausnummer, PLZ, Ort, E-Mail,
+        # Telefon) angelegt wurde - init_db muss sie nachträglich ergänzen, ohne
+        # bestehende Daten zu verlieren. Bestehende Teilnehmer gelten dabei als ohne
+        # hinterlegte Verwaltungs-/Kontaktdaten (NULL), nicht mit irgendeinem Default.
+        self.conn.execute("DROP TABLE teilnehmer")
+        self.conn.execute(
+            "CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
+            "rufname_hund TEXT NOT NULL, geschlecht TEXT, schulterhoehe_cm INTEGER, "
+            "chip_nr TEXT, art TEXT NOT NULL, stufe INTEGER NOT NULL, disziplin TEXT, "
+            "startnummer INTEGER UNIQUE, gegenstand_1 TEXT, gegenstand_2 TEXT, gegenstand_3 TEXT, "
+            "bezahlt INTEGER NOT NULL DEFAULT 0)"
+        )
+        self.conn.execute(
+            "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer) "
+            "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1)"
+        )
+        self.conn.commit()
+        self.conn.close()
+
+        conn = init_db(self.pfad)
+        alt = list_teilnehmer(conn)[0]
+        self.assertEqual(alt["nachname"], "Alt")
+        for spalte in (
+            "verband", "mitgliedsnummer", "wurftag", "strasse", "hausnummer", "plz", "ort", "email", "telefon",
+        ):
+            self.assertIsNone(alt[spalte])
+        # update_teilnehmer funktioniert danach ganz normal weiter, auch für die neuen Felder.
+        update_teilnehmer(conn, alt["id"], NeuerTeilnehmer(
+            nachname="Alt", vorname="Vorname", rufname_hund="Hund", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, plz="61479", ort="Höppern",
+        ))
+        aktualisiert = get_teilnehmer(conn, alt["id"])
+        self.assertEqual(aktualisiert["plz"], "61479")
+        self.assertEqual(aktualisiert["ort"], "Höppern")
+        conn.close()
+        self.conn = init_db(self.pfad)  # tearDown erwartet self.conn offen
+
+    def test_teilnehmer_verwaltungs_und_kontaktfelder_werden_gespeichert(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Holst", vorname="Katrin", rufname_hund="Freda",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=4,
+            verband="VDH", mitgliedsnummer="12345", wurftag="2023-04-01",
+            strasse="Hauptstraße", hausnummer="12a", plz="61479", ort="Höppern",
+            email="katrin.holst@example.com", telefon="06171 123456",
+        ))
+        t = get_teilnehmer(self.conn, tid)
+        self.assertEqual(t["verband"], "VDH")
+        self.assertEqual(t["mitgliedsnummer"], "12345")
+        self.assertEqual(t["wurftag"], "2023-04-01")
+        self.assertEqual(t["strasse"], "Hauptstraße")
+        self.assertEqual(t["hausnummer"], "12a")
+        self.assertEqual(t["plz"], "61479")
+        self.assertEqual(t["ort"], "Höppern")
+        self.assertEqual(t["email"], "katrin.holst@example.com")
+        self.assertEqual(t["telefon"], "06171 123456")
+
+        # Alle neuen Felder sind optional - ohne Angabe bleiben sie NULL.
+        tid2 = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ohne", vorname="Zusatzdaten", rufname_hund="Bello",
+            art="DK", stufe=2, startnummer=5,
+        ))
+        t2 = get_teilnehmer(self.conn, tid2)
+        for spalte in (
+            "verband", "mitgliedsnummer", "wurftag", "strasse", "hausnummer", "plz", "ort", "email", "telefon",
+        ):
+            self.assertIsNone(t2[spalte])
+
     def test_teilnehmer_loeschen_entfernt_auch_ergebnis(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1,

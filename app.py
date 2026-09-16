@@ -246,6 +246,8 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.nachname = QLineEdit()
         self.vorname = QLineEdit()
         self.verein = QLineEdit()
+        self.verband = QLineEdit()
+        self.mitgliedsnummer = QLineEdit()
         self.zwingername = QLineEdit()
         self.rufname_hund = QLineEdit()
         self.geschlecht = QComboBox()
@@ -253,6 +255,14 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.schulterhoehe = QSpinBox()
         self.schulterhoehe.setRange(0, 100)
         self.chip_nr = QLineEdit()
+        self.wurftag = QLineEdit()
+        self.wurftag.setPlaceholderText("JJJJ-MM-TT")
+        self.strasse = QLineEdit()
+        self.hausnummer = QLineEdit()
+        self.plz = QLineEdit()
+        self.ort = QLineEdit()
+        self.email = QLineEdit()
+        self.telefon = QLineEdit()
         self.startnummer = QSpinBox()
         self.startnummer.setRange(1, 999)
         self.startnummer.setValue(naechste_nummer)  # Vorschlag bei Neuanlage; wird unten bei Bearbeiten überschrieben
@@ -289,11 +299,20 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Nachname*", self.nachname)
         form.addRow("Vorname*", self.vorname)
         form.addRow("Verein", self.verein)
+        form.addRow("Verband", self.verband)
+        form.addRow("Mitgliedsnummer", self.mitgliedsnummer)
+        form.addRow("Straße", self.strasse)
+        form.addRow("Hausnummer", self.hausnummer)
+        form.addRow("PLZ", self.plz)
+        form.addRow("Ort", self.ort)
+        form.addRow("E-Mail", self.email)
+        form.addRow("Telefonnummer", self.telefon)
         form.addRow("Zwingername", self.zwingername)
         form.addRow("Rufname Hund*", self.rufname_hund)
         form.addRow("Geschlecht", self.geschlecht)
         form.addRow("Widerristhöhe (cm)", self.schulterhoehe)
         form.addRow("Chip-Nr.", self.chip_nr)
+        form.addRow("Wurftag (JJJJ-MM-TT)", self.wurftag)
         form.addRow("Startnummer", self.startnummer)
         form.addRow("Art*", self.art)
         form.addRow("Leistungsklasse*", self.stufe)
@@ -317,12 +336,21 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             self.nachname.setText(vorhandener["nachname"])
             self.vorname.setText(vorhandener["vorname"])
             self.verein.setText(vorhandener["verein"] or "")
+            self.verband.setText(vorhandener["verband"] or "")
+            self.mitgliedsnummer.setText(vorhandener["mitgliedsnummer"] or "")
+            self.strasse.setText(vorhandener["strasse"] or "")
+            self.hausnummer.setText(vorhandener["hausnummer"] or "")
+            self.plz.setText(vorhandener["plz"] or "")
+            self.ort.setText(vorhandener["ort"] or "")
+            self.email.setText(vorhandener["email"] or "")
+            self.telefon.setText(vorhandener["telefon"] or "")
             self.zwingername.setText(vorhandener["zwingername"] or "")
             self.rufname_hund.setText(vorhandener["rufname_hund"])
             if vorhandener["geschlecht"]:
                 self.geschlecht.setCurrentText(vorhandener["geschlecht"])
             self.schulterhoehe.setValue(vorhandener["schulterhoehe_cm"] or 0)
             self.chip_nr.setText(vorhandener["chip_nr"] or "")
+            self.wurftag.setText(vorhandener["wurftag"] or "")
             self.startnummer.setValue(vorhandener["startnummer"] or 1)
             self.art.setCurrentText(vorhandener["art"])
             self.stufe.setCurrentText(str(vorhandener["stufe"]))
@@ -376,6 +404,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             gegenstand_2_disziplin=_zuordnung_oder_none(self.gegenstand_2_disziplin),
             gegenstand_3_disziplin=_zuordnung_oder_none(self.gegenstand_3_disziplin),
             bezahlt=self.bezahlt.isChecked(),
+            verband=self.verband.text().strip() or None,
+            mitgliedsnummer=self.mitgliedsnummer.text().strip() or None,
+            wurftag=self.wurftag.text().strip() or None,
+            strasse=self.strasse.text().strip() or None,
+            hausnummer=self.hausnummer.text().strip() or None,
+            plz=self.plz.text().strip() or None,
+            ort=self.ort.text().strip() or None,
+            email=self.email.text().strip() or None,
+            telefon=self.telefon.text().strip() or None,
         )
 
 
@@ -1953,7 +1990,10 @@ jederzeit wechseln.</p>
 
 <h3>Reiter "Teilnehmer"</h3>
 <p>Liste aller gemeldeten Teilnehmer. "Teilnehmer hinzufügen…" öffnet die Erfassungsmaske:
-Stammdaten, Art (ED/DK), Leistungsklasse, bei ED die Disziplin, bis zu drei Suchgegenstände.
+Stammdaten, Verband/Mitgliedsnummer, Anschrift (Straße/Hausnummer/PLZ/Ort) und Kontaktdaten
+(E-Mail/Telefon) sowie Wurftag des Hundes - alles optional, außer den mit * markierten
+Pflichtfeldern. Dazu Art (ED/DK), Leistungsklasse, bei ED die Disziplin, bis zu drei
+Suchgegenstände.
 Hinter jedem Gegenstand legst du per Auswahlfeld fest, für welche Disziplin er gilt ("frei",
 wenn keine Zuordnung nötig ist) – das steuert, wo er später auf dem Bewertungsbogen
 erscheint. Die Startnummer wird automatisch vorgeschlagen. "Bezahlt umschalten" setzt den

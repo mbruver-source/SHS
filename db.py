@@ -76,6 +76,17 @@ CREATE TABLE IF NOT EXISTS teilnehmer (
     -- Teilnehmerliste, ohne den kompletten Bearbeiten-Dialog öffnen zu müssen - siehe
     -- setze_bezahlt(). Fließt auch in die "Übersicht für Prüfungsleitung"-PDF ein.
     bezahlt INTEGER NOT NULL DEFAULT 0 CHECK (bezahlt IN (0, 1)),
+    -- Verwaltungs-/Kontaktdaten (alle optional, siehe TeilnehmerDialog) - "verband" meint
+    -- den übergeordneten Dachverband (z.B. VDH), nicht den lokalen "verein" oben.
+    verband TEXT,
+    mitgliedsnummer TEXT,
+    wurftag TEXT,
+    strasse TEXT,
+    hausnummer TEXT,
+    plz TEXT,
+    ort TEXT,
+    email TEXT,
+    telefon TEXT,
     -- bei ED ist die Disziplin Pflicht, bei DK darf sie nicht gesetzt sein
     CHECK (
         (art = 'ED' AND disziplin IS NOT NULL) OR
@@ -156,18 +167,30 @@ _TEILNEHMER_NEUE_SPALTEN = [
     ("gegenstand_1_disziplin", "TEXT"),
     ("gegenstand_2_disziplin", "TEXT"),
     ("gegenstand_3_disziplin", "TEXT"),
+    ("verband", "TEXT"),
+    ("mitgliedsnummer", "TEXT"),
+    ("wurftag", "TEXT"),
+    ("strasse", "TEXT"),
+    ("hausnummer", "TEXT"),
+    ("plz", "TEXT"),
+    ("ort", "TEXT"),
+    ("email", "TEXT"),
+    ("telefon", "TEXT"),
 ]
 
 
 def _migriere_teilnehmer_spalten(conn: sqlite3.Connection) -> None:
     """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien neu
     hinzugekommene Teilnehmer-Spalten nachträglich (analog zu
-    _migriere_veranstaltung_spalten oben) - aktuell 'bezahlt' sowie die drei
-    'gegenstand_N_disziplin'-Zuordnungsfelder. Bestehende Teilnehmer gelten dabei als
-    "noch nicht bezahlt" (Default 0) und ihre Gegenstände als "frei" (NULL) statt
-    automatisch einer Disziplin zugeordnet - andernfalls würde allein durch das Öffnen
-    einer alten Termin-Datei fälschlich der Eindruck entstehen, bereits erfasste
-    Teilnehmer hätten schon bezahlt bzw. eine bestimmte Gegenstand-Zuordnung hinterlegt."""
+    _migriere_veranstaltung_spalten oben) - aktuell 'bezahlt', die drei
+    'gegenstand_N_disziplin'-Zuordnungsfelder sowie die Verwaltungs-/Kontaktdaten
+    (Verband, Mitgliedsnummer, Wurftag, Straße, Hausnummer, PLZ, Ort, E-Mail, Telefon).
+    Bestehende Teilnehmer gelten dabei als "noch nicht bezahlt" (Default 0), ihre
+    Gegenstände als "frei" (NULL) statt automatisch einer Disziplin zugeordnet, und die
+    neuen Verwaltungs-/Kontaktfelder als leer (NULL) - andernfalls würde allein durch das
+    Öffnen einer alten Termin-Datei fälschlich der Eindruck entstehen, bereits erfasste
+    Teilnehmer hätten schon bezahlt, eine bestimmte Gegenstand-Zuordnung oder Kontaktdaten
+    hinterlegt."""
     vorhandene_spalten = {row[1] for row in conn.execute("PRAGMA table_info(teilnehmer)").fetchall()}
     for spalte, sql_typ in _TEILNEHMER_NEUE_SPALTEN:
         if spalte not in vorhandene_spalten:
@@ -267,6 +290,17 @@ class NeuerTeilnehmer:
     gegenstand_2_disziplin: str | None = None
     gegenstand_3_disziplin: str | None = None
     bezahlt: bool = False
+    # Verwaltungs-/Kontaktdaten (siehe SCHEMA oben) - "verband" meint den übergeordneten
+    # Dachverband (z.B. VDH), nicht den lokalen "verein" oben.
+    verband: str | None = None
+    mitgliedsnummer: str | None = None
+    wurftag: str | None = None
+    strasse: str | None = None
+    hausnummer: str | None = None
+    plz: str | None = None
+    ort: str | None = None
+    email: str | None = None
+    telefon: str | None = None
 
 
 def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
@@ -276,14 +310,16 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
             nachname, vorname, verein, zwingername, rufname_hund, geschlecht,
             schulterhoehe_cm, chip_nr, art, stufe, disziplin, startnummer,
             gegenstand_1, gegenstand_2, gegenstand_3,
-            gegenstand_1_disziplin, gegenstand_2_disziplin, gegenstand_3_disziplin, bezahlt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            gegenstand_1_disziplin, gegenstand_2_disziplin, gegenstand_3_disziplin, bezahlt,
+            verband, mitgliedsnummer, wurftag, strasse, hausnummer, plz, ort, email, telefon
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             t.nachname, t.vorname, t.verein, t.zwingername, t.rufname_hund, t.geschlecht,
             t.schulterhoehe_cm, t.chip_nr, t.art, t.stufe, t.disziplin, t.startnummer,
             t.gegenstand_1, t.gegenstand_2, t.gegenstand_3,
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin, int(t.bezahlt),
+            t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
         ),
     )
     teilnehmer_id = cur.lastrowid
@@ -330,7 +366,8 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             nachname=?, vorname=?, verein=?, zwingername=?, rufname_hund=?, geschlecht=?,
             schulterhoehe_cm=?, chip_nr=?, art=?, stufe=?, disziplin=?, startnummer=?,
             gegenstand_1=?, gegenstand_2=?, gegenstand_3=?,
-            gegenstand_1_disziplin=?, gegenstand_2_disziplin=?, gegenstand_3_disziplin=?, bezahlt=?
+            gegenstand_1_disziplin=?, gegenstand_2_disziplin=?, gegenstand_3_disziplin=?, bezahlt=?,
+            verband=?, mitgliedsnummer=?, wurftag=?, strasse=?, hausnummer=?, plz=?, ort=?, email=?, telefon=?
         WHERE id=?
         """,
         (
@@ -338,7 +375,9 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             t.schulterhoehe_cm, t.chip_nr, t.art, t.stufe, t.disziplin, t.startnummer,
             t.gegenstand_1, t.gegenstand_2, t.gegenstand_3,
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin,
-            int(t.bezahlt), teilnehmer_id,
+            int(t.bezahlt),
+            t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
+            teilnehmer_id,
         ),
     )
     conn.commit()

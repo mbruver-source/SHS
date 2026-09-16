@@ -163,6 +163,82 @@ def test_bestehender_teilnehmer_im_dialog_zeigt_gespeicherte_zuordnung(qtbot, co
     assert dialog.gegenstand_2_disziplin.currentText() == "frei"
 
 
+# --- Verwaltungs-/Kontaktdaten (Verband, Mitgliedsnummer, Wurftag, Anschrift, E-Mail,
+# Telefon) ----------------------------------------------------------------------------
+
+
+def test_verwaltungs_und_kontaktfelder_werden_im_dialog_erfasst(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.verband.setText("VDH")
+    dialog.mitgliedsnummer.setText("12345")
+    dialog.wurftag.setText("2023-04-01")
+    dialog.strasse.setText("Hauptstraße")
+    dialog.hausnummer.setText("12a")
+    dialog.plz.setText("61479")
+    dialog.ort.setText("Höppern")
+    dialog.email.setText("max.muster@example.com")
+    dialog.telefon.setText("06171 123456")
+
+    ergebnis = dialog.ergebnis()
+    assert ergebnis.verband == "VDH"
+    assert ergebnis.mitgliedsnummer == "12345"
+    assert ergebnis.wurftag == "2023-04-01"
+    assert ergebnis.strasse == "Hauptstraße"
+    assert ergebnis.hausnummer == "12a"
+    assert ergebnis.plz == "61479"
+    assert ergebnis.ort == "Höppern"
+    assert ergebnis.email == "max.muster@example.com"
+    assert ergebnis.telefon == "06171 123456"
+
+
+def test_verwaltungs_und_kontaktfelder_bleiben_ohne_eingabe_leer(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+
+    ergebnis = dialog.ergebnis()
+    for feld in ("verband", "mitgliedsnummer", "wurftag", "strasse", "hausnummer", "plz", "ort", "email", "telefon"):
+        assert getattr(ergebnis, feld) is None
+
+
+def test_bestehender_teilnehmer_im_dialog_zeigt_verwaltungs_und_kontaktfelder(qtbot, conn):
+    _teilnehmer_anlegen(
+        conn,
+        verband="VDH",
+        mitgliedsnummer="12345",
+        wurftag="2023-04-01",
+        strasse="Hauptstraße",
+        hausnummer="12a",
+        plz="61479",
+        ort="Höppern",
+        email="max.muster@example.com",
+        telefon="06171 123456",
+    )
+    vorhandener = list_teilnehmer(conn)[0]
+
+    dialog = TeilnehmerDialog(vorhandener=vorhandener)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.verband.text() == "VDH"
+    assert dialog.mitgliedsnummer.text() == "12345"
+    assert dialog.wurftag.text() == "2023-04-01"
+    assert dialog.strasse.text() == "Hauptstraße"
+    assert dialog.hausnummer.text() == "12a"
+    assert dialog.plz.text() == "61479"
+    assert dialog.ort.text() == "Höppern"
+    assert dialog.email.text() == "max.muster@example.com"
+    assert dialog.telefon.text() == "06171 123456"
+
+
 # --- Hilfe-Button ---------------------------------------------------------------
 
 
