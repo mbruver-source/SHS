@@ -143,6 +143,41 @@ beiden Optionen jederzeit nachrüsten.
 **Beim Weitergeben der Setup-Datei an neue Nutzer:** kurz auf diesen
 Klick hinweisen, damit niemand die Installation deswegen abbricht.
 
+## Installer automatisch über GitHub Actions bauen (Alternative zu lokal)
+
+Seit der Umstellung auf ein GitHub-Repo gibt es neben dem lokalen Build über
+`build_installer.bat` auch einen automatisierten Weg: der Workflow
+`.github/workflows/build-installer.yml` baut denselben Installer auf einem
+GitHub-Windows-Runner – nützlich, wenn gerade kein Windows-Rechner zur Hand
+ist, oder um den Build-Schritt nicht mehr manuell erledigen zu müssen.
+
+**Wichtiger Unterschied zum lokalen Build:** Der Workflow ruft
+`bump_version.py` NICHT selbst auf, sondern baut mit der Nummer, die schon in
+`version.txt` eingecheckt ist. Ablauf für ein Release darüber:
+
+1. Lokal einmal `python bump_version.py` ausführen (oder die Zahl von Hand in
+   `version.txt` setzen).
+2. Die geänderten `version.txt`/`version_info.txt` committen und pushen.
+3. Einen Versions-Tag setzen und pushen:
+
+   ```
+   git tag v1.2.0
+   git push origin v1.2.0
+   ```
+
+   Das löst den Workflow automatisch aus, baut die Setup-Datei und veröffentlicht
+   sie als GitHub Release (Reiter „Releases" im Repo) inklusive automatisch
+   erzeugter Release-Notes.
+
+Zum reinen Testen, ohne gleich ein Release zu erzeugen, lässt sich derselbe
+Workflow auch manuell anstoßen: Im Repo unter „Actions" → „Installer bauen" →
+„Run workflow". Das Ergebnis liegt dann als herunterladbares Artefakt am
+Workflow-Lauf, ohne dass ein Release entsteht.
+
+Die Kurz-Checkliste unten gilt für beide Wege – bei einem Actions-Build sind
+Schritt 2 und 3 (PyInstaller/Inno Setup) bereits durch den Workflow erledigt,
+Testinstallation und Versionsdisziplin bleiben aber genauso wichtig.
+
 ## Kurz-Checkliste pro Release
 
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,

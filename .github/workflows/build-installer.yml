@@ -1,0 +1,85 @@
+name: Installer bauen
+
+# Baut den Windows-Installer (PyInstaller + Inno Setup) automatisiert auf einem
+# GitHub-Windows-Runner - macht inhaltlich dasselbe wie build_installer.bat lokal.
+#
+# Ausgelöst durch:
+#   - einen gepushten Versions-Tag nach dem Muster "vX.Y.Z" (z. B. "v1.2.0")
+#     -> baut UND veröffentlicht die Setup-.exe als GitHub Release
+#   - manuell über den Button "Run workflow" (workflow_dispatch)
+#     -> baut nur und lädt das Ergebnis als Artefakt hoch, zum Testen, ohne
+#        gleich ein Release zu erzeugen
+#
+# WICHTIG zur Versionsnummer: Dieser Workflow ruft bump_version.py NICHT auf und
+# erhöht die Versionsnummer also nicht selbst. Er baut mit der Nummer, die bereits
+# in version.txt eingecheckt ist. Ablauf für ein Release:
+#   1. Lokal einmal `python bump_version.py` laufen lassen
+#   2. Die dadurch geänderten version.txt/version_info.txt committen und pushen
+#   3. Dann den Tag setzen: `git tag v1.2.0 && git push origin v1.2.0`
+# So bleibt version.txt die einzige, eindeutige Quelle der Versionsnummer - siehe
+# README_INSTALLER.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # nötig, damit der Workflow bei einem Tag ein GitHub-Release anlegen darf
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Python-Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Versionsnummer aus version.txt auslesen
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content version.txt -Raw).Trim()
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: .exe mit PyInstaller bauen
+        run: pyinstaller build.spec
+
+      - name: Prüfen, ob dist\SHS-Pruefungsprogramm.exe entstanden ist
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist\SHS-Pruefungsprogramm.exe")) {
+            Write-Error "PyInstaller hat keine dist\SHS-Pruefungsprogramm.exe erzeugt"
+            exit 1
+          }
+
+      - name: Inno Setup installieren
+        run: choco install innosetup -y
+
+      - name: Installer mit Inno Setup bauen
+        run: ISCC installer.iss /DMyAppVersion=${{ steps.version.outputs.version }}
+
+      - name: Setup-.exe als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHS-Pruefungsprogramm-Setup-${{ steps.version.outputs.version }}
+          path: Output\SHS-Pruefungsprogramm-Setup-*.exe
+
+      - name: GitHub-Release erstellen (nur bei Versions-Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Output\SHS-Pruefungsprogramm-Setup-*.exe
+          generate_release_notes: true
