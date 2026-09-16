@@ -1,0 +1,40 @@
+name: Tests
+
+# Läuft bei jedem Push und bei jedem Pull Request automatisch die komplette
+# Testsuite (aktuell 108 Tests in test_db.py, test_pdf_export.py,
+# test_shs_core.py, test_bump_version.py). Diese Tests brauchen keine
+# grafische Oberfläche (kein PySide6/Qt-Import in den Testdateien), laufen
+# also problemlos headless auf einem normalen Linux-Runner.
+#
+# Der eigentliche Windows-Installer-Build (PyInstaller + Inno Setup) läuft
+# weiterhin manuell auf dem Windows-Rechner über build_installer.bat, siehe
+# README_INSTALLER.md.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Python ${{ matrix.python-version }} einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Tests ausführen
+        run: pytest -v

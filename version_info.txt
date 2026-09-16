@@ -1,0 +1,44 @@
+# UTF-8
+#
+# Windows-Versionsinformationen für PyInstaller (siehe build.spec, Parameter
+# `version="version_info.txt"`). Diese Datei wird in die .exe eingebettet und
+# taucht z.B. im Windows-Explorer unter "Eigenschaften -> Details" auf.
+#
+# WIRD AUTOMATISCH von bump_version.py erzeugt (aufgerufen aus
+# build_installer.bat vor jedem Build) - bitte nicht mehr von Hand editieren,
+# sonst geht die nächste automatische Erhöhung von der falschen Zahl aus.
+# Die aktuell gültige Versionsnummer steht in version.txt.
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers/prodvers sind 4er-Tupel (Major, Minor, Patch, Build).
+    filevers=(0, 99, 99, 0),
+    prodvers=(0, 99, 99, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,        # VOS_NT_WINDOWS32
+    fileType=0x1,      # VFT_APP
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          "040704B0",  # 0407 = Deutsch, 04B0 = Unicode
+          [
+            StringStruct("CompanyName", "SHS Verein"),
+            StringStruct("FileDescription", "SHS-Pruefungsprogramm - Verwaltung von Spuerhundsport-Pruefungen"),
+            StringStruct("FileVersion", "0.99.99.0"),
+            StringStruct("InternalName", "SHS-Pruefungsprogramm"),
+            StringStruct("LegalCopyright", "SHS Verein"),
+            StringStruct("OriginalFilename", "SHS-Pruefungsprogramm.exe"),
+            StringStruct("ProductName", "SHS-Pruefungsprogramm"),
+            StringStruct("ProductVersion", "0.99.99.0"),
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct("Translation", [1031, 1200])]),  # 1031 = Deutsch, 1200 = Unicode BMP
+  ]
+)
