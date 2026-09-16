@@ -928,7 +928,11 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
                 "wurde keines angegeben."
             ) from exc
         raise
-    except zipfile.BadZipFile as exc:
+    except (zipfile.BadZipFile, pyzipper.zipfile.BadZipFile) as exc:
+        # pyzipper verwendet eine eigene, von zipfile GEERBTE/geforkte BadZipFile-Klasse
+        # (pyzipper.zipfile.BadZipFile) statt der Standardbibliotheks-Klasse - beide
+        # werden hier abgefangen, da AESZipFile ausschließlich die eigene wirft (per
+        # echtem CI-Testlauf bestätigt).
         raise ValueError("Das ist keine gültige ZIP-Datei.") from exc
     return sorted(namen)
 

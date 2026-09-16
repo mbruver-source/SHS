@@ -211,7 +211,12 @@ class TestSicherungWiederherstellen(unittest.TestCase):
 
         sicherung_wiederherstellen(self.zip_pfad, {"a.sqlite": "a.sqlite"}, ordner=self.ziel_ordner)
 
-        self.assertNotEqual((self.ziel_ordner / "a.sqlite").read_text(), "alter Inhalt")
+        # Der wiederhergestellte Inhalt ist eine echte (binäre) SQLite-Datei - deshalb
+        # bytes-weise lesen statt read_text() (das an den Binärdaten mit einem
+        # UnicodeDecodeError scheitern würde).
+        inhalt = (self.ziel_ordner / "a.sqlite").read_bytes()
+        self.assertNotEqual(inhalt, b"alter Inhalt")
+        self.assertTrue(inhalt.startswith(b"SQLite format 3"))
 
     def test_mit_passwort(self):
         _termin_anlegen(self.quell_ordner, "a.sqlite")
