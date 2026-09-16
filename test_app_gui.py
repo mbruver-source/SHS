@@ -326,6 +326,31 @@ def test_versiondialog_zeigt_aktuelle_version(qtbot):
     assert any(VERSION in t for t in texte)
 
 
+def test_versiondialog_update_button_oeffnet_github_releases_seite(qtbot, monkeypatch):
+    """Da das Repository privat ist, kann nicht automatisch im Hintergrund geprüft
+    werden - der Button öffnet stattdessen die GitHub-Releases-Seite im Browser
+    (siehe GITHUB_RELEASES_URL/VersionDialog._updates_pruefen in app.py)."""
+    import app
+
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    geoeffnete_urls = []
+    monkeypatch.setattr(
+        app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString())
+    )
+
+    update_buttons = [
+        b for b in dialog.findChildren(QPushButton) if "Updates" in b.text()
+    ]
+    assert len(update_buttons) == 1
+
+    qtbot.mouseClick(update_buttons[0], Qt.MouseButton.LeftButton)
+
+    assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
+
+
 # --- Automatisches Speichern beim Beenden -------------------------------------------
 
 

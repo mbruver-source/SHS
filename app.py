@@ -2061,6 +2061,12 @@ danach den Speicherort. "Sicherung wiederherstellen (ZIP)…" fragt bei Bedarf n
 Passwort und bei jedem bereits vorhandenen Termin, ob überschrieben, als Kopie
 importiert oder übersprungen werden soll. Ein vergessenes Passwort lässt sich nicht
 wiederherstellen – gut aufbewahren.</p>
+
+<h3>Versionsanzeige</h3>
+<p>Der Button "Version" neben "Hilfe" zeigt die aktuell installierte Version. "Nach
+Updates suchen" öffnet dort die Releases-Seite des Programms im Browser, wo eine neuere
+Version bei Bedarf von Hand heruntergeladen werden kann – eine automatische Prüfung im
+Hintergrund ist aktuell nicht eingebaut.</p>
 """
 
 
@@ -2089,10 +2095,19 @@ class HilfeDialog(QDialog):
         layout.addLayout(schliessen_zeile)
 
 
+#: Adresse der GitHub-Releases-Seite, die der "Nach Updates suchen"-Button im
+#: VersionDialog öffnet. Da das Repository privat ist, kann die Version NICHT
+#: automatisch (ohne Zugangsdaten) per GitHub-API geprüft werden - der Button öffnet
+#: stattdessen die Seite im Standardbrowser, wo man sich ggf. mit seinem GitHub-Konto
+#: anmeldet und die neueste Version von Hand herunterlädt. Siehe VersionDialog._updates_pruefen.
+GITHUB_RELEASES_URL = "https://github.com/mbruver-source/SHS/releases"
+
+
 class VersionDialog(QDialog):
     """Zeigt die aktuell laufende Programmversion (siehe VERSION oben, aus version.py -
-    von bump_version.py bei jedem Release automatisch erzeugt). Wird über den
-    Version-Button im Hauptfenster geöffnet, direkt neben "Hilfe" (siehe
+    von bump_version.py bei jedem Release automatisch erzeugt) sowie einen Button, der
+    zur Kontrolle auf neuere Versionen die GitHub-Releases-Seite im Browser öffnet. Wird
+    über den Version-Button im Hauptfenster geöffnet, direkt neben "Hilfe" (siehe
     HauptFenster._version_anzeigen)."""
 
     def __init__(self, parent=None):
@@ -2109,10 +2124,15 @@ class VersionDialog(QDialog):
         version_zeile.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         hinweis = QLabel(
-            "Um zu prüfen, ob eine neuere Version verfügbar ist, wende dich bitte an "
-            "die Vereins-IT bzw. schau in der Programm-Ablage nach dem aktuellen Installer."
+            "Da das Programm-Repository nicht öffentlich ist, kann diese Prüfung nicht "
+            "automatisch im Hintergrund laufen. Der Button unten öffnet die "
+            "Releases-Seite im Browser - dort steht, ob es eine neuere Version gibt "
+            "und der zugehörige Installer kann von dort heruntergeladen werden."
         )
         hinweis.setWordWrap(True)
+
+        updates_btn = QPushButton("Nach Updates suchen (GitHub öffnen)")
+        updates_btn.clicked.connect(self._updates_pruefen)
 
         schliessen_btn = QPushButton("Schließen")
         schliessen_btn.clicked.connect(self.accept)
@@ -2125,8 +2145,12 @@ class VersionDialog(QDialog):
         layout.addWidget(version_zeile)
         layout.addSpacing(8)
         layout.addWidget(hinweis)
+        layout.addWidget(updates_btn)
         layout.addSpacing(8)
         layout.addLayout(schliessen_zeile)
+
+    def _updates_pruefen(self) -> None:
+        QDesktopServices.openUrl(QUrl(GITHUB_RELEASES_URL))
 
 
 class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
