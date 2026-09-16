@@ -25,7 +25,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QPushButton
 
-from app import HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab
+from app import _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab
 from db import NeuerTeilnehmer, add_teilnehmer, init_db, list_teilnehmer, set_veranstaltung
 
 
@@ -59,6 +59,29 @@ def _teilnehmer_anlegen(connection, **overrides) -> int:
     )
     daten.update(overrides)
     return add_teilnehmer(connection, NeuerTeilnehmer(**daten))
+
+
+# --- Erscheinungsbild "Modern/Minimal" (siehe Design-Mockup-Vergleich) --------------
+# Der Stylesheet-Text selbst wird nicht pixelgenau geprüft (das könnte nur ein
+# Screenshot-Vergleich leisten) - hier nur, dass er tatsächlich gesetzt wird (main(),
+# nicht separat testbar ohne den echten Startdialog durchzuklicken) und dass die als
+# Haupt-Aktion vorgesehenen Buttons den dafür vorgesehenen objectName tragen, über den
+# _QSS_MODERN_MINIMAL sie hervorhebt.
+
+
+def test_qss_modern_minimal_enthaelt_kernselektoren():
+    assert "QTabBar::tab:selected" in _QSS_MODERN_MINIMAL
+    assert "QPushButton#primaerButton" in _QSS_MODERN_MINIMAL
+    assert "#2F6FED" in _QSS_MODERN_MINIMAL  # Akzentfarbe
+
+
+def test_teilnehmer_hinzufuegen_ist_primaerbutton(qtbot, conn):
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    # Der einzige Button mit diesem objectName in diesem Tab ist "Teilnehmer hinzufügen…".
+    gefunden = [b for b in tab.findChildren(QPushButton) if b.objectName() == "primaerButton"]
+    assert len(gefunden) == 1
+    assert gefunden[0].text() == "Teilnehmer hinzufügen…"
 
 
 # --- Bezahlt-Markierung -------------------------------------------------------------

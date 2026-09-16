@@ -452,6 +452,7 @@ class TeilnehmerTab(QWidget):
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
         hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
+        hinzufuegen_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
         hinzufuegen_btn.clicked.connect(self._teilnehmer_hinzufuegen)
 
         self.bearbeiten_btn = QPushButton("Bearbeiten…")
@@ -584,7 +585,17 @@ class TeilnehmerTab(QWidget):
                 "✓ bezahlt" if t["bezahlt"] else "",
             ]
             for col, wert in enumerate(werte):
-                self.tabelle.setItem(row, col, QTableWidgetItem(wert))
+                item = QTableWidgetItem(wert)
+                self.tabelle.setItem(row, col, item)
+            # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_MODERN_MINIMAL) -
+            # nur die Textfarbe, der Zelleninhalt selbst bleibt wie zuvor ("" bei nicht
+            # bezahlt), damit bestehende Tests darauf weiter verlassen können.
+            if t["bezahlt"]:
+                bezahlt_item = self.tabelle.item(row, 6)
+                bezahlt_item.setForeground(QColor("#1E8E5A"))
+                schrift = bezahlt_item.font()
+                schrift.setBold(True)
+                bezahlt_item.setFont(schrift)
         # Spaltenbreiten an den tatsächlichen Inhalt anpassen, damit z.B. lange
         # Vereinsnamen oder LK-Bezeichnungen nicht abgeschnitten werden - danach
         # bleiben die Spalten weiterhin von Hand nachziehbar.
@@ -661,6 +672,7 @@ class ErgebnisTab(QWidget):
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
         speichern_btn = QPushButton("Alle Ergebnisse speichern")
+        speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
         speichern_btn.clicked.connect(self.alle_speichern)
 
         aktualisieren_btn = QPushButton("Liste aktualisieren")
@@ -1709,6 +1721,7 @@ class VerwaltungTab(QWidget):
         self.conn = conn
 
         veranstaltung_btn = QPushButton("Veranstaltungsdaten bearbeiten…")
+        veranstaltung_btn.setObjectName("primaerButton")  # einzige Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
         veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
 
         hinweis = QLabel(
@@ -2336,6 +2349,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.tabelle.horizontalHeader().setStretchLastSection(True)
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
+        neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_MODERN_MINIMAL
         neu_btn.clicked.connect(self._neuer_termin)
         self.oeffnen_btn = QPushButton("Öffnen")
         self.oeffnen_btn.clicked.connect(self._termin_oeffnen)
@@ -2466,8 +2480,158 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             self.accept()
 
 
+_QSS_MODERN_MINIMAL = """
+/* "Modern/Minimal"-Erscheinungsbild (siehe Design-Mockup-Vergleich): kühles Grau-Blau,
+ein einzelner Akzentton (#2F6FED), ruhige Flächen statt vieler Rahmen/Schatten. Global
+über QApplication.setStyleSheet() gesetzt (siehe main() unten) - HauptFenster & Dialoge
+setzen zusätzlich per ResponsiveSchriftMixin eine eigene, nähere QHeaderView::section-/
+QLabel-Regel NUR für font-size bei Größenänderung; das überschreibt hier absichtlich
+nichts anderes, da beide Regelsätze unterschiedliche Eigenschaften des Selektors setzen. */
+
+QMainWindow, QDialog {
+    background: #FFFFFF;
+}
+QWidget {
+    color: #1B2430;
+}
+QLabel {
+    color: #1B2430;
+}
+
+/* Reiter (Teilnehmer/Zeitplan/.../Datensicherung sowie der Hilfe-Dialog) */
+QTabWidget::pane {
+    border: 1px solid #E4E8EE;
+    background: #FFFFFF;
+    top: -1px;
+}
+QTabBar::tab {
+    background: #FFFFFF;
+    color: #6B7686;
+    padding: 8px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-right: 2px;
+}
+QTabBar::tab:selected {
+    color: #16233E;
+    font-weight: 600;
+    border-bottom: 2px solid #2F6FED;
+}
+QTabBar::tab:hover:!selected {
+    color: #16233E;
+}
+
+/* Schaltflächen: neutral/sekundär als Standard; die jeweilige Haupt-Aktion eines
+Reiters/Dialogs trägt objectName "primaerButton" (siehe z.B. TeilnehmerTab) und wird
+blau hervorgehoben - ebenso automatisch jeder Dialog-Default-Button (die "OK"-Schaltfläche
+einer QDialogButtonBox, über die Qt-eigene :default-Pseudoklasse, ohne dass jeder
+Dialog einzeln angepasst werden muss). */
+QPushButton {
+    background: #F1F4F8;
+    color: #2A3342;
+    border: 1px solid #E4E8EE;
+    border-radius: 6px;
+    padding: 6px 14px;
+}
+QPushButton:hover {
+    background: #E7ECF3;
+}
+QPushButton:pressed {
+    background: #DCE3EC;
+}
+QPushButton:disabled {
+    color: #A7B0BD;
+    background: #F6F8FA;
+    border-color: #EDF0F4;
+}
+QPushButton#primaerButton, QPushButton:default:enabled {
+    background: #2F6FED;
+    color: #FFFFFF;
+    border: 1px solid #2F6FED;
+    font-weight: 600;
+}
+QPushButton#primaerButton:hover, QPushButton:default:enabled:hover {
+    background: #2A63D6;
+    border-color: #2A63D6;
+}
+QPushButton#primaerButton:pressed, QPushButton:default:enabled:pressed {
+    background: #2558BF;
+    border-color: #2558BF;
+}
+
+/* Eingabefelder */
+QLineEdit, QComboBox, QSpinBox, QDateEdit {
+    background: #F1F4F8;
+    border: 1px solid #E4E8EE;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #1B2430;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {
+    border: 1px solid #2F6FED;
+    background: #FFFFFF;
+}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
+    color: #A7B0BD;
+    background: #F6F8FA;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QCheckBox {
+    color: #1B2430;
+    spacing: 6px;
+}
+
+/* Tabellen (Teilnehmer, Ergebniserfassung, Auswertung, Zeitplan, Terminübersicht) */
+QTableWidget {
+    background: #FFFFFF;
+    alternate-background-color: #FBFCFD;
+    gridline-color: #E4E8EE;
+    border: 1px solid #E4E8EE;
+    border-radius: 6px;
+    selection-background-color: #EAF1FF;
+    selection-color: #1B2430;
+}
+QTableWidget::item {
+    padding: 4px 6px;
+}
+QTableWidget::item:selected {
+    background: #EAF1FF;
+    color: #1B2430;
+}
+QHeaderView::section {
+    background: #FBFCFD;
+    color: #8A94A6;
+    padding: 6px;
+    border: none;
+    border-bottom: 1px solid #E4E8EE;
+    font-weight: 600;
+}
+QTableCornerButton::section {
+    background: #FBFCFD;
+    border: none;
+    border-bottom: 1px solid #E4E8EE;
+}
+
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #FFFFFF;
+    border: none;
+}
+QScrollBar::handle {
+    background: #D8DEE7;
+    border-radius: 5px;
+}
+QScrollBar::handle:hover {
+    background: #C3CBD8;
+}
+"""
+
+
 def main() -> int:
     app = QApplication(sys.argv)
+    app.setStyleSheet(_QSS_MODERN_MINIMAL)
 
     start = StartDialog()
     if start.exec() != QDialog.Accepted or not start.pfad:
