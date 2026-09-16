@@ -26,9 +26,11 @@ def test_version_lesen_ohne_datei_beginnt_bei_1_0_0(tmp_path, monkeypatch):
 def test_main_schreibt_version_txt_und_version_info_txt(tmp_path, monkeypatch):
     version_datei = tmp_path / "version.txt"
     version_info_datei = tmp_path / "version_info.txt"
+    version_py_datei = tmp_path / "version.py"
     version_datei.write_text("1.0.99\n", encoding="utf-8")
     monkeypatch.setattr(bump_version, "VERSION_DATEI", version_datei)
     monkeypatch.setattr(bump_version, "VERSION_INFO_DATEI", version_info_datei)
+    monkeypatch.setattr(bump_version, "VERSION_PY_DATEI", version_py_datei)
 
     ergebnis = bump_version.main()
 
@@ -38,6 +40,21 @@ def test_main_schreibt_version_txt_und_version_info_txt(tmp_path, monkeypatch):
     assert 'filevers=(1, 1, 0, 0)' in inhalt
     assert 'StringStruct("FileVersion", "1.1.0.0")' in inhalt
     assert 'StringStruct("ProductVersion", "1.1.0.0")' in inhalt
+    assert 'VERSION = "1.1.0"' in version_py_datei.read_text(encoding="utf-8")
+
+
+def test_version_py_schreiben_enthaelt_versionskonstante(tmp_path, monkeypatch):
+    version_py_datei = tmp_path / "version.py"
+    monkeypatch.setattr(bump_version, "VERSION_PY_DATEI", version_py_datei)
+
+    bump_version.version_py_schreiben("2.3.4")
+
+    inhalt = version_py_datei.read_text(encoding="utf-8")
+    assert 'VERSION = "2.3.4"' in inhalt
+    # Muss als reguläres Python-Modul importierbar sein (so bindet app.py es ein).
+    namensraum: dict = {}
+    exec(compile(inhalt, str(version_py_datei), "exec"), namensraum)
+    assert namensraum["VERSION"] == "2.3.4"
 
 
 def test_version_lesen_mit_ungueltigem_inhalt_wirft_fehler(tmp_path, monkeypatch):

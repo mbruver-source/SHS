@@ -26,8 +26,9 @@ a = Analysis(
     ["app.py"],
     pathex=[],
     binaries=[],
-    # db.py/shs_core.py/pdf_export.py werden von app.py per "import" eingebunden und
-    # daher von PyInstaller automatisch mit erkannt und eingepackt - keine weiteren
+    # db.py/shs_core.py/pdf_export.py sowie version.py (siehe bump_version.py und der
+    # Version-Button neben "Hilfe" in app.py) werden von app.py per "import" eingebunden
+    # und daher von PyInstaller automatisch mit erkannt und eingepackt - keine weiteren
     # Einträge hier nötig.
     datas=[],
     # pyzipper (Datensicherung, siehe db.py) importiert pycryptodomex für die

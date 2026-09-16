@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QLabel, QPushButton
 
-from app import _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab
+from app import VERSION, _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab, VersionDialog
 from db import NeuerTeilnehmer, add_teilnehmer, init_db, list_teilnehmer, set_veranstaltung
 
 
@@ -290,6 +290,40 @@ def test_hilfe_button_ist_sichtbar_und_oeffnet_hilfedialog(qtbot, termin, monkey
     qtbot.mouseClick(hilfe_btn, Qt.MouseButton.LeftButton)
 
     assert geoeffnet.get("ja") is True
+
+
+# --- Version-Button ---------------------------------------------------------------
+
+
+def test_version_button_ist_sichtbar_und_oeffnet_versiondialog(qtbot, termin, monkeypatch):
+    """Analog zu test_hilfe_button_...: der Version-Button neben "Hilfe" existiert,
+    ist sichtbar, zeigt die aktuelle Version im Text und öffnet den VersionDialog."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+
+    version_buttons = [b for b in fenster.findChildren(QPushButton) if b.text() == f"ℹ️ Version {VERSION}"]
+    assert len(version_buttons) == 1
+    version_btn = version_buttons[0]
+    assert version_btn.isVisible()
+    assert version_btn.height() > 0
+
+    geoeffnet = {}
+    monkeypatch.setattr(VersionDialog, "exec", lambda self: geoeffnet.setdefault("ja", True))
+
+    qtbot.mouseClick(version_btn, Qt.MouseButton.LeftButton)
+
+    assert geoeffnet.get("ja") is True
+
+
+def test_versiondialog_zeigt_aktuelle_version(qtbot):
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    texte = [w.text() for w in dialog.findChildren(QLabel)]
+    assert any(VERSION in t for t in texte)
 
 
 # --- Automatisches Speichern beim Beenden -------------------------------------------

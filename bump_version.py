@@ -10,7 +10,8 @@ theoretisch, aber der Vollständigkeit halber genauso behandelt).
 Liest/schreibt die aktuelle Versionsnummer in version.txt (einzige
 "Quelle der Wahrheit") und schreibt dieselbe Nummer zusätzlich in
 version_info.txt (Windows-Versionsinfo, die PyInstaller in die .exe
-einbettet, siehe build.spec).
+einbettet, siehe build.spec) sowie in version.py (von app.py importiert,
+für die Versionsanzeige in der GUI - siehe Version-Button neben "Hilfe").
 
 Wird von build_installer.bat VOR dem PyInstaller-Build aufgerufen und gibt
 die neue Versionsnummer (z.B. "1.0.1") auf stdout aus, damit das Batch-Skript
@@ -26,6 +27,13 @@ import pathlib
 HIER = pathlib.Path(__file__).resolve().parent
 VERSION_DATEI = HIER / "version.txt"
 VERSION_INFO_DATEI = HIER / "version_info.txt"
+# Laufzeit-lesbare Version für die GUI (siehe app.py, Version-Button neben "Hilfe"):
+# version.txt/version_info.txt dienen PyInstaller/Inno Setup beim Bauen, werden aber
+# selbst NICHT mit in die .exe gepackt (kein Eintrag in build.spec/datas). version.py
+# dagegen ist eine ganz normale, von app.py importierte Python-Datei - PyInstaller
+# erkennt und bündelt sie daher automatisch, genau wie db.py/shs_core.py (siehe
+# Kommentar in build.spec), ganz ohne zusätzlichen datas-Eintrag.
+VERSION_PY_DATEI = HIER / "version.py"
 
 
 def version_lesen() -> tuple[int, int, int]:
@@ -106,12 +114,25 @@ VSVersionInfo(
     VERSION_INFO_DATEI.write_text(inhalt, encoding="utf-8")
 
 
+def version_py_schreiben(version_text: str) -> None:
+    """Schreibt die kleine, von app.py importierte version.py neu (siehe VERSION_PY_DATEI
+    oben) - WIRD AUTOMATISCH erzeugt, bitte nicht von Hand editieren."""
+    inhalt = (
+        '"""WIRD AUTOMATISCH von bump_version.py erzeugt - bitte nicht von Hand editieren.\n'
+        "Von app.py importiert, um die aktuell laufende Version anzuzeigen (siehe\n"
+        'Version-Button neben "Hilfe")."""\n'
+        f'VERSION = "{version_text}"\n'
+    )
+    VERSION_PY_DATEI.write_text(inhalt, encoding="utf-8")
+
+
 def main() -> str:
     aktuell = version_lesen()
     neu = naechste_version(aktuell)
     neu_text = ".".join(str(n) for n in neu)
     VERSION_DATEI.write_text(neu_text + "\n", encoding="utf-8")
     version_info_schreiben(neu)
+    version_py_schreiben(neu_text)
     return neu_text
 
 

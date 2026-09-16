@@ -110,6 +110,14 @@ from db import (
 )
 import pdf_export
 
+try:
+    # version.py wird von bump_version.py automatisch erzeugt (siehe dort) und ist daher
+    # in einer frischen Arbeitskopie vor dem allerersten Build noch nicht vorhanden - der
+    # Fallback verhindert, dass app.py deswegen gar nicht erst startet.
+    from version import VERSION
+except ImportError:
+    VERSION = "dev"
+
 
 def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
     """Aktualisiert einzelne Veranstaltungs-Felder, ohne die übrigen (z.B. von einem
@@ -2081,6 +2089,46 @@ class HilfeDialog(QDialog):
         layout.addLayout(schliessen_zeile)
 
 
+class VersionDialog(QDialog):
+    """Zeigt die aktuell laufende Programmversion (siehe VERSION oben, aus version.py -
+    von bump_version.py bei jedem Release automatisch erzeugt). Wird über den
+    Version-Button im Hauptfenster geöffnet, direkt neben "Hilfe" (siehe
+    HauptFenster._version_anzeigen)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Version")
+
+        titel = QLabel("SHS Prüfungsprogramm")
+        schrift = titel.font()
+        schrift.setPointSize(schrift.pointSize() + 2)
+        schrift.setBold(True)
+        titel.setFont(schrift)
+
+        version_zeile = QLabel(f"Version {VERSION}")
+        version_zeile.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        hinweis = QLabel(
+            "Um zu prüfen, ob eine neuere Version verfügbar ist, wende dich bitte an "
+            "die Vereins-IT bzw. schau in der Programm-Ablage nach dem aktuellen Installer."
+        )
+        hinweis.setWordWrap(True)
+
+        schliessen_btn = QPushButton("Schließen")
+        schliessen_btn.clicked.connect(self.accept)
+        schliessen_zeile = QHBoxLayout()
+        schliessen_zeile.addStretch()
+        schliessen_zeile.addWidget(schliessen_btn)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(titel)
+        layout.addWidget(version_zeile)
+        layout.addSpacing(8)
+        layout.addWidget(hinweis)
+        layout.addSpacing(8)
+        layout.addLayout(schliessen_zeile)
+
+
 class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def __init__(self, conn, pfad: str):
         super().__init__()
@@ -2097,6 +2145,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         hilfe_btn = QPushButton("❓ Hilfe")
         hilfe_btn.clicked.connect(self._hilfe_anzeigen)
 
+        version_btn = QPushButton(f"ℹ️ Version {VERSION}")
+        version_btn.clicked.connect(self._version_anzeigen)
+
         self._tabs = QTabWidget()
         self._tabs.currentChanged.connect(self._tab_gewechselt)
         self._vorheriger_tab_index = 0
@@ -2106,6 +2157,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         kopf_zeile = QHBoxLayout()
         kopf_zeile.addStretch()
         kopf_zeile.addWidget(wechseln_btn)
+        kopf_zeile.addWidget(version_btn)
         kopf_zeile.addWidget(hilfe_btn)
 
         zentral = QWidget()
@@ -2119,6 +2171,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _hilfe_anzeigen(self) -> None:
         HilfeDialog(self).exec()
+
+    def _version_anzeigen(self) -> None:
+        VersionDialog(self).exec()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Speichert automatisch noch nicht gespeicherte Ergebnisse, bevor das Programm
