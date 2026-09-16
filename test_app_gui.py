@@ -10,6 +10,13 @@ QT_QPA_PLATFORM in .github/workflows/tests.yml sowie pytest.ini (qt_api = pyside
 Deckt gezielt die Bereiche ab, die laut Fortschritt.md zuletzt als "noch nicht real in
 der GUI getestet" markiert waren: Bezahlt-Markierung, freie Gegenstand-Disziplin-
 Zuordnung (ohne Default), Hilfe-Button und automatisches Speichern beim Beenden.
+
+Hinweis (aus einem echten CI-Fehlschlag gelernt): Widgets, an denen per `qtbot.mouseClick`
+tatsächlich geklickt wird, müssen vorher mit `.show()` sichtbar gemacht werden - ohne
+`.show()` hat ein Klick auf eine (noch nie gezeigte) QCheckBox im ersten CI-Lauf nicht
+zuverlässig ausgelöst, vermutlich weil Qt die genaue Klickfläche des Kästchens erst nach
+einem Layout-/Show-Durchlauf kennt. Ein einfacher Konstruktor-Aufruf ohne Klick braucht
+das nicht zwingend, schadet aber auch nicht - hier der Einfachheit halber überall gesetzt.
 """
 
 from __future__ import annotations
@@ -61,6 +68,7 @@ def test_bezahlt_button_ist_erst_nach_auswahl_einer_zeile_aktiv(qtbot, conn):
     _teilnehmer_anlegen(conn)
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
+    tab.show()
 
     assert not tab.bezahlt_btn.isEnabled()
     tab.tabelle.selectRow(0)
@@ -71,6 +79,7 @@ def test_bezahlt_umschalten_per_klick_aendert_datenbank_und_tabelle(qtbot, conn)
     _teilnehmer_anlegen(conn)
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
+    tab.show()
     tab.tabelle.selectRow(0)
 
     assert list_teilnehmer(conn)[0]["bezahlt"] == 0
@@ -89,6 +98,7 @@ def test_bezahlt_umschalten_per_klick_aendert_datenbank_und_tabelle(qtbot, conn)
 def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
+    dialog.show()
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -104,6 +114,7 @@ def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
 def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
+    dialog.show()
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -119,6 +130,7 @@ def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
 def test_gegenstand_disziplin_frei_waehlbar_unabhaengig_von_position(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
+    dialog.show()
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -143,6 +155,7 @@ def test_bestehender_teilnehmer_im_dialog_zeigt_gespeicherte_zuordnung(qtbot, co
 
     dialog = TeilnehmerDialog(vorhandener=vorhandener)
     qtbot.addWidget(dialog)
+    dialog.show()
 
     assert dialog.gegenstand_1.text() == "Schlüsselbund"
     assert dialog.gegenstand_1_disziplin.currentText() == "Behältnisstrecke"
