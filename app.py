@@ -2063,7 +2063,10 @@ Seite je Richter.</p>
 <p>Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Suchleistung (0–60)
 und Anzeigeleistung (0–40) eintragen. Noch nicht gespeicherte Zeilen werden gelb markiert.
 "Alle Ergebnisse speichern" sichert alle Änderungen auf einmal. Der Filter blendet nur aus,
-ungespeicherte Eingaben gehen dabei nicht verloren.</p>
+ungespeicherte Eingaben gehen dabei nicht verloren. Um ein bereits gespeichertes Ergebnis
+wieder zu entfernen, beide Felder (Suche und Anzeige) leeren und anschließend speichern –
+ist nur eines der beiden Felder leer, gilt das als unvollständig und wird beim Speichern
+zurückgewiesen.</p>
 
 <h3>Reiter "Auswertung"</h3>
 <p>Zeigt die berechnete Rangliste je Leistungsklasse mit Wertnote. Filter nach
