@@ -275,6 +275,22 @@ class TestDatenbank(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=61, anzeige=10)  # max. 60
 
+    def test_eintragen_ergebnis_mit_none_loescht_zuvor_eingetragenes_ergebnis(self):
+        # Regressionstest: in der Ergebniserfassung ein zuvor gespeichertes Ergebnis
+        # wieder leeren (beide Felder auf None) muss die Werte in der DB auf NULL
+        # setzen, statt dass sie beim nächsten Laden wieder auftauchen.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1, disziplin="Trümmerfeld"))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=58, anzeige=38)
+
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=None, anzeige=None)
+
+        zeile = self.conn.execute(
+            "SELECT suche_truemmerfeld, anzeige_truemmerfeld FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+        ).fetchone()
+        self.assertIsNone(zeile["suche_truemmerfeld"])
+        self.assertIsNone(zeile["anzeige_truemmerfeld"])
+
     def test_teilnehmer_bearbeiten(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="Alt", vorname="A", rufname_hund="H", art="ED", stufe=1,

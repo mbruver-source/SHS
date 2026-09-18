@@ -926,9 +926,18 @@ class ErgebnisTab(QWidget):
                 if (suche_wert, anzeige_wert) == geladen[disziplin]:
                     continue  # unverändert - nichts zu tun
 
+                if suche_wert is None and anzeige_wert is None:
+                    # Beide Felder wurden geleert - vorher eingetragenes Ergebnis wird
+                    # als gelöscht gespeichert (NULL in der DB), statt nur in der
+                    # Tabelle leer auszusehen, aber beim nächsten Laden wieder
+                    # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
+                    # bleiben.
+                    eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
+                    geladen[disziplin] = (None, None)
+                    gespeichert += 1
+                    continue
+
                 if suche_wert is None or anzeige_wert is None:
-                    if suche_wert is None and anzeige_wert is None:
-                        continue  # beide wieder geleert - kein Fehler, einfach nichts speichern
                     fehler.append(f"{name} – {disziplin}: bitte sowohl Suche als auch Anzeige eintragen")
                     continue
 

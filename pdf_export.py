@@ -423,10 +423,50 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     SimpleDocTemplate(pfad, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm).build(story)
 
 
-_ETIKETT_SPALTEN = [30 * mm, 30 * mm, 24 * mm, 24 * mm, 26 * mm, 26 * mm, 18 * mm]
+# Physische Etikettengröße wie vom Verein vorgegeben: Lang = 17 cm, Hoch = 2 cm (je
+# Teilnehmer EIN zweizeiliges Etikett dieser Größe, siehe erstelle_ergebnisliste_etiketten_pdf
+# unten). Die Spaltenbreiten müssen sich exakt zu ETIKETT_BREITE_MM aufsummieren und die
+# beiden Zeilenhöhen exakt zu ETIKETT_HOEHE_MM - vorher waren es (ungewollt) rund 17,8 cm
+# Breite und eine von reportlab automatisch bestimmte, deutlich kleinere Höhe als 2 cm.
+#
+# Weil die Zeilenhöhe jetzt FEST ist (statt sich wie vorher automatisch an den Inhalt
+# anzupassen), müssen die Felder mit bekanntem Wertebereich auf einer Zeile bleiben, sonst
+# würde umgebrochener Text optisch mit der Zeile darunter überlappen: die Spaltenbreiten
+# unten sind bewusst so gewählt, dass die Punktzahl-Felder (max. "Trümmer: 100" bzw.
+# "Behältnis: 100"/"Gesamt: 300") UND das Art/LK-Feld (max. "ED LK 3 Behältnis" - siehe
+# _ETIKETT_DISZIPLIN_KURZ) garantiert einzeilig bleiben (mit echten Etiketten/Testdaten
+# geprüft). Frei eingegebener Vereinsname/Teilnehmername kann bei ungewöhnlich langen
+# Werten weiterhin umbrechen - das war schon vorher so und lässt sich bei Freitext nicht
+# generell ausschließen.
+ETIKETT_BREITE_MM = 170
+ETIKETT_HOEHE_MM = 20
+_ETIKETT_SPALTEN = [30 * mm, 29 * mm, 24 * mm, 21 * mm, 25 * mm, 23 * mm, 18 * mm]
+# math.isclose statt "==": Summe von sieben einzeln mit dem (nicht exakt binär
+# darstellbaren) Faktor "mm" multiplizierten Werten kann durch Gleitkomma-Rundung um
+# einen verschwindend kleinen Bruchteil von der direkt berechneten Summe abweichen.
+assert math.isclose(sum(_ETIKETT_SPALTEN), ETIKETT_BREITE_MM * mm)
+_ETIKETT_ZEILEN = [ETIKETT_HOEHE_MM / 2 * mm, ETIKETT_HOEHE_MM / 2 * mm]
 _ETIKETT_TEXT = ParagraphStyle("SHSEtikettText", parent=_STYLES["Normal"], fontSize=8.5, leading=10)
 _ETIKETT_FELD = ParagraphStyle("SHSEtikettFeld", parent=_STYLES["Normal"], fontSize=8.5, fontName="Helvetica-Bold", leading=10)
 _ETIKETT_SHR = ParagraphStyle("SHSEtikettSHR", parent=_STYLES["Normal"], fontSize=7.5, alignment=1)
+
+# Kurzform der Disziplin nur für das Art/LK-Feld des Etiketts (z.B. "ED LK 3 Behältnis"
+# statt "ED LK 3 Behältnisstrecke") - passend zu den ohnehin schon abgekürzten
+# Punktzahl-Feldern ("Behältnis: 100" statt "Behältnisstrecke: 100") auf demselben
+# Etikett und nötig, damit das Feld bei der festen Zeilenhöhe nicht umbricht. Die
+# GUI/der Filter nutzen weiterhin die ungekürzte leistungsklasse_label() aus db.py.
+_ETIKETT_DISZIPLIN_KURZ = {
+    "Trümmerfeld": "Trümmer",
+    "Flächensuche": "Fläche",
+    "Behältnisstrecke": "Behältnis",
+}
+
+
+def _etikett_art_lk_text(t: dict) -> str:
+    if t["art"] == "DK":
+        return f"DK LK {t['stufe']}"
+    kurz = _ETIKETT_DISZIPLIN_KURZ.get(t["disziplin"], t["disziplin"])
+    return f"ED LK {t['stufe']} {kurz}"
 
 
 def _disziplin_gesamt_text(ergebnis: dict, disziplin: str) -> str:
@@ -449,6 +489,10 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     Layout/Feldauswahl nach Vorlage aus der Originaldatei (Tabellenblatt "Druck_LU").
     Gedacht zum Bedrucken von Klebe-/Etikettenpapier, das danach zeilenweise
     auseinandergeschnitten wird.
+
+    Jedes einzelne Etikett ist exakt ETIKETT_BREITE_MM x ETIKETT_HOEHE_MM groß (aktuell
+    17 x 2 cm, siehe dort) - die gestrichelte Schnittlinie zwischen zwei Etiketten kommt
+    beim Ausschneiden zusätzlich oben drauf, ist also nicht Teil der 2 cm Etikettenhöhe.
 
     Das Feld "SH-R" bleibt bewusst leer - es ist ein Platzhalter, den der Spürhundesport-
     Richter später von Hand abstempelt und unterschreibt.
@@ -496,7 +540,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
         daten = [
             [
                 Paragraph(austragender_verein, _ETIKETT_TEXT),
-                Paragraph(leistungsklasse_label(t), _ETIKETT_TEXT),
+                Paragraph(_etikett_art_lk_text(t), _ETIKETT_TEXT),
                 Paragraph(truemmer_text, _ETIKETT_FELD),
                 Paragraph(flaeche_text, _ETIKETT_FELD),
                 Paragraph(behaeltnis_text, _ETIKETT_FELD),
@@ -505,7 +549,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
             ],
             [Paragraph(datum, _ETIKETT_TEXT), Paragraph(name_info, _ETIKETT_TEXT), "", "", "", "", ""],
         ]
-        etikett = Table(daten, colWidths=_ETIKETT_SPALTEN)
+        etikett = Table(daten, colWidths=_ETIKETT_SPALTEN, rowHeights=_ETIKETT_ZEILEN)
         etikett.setStyle(TableStyle([
             ("SPAN", (1, 1), (5, 1)),
             ("SPAN", (6, 0), (6, 1)),

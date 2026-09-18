@@ -398,8 +398,15 @@ def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
 
 # --- Ergebnisse ------------------------------------------------------------
 
-def eintragen_ergebnis(conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int, anzeige: int) -> None:
-    """Trägt Suchleistung/Anzeigeleistung für eine Disziplin eines Teilnehmers ein."""
+def eintragen_ergebnis(
+    conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int | None, anzeige: int | None
+) -> None:
+    """Trägt Suchleistung/Anzeigeleistung für eine Disziplin eines Teilnehmers ein.
+
+    suche/anzeige dürfen auch beide None sein - das löscht ein zuvor eingetragenes
+    Ergebnis wieder (z.B. wenn in der Ergebniserfassung beide Felder einer Zeile geleert
+    werden). Die CHECK-Constraints auf den Spalten (BETWEEN 0 AND 60/40) greifen bei
+    NULL nicht, SQLite wertet einen NULL-Vergleich nicht als Verletzung."""
     if disziplin not in DISZIPLIN_SPALTEN:
         raise ValueError(f"Unbekannte Disziplin: {disziplin!r}")
     spalte_suche, spalte_anzeige = DISZIPLIN_SPALTEN[disziplin]

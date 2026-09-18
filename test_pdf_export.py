@@ -29,6 +29,22 @@ def _text(pfad: str) -> str:
     return "\n".join(seite.extract_text() for seite in reader.pages)
 
 
+def test_etikett_masse_entsprechen_der_physischen_etikettengroesse():
+    """Regressionstest für den gemeldeten Fehler: jedes Etikett muss exakt der
+    physischen Etikettengröße entsprechen (aktuell vom Verein vorgegeben: Lang = 17 cm,
+    Hoch = 2 cm) - vorher waren es ungewollt rund 17,8 cm Breite und eine von reportlab
+    automatisch bestimmte, deutlich kleinere Höhe als 2 cm. Läuft unabhängig von
+    PdfReader/pypdf, da direkt an den Bausteinen (Spaltenbreiten/Zeilenhöhen) geprüft,
+    aus denen die Etiketten-Tabelle gebaut wird - reportlab selbst ist bereits über
+    requirements.txt vorhanden."""
+    import math
+
+    from reportlab.lib.units import mm
+
+    assert math.isclose(sum(pdf_export._ETIKETT_SPALTEN), pdf_export.ETIKETT_BREITE_MM * mm)
+    assert math.isclose(sum(pdf_export._ETIKETT_ZEILEN), pdf_export.ETIKETT_HOEHE_MM * mm)
+
+
 @unittest.skipIf(PdfReader is None, "pypdf nicht installiert - PDF-Inhaltsprüfung wird übersprungen")
 class TestPdfExport(unittest.TestCase):
     def setUp(self):

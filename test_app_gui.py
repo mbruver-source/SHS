@@ -26,7 +26,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton
 
 from app import VERSION, _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab, VersionDialog
-from db import NeuerTeilnehmer, add_teilnehmer, init_db, list_teilnehmer, set_veranstaltung
+from db import NeuerTeilnehmer, add_teilnehmer, eintragen_ergebnis, init_db, list_teilnehmer, set_veranstaltung
 
 
 @pytest.fixture
@@ -385,5 +385,86 @@ def test_schliessen_speichert_nicht_wenn_bereits_alles_gespeichert(qtbot, termin
     )
 
     fenster.close()
+
+
+# --- Ergebniserfassung: Ergebnis wieder löschen (beide Felder leeren) --------------
+# Regressionstest für den gemeldeten Fehler: ein bereits gespeichertes Ergebnis ließ
+# sich nicht mehr löschen - "Alle Ergebnisse speichern" tat beim Leeren beider Felder
+# einer Zeile nichts (weder DB-Update noch Statuswechsel), die Zeile blieb dauerhaft
+# gelb "nicht gespeichert" markiert, egal wie oft gespeichert wurde.
+
+
+def test_ergebnis_loeschen_durch_leeren_beider_felder_wird_gespeichert(qtbot, termin):
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", suche=45, anzeige=28)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+
+    ergebnis_tab = fenster.ergebnis_tab
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    assert suche_feld.text() == "45"
+    assert anzeige_feld.text() == "28"
+
+    suche_feld.clear()
+    anzeige_feld.clear()
+    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+
+    speichern_btn = next(
+        b for b in fenster.findChildren(QPushButton) if b.text() == "Alle Ergebnisse speichern"
+    )
+    qtbot.mouseClick(speichern_btn, Qt.MouseButton.LeftButton)
+
+    # In der DB wirklich gelöscht (NULL), nicht nur optisch leer in der Tabelle.
+    zeile = conn.execute(
+        "SELECT suche_flaechensuche, anzeige_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+    ).fetchone()
+    assert zeile["suche_flaechensuche"] is None
+    assert zeile["anzeige_flaechensuche"] is None
+
+    # Zeile gilt jetzt als gespeichert (nicht mehr dauerhaft gelb markiert) und der
+    # Status-Text bestätigt das Speichern statt "Keine Änderungen zu speichern".
+    assert not ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert "gespeichert" in ergebnis_tab.status_label.text().lower()
+    assert "keine änderungen" not in ergebnis_tab.status_label.text().lower()
+
+
+def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenverlust(qtbot, termin, monkeypatch):
+    """Wird nur eines der beiden Felder geleert (statt beider), bleibt das weiterhin ein
+    Fehler ("bitte sowohl Suche als auch Anzeige eintragen") statt stillschweigend
+    gespeichert zu werden - ein einzelner Wert allein wäre kein gültiges Ergebnis."""
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", suche=45, anzeige=28)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+
+    ergebnis_tab = fenster.ergebnis_tab
+    suche_feld, _anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.clear()
+
+    warnung_gezeigt = {}
+    monkeypatch.setattr(
+        "app.QMessageBox.warning",
+        lambda *a, **k: warnung_gezeigt.setdefault("ja", True),
+    )
+
+    speichern_btn = next(
+        b for b in fenster.findChildren(QPushButton) if b.text() == "Alle Ergebnisse speichern"
+    )
+    qtbot.mouseClick(speichern_btn, Qt.MouseButton.LeftButton)
+
+    assert warnung_gezeigt.get("ja") is True
+    # Der alte Wert bleibt in der DB unverändert (Anzeige-Feld war ja noch gültig
+    # gefüllt, aber ohne Gegenstück nicht speicherbar).
+    zeile = conn.execute(
+        "SELECT suche_flaechensuche, anzeige_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+    ).fetchone()
+    assert zeile["suche_flaechensuche"] == 45
+    assert zeile["anzeige_flaechensuche"] == 28
 
     assert "gespeichert" not in aufgerufen
