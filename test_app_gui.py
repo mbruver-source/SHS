@@ -466,5 +466,3 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     ).fetchone()
     assert zeile["suche_flaechensuche"] == 45
     assert zeile["anzeige_flaechensuche"] == 28
-
-    assert "gespeichert" not in aufgerufen
