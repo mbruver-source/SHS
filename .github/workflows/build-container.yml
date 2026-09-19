@@ -42,21 +42,23 @@ env:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
+    # Auf Job-Ebene statt in einem einzelnen Step gesetzt, damit ALLE Steps dieses Jobs
+    # dieselben Werte sehen - auch "Compose-Stack stoppen" unten, der "docker compose
+    # down" ganz unabhängig vom Start-Step aufruft und die beiden Variablen für die
+    # Interpolation von compose.yaml ebenfalls braucht. (Vorherige Fassung: erst per
+    # "echo ... >> $GITHUB_ENV" gesetzt, was erst ab dem NÄCHSTEN Step gilt und beim
+    # "up" in genau diesem Step fehlte; danach per "export" behoben, was zwar sofort im
+    # selben Step wirkt, aber nicht in spätere Steps übernommen wird und deshalb beim
+    # "down" fehlte - ein Job-weites "env:" deckt beide Fälle gleichzeitig ab.)
+    env:
+      SHS_DB_PASSWORD: smoketest
+      SHS_WEB_SECRET_KEY: smoketest
     steps:
       - name: Code auschecken
         uses: actions/checkout@v4
 
       - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
-        run: |
-          export SHS_DB_PASSWORD=smoketest
-          export SHS_WEB_SECRET_KEY=smoketest
-          docker compose -f compose.yaml up --build -d
-        # "export" statt "echo ... >> $GITHUB_ENV": Variablen, die über GITHUB_ENV
-        # gesetzt werden, gelten erst ab dem NÄCHSTEN Step, nicht mehr im selben "run:"-
-        # Block, in dem sie gesetzt wurden - "docker compose" lief dadurch hier ohne die
-        # beiden Variablen und compose brach mit der oben gezeigten Fehlermeldung ab.
-        # "export" wirkt dagegen sofort innerhalb desselben Shell-Aufrufs - reicht hier,
-        # da beide Variablen nur von diesem einen Step gebraucht werden.
+        run: docker compose -f compose.yaml up --build -d
 
       - name: Warten, bis die Login-Seite antwortet
         run: |
