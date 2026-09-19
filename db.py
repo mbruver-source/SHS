@@ -10,6 +10,19 @@ das war die geforderte, gezielte Löschmöglichkeit aus Datenschutzgründen.
 Enthält reine Datenhaltung + die Verbindung zur Kernlogik aus shs_core.py
 (Notenberechnung, Rangbildung). Keine GUI-Abhängigkeiten - lässt sich
 unabhängig von PySide6 testen.
+
+Zweite Datenbank-Anbindung (für die geplante Podman/Web-Version mit
+Mehrbenutzerzugriff): init_db_postgres() öffnet dieselbe fachliche Datenbank auf
+PostgreSQL statt SQLite. Damit dafür keine zweite Fassung jeder einzelnen
+Datenfunktion gepflegt werden muss, geben init_db()/init_db_postgres() jeweils ein
+Objekt zurück, das dieselbe (kleine) Teilmenge der sqlite3.Connection-Schnittstelle
+anbietet (execute/executescript/commit/close, '?'-Platzhalter, dict-artige Zeilen) -
+siehe _PostgresConnection weiter unten. Alle Funktionen ab DISZIPLIN_SPALTEN sind
+deshalb bewusst weiterhin mit `conn: sqlite3.Connection` typisiert (das ist die
+Desktop-Verbindungsart, für die dieses Modul ursprünglich geschrieben wurde), obwohl sie
+zur Laufzeit unverändert auch mit einer PostgreSQL-Verbindung funktionieren - dank
+`from __future__ import annotations` wird diese Typisierung nicht ausgewertet, sie dient
+nur der Dokumentation des ursprünglichen Anwendungsfalls.
 """
 
 from __future__ import annotations
@@ -135,6 +148,90 @@ CREATE TABLE IF NOT EXISTS zeitplan_eintrag (
 );
 """
 
+# PostgreSQL-Variante desselben Schemas (für die geplante Podman/Web-Version mit
+# Mehrbenutzerzugriff, siehe init_db_postgres() weiter unten). Der einzige tatsächliche
+# Syntax-Unterschied zwischen SQLite und PostgreSQL in diesem Schema ist die
+# Autoincrement-Schreibweise der drei id-Spalten (teilnehmer/zeitplan_richter/
+# zeitplan_eintrag) - alles andere (CHECK-Constraints, REFERENCES ... ON DELETE CASCADE,
+# Kommentare) ist Standard-SQL und funktioniert in beiden Datenbanken identisch. Daher
+# hier bewusst KEINE zweite, separat gepflegte Schema-Definition, sondern eine einmalige
+# Ersetzung - eine Änderung an SCHEMA oben wirkt automatisch auf beide Datenbanken.
+SCHEMA_POSTGRES = SCHEMA.replace(
+    "INTEGER PRIMARY KEY AUTOINCREMENT",
+    "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY",
+)
+
+
+_INSERT_TABELLE_RE = re.compile(r"\s*INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+# Tabellen, bei denen eine INSERT-Funktion in diesem Modul den neu vergebenen
+# Primärschlüssel über `cur.lastrowid` abfragt (siehe add_teilnehmer, add_zeitplan_richter,
+# add_zeitplan_pruefungsblock, add_zeitplan_pause). psycopg2 kennt `lastrowid` nicht -
+# _PostgresConnection.execute() hängt für INSERTs in diese Tabellen automatisch
+# "RETURNING id" an und liefert den Wert stattdessen über dieses Attribut zurück, damit
+# der aufrufende Code unverändert bleiben kann.
+_LASTROWID_TABELLEN = {"teilnehmer", "zeitplan_richter", "zeitplan_eintrag"}
+
+
+class _PostgresCursor:
+    """Reicht fetchone()/fetchall() an den echten psycopg2-Cursor durch und stellt
+    zusätzlich .lastrowid bereit, das psycopg2 (anders als sqlite3.Cursor) nicht kennt -
+    siehe _PostgresConnection.execute()."""
+
+    def __init__(self, roh_cursor, lastrowid: int | None) -> None:
+        self._roh_cursor = roh_cursor
+        self.lastrowid = lastrowid
+
+    def fetchone(self):
+        return self._roh_cursor.fetchone()
+
+    def fetchall(self):
+        return self._roh_cursor.fetchall()
+
+
+class _PostgresConnection:
+    """Dünner Kompatibilitäts-Wrapper um eine psycopg2-Verbindung, der die von diesem
+    Modul verwendete Teilmenge der sqlite3.Connection-Schnittstelle nachbildet:
+    execute()/executescript()/commit()/close(), '?'-Platzhalter statt psycopg2s '%s', sowie
+    dict-artige Ergebniszeilen (row["spalte"], dict(row)) wie sqlite3.Row.
+
+    Dadurch bleiben alle ~40 Datenfunktionen in diesem Modul UNVERÄNDERT - sie
+    funktionieren identisch, egal ob `conn` eine lokale SQLite-Termin-Datei (Desktop,
+    sqlite3.Connection direkt) oder eine gemeinsame PostgreSQL-Datenbank (Container/Web,
+    dieser Wrapper) ist. Das war genau das Ziel dieser Umstellung: eine Änderung an der
+    Geschäftslogik/den Abfragen muss nur an EINER Stelle gemacht werden, nicht doppelt
+    für beide Datenbanken."""
+
+    def __init__(self, roh_verbindung) -> None:
+        self._roh_verbindung = roh_verbindung
+
+    def execute(self, sql: str, params=()) -> _PostgresCursor:
+        sql_pg = sql.replace("?", "%s")
+        tabelle_treffer = _INSERT_TABELLE_RE.match(sql)
+        braucht_lastrowid = (
+            tabelle_treffer is not None
+            and tabelle_treffer.group(1).lower() in _LASTROWID_TABELLEN
+            and "returning" not in sql.lower()
+        )
+        if braucht_lastrowid:
+            sql_pg = f"{sql_pg} RETURNING id"
+        roh_cursor = self._roh_verbindung.cursor()
+        roh_cursor.execute(sql_pg, params)
+        lastrowid = roh_cursor.fetchone()["id"] if braucht_lastrowid else None
+        return _PostgresCursor(roh_cursor, lastrowid)
+
+    def executescript(self, sql: str) -> None:
+        # Anders als sqlite3.Connection.executescript() reicht bei psycopg2 ein
+        # einzelner execute()-Aufruf mit mehreren durch ';' getrennten Anweisungen -
+        # verwendet hier für das mehrteilige CREATE-TABLE-Schema (SCHEMA_POSTGRES).
+        self._roh_verbindung.cursor().execute(sql)
+
+    def commit(self) -> None:
+        self._roh_verbindung.commit()
+
+    def close(self) -> None:
+        self._roh_verbindung.close()
+
+
 DISZIPLIN_SPALTEN = {
     "Trümmerfeld": ("suche_truemmerfeld", "anzeige_truemmerfeld"),
     "Flächensuche": ("suche_flaechensuche", "anzeige_flaechensuche"),
@@ -149,13 +246,28 @@ _VERANSTALTUNG_NEUE_SPALTEN = [
 ]
 
 
-def _migriere_veranstaltung_spalten(conn: sqlite3.Connection) -> None:
-    """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien die neuen,
-    optionalen Veranstaltungs-Spalten nachträglich (CREATE TABLE IF NOT EXISTS allein
-    reicht dafür nicht, da die Tabelle in Altdateien schon ohne diese Spalten existiert).
-    ALTER TABLE ADD COLUMN ist in SQLite dafür unproblematisch: keine Datenverluste,
-    bestehende Zeilen bekommen für die neue Spalte einfach NULL."""
-    vorhandene_spalten = {row[1] for row in conn.execute("PRAGMA table_info(veranstaltung)").fetchall()}
+def _vorhandene_spalten(conn, tabelle: str) -> set[str]:
+    """Ermittelt die aktuell in `tabelle` vorhandenen Spalten - gemeinsame Grundlage für
+    die beiden Migrations-Funktionen unten. Funktioniert für eine lokale SQLite-
+    Termin-Datei (PRAGMA table_info, dort per Positionsindex - so liefert es sqlite3)
+    genauso wie für eine gemeinsame PostgreSQL-Datenbank (information_schema.columns,
+    dort per Spaltenname - so liefert es der _PostgresConnection-Wrapper)."""
+    if isinstance(conn, sqlite3.Connection):
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({tabelle})").fetchall()}
+    rows = conn.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tabelle,)
+    ).fetchall()
+    return {row["column_name"] for row in rows}
+
+
+def _migriere_veranstaltung_spalten(conn) -> None:
+    """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien/
+    Datenbanken die neuen, optionalen Veranstaltungs-Spalten nachträglich (CREATE TABLE
+    IF NOT EXISTS allein reicht dafür nicht, da die Tabelle in Altdateien schon ohne
+    diese Spalten existiert). ALTER TABLE ADD COLUMN ist dafür in SQLite wie PostgreSQL
+    unproblematisch: keine Datenverluste, bestehende Zeilen bekommen für die neue Spalte
+    einfach NULL. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
+    vorhandene_spalten = _vorhandene_spalten(conn, "veranstaltung")
     for spalte in _VERANSTALTUNG_NEUE_SPALTEN:
         if spalte not in vorhandene_spalten:
             conn.execute(f"ALTER TABLE veranstaltung ADD COLUMN {spalte} TEXT")
@@ -179,9 +291,9 @@ _TEILNEHMER_NEUE_SPALTEN = [
 ]
 
 
-def _migriere_teilnehmer_spalten(conn: sqlite3.Connection) -> None:
-    """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien neu
-    hinzugekommene Teilnehmer-Spalten nachträglich (analog zu
+def _migriere_teilnehmer_spalten(conn) -> None:
+    """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien/
+    Datenbanken neu hinzugekommene Teilnehmer-Spalten nachträglich (analog zu
     _migriere_veranstaltung_spalten oben) - aktuell 'bezahlt', die drei
     'gegenstand_N_disziplin'-Zuordnungsfelder sowie die Verwaltungs-/Kontaktdaten
     (Verband, Mitgliedsnummer, Wurftag, Straße, Hausnummer, PLZ, Ort, E-Mail, Telefon).
@@ -190,8 +302,8 @@ def _migriere_teilnehmer_spalten(conn: sqlite3.Connection) -> None:
     neuen Verwaltungs-/Kontaktfelder als leer (NULL) - andernfalls würde allein durch das
     Öffnen einer alten Termin-Datei fälschlich der Eindruck entstehen, bereits erfasste
     Teilnehmer hätten schon bezahlt, eine bestimmte Gegenstand-Zuordnung oder Kontaktdaten
-    hinterlegt."""
-    vorhandene_spalten = {row[1] for row in conn.execute("PRAGMA table_info(teilnehmer)").fetchall()}
+    hinterlegt. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
+    vorhandene_spalten = _vorhandene_spalten(conn, "teilnehmer")
     for spalte, sql_typ in _TEILNEHMER_NEUE_SPALTEN:
         if spalte not in vorhandene_spalten:
             conn.execute(f"ALTER TABLE teilnehmer ADD COLUMN {spalte} {sql_typ}")
@@ -204,6 +316,33 @@ def init_db(pfad: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    conn.commit()
+    _migriere_veranstaltung_spalten(conn)
+    _migriere_teilnehmer_spalten(conn)
+    return conn
+
+
+def init_db_postgres(dsn: str) -> _PostgresConnection:
+    """Öffnet eine gemeinsame PostgreSQL-Datenbank für die geplante Podman/Web-Version
+    (Mehrbenutzerzugriff) - das Pendant zu init_db() für die SQLite-Desktop-Version, mit
+    identischem Schema (SCHEMA_POSTGRES) und denselben Migrations-Funktionen. Alle
+    übrigen Funktionen in diesem Modul funktionieren mit der zurückgegebenen Verbindung
+    unverändert (siehe _PostgresConnection).
+
+    Importiert psycopg2 bewusst erst hier statt am Modulanfang, damit db.py für die
+    SQLite-Desktop-Version weiterhin ganz ohne diese zusätzliche Abhängigkeit auskommt -
+    genau wie pyzipper aktuell nur innerhalb der Backup-Funktionen gebraucht wird statt
+    global importiert zu werden.
+
+    dsn: vollständiger PostgreSQL-Verbindungsstring,
+    z. B. "postgresql://benutzer:passwort@host:5432/datenbankname".
+    """
+    import psycopg2
+    import psycopg2.extras
+
+    roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn = _PostgresConnection(roh_verbindung)
+    conn.executescript(SCHEMA_POSTGRES)
     conn.commit()
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
@@ -341,7 +480,10 @@ def vergebene_startnummern(conn: sqlite3.Connection, ausser_teilnehmer_id: int |
     if ausser_teilnehmer_id is not None:
         query += " AND id != ?"
         params.append(ausser_teilnehmer_id)
-    return {row[0] for row in conn.execute(query, params).fetchall()}
+    # Spaltenname statt Positionsindex (row[0]): sqlite3.Row erlaubt beides, die
+    # dict-artigen Zeilen der PostgreSQL-Verbindung (_PostgresConnection) nur den Zugriff
+    # per Spaltenname - siehe SCHEMA_POSTGRES/init_db_postgres weiter oben.
+    return {row["startnummer"] for row in conn.execute(query, params).fetchall()}
 
 
 def naechste_freie_startnummer(conn: sqlite3.Connection) -> int:

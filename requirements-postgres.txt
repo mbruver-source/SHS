@@ -1,0 +1,13 @@
+# Zusätzliche Abhängigkeit NUR für die PostgreSQL-Anbindung (init_db_postgres() in
+# db.py) - für die geplante Podman/Web-Version mit Mehrbenutzerzugriff.
+#
+# Bewusst NICHT in requirements.txt, damit der Windows-Installer (build_installer.bat,
+# build.spec, build-installer.yml) weiterhin schlank bleibt: die SQLite-Desktop-Version
+# braucht diese Abhängigkeit nie, db.py importiert psycopg2 deshalb auch nur innerhalb
+# von init_db_postgres() statt am Modulanfang (siehe dortiger Kommentar) - ein
+# Vereinsmitglied, das nur den Desktop-Installer nutzt, lädt psycopg2 nie mit herunter.
+#
+# Wird aktuell installiert von: tests.yml (für die TestDatenbankPostgres/
+# TestZeitplanPostgres-Tests in test_db.py gegen einen echten PostgreSQL-Service-
+# Container) - und später vom eigentlichen Web/Container-Backend, sobald das gebaut wird.
+psycopg2-binary>=2.9

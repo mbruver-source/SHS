@@ -26,6 +26,7 @@ from db import (
     get_teilnehmer,
     get_veranstaltung,
     init_db,
+    init_db_postgres,
     liste_termine,
     list_teilnehmer,
     list_zeitplan_eintraege,
@@ -47,6 +48,21 @@ from db import (
 
 
 class TestDatenbank(unittest.TestCase):
+    # Die folgenden drei Klassenattribute/-methoden werden von TestDatenbankPostgres
+    # (siehe Dateiende) überschrieben, um genau dieselben Tests zusätzlich gegen eine
+    # echte PostgreSQL-Datenbank laufen zu lassen - das stellt sicher, dass die
+    # Kernlogik (nicht nur die SQLite-spezifische Desktop-Variante) für die geplante
+    # Podman/Web-Version tatsächlich funktioniert, ohne den ganzen Testsatz zu duplizieren.
+
+    # sqlite3 und psycopg2 werfen bei einer CHECK-/UNIQUE-Verletzung unterschiedliche
+    # Exception-Typen.
+    IntegrityErrorTyp = sqlite3.IntegrityError
+    # Für die drei test_migration_*-Tests unten: die "id"-Spalten-DDL einer bewusst
+    # ohne die neueren Zusatzspalten angelegten "teilnehmer"-Tabelle (simuliert eine
+    # ältere Termin-Datei/-Datenbank) - siehe SCHEMA_POSTGRES in db.py für denselben
+    # Unterschied im eigentlichen Schema.
+    _ID_SPALTE_DDL = "INTEGER PRIMARY KEY AUTOINCREMENT"
+
     def setUp(self):
         # Jeder Test bekommt eine frische, temporäre Termin-Datei.
         fd, self.pfad = tempfile.mkstemp(suffix=".sqlite")
@@ -58,6 +74,33 @@ class TestDatenbank(unittest.TestCase):
         self.conn.close()
         if os.path.exists(self.pfad):
             os.remove(self.pfad)
+
+    def _neu_verbinden(self):
+        """Schließt die aktuelle Verbindung und öffnet eine neue auf dieselbe Termin-
+        Datei (führt dabei die Migrationen erneut aus) - simuliert, dass die Anwendung
+        eine bereits vorhandene, ältere Termin-Datei erneut öffnet. Aktualisiert
+        self.conn (auch relevant für tearDown) und gibt die neue Verbindung zusätzlich
+        zurück. Von TestDatenbankPostgres überschrieben (dort: neue Verbindung zur
+        selben PostgreSQL-Datenbank statt Datei-Neuöffnen)."""
+        self.conn.close()
+        self.conn = init_db(self.pfad)
+        return self.conn
+
+    def _lege_alte_teilnehmer_tabelle_an(self, zusatz_spalten_sql: str = "") -> None:
+        """Ersetzt die Tabelle 'teilnehmer' durch eine ältere Fassung ohne die später
+        hinzugekommenen Spalten (simuliert eine vor deren Einführung angelegte Termin-
+        Datei/-Datenbank) - für die drei test_migration_*-Tests unten. Die id-Spalte ist
+        dialektabhängig (siehe _ID_SPALTE_DDL), alles andere ist Standard-SQL und für
+        SQLite wie PostgreSQL identisch gültig."""
+        self.conn.execute("DROP TABLE teilnehmer")
+        self.conn.execute(
+            f"CREATE TABLE teilnehmer (id {self._ID_SPALTE_DDL}, "
+            "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
+            "rufname_hund TEXT NOT NULL, geschlecht TEXT, schulterhoehe_cm INTEGER, "
+            "chip_nr TEXT, art TEXT NOT NULL, stufe INTEGER NOT NULL, disziplin TEXT, "
+            "startnummer INTEGER UNIQUE, gegenstand_1 TEXT, gegenstand_2 TEXT, gegenstand_3 TEXT"
+            f"{zusatz_spalten_sql})"
+        )
 
     def test_veranstaltung_anlegen_und_lesen(self):
         self.assertIsNone(get_veranstaltung(self.conn))
@@ -113,9 +156,12 @@ class TestDatenbank(unittest.TestCase):
         self.assertIsNone(pruefungsgebuehr_fuer_art(None, "ED"))
 
     def test_migration_ergaenzt_zusatzfelder_in_alter_termin_datei(self):
-        # Simuliert eine Termin-Datei, die vor Einführung der Zusatzfelder angelegt wurde
-        # (Tabelle "veranstaltung" ohne diese Spalten) - init_db muss sie nachträglich
-        # ergänzen, ohne bestehende Daten zu verlieren.
+        # Simuliert eine Termin-Datei/-Datenbank, die vor Einführung der Zusatzfelder
+        # angelegt wurde (Tabelle "veranstaltung" ohne diese Spalten) - erneutes Öffnen
+        # (_neu_verbinden) muss sie nachträglich ergänzen, ohne bestehende Daten zu
+        # verlieren. Die DDL hier kommt ohne AUTOINCREMENT aus und ist daher für SQLite
+        # wie PostgreSQL unverändert gültig (siehe TestDatenbankPostgres für den
+        # Postgres-Nachlauf dieses Tests).
         self.conn.execute("DROP TABLE veranstaltung")
         self.conn.execute(
             "CREATE TABLE veranstaltung (id INTEGER PRIMARY KEY CHECK (id = 1), "
@@ -125,9 +171,8 @@ class TestDatenbank(unittest.TestCase):
             "INSERT INTO veranstaltung (id, verein, ort, datum) VALUES (1, 'Alt-Verein', 'Alt-Ort', '2025-01-01')"
         )
         self.conn.commit()
-        self.conn.close()
 
-        conn = init_db(self.pfad)
+        conn = self._neu_verbinden()
         v = get_veranstaltung(conn)
         self.assertEqual(v["verein"], "Alt-Verein")
         self.assertIsNone(v["pruefungsnummer"])
@@ -136,8 +181,6 @@ class TestDatenbank(unittest.TestCase):
         # set_veranstaltung funktioniert danach ganz normal weiter.
         set_veranstaltung(conn, verein="Alt-Verein", datum="2025-01-01", pruefungsnummer="P-1")
         self.assertEqual(get_veranstaltung(conn)["pruefungsnummer"], "P-1")
-        conn.close()
-        self.conn = init_db(self.pfad)  # tearDown erwartet self.conn offen
 
     def test_ed_teilnehmer_vollstaendiger_ablauf(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -260,19 +303,19 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(by_id[str(c)].von_startern, 1)
 
     def test_check_constraint_ed_braucht_disziplin(self):
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(self.IntegrityErrorTyp):
             add_teilnehmer(self.conn, NeuerTeilnehmer(
                 nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1, disziplin=None))
 
     def test_check_constraint_dk_darf_keine_disziplin_haben(self):
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(self.IntegrityErrorTyp):
             add_teilnehmer(self.conn, NeuerTeilnehmer(
                 nachname="X", vorname="Y", rufname_hund="Z", art="DK", stufe=1, disziplin="Trümmerfeld"))
 
     def test_check_constraint_punktzahl_ausserhalb_bereich(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1, disziplin="Trümmerfeld"))
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(self.IntegrityErrorTyp):
             eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=61, anzeige=10)  # max. 60
 
     def test_eintragen_ergebnis_mit_none_loescht_zuvor_eingetragenes_ergebnis(self):
@@ -364,22 +407,14 @@ class TestDatenbank(unittest.TestCase):
         # Spalten) - init_db muss sie nachträglich ergänzen, ohne bestehende Daten zu
         # verlieren. Bestehende Teilnehmer gelten dabei als "noch nicht bezahlt" und ihre
         # Gegenstände als "frei" (NULL), nicht als automatisch einer Disziplin zugeordnet.
-        self.conn.execute("DROP TABLE teilnehmer")
-        self.conn.execute(
-            "CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
-            "rufname_hund TEXT NOT NULL, geschlecht TEXT, schulterhoehe_cm INTEGER, "
-            "chip_nr TEXT, art TEXT NOT NULL, stufe INTEGER NOT NULL, disziplin TEXT, "
-            "startnummer INTEGER UNIQUE, gegenstand_1 TEXT, gegenstand_2 TEXT, gegenstand_3 TEXT)"
-        )
+        self._lege_alte_teilnehmer_tabelle_an()
         self.conn.execute(
             "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer, gegenstand_1) "
             "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1, 'Korken')"
         )
         self.conn.commit()
-        self.conn.close()
 
-        conn = init_db(self.pfad)
+        conn = self._neu_verbinden()
         alt = list_teilnehmer(conn)[0]
         self.assertEqual(alt["nachname"], "Alt")
         self.assertEqual(alt["bezahlt"], 0)
@@ -393,8 +428,6 @@ class TestDatenbank(unittest.TestCase):
             disziplin="Trümmerfeld", startnummer=1, gegenstand_1="Korken", gegenstand_1_disziplin="Trümmerfeld",
         ))
         self.assertEqual(get_teilnehmer(conn, alt["id"])["gegenstand_1_disziplin"], "Trümmerfeld")
-        conn.close()
-        self.conn = init_db(self.pfad)  # tearDown erwartet self.conn offen
 
     def test_migration_ergaenzt_verwaltungs_und_kontaktfelder_in_alter_termin_datei(self):
         # Simuliert eine Termin-Datei, die vor Einführung der Verwaltungs-/Kontaktdaten
@@ -402,23 +435,14 @@ class TestDatenbank(unittest.TestCase):
         # Telefon) angelegt wurde - init_db muss sie nachträglich ergänzen, ohne
         # bestehende Daten zu verlieren. Bestehende Teilnehmer gelten dabei als ohne
         # hinterlegte Verwaltungs-/Kontaktdaten (NULL), nicht mit irgendeinem Default.
-        self.conn.execute("DROP TABLE teilnehmer")
-        self.conn.execute(
-            "CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
-            "rufname_hund TEXT NOT NULL, geschlecht TEXT, schulterhoehe_cm INTEGER, "
-            "chip_nr TEXT, art TEXT NOT NULL, stufe INTEGER NOT NULL, disziplin TEXT, "
-            "startnummer INTEGER UNIQUE, gegenstand_1 TEXT, gegenstand_2 TEXT, gegenstand_3 TEXT, "
-            "bezahlt INTEGER NOT NULL DEFAULT 0)"
-        )
+        self._lege_alte_teilnehmer_tabelle_an(", bezahlt INTEGER NOT NULL DEFAULT 0")
         self.conn.execute(
             "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer) "
             "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1)"
         )
         self.conn.commit()
-        self.conn.close()
 
-        conn = init_db(self.pfad)
+        conn = self._neu_verbinden()
         alt = list_teilnehmer(conn)[0]
         self.assertEqual(alt["nachname"], "Alt")
         for spalte in (
@@ -433,8 +457,6 @@ class TestDatenbank(unittest.TestCase):
         aktualisiert = get_teilnehmer(conn, alt["id"])
         self.assertEqual(aktualisiert["plz"], "61479")
         self.assertEqual(aktualisiert["ort"], "Höppern")
-        conn.close()
-        self.conn = init_db(self.pfad)  # tearDown erwartet self.conn offen
 
     def test_teilnehmer_verwaltungs_und_kontaktfelder_werden_gespeichert(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -481,7 +503,7 @@ class TestDatenbank(unittest.TestCase):
         add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1,
             disziplin="Trümmerfeld", startnummer=5))
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(self.IntegrityErrorTyp):
             add_teilnehmer(self.conn, NeuerTeilnehmer(
                 nachname="B", vorname="B", rufname_hund="H", art="ED", stufe=1,
                 disziplin="Trümmerfeld", startnummer=5))
@@ -550,6 +572,9 @@ class TestZeitplan(unittest.TestCase):
     """Tests für die Zeitplan-Verwaltung: Leistungsrichter-Spuren mit frei sortierbaren
     Prüfungsblöcken/Pausen, Teilnehmer-Gruppierung, automatische Verteilung sowie die
     zeitliche Berechnung (Start-/Endzeiten je Zeile bzw. je Block)."""
+
+    # Siehe TestDatenbank oben - von TestZeitplanPostgres (Dateiende) überschrieben.
+    IntegrityErrorTyp = sqlite3.IntegrityError
 
     def setUp(self):
         fd, self.pfad = tempfile.mkstemp(suffix=".sqlite")
@@ -655,7 +680,7 @@ class TestZeitplan(unittest.TestCase):
 
     def test_check_constraint_pause_ohne_art_stufe_disziplin(self):
         rid = add_zeitplan_richter(self.conn)
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaises(self.IntegrityErrorTyp):
             self.conn.execute(
                 "INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, art, dauer_minuten) "
                 "VALUES (?, 0, 'pause', 'ED', 10)",
@@ -886,6 +911,89 @@ class TestTerminuebersicht(unittest.TestCase):
     def test_liste_termine_ignoriert_andere_dateitypen(self):
         (self.ordner / "notizen.txt").write_text("nicht relevant")
         self.assertEqual(liste_termine(self.ordner), [])
+
+
+# --- Dieselben Tests zusätzlich gegen PostgreSQL (geplante Podman/Web-Version) --------
+#
+# TestTerminuebersicht oben bleibt bewusst NUR gegen SQLite: sie testet die
+# Datei-Verwaltung (termine_ordner/liste_termine/dateiname_vorschlagen) - "ein Termin =
+# eine Datei" ist ein Konzept der Desktop-Version (siehe Moduldocstring in db.py) und hat
+# für eine gemeinsame PostgreSQL-Datenbank kein direktes Gegenstück; wie die Web-Version
+# einzelne Termine in einer gemeinsamen Datenbank unterscheidet, ist eine eigene, noch zu
+# klärende Design-Frage (nicht Teil dieser Umstellung).
+#
+# TestDatenbank und TestZeitplan dagegen decken die eigentliche Kernlogik ab (Teilnehmer,
+# Ergebnisse, Zeitplan) - genau die Funktionen, die künftig sowohl von der SQLite-
+# Desktop- als auch der PostgreSQL-Web-Version genutzt werden. Über die beiden
+# Unterklassen unten laufen exakt dieselben Testmethoden zusätzlich gegen eine echte
+# PostgreSQL-Datenbank, ohne den Testsatz zu duplizieren (siehe _PostgresBackendMixin).
+
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+_POSTGRES_TEST_DSN = os.environ.get("SHS_TEST_POSTGRES_DSN")
+
+
+def _postgres_testdaten_leeren(conn) -> None:
+    """Setzt die PostgreSQL-Testdatenbank vor jedem Test zurück. Anders als bei SQLite,
+    wo jeder Test automatisch eine frische, temporäre Datei bekommt (siehe
+    TestDatenbank.setUp), ist die Postgres-Testdatenbank eine dauerhafte, über alle Tests
+    hinweg gemeinsam genutzte Datenbank. RESTART IDENTITY sorgt zusätzlich dafür, dass
+    neu vergebene IDs - wie bei einer frischen SQLite-Datei - wieder bei 1 anfangen."""
+    conn.execute(
+        "TRUNCATE TABLE ergebnisse, teilnehmer, veranstaltung, zeitplan_eintrag, "
+        "zeitplan_richter RESTART IDENTITY CASCADE"
+    )
+    conn.commit()
+
+
+class _PostgresBackendMixin:
+    """Lässt die von TestDatenbank/TestZeitplan geerbten Testmethoden zusätzlich gegen
+    eine echte PostgreSQL-Datenbank laufen (siehe init_db_postgres() in db.py). Wird per
+    Mehrfachvererbung VOR TestDatenbank/TestZeitplan eingemischt (siehe die beiden
+    Klassen unten), sodass setUp/tearDown/IntegrityErrorTyp/_ID_SPALTE_DDL/_neu_verbinden
+    von hier verwendet werden, alle test_*-Methoden aber unverändert von der jeweiligen
+    Basisklasse geerbt werden.
+
+    Übersprungen (nicht fehlgeschlagen), wenn keine Testdatenbank über die
+    Umgebungsvariable SHS_TEST_POSTGRES_DSN verfügbar ist oder psycopg2 nicht installiert
+    ist - lokal typischerweise beides der Fall, läuft aber in der CI gegen einen echten
+    PostgreSQL-Service-Container (siehe tests.yml)."""
+
+    IntegrityErrorTyp = psycopg2.IntegrityError if psycopg2 is not None else Exception
+    _ID_SPALTE_DDL = "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
+
+    def setUp(self):
+        if not _POSTGRES_TEST_DSN:
+            self.skipTest(
+                "SHS_TEST_POSTGRES_DSN nicht gesetzt - PostgreSQL-Tests übersprungen "
+                "(z. B. lokal ohne laufenden Postgres-Server; läuft in der CI)"
+            )
+        if psycopg2 is None:
+            self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
+        self.conn = init_db_postgres(_POSTGRES_TEST_DSN)
+        _postgres_testdaten_leeren(self.conn)
+
+    def tearDown(self):
+        if getattr(self, "conn", None) is not None:
+            self.conn.close()
+
+    def _neu_verbinden(self):
+        self.conn.close()
+        self.conn = init_db_postgres(_POSTGRES_TEST_DSN)
+        return self.conn
+
+
+class TestDatenbankPostgres(_PostgresBackendMixin, TestDatenbank):
+    """Wiederholt sämtliche TestDatenbank-Tests gegen PostgreSQL statt SQLite -
+    siehe _PostgresBackendMixin."""
+
+
+class TestZeitplanPostgres(_PostgresBackendMixin, TestZeitplan):
+    """Wiederholt sämtliche TestZeitplan-Tests gegen PostgreSQL statt SQLite -
+    siehe _PostgresBackendMixin."""
 
 
 if __name__ == "__main__":
