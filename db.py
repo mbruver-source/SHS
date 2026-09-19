@@ -228,6 +228,9 @@ class _PostgresConnection:
     def commit(self) -> None:
         self._roh_verbindung.commit()
 
+    def rollback(self) -> None:
+        self._roh_verbindung.rollback()
+
     def close(self) -> None:
         self._roh_verbindung.close()
 

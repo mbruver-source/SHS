@@ -1323,6 +1323,15 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
 
     def tearDown(self):
         if getattr(self, "conn", None) is not None:
+            # rollback() zuerst: einige Tests (z.B. test_doppelter_benutzername_wird_
+            # abgelehnt) lösen absichtlich einen IntegrityError aus, um ihn zu prüfen -
+            # PostgreSQL markiert die laufende Transaktion danach als abgebrochen, jeder
+            # weitere Befehl auf derselben Verbindung schlägt dann mit
+            # InFailedSqlTransaction fehl, bis zurückgerollt wurde (anders als SQLite,
+            # das diese Einschränkung nicht kennt - deshalb fiel das hier erst beim
+            # ersten echten Lauf gegen PostgreSQL auf). rollback() selbst ist auch ohne
+            # abgebrochene Transaktion unschädlich.
+            self.conn.rollback()
             self.conn.execute("DELETE FROM public.web_benutzer")
             self.conn.commit()
             self.conn.close()

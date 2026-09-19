@@ -72,6 +72,14 @@ class TestPostgresConnectionWrapper(unittest.TestCase):
         self.conn.close()
         self.roh_conn.close.assert_called_once()
 
+    def test_rollback_delegiert_an_die_rohe_verbindung(self):
+        # Gebraucht z.B. in test_db.TestBenutzerkontenPostgres.tearDown(), um nach einem
+        # in einem Test absichtlich ausgelösten IntegrityError die von PostgreSQL als
+        # abgebrochen markierte Transaktion zurückzusetzen, bevor die nächste Abfrage auf
+        # derselben Verbindung läuft (siehe dortiger Kommentar).
+        self.conn.rollback()
+        self.roh_conn.rollback.assert_called_once()
+
     def test_fetchone_und_fetchall_delegieren_an_den_rohen_cursor(self):
         self.roh_cursor.fetchone.return_value = {"id": 1}
         self.roh_cursor.fetchall.return_value = [{"id": 1}, {"id": 2}]

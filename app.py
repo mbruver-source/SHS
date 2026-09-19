@@ -2097,9 +2097,11 @@ wiederherstellen – gut aufbewahren.</p>
 
 <h3>Versionsanzeige</h3>
 <p>Der Button "Version" neben "Hilfe" zeigt die aktuell installierte Version. "Nach
-Updates suchen" öffnet dort die Releases-Seite des Programms im Browser, wo eine neuere
-Version bei Bedarf von Hand heruntergeladen werden kann – eine automatische Prüfung im
-Hintergrund ist aktuell nicht eingebaut.</p>
+Updates suchen" prüft dort per Klick automatisch (über GitHub), ob eine neuere Version
+veröffentlicht wurde, und zeigt bei Bedarf einen Download-Button an – dafür wird kurz
+eine Internetverbindung gebraucht, ohne Internet erscheint stattdessen ein entsprechender
+Hinweis. Eine automatische Prüfung im Hintergrund beim Programmstart ist bewusst nicht
+eingebaut.</p>
 """
 
 
@@ -2128,20 +2130,71 @@ class HilfeDialog(QDialog):
         layout.addLayout(schliessen_zeile)
 
 
-#: Adresse der GitHub-Releases-Seite, die der "Nach Updates suchen"-Button im
-#: VersionDialog öffnet. Da das Repository privat ist, kann die Version NICHT
-#: automatisch (ohne Zugangsdaten) per GitHub-API geprüft werden - der Button öffnet
-#: stattdessen die Seite im Standardbrowser, wo man sich ggf. mit seinem GitHub-Konto
-#: anmeldet und die neueste Version von Hand herunterlädt. Siehe VersionDialog._updates_pruefen.
+#: Adresse der GitHub-Releases-Seite (zum Herunterladen einer neueren Version) bzw. der
+#: dazugehörigen GitHub-API (zum automatischen Prüfen, ob es eine gibt) - siehe
+#: VersionDialog._updates_pruefen. Seit das Repository öffentlich ist, funktioniert die
+#: API-Abfrage OHNE Zugangsdaten (bei einem privaten Repository wäre dafür ein
+#: angemeldetes GitHub-Konto mit Zugriff nötig gewesen - deshalb öffnete der Button
+#: früher nur die Releases-Seite im Browser zum manuellen Nachschauen).
 GITHUB_RELEASES_URL = "https://github.com/mbruver-source/SHS/releases"
+GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/mbruver-source/SHS/releases/latest"
+
+
+def _version_tupel(text: str) -> tuple[int, int, int] | None:
+    """Wandelt eine Versionsnummer der Form 'X.Y.Z' (optional mit führendem 'v', wie in
+    GitHub-Tag-Namen üblich) in ein vergleichbares Tupel um - liefert None bei
+    unerwartetem Format, statt eine Exception zu werfen (z. B. falls GitHub künftig
+    einmal einen anders benannten Pre-Release als "latest" führt)."""
+    text = text.strip().lstrip("vV")
+    teile = text.split(".")
+    if len(teile) != 3:
+        return None
+    try:
+        a, b, c = (int(t) for t in teile)
+    except ValueError:
+        return None
+    return (a, b, c)
+
+
+def _neueste_version_pruefen() -> tuple[str | None, str | None]:
+    """Fragt die öffentliche GitHub-Releases-API nach der neuesten veröffentlichten
+    Version - liefert (Versionsnummer-Text ohne führendes 'v', None) bei Erfolg bzw.
+    (None, verständlicher Fehlertext) bei jedem Problem (kein Internet - z. B. im
+    Vereinsnetz am Prüfungstag typischerweise ohne Internetzugang -, GitHub nicht
+    erreichbar, noch kein Release vorhanden usw.), damit VersionDialog._updates_pruefen
+    dem Nutzer in jedem Fall eine verständliche Rückmeldung zeigen kann, statt dass das
+    Programm an dieser Stelle abstürzt."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    anfrage = urllib.request.Request(
+        GITHUB_LATEST_RELEASE_API_URL, headers={"Accept": "application/vnd.github+json"}
+    )
+    try:
+        with urllib.request.urlopen(anfrage, timeout=5) as antwort:
+            daten = json.loads(antwort.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None, "Es wurde noch kein Release veröffentlicht."
+        return None, f"GitHub antwortete mit Fehler {exc.code}."
+    except (urllib.error.URLError, OSError):
+        return None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?)."
+    except (ValueError, KeyError):
+        return None, "Die Antwort von GitHub konnte nicht gelesen werden."
+
+    tag = str(daten.get("tag_name", "")).strip()
+    if not tag:
+        return None, "GitHub hat keine Versionsnummer geliefert."
+    return tag.lstrip("vV"), None
 
 
 class VersionDialog(QDialog):
     """Zeigt die aktuell laufende Programmversion (siehe VERSION oben, aus version.py -
     von bump_version.py bei jedem Release automatisch erzeugt) sowie einen Button, der
-    zur Kontrolle auf neuere Versionen die GitHub-Releases-Seite im Browser öffnet. Wird
-    über den Version-Button im Hauptfenster geöffnet, direkt neben "Hilfe" (siehe
-    HauptFenster._version_anzeigen)."""
+    per GitHub-API prüft, ob eine neuere Version veröffentlicht wurde (siehe
+    _neueste_version_pruefen oben). Wird über den Version-Button im Hauptfenster
+    geöffnet, direkt neben "Hilfe" (siehe HauptFenster._version_anzeigen)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2157,19 +2210,32 @@ class VersionDialog(QDialog):
         version_zeile.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         hinweis = QLabel(
-            "Da das Programm-Repository nicht öffentlich ist, kann diese Prüfung nicht "
-            "automatisch im Hintergrund laufen. Der Button unten öffnet die "
-            "Releases-Seite im Browser - dort steht, ob es eine neuere Version gibt "
-            "und der zugehörige Installer kann von dort heruntergeladen werden."
+            "Der Button unten fragt beim Klick die GitHub-Releases-Seite dieses "
+            "Programms ab und zeigt an, ob eine neuere Version verfügbar ist. Dafür "
+            "wird kurz eine Internetverbindung gebraucht - ohne Internet (z. B. am "
+            "Prüfungstag im Vereinsnetz) erscheint stattdessen ein entsprechender "
+            "Hinweis."
         )
         hinweis.setWordWrap(True)
 
-        updates_btn = QPushButton("Nach Updates suchen (GitHub öffnen)")
-        updates_btn.clicked.connect(self._updates_pruefen)
+        self._updates_btn = QPushButton("Nach Updates suchen")
+        self._updates_btn.clicked.connect(self._updates_pruefen)
+
+        self._ergebnis_zeile = QLabel("")
+        self._ergebnis_zeile.setWordWrap(True)
+        self._ergebnis_zeile.hide()
+
+        self._download_btn = QPushButton("Neue Version herunterladen (GitHub öffnen)")
+        self._download_btn.clicked.connect(self._releases_seite_oeffnen)
+        self._download_btn.hide()
+
+        seite_link_btn = QPushButton("Releases-Seite im Browser öffnen")
+        seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
 
         schliessen_btn = QPushButton("Schließen")
         schliessen_btn.clicked.connect(self.accept)
         schliessen_zeile = QHBoxLayout()
+        schliessen_zeile.addWidget(seite_link_btn)
         schliessen_zeile.addStretch()
         schliessen_zeile.addWidget(schliessen_btn)
 
@@ -2178,11 +2244,45 @@ class VersionDialog(QDialog):
         layout.addWidget(version_zeile)
         layout.addSpacing(8)
         layout.addWidget(hinweis)
-        layout.addWidget(updates_btn)
+        layout.addWidget(self._updates_btn)
+        layout.addWidget(self._ergebnis_zeile)
+        layout.addWidget(self._download_btn)
         layout.addSpacing(8)
         layout.addLayout(schliessen_zeile)
 
     def _updates_pruefen(self) -> None:
+        # Button während der (kurzen, durch den Timeout in _neueste_version_pruefen auf
+        # wenige Sekunden begrenzten) Abfrage deaktivieren und "wird geprüft" anzeigen,
+        # mit einem expliziten processEvents() dazwischen - ohne das bliebe die
+        # Oberfläche bis zur Antwort optisch eingefroren, da die Abfrage selbst
+        # synchron/blockierend läuft (kein eigener Hintergrund-Thread, für eine einzelne
+        # kurze Anfrage auf Klick hin bewusst nicht nötig).
+        self._updates_btn.setEnabled(False)
+        self._updates_btn.setText("Wird geprüft…")
+        self._download_btn.hide()
+        self._ergebnis_zeile.setText("")
+        self._ergebnis_zeile.hide()
+        QApplication.processEvents()
+
+        neueste_version, fehler = _neueste_version_pruefen()
+
+        self._updates_btn.setEnabled(True)
+        self._updates_btn.setText("Nach Updates suchen")
+        self._ergebnis_zeile.show()
+
+        if fehler is not None:
+            self._ergebnis_zeile.setText(fehler)
+            return
+
+        aktuell = _version_tupel(VERSION)
+        neueste = _version_tupel(neueste_version)
+        if aktuell is not None and neueste is not None and neueste > aktuell:
+            self._ergebnis_zeile.setText(f"Neue Version {neueste_version} verfügbar (installiert: {VERSION}).")
+            self._download_btn.show()
+        else:
+            self._ergebnis_zeile.setText("Du hast bereits die neueste Version.")
+
+    def _releases_seite_oeffnen(self) -> None:
         QDesktopServices.openUrl(QUrl(GITHUB_RELEASES_URL))
 
 

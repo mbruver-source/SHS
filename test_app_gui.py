@@ -326,29 +326,90 @@ def test_versiondialog_zeigt_aktuelle_version(qtbot):
     assert any(VERSION in t for t in texte)
 
 
-def test_versiondialog_update_button_oeffnet_github_releases_seite(qtbot, monkeypatch):
-    """Da das Repository privat ist, kann nicht automatisch im Hintergrund geprüft
-    werden - der Button öffnet stattdessen die GitHub-Releases-Seite im Browser
-    (siehe GITHUB_RELEASES_URL/VersionDialog._updates_pruefen in app.py)."""
+def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qtbot, monkeypatch):
+    """Seit das Repository öffentlich ist, prüft der "Nach Updates suchen"-Button per
+    GitHub-API automatisch, statt nur die Releases-Seite zu öffnen (siehe
+    _neueste_version_pruefen/VersionDialog._updates_pruefen in app.py) - hier mit einer
+    gefakten Antwort ("es gibt eine neuere Version"), damit der Test ohne echten
+    Netzwerkzugriff läuft."""
     import app
 
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     dialog.show()
 
-    geoeffnete_urls = []
-    monkeypatch.setattr(
-        app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString())
-    )
+    neuere_version = ".".join(str(t + 1) for t in app._version_tupel(VERSION)[:1]) + ".0.0"
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: (neuere_version, None))
+    assert not dialog._download_btn.isVisible()
 
-    update_buttons = [
-        b for b in dialog.findChildren(QPushButton) if "Updates" in b.text()
-    ]
+    update_buttons = [b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen"]
     assert len(update_buttons) == 1
-
     qtbot.mouseClick(update_buttons[0], Qt.MouseButton.LeftButton)
 
+    assert neuere_version in dialog._ergebnis_zeile.text()
+    assert dialog._download_btn.isVisible()
+
+    geoeffnete_urls = []
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()))
+    qtbot.mouseClick(dialog._download_btn, Qt.MouseButton.LeftButton)
     assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
+
+
+def test_versiondialog_update_button_zeigt_hinweis_wenn_aktuell(qtbot, monkeypatch):
+    import app
+
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: (VERSION, None))
+
+    update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
+    qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
+
+    assert "bereits die neueste Version" in dialog._ergebnis_zeile.text()
+    assert not dialog._download_btn.isVisible()
+
+
+def test_versiondialog_update_button_zeigt_fehler_ohne_internet(qtbot, monkeypatch):
+    """_neueste_version_pruefen() fängt Netzwerkfehler selbst ab und liefert einen
+    Fehlertext statt einer Exception (siehe dortiger Docstring) - der Dialog zeigt diesen
+    Text dann einfach an, statt abzustürzen."""
+    import app
+
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    monkeypatch.setattr(
+        app, "_neueste_version_pruefen", lambda: (None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?).")
+    )
+
+    update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
+    qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
+
+    assert "Keine Verbindung" in dialog._ergebnis_zeile.text()
+    assert not dialog._download_btn.isVisible()
+
+
+def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugriff(qtbot, monkeypatch):
+    """Der separate Link "Releases-Seite im Browser öffnen" bleibt als manueller
+    Rückfallweg bestehen (z. B. falls die automatische Prüfung fehlschlägt) und ruft
+    dabei NIE die GitHub-API auf, sondern öffnet direkt den Browser."""
+    import app
+
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    aufgerufen = {}
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: aufgerufen.setdefault("ja", True))
+    geoeffnete_urls = []
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()))
+
+    seite_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Releases-Seite im Browser öffnen")
+    qtbot.mouseClick(seite_btn, Qt.MouseButton.LeftButton)
+
+    assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
+    assert "ja" not in aufgerufen
 
 
 # --- Automatisches Speichern beim Beenden -------------------------------------------

@@ -130,15 +130,15 @@ einem Update) erscheint die Meldung auf demselben Rechner nicht erneut.
 **Warum unsigniert bleibt:** Eine Signatur, die diese Meldung zuverlässig
 verhindert, würde eine laufende Kosten- bzw. Aufwandsverpflichtung bedeuten
 (z. B. Azure Artifact Signing ab ca. 10 $/Monat, ein klassisches
-Code-Signing-Zertifikat ab ca. 150 $/Jahr) oder – bei der kostenlosen
-SignPath-Foundation-Option – eine Offenlegung des kompletten Quellcodes unter
-einer Open-Source-Lizenz plus Umstellung des Builds auf eine automatisierte
-CI/CD-Pipeline (z. B. GitHub Actions statt `build_installer.bat` auf dem
-eigenen PC). Für ein vereinsintern verteiltes Tool mit wenigen Nutzern steht
-der Aufwand dazu in keinem Verhältnis zum Nutzen – der einmalige Klick auf
-"Trotzdem ausführen" ist der pragmatischere Weg. Falls sich das je ändert
-(z. B. größere Verbreitung, Wunsch nach Open Source), lässt sich eine der
-beiden Optionen jederzeit nachrüsten.
+Code-Signing-Zertifikat ab ca. 150 $/Jahr). Seitdem das Repository öffentlich
+und unter der [MIT-Lizenz](LICENSE) verfügbar ist und der Build bereits über
+GitHub Actions läuft (siehe unten), sind die Voraussetzungen für die
+kostenlose Signierung über die SignPath Foundation erfüllt; die dafür nötige
+[Code Signing Policy](CODE_SIGNING_POLICY.md) ist bereits vorbereitet. Die
+eigentliche Bewerbung bei SignPath sowie die Aktivierung von MFA auf dem
+GitHub-Konto stehen aber noch aus – bis dahin bleibt die Setup-Datei
+unsigniert und der einmalige Klick auf "Trotzdem ausführen" ist weiterhin
+nötig.
 
 **Beim Weitergeben der Setup-Datei an neue Nutzer:** kurz auf diesen
 Klick hinweisen, damit niemand die Installation deswegen abbricht.
