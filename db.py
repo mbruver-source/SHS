@@ -251,11 +251,20 @@ def _vorhandene_spalten(conn, tabelle: str) -> set[str]:
     die beiden Migrations-Funktionen unten. Funktioniert für eine lokale SQLite-
     Termin-Datei (PRAGMA table_info, dort per Positionsindex - so liefert es sqlite3)
     genauso wie für eine gemeinsame PostgreSQL-Datenbank (information_schema.columns,
-    dort per Spaltenname - so liefert es der _PostgresConnection-Wrapper)."""
+    dort per Spaltenname - so liefert es der _PostgresConnection-Wrapper).
+
+    Wichtig bei PostgreSQL mit mehreren Terminen (siehe Terminverwaltungs-Abschnitt
+    weiter unten): information_schema.columns listet OHNE Einschränkung Spalten aus
+    ALLEN Schemas, nicht nur aus dem gerade aktiven (search_path) - eine gleichnamige
+    Tabelle in einem ANDEREN Termin-Schema (z.B. termin_2.veranstaltung) würde sonst mit
+    hineinzählen. `table_schema = current_schema()` schränkt deshalb gezielt auf das
+    Schema ein, das der aktuelle search_path gerade tatsächlich anspricht."""
     if isinstance(conn, sqlite3.Connection):
         return {row[1] for row in conn.execute(f"PRAGMA table_info({tabelle})").fetchall()}
     rows = conn.execute(
-        "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tabelle,)
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name = ? AND table_schema = current_schema()",
+        (tabelle,),
     ).fetchall()
     return {row["column_name"] for row in rows}
 
@@ -322,12 +331,30 @@ def init_db(pfad: str) -> sqlite3.Connection:
     return conn
 
 
+def _richte_schema_im_aktuellen_suchpfad_ein(conn) -> None:
+    """Legt die Tabellen (SCHEMA_POSTGRES) im aktuellen search_path der Verbindung an und
+    führt die Migrationen aus. Gemeinsam genutzt von init_db_postgres() (ein Termin = eine
+    ganze Datenbank/eigene Verbindung) und erstelle_termin_postgres()/
+    oeffne_termin_postgres() weiter unten (mehrere Termine = mehrere Schemas innerhalb
+    EINER gemeinsam genutzten Datenbank, siehe dortige Kommentare)."""
+    conn.executescript(SCHEMA_POSTGRES)
+    conn.commit()
+    _migriere_veranstaltung_spalten(conn)
+    _migriere_teilnehmer_spalten(conn)
+
+
 def init_db_postgres(dsn: str) -> _PostgresConnection:
-    """Öffnet eine gemeinsame PostgreSQL-Datenbank für die geplante Podman/Web-Version
-    (Mehrbenutzerzugriff) - das Pendant zu init_db() für die SQLite-Desktop-Version, mit
-    identischem Schema (SCHEMA_POSTGRES) und denselben Migrations-Funktionen. Alle
-    übrigen Funktionen in diesem Modul funktionieren mit der zurückgegebenen Verbindung
-    unverändert (siehe _PostgresConnection).
+    """Öffnet eine PostgreSQL-Datenbank für EINEN Termin (die ganze Datenbank entspricht
+    dabei einer SQLite-Termin-Datei) - das Pendant zu init_db() für die SQLite-Desktop-
+    Version, mit identischem Schema (SCHEMA_POSTGRES) und denselben Migrations-
+    Funktionen. Alle übrigen Funktionen in diesem Modul funktionieren mit der
+    zurückgegebenen Verbindung unverändert (siehe _PostgresConnection).
+
+    Für die geplante Podman/Web-Version mit MEHREREN Terminen in EINER gemeinsam
+    genutzten Datenbank (Mehrbenutzerzugriff) siehe stattdessen die Terminverwaltung
+    weiter unten (verbinde_postgres_server()/erstelle_termin_postgres()/
+    oeffne_termin_postgres()/loesche_termin_postgres()) - diese Funktion hier bleibt der
+    einfachere Baustein für den Fall einer eigenen Datenbank pro Termin.
 
     Importiert psycopg2 bewusst erst hier statt am Modulanfang, damit db.py für die
     SQLite-Desktop-Version weiterhin ganz ohne diese zusätzliche Abhängigkeit auskommt -
@@ -342,10 +369,7 @@ def init_db_postgres(dsn: str) -> _PostgresConnection:
 
     roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
     conn = _PostgresConnection(roh_verbindung)
-    conn.executescript(SCHEMA_POSTGRES)
-    conn.commit()
-    _migriere_veranstaltung_spalten(conn)
-    _migriere_teilnehmer_spalten(conn)
+    _richte_schema_im_aktuellen_suchpfad_ein(conn)
     return conn
 
 
@@ -1026,6 +1050,189 @@ def dateiname_vorschlagen(verein: str, datum: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "-", verein or "").strip("-") or "Termin"
     datum_teil = re.sub(r"[^0-9-]", "", datum or "") or "ohne-datum"
     return f"{datum_teil}_{slug}.sqlite"
+
+
+# --- Terminverwaltung für PostgreSQL (mehrere Termine in EINER gemeinsamen Datenbank) --
+#
+# Pendant zum Terminübersicht-Abschnitt oben, für die geplante Podman/Web-Version mit
+# Mehrbenutzerzugriff (siehe Grobkonzept/Fortschritt.md). Bei der SQLite-Desktop-Version
+# entspricht ein Termin einer eigenen Datei - "alle Termine auflisten" heißt dort einfach
+# "den Ordner auflisten" (liste_termine()), und "einen Termin löschen" heißt "die Datei
+# löschen". Auf einem gemeinsam genutzten PostgreSQL-Server, auf den mehrere Nutzer
+# gleichzeitig zugreifen, gibt es aber keine "Dateien" - stattdessen bekommt jeder Termin
+# ein eigenes PostgreSQL-SCHEMA (ein Namensraum für Tabellen innerhalb einer Datenbank,
+# z. B. "termin_17"), das dieselben Tabellen enthält wie eine SQLite-Termin-Datei. Das
+# bildet dieselbe Isolation und dieselbe gezielte, vollständige Löschbarkeit nach, die im
+# Grobkonzept aus Datenschutzgründen ausdrücklich gefordert ist (DROP SCHEMA ... CASCADE
+# entspricht dabei dem Löschen einer Datei) - und der entscheidende Vorteil: alle ~40
+# Datenfunktionen weiter oben in diesem Modul (add_teilnehmer, eintragen_ergebnis, ...)
+# brauchen dafür KEINE Änderung. Welcher Termin gemeint ist, wird eine Ebene darüber
+# entschieden, indem der search_path der Verbindung auf das passende Schema gesetzt wird
+# (oeffne_termin_postgres()) - danach arbeiten alle übrigen Funktionen ganz normal auf
+# `conn` weiter, exakt wie bei einer geöffneten SQLite-Termin-Datei.
+#
+# Eine schlanke "Registry"-Tabelle (im PostgreSQL-Standard-Schema "public", also
+# außerhalb jedes einzelnen Termin-Schemas) führt Buch darüber, welche Schema-Namen zu
+# welchem Termin gehören - das Pendant zum "Ordner mit *.sqlite-Dateien" der
+# Desktop-Version. Absichtlich SCHLANK gehalten (nur id/schema_name/erstellt_am, keine
+# Kopie von Verein/Ort/Datum): liste_termine_postgres() liest diese Angaben stattdessen
+# direkt aus der "veranstaltung"-Tabelle jedes einzelnen Termin-Schemas, genau wie
+# liste_termine() bei SQLite jede Datei kurz öffnet - so gibt es nur EINE Quelle der
+# Wahrheit statt zwei, die auseinanderlaufen könnten.
+#
+# Bewusst NICHT Teil dieses Moduls: eine Auswertung ÜBER mehrere Termine hinweg (auf
+# ausdrücklichen Wunsch nicht benötigt, siehe Chatverlauf) - jedes Schema bleibt
+# vollständig eigenständig, wie bisher jede Termin-Datei.
+
+_SCHEMA_NAME_MUSTER = re.compile(r"^termin_[0-9]+$")
+
+
+def _pruefe_schema_name(schema_name: str) -> None:
+    """Stellt sicher, dass `schema_name` dem erwarteten Muster ('termin_<Zahl>')
+    entspricht, BEVOR er in einen SQL-Text eingesetzt wird (CREATE/DROP SCHEMA und SET
+    search_path erlauben - anders als normale Werte - keine parametrisierten Platzhalter
+    für Bezeichner). In der Praxis wird `schema_name` in diesem Modul ausschließlich
+    intern aus der Registry-ID erzeugt (nie aus direkter Nutzereingabe übernommen) - diese
+    Prüfung ist die zusätzliche Absicherung dagegen, falls sich das einmal ändert."""
+    if not _SCHEMA_NAME_MUSTER.match(schema_name):
+        raise ValueError(f"Ungültiger Schema-Name: {schema_name!r}")
+
+
+def _setze_termin_suchpfad(conn, schema_name: str) -> None:
+    """Wechselt die Verbindung auf das angegebene Schema ('public' für die
+    Registry-Tabelle, sonst ein Termin-Schema) - siehe Abschnitts-Kommentar oben."""
+    if schema_name != "public":
+        _pruefe_schema_name(schema_name)
+    conn.execute(f"SET search_path TO {schema_name}")
+
+
+@dataclass
+class TerminInfoPostgres:
+    """Eintrag für die Terminübersicht der PostgreSQL/Web-Version - das Pendant zu
+    TerminInfo (SQLite) oben, ohne die dort dateibezogenen Felder (pfad/dateiname/
+    lesbar), dafür mit der registrierten ID und dem Schema-Namen."""
+    id: int
+    schema_name: str
+    verein: str | None
+    ort: str | None
+    datum: str | None
+    anzahl_teilnehmer: int
+    erstellt_am: object  # datetime, vom psycopg2-Treiber geliefert
+
+
+def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
+    """Öffnet eine Verbindung zum gemeinsam genutzten PostgreSQL-Server für die
+    Terminverwaltung (anlegen/auflisten/öffnen/löschen, siehe die Funktionen unten) - das
+    Pendant zum Anzeigen der Terminübersicht beim Programmstart der Desktop-Version
+    (termine_ordner()/liste_termine()). Legt bei Bedarf die Registry-Tabelle an.
+
+    Importiert psycopg2 bewusst erst hier statt am Modulanfang - siehe init_db_postgres()
+    weiter oben für die Begründung.
+
+    dsn: vollständiger PostgreSQL-Verbindungsstring (ohne Bezug zu einem bestimmten
+    Termin - die Datenbank selbst wird von allen Terminen gemeinsam genutzt, siehe
+    Abschnitts-Kommentar oben), z. B. "postgresql://benutzer:passwort@host:5432/shs".
+    """
+    import psycopg2
+    import psycopg2.extras
+
+    roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+    conn = _PostgresConnection(roh_verbindung)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS public.termin_registry ("
+        "id INTEGER PRIMARY KEY, schema_name TEXT NOT NULL UNIQUE, "
+        "erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now())"
+    )
+    conn.commit()
+    return conn
+
+
+def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
+    """Legt einen neuen, leeren Termin als eigenes PostgreSQL-Schema an (Postgres-Pendant
+    zu einer neuen, leeren Termin-Datei bei der SQLite-Desktop-Version) - Isolation und
+    spätere gezielte Löschbarkeit bleiben dadurch erhalten (siehe loesche_termin_postgres
+    unten). Enthält danach dieselben (leeren) Tabellen wie init_db()/init_db_postgres().
+    Verein/Ort/Datum werden anschließend ganz normal über set_veranstaltung() gesetzt,
+    NACHDEM mit oeffne_termin_postgres() auf das neue Schema gewechselt wurde (hier noch
+    None, wie bei einer frisch angelegten SQLite-Termin-Datei vor dem ersten Ausfüllen).
+
+    Die Schema-ID kommt aus einer eigenen Sequenz statt aus der Registry-Tabelle selbst
+    (die 'id' dort könnte sonst erst NACH dem Einfügen der Zeile bekannt sein, obwohl der
+    Schema-Name - der ja von der ID abhängt - schon beim Einfügen gebraucht wird). Eine
+    Sequenz vergibt zudem nie zweimal denselben Wert, auch nicht nach einem Löschen - ein
+    neuer Termin bekommt also nie versehentlich den Schema-Namen eines zuvor gelöschten."""
+    _setze_termin_suchpfad(conn, "public")
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS termin_registry_id_seq")
+    neue_id = conn.execute("SELECT nextval('termin_registry_id_seq') AS id").fetchone()["id"]
+    schema_name = f"termin_{neue_id}"
+    conn.execute(
+        "INSERT INTO termin_registry (id, schema_name) VALUES (?, ?)",
+        (neue_id, schema_name),
+    )
+    conn.execute(f"CREATE SCHEMA {schema_name}")
+    _setze_termin_suchpfad(conn, schema_name)
+    _richte_schema_im_aktuellen_suchpfad_ein(conn)
+    zeile = conn.execute(
+        "SELECT erstellt_am FROM public.termin_registry WHERE id = ?", (neue_id,)
+    ).fetchone()
+    _setze_termin_suchpfad(conn, "public")
+    return TerminInfoPostgres(
+        id=neue_id, schema_name=schema_name, verein=None, ort=None, datum=None,
+        anzahl_teilnehmer=0, erstellt_am=zeile["erstellt_am"],
+    )
+
+
+def oeffne_termin_postgres(conn, schema_name: str) -> None:
+    """Wechselt die Verbindung auf das Schema eines bestehenden Termins (Postgres-Pendant
+    zum Öffnen einer Termin-Datei bei der SQLite-Desktop-Version) und führt dabei - genau
+    wie init_db()/init_db_postgres() - die Migrationen erneut aus, damit auch ein älterer
+    Termin automatisch auf den aktuellen Stand gebracht wird. Alle übrigen Funktionen in
+    diesem Modul (add_teilnehmer, eintragen_ergebnis, berechne_auswertung, ...) arbeiten
+    danach ganz normal auf `conn` weiter - bis zum nächsten Wechsel (ein erneuter Aufruf
+    hier, oder _setze_termin_suchpfad(conn, "public") für die Registry-Funktionen)."""
+    _setze_termin_suchpfad(conn, schema_name)
+    _migriere_veranstaltung_spalten(conn)
+    _migriere_teilnehmer_spalten(conn)
+
+
+def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
+    """Postgres-Pendant zu liste_termine() (SQLite) - ein Registry-Eintrag entspricht
+    dabei einer Datei im Termine-Ordner. Für jeden registrierten Termin wird kurz auf
+    dessen Schema gewechselt, um Verein/Ort/Datum/Teilnehmerzahl zu lesen - genau die
+    gleiche Vorgehensweise wie bei liste_termine(), das jede Datei kurz öffnet. Neueste
+    zuerst (nach Datum, wie liste_termine())."""
+    _setze_termin_suchpfad(conn, "public")
+    eintraege = conn.execute(
+        "SELECT id, schema_name, erstellt_am FROM termin_registry ORDER BY erstellt_am"
+    ).fetchall()
+    ergebnisse: list[TerminInfoPostgres] = []
+    for eintrag in eintraege:
+        schema_name = eintrag["schema_name"]
+        _setze_termin_suchpfad(conn, schema_name)
+        v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
+        anzahl = conn.execute("SELECT COUNT(*) AS anzahl FROM teilnehmer").fetchone()["anzahl"]
+        ergebnisse.append(TerminInfoPostgres(
+            id=eintrag["id"], schema_name=schema_name,
+            verein=v["verein"] if v else None, ort=v["ort"] if v else None,
+            datum=v["datum"] if v else None, anzahl_teilnehmer=anzahl,
+            erstellt_am=eintrag["erstellt_am"],
+        ))
+    _setze_termin_suchpfad(conn, "public")
+    ergebnisse.sort(key=lambda t: (t.datum or "", t.schema_name), reverse=True)
+    return ergebnisse
+
+
+def loesche_termin_postgres(conn, schema_name: str) -> None:
+    """Löscht einen Termin vollständig und gezielt (Postgres-Pendant zum Löschen einer
+    Termin-Datei bei der SQLite-Desktop-Version - siehe Grobkonzept: aus
+    Datenschutzgründen ausdrücklich geforderte, gezielte Löschmöglichkeit, ohne andere
+    Termine zu berühren). DROP SCHEMA ... CASCADE entfernt dabei alle Tabellen/Daten
+    dieses einen Termins auf einen Schlag."""
+    _pruefe_schema_name(schema_name)
+    _setze_termin_suchpfad(conn, "public")
+    conn.execute(f"DROP SCHEMA {schema_name} CASCADE")
+    conn.execute("DELETE FROM termin_registry WHERE schema_name = ?", (schema_name,))
+    conn.commit()
 
 
 # --- Datensicherung (Export/Import aller Termine als ZIP, optional passwortgeschützt) ---

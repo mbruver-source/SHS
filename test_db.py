@@ -22,24 +22,29 @@ from db import (
     dateiname_vorschlagen,
     delete_teilnehmer,
     eintragen_ergebnis,
+    erstelle_termin_postgres,
     gegenstand_fuer_disziplin,
     get_teilnehmer,
     get_veranstaltung,
     init_db,
     init_db_postgres,
     liste_termine,
+    liste_termine_postgres,
     list_teilnehmer,
     list_zeitplan_eintraege,
     list_zeitplan_richter,
+    loesche_termin_postgres,
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
+    oeffne_termin_postgres,
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
     setze_bezahlt,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
+    verbinde_postgres_server,
     vergebene_startnummern,
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
@@ -994,6 +999,114 @@ class TestDatenbankPostgres(_PostgresBackendMixin, TestDatenbank):
 class TestZeitplanPostgres(_PostgresBackendMixin, TestZeitplan):
     """Wiederholt sämtliche TestZeitplan-Tests gegen PostgreSQL statt SQLite -
     siehe _PostgresBackendMixin."""
+
+
+# --- Terminverwaltung für PostgreSQL (mehrere Termine in einer gemeinsamen Datenbank) --
+#
+# Für verbinde_postgres_server()/erstelle_termin_postgres()/oeffne_termin_postgres()/
+# liste_termine_postgres()/loesche_termin_postgres() (siehe dortige Kommentare in db.py)
+# gibt es - anders als für TestDatenbank/TestZeitplan oben - kein SQLite-Gegenstück zum
+# Wiederverwenden: "mehrere Termine in einer gemeinsamen Datenbank" ist ein Konzept, das
+# bei der Desktop-Version (ein Termin = eine Datei) so nicht existiert. Eigene,
+# eigenständige Tests, mit demselben Skip-Verhalten wie oben (kein SHS_TEST_POSTGRES_DSN/
+# psycopg2 lokal -> übersprungen, läuft in der CI).
+
+class TestTerminverwaltungPostgres(unittest.TestCase):
+    def setUp(self):
+        if not _POSTGRES_TEST_DSN:
+            self.skipTest(
+                "SHS_TEST_POSTGRES_DSN nicht gesetzt - PostgreSQL-Tests übersprungen "
+                "(z. B. lokal ohne laufenden Postgres-Server; läuft in der CI)"
+            )
+        if psycopg2 is None:
+            self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
+        self.conn = verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        self._registry_leeren()
+
+    def tearDown(self):
+        if getattr(self, "conn", None) is not None:
+            self._registry_leeren()
+            self.conn.close()
+
+    def _registry_leeren(self):
+        """Entfernt alle Termin-Schemas und Registry-Einträge eines evtl. vorigen
+        Testlaufs, damit jeder Test mit einer leeren Registry beginnt - Pendant zur
+        frischen, temporären SQLite-Datei in TestDatenbank.setUp()."""
+        zeilen = self.conn.execute("SELECT schema_name FROM public.termin_registry").fetchall()
+        for zeile in zeilen:
+            self.conn.execute(f"DROP SCHEMA IF EXISTS {zeile['schema_name']} CASCADE")
+        self.conn.execute("DELETE FROM termin_registry")
+        self.conn.commit()
+
+    def test_zwei_termine_sind_voneinander_isoliert(self):
+        a = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, a.schema_name)
+        set_veranstaltung(self.conn, verein="Verein A", datum="2026-09-19")
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld",
+        ))
+
+        b = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, b.schema_name)
+        set_veranstaltung(self.conn, verein="Verein B", datum="2026-10-01")
+
+        # Termin B sieht weder den Teilnehmer noch die Veranstaltungsdaten von Termin A
+        self.assertEqual(list_teilnehmer(self.conn), [])
+        self.assertEqual(get_veranstaltung(self.conn)["verein"], "Verein B")
+
+        oeffne_termin_postgres(self.conn, a.schema_name)
+        self.assertEqual(len(list_teilnehmer(self.conn)), 1)
+        self.assertEqual(get_veranstaltung(self.conn)["verein"], "Verein A")
+
+    def test_liste_termine_zeigt_verein_ort_datum_und_teilnehmerzahl_neueste_zuerst(self):
+        a = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, a.schema_name)
+        set_veranstaltung(self.conn, verein="Verein A", ort="Ort A", datum="2026-09-19")
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="X", vorname="Y", rufname_hund="Z", art="DK", stufe=1,
+        ))
+
+        b = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, b.schema_name)
+        set_veranstaltung(self.conn, verein="Verein B", ort="Ort B", datum="2026-10-01")
+
+        termine = liste_termine_postgres(self.conn)
+        self.assertEqual(len(termine), 2)
+        self.assertEqual(termine[0].verein, "Verein B")  # neuestes Datum zuerst
+        self.assertEqual(termine[0].ort, "Ort B")
+        self.assertEqual(termine[0].anzahl_teilnehmer, 0)
+        self.assertEqual(termine[1].verein, "Verein A")
+        self.assertEqual(termine[1].anzahl_teilnehmer, 1)
+
+    def test_loeschen_entfernt_nur_den_einen_termin(self):
+        a = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, a.schema_name)
+        set_veranstaltung(self.conn, verein="Verein A", datum="2026-09-19")
+
+        b = erstelle_termin_postgres(self.conn)
+        oeffne_termin_postgres(self.conn, b.schema_name)
+        set_veranstaltung(self.conn, verein="Verein B", datum="2026-10-01")
+
+        loesche_termin_postgres(self.conn, a.schema_name)
+
+        termine = liste_termine_postgres(self.conn)
+        self.assertEqual([t.schema_name for t in termine], [b.schema_name])
+
+        vorhandene_schemas = {
+            zeile["schema_name"]
+            for zeile in self.conn.execute("SELECT schema_name FROM information_schema.schemata").fetchall()
+        }
+        self.assertNotIn(a.schema_name, vorhandene_schemas)
+
+    def test_ungueltiger_schema_name_wird_abgelehnt(self):
+        # Schützt davor, dass ein Schema-Name jemals ungeprüft in SET search_path/
+        # CREATE/DROP SCHEMA landet (siehe _pruefe_schema_name in db.py).
+        with self.assertRaises(ValueError):
+            loesche_termin_postgres(self.conn, "public")
+        with self.assertRaises(ValueError):
+            loesche_termin_postgres(self.conn, "termin_1; DROP SCHEMA public CASCADE; --")
+        with self.assertRaises(ValueError):
+            oeffne_termin_postgres(self.conn, "nicht_erlaubt")
 
 
 if __name__ == "__main__":
