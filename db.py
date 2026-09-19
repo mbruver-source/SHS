@@ -1382,6 +1382,13 @@ def exportiere_termin_nach_postgres(sqlite_conn: sqlite3.Connection, postgres_co
     nach der Prüfung holt importiere_ergebnisse_aus_postgres() die dort eingetragenen
     Ergebnisse zurück."""
     neuer_termin = erstelle_termin_postgres(postgres_conn)
+    # erstelle_termin_postgres() setzt den search_path am Ende bewusst zurück auf
+    # "public" (siehe dortiger Kommentar) - ohne dieses erneute Umschalten würde
+    # kopiere_termin_daten() alle Daten in die falschen (gemeinsam genutzten)
+    # "public"-Tabellen schreiben statt in das neue Termin-Schema (in der echten CI
+    # gefunden: IndexError beim anschließenden Import, weil das neue Schema leer
+    # blieb, siehe Fortschritt.md).
+    _setze_termin_suchpfad(postgres_conn, neuer_termin.schema_name)
     kopiere_termin_daten(sqlite_conn, postgres_conn)
     postgres_conn.commit()
     # anzahl_teilnehmer/verein/ort/datum in erstelle_termin_postgres()s Rückgabe waren noch

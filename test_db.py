@@ -73,6 +73,13 @@ class TestDatenbank(unittest.TestCase):
     # ältere Termin-Datei/-Datenbank) - siehe SCHEMA_POSTGRES in db.py für denselben
     # Unterschied im eigentlichen Schema.
     _ID_SPALTE_DDL = "INTEGER PRIMARY KEY AUTOINCREMENT"
+    # Ebenfalls dialektabhängig: SQLite kennt bei DROP TABLE kein CASCADE (und braucht
+    # auch keins, da Fremdschlüssel hier standardmäßig nicht erzwungen werden); bei
+    # PostgreSQL hängt dagegen die "ergebnisse"-Tabelle per Fremdschlüssel an
+    # "teilnehmer" - ohne CASCADE schlägt das DROP TABLE in _lege_alte_teilnehmer_tabelle_an()
+    # unten dort mit "cannot drop table teilnehmer because other objects depend on it" fehl
+    # (in der echten CI gegen einen echten PostgreSQL-Server gefunden, siehe Fortschritt.md).
+    _DROP_TEILNEHMER_SQL_ZUSATZ = ""
 
     def setUp(self):
         # Jeder Test bekommt eine frische, temporäre Termin-Datei.
@@ -103,7 +110,7 @@ class TestDatenbank(unittest.TestCase):
         Datei/-Datenbank) - für die drei test_migration_*-Tests unten. Die id-Spalte ist
         dialektabhängig (siehe _ID_SPALTE_DDL), alles andere ist Standard-SQL und für
         SQLite wie PostgreSQL identisch gültig."""
-        self.conn.execute("DROP TABLE teilnehmer")
+        self.conn.execute(f"DROP TABLE teilnehmer{self._DROP_TEILNEHMER_SQL_ZUSATZ}")
         self.conn.execute(
             f"CREATE TABLE teilnehmer (id {self._ID_SPALTE_DDL}, "
             "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
@@ -505,8 +512,14 @@ class TestDatenbank(unittest.TestCase):
             disziplin="Trümmerfeld", startnummer=1))
         delete_teilnehmer(self.conn, tid)
         self.assertIsNone(get_teilnehmer(self.conn, tid))
+        # Spaltenname statt Positionsindex (row[0]): siehe vergebene_startnummern() in
+        # db.py - dieselbe sqlite3.Row-vs-RealDictCursor-Falle, hier im Test gefunden statt
+        # in db.py selbst (fiel erst beim echten CI-Lauf gegen PostgreSQL auf, siehe
+        # Fortschritt.md).
         self.assertEqual(
-            self.conn.execute("SELECT COUNT(*) FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)).fetchone()[0],
+            self.conn.execute(
+                "SELECT COUNT(*) AS anzahl FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+            ).fetchone()["anzahl"],
             0,
         )
 
@@ -635,8 +648,10 @@ class TestZeitplan(unittest.TestCase):
         rid = add_zeitplan_richter(self.conn, name="R1")
         add_zeitplan_pause(self.conn, rid, dauer_minuten=15)
         loesche_zeitplan_richter(self.conn, rid)
+        # Spaltenname statt Positionsindex - siehe Kommentar bei
+        # test_teilnehmer_loeschen_entfernt_auch_ergebnis oben.
         self.assertEqual(
-            self.conn.execute("SELECT COUNT(*) FROM zeitplan_eintrag").fetchone()[0], 0,
+            self.conn.execute("SELECT COUNT(*) AS anzahl FROM zeitplan_eintrag").fetchone()["anzahl"], 0,
         )
 
     def test_richter_verschieben_vertauscht_nachbarn(self):
@@ -1112,6 +1127,10 @@ class _PostgresBackendMixin:
 
     IntegrityErrorTyp = psycopg2.IntegrityError if psycopg2 is not None else Exception
     _ID_SPALTE_DDL = "INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
+    # Siehe Kommentar bei TestDatenbank._DROP_TEILNEHMER_SQL_ZUSATZ oben - PostgreSQL
+    # erzwingt die Fremdschlüsselbeziehung von "ergebnisse" auf "teilnehmer", SQLite
+    # (Standardeinstellung) nicht.
+    _DROP_TEILNEHMER_SQL_ZUSATZ = " CASCADE"
 
     def setUp(self):
         if not _POSTGRES_TEST_DSN:
@@ -1178,7 +1197,13 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
         zeilen = self.conn.execute("SELECT schema_name FROM public.termin_registry").fetchall()
         for zeile in zeilen:
             self.conn.execute(f"DROP SCHEMA IF EXISTS {zeile['schema_name']} CASCADE")
-        self.conn.execute("DELETE FROM termin_registry")
+        # "public." nicht weglassen: search_path zeigt hier ggf. noch auf das
+        # zuletzt per oeffne_termin_postgres() geöffnete (und oben gerade
+        # gelöschte!) Termin-Schema statt auf "public" - ein unqualifiziertes
+        # "termin_registry" schlägt dann mit UndefinedTable fehl, weil "public"
+        # nicht im search_path steht (in der echten CI gefunden, siehe
+        # Fortschritt.md).
+        self.conn.execute("DELETE FROM public.termin_registry")
         self.conn.commit()
 
     def test_zwei_termine_sind_voneinander_isoliert(self):
@@ -1307,10 +1332,12 @@ class TestTerminSyncPostgres(unittest.TestCase):
             self.conn.close()
 
     def _registry_leeren(self):
+        # Siehe ausführlicher Kommentar bei TestTerminverwaltungPostgres._registry_leeren
+        # oben - "public." beim DELETE nicht weglassen.
         zeilen = self.conn.execute("SELECT schema_name FROM public.termin_registry").fetchall()
         for zeile in zeilen:
             self.conn.execute(f"DROP SCHEMA IF EXISTS {zeile['schema_name']} CASCADE")
-        self.conn.execute("DELETE FROM termin_registry")
+        self.conn.execute("DELETE FROM public.termin_registry")
         self.conn.commit()
 
     def test_export_veroeffentlicht_termin_mit_zugangscode(self):
