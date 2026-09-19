@@ -1,0 +1,82 @@
+name: Tests
+
+# Läuft bei jedem Push und bei jedem Pull Request automatisch die komplette
+# Testsuite: test_db.py, test_db_postgres_wrapper.py, test_pdf_export.py,
+# test_shs_core.py, test_bump_version.py (reine Logik/Datenschicht, kein Qt),
+# test_app_web.py (Flask-Backend der geplanten Web-Version, siehe app_web.py) UND
+# test_app_gui.py (echte PySide6-GUI-Tests über pytest-qt: Klicks, Checkbox-Toggle,
+# Dialog-Öffnen usw.). Alles läuft headless über die Qt-eigene "offscreen"-Plattform
+# (QT_QPA_PLATFORM unten) - es wird also kein echter Bildschirm/Xvfb benötigt, nur ein
+# paar Systembibliotheken, die Qt zum Laden auch ohne sichtbares Fenster braucht.
+#
+# Der unten eingerichtete PostgreSQL-Service-Container lässt die Tests aus test_db.py,
+# die auf init_db_postgres() aufbauen (TestDatenbankPostgres/TestZeitplanPostgres/
+# TestTerminverwaltungPostgres/TestTerminSyncPostgres - siehe dortige Kommentare),
+# zusätzlich zur SQLite-Desktop-Variante auch gegen eine echte PostgreSQL-Datenbank
+# laufen - Grundlage für die geplante Podman/Web-Version mit Mehrbenutzerzugriff.
+# Lokal (ohne SHS_TEST_POSTGRES_DSN/psycopg2) werden diese Tests übersprungen statt zu
+# scheitern, siehe test_db.py. requirements-web.txt (Flask) wird zusätzlich installiert,
+# damit test_app_web.py (Web-Backend, V1: Ergebniseingabe) laufen kann.
+#
+# Der eigentliche Windows-Installer-Build (PyInstaller + Inno Setup) läuft weiterhin
+# separat über build-installer.yml bzw. manuell über build_installer.bat, siehe
+# README_INSTALLER.md - weder requirements-postgres.txt (psycopg2) noch
+# requirements-web.txt (Flask) fließen dort BEWUSST ein, damit der Desktop-Installer
+# schlank bleibt (siehe Kommentar in den jeweiligen Dateien).
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    env:
+      QT_QPA_PLATFORM: offscreen
+      SHS_TEST_POSTGRES_DSN: postgresql://shs_test:shs_test@localhost:5432/shs_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shs_test
+          POSTGRES_PASSWORD: shs_test
+          POSTGRES_DB: shs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Python ${{ matrix.python-version }} einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Qt-Systembibliotheken installieren (für headless/offscreen-Betrieb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
+            libxcb-xinerama0 libdbus-1-3 libfontconfig1
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-postgres.txt
+          pip install -r requirements-web.txt
+          pip install pytest pytest-qt
+
+      - name: Tests ausführen
+        run: pytest -v
