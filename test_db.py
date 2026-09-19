@@ -111,6 +111,23 @@ class TestDatenbank(unittest.TestCase):
         dialektabhängig (siehe _ID_SPALTE_DDL), alles andere ist Standard-SQL und für
         SQLite wie PostgreSQL identisch gültig."""
         self.conn.execute(f"DROP TABLE teilnehmer{self._DROP_TEILNEHMER_SQL_ZUSATZ}")
+        # Bei PostgreSQL reißt das obige "DROP TABLE ... CASCADE" auch die Fremdschlüssel-
+        # Constraint von "ergebnisse" auf "teilnehmer" mit ab (sie hängt als abhängiges
+        # Objekt daran) - die Tabelle "ergebnisse" selbst bleibt dabei aber bestehen, nur
+        # OHNE Fremdschlüssel, und würde das für den Rest des gemeinsam genutzten Postgres-
+        # Testlaufs auch bleiben, da init_db()/init_db_postgres() sie nur bei Bedarf neu
+        # anlegt ("CREATE TABLE IF NOT EXISTS" ist dann ein No-Op, solange die Tabelle noch
+        # existiert). Ohne diese Fremdschlüssel-Constraint löscht delete_teilnehmer()
+        # (verlässt sich vollständig auf ON DELETE CASCADE, siehe db.py) keine zugehörige
+        # ergebnisse-Zeile mehr mit - das führte in der echten CI zu einem falschen
+        # "1 != 0" in test_teilnehmer_loeschen_entfernt_auch_ergebnis weiter unten
+        # (derselbe gemeinsam genutzte Postgres-Testlauf, alphabetisch nach diesem Test
+        # ausgeführt, siehe Fortschritt.md). Deshalb "ergebnisse" hier ebenfalls verwerfen,
+        # damit die anschließende _neu_verbinden() sie samt Fremdschlüssel sauber neu
+        # anlegt. Unproblematisch für SQLite (dort entsteht durch das DROP TABLE oben
+        # ohnehin nie eine echte FK-Constraint) und für beide Dialekte gültiges Standard-
+        # SQL (kein CASCADE nötig, da nichts auf "ergebnisse" verweist).
+        self.conn.execute("DROP TABLE ergebnisse")
         self.conn.execute(
             f"CREATE TABLE teilnehmer (id {self._ID_SPALTE_DDL}, "
             "nachname TEXT NOT NULL, vorname TEXT NOT NULL, verein TEXT, zwingername TEXT, "
