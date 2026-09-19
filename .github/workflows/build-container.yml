@@ -48,9 +48,15 @@ jobs:
 
       - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
         run: |
-          echo "SHS_DB_PASSWORD=smoketest" >> "$GITHUB_ENV"
-          echo "SHS_WEB_SECRET_KEY=smoketest" >> "$GITHUB_ENV"
+          export SHS_DB_PASSWORD=smoketest
+          export SHS_WEB_SECRET_KEY=smoketest
           docker compose -f compose.yaml up --build -d
+        # "export" statt "echo ... >> $GITHUB_ENV": Variablen, die über GITHUB_ENV
+        # gesetzt werden, gelten erst ab dem NÄCHSTEN Step, nicht mehr im selben "run:"-
+        # Block, in dem sie gesetzt wurden - "docker compose" lief dadurch hier ohne die
+        # beiden Variablen und compose brach mit der oben gezeigten Fehlermeldung ab.
+        # "export" wirkt dagegen sofort innerhalb desselben Shell-Aufrufs - reicht hier,
+        # da beide Variablen nur von diesem einen Step gebraucht werden.
 
       - name: Warten, bis die Login-Seite antwortet
         run: |
