@@ -89,6 +89,19 @@ jobs:
         id: version
         run: echo "version=$(cat version.txt | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
 
+      - name: Prüfen, dass der Tag zu version.txt passt
+        # Dieselbe Absicherung wie in build-installer.yml (siehe dortiger Kommentar) -
+        # verhindert, dass ein zu früh gesetzter Tag (vor dem Committen/Pushen der per
+        # bump_version.py erhöhten version.txt) ein Image mit einer Versionsnummer
+        # veröffentlicht, die nicht zum Tag passt.
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          file_version="${{ steps.version.outputs.version }}"
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' passt nicht zu version.txt (enthaelt '$file_version'). Vermutlich wurde getaggt, BEVOR die per 'python bump_version.py' erhoehte version.txt committet und gepusht wurde - siehe README_INSTALLER.md, Ablauf fuer ein Release."
+            exit 1
+          fi
+
       - name: Buildx einrichten
         uses: docker/setup-buildx-action@v3
 

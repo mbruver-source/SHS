@@ -185,10 +185,35 @@ genau derselben Versionsnummer aus `version.txt`. Ein einziger Tag-Push
 versorgt damit sowohl den Windows-Installer als auch das Container-Image mit
 derselben Version. Details siehe `README_CONTAINER.md`.
 
+**Wichtig – Reihenfolge unbedingt einhalten:** Beide Workflows bauen NICHT mit
+dem Tag-Namen selbst, sondern mit der Nummer, die zum Zeitpunkt des Tags
+bereits in `version.txt` **eingecheckt** ist. Wird zuerst getaggt und erst
+danach (oder gar nicht) die per `bump_version.py` erhöhte `version.txt`
+committet/gepusht, baut der Workflow anstandslos mit der ALTEN Nummer weiter –
+der fertige Installer/das Image heißt dann irreführend anders als der Tag
+(genau das ist schon einmal passiert: Tag `v1.0.8` gesetzt, aber `version.txt`
+enthielt zu dem Zeitpunkt noch `1.0.7` – der Installer hieß entsprechend
+`SHS-Pruefungsprogramm-Setup-1.0.7.exe`). Beide Workflows prüfen das seitdem
+selbst (Schritt „Prüfen, dass der Tag zu `version.txt` passt") und brechen mit
+einer klaren Fehlermeldung ab, statt ein falsch benanntes Release stillschweigend
+zu veröffentlichen – die richtige Reihenfolge bleibt trotzdem wichtig, um diesen
+Abbruch gar nicht erst zu provozieren:
+
+```
+python bump_version.py
+git add version.txt version_info.txt version.py
+git commit -m "Version X.Y.Z"
+git push
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
 ## Kurz-Checkliste pro Release
 
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,
       oder von Hand) – neue Nummer steht in `version.txt`/`version_info.txt`
+- [ ] Bei einem Release über GitHub Actions: die geänderte `version.txt`
+      (und `version_info.txt`/`version.py`) **committet UND gepusht**, bevor
+      der Tag gesetzt wird – siehe Warnkasten oben
 - [ ] `pyinstaller build.spec` erfolgreich, `dist\SHS-Pruefungsprogramm.exe`
       kurz angetestet
 - [ ] `ISCC installer.iss /DMyAppVersion=X.Y.Z` erfolgreich

@@ -54,6 +54,23 @@ jobs:
           $v = (Get-Content version.txt -Raw).Trim()
           echo "version=$v" >> $env:GITHUB_OUTPUT
 
+      - name: Prüfen, dass der Tag zu version.txt passt (nur bei einem Versions-Tag)
+        # Verhindert genau den Fehler, der schon einmal passiert ist: wenn ein Tag
+        # (z.B. "v1.0.8") gesetzt/gepusht wird, BEVOR die per "python bump_version.py"
+        # erhöhte version.txt committet und gepusht wurde, baut dieser Workflow
+        # anstandslos mit der ALTEN Nummer aus version.txt weiter (z.B. "1.0.7") - der
+        # fertige Installer heißt dann irreführend anders als der Tag/das Release. Bricht
+        # jetzt stattdessen VOR dem eigentlichen Build klar erkennbar ab.
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tagVersion = "${{ github.ref_name }}".TrimStart('v')
+          $fileVersion = "${{ steps.version.outputs.version }}"
+          if ($tagVersion -ne $fileVersion) {
+            Write-Error "Tag '${{ github.ref_name }}' passt nicht zu version.txt (enthaelt '$fileVersion'). Vermutlich wurde getaggt, BEVOR die per 'python bump_version.py' erhoehte version.txt committet und gepusht wurde - siehe README_INSTALLER.md, Ablauf fuer ein Release. Zuerst 'python bump_version.py' laufen lassen, version.txt/version_info.txt/version.py committen und pushen, DANACH den (neuen) Tag setzen."
+            exit 1
+          }
+
       - name: .exe mit PyInstaller bauen
         run: pyinstaller build.spec
 
