@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime
 import re
+import secrets
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -563,6 +564,16 @@ def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
 
 
 # --- Ergebnisse ------------------------------------------------------------
+
+def get_ergebnis(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
+    """Liefert die (ggf. teilweise oder noch gar nicht ausgefüllte) Ergebniszeile eines
+    Teilnehmers - z. B. um ein Erfassungsformular mit bereits eingetragenen Werten
+    vorzubelegen (siehe app_web.py). None, wenn der Teilnehmer selbst nicht existiert
+    (jeder existierende Teilnehmer hat durch add_teilnehmer() immer eine - anfangs leere -
+    Ergebniszeile, siehe dort)."""
+    row = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
+    return dict(row) if row else None
+
 
 def eintragen_ergebnis(
     conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int | None, anzeige: int | None
@@ -1110,9 +1121,11 @@ def _setze_termin_suchpfad(conn, schema_name: str) -> None:
 class TerminInfoPostgres:
     """Eintrag für die Terminübersicht der PostgreSQL/Web-Version - das Pendant zu
     TerminInfo (SQLite) oben, ohne die dort dateibezogenen Felder (pfad/dateiname/
-    lesbar), dafür mit der registrierten ID und dem Schema-Namen."""
+    lesbar), dafür mit der registrierten ID, dem Schema-Namen und dem Zugangscode für
+    die Web-Oberfläche (siehe pruefe_zugangscode_postgres() weiter unten)."""
     id: int
     schema_name: str
+    zugangscode: str | None
     verein: str | None
     ort: str | None
     datum: str | None
@@ -1141,10 +1154,48 @@ def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS public.termin_registry ("
         "id INTEGER PRIMARY KEY, schema_name TEXT NOT NULL UNIQUE, "
+        "zugangscode TEXT, "
         "erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now())"
     )
+    # Bereits vor der Zugangscode-Einführung angelegte Registry-Tabellen bekommen die
+    # Spalte hier nachgerüstet (ADD COLUMN IF NOT EXISTS ist in PostgreSQL ein No-Op,
+    # wenn die Spalte - z. B. durch das CREATE TABLE oben bei einer neuen Datenbank -
+    # schon vorhanden ist) - dasselbe Prinzip wie _migriere_veranstaltung_spalten() für
+    # einzelne Termine, hier aber genügt eine einzelne feste ALTER-Anweisung, da es nur
+    # um eine einzige, unabhängige Spalte ohne Constraints geht.
+    conn.execute("ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS zugangscode TEXT")
     conn.commit()
     return conn
+
+
+def _eindeutigen_zugangscode_erzeugen(conn) -> str:
+    """Erzeugt einen sechsstelligen, rein numerischen Zugangscode für den gemeinsamen
+    Web-Login aller Richter/Helfer EINES Termins (siehe app_web.py) - kurz genug, um ihn
+    am Prüfungstag mündlich durchzugeben oder auf ein Flipchart zu schreiben. `secrets`
+    statt `random`, obwohl es sich nur um einen gemeinsamen PIN und kein Passwort für
+    einzelne Nutzer handelt. Kollisionen mit einem bereits vergebenen Code sind bei sechs
+    Ziffern extrem unwahrscheinlich, werden aber sicherheitshalber abgefangen (neu
+    gezogen statt zwei Terminen versehentlich denselben Code zu geben)."""
+    while True:
+        code = "".join(secrets.choice("0123456789") for _ in range(6))
+        treffer = conn.execute(
+            "SELECT 1 AS vorhanden FROM termin_registry WHERE zugangscode = ?", (code,)
+        ).fetchone()
+        if not treffer:
+            return code
+
+
+def pruefe_zugangscode_postgres(conn, zugangscode: str) -> str | None:
+    """Prüft einen von einem Richter/Helfer in der Web-Oberfläche eingegebenen
+    Zugangscode gegen die Registry und liefert bei Erfolg den zugehörigen Schema-Namen
+    (sonst None) - Grundlage für den Login in app_web.py. Whitespace am Rand wird
+    toleriert (Tippen/Copy-Paste auf dem Handy)."""
+    _setze_termin_suchpfad(conn, "public")
+    zeile = conn.execute(
+        "SELECT schema_name FROM termin_registry WHERE zugangscode = ?",
+        (zugangscode.strip(),),
+    ).fetchone()
+    return zeile["schema_name"] if zeile else None
 
 
 def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
@@ -1160,14 +1211,18 @@ def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
     (die 'id' dort könnte sonst erst NACH dem Einfügen der Zeile bekannt sein, obwohl der
     Schema-Name - der ja von der ID abhängt - schon beim Einfügen gebraucht wird). Eine
     Sequenz vergibt zudem nie zweimal denselben Wert, auch nicht nach einem Löschen - ein
-    neuer Termin bekommt also nie versehentlich den Schema-Namen eines zuvor gelöschten."""
+    neuer Termin bekommt also nie versehentlich den Schema-Namen eines zuvor gelöschten.
+
+    Bekommt außerdem direkt einen eindeutigen Zugangscode für den Web-Login zugewiesen
+    (siehe _eindeutigen_zugangscode_erzeugen/pruefe_zugangscode_postgres oben)."""
     _setze_termin_suchpfad(conn, "public")
     conn.execute("CREATE SEQUENCE IF NOT EXISTS termin_registry_id_seq")
     neue_id = conn.execute("SELECT nextval('termin_registry_id_seq') AS id").fetchone()["id"]
     schema_name = f"termin_{neue_id}"
+    zugangscode = _eindeutigen_zugangscode_erzeugen(conn)
     conn.execute(
-        "INSERT INTO termin_registry (id, schema_name) VALUES (?, ?)",
-        (neue_id, schema_name),
+        "INSERT INTO termin_registry (id, schema_name, zugangscode) VALUES (?, ?, ?)",
+        (neue_id, schema_name, zugangscode),
     )
     conn.execute(f"CREATE SCHEMA {schema_name}")
     _setze_termin_suchpfad(conn, schema_name)
@@ -1177,7 +1232,7 @@ def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
     ).fetchone()
     _setze_termin_suchpfad(conn, "public")
     return TerminInfoPostgres(
-        id=neue_id, schema_name=schema_name, verein=None, ort=None, datum=None,
+        id=neue_id, schema_name=schema_name, zugangscode=zugangscode, verein=None, ort=None, datum=None,
         anzahl_teilnehmer=0, erstellt_am=zeile["erstellt_am"],
     )
 
@@ -1203,7 +1258,7 @@ def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
     zuerst (nach Datum, wie liste_termine())."""
     _setze_termin_suchpfad(conn, "public")
     eintraege = conn.execute(
-        "SELECT id, schema_name, erstellt_am FROM termin_registry ORDER BY erstellt_am"
+        "SELECT id, schema_name, zugangscode, erstellt_am FROM termin_registry ORDER BY erstellt_am"
     ).fetchall()
     ergebnisse: list[TerminInfoPostgres] = []
     for eintrag in eintraege:
@@ -1212,7 +1267,7 @@ def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
         v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
         anzahl = conn.execute("SELECT COUNT(*) AS anzahl FROM teilnehmer").fetchone()["anzahl"]
         ergebnisse.append(TerminInfoPostgres(
-            id=eintrag["id"], schema_name=schema_name,
+            id=eintrag["id"], schema_name=schema_name, zugangscode=eintrag["zugangscode"],
             verein=v["verein"] if v else None, ort=v["ort"] if v else None,
             datum=v["datum"] if v else None, anzahl_teilnehmer=anzahl,
             erstellt_am=eintrag["erstellt_am"],
@@ -1233,6 +1288,172 @@ def loesche_termin_postgres(conn, schema_name: str) -> None:
     conn.execute(f"DROP SCHEMA {schema_name} CASCADE")
     conn.execute("DELETE FROM termin_registry WHERE schema_name = ?", (schema_name,))
     conn.commit()
+
+
+# --- Austausch zwischen einer SQLite-Termin-Datei (Desktop) und einem PostgreSQL-
+# Termin-Schema (Web) ---------------------------------------------------------
+#
+# Für die geplante V1 der Web-Version ("nur Ergebniseingabe", siehe Chatverlauf) wird ein
+# Termin weiterhin ganz normal in der Desktop-Version angelegt/geplant (Teilnehmer,
+# Zeitplan, ...) und erst VOR dem Prüfungstag als eigener PostgreSQL-Termin
+# "veröffentlicht" (exportiere_termin_nach_postgres) - danach tragen mehrere Richter
+# gleichzeitig über die Web-Oberfläche Ergebnisse ein. NACH der Prüfung werden diese
+# Ergebnisse zurück in dieselbe SQLite-Datei geholt (importiere_ergebnisse_aus_postgres),
+# damit PDF-Export/Auswertung/Zeitplan wie bisher in der Desktop-Version weiterlaufen -
+# die PostgreSQL-Datenbank ist also nur für den Prüfungstag selbst "die Wahrheit", davor
+# und danach bleibt es die SQLite-Datei. Siehe sync_termin.py für das Kommandozeilen-
+# Werkzeug, das diese beiden Funktionen aufruft.
+#
+# Die eigentliche Kopierlogik (kopiere_termin_daten/importiere_ergebnisse_nach_startnummer)
+# ist bewusst dialektunabhängig gehalten - sie arbeitet ausschließlich über bereits
+# vorhandene, für beide Datenbanken getestete Funktionen (add_teilnehmer, eintragen_ergebnis,
+# ...) bzw. portables SQL. Dadurch lässt sie sich, genau wie die übrige Kernlogik dieses
+# Moduls, vollständig mit zwei SQLite-Verbindungen automatisiert testen, ohne dass dafür
+# psycopg2 installiert sein müsste (siehe TestTerminSync in test_db.py) - nur die dünnen
+# Wrapper-Funktionen exportiere_termin_nach_postgres/importiere_ergebnisse_aus_postgres
+# selbst binden sich an eine echte PostgreSQL-Verbindung.
+
+
+def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
+    """Kopiert Veranstaltungsdaten und alle Teilnehmer (inkl. bereits vorhandener
+    Ergebnisse, falls schon welche eingetragen waren) von quelle_conn nach ziel_conn.
+
+    ziel_conn sollte auf ein leeres Schema/eine leere Datenbank zeigen (z. B. direkt nach
+    erstelle_termin_postgres()) - vorhandene Teilnehmer dort werden NICHT gelöscht, die
+    kopierten kommen einfach hinzu. Liefert die Zuordnung alte Teilnehmer-ID (in
+    quelle_conn) -> neue Teilnehmer-ID (in ziel_conn)."""
+    veranstaltung = get_veranstaltung(quelle_conn)
+    if veranstaltung:
+        set_veranstaltung(
+            ziel_conn,
+            verein=veranstaltung["verein"],
+            datum=veranstaltung["datum"],
+            ort=veranstaltung.get("ort"),
+            vereins_nr=veranstaltung.get("vereins_nr"),
+            pruefungsnummer=veranstaltung.get("pruefungsnummer"),
+            wertungsrichter_1=veranstaltung.get("wertungsrichter_1"),
+            wertungsrichter_2=veranstaltung.get("wertungsrichter_2"),
+            pruefungsleiter=veranstaltung.get("pruefungsleiter"),
+            pruefungsgebuehr_ed=veranstaltung.get("pruefungsgebuehr_ed"),
+            pruefungsgebuehr_dk=veranstaltung.get("pruefungsgebuehr_dk"),
+            zeitplan_start=veranstaltung.get("zeitplan_start"),
+        )
+
+    id_zuordnung: dict[int, int] = {}
+    for alt in list_teilnehmer(quelle_conn):
+        neu = NeuerTeilnehmer(
+            nachname=alt["nachname"], vorname=alt["vorname"], rufname_hund=alt["rufname_hund"],
+            art=alt["art"], stufe=alt["stufe"], disziplin=alt["disziplin"],
+            verein=alt.get("verein"), zwingername=alt.get("zwingername"), geschlecht=alt.get("geschlecht"),
+            schulterhoehe_cm=alt.get("schulterhoehe_cm"), chip_nr=alt.get("chip_nr"),
+            startnummer=alt.get("startnummer"),
+            gegenstand_1=alt.get("gegenstand_1"), gegenstand_2=alt.get("gegenstand_2"),
+            gegenstand_3=alt.get("gegenstand_3"),
+            gegenstand_1_disziplin=alt.get("gegenstand_1_disziplin"),
+            gegenstand_2_disziplin=alt.get("gegenstand_2_disziplin"),
+            gegenstand_3_disziplin=alt.get("gegenstand_3_disziplin"),
+            bezahlt=bool(alt.get("bezahlt")),
+            verband=alt.get("verband"), mitgliedsnummer=alt.get("mitgliedsnummer"), wurftag=alt.get("wurftag"),
+            strasse=alt.get("strasse"), hausnummer=alt.get("hausnummer"), plz=alt.get("plz"), ort=alt.get("ort"),
+            email=alt.get("email"), telefon=alt.get("telefon"),
+        )
+        neue_id = add_teilnehmer(ziel_conn, neu)
+        id_zuordnung[alt["id"]] = neue_id
+
+        alte_ergebnisse = get_ergebnis(quelle_conn, alt["id"])
+        if alte_ergebnisse:
+            for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
+                suche, anzeige = alte_ergebnisse[spalte_suche], alte_ergebnisse[spalte_anzeige]
+                if suche is not None or anzeige is not None:
+                    eintragen_ergebnis(ziel_conn, neue_id, disziplin, suche, anzeige)
+
+    return id_zuordnung
+
+
+def exportiere_termin_nach_postgres(sqlite_conn: sqlite3.Connection, postgres_conn) -> TerminInfoPostgres:
+    """Veröffentlicht einen bestehenden SQLite-Termin (Desktop) als neuen, eigenständigen
+    PostgreSQL-Termin (eigenes Schema, siehe erstelle_termin_postgres) für die
+    Mehrbenutzer-Ergebniserfassung am Prüfungstag - Veranstaltungsdaten und alle
+    Teilnehmer (inkl. bereits vorhandener Ergebnisse) werden dabei übernommen. Der
+    zurückgegebene Zugangscode ist das, was die Richter für den Login in der
+    Web-Oberfläche brauchen (siehe sync_termin.py).
+
+    Der SQLite-Termin bleibt dabei unverändert (reiner Export, keine Rückwirkung) - erst
+    nach der Prüfung holt importiere_ergebnisse_aus_postgres() die dort eingetragenen
+    Ergebnisse zurück."""
+    neuer_termin = erstelle_termin_postgres(postgres_conn)
+    kopiere_termin_daten(sqlite_conn, postgres_conn)
+    postgres_conn.commit()
+    # anzahl_teilnehmer/verein/ort/datum in erstelle_termin_postgres()s Rückgabe waren noch
+    # leer/0 (vor dem Kopieren) - aktuellen Stand für die Rückgabe nachladen.
+    _setze_termin_suchpfad(postgres_conn, "public")
+    aktuelle = [t for t in liste_termine_postgres(postgres_conn) if t.schema_name == neuer_termin.schema_name]
+    return aktuelle[0] if aktuelle else neuer_termin
+
+
+@dataclass
+class ImportBericht:
+    """Ergebnis von importiere_ergebnisse_nach_startnummer()/importiere_ergebnisse_aus_postgres() -
+    zur Anzeige/Protokollierung nach einem Import (siehe sync_termin.py)."""
+    aktualisiert: int
+    # "Nachname, Vorname" von Teilnehmern in der Quelle ohne Startnummer - können nicht
+    # zugeordnet werden (Zuordnung erfolgt ausschließlich über die Startnummer, siehe
+    # importiere_ergebnisse_nach_startnummer).
+    ohne_startnummer_uebersprungen: list[str]
+    # Startnummern aus der Quelle, zu denen es im Ziel keinen Teilnehmer mit derselben
+    # Startnummer gibt (z. B. wenn ein Teilnehmer nach dem Export noch umbenannt/gelöscht
+    # oder die Startnummer geändert wurde).
+    nicht_gefunden: list[str]
+
+
+def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBericht:
+    """Kernlogik: überträgt für jeden Teilnehmer in quelle_conn mit gesetzter Startnummer
+    die dort eingetragenen Ergebnisse auf den Teilnehmer mit DERSELBEN Startnummer in
+    ziel_conn. Zuordnung über die Startnummer statt über die interne ID, da beide
+    Datenbanken beim Export unabhängig voneinander vergebene IDs bekommen haben (siehe
+    kopiere_termin_daten oben) - die Startnummer ist das einzige beiden Seiten gemeinsame,
+    eindeutige Merkmal. Überschreibt dabei die Ergebnisse im Ziel vollständig mit dem
+    Stand der Quelle (nach der Prüfung gilt die Web-Erfassung als maßgeblich)."""
+    ziel_nach_startnummer = {
+        t["startnummer"]: t["id"] for t in list_teilnehmer(ziel_conn) if t.get("startnummer") is not None
+    }
+    aktualisiert = 0
+    ohne_startnummer: list[str] = []
+    nicht_gefunden: list[str] = []
+    for quelle_teilnehmer in list_teilnehmer(quelle_conn):
+        startnummer = quelle_teilnehmer.get("startnummer")
+        name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
+        if startnummer is None:
+            ohne_startnummer.append(name)
+            continue
+        ziel_id = ziel_nach_startnummer.get(startnummer)
+        if ziel_id is None:
+            nicht_gefunden.append(str(startnummer))
+            continue
+        ergebnis = get_ergebnis(quelle_conn, quelle_teilnehmer["id"])
+        if not ergebnis:
+            continue
+        hat_wert = False
+        for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
+            suche, anzeige = ergebnis[spalte_suche], ergebnis[spalte_anzeige]
+            if suche is not None or anzeige is not None:
+                eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
+                hat_wert = True
+        if hat_wert:
+            aktualisiert += 1
+    return ImportBericht(
+        aktualisiert=aktualisiert,
+        ohne_startnummer_uebersprungen=ohne_startnummer,
+        nicht_gefunden=nicht_gefunden,
+    )
+
+
+def importiere_ergebnisse_aus_postgres(postgres_conn, schema_name: str, sqlite_conn: sqlite3.Connection) -> ImportBericht:
+    """Holt nach der Prüfung die über die Web-Oberfläche eingetragenen Ergebnisse aus dem
+    angegebenen PostgreSQL-Termin-Schema zurück in die lokale SQLite-Termin-Datei (siehe
+    sync_termin.py) - Gegenstück zu exportiere_termin_nach_postgres()."""
+    oeffne_termin_postgres(postgres_conn, schema_name)
+    return importiere_ergebnisse_nach_startnummer(postgres_conn, sqlite_conn)
 
 
 # --- Datensicherung (Export/Import aller Termine als ZIP, optional passwortgeschützt) ---

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titel %}Anmelden – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Zugangscode</h1>
+  <p>Bitte den Zugangscode für den heutigen Prüfungstermin eingeben (vom Prüfungsleiter erhalten).</p>
+  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+  <form method="post">
+    <label for="zugangscode">Zugangscode</label>
+    <input type="text" id="zugangscode" name="zugangscode" inputmode="numeric" pattern="[0-9]*"
+           autocomplete="off" autofocus required>
+    <p><button type="submit">Anmelden</button></p>
+  </form>
+</div>
+{% endblock %}

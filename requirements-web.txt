@@ -1,0 +1,19 @@
+# Zusätzliche Abhängigkeiten NUR für den Web-Server der geplanten Podman/Web-Version
+# (app_web.py, V1: Ergebniseingabe über einen gemeinsamen Zugangscode je Termin - siehe
+# Modul-Docstring dort und Fortschritt.md für den Hintergrund).
+#
+# Bewusst getrennt sowohl von requirements.txt (Desktop-Installer, siehe dortiger
+# Kommentar in requirements-postgres.txt) als auch von requirements-postgres.txt selbst
+# (nur der Datenbanktreiber, wird z. B. auch für die Postgres-Tests in der CI gebraucht,
+# ohne dass dafür gleich Flask mitinstalliert werden müsste). Zum Einrichten des
+# Web-Servers werden BEIDE Dateien gebraucht:
+#   pip install -r requirements-postgres.txt -r requirements-web.txt
+#
+# Flask + die eingebauten Jinja2-Templates (templates/*.html) statt eines
+# JavaScript-Frontends, u. a. weil die Web-Version bewusst nur im lokalen
+# Vereins-Netzwerk laufen soll (kein verlässlicher Internetzugang am Prüfungstag
+# vorausgesetzt) - ein serverseitig gerenderter Ansatz ohne externe CDN-Abhängigkeiten
+# passt dazu am einfachsten. Der eingebaute Flask-Entwicklungsserver (app.run(), siehe
+# app_web.py) ist dabei nur für lokale Tests gedacht - für den echten Einsatz kommt
+# später ein WSGI-Server (z. B. waitress) im geplanten Podman-Container hinzu.
+Flask>=3.0

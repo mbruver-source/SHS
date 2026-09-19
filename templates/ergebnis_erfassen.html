@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titel %}Ergebnis erfassen – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<p><a class="knopf knopf-sekundaer" href="{{ url_for('teilnehmerliste') }}">&larr; Zur Teilnehmerliste</a></p>
+
+<div class="karte">
+  <h1>{{ teilnehmer.nachname }}, {{ teilnehmer.vorname }}</h1>
+  <p>
+    Hund: {{ teilnehmer.rufname_hund }}{% if teilnehmer.startnummer %} · Startnummer {{ teilnehmer.startnummer }}{% endif %}<br>
+    {{ label }}
+  </p>
+
+  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+
+  <form method="post">
+    {% for zeile in zeilen %}
+      <h2 style="margin-top: 1.2em;">{{ zeile.disziplin }}</h2>
+      <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–60)</label>
+      <input type="number" id="suche_{{ zeile.disziplin }}" name="suche_{{ zeile.disziplin }}"
+             inputmode="numeric" min="0" max="60"
+             value="{{ zeile.suche if zeile.suche is not none else '' }}">
+      <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–40)</label>
+      <input type="number" id="anzeige_{{ zeile.disziplin }}" name="anzeige_{{ zeile.disziplin }}"
+             inputmode="numeric" min="0" max="40"
+             value="{{ zeile.anzeige if zeile.anzeige is not none else '' }}">
+    {% endfor %}
+    <p><button type="submit">Speichern</button></p>
+  </form>
+</div>
+{% endblock %}

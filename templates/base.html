@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titel %}SHS Prüfung{% endblock %}</title>
+<style>
+  :root {
+    --gruen: #2e7d32;
+    --gruen-dunkel: #1b5e20;
+    --rot: #c62828;
+    --grau-hell: #f2f2f2;
+    --grau-rand: #ccc;
+    --text: #1a1a1a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    background: var(--grau-hell);
+    color: var(--text);
+    font-size: 18px;
+  }
+  header {
+    background: var(--gruen-dunkel);
+    color: #fff;
+    padding: 0.8em 1em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header a { color: #fff; text-decoration: none; }
+  header .titel { font-weight: 600; }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 1em;
+  }
+  .karte {
+    background: #fff;
+    border: 1px solid var(--grau-rand);
+    border-radius: 8px;
+    padding: 1em;
+    margin-bottom: 1em;
+  }
+  .fehler {
+    background: #fdecea;
+    border: 1px solid var(--rot);
+    color: var(--rot);
+    border-radius: 8px;
+    padding: 0.8em 1em;
+    margin-bottom: 1em;
+  }
+  label {
+    display: block;
+    font-weight: 600;
+    margin: 0.8em 0 0.3em;
+  }
+  input[type=text], input[type=number] {
+    width: 100%;
+    padding: 0.6em;
+    font-size: 1.1em;
+    border: 1px solid var(--grau-rand);
+    border-radius: 6px;
+  }
+  button, .knopf {
+    display: inline-block;
+    background: var(--gruen);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.8em 1.2em;
+    font-size: 1.1em;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+  }
+  button:active, .knopf:active { background: var(--gruen-dunkel); }
+  .knopf-sekundaer {
+    background: #fff;
+    color: var(--text);
+    border: 1px solid var(--grau-rand);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 0.6em 0.4em; border-bottom: 1px solid var(--grau-rand); }
+  .teilnehmer-zeile { text-decoration: none; color: var(--text); display: block; }
+  .status { display: inline-block; padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; }
+  .status-offen { background: #fff3cd; color: #7a5c00; }
+  .status-fertig { background: #e6f4ea; color: var(--gruen-dunkel); }
+  .startnummer { font-weight: 600; color: #555; margin-right: 0.4em; }
+</style>
+</head>
+<body>
+<header>
+  <span class="titel">SHS Prüfung{% if veranstaltung %} – {{ veranstaltung.verein }}{% endif %}</span>
+  {% if session.get('schema_name') %}<a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}
+</header>
+<main>
+{% block inhalt %}{% endblock %}
+</main>
+</body>
+</html>

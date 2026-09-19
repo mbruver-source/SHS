@@ -23,11 +23,16 @@ from db import (
     delete_teilnehmer,
     eintragen_ergebnis,
     erstelle_termin_postgres,
+    exportiere_termin_nach_postgres,
     gegenstand_fuer_disziplin,
+    get_ergebnis,
     get_teilnehmer,
     get_veranstaltung,
+    importiere_ergebnisse_aus_postgres,
+    importiere_ergebnisse_nach_startnummer,
     init_db,
     init_db_postgres,
+    kopiere_termin_daten,
     liste_termine,
     liste_termine_postgres,
     list_teilnehmer,
@@ -38,6 +43,7 @@ from db import (
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
     oeffne_termin_postgres,
+    pruefe_zugangscode_postgres,
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
     setze_bezahlt,
@@ -918,6 +924,143 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertEqual(liste_termine(self.ordner), [])
 
 
+class TestTerminSync(unittest.TestCase):
+    """Testet die eigentliche Kopierlogik des Austauschs zwischen einer SQLite-Termin-
+    Datei und einem PostgreSQL-Termin-Schema (kopiere_termin_daten/
+    importiere_ergebnisse_nach_startnummer, siehe Abschnittskommentar "Austausch
+    zwischen einer SQLite-Termin-Datei (Desktop) und einem PostgreSQL-Termin-Schema
+    (Web)" in db.py) - bewusst mit ZWEI SQLite-Verbindungen statt einer echten
+    PostgreSQL-Datenbank, da diese Funktionen dialektunabhängig sind (arbeiten nur über
+    bereits getestete Funktionen/portables SQL) und dadurch überall ohne installiertes
+    psycopg2 laufen. Die dünnen, tatsächlich an PostgreSQL gebundenen Wrapper-Funktionen
+    exportiere_termin_nach_postgres/importiere_ergebnisse_aus_postgres selbst werden
+    zusätzlich in TestTerminverwaltungPostgres weiter unten geprüft."""
+
+    def setUp(self):
+        self.quelle_pfad = self._neue_temp_datei()
+        self.ziel_pfad = self._neue_temp_datei()
+        self.quelle = init_db(self.quelle_pfad)
+        self.ziel = init_db(self.ziel_pfad)
+
+    def tearDown(self):
+        self.quelle.close()
+        self.ziel.close()
+        for pfad in (self.quelle_pfad, self.ziel_pfad):
+            if os.path.exists(pfad):
+                os.remove(pfad)
+
+    @staticmethod
+    def _neue_temp_datei() -> str:
+        fd, pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(pfad)  # init_db soll die Datei selbst neu anlegen
+        return pfad
+
+    def test_kopiert_veranstaltung_und_teilnehmer(self):
+        set_veranstaltung(
+            self.quelle, verein="Testverein", ort="Testort", datum="2026-09-19",
+            wertungsrichter_1="Richter A",
+        )
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, bezahlt=True,
+        ))
+
+        kopiere_termin_daten(self.quelle, self.ziel)
+
+        veranstaltung = get_veranstaltung(self.ziel)
+        self.assertEqual(veranstaltung["verein"], "Testverein")
+        self.assertEqual(veranstaltung["wertungsrichter_1"], "Richter A")
+
+        ziel_teilnehmer = list_teilnehmer(self.ziel)
+        self.assertEqual(len(ziel_teilnehmer), 1)
+        self.assertEqual(ziel_teilnehmer[0]["nachname"], "Muster")
+        self.assertEqual(ziel_teilnehmer[0]["startnummer"], 1)
+        self.assertTrue(ziel_teilnehmer[0]["bezahlt"])
+
+    def test_kopiert_bereits_vorhandene_ergebnisse_mit(self):
+        teilnehmer_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, teilnehmer_id, "Trümmerfeld", 45, 25)
+
+        id_zuordnung = kopiere_termin_daten(self.quelle, self.ziel)
+
+        neue_id = id_zuordnung[teilnehmer_id]
+        ergebnis = get_ergebnis(self.ziel, neue_id)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 45)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 25)
+
+    def test_id_zuordnung_liefert_alte_und_neue_id(self):
+        alte_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1,
+        ))
+        id_zuordnung = kopiere_termin_daten(self.quelle, self.ziel)
+        self.assertEqual(len(id_zuordnung), 1)
+        neue_id = id_zuordnung[alte_id]
+        self.assertIsNotNone(get_teilnehmer(self.ziel, neue_id))
+
+    def test_import_ueberschreibt_ergebnisse_im_ziel_nach_startnummer(self):
+        # Quelle simuliert den PostgreSQL-Stand nach der Prüfung, Ziel die lokale
+        # SQLite-Datei mit demselben Teilnehmer (aber einer anderen internen ID, wie
+        # nach einem echten Export/Import über zwei unabhängige Datenbanken).
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Irrelevant", vorname="X", rufname_hund="Y", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=99,
+        ))
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+
+        ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(bericht.ohne_startnummer_uebersprungen, [])
+        self.assertEqual(bericht.nicht_gefunden, ["99"])
+        ergebnis = get_ergebnis(self.ziel, ziel_id)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 50)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 30)
+
+    def test_import_uebergeht_teilnehmer_ohne_startnummer(self):
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Ohne", vorname="Nummer", rufname_hund="Rex", art="DK", stufe=1,
+        ))
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(bericht.ohne_startnummer_uebersprungen, ["Ohne, Nummer"])
+
+    def test_export_und_import_end_zu_end_ueber_sqlite(self):
+        """Simuliert den kompletten Export/Import-Ablauf rein mit SQLite (ohne die
+        PostgreSQL-spezifische Terminverwaltung, die separat geprüft wird) - Teilnehmer
+        kopieren, "am Prüfungstag" im Ziel Ergebnisse eintragen, danach zurück in die
+        Quelle importieren."""
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1,
+        ))
+        kopiere_termin_daten(self.quelle, self.ziel)
+
+        ziel_teilnehmer = list_teilnehmer(self.ziel)[0]
+        for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+            eintragen_ergebnis(self.ziel, ziel_teilnehmer["id"], disziplin, 40, 20)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.ziel, self.quelle)
+        self.assertEqual(bericht.aktualisiert, 1)
+
+        quelle_teilnehmer = list_teilnehmer(self.quelle)[0]
+        ergebnis = get_ergebnis(self.quelle, quelle_teilnehmer["id"])
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 40)
+        self.assertEqual(ergebnis["suche_flaechensuche"], 40)
+        self.assertEqual(ergebnis["suche_behaeltnis"], 40)
+
+
 # --- Dieselben Tests zusätzlich gegen PostgreSQL (geplante Podman/Web-Version) --------
 #
 # TestTerminuebersicht oben bleibt bewusst NUR gegen SQLite: sie testet die
@@ -1107,6 +1250,103 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
             loesche_termin_postgres(self.conn, "termin_1; DROP SCHEMA public CASCADE; --")
         with self.assertRaises(ValueError):
             oeffne_termin_postgres(self.conn, "nicht_erlaubt")
+
+    def test_neuer_termin_bekommt_eindeutigen_zugangscode(self):
+        a = erstelle_termin_postgres(self.conn)
+        b = erstelle_termin_postgres(self.conn)
+        self.assertIsNotNone(a.zugangscode)
+        self.assertEqual(len(a.zugangscode), 6)
+        self.assertTrue(a.zugangscode.isdigit())
+        self.assertNotEqual(a.zugangscode, b.zugangscode)
+
+    def test_pruefe_zugangscode_liefert_passenden_schema_namen(self):
+        termin = erstelle_termin_postgres(self.conn)
+        self.assertEqual(pruefe_zugangscode_postgres(self.conn, termin.zugangscode), termin.schema_name)
+        # Whitespace am Rand (Tippen/Copy-Paste auf dem Handy) wird toleriert.
+        self.assertEqual(pruefe_zugangscode_postgres(self.conn, f"  {termin.zugangscode}  "), termin.schema_name)
+
+    def test_falscher_zugangscode_liefert_none(self):
+        erstelle_termin_postgres(self.conn)
+        self.assertIsNone(pruefe_zugangscode_postgres(self.conn, "000000"))
+
+    def test_liste_termine_enthaelt_zugangscode(self):
+        termin = erstelle_termin_postgres(self.conn)
+        gefunden = liste_termine_postgres(self.conn)[0]
+        self.assertEqual(gefunden.zugangscode, termin.zugangscode)
+
+
+class TestTerminSyncPostgres(unittest.TestCase):
+    """Prüft die dünnen, tatsächlich an PostgreSQL gebundenen Wrapper-Funktionen
+    exportiere_termin_nach_postgres()/importiere_ergebnisse_aus_postgres() end-zu-Ende
+    gegen einen echten Server (die eigentliche Kopierlogik dahinter ist bereits
+    dialektunabhängig in TestTerminSync oben geprüft, siehe dortigen Klassen-Docstring)."""
+
+    def setUp(self):
+        if not _POSTGRES_TEST_DSN:
+            self.skipTest(
+                "SHS_TEST_POSTGRES_DSN nicht gesetzt - PostgreSQL-Tests übersprungen "
+                "(z. B. lokal ohne laufenden Postgres-Server; läuft in der CI)"
+            )
+        if psycopg2 is None:
+            self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
+        self.conn = verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        self._registry_leeren()
+
+        fd, self.sqlite_pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(self.sqlite_pfad)
+        self.sqlite_conn = init_db(self.sqlite_pfad)
+
+    def tearDown(self):
+        if getattr(self, "sqlite_conn", None) is not None:
+            self.sqlite_conn.close()
+            if os.path.exists(self.sqlite_pfad):
+                os.remove(self.sqlite_pfad)
+        if getattr(self, "conn", None) is not None:
+            self._registry_leeren()
+            self.conn.close()
+
+    def _registry_leeren(self):
+        zeilen = self.conn.execute("SELECT schema_name FROM public.termin_registry").fetchall()
+        for zeile in zeilen:
+            self.conn.execute(f"DROP SCHEMA IF EXISTS {zeile['schema_name']} CASCADE")
+        self.conn.execute("DELETE FROM termin_registry")
+        self.conn.commit()
+
+    def test_export_veroeffentlicht_termin_mit_zugangscode(self):
+        set_veranstaltung(self.sqlite_conn, verein="Testverein", datum="2026-09-19")
+        add_teilnehmer(self.sqlite_conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+
+        termin = exportiere_termin_nach_postgres(self.sqlite_conn, self.conn)
+
+        self.assertEqual(termin.verein, "Testverein")
+        self.assertEqual(termin.anzahl_teilnehmer, 1)
+        self.assertIsNotNone(termin.zugangscode)
+        self.assertEqual(pruefe_zugangscode_postgres(self.conn, termin.zugangscode), termin.schema_name)
+
+    def test_export_und_import_end_zu_ende(self):
+        teilnehmer_id = add_teilnehmer(self.sqlite_conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+
+        termin = exportiere_termin_nach_postgres(self.sqlite_conn, self.conn)
+
+        # "Am Prüfungstag": ein Richter trägt über die (hier simulierte) Web-Oberfläche
+        # ein Ergebnis für den Teilnehmer mit Startnummer 1 ein.
+        oeffne_termin_postgres(self.conn, termin.schema_name)
+        postgres_teilnehmer = list_teilnehmer(self.conn)[0]
+        eintragen_ergebnis(self.conn, postgres_teilnehmer["id"], "Trümmerfeld", 48, 28)
+
+        bericht = importiere_ergebnisse_aus_postgres(self.conn, termin.schema_name, self.sqlite_conn)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        ergebnis = get_ergebnis(self.sqlite_conn, teilnehmer_id)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 48)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 28)
 
 
 if __name__ == "__main__":

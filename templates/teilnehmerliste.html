@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titel %}Teilnehmer – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Teilnehmer</h1>
+  {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum }}</p>{% endif %}
+</div>
+
+<div class="karte" style="padding: 0;">
+  {% for zeile in zeilen %}
+    <a class="teilnehmer-zeile" href="{{ url_for('ergebnis_erfassen', teilnehmer_id=zeile.teilnehmer.id) }}">
+      <table style="margin: 0;"><tr>
+        <td style="border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+          <span class="startnummer">{% if zeile.teilnehmer.startnummer %}#{{ zeile.teilnehmer.startnummer }}{% else %}–{% endif %}</span>
+          {{ zeile.teilnehmer.nachname }}, {{ zeile.teilnehmer.vorname }} ({{ zeile.teilnehmer.rufname_hund }})<br>
+          <small>{{ zeile.label }}</small>
+        </td>
+        <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+          {% if zeile.vollstaendig %}
+            <span class="status status-fertig">bewertet</span>
+          {% else %}
+            <span class="status status-offen">offen</span>
+          {% endif %}
+        </td>
+      </tr></table>
+    </a>
+  {% else %}
+    <p style="padding: 1em;">Für diesen Termin sind noch keine Teilnehmer hinterlegt.</p>
+  {% endfor %}
+</div>
+{% endblock %}
