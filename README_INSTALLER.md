@@ -178,6 +178,13 @@ Die Kurz-Checkliste unten gilt für beide Wege – bei einem Actions-Build sind
 Schritt 2 und 3 (PyInstaller/Inno Setup) bereits durch den Workflow erledigt,
 Testinstallation und Versionsdisziplin bleiben aber genauso wichtig.
 
+**Derselbe Versions-Tag löst zusätzlich einen zweiten Workflow aus:**
+`.github/workflows/build-container.yml` baut bei jedem `vX.Y.Z`-Tag auch das
+Container-Image der Web-Version und veröffentlicht es nach `ghcr.io` – mit
+genau derselben Versionsnummer aus `version.txt`. Ein einziger Tag-Push
+versorgt damit sowohl den Windows-Installer als auch das Container-Image mit
+derselben Version. Details siehe `README_CONTAINER.md`.
+
 ## Kurz-Checkliste pro Release
 
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,

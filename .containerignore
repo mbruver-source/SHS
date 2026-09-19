@@ -1,0 +1,36 @@
+# Baukontext für Containerfile/compose.yaml klein halten - das Containerfile kopiert
+# ohnehin nur einzelne, benannte Dateien (db.py/shs_core.py/app_web.py/version.py/
+# templates/), diese Liste verhindert zusätzlich, dass unnötige Dateien überhaupt erst
+# an den Podman/Docker-Daemon übertragen werden.
+
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Desktop-Version (PySide6, GUI) - gehört nicht ins Web-Backend-Image
+app.py
+pdf_export.py
+gui_vorschau.html
+
+# Desktop-Installer-Build (PyInstaller/Inno Setup) - siehe README_INSTALLER.md
+build/
+dist/
+Output/
+*.exe
+build.spec
+build_installer.bat
+installer.iss
+version.txt
+version_info.txt
+bump_version.py
+
+# Tests, Dokumentation
+test_*.py
+*.md
+
+# Geheimnisse/lokale Konfiguration
+.env

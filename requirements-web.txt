@@ -14,6 +14,16 @@
 # Vereins-Netzwerk laufen soll (kein verlässlicher Internetzugang am Prüfungstag
 # vorausgesetzt) - ein serverseitig gerenderter Ansatz ohne externe CDN-Abhängigkeiten
 # passt dazu am einfachsten. Der eingebaute Flask-Entwicklungsserver (app.run(), siehe
-# app_web.py) ist dabei nur für lokale Tests gedacht - für den echten Einsatz kommt
-# später ein WSGI-Server (z. B. waitress) im geplanten Podman-Container hinzu.
+# app_web.py) ist dabei nur für lokale Tests gedacht.
 Flask>=3.0
+
+# WSGI-Server für den echten Einsatz im Podman-Container (siehe Containerfile) - ersetzt
+# dort den Flask-Entwicklungsserver. Reine Python-Abhängigkeit (kein C-Compiler im Image
+# nötig, anders als z. B. gunicorn unter manchen Umgebungen).
+waitress>=3.0
+
+# db.py importiert pyzipper am Modulanfang (für die ZIP-Datensicherung der Desktop-
+# Version, siehe dortiger Kommentar) - das Web-Backend nutzt diese Funktion selbst nie,
+# braucht die Abhängigkeit aber trotzdem, sobald es "import db" ausführt. Deshalb hier
+# mitgeführt statt einer eigenen dritten Requirements-Datei nur für diese eine Zeile.
+pyzipper>=0.4.0

@@ -1,0 +1,57 @@
+# Podman/Docker-Compose-Definition für die Web-Version (Web-Backend + PostgreSQL) -
+# siehe README_CONTAINER.md für den vollständigen Ablauf (.env einrichten, starten,
+# stoppen, Versionsnummer) und Fortschritt.md für den Architektur-Hintergrund.
+#
+# Start (Podman): podman-compose up -d
+#   - ohne lokal vorhandenes "web"-Image wird automatisch aus dem Containerfile gebaut
+#     (siehe "build:" unten) - für einen erzwungenen Neu-Build: podman-compose up --build -d
+#   - um stattdessen das zuletzt über GitHub Actions veröffentlichte Image zu verwenden:
+#     podman-compose pull && podman-compose up -d
+#
+# Funktioniert unverändert auch mit "docker compose" (Compose-Spec-Standarddatei).
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SHS_DB_USER:-shs}
+      POSTGRES_PASSWORD: ${SHS_DB_PASSWORD:?bitte SHS_DB_PASSWORD in .env setzen - siehe .env.example}
+      POSTGRES_DB: ${SHS_DB_NAME:-shs}
+    volumes:
+      - shs_postgres_daten:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SHS_DB_USER:-shs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Bewusst KEIN "ports:" hier - PostgreSQL muss nur für den "web"-Dienst im selben
+    # Compose-Netzwerk erreichbar sein, nicht von außen aus dem Vereinsnetz.
+
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: ${SHS_WEB_IMAGE:-ghcr.io/mbruver-source/shs-web:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Format/Details siehe db.verbinde_postgres_server() bzw. app_web.py.
+      SHS_POSTGRES_DSN: postgresql://${SHS_DB_USER:-shs}:${SHS_DB_PASSWORD:?bitte SHS_DB_PASSWORD in .env setzen - siehe .env.example}@db:5432/${SHS_DB_NAME:-shs}
+      SHS_WEB_SECRET_KEY: ${SHS_WEB_SECRET_KEY:?bitte SHS_WEB_SECRET_KEY in .env setzen - siehe .env.example}
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  # Bleibt über Neustarts/"compose down" hinweg erhalten (nur "compose down -v" löscht
+  # auch die Datenbank - siehe README_CONTAINER.md, Abschnitt "Stoppen"). Ersetzt NICHT
+  # die noch offene PostgreSQL-Backup-Strategie aus Fortschritt.md.
+  shs_postgres_daten:

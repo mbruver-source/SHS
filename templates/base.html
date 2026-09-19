@@ -88,6 +88,12 @@
   .status-offen { background: #fff3cd; color: #7a5c00; }
   .status-fertig { background: #e6f4ea; color: var(--gruen-dunkel); }
   .startnummer { font-weight: 600; color: #555; margin-right: 0.4em; }
+  footer {
+    text-align: center;
+    color: #888;
+    font-size: 0.8em;
+    padding: 1.5em 1em 2em;
+  }
 </style>
 </head>
 <body>
@@ -98,5 +104,6 @@
 <main>
 {% block inhalt %}{% endblock %}
 </main>
+<footer>SHS-Prüfungsprogramm{% if version %} · Version {{ version }}{% endif %}</footer>
 </body>
 </html>

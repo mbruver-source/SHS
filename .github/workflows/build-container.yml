@@ -1,0 +1,102 @@
+name: Container bauen
+
+# Baut das Web-Backend-Image (Containerfile) und prüft es über einen echten
+# Compose-Stack (PostgreSQL + Web-Container, siehe compose.yaml) - macht inhaltlich
+# dasselbe wie ein Nutzer später mit "podman-compose up". Läuft bei jedem Push/Pull
+# Request (Smoke-Test, kein Push in die Registry), analog zu tests.yml.
+#
+# Ausgelöst durch:
+#   - jeden Push/Pull Request -> baut das Image lokal und prüft per Smoke-Test, ob der
+#     Compose-Stack tatsächlich hochkommt und die Login-Seite antwortet (kein Registry-
+#     Push - reine Absicherung, dass Containerfile/compose.yaml nicht kaputt sind)
+#   - einen gepushten Versions-Tag nach dem Muster "vX.Y.Z" (z. B. "v1.2.0")
+#     -> zusätzlich: Image nach ghcr.io veröffentlichen, getaggt mit genau dieser
+#        Versionsnummer UND "latest" - DERSELBE Tag wie beim Windows-Installer
+#        (build-installer.yml), da beide Workflows von demselben Tag ausgelöst werden
+#        und dieselbe version.txt als Quelle lesen. Damit tragen .exe und Container-
+#        Image nach einem Release immer dieselbe Versionsnummer (sichtbar: Datei-
+#        Eigenschaften der .exe bzw. Fußzeile der Web-Oberfläche, siehe
+#        app_web.py/templates/base.html).
+#   - manuell über den Button "Run workflow" (workflow_dispatch) -> nur Smoke-Test,
+#      kein Registry-Push (zum Testen, ohne gleich zu veröffentlichen)
+#
+# Ablauf für ein Release (identisch zu build-installer.yml, siehe dortiger Kommentar
+# und README_INSTALLER.md/README_CONTAINER.md):
+#   1. Lokal einmal `python bump_version.py` laufen lassen
+#   2. version.txt/version_info.txt/version.py committen und pushen
+#   3. Tag setzen: `git tag v1.2.0 && git push origin v1.2.0`
+#      -> baut UND veröffentlicht sowohl den Windows-Installer als auch dieses Image
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write # nötig, damit der Publish-Schritt bei einem Tag nach ghcr.io pushen darf
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/shs-web
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
+        run: |
+          echo "SHS_DB_PASSWORD=smoketest" >> "$GITHUB_ENV"
+          echo "SHS_WEB_SECRET_KEY=smoketest" >> "$GITHUB_ENV"
+          docker compose -f compose.yaml up --build -d
+
+      - name: Warten, bis die Login-Seite antwortet
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/ > /dev/null; then
+              echo "Web-Container antwortet."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Web-Container antwortet nach 60s nicht auf http://localhost:5000/ - Logs:"
+          docker compose -f compose.yaml logs
+          exit 1
+
+      - name: Compose-Stack stoppen
+        if: always()
+        run: docker compose -f compose.yaml down -v
+
+  publish:
+    needs: smoke-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Versionsnummer aus version.txt auslesen
+        id: version
+        run: echo "version=$(cat version.txt | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      - name: Bei ghcr.io anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image bauen und veröffentlichen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE }}:latest

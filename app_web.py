@@ -39,8 +39,19 @@ from functools import wraps
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
 
 import db
+from version import VERSION
 
 app = Flask(__name__)
+
+
+@app.context_processor
+def _version_kontext():
+    """Stellt die Versionsnummer allen Templates zur Verfügung (Fußzeile, siehe
+    templates/base.html) - dieselbe Nummer wie in der Desktop-.exe (version.py wird von
+    bump_version.py für beide zusammen erzeugt, siehe dortiger Kommentar und
+    Containerfile), damit sich am Prüfungstag leicht erkennen lässt, ob Desktop- und
+    Web-Version zusammenpassen."""
+    return {"version": VERSION}
 
 # Verbindungsstring zum gemeinsamen PostgreSQL-Server - siehe db.verbinde_postgres_server()
 # für das Format. Bewusst über eine Umgebungsvariable statt hart im Code, analog zu
