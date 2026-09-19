@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block titel %}Termine verwalten – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Termin veröffentlichen</h1>
+  <p>
+    Termin-Datei (<code>.sqlite</code>) aus der Desktop-Version hochladen – erscheint
+    danach sofort in der Termin-Auswahl der Web-Oberfläche. Alternative zur
+    Kommandozeile (<code>sync_termin.py export</code>, siehe README_CONTAINER.md).
+  </p>
+  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+  {% if veroeffentlicht %}
+    <div class="karte" style="background: #e6f4ea; border-color: var(--gruen);">
+      Termin veröffentlicht: <strong>{{ veroeffentlicht.verein or "(ohne Vereinsnamen)" }}</strong>
+      {% if veroeffentlicht.ort %}, {{ veroeffentlicht.ort }}{% endif %}
+      – {{ veroeffentlicht.anzahl_teilnehmer }} Teilnehmer.
+    </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('admin_termin_veroeffentlichen') }}" enctype="multipart/form-data">
+    <label for="sqlite_datei_veroeffentlichen">Termin-Datei</label>
+    <input type="file" id="sqlite_datei_veroeffentlichen" name="sqlite_datei" accept=".sqlite" required>
+    <p><button type="submit">Veröffentlichen</button></p>
+  </form>
+</div>
+
+{% if zurueckgeholt_bericht %}
+  <div class="karte" style="background: #e6f4ea; border-color: var(--gruen);">
+    <h2 style="margin-top: 0;">Ergebnisse zurückgeholt</h2>
+    <p>
+      {{ zurueckgeholt_bericht.aktualisiert }} Teilnehmer mit Ergebnissen aktualisiert.
+      {% if zurueckgeholt_bericht.ohne_startnummer_uebersprungen %}
+        <br>Übersprungen (keine Startnummer in der Termin-Datei):
+        {{ zurueckgeholt_bericht.ohne_startnummer_uebersprungen | join(", ") }}
+      {% endif %}
+      {% if zurueckgeholt_bericht.nicht_gefunden %}
+        <br>Startnummern aus der Web-Erfassung ohne Entsprechung in der Termin-Datei:
+        {{ zurueckgeholt_bericht.nicht_gefunden | join(", ") }}
+      {% endif %}
+    </p>
+    <p>
+      <a class="knopf" href="{{ url_for('admin_termin_download', token=zurueckgeholt_token) }}">
+        {{ zurueckgeholt_name }} herunterladen
+      </a>
+    </p>
+    <p><small>Die aktualisierte Datei ersetzt in der Desktop-Version die ursprüngliche
+      Termin-Datei – danach laufen PDF-Export/Auswertung/Zeitplan dort wie gewohnt weiter.
+      Der Download-Link funktioniert nur einmal.</small></p>
+  </div>
+{% endif %}
+
+<div class="karte" style="padding: 0;">
+  {% for termin in termine %}
+    <div style="padding: 1em; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+      <strong>{{ termin.verein or "(ohne Vereinsnamen)" }}</strong>{% if termin.ort %}, {{ termin.ort }}{% endif %}<br>
+      <small>{{ termin.datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer · {{ termin.schema_name }}</small>
+      <div style="display: flex; gap: 0.5em; margin-top: 0.6em; flex-wrap: wrap; align-items: center;">
+        <form method="post" action="{{ url_for('admin_termin_zurueckholen', schema_name=termin.schema_name) }}"
+              enctype="multipart/form-data" style="display: flex; gap: 0.5em; align-items: center; margin: 0;">
+          <input type="file" name="sqlite_datei" accept=".sqlite" required style="width: auto;">
+          <button type="submit" class="knopf-sekundaer">Ergebnisse zurückholen</button>
+        </form>
+        <form method="post" action="{{ url_for('admin_termin_loeschen', schema_name=termin.schema_name) }}" style="margin: 0;">
+          <button type="submit" class="knopf-sekundaer">Löschen</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <p style="padding: 1em;">Aktuell ist kein Termin veröffentlicht.</p>
+  {% endfor %}
+</div>
+{% endblock %}

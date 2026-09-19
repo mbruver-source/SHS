@@ -2,13 +2,15 @@
 {% block titel %}Anmelden – SHS Prüfung{% endblock %}
 {% block inhalt %}
 <div class="karte">
-  <h1>Zugangscode</h1>
-  <p>Bitte den Zugangscode für den heutigen Prüfungstermin eingeben (vom Prüfungsleiter erhalten).</p>
+  <h1>Anmelden</h1>
+  <p>Bitte mit deinem Benutzernamen und Passwort anmelden (vom Administrator erhalten).</p>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   <form method="post">
-    <label for="zugangscode">Zugangscode</label>
-    <input type="text" id="zugangscode" name="zugangscode" inputmode="numeric" pattern="[0-9]*"
-           autocomplete="off" autofocus required>
+    <label for="benutzername">Benutzername</label>
+    <input type="text" id="benutzername" name="benutzername" autocomplete="username" autofocus required
+           autocapitalize="none" autocorrect="off" spellcheck="false">
+    <label for="passwort">Passwort</label>
+    <input type="password" id="passwort" name="passwort" autocomplete="current-password" required>
     <p><button type="submit">Anmelden</button></p>
   </form>
 </div>

@@ -99,7 +99,14 @@
 <body>
 <header>
   <span class="titel">SHS Prüfung{% if veranstaltung %} – {{ veranstaltung.verein }}{% endif %}</span>
-  {% if session.get('schema_name') %}<a href="{{ url_for('logout') }}">Abmelden</a>{% endif %}
+  {% if session.get('benutzername') %}
+    <nav>
+      {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a> ·{% endif %}
+      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a> ·{% endif %}
+      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a> ·{% endif %}
+      <a href="{{ url_for('logout') }}">Abmelden ({{ session.get('benutzername') }})</a>
+    </nav>
+  {% endif %}
 </header>
 <main>
 {% block inhalt %}{% endblock %}

@@ -25,8 +25,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Bewusst KEIN "ports:" hier - PostgreSQL muss nur für den "web"-Dienst im selben
-    # Compose-Netzwerk erreichbar sein, nicht von außen aus dem Vereinsnetz.
+    ports:
+      # NUR auf "localhost" des Rechners, auf dem der Container läuft - NICHT auf
+      # "0.0.0.0" (würde die Datenbank ungeschützt im ganzen Vereinsnetz erreichbar
+      # machen). Wird gebraucht, damit sync_termin.py (läuft direkt auf diesem Rechner,
+      # nicht im Container) den Termin vor der Prüfung veröffentlichen und danach die
+      # Ergebnisse zurückholen kann - siehe README_CONTAINER.md, Abschnitt "Zugangscode
+      # erzeugen". Der "web"-Dienst selbst erreicht "db" ohnehin über das interne
+      # Compose-Netzwerk (Hostname "db"), unabhängig von dieser Zeile.
+      - "127.0.0.1:5432:5432"
 
   web:
     build:

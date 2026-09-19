@@ -13,9 +13,12 @@ from db import (
     add_zeitplan_pause,
     add_zeitplan_pruefungsblock,
     add_zeitplan_richter,
+    admin_einrichten,
     aktualisiere_zeitplan_eintrag,
     alle_leistungsklassen,
     automatische_zeitplan_verteilung,
+    benutzer_anlegen,
+    benutzer_loeschen,
     berechne_auswertung,
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
@@ -28,11 +31,13 @@ from db import (
     get_ergebnis,
     get_teilnehmer,
     get_veranstaltung,
+    gibt_es_admin,
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
     init_db,
     init_db_postgres,
     kopiere_termin_daten,
+    liste_benutzer,
     liste_termine,
     liste_termine_postgres,
     list_teilnehmer,
@@ -43,7 +48,7 @@ from db import (
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
     oeffne_termin_postgres,
-    pruefe_zugangscode_postgres,
+    pruefe_login,
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
     setze_bezahlt,
@@ -1293,28 +1298,109 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
         with self.assertRaises(ValueError):
             oeffne_termin_postgres(self.conn, "nicht_erlaubt")
 
-    def test_neuer_termin_bekommt_eindeutigen_zugangscode(self):
-        a = erstelle_termin_postgres(self.conn)
-        b = erstelle_termin_postgres(self.conn)
-        self.assertIsNotNone(a.zugangscode)
-        self.assertEqual(len(a.zugangscode), 6)
-        self.assertTrue(a.zugangscode.isdigit())
-        self.assertNotEqual(a.zugangscode, b.zugangscode)
 
-    def test_pruefe_zugangscode_liefert_passenden_schema_namen(self):
-        termin = erstelle_termin_postgres(self.conn)
-        self.assertEqual(pruefe_zugangscode_postgres(self.conn, termin.zugangscode), termin.schema_name)
-        # Whitespace am Rand (Tippen/Copy-Paste auf dem Handy) wird toleriert.
-        self.assertEqual(pruefe_zugangscode_postgres(self.conn, f"  {termin.zugangscode}  "), termin.schema_name)
+class TestBenutzerkontenPostgres(unittest.TestCase):
+    """Prüft die globalen Web-Benutzerkonten (siehe db.py, Abschnitt "Benutzerkonten der
+    Web-Version") gegen einen echten PostgreSQL-Server - abgelöst hat diese
+    Benutzerverwaltung den früheren, hier bis vor Kurzem getesteten gemeinsamen
+    Zugangscode je Termin (siehe Git-Historie dieser Datei). Dasselbe Skip-Verhalten wie
+    TestTerminverwaltungPostgres oben (kein SHS_TEST_POSTGRES_DSN/psycopg2 lokal ->
+    übersprungen, läuft in der CI)."""
 
-    def test_falscher_zugangscode_liefert_none(self):
-        erstelle_termin_postgres(self.conn)
-        self.assertIsNone(pruefe_zugangscode_postgres(self.conn, "000000"))
+    IntegrityErrorTyp = psycopg2.IntegrityError if psycopg2 is not None else Exception
 
-    def test_liste_termine_enthaelt_zugangscode(self):
-        termin = erstelle_termin_postgres(self.conn)
-        gefunden = liste_termine_postgres(self.conn)[0]
-        self.assertEqual(gefunden.zugangscode, termin.zugangscode)
+    def setUp(self):
+        if not _POSTGRES_TEST_DSN:
+            self.skipTest(
+                "SHS_TEST_POSTGRES_DSN nicht gesetzt - PostgreSQL-Tests übersprungen "
+                "(z. B. lokal ohne laufenden Postgres-Server; läuft in der CI)"
+            )
+        if psycopg2 is None:
+            self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
+        self.conn = verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        self.conn.execute("DELETE FROM public.web_benutzer")
+        self.conn.commit()
+
+    def tearDown(self):
+        if getattr(self, "conn", None) is not None:
+            self.conn.execute("DELETE FROM public.web_benutzer")
+            self.conn.commit()
+            self.conn.close()
+
+    def test_ohne_konten_gibt_es_keinen_admin(self):
+        self.assertFalse(gibt_es_admin(self.conn))
+
+    def test_admin_einrichten_legt_ersten_admin_an(self):
+        self.assertTrue(admin_einrichten(self.conn, "chef", "sicheres_passwort"))
+        self.assertTrue(gibt_es_admin(self.conn))
+        konto = pruefe_login(self.conn, "chef", "sicheres_passwort")
+        self.assertEqual(konto, {"benutzername": "chef", "ist_admin": True})
+
+    def test_admin_einrichten_lehnt_zweiten_ersten_admin_ab(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        self.assertFalse(admin_einrichten(self.conn, "chef2", "anderes_passwort"))
+        # Das ursprüngliche Konto bleibt unverändert der einzige Administrator.
+        self.assertEqual([b["benutzername"] for b in liste_benutzer(self.conn) if b["ist_admin"]], ["chef"])
+
+    def test_pruefe_login_mit_falschem_passwort_liefert_none(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        self.assertIsNone(pruefe_login(self.conn, "chef", "falsch"))
+
+    def test_pruefe_login_mit_unbekanntem_benutzer_liefert_none(self):
+        self.assertIsNone(pruefe_login(self.conn, "gibtsnicht", "irgendwas"))
+
+    def test_benutzer_anlegen_ohne_adminrechte(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        konto = pruefe_login(self.conn, "helfer", "helferpasswort")
+        self.assertEqual(konto, {"benutzername": "helfer", "ist_admin": False})
+
+    def test_liste_benutzer_alphabetisch_ohne_passwort_hash(self):
+        admin_einrichten(self.conn, "zeno", "sicheres_passwort")
+        benutzer_anlegen(self.conn, "anna", "anderes_passwort")
+        namen = [b["benutzername"] for b in liste_benutzer(self.conn)]
+        self.assertEqual(namen, ["anna", "zeno"])
+        self.assertNotIn("passwort_hash", liste_benutzer(self.conn)[0])
+
+    def test_doppelter_benutzername_wird_abgelehnt(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        with self.assertRaises(self.IntegrityErrorTyp):
+            benutzer_anlegen(self.conn, "chef", "irgendein_passwort")
+
+    def test_benutzer_loeschen_entfernt_konto(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        benutzer_loeschen(self.conn, "helfer")
+        self.assertIsNone(pruefe_login(self.conn, "helfer", "helferpasswort"))
+
+    def test_letzter_admin_kann_nicht_geloescht_werden(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        with self.assertRaises(ValueError):
+            benutzer_loeschen(self.conn, "chef")
+        self.assertTrue(gibt_es_admin(self.conn))
+
+    def test_einer_von_zwei_admins_kann_geloescht_werden(self):
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        benutzer_anlegen(self.conn, "chef2", "anderes_passwort", ist_admin=True)
+        benutzer_loeschen(self.conn, "chef2")  # darf nicht werfen - "chef" bleibt Admin
+        self.assertIsNone(pruefe_login(self.conn, "chef2", "anderes_passwort"))
+        self.assertTrue(gibt_es_admin(self.conn))
+
+    def test_login_ignoriert_gross_und_kleinschreibung_beim_benutzernamen(self):
+        # Praxisfall: Der Benutzername wurde z. B. beim Anlegen als "Marco" gespeichert,
+        # ein Mobilgerät schreibt beim späteren Anmelden aber automatisch den ersten
+        # Buchstaben groß ("Autokapitalisierung") oder klein - der Login soll trotzdem
+        # funktionieren, nur das Passwort bleibt GROSS-/kleinschreibungsempfindlich.
+        admin_einrichten(self.conn, "Marco", "sicheres_passwort")
+        self.assertEqual(
+            pruefe_login(self.conn, "marco", "sicheres_passwort"),
+            {"benutzername": "Marco", "ist_admin": True},
+        )
+        self.assertEqual(
+            pruefe_login(self.conn, "MARCO", "sicheres_passwort"),
+            {"benutzername": "Marco", "ist_admin": True},
+        )
+        self.assertIsNone(pruefe_login(self.conn, "Marco", "Sicheres_Passwort"))
 
 
 class TestTerminSyncPostgres(unittest.TestCase):
@@ -1357,7 +1443,7 @@ class TestTerminSyncPostgres(unittest.TestCase):
         self.conn.execute("DELETE FROM public.termin_registry")
         self.conn.commit()
 
-    def test_export_veroeffentlicht_termin_mit_zugangscode(self):
+    def test_export_veroeffentlicht_termin(self):
         set_veranstaltung(self.sqlite_conn, verein="Testverein", datum="2026-09-19")
         add_teilnehmer(self.sqlite_conn, NeuerTeilnehmer(
             nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
@@ -1368,8 +1454,9 @@ class TestTerminSyncPostgres(unittest.TestCase):
 
         self.assertEqual(termin.verein, "Testverein")
         self.assertEqual(termin.anzahl_teilnehmer, 1)
-        self.assertIsNotNone(termin.zugangscode)
-        self.assertEqual(pruefe_zugangscode_postgres(self.conn, termin.zugangscode), termin.schema_name)
+        # Taucht danach in der Termin-Auswahl der Web-Oberfläche auf (kein Zugangscode
+        # mehr - der Login läuft über die Benutzerkonten, siehe TestBenutzerkontenPostgres).
+        self.assertIn(termin.schema_name, [t.schema_name for t in liste_termine_postgres(self.conn)])
 
     def test_export_und_import_end_zu_ende(self):
         teilnehmer_id = add_teilnehmer(self.sqlite_conn, NeuerTeilnehmer(

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titel %}Ersteinrichtung – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Ersteinrichtung</h1>
+  <p>
+    Für diese Web-Version ist noch kein Administrator-Konto eingerichtet. Bitte hier
+    einmalig einen Benutzernamen und ein Passwort für den Administrator vergeben - danach
+    können unter „Benutzer verwalten“ weitere Konten für Helfer/Richter angelegt werden,
+    die nur Ergebnisse eintragen dürfen.
+  </p>
+  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+  <form method="post">
+    <label for="benutzername">Benutzername</label>
+    <input type="text" id="benutzername" name="benutzername" autocomplete="username" autofocus required
+           autocapitalize="none" autocorrect="off" spellcheck="false">
+    <label for="passwort">Passwort</label>
+    <input type="password" id="passwort" name="passwort" autocomplete="new-password" minlength="8" required>
+    <label for="passwort_wiederholung">Passwort wiederholen</label>
+    <input type="password" id="passwort_wiederholung" name="passwort_wiederholung"
+           autocomplete="new-password" minlength="8" required>
+    <p><button type="submit">Administrator einrichten</button></p>
+  </form>
+</div>
+{% endblock %}

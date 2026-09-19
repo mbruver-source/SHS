@@ -11,10 +11,13 @@ Ablauf am Prüfungstag:
   1. Termin wie bisher in der Desktop-Version anlegen und vorbereiten (Teilnehmer,
      Zeitplan, ...).
   2. VOR der Prüfung: `python sync_termin.py export <Termin-Datei> --dsn <Postgres-DSN>`
-     veröffentlicht den Termin als eigenen PostgreSQL-Termin und gibt den Zugangscode
-     aus, den die Richter für den Login in der Web-Oberfläche brauchen.
-  3. Die Richter tragen während der Prüfung über die Web-Oberfläche (app_web.py)
-     gleichzeitig Ergebnisse ein.
+     veröffentlicht den Termin als eigenen PostgreSQL-Termin - er taucht danach in der
+     Termin-Auswahl der Web-Oberfläche auf (siehe unten, kein Zugangscode mehr nötig: der
+     Login läuft über die Benutzerkonten, die der Administrator einmalig einrichtet bzw.
+     unter "Benutzer verwalten" anlegt).
+  3. Die Richter melden sich mit ihrem Benutzernamen/Passwort an der Web-Oberfläche
+     (app_web.py) an, wählen (falls mehr als ein Termin offen ist) den richtigen Termin
+     aus und tragen währenddessen gleichzeitig Ergebnisse ein.
   4. NACH der Prüfung: `python sync_termin.py import <Schema-Name> <Termin-Datei>
      --dsn <Postgres-DSN>` holt die eingetragenen Ergebnisse zurück in dieselbe
      Termin-Datei (Zuordnung über die Startnummer) - danach laufen
@@ -61,7 +64,8 @@ def _export(sqlite_pfad: str, postgres_dsn: str | None) -> None:
 
     print(f"Termin veröffentlicht: Schema '{termin.schema_name}', {termin.anzahl_teilnehmer} Teilnehmer.")
     print()
-    print(f"  Zugangscode für die Richter: {termin.zugangscode}")
+    print("  Ab sofort in der Termin-Auswahl der Web-Oberfläche wählbar (nach Anmeldung")
+    print("  mit einem Benutzerkonto - siehe README_CONTAINER.md, 'Benutzerkonten').")
     print()
     print(f"Zum Zurückholen der Ergebnisse nach der Prüfung:")
     print(f"  python sync_termin.py import {termin.schema_name} {sqlite_pfad} --dsn <Postgres-DSN>")

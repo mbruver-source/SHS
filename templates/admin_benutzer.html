@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titel %}Benutzer verwalten – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Benutzer verwalten</h1>
+  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+  <form method="post">
+    <label for="benutzername">Benutzername</label>
+    <input type="text" id="benutzername" name="benutzername" autocomplete="off" required
+           autocapitalize="none" autocorrect="off" spellcheck="false">
+    <label for="passwort">Passwort</label>
+    <input type="password" id="passwort" name="passwort" autocomplete="new-password" minlength="8" required>
+    <label for="passwort_wiederholung">Passwort wiederholen</label>
+    <input type="password" id="passwort_wiederholung" name="passwort_wiederholung"
+           autocomplete="new-password" minlength="8" required>
+    <label for="rolle">Rolle</label>
+    <select id="rolle" name="rolle" style="width: 100%; padding: 0.6em; font-size: 1.1em;
+            border: 1px solid var(--grau-rand); border-radius: 6px;">
+      <option value="eintragen" selected>Nur Eintragen (Ergebnisse erfassen)</option>
+      <option value="admin">Administrator (voller Zugriff, kann Benutzer verwalten)</option>
+    </select>
+    <p><button type="submit">Benutzer anlegen</button></p>
+  </form>
+</div>
+
+<div class="karte" style="padding: 0;">
+  {% for b in benutzer %}
+    <table style="margin: 0;"><tr>
+      <td style="border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+        {{ b.benutzername }}<br>
+        <small>{% if b.ist_admin %}Administrator{% else %}Nur Eintragen{% endif %}</small>
+      </td>
+      <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+        <form method="post" action="{{ url_for('admin_benutzer_loeschen', benutzername=b.benutzername) }}">
+          <button type="submit" class="knopf-sekundaer">Löschen</button>
+        </form>
+      </td>
+    </tr></table>
+  {% else %}
+    <p style="padding: 1em;">Noch keine Benutzer angelegt.</p>
+  {% endfor %}
+</div>
+{% endblock %}

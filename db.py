@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import datetime
 import re
-import secrets
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -1121,11 +1120,11 @@ def _setze_termin_suchpfad(conn, schema_name: str) -> None:
 class TerminInfoPostgres:
     """Eintrag für die Terminübersicht der PostgreSQL/Web-Version - das Pendant zu
     TerminInfo (SQLite) oben, ohne die dort dateibezogenen Felder (pfad/dateiname/
-    lesbar), dafür mit der registrierten ID, dem Schema-Namen und dem Zugangscode für
-    die Web-Oberfläche (siehe pruefe_zugangscode_postgres() weiter unten)."""
+    lesbar), dafür mit der registrierten ID und dem Schema-Namen. Der Login läuft nicht
+    mehr über einen Zugangscode je Termin (siehe Abschnitt "Benutzerkonten der
+    Web-Version" weiter unten) - diese Klasse trägt deshalb keinen Zugangscode mehr."""
     id: int
     schema_name: str
-    zugangscode: str | None
     verein: str | None
     ort: str | None
     datum: str | None
@@ -1133,11 +1132,165 @@ class TerminInfoPostgres:
     erstellt_am: object  # datetime, vom psycopg2-Treiber geliefert
 
 
+# --- Benutzerkonten der Web-Version (Login) -----------------------------------------
+#
+# Ursprünglich (V1) meldeten sich alle Richter/Helfer über einen einzigen, gemeinsamen
+# sechsstelligen Zugangscode je Termin an (siehe _eindeutigen_zugangscode_erzeugen/
+# pruefe_zugangscode_postgres in einer früheren Fassung dieser Datei - inzwischen
+# entfernt). Auf ausdrücklichen Wunsch abgelöst durch echte, GLOBALE (nicht mehr an
+# einen einzelnen Termin gebundene) Benutzerkonten mit Benutzername/Passwort:
+#
+#   - Beim allerersten Start (noch kein Konto vorhanden) richtet der Administrator sich
+#     selbst mit einem frei gewählten Benutzernamen/Passwort ein (siehe gibt_es_admin/
+#     admin_einrichten) - "Ersteinrichtung" in app_web.py.
+#   - Danach kann der Administrator weitere Konten für Helfer/Richter anlegen
+#     (benutzer_anlegen), die nur Ergebnisse eintragen dürfen (KEINE Benutzerverwaltung,
+#     kein Löschen von Terminen o.ä.) - siehe app_web.py, Entscheidung "Admin + Eintragen"
+#     (genau zwei Rollen, keine feinere Rechtevergabe).
+#   - Weil Konten jetzt GLOBAL sind (nicht mehr an einen Termin gebunden wie vorher der
+#     Zugangscode), muss nach dem Login zusätzlich ausgewählt werden, mit welchem gerade
+#     veröffentlichten Termin weitergearbeitet werden soll (siehe app_web.py,
+#     "/termin-waehlen" - wird übersprungen, wenn genau ein Termin offen ist).
+#
+# termin_registry.zugangscode (siehe verbinde_postgres_server) bleibt als Spalte
+# bestehen (bereits veröffentlichte Registry-Einträge behalten ihren alten Wert), wird
+# von diesem Modul aber nirgends mehr gelesen oder neu befüllt - reine Historie.
+#
+# Passwörter werden NIE im Klartext gespeichert, sondern über werkzeug.security
+# (ohnehin schon eine Abhängigkeit von Flask, siehe requirements-web.txt) gehasht -
+# keine zusätzliche pip-Abhängigkeit nötig.
+_WEB_BENUTZER_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS public.web_benutzer ("
+    "benutzername TEXT PRIMARY KEY, "
+    "passwort_hash TEXT NOT NULL, "
+    "ist_admin INTEGER NOT NULL DEFAULT 0 CHECK (ist_admin IN (0, 1)), "
+    "erstellt_am TEXT NOT NULL)"
+)
+
+
+def _jetzt_iso() -> str:
+    """ISO-8601-Zeitstempel (UTC) für web_benutzer.erstellt_am - bewusst als TEXT von
+    Python aus gesetzt statt per DEFAULT now()/CURRENT_TIMESTAMP in der Tabellendefinition
+    (die zwischen SQLite und PostgreSQL nicht identisch geschrieben werden), damit
+    _WEB_BENUTZER_SCHEMA unverändert gegen beide Datenbanken läuft - genau wie SCHEMA/
+    SCHEMA_POSTGRES weiter oben, nur ohne den Umweg über eine .replace()-Übersetzung."""
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def gibt_es_admin(conn) -> bool:
+    """Liefert True, sobald mindestens ein Administrator-Konto existiert - Grundlage
+    dafür, ob app_web.py beim Aufruf von '/' die einmalige Ersteinrichtung oder den
+    normalen Login zeigt."""
+    _setze_termin_suchpfad(conn, "public")
+    treffer = conn.execute(
+        "SELECT 1 AS vorhanden FROM web_benutzer WHERE ist_admin = 1 LIMIT 1"
+    ).fetchone()
+    return treffer is not None
+
+
+def admin_einrichten(conn, benutzername: str, passwort: str) -> bool:
+    """Richtet den ERSTEN Administrator ein (einmalige Ersteinrichtung, siehe
+    gibt_es_admin) - lehnt ab (liefert False, legt nichts an), falls in der Zwischenzeit
+    bereits ein Administrator existiert (z. B. zwei gleichzeitig geöffnete
+    Ersteinrichtungs-Formulare), damit nie unbemerkt ein zweiter "erster" Admin
+    entsteht."""
+    _setze_termin_suchpfad(conn, "public")
+    if gibt_es_admin(conn):
+        return False
+    benutzer_anlegen(conn, benutzername, passwort, ist_admin=True)
+    return True
+
+
+def benutzer_anlegen(conn, benutzername: str, passwort: str, ist_admin: bool = False) -> None:
+    """Legt ein neues Web-Benutzerkonto an (vom Administrator über '/admin/benutzer',
+    siehe app_web.py) - Benutzername muss eindeutig sein (Primärschlüssel der Tabelle,
+    siehe _WEB_BENUTZER_SCHEMA), sonst wirft dies denselben IntegrityError wie jede
+    andere doppelt vergebene eindeutige Spalte in diesem Modul.
+
+    Importiert werkzeug.security bewusst erst hier statt am Modulanfang - genau wie
+    psycopg2 in verbinde_postgres_server() weiter oben: werkzeug ist nur eine
+    Abhängigkeit des Web-Servers (Flask zieht es mit, siehe requirements-web.txt), die
+    Desktop-Version (requirements.txt) soll sie nicht mitinstallieren müssen, obwohl sie
+    dasselbe db.py-Modul importiert."""
+    from werkzeug.security import generate_password_hash
+
+    _setze_termin_suchpfad(conn, "public")
+    conn.execute(
+        "INSERT INTO web_benutzer (benutzername, passwort_hash, ist_admin, erstellt_am) "
+        "VALUES (?, ?, ?, ?)",
+        (benutzername.strip(), generate_password_hash(passwort), 1 if ist_admin else 0, _jetzt_iso()),
+    )
+    conn.commit()
+
+
+def benutzer_loeschen(conn, benutzername: str) -> None:
+    """Löscht ein Web-Benutzerkonto. Verhindert dabei, dass der LETZTE verbleibende
+    Administrator gelöscht wird (sonst gäbe es niemanden mehr, der neue Konten anlegen
+    oder die Ersteinrichtung erneut durchlaufen könnte, ohne direkt in der Datenbank zu
+    hantieren) - wirft in diesem Fall ValueError, ganz analog zur Schema-Namen-Prüfung
+    in _pruefe_schema_name weiter oben."""
+    _setze_termin_suchpfad(conn, "public")
+    zeile = conn.execute(
+        "SELECT ist_admin FROM web_benutzer WHERE benutzername = ?", (benutzername,)
+    ).fetchone()
+    if zeile is None:
+        return
+    if zeile["ist_admin"]:
+        anzahl_admins = conn.execute(
+            "SELECT COUNT(*) AS anzahl FROM web_benutzer WHERE ist_admin = 1"
+        ).fetchone()["anzahl"]
+        if anzahl_admins <= 1:
+            raise ValueError("Der letzte verbleibende Administrator kann nicht gelöscht werden.")
+    conn.execute("DELETE FROM web_benutzer WHERE benutzername = ?", (benutzername,))
+    conn.commit()
+
+
+def liste_benutzer(conn) -> list[dict]:
+    """Für die Benutzerverwaltung ('/admin/benutzer', nur für Administratoren
+    sichtbar) - alphabetisch nach Benutzername, OHNE die Passwort-Hashes (die Ansicht
+    braucht sie nicht, unnötig sensible Daten unnötig weiterzureichen)."""
+    _setze_termin_suchpfad(conn, "public")
+    zeilen = conn.execute(
+        "SELECT benutzername, ist_admin, erstellt_am FROM web_benutzer ORDER BY benutzername"
+    ).fetchall()
+    return [
+        {"benutzername": z["benutzername"], "ist_admin": bool(z["ist_admin"]), "erstellt_am": z["erstellt_am"]}
+        for z in zeilen
+    ]
+
+
+def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
+    """Prüft Benutzername/Passwort gegen web_benutzer und liefert bei Erfolg
+    {"benutzername": ..., "ist_admin": bool}, sonst None - Grundlage für den Login in
+    app_web.py. Absichtlich IMMER derselbe Rückgabeweg bei unbekanntem Benutzernamen wie
+    bei falschem Passwort (kein 'Benutzer nicht gefunden' vs. 'Passwort falsch'), damit
+    sich über die Fehlermeldung keine vorhandenen Benutzernamen erraten lassen. Importiert
+    werkzeug.security bewusst erst hier - siehe Begründung in benutzer_anlegen().
+
+    Der Vergleich läuft über LOWER() auf beiden Seiten, GROSS-/Kleinschreibung beim
+    Benutzernamen spielt also keine Rolle (Passwörter bleiben dagegen wie gespeichert
+    GROSS-/kleinschreibungsempfindlich) - ohne das würden z. B. Mobilgeräte, die den
+    ersten Buchstaben eines Textfelds automatisch groß schreiben ("Autokapitalisierung"),
+    beim Anmelden leicht einen ansonsten korrekten Benutzernamen ablehnen, nur weil er beim
+    Anlegen des Kontos anders geschrieben wurde als beim späteren Anmelden."""
+    from werkzeug.security import check_password_hash
+
+    _setze_termin_suchpfad(conn, "public")
+    zeile = conn.execute(
+        "SELECT benutzername, passwort_hash, ist_admin FROM web_benutzer WHERE LOWER(benutzername) = LOWER(?)",
+        (benutzername.strip(),),
+    ).fetchone()
+    if zeile is None or not check_password_hash(zeile["passwort_hash"], passwort):
+        return None
+    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"])}
+
+
 def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
     """Öffnet eine Verbindung zum gemeinsam genutzten PostgreSQL-Server für die
     Terminverwaltung (anlegen/auflisten/öffnen/löschen, siehe die Funktionen unten) - das
     Pendant zum Anzeigen der Terminübersicht beim Programmstart der Desktop-Version
-    (termine_ordner()/liste_termine()). Legt bei Bedarf die Registry-Tabelle an.
+    (termine_ordner()/liste_termine()). Legt bei Bedarf die Registry-Tabelle sowie die
+    Benutzerverwaltung (siehe Abschnitt "Benutzerkonten der Web-Version" weiter unten) an.
 
     Importiert psycopg2 bewusst erst hier statt am Modulanfang - siehe init_db_postgres()
     weiter oben für die Begründung.
@@ -1164,38 +1317,9 @@ def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
     # einzelne Termine, hier aber genügt eine einzelne feste ALTER-Anweisung, da es nur
     # um eine einzige, unabhängige Spalte ohne Constraints geht.
     conn.execute("ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS zugangscode TEXT")
+    conn.execute(_WEB_BENUTZER_SCHEMA)
     conn.commit()
     return conn
-
-
-def _eindeutigen_zugangscode_erzeugen(conn) -> str:
-    """Erzeugt einen sechsstelligen, rein numerischen Zugangscode für den gemeinsamen
-    Web-Login aller Richter/Helfer EINES Termins (siehe app_web.py) - kurz genug, um ihn
-    am Prüfungstag mündlich durchzugeben oder auf ein Flipchart zu schreiben. `secrets`
-    statt `random`, obwohl es sich nur um einen gemeinsamen PIN und kein Passwort für
-    einzelne Nutzer handelt. Kollisionen mit einem bereits vergebenen Code sind bei sechs
-    Ziffern extrem unwahrscheinlich, werden aber sicherheitshalber abgefangen (neu
-    gezogen statt zwei Terminen versehentlich denselben Code zu geben)."""
-    while True:
-        code = "".join(secrets.choice("0123456789") for _ in range(6))
-        treffer = conn.execute(
-            "SELECT 1 AS vorhanden FROM termin_registry WHERE zugangscode = ?", (code,)
-        ).fetchone()
-        if not treffer:
-            return code
-
-
-def pruefe_zugangscode_postgres(conn, zugangscode: str) -> str | None:
-    """Prüft einen von einem Richter/Helfer in der Web-Oberfläche eingegebenen
-    Zugangscode gegen die Registry und liefert bei Erfolg den zugehörigen Schema-Namen
-    (sonst None) - Grundlage für den Login in app_web.py. Whitespace am Rand wird
-    toleriert (Tippen/Copy-Paste auf dem Handy)."""
-    _setze_termin_suchpfad(conn, "public")
-    zeile = conn.execute(
-        "SELECT schema_name FROM termin_registry WHERE zugangscode = ?",
-        (zugangscode.strip(),),
-    ).fetchone()
-    return zeile["schema_name"] if zeile else None
 
 
 def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
@@ -1213,16 +1337,17 @@ def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
     Sequenz vergibt zudem nie zweimal denselben Wert, auch nicht nach einem Löschen - ein
     neuer Termin bekommt also nie versehentlich den Schema-Namen eines zuvor gelöschten.
 
-    Bekommt außerdem direkt einen eindeutigen Zugangscode für den Web-Login zugewiesen
-    (siehe _eindeutigen_zugangscode_erzeugen/pruefe_zugangscode_postgres oben)."""
+    Bekommt KEINEN Zugangscode mehr zugewiesen - der Login läuft über die globalen
+    Benutzerkonten (siehe Abschnitt "Benutzerkonten der Web-Version" weiter oben); nach
+    dem Login wird der Termin stattdessen über '/termin-waehlen' in app_web.py
+    ausgewählt."""
     _setze_termin_suchpfad(conn, "public")
     conn.execute("CREATE SEQUENCE IF NOT EXISTS termin_registry_id_seq")
     neue_id = conn.execute("SELECT nextval('termin_registry_id_seq') AS id").fetchone()["id"]
     schema_name = f"termin_{neue_id}"
-    zugangscode = _eindeutigen_zugangscode_erzeugen(conn)
     conn.execute(
-        "INSERT INTO termin_registry (id, schema_name, zugangscode) VALUES (?, ?, ?)",
-        (neue_id, schema_name, zugangscode),
+        "INSERT INTO termin_registry (id, schema_name) VALUES (?, ?)",
+        (neue_id, schema_name),
     )
     conn.execute(f"CREATE SCHEMA {schema_name}")
     _setze_termin_suchpfad(conn, schema_name)
@@ -1232,7 +1357,7 @@ def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
     ).fetchone()
     _setze_termin_suchpfad(conn, "public")
     return TerminInfoPostgres(
-        id=neue_id, schema_name=schema_name, zugangscode=zugangscode, verein=None, ort=None, datum=None,
+        id=neue_id, schema_name=schema_name, verein=None, ort=None, datum=None,
         anzahl_teilnehmer=0, erstellt_am=zeile["erstellt_am"],
     )
 
@@ -1258,7 +1383,7 @@ def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
     zuerst (nach Datum, wie liste_termine())."""
     _setze_termin_suchpfad(conn, "public")
     eintraege = conn.execute(
-        "SELECT id, schema_name, zugangscode, erstellt_am FROM termin_registry ORDER BY erstellt_am"
+        "SELECT id, schema_name, erstellt_am FROM termin_registry ORDER BY erstellt_am"
     ).fetchall()
     ergebnisse: list[TerminInfoPostgres] = []
     for eintrag in eintraege:
@@ -1267,7 +1392,7 @@ def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
         v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
         anzahl = conn.execute("SELECT COUNT(*) AS anzahl FROM teilnehmer").fetchone()["anzahl"]
         ergebnisse.append(TerminInfoPostgres(
-            id=eintrag["id"], schema_name=schema_name, zugangscode=eintrag["zugangscode"],
+            id=eintrag["id"], schema_name=schema_name,
             verein=v["verein"] if v else None, ort=v["ort"] if v else None,
             datum=v["datum"] if v else None, anzahl_teilnehmer=anzahl,
             erstellt_am=eintrag["erstellt_am"],
@@ -1375,8 +1500,9 @@ def exportiere_termin_nach_postgres(sqlite_conn: sqlite3.Connection, postgres_co
     PostgreSQL-Termin (eigenes Schema, siehe erstelle_termin_postgres) für die
     Mehrbenutzer-Ergebniserfassung am Prüfungstag - Veranstaltungsdaten und alle
     Teilnehmer (inkl. bereits vorhandener Ergebnisse) werden dabei übernommen. Der
-    zurückgegebene Zugangscode ist das, was die Richter für den Login in der
-    Web-Oberfläche brauchen (siehe sync_termin.py).
+    veröffentlichte Termin taucht danach in der Termin-Auswahl der Web-Oberfläche auf
+    ('/termin-waehlen' in app_web.py, nach dem Login mit einem Benutzerkonto - siehe
+    sync_termin.py).
 
     Der SQLite-Termin bleibt dabei unverändert (reiner Export, keine Rückwirkung) - erst
     nach der Prüfung holt importiere_ergebnisse_aus_postgres() die dort eingetragenen

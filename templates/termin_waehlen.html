@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titel %}Termin wählen – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Termin wählen</h1>
+  <p>Mit welchem veröffentlichten Termin möchtest du weiterarbeiten?</p>
+</div>
+
+<div class="karte" style="padding: 0;">
+  {% for termin in termine %}
+    <form method="post" style="margin: 0;">
+      <input type="hidden" name="schema_name" value="{{ termin.schema_name }}">
+      <button type="submit" class="knopf-sekundaer" style="width: 100%; text-align: left; border-radius: 0;
+              border: none; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};
+              padding: 1em;">
+        <strong>{{ termin.verein or "(ohne Vereinsnamen)" }}</strong>{% if termin.ort %}, {{ termin.ort }}{% endif %}<br>
+        <small>{{ termin.datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer</small>
+      </button>
+    </form>
+  {% else %}
+    <p style="padding: 1em;">
+      Aktuell ist kein Termin veröffentlicht. Ein Termin wird vor der Prüfung in der
+      Desktop-Version über <code>sync_termin.py export</code> veröffentlicht (siehe
+      README_CONTAINER.md).
+    </p>
+  {% endfor %}
+</div>
+{% endblock %}
