@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -70,6 +71,7 @@ from PySide6.QtWidgets import (
 
 from db import (
     ALLE_DISZIPLINEN,
+    CSV_IMPORT_SPALTEN,
     DISZIPLIN_SPALTEN,
     NeuerTeilnehmer,
     add_teilnehmer,
@@ -88,6 +90,8 @@ from db import (
     eindeutigen_dateinamen_finden,
     eintragen_ergebnis,
     get_veranstaltung,
+    importiere_teilnehmer_aus_csv,
+    importiere_teilnehmer_stammdaten,
     init_db,
     leistungsklasse_label,
     liste_termine,
@@ -102,6 +106,8 @@ from db import (
     sicherung_erstellen,
     sicherung_inhalt,
     sicherung_wiederherstellen,
+    tausche_startnummern,
+    teilnehmer_fehlende_pflichtangaben,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
@@ -245,15 +251,34 @@ def _gegenstand_zeile(feld: QLineEdit, zuordnung: QComboBox) -> QWidget:
     return widget
 
 
+def _startnummer_zeile(feld: QSpinBox, unbekannt: QCheckBox) -> QWidget:
+    """Kombiniert das Startnummer-Feld mit dem Häkchen 'Startnummer steht noch nicht
+    fest' zu einer gemeinsamen Formularzeile (Nutzerwunsch 20.09.: Startnummer soll bei
+    der Ersterfassung kein Pflichtfeld mehr sein müssen)."""
+    zeile = QHBoxLayout()
+    zeile.setContentsMargins(0, 0, 0, 0)
+    zeile.addWidget(feld, 1)
+    zeile.addWidget(unbekannt, 2)
+    widget = QWidget()
+    widget.setLayout(zeile)
+    return widget
+
+
 class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     """Formular zur Neuanlage eines Teilnehmers."""
 
-    def __init__(self, parent=None, vorhandener: dict | None = None, vergebene_nummern: set[int] | None = None, naechste_nummer: int = 1):
+    def __init__(
+        self, parent=None, vorhandener: dict | None = None, vergebene_nummern: set[int] | None = None,
+        naechste_nummer: int = 1, namen_je_startnummer: dict[int, str] | None = None,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Teilnehmer bearbeiten" if vorhandener else "Teilnehmer erfassen")
         # Bereits vergebene Startnummern (beim Bearbeiten ohne die eigene) - für
         # die Dubletten-Prüfung beim Speichern.
         self._vergebene_nummern = vergebene_nummern or set()
+        # Nur für die Warnmeldung bei doppelter Startnummer: wer hat sie schon (Name), damit
+        # der Hinweis konkret wird statt nur "ist bereits vergeben" zu sagen.
+        self._namen_je_startnummer = namen_je_startnummer or {}
 
         self.nachname = QLineEdit()
         self.vorname = QLineEdit()
@@ -267,8 +292,11 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.schulterhoehe = QSpinBox()
         self.schulterhoehe.setRange(0, 100)
         self.chip_nr = QLineEdit()
+        self.rasse = QLineEdit()
         self.wurftag = QLineEdit()
         self.wurftag.setPlaceholderText("JJJJ-MM-TT")
+        self.tollwutimpfung_bis = QLineEdit()
+        self.tollwutimpfung_bis.setPlaceholderText("JJJJ-MM-TT")
         self.strasse = QLineEdit()
         self.hausnummer = QLineEdit()
         self.plz = QLineEdit()
@@ -278,6 +306,13 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.startnummer = QSpinBox()
         self.startnummer.setRange(1, 999)
         self.startnummer.setValue(naechste_nummer)  # Vorschlag bei Neuanlage; wird unten bei Bearbeiten überschrieben
+        # Nutzerwunsch (20.09., Anmerkung zum Programm): "Vergabe der Startnummern als
+        # Pflichtfeld finde ich hier noch nicht so gut, ich weiß ggf. nicht was alles an
+        # Meldungen kommt" - die Startnummer kann jetzt offen gelassen werden (startnummer
+        # bleibt dann NULL, wie von db.py ohnehin schon unterstützt) und später nachgetragen
+        # werden.
+        self.startnummer_unbekannt = QCheckBox("Startnummer steht noch nicht fest")
+        self.startnummer_unbekannt.toggled.connect(self._startnummer_verfuegbarkeit_aktualisieren)
 
         self.art = QComboBox()
         self.art.addItems(["ED", "DK"])
@@ -304,11 +339,32 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
         self.bezahlt = QCheckBox("Prüfungsgebühr bezahlt")
 
+        # Nutzerwunsch (20.09., Anmerkung zum Programm): Halter (Hundeeigentümer) und
+        # Hundeführer (der/die oben mit Nachname/Vorname erfasste Person) können laut
+        # Meldeformular abweichen - auf dem Formular ein eigener Abschnitt "falls
+        # abweichend von Teilnehmer". Deshalb hier bewusst NUR bei Bedarf sichtbar (per
+        # Checkbox), statt für jeden Teilnehmer 9 zusätzliche, meist leere Felder
+        # anzuzeigen - im Normalfall (Halter = Hundeführer) bleibt der komplette Block
+        # verborgen und alle halter_*-Felder in der Datenbank NULL.
+        self.halter_weicht_ab = QCheckBox("Halter weicht vom Hundeführer ab")
+        self.halter_weicht_ab.toggled.connect(self._halter_sichtbarkeit_aktualisieren)
+        self.halter_vorname = QLineEdit()
+        self.halter_nachname = QLineEdit()
+        self.halter_strasse = QLineEdit()
+        self.halter_hausnummer = QLineEdit()
+        self.halter_plz = QLineEdit()
+        self.halter_ort = QLineEdit()
+        self.halter_mitgliedsverein = QLineEdit()
+        self.halter_mitgliedsnummer = QLineEdit()
+        self.halter_lu_nr = QLineEdit()
+
         # Zwei Spalten nebeneinander statt einer langen Liste untereinander - bei allen
         # Feldern (inkl. der neuen Verwaltungs-/Kontaktfelder) ging das Fenster sonst in
         # der Höhe über den Bildschirm hinaus, ohne dass sich der Dialog scrollen ließ.
-        # Links: Angaben zu Halter/Verein/Anschrift/Kontakt. Rechts: Angaben zu Hund und
-        # Prüfungsmeldung. Siehe auch Mockup-Absprache mit Marco.
+        # Links: Angaben zu Hundeführer/Verein/Anschrift/Kontakt (der/die Meldende).
+        # Rechts: Angaben zu Hund und Prüfungsmeldung. Siehe auch Mockup-Absprache mit
+        # Marco. Ein möglicher abweichender Halter bekommt einen eigenen, dritten Block
+        # darunter (siehe gruppe_halter unten) statt hier mit hineinzumischen.
         form_links = QFormLayout()
         form_links.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form_links.addRow("Nachname*", self.nachname)
@@ -323,18 +379,20 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_links.addRow("E-Mail", self.email)
         form_links.addRow("Telefonnummer", self.telefon)
 
-        gruppe_links = QGroupBox("Halter && Kontakt")
+        gruppe_links = QGroupBox("Hundeführer && Kontakt")
         gruppe_links.setLayout(form_links)
 
         form_rechts = QFormLayout()
         form_rechts.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form_rechts.addRow("Zwingername", self.zwingername)
         form_rechts.addRow("Rufname Hund*", self.rufname_hund)
+        form_rechts.addRow("Rasse", self.rasse)
         form_rechts.addRow("Geschlecht", self.geschlecht)
         form_rechts.addRow("Widerristhöhe (cm)", self.schulterhoehe)
         form_rechts.addRow("Chip-Nr.", self.chip_nr)
         form_rechts.addRow("Wurftag (JJJJ-MM-TT)", self.wurftag)
-        form_rechts.addRow("Startnummer", self.startnummer)
+        form_rechts.addRow("Tollwutimpfung gültig bis (JJJJ-MM-TT)", self.tollwutimpfung_bis)
+        form_rechts.addRow("Startnummer", _startnummer_zeile(self.startnummer, self.startnummer_unbekannt))
         form_rechts.addRow("Art*", self.art)
         form_rechts.addRow("Leistungsklasse*", self.stufe)
         form_rechts.addRow("Disziplin (nur bei ED)", self.disziplin)
@@ -350,12 +408,30 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         spalten_zeile.addWidget(gruppe_links)
         spalten_zeile.addWidget(gruppe_rechts)
 
+        form_halter = QFormLayout()
+        form_halter.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form_halter.addRow("Vorname", self.halter_vorname)
+        form_halter.addRow("Name", self.halter_nachname)
+        form_halter.addRow("Straße", self.halter_strasse)
+        form_halter.addRow("Hausnummer", self.halter_hausnummer)
+        form_halter.addRow("PLZ", self.halter_plz)
+        form_halter.addRow("Ort", self.halter_ort)
+        form_halter.addRow("Mitgliedsverein", self.halter_mitgliedsverein)
+        form_halter.addRow("Mitgl.-Nr.", self.halter_mitgliedsnummer)
+        form_halter.addRow("LU-Nr.", self.halter_lu_nr)
+
+        self.gruppe_halter = QGroupBox("Halter (falls abweichend vom Hundeführer)")
+        self.gruppe_halter.setLayout(form_halter)
+        self.gruppe_halter.setVisible(False)  # nur bei Bedarf eingeblendet, siehe oben
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addLayout(spalten_zeile)
+        layout.addWidget(self.halter_weicht_ab)
+        layout.addWidget(self.gruppe_halter)
         layout.addWidget(buttons)
 
         # Feste, bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch
@@ -383,8 +459,13 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 self.geschlecht.setCurrentText(vorhandener["geschlecht"])
             self.schulterhoehe.setValue(vorhandener["schulterhoehe_cm"] or 0)
             self.chip_nr.setText(vorhandener["chip_nr"] or "")
+            self.rasse.setText(vorhandener["rasse"] or "")
             self.wurftag.setText(vorhandener["wurftag"] or "")
-            self.startnummer.setValue(vorhandener["startnummer"] or 1)
+            self.tollwutimpfung_bis.setText(vorhandener["tollwutimpfung_bis"] or "")
+            if vorhandener["startnummer"] is not None:
+                self.startnummer.setValue(vorhandener["startnummer"])
+            else:
+                self.startnummer_unbekannt.setChecked(True)
             self.art.setCurrentText(vorhandener["art"])
             self.stufe.setCurrentText(str(vorhandener["stufe"]))
             if vorhandener["disziplin"]:
@@ -396,8 +477,29 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             self.gegenstand_2_disziplin.setCurrentText(vorhandener["gegenstand_2_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
             self.gegenstand_3_disziplin.setCurrentText(vorhandener["gegenstand_3_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
             self.bezahlt.setChecked(bool(vorhandener["bezahlt"]))
+            # Ein Halter-Datensatz gilt als "abweichend" hinterlegt, sobald mindestens
+            # eines der halter_*-Felder gesetzt ist - dann Block gleich aufklappen, statt
+            # bereits erfasste Angaben hinter der Checkbox zu verstecken.
+            halter_felder = {
+                "halter_vorname": self.halter_vorname, "halter_nachname": self.halter_nachname,
+                "halter_strasse": self.halter_strasse, "halter_hausnummer": self.halter_hausnummer,
+                "halter_plz": self.halter_plz, "halter_ort": self.halter_ort,
+                "halter_mitgliedsverein": self.halter_mitgliedsverein,
+                "halter_mitgliedsnummer": self.halter_mitgliedsnummer, "halter_lu_nr": self.halter_lu_nr,
+            }
+            for spalte, feld in halter_felder.items():
+                feld.setText(vorhandener[spalte] or "")
+            self.halter_weicht_ab.setChecked(any(vorhandener[spalte] for spalte in halter_felder))
 
+        self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
+        self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
         self._schriftgroesse_anwenden()
+
+    def _halter_sichtbarkeit_aktualisieren(self, abweichend: bool) -> None:
+        self.gruppe_halter.setVisible(abweichend)
+
+    def _startnummer_verfuegbarkeit_aktualisieren(self, unbekannt: bool) -> None:
+        self.startnummer.setEnabled(not unbekannt)
 
     def _art_geaendert(self, art: str) -> None:
         # Disziplin ist nur bei Einzeldisziplin (ED) relevant/erlaubt
@@ -407,11 +509,16 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         if not self.nachname.text().strip() or not self.vorname.text().strip() or not self.rufname_hund.text().strip():
             QMessageBox.warning(self, "Fehlende Angaben", "Nachname, Vorname und Rufname des Hundes sind Pflichtfelder.")
             return
-        if self.startnummer.value() in self._vergebene_nummern:
+        if not self.startnummer_unbekannt.isChecked() and self.startnummer.value() in self._vergebene_nummern:
+            nummer = self.startnummer.value()
+            inhaber = self._namen_je_startnummer.get(nummer)
+            zusatz = f" (aktuell: {inhaber})" if inhaber else ""
             QMessageBox.warning(
                 self, "Startnummer bereits vergeben",
-                f"Die Startnummer {self.startnummer.value()} ist bereits einem anderen Teilnehmer zugeteilt. "
-                "Bitte eine andere Startnummer wählen.",
+                f"Die Startnummer {nummer} ist bereits einem anderen Teilnehmer zugeteilt{zusatz}.\n\n"
+                "Bitte eine andere Startnummer wählen, das Häkchen „Startnummer steht noch nicht "
+                "fest“ setzen, oder die beiden Startnummern anschließend über „Startnummer "
+                "tauschen…“ in der Teilnehmerliste direkt miteinander tauschen.",
             )
             return
         # QS-Review (19./20.09.): Jede Disziplin darf nur EINEM der drei Gegenstand-Felder
@@ -459,7 +566,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             geschlecht=self.geschlecht.currentText(),
             schulterhoehe_cm=self.schulterhoehe.value() or None,
             chip_nr=self.chip_nr.text().strip() or None,
-            startnummer=self.startnummer.value(),
+            rasse=self.rasse.text().strip() or None,
+            tollwutimpfung_bis=self.tollwutimpfung_bis.text().strip() or None,
+            startnummer=None if self.startnummer_unbekannt.isChecked() else self.startnummer.value(),
             gegenstand_1=self.gegenstand_1.text().strip() or None,
             gegenstand_2=self.gegenstand_2.text().strip() or None,
             gegenstand_3=self.gegenstand_3.text().strip() or None,
@@ -476,19 +585,175 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             ort=self.ort.text().strip() or None,
             email=self.email.text().strip() or None,
             telefon=self.telefon.text().strip() or None,
+            # Nur übernehmen, wenn die Checkbox aktiv ist - so bleibt ein versehentlich
+            # eingetragener und dann per Checkbox wieder verworfener Halter-Text nicht
+            # trotzdem in der Datenbank hängen (siehe _halter_sichtbarkeit_aktualisieren).
+            halter_vorname=self.halter_vorname.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_nachname=self.halter_nachname.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_strasse=self.halter_strasse.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_hausnummer=self.halter_hausnummer.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_plz=self.halter_plz.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_ort=self.halter_ort.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
+            halter_mitgliedsverein=(
+                self.halter_mitgliedsverein.text().strip() or None if self.halter_weicht_ab.isChecked() else None
+            ),
+            halter_mitgliedsnummer=(
+                self.halter_mitgliedsnummer.text().strip() or None if self.halter_weicht_ab.isChecked() else None
+            ),
+            halter_lu_nr=self.halter_lu_nr.text().strip() or None if self.halter_weicht_ab.isChecked() else None,
         )
 
 
+class StartnummerTauschenDialog(QDialog):
+    """Tauscht die Startnummer eines Teilnehmers mit der eines anderen - löst gezielt das
+    in der Anmerkung vom 20.09. geschilderte Problem, dass man eine gewünschte, bereits
+    vergebene Startnummer bisher erst manuell an anderer Stelle 'freimachen' musste,
+    bevor man sie neu vergeben konnte. Führt selbst keine Feldprüfung durch - die eigentliche
+    Vertauschung übernimmt db.tausche_startnummern() atomar."""
+
+    def __init__(self, parent, teilnehmer: dict, andere_teilnehmer: list[dict]):
+        super().__init__(parent)
+        self.setWindowTitle("Startnummer tauschen")
+        eigene_nummer = teilnehmer["startnummer"]
+        eigene_anzeige = str(eigene_nummer) if eigene_nummer is not None else "keine"
+        hinweis = QLabel(
+            f"Startnummer von {teilnehmer['nachname']}, {teilnehmer['vorname']} "
+            f"(aktuell: {eigene_anzeige}) tauschen mit:"
+        )
+        hinweis.setWordWrap(True)
+
+        self.partner_combo = QComboBox()
+        for t in sorted(andere_teilnehmer, key=lambda t: (t["startnummer"] is None, t["startnummer"] or 0)):
+            nummer_anzeige = str(t["startnummer"]) if t["startnummer"] is not None else "keine"
+            self.partner_combo.addItem(
+                f"{t['nachname']}, {t['vorname']} (Start-Nr. {nummer_anzeige})", t["id"]
+            )
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(hinweis)
+        layout.addWidget(self.partner_combo)
+        layout.addWidget(buttons)
+
+    def ausgewaehlte_partner_id(self) -> int | None:
+        return self.partner_combo.currentData()
+
+
+class TerminImportDialog(QDialog):
+    """Übernimmt ausgewählte Teilnehmer-STAMMDATEN aus einem anderen Termin in den aktuell
+    geöffneten (Nutzerwunsch 20.09., Anmerkung zum Programm: 'Teilnehmer müssen wieder
+    einzeln eingegeben werden [...] ist Option möglich, von anderem Termin importieren?').
+    Öffnet dafür kurzzeitig eine ZWEITE, separate Verbindung zur gewählten Quell-Termin-
+    Datei (siehe _termin_gewaehlt/schliesse_quelle) - der aktuell geöffnete Termin (in
+    dessen Tab dieser Dialog geöffnet wurde) bleibt davon komplett unberührt, es wird
+    ausschließlich per db.importiere_teilnehmer_stammdaten() gezielt in ihn hinein
+    geschrieben. Bewusst NICHT wiederverwendet wird kopiere_termin_daten() (Web-Sync) - die
+    kopiert einen kompletten Termin 1:1 inkl. Startnummer/Ergebnis/Bezahlt-Status, hier soll
+    aber gezielt nur eine Auswahl an dauerhaften Stammdaten übernommen werden (Absprache mit
+    dem Nutzer)."""
+
+    def __init__(self, parent, aktueller_pfad: str | None):
+        super().__init__(parent)
+        self.setWindowTitle("Teilnehmer aus anderem Termin importieren")
+        self.resize(560, 480)
+        self._quelle_conn: sqlite3.Connection | None = None
+        self._termine = [t for t in liste_termine() if t.lesbar and t.pfad != aktueller_pfad]
+
+        self.termin_combo = QComboBox()
+        for t in self._termine:
+            self.termin_combo.addItem(
+                f"{t.verein or '(ohne Verein)'} – {t.datum} ({t.anzahl_teilnehmer} Teilnehmer)"
+            )
+        self.termin_combo.currentIndexChanged.connect(self._termin_gewaehlt)
+
+        self.teilnehmer_liste = QListWidget()
+
+        alle_btn = QPushButton("Alle auswählen")
+        alle_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Checked))
+        keine_btn = QPushButton("Keine auswählen")
+        keine_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Unchecked))
+        auswahl_zeile = QHBoxLayout()
+        auswahl_zeile.addWidget(alle_btn)
+        auswahl_zeile.addWidget(keine_btn)
+        auswahl_zeile.addStretch()
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        if not self._termine:
+            layout.addWidget(QLabel("Kein anderer Termin gefunden, aus dem importiert werden könnte."))
+            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        else:
+            layout.addWidget(QLabel("Termin, aus dem importiert werden soll:"))
+            layout.addWidget(self.termin_combo)
+            layout.addWidget(QLabel(
+                "Zu importierende Teilnehmer (nur Stammdaten - Startnummer, Gegenstände, "
+                "Bezahlt-Status und Ergebnis werden bewusst NICHT übernommen):"
+            ))
+            layout.addLayout(auswahl_zeile)
+            layout.addWidget(self.teilnehmer_liste)
+        layout.addWidget(self.buttons)
+
+        if self._termine:
+            self._termin_gewaehlt(0)
+
+    def _termin_gewaehlt(self, index: int) -> None:
+        if self._quelle_conn is not None:
+            self._quelle_conn.close()
+            self._quelle_conn = None
+        self.teilnehmer_liste.clear()
+        if not (0 <= index < len(self._termine)):
+            return
+        self._quelle_conn = init_db(self._termine[index].pfad)
+        for t in list_teilnehmer(self._quelle_conn):
+            text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"
+            item = QListWidgetItem(text)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            item.setData(Qt.UserRole, t["id"])
+            self.teilnehmer_liste.addItem(item)
+
+    def _alle_umschalten(self, zustand) -> None:
+        for row in range(self.teilnehmer_liste.count()):
+            self.teilnehmer_liste.item(row).setCheckState(zustand)
+
+    def ausgewaehlte_ids(self) -> list[int]:
+        return [
+            self.teilnehmer_liste.item(row).data(Qt.UserRole)
+            for row in range(self.teilnehmer_liste.count())
+            if self.teilnehmer_liste.item(row).checkState() == Qt.Checked
+        ]
+
+    def quelle_conn(self) -> sqlite3.Connection | None:
+        return self._quelle_conn
+
+    def schliesse_quelle(self) -> None:
+        """Muss vom Aufrufer nach exec() gerufen werden (egal ob akzeptiert oder
+        abgebrochen), damit die zweite, nur für den Import geöffnete Verbindung nicht
+        offen bleibt."""
+        if self._quelle_conn is not None:
+            self._quelle_conn.close()
+            self._quelle_conn = None
+
+
 class TeilnehmerTab(QWidget):
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, parent=None, pfad: str | None = None):
         super().__init__(parent)
         self.conn = conn
+        # Nur für TerminImportDialog: der eigene Dateipfad wird aus der Terminauswahl dort
+        # ausgeschlossen, damit man nicht "aus sich selbst" importieren kann.
+        self._pfad = pfad
         self._teilnehmer_ids: list[int] = []  # Zeile -> Teilnehmer-ID, parallel zur Tabelle
         self._teilnehmer_je_zeile: list[dict] = []  # Zeile -> Teilnehmer-Datensatz, für den Filter
 
-        self.tabelle = QTableWidget(0, 7)
+        self.tabelle = QTableWidget(0, 8)
         self.tabelle.setHorizontalHeaderLabels(
-            ["Start-Nr.", "Nachname", "Vorname", "Hund", "Art/LK", "Verein", "Bezahlt"]
+            ["Start-Nr.", "Nachname", "Vorname", "Hund", "Art/LK", "Verein", "Bezahlt", "Vollständig"]
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.setSelectionBehavior(QTableWidget.SelectRows)
@@ -502,6 +767,17 @@ class TeilnehmerTab(QWidget):
         # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
         # ebenso in der Ergebniserfassung (siehe ErgebnisTab).
         self.tabelle.verticalHeader().setVisible(False)
+        # Nutzerwunsch (20.09., Anmerkung zum Programm): "Filtermöglichkeit gut - kann hier
+        # ggf. noch Sortierungsoption ergänzt werden?" - Klick auf eine Spaltenüberschrift
+        # sortiert danach (Qt-Bordmittel), erneuter Klick kehrt die Richtung um. Die
+        # Sortierung bleibt über aktualisieren() hinweg erhalten (siehe _sortierung_gemerkt/
+        # aktualisieren) - ohne das würde jede Änderung (Speichern, Bezahlt umschalten, ...)
+        # kommentarlos auf die Standard-Sortierung zurückspringen. Start-Nr. (Spalte 0,
+        # aufsteigend) als Vorgabe entspricht der bisherigen, unveränderten Reihenfolge.
+        self.tabelle.setSortingEnabled(True)
+        self.tabelle.horizontalHeader().sortIndicatorChanged.connect(self._sortierung_gemerkt)
+        self._sortierspalte = 0
+        self._sortierreihenfolge = Qt.AscendingOrder
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
@@ -539,11 +815,27 @@ class TeilnehmerTab(QWidget):
         self.bezahlt_btn.clicked.connect(self._bezahlt_umschalten)
         self.bezahlt_btn.setEnabled(False)
 
+        # Nutzerwunsch (20.09.): Startnummern zweier Teilnehmer direkt tauschen können,
+        # statt eine gewünschte, bereits vergebene Nummer erst manuell an anderer Stelle
+        # "freimachen" zu müssen.
+        self.tauschen_btn = QPushButton("Startnummer tauschen…")
+        self.tauschen_btn.clicked.connect(self._startnummer_tauschen)
+        self.tauschen_btn.setEnabled(False)
+
+        # Nutzerwunsch (20.09., Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln
+        # eingegeben werden [...] ist Option möglich, von anderem Termin importieren?" -
+        # übernimmt gezielt Stammdaten (nicht Startnummer/Gegenstände/Bezahlt-Status/
+        # Ergebnis) aus einem anderen, bereits vorhandenen Termin.
+        import_btn = QPushButton("Aus anderem Termin importieren…")
+        import_btn.clicked.connect(self._aus_anderem_termin_importieren)
+
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(hinzufuegen_btn)
         button_zeile.addWidget(self.bearbeiten_btn)
         button_zeile.addWidget(self.loeschen_btn)
         button_zeile.addWidget(self.bezahlt_btn)
+        button_zeile.addWidget(self.tauschen_btn)
+        button_zeile.addWidget(import_btn)
         button_zeile.addStretch()
 
         filter_zeile = QHBoxLayout()
@@ -566,17 +858,31 @@ class TeilnehmerTab(QWidget):
 
     def _ausgewaehlte_id(self) -> int | None:
         zeile = self.tabelle.currentRow()
-        if 0 <= zeile < len(self._teilnehmer_ids):
-            return self._teilnehmer_ids[zeile]
-        return None
+        item = self.tabelle.item(zeile, 0)
+        return item.data(Qt.UserRole) if item is not None else None
+
+    def _sortierung_gemerkt(self, spalte: int, reihenfolge) -> None:
+        """Merkt sich die zuletzt per Spaltenklick gewählte Sortierung, damit
+        aktualisieren() sie nach einer Änderung (Speichern, Bezahlt umschalten, ...)
+        erneut anwenden kann, statt stillschweigend auf Start-Nr. zurückzuspringen."""
+        self._sortierspalte = spalte
+        self._sortierreihenfolge = reihenfolge
 
     def _filter_anwenden(self) -> None:
         """Blendet Zeilen anhand des aktuellen Filters nur aus/ein (setRowHidden) -
-        entspricht dem gleichnamigen Filter in der Ergebniserfassung (siehe ErgebnisTab)."""
+        entspricht dem gleichnamigen Filter in der Ergebniserfassung (siehe ErgebnisTab).
+        Arbeitet über die tatsächliche (ggf. per Spaltenklick sortierte) Zeilenreihenfolge
+        der Tabelle statt über die Listenreihenfolge aus der Datenbank - die beiden
+        stimmen nach einer Sortierung nicht mehr zwingend überein (siehe _teilnehmer_je_id
+        in aktualisieren())."""
         filter_wert = self.filter_combo.currentText()
         filter_startnr = self.filter_startnummer.text().strip()
         filter_bezahlt = self.filter_bezahlt.currentText()
-        for row, t in enumerate(self._teilnehmer_je_zeile):
+        for row in range(self.tabelle.rowCount()):
+            item = self.tabelle.item(row, 0)
+            t = self._teilnehmer_je_id.get(item.data(Qt.UserRole)) if item is not None else None
+            if t is None:
+                continue
             passt = (
                 (filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert)
                 and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
@@ -592,12 +898,23 @@ class TeilnehmerTab(QWidget):
         self.bearbeiten_btn.setEnabled(hat_auswahl)
         self.loeschen_btn.setEnabled(hat_auswahl)
         self.bezahlt_btn.setEnabled(hat_auswahl)
+        self.tauschen_btn.setEnabled(hat_auswahl and len(self._teilnehmer_je_zeile) > 1)
+
+    def _namen_je_startnummer(self, ausser_teilnehmer_id: int | None = None) -> dict[int, str]:
+        """Für die Warnmeldung bei doppelt vergebener Startnummer im TeilnehmerDialog -
+        wer hat die Nummer bereits (Name statt nur 'ist schon vergeben')."""
+        return {
+            t["startnummer"]: f"{t['nachname']}, {t['vorname']}"
+            for t in list_teilnehmer(self.conn)
+            if t["startnummer"] is not None and t["id"] != ausser_teilnehmer_id
+        }
 
     def _teilnehmer_hinzufuegen(self) -> None:
         dialog = TeilnehmerDialog(
             self,
             vergebene_nummern=vergebene_startnummern(self.conn),
             naechste_nummer=naechste_freie_startnummer(self.conn),
+            namen_je_startnummer=self._namen_je_startnummer(),
         )
         if dialog.exec() == QDialog.Accepted:
             try:
@@ -616,6 +933,7 @@ class TeilnehmerTab(QWidget):
             self,
             vorhandener=aktuelle_daten,
             vergebene_nummern=vergebene_startnummern(self.conn, ausser_teilnehmer_id=teilnehmer_id),
+            namen_je_startnummer=self._namen_je_startnummer(ausser_teilnehmer_id=teilnehmer_id),
         )
         if dialog.exec() == QDialog.Accepted:
             try:
@@ -624,6 +942,40 @@ class TeilnehmerTab(QWidget):
                 _fehler_anzeigen(self, exc)
                 return
             self.aktualisieren()
+
+    def _startnummer_tauschen(self) -> None:
+        teilnehmer_id = self._ausgewaehlte_id()
+        if teilnehmer_id is None:
+            return
+        alle = list_teilnehmer(self.conn)
+        aktuell = next(t for t in alle if t["id"] == teilnehmer_id)
+        andere = [t for t in alle if t["id"] != teilnehmer_id]
+        if not andere:
+            return
+        dialog = StartnummerTauschenDialog(self, aktuell, andere)
+        if dialog.exec() == QDialog.Accepted:
+            partner_id = dialog.ausgewaehlte_partner_id()
+            if partner_id is not None:
+                tausche_startnummern(self.conn, teilnehmer_id, partner_id)
+                self.aktualisieren()
+
+    def _aus_anderem_termin_importieren(self) -> None:
+        dialog = TerminImportDialog(self, self._pfad)
+        try:
+            if dialog.exec() == QDialog.Accepted:
+                quelle = dialog.quelle_conn()
+                ausgewaehlt = dialog.ausgewaehlte_ids()
+                if quelle is not None and ausgewaehlt:
+                    anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
+                    self.aktualisieren()
+                    QMessageBox.information(
+                        self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert."
+                    )
+        finally:
+            # Die zweite, nur für den Import geöffnete Verbindung muss in jedem Fall
+            # geschlossen werden - unabhängig davon, ob der Dialog akzeptiert oder
+            # abgebrochen wurde.
+            dialog.schliesse_quelle()
 
     def _teilnehmer_loeschen(self) -> None:
         teilnehmer_id = self._ausgewaehlte_id()
@@ -652,6 +1004,14 @@ class TeilnehmerTab(QWidget):
         teilnehmer = list_teilnehmer(self.conn)
         self._teilnehmer_ids = [t["id"] for t in teilnehmer]
         self._teilnehmer_je_zeile = teilnehmer
+        # Für _filter_anwenden(): Zuordnung Teilnehmer-ID -> Datensatz, damit der Filter
+        # über die tatsächliche (ggf. sortierte) Zeilenreihenfolge der Tabelle arbeiten
+        # kann statt über die Listenreihenfolge aus der Datenbank (siehe _sortierung_gemerkt).
+        self._teilnehmer_je_id = {t["id"]: t for t in teilnehmer}
+        # Während der Neubefüllung die automatische Sortierung abschalten - sonst sortiert
+        # Qt nach jedem einzelnen setItem() neu und die spaltenweise befüllten Zellen einer
+        # Zeile landen versehentlich in unterschiedlichen (durcheinandergewürfelten) Zeilen.
+        self.tabelle.setSortingEnabled(False)
         self.tabelle.setRowCount(len(teilnehmer))
         for row, t in enumerate(teilnehmer):
             werte = [
@@ -665,6 +1025,18 @@ class TeilnehmerTab(QWidget):
             ]
             for col, wert in enumerate(werte):
                 item = QTableWidgetItem(wert)
+                if col == 0:
+                    # Start-Nr.-Spalte: Sortierung soll numerisch erfolgen (2 vor 10), nicht
+                    # alphabetisch wie bei reinem Text ("10" vor "2"). Qt sortiert Items nach
+                    # Qt.DisplayRole - mit einer echten int-Zahl als DisplayRole sortiert Qt
+                    # numerisch, während der angezeigte Text (bei fehlender Startnummer: "")
+                    # unverändert bleibt.
+                    if t["startnummer"] is not None:
+                        item.setData(Qt.DisplayRole, t["startnummer"])
+                    # Stabile Zuordnung Tabellenzeile -> Teilnehmer-ID (siehe _ausgewaehlte_id/
+                    # _filter_anwenden) - unverzichtbar, sobald per Spaltenklick sortiert wird
+                    # und die Zeilenreihenfolge nicht mehr der Listenreihenfolge entspricht.
+                    item.setData(Qt.UserRole, t["id"])
                 self.tabelle.setItem(row, col, item)
             # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_MODERN_MINIMAL) -
             # nur die Textfarbe, der Zelleninhalt selbst bleibt wie zuvor ("" bei nicht
@@ -675,6 +1047,25 @@ class TeilnehmerTab(QWidget):
                 schrift = bezahlt_item.font()
                 schrift.setBold(True)
                 bezahlt_item.setFont(schrift)
+            # Nutzerwunsch (20.09.): Warnhinweis, wenn Chip-Nr. oder die zur Leistungsklasse
+            # passende Gegenstand-Zuordnung fehlt ("Kontrollbutton") - bewusst nur bei
+            # fehlenden Angaben ein Hinweis, sonst bleibt die Zelle leer (die Ausnahme soll
+            # auffallen, nicht der Normalfall).
+            fehlend = teilnehmer_fehlende_pflichtangaben(t)
+            vollstaendig_item = QTableWidgetItem("⚠ " + "; ".join(fehlend) if fehlend else "")
+            if fehlend:
+                vollstaendig_item.setForeground(QColor("#b56a00"))
+                vollstaendig_item.setToolTip("Fehlt noch: " + "; ".join(fehlend))
+                schrift = vollstaendig_item.font()
+                schrift.setBold(True)
+                vollstaendig_item.setFont(schrift)
+            self.tabelle.setItem(row, 7, vollstaendig_item)
+        # Zuletzt per Spaltenklick gewählte Sortierung erneut anwenden (statt nach jeder
+        # Änderung - Speichern, Bezahlt umschalten, ... - stillschweigend auf die
+        # Standard-Sortierung nach Start-Nr. zurückzuspringen), bevor die interaktive
+        # Sortierung wieder aktiviert wird.
+        self.tabelle.sortItems(self._sortierspalte, self._sortierreihenfolge)
+        self.tabelle.setSortingEnabled(True)
         # Spaltenbreiten an den tatsächlichen Inhalt anpassen, damit z.B. lange
         # Vereinsnamen oder LK-Bezeichnungen nicht abgeschnitten werden - danach
         # bleiben die Spalten weiterhin von Hand nachziehbar.
@@ -692,6 +1083,114 @@ class TeilnehmerTab(QWidget):
         self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
         self.filter_combo.blockSignals(False)
         self._filter_anwenden()
+
+
+def _formular_import_prompt() -> str:
+    """Baut den Kopier-Prompt für den Reiter 'Formular-Import' (siehe FormularImportTab)
+    aus CSV_IMPORT_SPALTEN (db.py) - so können Prompt-Text und CSV-Parser
+    (importiere_teilnehmer_aus_csv) nie auseinanderlaufen. Gedacht für ein beliebiges
+    externes KI-System (z.B. Claude oder ChatGPT), dem der Nutzer diesen Text zusammen
+    mit einem ausgefüllten Meldeformular übergibt - die Desktop-Anwendung selbst hat
+    keinen eigenen KI-Zugriff (arbeitet komplett offline), siehe Fortschritt.md."""
+    spalten = ", ".join(CSV_IMPORT_SPALTEN)
+    return (
+        "Du bekommst ein oder mehrere ausgefüllte SHS-Meldeformulare (als PDF, Word-"
+        "Dokument oder Foto/Scan). Lies je Formular GENAU EINEN Teilnehmer heraus und gib "
+        "das Ergebnis als CSV-Datei mit exakt dieser Kopfzeile aus (Komma-getrennt, "
+        "UTF-8, Werte ggf. in Anführungszeichen falls sie ein Komma enthalten):\n\n"
+        f"{spalten}\n\n"
+        "Regeln:\n"
+        "- Pro Formular genau eine Datenzeile. Mehrere Formulare ergeben mehrere Zeilen "
+        "untereinander in derselben CSV.\n"
+        "- nachname, vorname und rufname_hund sind Pflicht (rufname_hund = 'Rufname des "
+        "Hundes' auf dem Formular). Ein Formular ohne diese Angaben bitte auslassen.\n"
+        "- art/stufe/disziplin ergeben sich aus dem angekreuzten Kästchen oben auf dem "
+        "Formular: 'DK-LK 1/2/3' -> art=DK, stufe=1/2/3, disziplin LEER lassen. "
+        "'Trümmer LK n' -> art=ED, stufe=n, disziplin=Trümmerfeld. "
+        "'Fläche LK n' -> art=ED, stufe=n, disziplin=Flächensuche. "
+        "'Behältnisse LK n' -> art=ED, stufe=n, disziplin=Behältnisstrecke.\n"
+        "- verein = Mitgliedsverein des Teilnehmers, verband = übergeordneter Verband "
+        "(z.B. VDH), mitgliedsnummer = Mitgl.-Nr., wurftag = Wurfdatum des Hundes "
+        "(JJJJ-MM-TT), tollwutimpfung_bis = 'Tollwutimpfung gültig bis' (JJJJ-MM-TT), "
+        "schulterhoehe_cm = Größe in cm (nur die Zahl), geschlecht = 'Hündin' oder "
+        "'Rüde'.\n"
+        "- Die halter_*-Spalten NUR befüllen, wenn das Formular den Abschnitt 'Falls "
+        "abweichend von Teilnehmer - Angaben des Hundeeigentümers' ausgefüllt hat - sonst "
+        "ALLE halter_*-Spalten in dieser Zeile leer lassen (halter_mitgliedsverein = "
+        "'Mitgliedsverein' und halter_mitgliedsnummer = 'Mitgl.-Nr.' im Halter-"
+        "Abschnitt).\n"
+        "- Ein Feld ohne erkennbare Angabe auf dem Formular bleibt in der CSV leer - "
+        "nicht raten oder freilassen mit einem Platzhalter wie 'unbekannt' füllen.\n"
+        "- startnummer, gegenstand_1/2/3, gegenstand_1/2/3_disziplin und bezahlt stehen "
+        "NICHT auf dem Meldeformular - diese Spalten entweder ganz weglassen oder leer "
+        "lassen, sie werden im Programm separat vergeben.\n\n"
+        "Gib NUR die CSV-Datei aus, ohne einleitenden oder abschließenden Text drumherum."
+    )
+
+
+class FormularImportTab(QWidget):
+    """Hilft dabei, Teilnehmer aus einem ausgefüllten Meldeformular zu übernehmen, ohne
+    die Angaben von Hand abtippen zu müssen (Nutzerwunsch 20.09., Anmerkung zum Programm,
+    Abschnitt 'Teilnehmer'): ein vorformulierter Prompt (siehe _formular_import_prompt())
+    lässt sich zusammen mit einem ausgefüllten Meldeformular an ein beliebiges externes
+    KI-System übergeben, das daraus eine CSV-Datei mit den hier erwarteten Spalten
+    erzeugt - diese CSV lässt sich anschließend direkt importieren. Läuft bewusst über
+    einen Kopier-Prompt statt einer eingebauten KI-Anbindung, da die Desktop-Anwendung
+    offline arbeitet und keinen eigenen KI-Zugriff hat."""
+
+    def __init__(self, conn, parent=None):
+        super().__init__(parent)
+        self.conn = conn
+
+        anleitung = QLabel(
+            "1. Prompt unten kopieren und zusammen mit dem ausgefüllten Meldeformular "
+            "(PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben (z. B. Claude "
+            "oder ChatGPT).\n"
+            "2. Die dabei erzeugte CSV-Datei hier importieren - neue Teilnehmer erscheinen "
+            "danach im Reiter „Teilnehmer“."
+        )
+        anleitung.setWordWrap(True)
+
+        self.prompt_feld = QPlainTextEdit(_formular_import_prompt())
+        self.prompt_feld.setReadOnly(True)
+        self.prompt_feld.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+
+        kopieren_btn = QPushButton("Prompt kopieren")
+        kopieren_btn.clicked.connect(self._prompt_kopieren)
+        self.status_label = QLabel("")
+
+        import_btn = QPushButton("CSV importieren…")
+        import_btn.setObjectName("primaerButton")
+        import_btn.clicked.connect(self._csv_importieren)
+
+        button_zeile = QHBoxLayout()
+        button_zeile.addWidget(kopieren_btn)
+        button_zeile.addWidget(self.status_label)
+        button_zeile.addStretch()
+        button_zeile.addWidget(import_btn)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(anleitung)
+        layout.addWidget(self.prompt_feld)
+        layout.addLayout(button_zeile)
+
+    def _prompt_kopieren(self) -> None:
+        QApplication.clipboard().setText(self.prompt_feld.toPlainText())
+        self.status_label.setText("Prompt kopiert.")
+
+    def _csv_importieren(self) -> None:
+        pfad, _ = QFileDialog.getOpenFileName(self, "CSV importieren", "", "CSV-Datei (*.csv)")
+        if not pfad:
+            return
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        except OSError as exc:
+            QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+            return
+        text = f"{ergebnis.importiert} Teilnehmer importiert."
+        if ergebnis.fehler:
+            text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
+        QMessageBox.information(self, "Import abgeschlossen", text)
 
 
 FARBE_UNGESPEICHERT = QColor("#fff3cd")   # dezentes Gelb - Zeile hat noch nicht gespeicherte Änderungen
@@ -2527,7 +3026,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # als neuer Standard gilt (siehe _Ablageort oben).
         ablageort = _Ablageort(os.path.dirname(pfad) if pfad else str(termine_ordner()))
 
-        self.teilnehmer_tab = TeilnehmerTab(conn)
+        self.teilnehmer_tab = TeilnehmerTab(conn, pfad=pfad)
+        self.formular_import_tab = FormularImportTab(conn)
         self.zeitplan_tab = ZeitplanTab(conn, ablageort)
         self.ergebnis_tab = ErgebnisTab(conn)
         self.auswertung_tab = AuswertungTab(conn)
@@ -2540,6 +3040,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.datensicherung_tab = DatensicherungTab()
 
         self._tabs.addTab(self.teilnehmer_tab, "Teilnehmer")
+        self._tabs.addTab(self.formular_import_tab, "Formular-Import")
         self._tabs.addTab(self.zeitplan_tab, "Zeitplan")
         self._tabs.addTab(self.ergebnis_tab, "Ergebniserfassung")
         self._tabs.addTab(self.auswertung_tab, "Auswertung")
@@ -2793,7 +3294,20 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.loeschen_btn.setEnabled(hat_auswahl)
 
     def _neuer_termin(self) -> None:
-        dialog = VeranstaltungsDialog(self)
+        # Nutzerwunsch (20.09., Anmerkung Punkt 2): Verein/Vereins-Nr./Ort müssen nicht
+        # jedes Mal neu eingetippt werden, wenn ohnehin wieder derselbe Verein gemeint
+        # ist - Vorbelegung aus dem in der Terminübersicht obersten (nach Datum
+        # neuesten) Termin, sofern schon einer existiert. Bleibt jederzeit überschreibbar,
+        # das Datum selbst wird bewusst NICHT übernommen.
+        vorbelegung = {}
+        if self._termine:
+            letzter = self._termine[0]
+            vorbelegung = {
+                "verein": letzter.verein,
+                "vereins_nr": letzter.vereins_nr,
+                "ort": letzter.ort,
+            }
+        dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung)
         if dialog.exec() != QDialog.Accepted:
             return
         pfad = dialog.pfad_feld.text().strip()

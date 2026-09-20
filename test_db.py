@@ -35,6 +35,8 @@ from db import (
     gibt_es_admin,
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
+    importiere_teilnehmer_aus_csv,
+    importiere_teilnehmer_stammdaten,
     init_db,
     init_db_postgres,
     kopiere_termin_daten,
@@ -53,6 +55,8 @@ from db import (
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
     setze_bezahlt,
+    tausche_startnummern,
+    teilnehmer_fehlende_pflichtangaben,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
@@ -618,6 +622,153 @@ class TestDatenbank(unittest.TestCase):
         ):
             self.assertIsNone(t2[spalte])
 
+    def test_teilnehmer_rasse_tollwutimpfung_und_halter_werden_gespeichert(self):
+        # Nutzerwunsch (20.09., Anmerkung zum Programm): Rasse/Tollwutimpfung stehen auf
+        # dem echten Meldeformular, ebenso ein eigener Halter-Block ("falls abweichend
+        # von Teilnehmer"), der bewusst NUR befüllt wird, wenn der Halter tatsächlich
+        # eine andere Person als der Hundeführer ist.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Holst", vorname="Katrin", rufname_hund="Freda",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=4,
+            rasse="Labrador Retriever", tollwutimpfung_bis="2027-05-01",
+            halter_vorname="Peter", halter_nachname="Holst",
+            halter_strasse="Nebenweg", halter_hausnummer="3",
+            halter_plz="61479", halter_ort="Höppern",
+            halter_mitgliedsverein="SGV Köppern e.V.", halter_mitgliedsnummer="98765",
+            halter_lu_nr="LU-42",
+        ))
+        t = get_teilnehmer(self.conn, tid)
+        self.assertEqual(t["rasse"], "Labrador Retriever")
+        self.assertEqual(t["tollwutimpfung_bis"], "2027-05-01")
+        self.assertEqual(t["halter_vorname"], "Peter")
+        self.assertEqual(t["halter_nachname"], "Holst")
+        self.assertEqual(t["halter_strasse"], "Nebenweg")
+        self.assertEqual(t["halter_hausnummer"], "3")
+        self.assertEqual(t["halter_plz"], "61479")
+        self.assertEqual(t["halter_ort"], "Höppern")
+        self.assertEqual(t["halter_mitgliedsverein"], "SGV Köppern e.V.")
+        self.assertEqual(t["halter_mitgliedsnummer"], "98765")
+        self.assertEqual(t["halter_lu_nr"], "LU-42")
+
+        # Ohne abweichenden Halter (Normalfall) bleiben alle Halter-Felder NULL.
+        tid2 = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ohne", vorname="Halter", rufname_hund="Bello", art="DK", stufe=2, startnummer=5,
+        ))
+        t2 = get_teilnehmer(self.conn, tid2)
+        for spalte in (
+            "rasse", "tollwutimpfung_bis", "halter_vorname", "halter_nachname", "halter_strasse",
+            "halter_hausnummer", "halter_plz", "halter_ort", "halter_mitgliedsverein",
+            "halter_mitgliedsnummer", "halter_lu_nr",
+        ):
+            self.assertIsNone(t2[spalte])
+
+    def test_migration_ergaenzt_rasse_tollwutimpfung_und_halterfelder_in_alter_termin_datei(self):
+        # Simuliert eine Termin-Datei von vor Einführung von Rasse/Tollwutimpfung/Halter-
+        # Block (Tabelle "teilnehmer" mit allen ZUVOR bereits vorhandenen, aber ohne die
+        # NEUEN Spalten) - init_db muss sie nachträglich ergänzen, ohne bestehende Daten
+        # zu verlieren.
+        self._lege_alte_teilnehmer_tabelle_an(
+            ", bezahlt INTEGER NOT NULL DEFAULT 0, gegenstand_1_disziplin TEXT, "
+            "gegenstand_2_disziplin TEXT, gegenstand_3_disziplin TEXT, verband TEXT, "
+            "mitgliedsnummer TEXT, wurftag TEXT, strasse TEXT, hausnummer TEXT, plz TEXT, "
+            "ort TEXT, email TEXT, telefon TEXT"
+        )
+        self.conn.execute(
+            "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer) "
+            "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1)"
+        )
+        self.conn.commit()
+
+        conn = self._neu_verbinden()
+        alt = list_teilnehmer(conn)[0]
+        self.assertEqual(alt["nachname"], "Alt")
+        for spalte in (
+            "rasse", "tollwutimpfung_bis", "halter_vorname", "halter_nachname", "halter_strasse",
+            "halter_hausnummer", "halter_plz", "halter_ort", "halter_mitgliedsverein",
+            "halter_mitgliedsnummer", "halter_lu_nr",
+        ):
+            self.assertIsNone(alt[spalte])
+        # update_teilnehmer funktioniert danach ganz normal weiter, auch für die neuen Felder.
+        update_teilnehmer(conn, alt["id"], NeuerTeilnehmer(
+            nachname="Alt", vorname="Vorname", rufname_hund="Hund", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, rasse="Beagle", halter_vorname="Peter",
+        ))
+        aktualisiert = get_teilnehmer(conn, alt["id"])
+        self.assertEqual(aktualisiert["rasse"], "Beagle")
+        self.assertEqual(aktualisiert["halter_vorname"], "Peter")
+
+    def test_importiere_teilnehmer_aus_csv_legt_teilnehmer_an(self):
+        # Nutzerwunsch (20.09.): Meldeformulare per KI-System in eine CSV umwandeln lassen
+        # (siehe FormularImportTab/_formular_import_prompt() in app.py) und diese CSV hier
+        # importieren, statt Teilnehmer von Hand abzutippen.
+        pfad = os.path.join(os.path.dirname(self.pfad), "import.csv")
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin,verein,rasse,halter_vorname\n"
+                "Holst,Katrin,Freda,ED,1,Trümmerfeld,SGV Köppern e.V.,Labrador,\n"
+                "Meier,Jan,Rex,DK,2,,SGV Köppern e.V.,,Peter Meier\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 2)
+            self.assertEqual(ergebnis.fehler, [])
+            teilnehmer = {t["nachname"]: t for t in list_teilnehmer(self.conn)}
+            self.assertEqual(teilnehmer["Holst"]["art"], "ED")
+            self.assertEqual(teilnehmer["Holst"]["disziplin"], "Trümmerfeld")
+            self.assertEqual(teilnehmer["Holst"]["rasse"], "Labrador")
+            self.assertEqual(teilnehmer["Meier"]["art"], "DK")
+            self.assertIsNone(teilnehmer["Meier"]["disziplin"])
+            self.assertEqual(teilnehmer["Meier"]["halter_vorname"], "Peter Meier")
+        finally:
+            os.remove(pfad)
+
+    def test_importiere_teilnehmer_aus_csv_ueberspringt_fehlerhafte_zeile_und_importiert_rest(self):
+        pfad = os.path.join(os.path.dirname(self.pfad), "import_fehler.csv")
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+                "Gut,Erster,Hund1,ED,1,Trümmerfeld\n"
+                # Fehlt: rufname_hund
+                ",Zweiter,,DK,1,\n"
+                # Ungültige Art
+                "Schlecht,Dritter,Hund3,XX,1,\n"
+                "Gut,Vierter,Hund4,DK,3,\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 2)
+            self.assertEqual(len(ergebnis.fehler), 2)
+            self.assertIn("Zeile 3", ergebnis.fehler[0])
+            self.assertIn("Zeile 4", ergebnis.fehler[1])
+            namen = {t["nachname"] for t in list_teilnehmer(self.conn)}
+            self.assertEqual(namen, {"Gut"})
+        finally:
+            os.remove(pfad)
+
+    def test_importiere_teilnehmer_aus_csv_ueberspringt_ungueltiges_geschlecht(self):
+        # Regression: geschlecht wurde bisher nicht validiert, sodass ein von einer KI
+        # gelieferter Wert wie "weiblich" statt "Hündin"/"Rüde" eine sqlite3.IntegrityError
+        # auslöste, die NICHT vom try/except ValueError abgefangen wurde - dadurch brach der
+        # komplette Import ab, statt nur die eine Zeile zu überspringen (im Widerspruch zum
+        # eigenen Docstring von importiere_teilnehmer_aus_csv()). Siehe Fortschritt.md.
+        pfad = os.path.join(os.path.dirname(self.pfad), "import_geschlecht.csv")
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin,geschlecht\n"
+                "Schlecht,Erster,Hund1,ED,1,Trümmerfeld,weiblich\n"
+                "Gut,Zweiter,Hund2,DK,2,,Hündin\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 1)
+            self.assertEqual(len(ergebnis.fehler), 1)
+            self.assertIn("Zeile 2", ergebnis.fehler[0])
+            self.assertIn("Geschlecht", ergebnis.fehler[0])
+            namen = {t["nachname"] for t in list_teilnehmer(self.conn)}
+            self.assertEqual(namen, {"Gut"})
+        finally:
+            os.remove(pfad)
+
     def test_teilnehmer_loeschen_entfernt_auch_ergebnis(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1,
@@ -679,6 +830,83 @@ class TestDatenbank(unittest.TestCase):
             disziplin="Trümmerfeld", startnummer=7))
         self.assertEqual(vergebene_startnummern(self.conn), {7})
         self.assertEqual(vergebene_startnummern(self.conn, ausser_teilnehmer_id=tid), set())
+
+    def test_tausche_startnummern_vertauscht_beide_nummern(self):
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="B", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        tausche_startnummern(self.conn, a, b)
+        self.assertEqual(get_teilnehmer(self.conn, a)["startnummer"], 2)
+        self.assertEqual(get_teilnehmer(self.conn, b)["startnummer"], 1)
+
+    def test_tausche_startnummern_funktioniert_wenn_einer_noch_keine_hat(self):
+        # Regression/Nutzerwunsch (20.09.): das darf NICHT an der UNIQUE-Constraint
+        # scheitern, auch wenn einer der beiden (oder beide) noch gar keine Startnummer
+        # hat (None) - siehe tausche_startnummern() in db.py.
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=5))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="B", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld"))
+        tausche_startnummern(self.conn, a, b)
+        self.assertIsNone(get_teilnehmer(self.conn, a)["startnummer"])
+        self.assertEqual(get_teilnehmer(self.conn, b)["startnummer"], 5)
+
+    def test_teilnehmer_fehlende_pflichtangaben_leer_wenn_vollstaendig(self):
+        # ED LK1: genau 1 Gegenstand in der gewählten Disziplin reicht.
+        vollstaendig = dict(
+            chip_nr="123", art="ED", stufe=1, disziplin="Flächensuche",
+            gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Flächensuche",
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(vollstaendig), [])
+
+    def test_teilnehmer_fehlende_pflichtangaben_ed_meldet_chipnr_und_gegenstaende(self):
+        unvollstaendig = dict(
+            chip_nr=None, art="ED", stufe=2, disziplin="Trümmerfeld",
+            gegenstand_1="Dose", gegenstand_1_disziplin="Trümmerfeld",  # nur 1 statt 2 nötig
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        fehlend = teilnehmer_fehlende_pflichtangaben(unvollstaendig)
+        self.assertIn("Chip-Nr. fehlt", fehlend)
+        self.assertEqual(len(fehlend), 2)
+
+    def test_teilnehmer_fehlende_pflichtangaben_dk_lk3_braucht_drei_verschiedene_gegenstaende(self):
+        # LK3-Regel (Klärung 16.09., Fortschritt.md): 3 unterschiedliche Gegenstände, je
+        # einer Disziplin zugeordnet.
+        nur_zwei_verschiedene = dict(
+            chip_nr="1", art="DK", stufe=3,
+            gegenstand_1="A", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="A", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3="B", gegenstand_3_disziplin="Behältnisstrecke",
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(nur_zwei_verschiedene), ["Gegenstände unvollständig (Dreikampf)"])
+
+        drei_verschiedene = dict(nur_zwei_verschiedene, gegenstand_2="C")
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(drei_verschiedene), [])
+
+    def test_teilnehmer_fehlende_pflichtangaben_dk_lk1_reicht_ein_gegenstand_fuer_alle_disziplinen(self):
+        # LK1-Regel: derselbe Gegenstand-Text darf für alle 3 Disziplinen stehen, solange
+        # jede der drei Disziplinen einem der drei Felder zugeordnet ist.
+        lk1 = dict(
+            chip_nr="1", art="DK", stufe=1,
+            gegenstand_1="X", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="X", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3="X", gegenstand_3_disziplin="Behältnisstrecke",
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(lk1), [])
+
+        nicht_alle_disziplinen_abgedeckt = dict(lk1, gegenstand_3_disziplin=None)
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(nicht_alle_disziplinen_abgedeckt),
+            ["Gegenstände unvollständig (Dreikampf)"],
+        )
 
     def test_alle_leistungsklassen_sortiert_und_ohne_duplikate(self):
         add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -1019,7 +1247,9 @@ class TestTerminuebersicht(unittest.TestCase):
     def test_liste_termine_zeigt_stammdaten_und_teilnehmerzahl(self):
         pfad = self.ordner / "2026-09-19_test.sqlite"
         conn = init_db(str(pfad))
-        set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern")
+        set_veranstaltung(
+            conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern", vereins_nr="123"
+        )
         add_teilnehmer(conn, NeuerTeilnehmer(
             nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld"))
         conn.close()
@@ -1027,6 +1257,10 @@ class TestTerminuebersicht(unittest.TestCase):
         termine = liste_termine(self.ordner)
         self.assertEqual(len(termine), 1)
         self.assertEqual(termine[0].verein, "SGV Köppern e.V.")
+        # Nutzerwunsch (20.09.): vereins_nr steht in TerminInfo zur Verfügung, damit sich
+        # beim Anlegen eines neuen Termins Verein/Vereins-Nr./Ort vorschlagen lassen
+        # (siehe StartDialog._neuer_termin in app.py).
+        self.assertEqual(termine[0].vereins_nr, "123")
         self.assertEqual(termine[0].datum, "2026-09-19")
         self.assertEqual(termine[0].anzahl_teilnehmer, 1)
         self.assertTrue(termine[0].lesbar)
@@ -1187,6 +1421,81 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(ergebnis["suche_truemmerfeld"], 40)
         self.assertEqual(ergebnis["suche_flaechensuche"], 40)
         self.assertEqual(ergebnis["suche_behaeltnis"], 40)
+
+
+class TestTerminImportStammdaten(unittest.TestCase):
+    """Testet importiere_teilnehmer_stammdaten() - 'Teilnehmer aus anderem Termin
+    importieren' (Nutzerwunsch 20.09., siehe TerminImportDialog in app.py). Anders als
+    kopiere_termin_daten() (siehe TestTerminSync oben, komplette 1:1-Übertragung für die
+    Web-Sync) übernimmt diese Funktion gezielt nur eine Auswahl an Teilnehmern und nur
+    deren Stammdaten - Startnummer/Gegenstände/Bezahlt-Status/Ergebnis bleiben immer
+    zurückgesetzt, unabhängig davon, was die Quelle hatte."""
+
+    def setUp(self):
+        self.quelle_pfad = TestTerminSync._neue_temp_datei()
+        self.ziel_pfad = TestTerminSync._neue_temp_datei()
+        self.quelle = init_db(self.quelle_pfad)
+        self.ziel = init_db(self.ziel_pfad)
+
+    def tearDown(self):
+        self.quelle.close()
+        self.ziel.close()
+        for pfad in (self.quelle_pfad, self.ziel_pfad):
+            if os.path.exists(pfad):
+                os.remove(pfad)
+
+    def test_importiert_nur_ausgewaehlte_teilnehmer_mit_stammdaten(self):
+        a = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", verein="Testverein", chip_nr="123", rasse="Schäferhund",
+            startnummer=1, bezahlt=True,
+            gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Trümmerfeld",
+        ))
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Nicht", vorname="Gewollt", rufname_hund="Fido", art="ED", stufe=1,
+            disziplin="Flächensuche",
+        ))
+
+        anzahl = importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [a])
+
+        self.assertEqual(anzahl, 1)
+        ziel_teilnehmer = list_teilnehmer(self.ziel)
+        self.assertEqual(len(ziel_teilnehmer), 1)  # nur der ausgewählte, nicht "Nicht Gewollt"
+        importiert = ziel_teilnehmer[0]
+        self.assertEqual(importiert["nachname"], "Muster")
+        self.assertEqual(importiert["verein"], "Testverein")
+        self.assertEqual(importiert["chip_nr"], "123")
+        self.assertEqual(importiert["rasse"], "Schäferhund")
+        self.assertEqual(importiert["art"], "ED")
+        self.assertEqual(importiert["disziplin"], "Trümmerfeld")
+        # Bewusst NICHT übernommen (Absprache mit dem Nutzer):
+        self.assertIsNone(importiert["startnummer"])
+        self.assertFalse(importiert["bezahlt"])
+        self.assertIsNone(importiert["gegenstand_1"])
+        self.assertIsNone(importiert["gegenstand_1_disziplin"])
+
+    def test_bereits_vergebene_startnummer_in_quelle_blockiert_import_ins_ziel_nicht(self):
+        # Regression: würde die Startnummer mitkopiert, könnte der Import an der
+        # UNIQUE-Constraint im Ziel scheitern (z.B. wenn dort schon jemand dieselbe
+        # Nummer hat) - da sie bewusst NICHT übernommen wird, kann das nicht passieren.
+        add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Schon", vorname="Da", rufname_hund="Bello", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Neu", vorname="Dazu", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+
+        anzahl = importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [quelle_id])
+
+        self.assertEqual(anzahl, 1)
+        self.assertEqual(len(list_teilnehmer(self.ziel)), 2)
+
+    def test_nicht_mehr_vorhandene_id_wird_uebersprungen(self):
+        anzahl = importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [999])
+        self.assertEqual(anzahl, 0)
+        self.assertEqual(list_teilnehmer(self.ziel), [])
 
 
 # --- Dieselben Tests zusätzlich gegen PostgreSQL (geplante Podman/Web-Version) --------

@@ -23,20 +23,34 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QMessageBox, QPushButton
 
 from app import (
     VERSION,
     _QSS_MODERN_MINIMAL,
     AuswertungTab,
+    FormularImportTab,
     HauptFenster,
     HilfeDialog,
+    StartDialog,
     TeilnehmerDialog,
     TeilnehmerTab,
     TeilnehmerUebersichtTab,
+    TerminImportDialog,
     VersionDialog,
 )
-from db import NeuerTeilnehmer, add_teilnehmer, eintragen_ergebnis, init_db, list_teilnehmer, set_veranstaltung
+from db import (
+    CSV_IMPORT_SPALTEN,
+    NeuerTeilnehmer,
+    TerminInfo,
+    add_teilnehmer,
+    eintragen_ergebnis,
+    init_db,
+    leistungsklasse_label,
+    list_teilnehmer,
+    set_veranstaltung,
+    setze_bezahlt,
+)
 
 
 @pytest.fixture
@@ -408,6 +422,181 @@ def test_bestehender_teilnehmer_im_dialog_zeigt_verwaltungs_und_kontaktfelder(qt
     assert dialog.telefon.text() == "06171 123456"
 
 
+# --- Rasse/Tollwutimpfung sowie Halter-Block (Nutzerwunsch 20.09., Anmerkung zum
+# Programm, Abschnitt "Teilnehmer") -----------------------------------------------
+
+
+def test_rasse_und_tollwutimpfung_werden_im_dialog_erfasst(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.rasse.setText("Labrador Retriever")
+    dialog.tollwutimpfung_bis.setText("2027-05-01")
+
+    ergebnis = dialog.ergebnis()
+    assert ergebnis.rasse == "Labrador Retriever"
+    assert ergebnis.tollwutimpfung_bis == "2027-05-01"
+
+
+def test_halter_block_ist_standardmaessig_ausgeblendet_und_leer(qtbot):
+    # Normalfall: Halter = Hundeführer, der Block bleibt verborgen und liefert keine
+    # halter_*-Werte, auch wenn (versehentlich) etwas darin steht.
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+
+    assert dialog.gruppe_halter.isVisible() is False
+
+    ergebnis = dialog.ergebnis()
+    for feld in (
+        "halter_vorname", "halter_nachname", "halter_strasse", "halter_hausnummer",
+        "halter_plz", "halter_ort", "halter_mitgliedsverein", "halter_mitgliedsnummer", "halter_lu_nr",
+    ):
+        assert getattr(ergebnis, feld) is None
+
+
+def test_halter_checkbox_blendet_block_ein_und_uebernimmt_werte(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+
+    qtbot.mouseClick(dialog.halter_weicht_ab, Qt.MouseButton.LeftButton)
+    assert dialog.gruppe_halter.isVisible() is True
+
+    dialog.halter_vorname.setText("Peter")
+    dialog.halter_nachname.setText("Muster")
+    dialog.halter_strasse.setText("Nebenweg")
+    dialog.halter_hausnummer.setText("3")
+    dialog.halter_plz.setText("61479")
+    dialog.halter_ort.setText("Höppern")
+    dialog.halter_mitgliedsverein.setText("SGV Köppern e.V.")
+    dialog.halter_mitgliedsnummer.setText("98765")
+    dialog.halter_lu_nr.setText("LU-42")
+
+    ergebnis = dialog.ergebnis()
+    assert ergebnis.halter_vorname == "Peter"
+    assert ergebnis.halter_nachname == "Muster"
+    assert ergebnis.halter_strasse == "Nebenweg"
+    assert ergebnis.halter_hausnummer == "3"
+    assert ergebnis.halter_plz == "61479"
+    assert ergebnis.halter_ort == "Höppern"
+    assert ergebnis.halter_mitgliedsverein == "SGV Köppern e.V."
+    assert ergebnis.halter_mitgliedsnummer == "98765"
+    assert ergebnis.halter_lu_nr == "LU-42"
+
+    # Checkbox wieder deaktivieren: Block verschwindet und die Werte fließen NICHT mehr
+    # in ergebnis() ein, obwohl sie noch in den Feldern stehen (siehe TeilnehmerDialog.ergebnis()).
+    qtbot.mouseClick(dialog.halter_weicht_ab, Qt.MouseButton.LeftButton)
+    assert dialog.gruppe_halter.isVisible() is False
+    ergebnis_ohne = dialog.ergebnis()
+    assert ergebnis_ohne.halter_vorname is None
+    assert ergebnis_ohne.halter_mitgliedsverein is None
+
+
+def test_bestehender_teilnehmer_mit_halter_zeigt_block_direkt_aufgeklappt(qtbot, conn):
+    _teilnehmer_anlegen(
+        conn,
+        rasse="Beagle",
+        tollwutimpfung_bis="2027-05-01",
+        halter_vorname="Peter",
+        halter_nachname="Muster",
+        halter_mitgliedsverein="SGV Köppern e.V.",
+    )
+    vorhandener = list_teilnehmer(conn)[0]
+
+    dialog = TeilnehmerDialog(vorhandener=vorhandener)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.rasse.text() == "Beagle"
+    assert dialog.tollwutimpfung_bis.text() == "2027-05-01"
+    assert dialog.halter_weicht_ab.isChecked() is True
+    assert dialog.gruppe_halter.isVisible() is True
+    assert dialog.halter_vorname.text() == "Peter"
+    assert dialog.halter_mitgliedsverein.text() == "SGV Köppern e.V."
+
+
+def test_bestehender_teilnehmer_ohne_halter_zeigt_block_eingeklappt(qtbot, conn):
+    _teilnehmer_anlegen(conn)
+    vorhandener = list_teilnehmer(conn)[0]
+
+    dialog = TeilnehmerDialog(vorhandener=vorhandener)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.halter_weicht_ab.isChecked() is False
+    assert dialog.gruppe_halter.isVisible() is False
+
+
+# --- Reiter "Formular-Import" (Nutzerwunsch 20.09.: Meldeformulare per externem KI-
+# System in eine CSV umwandeln lassen und diese hier importieren) -------------------
+
+
+def test_formular_import_tab_prompt_enthaelt_alle_csv_spalten(qtbot, conn):
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    prompt_text = tab.prompt_feld.toPlainText()
+    for spalte in CSV_IMPORT_SPALTEN:
+        assert spalte in prompt_text
+    assert prompt_text == tab.prompt_feld.toPlainText()  # read-only: kein versehentliches Editieren möglich
+    assert tab.prompt_feld.isReadOnly() is True
+
+
+def test_formular_import_tab_prompt_kopieren_setzt_zwischenablage(qtbot, conn):
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Prompt kopieren"),
+        Qt.MouseButton.LeftButton,
+    )
+    assert QApplication.clipboard().text() == tab.prompt_feld.toPlainText()
+    assert tab.status_label.text() == "Prompt kopiert."
+
+
+def test_formular_import_tab_csv_import_legt_teilnehmer_an_und_zeigt_zusammenfassung(qtbot, conn, tmp_path, monkeypatch):
+    pfad = tmp_path / "import.csv"
+    pfad.write_text(
+        "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+        "Holst,Katrin,Freda,ED,1,Trümmerfeld\n"
+        # Fehlerhafte zweite Zeile (ungültige Art) - darf den Import nicht verhindern.
+        "Schlecht,Fehler,Hund,XX,1,\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(pfad), "CSV-Datei (*.csv)"))
+    meldung = {}
+    monkeypatch.setattr(
+        "app.QMessageBox.information",
+        lambda parent, titel, text: meldung.setdefault("text", text),
+    )
+
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "CSV importieren…"),
+        Qt.MouseButton.LeftButton,
+    )
+
+    namen = {t["nachname"] for t in list_teilnehmer(conn)}
+    assert namen == {"Holst"}
+    assert "1 Teilnehmer importiert" in meldung["text"]
+    assert "1 Zeile(n) übersprungen" in meldung["text"]
+
+
 # --- Hilfe-Button ---------------------------------------------------------------
 
 
@@ -725,3 +914,450 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     ).fetchone()
     assert zeile["suche_flaechensuche"] == 45
     assert zeile["anzeige_flaechensuche"] == 28
+
+
+def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch):
+    # Nutzerwunsch (20.09., Anmerkung "Anlage neuer Termin nachdem bereits Anlagen
+    # erfolgt sind"): das Programm soll sich merken, welcher Verein gemeint ist, damit
+    # die oberen 3 Eingaben (Verein/Vereins-Nr./Ort) beim Anlegen eines weiteren Termins
+    # nicht erneut eingetippt werden müssen. Vorbelegung aus dem in der Terminübersicht
+    # obersten (nach Datum neuesten) Termin - das Datum selbst wird bewusst NICHT
+    # übernommen, da jeder Termin ein eigenes hat.
+    letzter = TerminInfo(
+        pfad="egal.sqlite", dateiname="egal.sqlite", verein="SGV Köppern e.V.",
+        vereins_nr="123", ort="Köppern", datum="2026-09-19", anzahl_teilnehmer=5, lesbar=True,
+    )
+    monkeypatch.setattr("app.liste_termine", lambda: [letzter])
+
+    aufgezeichnete_vorbelegung = {}
+
+    class _AbbrechenderDialogStub:
+        """Ersetzt VeranstaltungsDialog: zeichnet nur die übergebene Vorbelegung auf und
+        bricht sofort ab, statt einen echten (blockierenden) Dialog zu öffnen."""
+
+        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False):
+            aufgezeichnete_vorbelegung.update(vorbelegung or {})
+
+        def exec(self):
+            return QDialog.Rejected
+
+    monkeypatch.setattr("app.VeranstaltungsDialog", _AbbrechenderDialogStub)
+
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    dialog._neuer_termin()
+
+    assert aufgezeichnete_vorbelegung == {
+        "verein": "SGV Köppern e.V.",
+        "vereins_nr": "123",
+        "ort": "Köppern",
+    }
+
+
+def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, monkeypatch):
+    # Gegenprobe: ohne bereits vorhandene Termine (z. B. allererster Start) darf nichts
+    # vorbelegt werden.
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+
+    aufgezeichnete_vorbelegung = {"noch_nicht_aufgerufen": True}
+
+    class _AbbrechenderDialogStub:
+        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False):
+            aufgezeichnete_vorbelegung.clear()
+            aufgezeichnete_vorbelegung.update(vorbelegung or {})
+
+        def exec(self):
+            return QDialog.Rejected
+
+    monkeypatch.setattr("app.VeranstaltungsDialog", _AbbrechenderDialogStub)
+
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    dialog._neuer_termin()
+
+    assert aufgezeichnete_vorbelegung == {}
+
+
+# --- Startnummer optional + Warnung/Tausch statt harter Blockade (20.09.) ----------
+# Nutzerwunsch (Anmerkung zum Programm): "Vergabe der Startnummern als Pflichtfeld finde
+# ich hier noch nicht so gut [...] ich muss die Nummern die ich jetzt eigentlich bräuchte
+# erst „frei machen“, weil ich nicht doppelt vergeben kann." Geklärt: Startnummer darf bei
+# der Ersterfassung leer bleiben (Checkbox "Startnummer steht noch nicht fest"), eine
+# Dublette zeigt eine Warnung mit Namen des aktuellen Inhabers statt nur "ist vergeben",
+# und eine eigene Tauschen-Funktion in der Teilnehmerliste tauscht zwei Startnummern
+# direkt (Eindeutigkeit bleibt dabei in der Datenbank weiterhin strikt erzwungen).
+
+
+def test_startnummer_checkbox_deaktiviert_spinbox_und_ergibt_keine_startnummer(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+
+    assert dialog.startnummer.isEnabled()
+    assert dialog.ergebnis().startnummer == dialog.startnummer.value()
+
+    qtbot.mouseClick(dialog.startnummer_unbekannt, Qt.MouseButton.LeftButton)
+
+    assert not dialog.startnummer.isEnabled()
+    assert dialog.ergebnis().startnummer is None
+
+
+def test_bestehender_teilnehmer_ohne_startnummer_zeigt_checkbox_aktiviert(qtbot, conn):
+    _teilnehmer_anlegen(conn, startnummer=None)
+    vorhandener = list_teilnehmer(conn)[0]
+    dialog = TeilnehmerDialog(vorhandener=vorhandener, vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.startnummer_unbekannt.isChecked()
+    assert not dialog.startnummer.isEnabled()
+
+
+def test_doppelte_startnummer_zeigt_warnung_mit_namen_statt_blockade_ohne_hinweis(qtbot, monkeypatch):
+    dialog = TeilnehmerDialog(
+        vergebene_nummern={5}, namen_je_startnummer={5: "Muster, Max"},
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Neu")
+    dialog.vorname.setText("Nina")
+    dialog.rufname_hund.setText("Rex")
+    dialog.startnummer.setValue(5)
+
+    warnungen = []
+    monkeypatch.setattr(
+        "app.QMessageBox.warning",
+        lambda self, titel, text: warnungen.append(text),
+    )
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert len(warnungen) == 1
+    assert "Muster, Max" in warnungen[0]
+    assert "tauschen" in warnungen[0]
+    assert dialog.result() == 0  # nicht akzeptiert - Eindeutigkeit bleibt strikt
+
+
+def test_doppelte_startnummer_wird_bei_aktivierter_checkbox_nicht_geprueft(qtbot, monkeypatch):
+    # Wer die Startnummer offen lässt, bekommt keine Dubletten-Warnung - es gibt ja
+    # (noch) gar keine einzutragende Nummer.
+    dialog = TeilnehmerDialog(vergebene_nummern={5}, namen_je_startnummer={5: "Muster, Max"})
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Neu")
+    dialog.vorname.setText("Nina")
+    dialog.rufname_hund.setText("Rex")
+    dialog.startnummer.setValue(5)
+    qtbot.mouseClick(dialog.startnummer_unbekannt, Qt.MouseButton.LeftButton)
+
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda self, titel, text: warnungen.append(text))
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert warnungen == []
+    assert dialog.result() == 1
+    assert dialog.ergebnis().startnummer is None
+
+
+def test_startnummer_tauschen_button_nur_bei_mehreren_teilnehmern_aktiv(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Erste", startnummer=1)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.selectRow(0)
+
+    assert not tab.tauschen_btn.isEnabled()  # nur ein Teilnehmer - nichts zum Tauschen
+
+    _teilnehmer_anlegen(conn, nachname="Zweite", startnummer=2)
+    tab.aktualisieren()
+    tab.tabelle.selectRow(0)
+
+    assert tab.tauschen_btn.isEnabled()
+
+
+def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monkeypatch):
+    id_a = _teilnehmer_anlegen(conn, nachname="Erste", startnummer=1)
+    id_b = _teilnehmer_anlegen(conn, nachname="Zweite", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    class _AkzeptierenderTauschDialogStub:
+        """Ersetzt StartnummerTauschenDialog: akzeptiert sofort mit dem zweiten
+        übergebenen Teilnehmer als Tauschpartner, statt einen echten (blockierenden)
+        Dialog zu öffnen - entspricht dem Muster von _AbbrechenderDialogStub oben."""
+
+        def __init__(self, parent, teilnehmer, andere_teilnehmer):
+            self._partner_id = andere_teilnehmer[0]["id"]
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def ausgewaehlte_partner_id(self):
+            return self._partner_id
+
+    monkeypatch.setattr("app.StartnummerTauschenDialog", _AkzeptierenderTauschDialogStub)
+
+    zeile_a = next(row for row, tid in enumerate(tab._teilnehmer_ids) if tid == id_a)
+    tab.tabelle.selectRow(zeile_a)
+    tab._startnummer_tauschen()
+
+    namen_zu_nummer = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
+    assert namen_zu_nummer["Erste"] == 2
+    assert namen_zu_nummer["Zweite"] == 1
+
+
+# --- Warnsymbol bei fehlenden Prüfungsdaten in der Teilnehmerliste (20.09.) --------
+# Nutzerwunsch (Anmerkung zum Programm): "in der Übersicht von den Teilnehmern fehlt mir
+# aktuell aber noch der Überblick, ob ich auch wirklich alles erfasst habe [...] ein
+# „Kontrollbutton“ [...], der dann nochmal prüft ob auch alle Sachen Bspl. 3 Gegenstände
+# bei LK 3 erfasst sind." Geklärt: direkt als Warnsymbol in der Teilnehmerliste (statt
+# eigenem Button), geprüft werden Chip-Nr. sowie die zur Leistungsklasse passende
+# Gegenstand-Zuordnung.
+
+
+def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Unvollstaendig", startnummer=1, chip_nr=None)
+    _teilnehmer_anlegen(
+        conn, nachname="Vollstaendig", startnummer=2, chip_nr="998877",
+        art="ED", stufe=1, disziplin="Flächensuche",
+        gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Flächensuche",
+    )
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    zeile_unvollstaendig = next(
+        row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Unvollstaendig"
+    )
+    zeile_vollstaendig = next(
+        row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Vollstaendig"
+    )
+
+    text_unvollstaendig = tab.tabelle.item(zeile_unvollstaendig, 7).text()
+    assert text_unvollstaendig.startswith("⚠")
+    assert "Chip-Nr." in text_unvollstaendig
+    assert "Gegenstände" in text_unvollstaendig
+    assert tab.tabelle.item(zeile_vollstaendig, 7).text() == ""
+
+
+# --- Teilnehmer aus anderem Termin importieren (20.09.) ----------------------------
+# Nutzerwunsch (Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln eingegeben
+# werden. → ist Option möglich, von anderem Termin importieren?" Geklärt: Auswahl per
+# Checkbox-Liste, es werden nur Stammdaten übernommen (Startnummer/Gegenstände/Bezahlt-
+# Status/Ergebnis bleiben zurückgesetzt), keine Dubletten-Prüfung.
+
+
+def test_termin_import_dialog_listet_teilnehmer_und_importiert_auswahl(qtbot, tmp_path, monkeypatch):
+    quelle_pfad = str(tmp_path / "quelle.sqlite")
+    quelle_conn = init_db(quelle_pfad)
+    add_teilnehmer(quelle_conn, NeuerTeilnehmer(
+        nachname="Eins", vorname="A", rufname_hund="Hund1", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    add_teilnehmer(quelle_conn, NeuerTeilnehmer(
+        nachname="Zwei", vorname="B", rufname_hund="Hund2", art="ED", stufe=1, disziplin="Flächensuche"))
+    quelle_conn.close()
+
+    termin_info = TerminInfo(
+        pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
+        ort="Testort", datum="2026-01-01", anzahl_teilnehmer=2, lesbar=True,
+    )
+    monkeypatch.setattr("app.liste_termine", lambda: [termin_info])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    # Standardmäßig alle ausgewählt.
+    assert dialog.teilnehmer_liste.count() == 2
+    assert len(dialog.ausgewaehlte_ids()) == 2
+
+    dialog.teilnehmer_liste.item(0).setCheckState(Qt.Unchecked)
+    assert len(dialog.ausgewaehlte_ids()) == 1
+
+    dialog.schliesse_quelle()
+
+
+def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypatch):
+    eigener = TerminInfo(
+        pfad="eigen.sqlite", dateiname="eigen.sqlite", verein="Eigen", vereins_nr=None,
+        ort="X", datum="2026-01-01", anzahl_teilnehmer=1, lesbar=True,
+    )
+    anderer = TerminInfo(
+        pfad="anderer.sqlite", dateiname="anderer.sqlite", verein="Anderer", vereins_nr=None,
+        ort="Y", datum="2026-01-02", anzahl_teilnehmer=1, lesbar=True,
+    )
+    monkeypatch.setattr("app.liste_termine", lambda: [eigener, anderer])
+
+    dialog = TerminImportDialog(None, aktueller_pfad="eigen.sqlite")
+    qtbot.addWidget(dialog)
+
+    assert dialog.termin_combo.count() == 1
+    assert "Anderer" in dialog.termin_combo.itemText(0)
+
+
+def test_termin_import_dialog_ohne_anderen_termin_deaktiviert_ok(qtbot, monkeypatch):
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+
+
+def test_aus_anderem_termin_importieren_uebernimmt_ausgewaehlte_teilnehmer(qtbot, conn, tmp_path, monkeypatch):
+    quelle_pfad = str(tmp_path / "quelle.sqlite")
+    quelle_conn = init_db(quelle_pfad)
+    quelle_id = add_teilnehmer(quelle_conn, NeuerTeilnehmer(
+        nachname="Import", vorname="Mich", rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld"))
+
+    class _ImportDialogStub:
+        """Ersetzt TerminImportDialog: liefert direkt den (schon geöffneten) Teilnehmer
+        ohne echten (blockierenden) Dialog - entspricht dem Muster von
+        _AkzeptierenderTauschDialogStub oben."""
+
+        def __init__(self, parent, aktueller_pfad):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def quelle_conn(self):
+            return quelle_conn
+
+        def ausgewaehlte_ids(self):
+            return [quelle_id]
+
+        def schliesse_quelle(self):
+            quelle_conn.close()
+
+    monkeypatch.setattr("app.TerminImportDialog", _ImportDialogStub)
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab._aus_anderem_termin_importieren()
+
+    namen = {t["nachname"] for t in list_teilnehmer(conn)}
+    assert "Import" in namen
+
+
+# --- Sortierung durch Klick auf Spaltenüberschrift (20.09.) ------------------------
+# Nutzerwunsch (Anmerkung zum Programm): "Filtermöglichkeit gut - kann hier ggf. noch
+# Sortierungsoption ergänzt werden?" Geklärt (kleiner, zweifach genannter Wunsch, keine
+# weitere Rückfrage nötig): Klick auf eine Spaltenüberschrift sortiert danach (Qt-
+# Bordmittel, wie aus LibreOffice/Excel gewohnt), erneuter Klick kehrt die Richtung um.
+# Wichtig zu testen: Zeilenauswahl (_ausgewaehlte_id) und Filter (_filter_anwenden)
+# müssen auch nach einer Sortierung noch die richtigen Teilnehmer treffen, da die
+# Zeilenreihenfolge dann nicht mehr zwingend der Listenreihenfolge aus der Datenbank
+# entspricht (siehe _teilnehmer_je_id in aktualisieren()).
+
+
+def test_spaltenklick_sortiert_tabelle_nach_nachname(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(1, Qt.AscendingOrder)  # Spalte 1 = Nachname
+
+    assert tab.tabelle.item(0, 1).text() == "Adler"
+    assert tab.tabelle.item(1, 1).text() == "Zorn"
+
+
+def test_startnummer_spalte_sortiert_numerisch_nicht_alphabetisch(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Zehn", startnummer=10)
+    _teilnehmer_anlegen(conn, nachname="Zwei", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(0, Qt.AscendingOrder)  # Spalte 0 = Start-Nr.
+
+    # Bei rein alphabetischer (Text-)Sortierung stünde "10" vor "2" - hier muss die
+    # numerisch kleinere Startnummer (2) zuerst kommen.
+    assert tab.tabelle.item(0, 0).text() == "2"
+    assert tab.tabelle.item(1, 0).text() == "10"
+
+
+def test_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
+    id_zorn = _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(1, Qt.AscendingOrder)
+    assert tab.tabelle.item(0, 1).text() == "Adler"
+
+    # Eine beliebige Änderung, die aktualisieren() auslöst (hier: Bezahlt umschalten) -
+    # ohne das Merken der Sortierung würde die Tabelle jetzt kommentarlos wieder auf
+    # Start-Nr. aufsteigend zurückspringen.
+    setze_bezahlt(conn, id_zorn, True)
+    tab.aktualisieren()
+
+    assert tab.tabelle.item(0, 1).text() == "Adler"
+    assert tab.tabelle.item(1, 1).text() == "Zorn"
+
+
+def test_auswahl_liefert_richtige_id_nach_sortierung(qtbot, conn):
+    id_zorn = _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1)
+    id_adler = _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(1, Qt.DescendingOrder)  # Zorn jetzt vor Adler
+    assert tab.tabelle.item(0, 1).text() == "Zorn"
+
+    tab.tabelle.selectRow(0)
+    assert tab._ausgewaehlte_id() == id_zorn
+
+    tab.tabelle.selectRow(1)
+    assert tab._ausgewaehlte_id() == id_adler
+
+
+def test_filter_wirkt_korrekt_auch_nach_sortierung(qtbot, conn):
+    _teilnehmer_anlegen(
+        conn, nachname="Zorn", startnummer=1, art="ED", stufe=1, disziplin="Flächensuche"
+    )
+    _teilnehmer_anlegen(
+        conn, nachname="Adler", startnummer=2, art="ED", stufe=2, disziplin="Trümmerfeld"
+    )
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(1, Qt.AscendingOrder)  # Adler jetzt Zeile 0, Zorn Zeile 1
+
+    ziel = next(t for t in list_teilnehmer(conn) if t["nachname"] == "Zorn")
+    tab.filter_combo.setCurrentText(leistungsklasse_label(ziel))
+
+    # Adler (jetzt Zeile 0) passt nicht zum Filter und muss ausgeblendet sein, Zorn
+    # (Zeile 1) muss sichtbar bleiben - unabhängig von der Sortierung.
+    assert tab.tabelle.isRowHidden(0)
+    assert not tab.tabelle.isRowHidden(1)
+
+
+def test_startnummer_spalte_sortiert_auch_bei_fehlender_startnummer_ohne_absturz(qtbot, conn):
+    # Ein Teilnehmer ohne Startnummer (siehe Checkbox "Startnummer steht noch nicht
+    # fest") hat in Spalte 0 nur Text ("") statt der numerischen Qt.DisplayRole - beim
+    # Sortieren vergleicht Qt hier Text- mit Zahl-Werten. Ziel dieses Tests ist in erster
+    # Linie: kein Absturz/keine Exception, plus eine stabile, nachvollziehbare Reihenfolge.
+    id_ohne = _teilnehmer_anlegen(conn, nachname="OhneNummer", startnummer=None)
+    _teilnehmer_anlegen(conn, nachname="MitNummer", startnummer=3)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.sortByColumn(0, Qt.AscendingOrder)
+
+    namen_in_reihenfolge = [tab.tabelle.item(row, 1).text() for row in range(tab.tabelle.rowCount())]
+    assert set(namen_in_reihenfolge) == {"OhneNummer", "MitNummer"}
+    # Beide Zeilen müssen über die UserRole-ID weiterhin korrekt auflösbar sein.
+    tab.tabelle.selectRow(namen_in_reihenfolge.index("OhneNummer"))
+    assert tab._ausgewaehlte_id() == id_ohne

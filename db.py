@@ -27,6 +27,7 @@ nur der Dokumentation des ursprünglichen Anwendungsfalls.
 
 from __future__ import annotations
 
+import csv
 import datetime
 import math
 import os
@@ -108,6 +109,21 @@ CREATE TABLE IF NOT EXISTS teilnehmer (
     ort TEXT,
     email TEXT,
     telefon TEXT,
+    -- Rasse/Tollwutimpfung sowie ein optionaler Halter-Block (Nutzerwunsch 20.09., siehe
+    -- _TEILNEHMER_NEUE_SPALTEN) - der Halter (Hundeeigentümer) kann laut Meldeformular
+    -- eine andere Person als der Hundeführer (nachname/vorname oben) sein. Alle Felder
+    -- bleiben leer (NULL), solange kein abweichender Halter angegeben wird.
+    rasse TEXT,
+    tollwutimpfung_bis TEXT,
+    halter_vorname TEXT,
+    halter_nachname TEXT,
+    halter_strasse TEXT,
+    halter_hausnummer TEXT,
+    halter_plz TEXT,
+    halter_ort TEXT,
+    halter_mitgliedsverein TEXT,
+    halter_mitgliedsnummer TEXT,
+    halter_lu_nr TEXT,
     -- bei ED ist die Disziplin Pflicht, bei DK darf sie nicht gesetzt sein
     CHECK (
         (art = 'ED' AND disziplin IS NOT NULL) OR
@@ -329,6 +345,25 @@ _TEILNEHMER_NEUE_SPALTEN = [
     ("ort", "TEXT"),
     ("email", "TEXT"),
     ("telefon", "TEXT"),
+    # Nutzerwunsch (20.09., Anmerkung zum Programm): "Rasse" und "Tollwutimpfung gültig
+    # bis" stehen auf dem echten Meldeformular, fehlten bisher aber im Programm. Sowie ein
+    # eigener Halter-Block ("falls abweichend von Teilnehmer - Angaben des
+    # Hundeeigentümers" auf dem Formular) - der Halter (Hundeeigentümer) kann eine andere
+    # Person als der Hundeführer (Teilnehmer/nachname+vorname oben) sein. Bewusst NICHT
+    # als eigene Tabelle/Beziehung modelliert, da es sich um höchstens EINE zusätzliche
+    # Person je Teilnehmer handelt, keine Liste - ein flacher, optionaler Spaltenblock
+    # reicht dafür wie schon beim Teilnehmer selbst.
+    ("rasse", "TEXT"),
+    ("tollwutimpfung_bis", "TEXT"),
+    ("halter_vorname", "TEXT"),
+    ("halter_nachname", "TEXT"),
+    ("halter_strasse", "TEXT"),
+    ("halter_hausnummer", "TEXT"),
+    ("halter_plz", "TEXT"),
+    ("halter_ort", "TEXT"),
+    ("halter_mitgliedsverein", "TEXT"),
+    ("halter_mitgliedsnummer", "TEXT"),
+    ("halter_lu_nr", "TEXT"),
 ]
 
 
@@ -502,6 +537,21 @@ class NeuerTeilnehmer:
     ort: str | None = None
     email: str | None = None
     telefon: str | None = None
+    # Rasse/Tollwutimpfung sowie ein optionaler Halter-Block (Nutzerwunsch 20.09., siehe
+    # SCHEMA/_TEILNEHMER_NEUE_SPALTEN) - der Halter (Hundeeigentümer) kann laut
+    # Meldeformular eine andere Person als der Hundeführer (nachname/vorname oben) sein.
+    # Bleibt komplett leer, solange kein abweichender Halter angegeben wird.
+    rasse: str | None = None
+    tollwutimpfung_bis: str | None = None
+    halter_vorname: str | None = None
+    halter_nachname: str | None = None
+    halter_strasse: str | None = None
+    halter_hausnummer: str | None = None
+    halter_plz: str | None = None
+    halter_ort: str | None = None
+    halter_mitgliedsverein: str | None = None
+    halter_mitgliedsnummer: str | None = None
+    halter_lu_nr: str | None = None
 
 
 def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
@@ -512,8 +562,14 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
             schulterhoehe_cm, chip_nr, art, stufe, disziplin, startnummer,
             gegenstand_1, gegenstand_2, gegenstand_3,
             gegenstand_1_disziplin, gegenstand_2_disziplin, gegenstand_3_disziplin, bezahlt,
-            verband, mitgliedsnummer, wurftag, strasse, hausnummer, plz, ort, email, telefon
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            verband, mitgliedsnummer, wurftag, strasse, hausnummer, plz, ort, email, telefon,
+            rasse, tollwutimpfung_bis,
+            halter_vorname, halter_nachname, halter_strasse, halter_hausnummer,
+            halter_plz, halter_ort, halter_mitgliedsverein, halter_mitgliedsnummer, halter_lu_nr
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
         """,
         (
             t.nachname, t.vorname, t.verein, t.zwingername, t.rufname_hund, t.geschlecht,
@@ -521,6 +577,9 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
             t.gegenstand_1, t.gegenstand_2, t.gegenstand_3,
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin, int(t.bezahlt),
             t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
+            t.rasse, t.tollwutimpfung_bis,
+            t.halter_vorname, t.halter_nachname, t.halter_strasse, t.halter_hausnummer,
+            t.halter_plz, t.halter_ort, t.halter_mitgliedsverein, t.halter_mitgliedsnummer, t.halter_lu_nr,
         ),
     )
     teilnehmer_id = cur.lastrowid
@@ -571,7 +630,10 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             schulterhoehe_cm=?, chip_nr=?, art=?, stufe=?, disziplin=?, startnummer=?,
             gegenstand_1=?, gegenstand_2=?, gegenstand_3=?,
             gegenstand_1_disziplin=?, gegenstand_2_disziplin=?, gegenstand_3_disziplin=?, bezahlt=?,
-            verband=?, mitgliedsnummer=?, wurftag=?, strasse=?, hausnummer=?, plz=?, ort=?, email=?, telefon=?
+            verband=?, mitgliedsnummer=?, wurftag=?, strasse=?, hausnummer=?, plz=?, ort=?, email=?, telefon=?,
+            rasse=?, tollwutimpfung_bis=?,
+            halter_vorname=?, halter_nachname=?, halter_strasse=?, halter_hausnummer=?,
+            halter_plz=?, halter_ort=?, halter_mitgliedsverein=?, halter_mitgliedsnummer=?, halter_lu_nr=?
         WHERE id=?
         """,
         (
@@ -581,9 +643,32 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin,
             int(t.bezahlt),
             t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
+            t.rasse, t.tollwutimpfung_bis,
+            t.halter_vorname, t.halter_nachname, t.halter_strasse, t.halter_hausnummer,
+            t.halter_plz, t.halter_ort, t.halter_mitgliedsverein, t.halter_mitgliedsnummer, t.halter_lu_nr,
             teilnehmer_id,
         ),
     )
+    conn.commit()
+
+
+def tausche_startnummern(conn: sqlite3.Connection, teilnehmer_id_a: int, teilnehmer_id_b: int) -> None:
+    """Tauscht die Startnummern zweier Teilnehmer atomar - über eine kurzzeitige NULL-
+    Zwischenstufe, da 'startnummer INTEGER UNIQUE' ein direktes Vertauschen sonst als
+    Dublette ablehnen würde (Teilnehmer B hätte für einen Moment dieselbe Nummer wie
+    Teilnehmer A). Erleichtert das Umnummerieren, ohne dass man Startnummern vorher von
+    Hand an anderer Stelle 'freimachen' muss (Nutzerwunsch 20.09., Anmerkung zum
+    Programm: 'ich muss die Nummern die ich jetzt eigentlich bräuchte erst „frei
+    machen“, weil ich nicht doppelt vergeben kann'). Funktioniert unabhängig davon, ob
+    einer der beiden (oder beide) noch gar keine Startnummer haben (None)."""
+    a = get_teilnehmer(conn, teilnehmer_id_a)
+    b = get_teilnehmer(conn, teilnehmer_id_b)
+    if a is None or b is None:
+        raise ValueError("Teilnehmer nicht gefunden")
+    nummer_a, nummer_b = a["startnummer"], b["startnummer"]
+    conn.execute("UPDATE teilnehmer SET startnummer = NULL WHERE id = ?", (teilnehmer_id_a,))
+    conn.execute("UPDATE teilnehmer SET startnummer = ? WHERE id = ?", (nummer_a, teilnehmer_id_b))
+    conn.execute("UPDATE teilnehmer SET startnummer = ? WHERE id = ?", (nummer_b, teilnehmer_id_a))
     conn.commit()
 
 
@@ -598,6 +683,179 @@ def setze_bezahlt(conn: sqlite3.Connection, teilnehmer_id: int, bezahlt: bool) -
 def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
     conn.execute("DELETE FROM teilnehmer WHERE id = ?", (teilnehmer_id,))
     conn.commit()
+
+
+# --- CSV-Import (Meldeformular) ---------------------------------------------
+#
+# Nutzerwunsch (20.09., Anmerkung zum Programm, Abschnitt "Teilnehmer"): Meldeformulare
+# nicht mehr von Hand abtippen müssen. Die Desktop-Anwendung selbst hat keinen eigenen
+# KI-Zugriff (arbeitet komplett offline) - deshalb läuft das Einlesen über einen
+# vorformulierten Prompt (siehe FormularImportTab/_formular_import_prompt() in app.py),
+# den der Nutzer zusammen mit einem ausgefüllten Meldeformular einem beliebigen externen
+# KI-System übergibt. Das liefert eine CSV-Datei zurück, die sich hier direkt importieren
+# lässt. CSV_IMPORT_SPALTEN ist die einzige Quelle der Wahrheit für die erwarteten
+# Spaltennamen - der Prompt-Text in app.py baut seine Kopfzeile aus genau dieser Liste,
+# damit Prompt und Parser nie auseinanderlaufen können.
+CSV_IMPORT_SPALTEN = [
+    "nachname", "vorname", "rufname_hund", "art", "stufe", "disziplin",
+    "verein", "zwingername", "geschlecht", "rasse", "schulterhoehe_cm", "chip_nr",
+    "tollwutimpfung_bis",
+    "verband", "mitgliedsnummer", "wurftag", "strasse", "hausnummer", "plz", "ort",
+    "email", "telefon",
+    "halter_vorname", "halter_nachname", "halter_strasse", "halter_hausnummer",
+    "halter_plz", "halter_ort", "halter_mitgliedsverein", "halter_mitgliedsnummer",
+    "halter_lu_nr",
+]
+
+
+@dataclass
+class CsvImportErgebnis:
+    """Rückgabe von importiere_teilnehmer_aus_csv(): wie viele Zeilen tatsächlich als
+    Teilnehmer angelegt wurden, sowie eine Liste menschenlesbarer Fehlertexte ("Zeile N:
+    ...") für übersprungene Zeilen - der Import bricht bei einer fehlerhaften Zeile NICHT
+    komplett ab, sondern importiert die übrigen trotzdem (siehe FormularImportTab)."""
+    importiert: int
+    fehler: list[str]
+
+
+def _csv_wert(zeile: dict, spalte: str) -> str | None:
+    wert = (zeile.get(spalte) or "").strip()
+    return wert or None
+
+
+def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
+    """Wandelt eine einzelne CSV-Zeile (Spalten wie CSV_IMPORT_SPALTEN) in einen
+    NeuerTeilnehmer um. Wirft ValueError mit einer für den Nutzer verständlichen
+    Begründung, wenn Pflichtangaben fehlen oder Art/Stufe/Disziplin/Schulterhöhe nicht
+    plausibel sind - importiere_teilnehmer_aus_csv() fängt das je Zeile ab."""
+    nachname = _csv_wert(zeile, "nachname")
+    vorname = _csv_wert(zeile, "vorname")
+    rufname_hund = _csv_wert(zeile, "rufname_hund")
+    if not nachname or not vorname or not rufname_hund:
+        raise ValueError("Nachname/Vorname/Rufname des Hundes fehlt")
+
+    art = _csv_wert(zeile, "art")
+    if art not in ("ED", "DK"):
+        raise ValueError(f"ungültige Art {art!r} (muss ED oder DK sein)")
+
+    stufe_text = _csv_wert(zeile, "stufe")
+    try:
+        stufe = int(stufe_text) if stufe_text is not None else None
+    except ValueError:
+        stufe = None
+    if stufe not in (1, 2, 3):
+        raise ValueError(f"ungültige Leistungsklasse {stufe_text!r} (muss 1, 2 oder 3 sein)")
+
+    disziplin = _csv_wert(zeile, "disziplin")
+    if art == "ED":
+        if disziplin not in ALLE_DISZIPLINEN:
+            raise ValueError(f"ungültige Disziplin {disziplin!r} für ED (muss eine von {ALLE_DISZIPLINEN} sein)")
+    else:
+        disziplin = None
+
+    schulterhoehe_text = _csv_wert(zeile, "schulterhoehe_cm")
+    schulterhoehe_cm = None
+    if schulterhoehe_text is not None:
+        try:
+            schulterhoehe_cm = int(schulterhoehe_text)
+        except ValueError:
+            raise ValueError(f"ungültige Schulterhöhe {schulterhoehe_text!r} (muss eine Zahl sein)")
+
+    geschlecht = _csv_wert(zeile, "geschlecht")
+    if geschlecht is not None and geschlecht not in ("Hündin", "Rüde"):
+        raise ValueError(f"ungültiges Geschlecht {geschlecht!r} (muss Hündin oder Rüde sein)")
+
+    return NeuerTeilnehmer(
+        nachname=nachname, vorname=vorname, rufname_hund=rufname_hund,
+        art=art, stufe=stufe, disziplin=disziplin,
+        verein=_csv_wert(zeile, "verein"), zwingername=_csv_wert(zeile, "zwingername"),
+        geschlecht=geschlecht, rasse=_csv_wert(zeile, "rasse"),
+        schulterhoehe_cm=schulterhoehe_cm, chip_nr=_csv_wert(zeile, "chip_nr"),
+        tollwutimpfung_bis=_csv_wert(zeile, "tollwutimpfung_bis"),
+        verband=_csv_wert(zeile, "verband"), mitgliedsnummer=_csv_wert(zeile, "mitgliedsnummer"),
+        wurftag=_csv_wert(zeile, "wurftag"), strasse=_csv_wert(zeile, "strasse"),
+        hausnummer=_csv_wert(zeile, "hausnummer"), plz=_csv_wert(zeile, "plz"), ort=_csv_wert(zeile, "ort"),
+        email=_csv_wert(zeile, "email"), telefon=_csv_wert(zeile, "telefon"),
+        halter_vorname=_csv_wert(zeile, "halter_vorname"), halter_nachname=_csv_wert(zeile, "halter_nachname"),
+        halter_strasse=_csv_wert(zeile, "halter_strasse"), halter_hausnummer=_csv_wert(zeile, "halter_hausnummer"),
+        halter_plz=_csv_wert(zeile, "halter_plz"), halter_ort=_csv_wert(zeile, "halter_ort"),
+        halter_mitgliedsverein=_csv_wert(zeile, "halter_mitgliedsverein"),
+        halter_mitgliedsnummer=_csv_wert(zeile, "halter_mitgliedsnummer"),
+        halter_lu_nr=_csv_wert(zeile, "halter_lu_nr"),
+    )
+
+
+def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImportErgebnis:
+    """Liest eine CSV-Datei (Kopfzeile mit Spaltennamen aus CSV_IMPORT_SPALTEN - fehlende
+    oder zusätzliche Spalten werden toleriert) und legt daraus Teilnehmer an, siehe
+    FormularImportTab in app.py. Eine einzelne fehlerhafte Zeile bricht den Import nicht
+    ab, sondern wird übersprungen und im Ergebnis aufgeführt - der Rest der Datei wird
+    trotzdem importiert. 'utf-8-sig' statt 'utf-8', damit ein von Excel/Windows-Tools
+    gespeichertes BOM am Dateianfang nicht versehentlich Teil des ersten Spaltennamens
+    wird (sonst würde 'nachname' der ersten Spalte nicht erkannt)."""
+    fehler: list[str] = []
+    importiert = 0
+    with open(pfad, newline="", encoding="utf-8-sig") as datei:
+        reader = csv.DictReader(datei)
+        for zeilennummer, zeile in enumerate(reader, start=2):  # Zeile 1 = Kopfzeile
+            try:
+                teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
+                add_teilnehmer(conn, teilnehmer)
+            except (ValueError, sqlite3.IntegrityError) as exc:
+                fehler.append(f"Zeile {zeilennummer}: {exc}")
+                continue
+            importiert += 1
+    return CsvImportErgebnis(importiert=importiert, fehler=fehler)
+
+
+def importiere_teilnehmer_stammdaten(
+    quelle_conn: sqlite3.Connection, ziel_conn: sqlite3.Connection, teilnehmer_ids: list[int]
+) -> int:
+    """Übernimmt die ausgewählten Teilnehmer (per ID in quelle_conn) als NEUE Teilnehmer in
+    ziel_conn - für 'Teilnehmer aus anderem Termin importieren' (Nutzerwunsch 20.09.,
+    Anmerkung zum Programm: 'Teilnehmer müssen wieder einzeln eingegeben werden [...] ist
+    Option möglich, von anderem Termin importieren?'). Siehe TerminImportDialog in app.py.
+
+    Anders als kopiere_termin_daten() weiter unten (die für die Web-Sync einen KOMPLETTEN
+    Termin 1:1 überträgt, inkl. Startnummer/Gegenstand-Zuordnung/Bezahlt-Status/Ergebnis)
+    werden hier bewusst NUR die über mehrere Prüfungstage hinweg gültigen Stammdaten
+    übernommen (Absprache mit dem Nutzer) - Startnummer, Gegenstand-Zuordnung, Bezahlt-
+    Status und ein eventuell schon eingetragenes Ergebnis gehören zum jeweils EINEN
+    Prüfungstag und bleiben deshalb auf ihren NeuerTeilnehmer-Defaults (None/False), auch
+    wenn die Quelle bereits welche hatte. Art/Leistungsklasse/Disziplin müssen technisch
+    trotzdem mitkommen (Pflichtfelder in der Datenbank, ein Teilnehmer kann nicht ohne sie
+    angelegt werden) - lassen sich im Teilnehmer-Dialog nach dem Import aber wie gewohnt
+    sofort anpassen, falls sich die Meldung geändert hat.
+
+    Keine Dubletten-Prüfung (Absprache mit dem Nutzer: einfach zusätzlich anlegen - der
+    Nutzer erkennt und bereinigt Dubletten im Zweifel selbst). Liefert die Anzahl der
+    tatsächlich importierten Teilnehmer (übersprungen wird nur eine in quelle_conn nicht
+    mehr vorhandene ID, z.B. durch eine zwischenzeitliche Änderung)."""
+    importiert = 0
+    for teilnehmer_id in teilnehmer_ids:
+        alt = get_teilnehmer(quelle_conn, teilnehmer_id)
+        if alt is None:
+            continue
+        neu = NeuerTeilnehmer(
+            nachname=alt["nachname"], vorname=alt["vorname"], rufname_hund=alt["rufname_hund"],
+            art=alt["art"], stufe=alt["stufe"], disziplin=alt["disziplin"],
+            verein=alt.get("verein"), zwingername=alt.get("zwingername"), geschlecht=alt.get("geschlecht"),
+            schulterhoehe_cm=alt.get("schulterhoehe_cm"), chip_nr=alt.get("chip_nr"),
+            rasse=alt.get("rasse"), tollwutimpfung_bis=alt.get("tollwutimpfung_bis"),
+            verband=alt.get("verband"), mitgliedsnummer=alt.get("mitgliedsnummer"), wurftag=alt.get("wurftag"),
+            strasse=alt.get("strasse"), hausnummer=alt.get("hausnummer"), plz=alt.get("plz"), ort=alt.get("ort"),
+            email=alt.get("email"), telefon=alt.get("telefon"),
+            halter_vorname=alt.get("halter_vorname"), halter_nachname=alt.get("halter_nachname"),
+            halter_strasse=alt.get("halter_strasse"), halter_hausnummer=alt.get("halter_hausnummer"),
+            halter_plz=alt.get("halter_plz"), halter_ort=alt.get("halter_ort"),
+            halter_mitgliedsverein=alt.get("halter_mitgliedsverein"),
+            halter_mitgliedsnummer=alt.get("halter_mitgliedsnummer"), halter_lu_nr=alt.get("halter_lu_nr"),
+            # Bewusst NICHT übernommen: startnummer, gegenstand_1/2/3(_disziplin), bezahlt -
+            # bleiben auf ihren NeuerTeilnehmer-Defaults (None/False), siehe Docstring oben.
+        )
+        add_teilnehmer(ziel_conn, neu)
+        importiert += 1
+    return importiert
 
 
 # --- Ergebnisse ------------------------------------------------------------
@@ -772,6 +1030,66 @@ def gegenstand_fuer_disziplin(teilnehmer: dict, disziplin: str) -> str | None:
         if teilnehmer.get(feld) and teilnehmer.get(f"{feld}_disziplin") == disziplin:
             return teilnehmer[feld]
     return None
+
+
+def _dk_gegenstaende_vollstaendig(teilnehmer: dict, stufe: int) -> bool:
+    """Prüft die Gegenstand-Disziplin-Zuordnung für Dreikampf (DK) gegen die mit dem
+    Nutzer bereits am 16.09. abgestimmte Leistungsklassen-Regel (siehe Fortschritt.md,
+    Fix 4): LK1 = mind. 1 Gegenstand-Text, der allen 3 Disziplinen zugeordnet ist
+    (derselbe Text in mehreren Feldern mit je einer anderen Disziplin-Zuordnung), LK2 =
+    mind. 2 unterschiedliche Gegenstand-Texte, LK3 = 3 unterschiedliche Gegenstand-Texte -
+    in jedem Fall müssen dabei alle 3 Disziplinen (Trümmerfeld/Flächensuche/
+    Behältnisstrecke) einem der drei Gegenstand-Felder zugeordnet sein. Nutzt aus, dass
+    eine Disziplin nie zwei Gegenstand-Feldern zugleich zugeordnet sein kann (wird beim
+    Speichern in TeilnehmerDialog._pruefen_und_akzeptieren, app.py, verhindert)."""
+    text_je_disziplin: dict[str, str] = {}
+    for feld in _GEGENSTAND_FELDER:
+        disziplin = teilnehmer.get(f"{feld}_disziplin")
+        text = teilnehmer.get(feld)
+        if disziplin and text:
+            text_je_disziplin[disziplin] = text
+    if set(text_je_disziplin) != set(ALLE_DISZIPLINEN):
+        return False  # nicht alle 3 Disziplinen mit einem Gegenstand belegt
+    mindestanzahl = {1: 1, 2: 2, 3: 3}.get(stufe, 3)
+    return len(set(text_je_disziplin.values())) >= mindestanzahl
+
+
+def _ed_gegenstaende_vollstaendig(teilnehmer: dict, stufe: int, disziplin: str) -> bool:
+    """Prüft, ob für Einzeldisziplin (ED) mindestens `stufe` viele Gegenstände der
+    gewählten Disziplin zugeordnet sind (LK1=1, LK2=2, LK3=3) - analoge, auf eine
+    einzelne Disziplin verengte Anwendung derselben Leistungsklassen-Regel wie
+    _dk_gegenstaende_vollstaendig()."""
+    anzahl = sum(
+        1 for feld in _GEGENSTAND_FELDER
+        if teilnehmer.get(f"{feld}_disziplin") == disziplin and teilnehmer.get(feld)
+    )
+    return anzahl >= stufe
+
+
+def teilnehmer_fehlende_pflichtangaben(teilnehmer: dict) -> list[str]:
+    """Liefert eine Liste kurzer, für die Oberfläche gedachter Beschreibungen fehlender
+    Prüfungsdaten (leere Liste = vollständig) - Grundlage für das Warnsymbol in der
+    Teilnehmerliste (Nutzerwunsch 20.09., Anmerkung zum Programm: 'in der Übersicht von
+    den Teilnehmern fehlt mir aktuell aber noch der Überblick, ob ich auch wirklich
+    alles erfasst habe [...] ein „Kontrollbutton“ [...], der dann nochmal prüft ob auch
+    alle Sachen Bspl. 3 Gegenstände bei LK 3 erfasst sind'). Geprüft werden bewusst nur
+    Chip-Nr. und die zur Leistungsklasse passende Gegenstand-Disziplin-Zuordnung - nicht
+    die übrigen, weiterhin bewusst optionalen Erfassungsfelder (Absprache mit dem
+    Nutzer, siehe Fortschritt.md)."""
+    fehlend: list[str] = []
+    if not teilnehmer.get("chip_nr"):
+        fehlend.append("Chip-Nr. fehlt")
+    stufe = teilnehmer.get("stufe")
+    art = teilnehmer.get("art")
+    if stufe in (1, 2, 3):
+        if art == "DK":
+            if not _dk_gegenstaende_vollstaendig(teilnehmer, stufe):
+                fehlend.append("Gegenstände unvollständig (Dreikampf)")
+        elif art == "ED":
+            disziplin = teilnehmer.get("disziplin")
+            if disziplin and not _ed_gegenstaende_vollstaendig(teilnehmer, stufe, disziplin):
+                fehlend.append("Gegenstände unvollständig")
+    return fehlend
 
 
 def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
@@ -1153,10 +1471,15 @@ def termine_ordner() -> Path:
 
 @dataclass
 class TerminInfo:
-    """Eintrag für die Terminübersicht im Startdialog."""
+    """Eintrag für die Terminübersicht im Startdialog. `vereins_nr` steht zusätzlich zu
+    den in der Tabelle angezeigten Spalten bereit, damit sich beim Anlegen eines neuen
+    Termins Verein/Vereins-Nr./Ort des zuletzt angelegten Termins vorschlagen lassen
+    (Nutzerwunsch 20.09., siehe VeranstaltungsDialog/StartDialog._neuer_termin in
+    app.py) - erspart die erneute Eingabe, wenn ohnehin derselbe Verein gemeint ist."""
     pfad: str
     dateiname: str
     verein: str | None
+    vereins_nr: str | None
     ort: str | None
     datum: str | None
     anzahl_teilnehmer: int
@@ -1179,6 +1502,7 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
                 pfad=str(pfad),
                 dateiname=pfad.name,
                 verein=v["verein"] if v else None,
+                vereins_nr=v["vereins_nr"] if v else None,
                 ort=v["ort"] if v else None,
                 datum=v["datum"] if v else None,
                 anzahl_teilnehmer=anzahl,
@@ -1186,8 +1510,8 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
             ))
         except sqlite3.DatabaseError:
             ergebnisse.append(TerminInfo(
-                pfad=str(pfad), dateiname=pfad.name, verein=None, ort=None, datum=None,
-                anzahl_teilnehmer=0, lesbar=False,
+                pfad=str(pfad), dateiname=pfad.name, verein=None, vereins_nr=None, ort=None,
+                datum=None, anzahl_teilnehmer=0, lesbar=False,
             ))
     ergebnisse.sort(key=lambda t: (t.datum or "", t.dateiname), reverse=True)
     return ergebnisse
@@ -1669,6 +1993,12 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             verband=alt.get("verband"), mitgliedsnummer=alt.get("mitgliedsnummer"), wurftag=alt.get("wurftag"),
             strasse=alt.get("strasse"), hausnummer=alt.get("hausnummer"), plz=alt.get("plz"), ort=alt.get("ort"),
             email=alt.get("email"), telefon=alt.get("telefon"),
+            rasse=alt.get("rasse"), tollwutimpfung_bis=alt.get("tollwutimpfung_bis"),
+            halter_vorname=alt.get("halter_vorname"), halter_nachname=alt.get("halter_nachname"),
+            halter_strasse=alt.get("halter_strasse"), halter_hausnummer=alt.get("halter_hausnummer"),
+            halter_plz=alt.get("halter_plz"), halter_ort=alt.get("halter_ort"),
+            halter_mitgliedsverein=alt.get("halter_mitgliedsverein"),
+            halter_mitgliedsnummer=alt.get("halter_mitgliedsnummer"), halter_lu_nr=alt.get("halter_lu_nr"),
         )
         neue_id = add_teilnehmer(ziel_conn, neu)
         id_zuordnung[alt["id"]] = neue_id
