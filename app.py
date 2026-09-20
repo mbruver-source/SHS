@@ -80,6 +80,7 @@ from db import (
     alle_leistungsklassen,
     automatische_zeitplan_verteilung,
     berechne_auswertung,
+    berechne_teilnehmer_lk_uebersicht,
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
     dateiname_vorschlagen,
@@ -1120,6 +1121,86 @@ class AuswertungTab(QWidget):
             self.ausstehend_label.setText("Alle Teilnehmer (in diesem Filter) sind vollständig ausgewertet.")
 
 
+class TeilnehmerUebersichtTab(QWidget):
+    """Zeigt Teilnehmerzahlen je Art/Leistungsklasse inkl. der ED-Disziplin-Aufschlüsselung
+    sowie die daraus abgeleitete Anzahl benötigter Leistungsrichter - entspricht der Sicht
+    "Übersicht Teilnehmer" aus der ursprünglichen Excel-Vorlage (siehe Grobkonzept.md), hier
+    mit "SH-R" durch den in diesem Programm sonst verwendeten Begriff "Leistungsrichter"
+    ersetzt. Datenquelle ist db.berechne_teilnehmer_lk_uebersicht() - wie bei AuswertungTab
+    kein Zwischenspeicher, baut sich bei jedem Tabwechsel neu aus der DB auf."""
+
+    _ZEILEN = [
+        ("ed", 1, "ED LK 1"),
+        ("ed", 2, "ED LK 2"),
+        ("ed", 3, "ED LK 3"),
+        ("dk", 1, "DK LK 1"),
+        ("dk", 2, "DK LK 2"),
+        ("dk", 3, "DK LK 3"),
+    ]
+
+    def __init__(self, conn, parent=None):
+        super().__init__(parent)
+        self.conn = conn
+
+        self.tabelle = QTableWidget(6, 6)
+        self.tabelle.setHorizontalHeaderLabels(
+            ["Art / Leistungsklasse", "Teilnehmer", "Trümmerfeld", "Flächensuche", "Behältnisstrecke", "Abteilungen"]
+        )
+        self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabelle.horizontalHeader().setStretchLastSection(True)
+        self.tabelle.verticalHeader().setVisible(False)
+
+        self.teilnehmer_label = QLabel()
+        self.teilnehmer_label.setStyleSheet("font-weight: bold;")
+        self.abteilungen_label = QLabel()
+        self.abteilungen_label.setStyleSheet("font-weight: bold;")
+        self.richter_label = QLabel()
+        self.richter_label.setStyleSheet("font-weight: bold;")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Übersicht Teilnehmer und LK"))
+        layout.addWidget(self.tabelle)
+        layout.addWidget(self.teilnehmer_label)
+        layout.addWidget(self.abteilungen_label)
+        layout.addWidget(self.richter_label)
+
+        self.aktualisieren()
+
+    def aktualisieren(self) -> None:
+        """Berechnet die Übersicht aus der Datenbank neu und aktualisiert Tabelle und
+        Summenzeilen."""
+        daten = berechne_teilnehmer_lk_uebersicht(self.conn)
+
+        for row, (art, lk, bezeichnung) in enumerate(self._ZEILEN):
+            if art == "ed":
+                lk_daten = daten["ed"][lk]
+                werte = [
+                    bezeichnung,
+                    str(lk_daten["summe"]),
+                    str(lk_daten["Trümmerfeld"]),
+                    str(lk_daten["Flächensuche"]),
+                    str(lk_daten["Behältnisstrecke"]),
+                    str(lk_daten["abteilungen"]),
+                ]
+            else:
+                lk_daten = daten["dk"][lk]
+                werte = [
+                    bezeichnung,
+                    str(lk_daten["summe"]),
+                    "–",
+                    "–",
+                    "–",
+                    str(lk_daten["abteilungen"]),
+                ]
+            for col, wert in enumerate(werte):
+                self.tabelle.setItem(row, col, QTableWidgetItem(wert))
+        self.tabelle.resizeColumnsToContents()
+
+        self.teilnehmer_label.setText(f"Teilnehmer gesamt: {daten['teilnehmer_gesamt']}")
+        self.abteilungen_label.setText(f"Abteilungen gesamt: {daten['abteilungen_gesamt']}")
+        self.richter_label.setText(f"Anzahl benötigter Leistungsrichter: {daten['leistungsrichter_benoetigt']}")
+
+
 class PruefungsblockDialog(ResponsiveSchriftMixin, QDialog):
     """Formular zum Hinzufügen eines Prüfungsblocks in einer Leistungsrichter-Spur des
     Zeitplans. Anders als bei der Teilnehmererfassung ist die Disziplin hier auch bei DK
@@ -1638,7 +1719,7 @@ class ExportTab(QWidget):
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
             "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
             "geplanten Ablauf je Leistungsrichter (eine Seite je Richter) zusammen. "
-            "Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter sowie die "
+            "Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter sowie die "
             "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
             "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
             "gepflegt."
@@ -1786,7 +1867,7 @@ class ExportTab(QWidget):
 
 class VerwaltungTab(QWidget):
     """Verwaltungsdaten der Veranstaltung: Verein/Ort/Datum und Zusatzangaben (Vereins-Nr.,
-    Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
+    Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
     Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
     deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
 
@@ -1800,7 +1881,7 @@ class VerwaltungTab(QWidget):
 
         hinweis = QLabel(
             "Über \"Veranstaltungsdaten bearbeiten…\" lassen sich Verein, Ort und Datum "
-            "sowie Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter und die "
+            "sowie Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
             "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest."
@@ -2115,7 +2196,7 @@ Anzeige.</p>
 
 <h3>Reiter "Verwaltung"</h3>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
-Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
+Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
 Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").</p>
 
@@ -2434,6 +2515,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.zeitplan_tab = ZeitplanTab(conn, ablageort)
         self.ergebnis_tab = ErgebnisTab(conn)
         self.auswertung_tab = AuswertungTab(conn)
+        self.teilnehmer_uebersicht_tab = TeilnehmerUebersichtTab(conn)
         self.verwaltung_tab = VerwaltungTab(conn)
         self.export_tab = ExportTab(conn, pfad, ablageort)
         # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
@@ -2445,6 +2527,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._tabs.addTab(self.zeitplan_tab, "Zeitplan")
         self._tabs.addTab(self.ergebnis_tab, "Ergebniserfassung")
         self._tabs.addTab(self.auswertung_tab, "Auswertung")
+        self._tabs.addTab(self.teilnehmer_uebersicht_tab, "Übersicht")
         self._tabs.addTab(self.verwaltung_tab, "Verwaltung")
         self._tabs.addTab(self.export_tab, "Export")
         self._tabs.addTab(self.datensicherung_tab, "Datensicherung")
@@ -2510,7 +2593,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     (inklusive Speicherort, der aus Verein + Datum vorgeschlagen wird und sich anpasst,
     solange der Nutzer ihn nicht selbst geändert hat) oder zum nachträglichen Bearbeiten
     eines bereits geöffneten Termins (ohne Speicherort-Feld, mit den bisherigen Werten
-    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5,
+    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5,
     Prüfungsleiter) sind rein optional und werden nur für die Statistik-PDF gebraucht
     (siehe pdf_export.erstelle_statistik_pdf) - sie stehen oft erst kurz vor oder am
     Prüfungstag fest, daher lassen sie sich jederzeit nachträglich ergänzen/ändern. Die
@@ -2555,11 +2638,11 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Datum* (JJJJ-MM-TT)", self.datum)
         form.addRow("Prüfungsnummer", self.pruefungsnummer)
         form.addRow("Prüfungsleiter", self.pruefungsleiter)
-        form.addRow("Wertungsrichter 1", self.wertungsrichter_1)
-        form.addRow("Wertungsrichter 2", self.wertungsrichter_2)
-        form.addRow("Wertungsrichter 3", self.wertungsrichter_3)
-        form.addRow("Wertungsrichter 4", self.wertungsrichter_4)
-        form.addRow("Wertungsrichter 5", self.wertungsrichter_5)
+        form.addRow("Leistungsrichter 1", self.wertungsrichter_1)
+        form.addRow("Leistungsrichter 2", self.wertungsrichter_2)
+        form.addRow("Leistungsrichter 3", self.wertungsrichter_3)
+        form.addRow("Leistungsrichter 4", self.wertungsrichter_4)
+        form.addRow("Leistungsrichter 5", self.wertungsrichter_5)
         form.addRow("Prüfungsgebühr ED (€)", self.pruefungsgebuehr_ed)
         form.addRow("Prüfungsgebühr DK (€)", self.pruefungsgebuehr_dk)
 

@@ -33,6 +33,7 @@ from app import (
     HilfeDialog,
     TeilnehmerDialog,
     TeilnehmerTab,
+    TeilnehmerUebersichtTab,
     VersionDialog,
 )
 from db import NeuerTeilnehmer, add_teilnehmer, eintragen_ergebnis, init_db, list_teilnehmer, set_veranstaltung
@@ -103,6 +104,49 @@ def test_auswertung_tabelle_zeigt_keine_zeilennummern(qtbot, conn):
     tab = AuswertungTab(conn)
     qtbot.addWidget(tab)
     assert not tab.tabelle.verticalHeader().isVisible()
+
+
+# --- Übersicht Teilnehmer und LK -----------------------------------------------------
+
+
+def test_uebersicht_zeigt_teilnehmerzahlen_und_leistungsrichter_bedarf(qtbot, conn):
+    # 13 ED-Teilnehmer LK1/Trümmerfeld + 2 DK-Teilnehmer LK1 + 2 DK-Teilnehmer LK2
+    # -> 17 Teilnehmer gesamt, Abteilungen = 13*1 + 4*3 = 25, Leistungsrichter = ceil(25/36) = 1.
+    startnummer = 1
+    for _ in range(13):
+        _teilnehmer_anlegen(
+            conn, art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=startnummer
+        )
+        startnummer += 1
+    for _ in range(2):
+        _teilnehmer_anlegen(conn, art="DK", stufe=1, disziplin=None, startnummer=startnummer)
+        startnummer += 1
+    for _ in range(2):
+        _teilnehmer_anlegen(conn, art="DK", stufe=2, disziplin=None, startnummer=startnummer)
+        startnummer += 1
+
+    tab = TeilnehmerUebersichtTab(conn)
+    qtbot.addWidget(tab)
+
+    assert tab.teilnehmer_label.text() == "Teilnehmer gesamt: 17"
+    assert tab.abteilungen_label.text() == "Abteilungen gesamt: 25"
+    assert tab.richter_label.text() == "Anzahl benötigter Leistungsrichter: 1"
+
+    # ED LK 1 (Zeile 0): 13 Teilnehmer, alle Trümmerfeld, 13 Abteilungen.
+    assert tab.tabelle.item(0, 0).text() == "ED LK 1"
+    assert tab.tabelle.item(0, 1).text() == "13"
+    assert tab.tabelle.item(0, 2).text() == "13"
+    assert tab.tabelle.item(0, 5).text() == "13"
+
+    # DK LK 1 (Zeile 3): 2 Teilnehmer, 6 Abteilungen, keine Disziplin-Aufschlüsselung.
+    assert tab.tabelle.item(3, 0).text() == "DK LK 1"
+    assert tab.tabelle.item(3, 1).text() == "2"
+    assert tab.tabelle.item(3, 2).text() == "–"
+    assert tab.tabelle.item(3, 5).text() == "6"
+
+    # DK LK 2 (Zeile 4): 2 Teilnehmer, 6 Abteilungen.
+    assert tab.tabelle.item(4, 1).text() == "2"
+    assert tab.tabelle.item(4, 5).text() == "6"
 
 
 # --- Bezahlt-Markierung -------------------------------------------------------------

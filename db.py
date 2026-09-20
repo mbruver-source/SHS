@@ -28,6 +28,7 @@ nur der Dokumentation des ursprünglichen Anwendungsfalls.
 from __future__ import annotations
 
 import datetime
+import math
 import os
 import re
 import sqlite3
@@ -664,6 +665,95 @@ def leistungsklasse_label(teilnehmer: dict) -> str:
     if teilnehmer["art"] == "DK":
         return f"DK LK {teilnehmer['stufe']}"
     return f"ED LK {teilnehmer['stufe']} {teilnehmer['disziplin']}"
+
+
+# Konstanten für die Leistungsrichter-Bedarfsberechnung nach Vorgabe des Vereins: 1
+# Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf (DK) = 3 Einheiten (ein Dreikampf-
+# Teilnehmer durchläuft alle drei Disziplinen und bindet einen Richter entsprechend
+# länger). Ein Leistungsrichter darf höchstens 36 Einheiten an einem Prüfungstag richten -
+# die benötigte Richterzahl ergibt sich aus den Gesamteinheiten, aufgerundet. Zentral hier
+# statt doppelt gepflegt (analog dazu, wie shs_core.py die Wertnoten-Logik zentralisiert):
+# gemeinsame Grundlage für pdf_export.erstelle_leistungsrichter_bedarf_pdf() und
+# berechne_teilnehmer_lk_uebersicht() unten.
+LR_EINHEITEN_JE_ART = {"ED": 1, "DK": 3}
+LR_EINHEITEN_PRO_RICHTER = 36
+
+
+def berechne_teilnehmer_lk_uebersicht(conn) -> dict:
+    """Liefert eine Übersicht der Teilnehmerzahlen je Art/Leistungsklasse (bei ED
+    zusätzlich je Disziplin aufgeschlüsselt), sowie die daraus resultierende Anzahl
+    benötigter Leistungsrichter. Grundlage für den GUI-Reiter "Übersicht Teilnehmer und
+    LK" (siehe app.py) - fachlich identisch mit
+    pdf_export.erstelle_leistungsrichter_bedarf_pdf() (nutzt dieselben Konstanten
+    LR_EINHEITEN_JE_ART/LR_EINHEITEN_PRO_RICHTER, daher immer konsistente Zahlen
+    zwischen GUI-Reiter und PDF-Export).
+
+    Rückgabe:
+    {
+        "ed": {
+            1: {"Trümmerfeld": int, "Flächensuche": int, "Behältnisstrecke": int, "summe": int, "abteilungen": int},
+            2: {...gleiche Struktur...},
+            3: {...gleiche Struktur...},
+        },
+        "ed_summe": int,
+        "dk": {
+            1: {"summe": int, "abteilungen": int},
+            2: {...gleiche Struktur...},
+            3: {...gleiche Struktur...},
+        },
+        "dk_summe": int,
+        "teilnehmer_gesamt": int,
+        "abteilungen_gesamt": int,
+        "leistungsrichter_benoetigt": int,
+    }
+
+    "Abteilungen" je Teilnehmer = LR_EINHEITEN_JE_ART[art] (ED=1, DK=3) - deckt sich mit
+    der Originalvorlage ("Übersicht Teilnehmer"-Tabellenblatt), wo ein Dreikampf-Hund als
+    3 Abteilungen zählt (eine je Disziplin) und ein ED-Hund als 1 Abteilung.
+    "leistungsrichter_benoetigt" = ceil(abteilungen_gesamt / LR_EINHEITEN_PRO_RICHTER),
+    0 wenn abteilungen_gesamt == 0 (kein aufgerundetes ceil(0/36) das fälschlich 0 ergäbe
+    - math.ceil(0/36) ist ohnehin 0, aber explizit behandeln macht die Absicht klarer,
+    analog zum bestehenden Muster in pdf_export.erstelle_leistungsrichter_bedarf_pdf())."""
+    teilnehmer = list_teilnehmer(conn)
+
+    ed = {
+        stufe: {
+            **{disziplin: 0 for disziplin in ALLE_DISZIPLINEN},
+            "summe": 0,
+            "abteilungen": 0,
+        }
+        for stufe in (1, 2, 3)
+    }
+    dk = {stufe: {"summe": 0, "abteilungen": 0} for stufe in (1, 2, 3)}
+
+    for t in teilnehmer:
+        abteilungen_je_teilnehmer = LR_EINHEITEN_JE_ART[t["art"]]
+        if t["art"] == "ED":
+            gruppe = ed[t["stufe"]]
+            gruppe[t["disziplin"]] += 1
+        else:
+            gruppe = dk[t["stufe"]]
+        gruppe["summe"] += 1
+        gruppe["abteilungen"] += abteilungen_je_teilnehmer
+
+    ed_summe = sum(gruppe["summe"] for gruppe in ed.values())
+    dk_summe = sum(gruppe["summe"] for gruppe in dk.values())
+    abteilungen_gesamt = sum(gruppe["abteilungen"] for gruppe in ed.values()) + sum(
+        gruppe["abteilungen"] for gruppe in dk.values()
+    )
+    leistungsrichter_benoetigt = (
+        math.ceil(abteilungen_gesamt / LR_EINHEITEN_PRO_RICHTER) if abteilungen_gesamt else 0
+    )
+
+    return {
+        "ed": ed,
+        "ed_summe": ed_summe,
+        "dk": dk,
+        "dk_summe": dk_summe,
+        "teilnehmer_gesamt": ed_summe + dk_summe,
+        "abteilungen_gesamt": abteilungen_gesamt,
+        "leistungsrichter_benoetigt": leistungsrichter_benoetigt,
+    }
 
 
 _GEGENSTAND_FELDER = ("gegenstand_1", "gegenstand_2", "gegenstand_3")

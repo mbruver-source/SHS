@@ -20,6 +20,7 @@ from db import (
     benutzer_anlegen,
     benutzer_loeschen,
     berechne_auswertung,
+    berechne_teilnehmer_lk_uebersicht,
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
     dateiname_vorschlagen,
@@ -199,6 +200,59 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(pruefungsgebuehr_fuer_art(v, "DK"), "18,00")
         # pruefungsgebuehr_fuer_art kommt auch mit fehlender Veranstaltung klar.
         self.assertIsNone(pruefungsgebuehr_fuer_art(None, "ED"))
+
+    def test_teilnehmer_lk_uebersicht_ohne_teilnehmer(self):
+        # Ohne Teilnehmer sind alle Zähler 0 - insbesondere darf
+        # leistungsrichter_benoetigt hier NICHT durch eine Division-durch-Null stolpern.
+        ergebnis = berechne_teilnehmer_lk_uebersicht(self.conn)
+        self.assertEqual(ergebnis["ed"][1], {
+            "Trümmerfeld": 0, "Flächensuche": 0, "Behältnisstrecke": 0, "summe": 0, "abteilungen": 0,
+        })
+        self.assertEqual(ergebnis["ed_summe"], 0)
+        self.assertEqual(ergebnis["dk"][1], {"summe": 0, "abteilungen": 0})
+        self.assertEqual(ergebnis["dk_summe"], 0)
+        self.assertEqual(ergebnis["teilnehmer_gesamt"], 0)
+        self.assertEqual(ergebnis["abteilungen_gesamt"], 0)
+        self.assertEqual(ergebnis["leistungsrichter_benoetigt"], 0)
+
+    def test_teilnehmer_lk_uebersicht_gemischt(self):
+        # Szenario aus der Original-Vorlage ("Übersicht Teilnehmer"): 13 ED-LK1-Teilnehmer
+        # in Trümmerfeld, 2 DK-LK1- und 2 DK-LK2-Teilnehmer. Prüft insbesondere die
+        # Abteilungen-Zählung (DK = 3 je Teilnehmer) und die daraus resultierende
+        # Leistungsrichterzahl.
+        startnummer = 1
+        for _ in range(13):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname="Muster", vorname="ED", rufname_hund="Bello",
+                art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=startnummer,
+            ))
+            startnummer += 1
+        for _ in range(2):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname="Muster", vorname="DK1", rufname_hund="Rex",
+                art="DK", stufe=1, startnummer=startnummer,
+            ))
+            startnummer += 1
+        for _ in range(2):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname="Muster", vorname="DK2", rufname_hund="Luna",
+                art="DK", stufe=2, startnummer=startnummer,
+            ))
+            startnummer += 1
+
+        ergebnis = berechne_teilnehmer_lk_uebersicht(self.conn)
+        self.assertEqual(ergebnis["ed"][1]["Trümmerfeld"], 13)
+        self.assertEqual(ergebnis["ed"][1]["summe"], 13)
+        self.assertEqual(ergebnis["ed"][1]["abteilungen"], 13)
+        self.assertEqual(ergebnis["ed_summe"], 13)
+        self.assertEqual(ergebnis["dk"][1]["summe"], 2)
+        self.assertEqual(ergebnis["dk"][1]["abteilungen"], 6)
+        self.assertEqual(ergebnis["dk"][2]["summe"], 2)
+        self.assertEqual(ergebnis["dk"][2]["abteilungen"], 6)
+        self.assertEqual(ergebnis["dk_summe"], 4)
+        self.assertEqual(ergebnis["teilnehmer_gesamt"], 17)
+        self.assertEqual(ergebnis["abteilungen_gesamt"], 25)
+        self.assertEqual(ergebnis["leistungsrichter_benoetigt"], 1)
 
     def test_migration_ergaenzt_zusatzfelder_in_alter_termin_datei(self):
         # Simuliert eine Termin-Datei/-Datenbank, die vor Einführung der Zusatzfelder
