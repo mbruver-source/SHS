@@ -51,6 +51,7 @@ import io
 import os
 import secrets
 import tempfile
+import time
 from functools import wraps
 
 from flask import Flask, abort, g, redirect, render_template, request, send_file, session, url_for
@@ -71,6 +72,63 @@ def _version_kontext():
     Web-Version zusammenpassen."""
     return {"version": VERSION}
 
+
+# --- CSRF-Schutz (QS-Review 19./20.09.: bisher komplett gefehlt) --------------------
+#
+# Ohne das könnte eine bösartige, in einem ANDEREN Browser-Tab geöffnete Seite über ein
+# automatisch abgeschicktes Formular im Namen eines gerade angemeldeten Nutzers Aktionen
+# auf DIESER Anwendung auslösen (z. B. einen Termin oder ein Benutzerkonto löschen) -
+# allein weil der Browser das gültige Session-Cookie bei jedem Aufruf dieser Domain
+# automatisch mitschickt, unabhängig davon, von welcher Seite aus der Aufruf kam. Ein
+# Session-Cookie allein schützt davor NICHT.
+#
+# Bewusst als eigene, kleine before_request-Prüfung statt einer zusätzlichen
+# Abhängigkeit wie Flask-WTF - das Projekt hält seine Web-Abhängigkeiten bewusst
+# minimal (siehe requirements-web.txt) und braucht hier nur ein einfaches
+# Token-in-Session/Token-im-Formular-Verfahren (das klassische "Synchronizer Token
+# Pattern"), keine Formular-Bibliothek.
+
+
+def _csrf_token() -> str:
+    """Liefert das CSRF-Token der aktuellen Browser-Session, erzeugt bei Bedarf ein neues
+    (einmal pro Session/Cookie, nicht pro Formular oder Anfrage) - wird über den
+    Kontext-Prozessor unten allen Templates als Funktion `csrf_token()` bereitgestellt,
+    damit jedes Formular es als verstecktes Feld mitschicken kann. Siehe _csrf_pruefen()
+    für die Prüfung beim Empfang."""
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+@app.context_processor
+def _csrf_kontext():
+    return {"csrf_token": _csrf_token}
+
+
+@app.before_request
+def _csrf_pruefen():
+    """Lehnt jede eingehende POST-Anfrage ohne exakt passendes CSRF-Token ab (siehe
+    Abschnitts-Kommentar oben). Das Token liegt serverseitig in der (signierten, vom
+    Browser selbst nicht lesbaren) Session - eine fremde Seite kennt es nicht und kann es
+    deshalb auch nicht in einem automatisch abgeschickten Formular mitschicken, selbst
+    wenn sie das Session-Cookie unfreiwillig mitsendet.
+
+    secrets.compare_digest() statt '==' vergleicht in konstanter Zeit statt
+    zeichenweise abzubrechen - dieselbe Vorsicht gegen Seitenkanal-Angriffe wie beim
+    Passwortvergleich über werkzeug.security (siehe db.pruefe_login).
+
+    Läuft als before_request VOR jeder einzelnen Ansicht, statt als Decorator an jeder
+    POST-Route einzeln angebracht werden zu müssen - so kann keine künftige neue
+    POST-Route versehentlich ungeprüft bleiben."""
+    if request.method != "POST":
+        return None
+    erwartet = session.get("csrf_token")
+    erhalten = request.form.get("csrf_token", "")
+    if not erwartet or not secrets.compare_digest(erwartet, erhalten):
+        abort(403)
+
 # Verbindungsstring zum gemeinsamen PostgreSQL-Server - siehe db.verbinde_postgres_server()
 # für das Format. Bewusst über eine Umgebungsvariable statt hart im Code, analog zu
 # SHS_TEST_POSTGRES_DSN in test_db.py.
@@ -85,6 +143,18 @@ app.config["SHS_POSTGRES_DSN"] = os.environ.get("SHS_POSTGRES_DSN", "")
 # am Prüfungstag SHS_WEB_SECRET_KEY fest setzen (z.B. per
 # `python -c "import secrets; print(secrets.token_hex(32))"` einmalig erzeugen).
 app.secret_key = os.environ.get("SHS_WEB_SECRET_KEY") or secrets.token_hex(32)
+
+# Explizit gesetzt statt sich auf den Flask-Standard zu verlassen (QS-Review 19./20.09.):
+# "Lax" schickt das Session-Cookie bei einer normalen Navigation zu dieser Seite (Link/
+# Tippen der Adresse/Lesezeichen) weiterhin mit, aber NICHT bei einer von einer fremden
+# Seite AUSGELÖSTEN Anfrage (z. B. einem automatisch abgeschickten Formular oder einem
+# eingebetteten Bild/iframe) - zusätzlich zum CSRF-Token oben eine zweite, unabhängige
+# Absicherungsebene, die auch dann noch greift, falls irgendeine künftige Route das
+# Token einmal vergisst zu prüfen. Bewusst NICHT SESSION_COOKIE_SECURE=True gesetzt: die
+# Web-Version läuft laut Modul-Docstring oben ohne eigenes HTTPS/TLS im lokalen
+# Vereinsnetz - mit Secure=True würde der Browser das Cookie über die dann übliche
+# HTTP-Verbindung gar nicht erst mitschicken und niemand könnte sich mehr anmelden.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 
 def _postgres_verbindung():
@@ -124,13 +194,19 @@ def _admin_erforderlich(view):
     """Decorator für die Benutzerverwaltung ('/admin/benutzer') - setzt zusätzlich zu
     _login_erforderlich voraus, dass das angemeldete Konto ein Administrator ist (siehe
     Entscheidung "zwei Rollen: Admin + Eintragen", db.py). Nicht-Admins bekommen 403 statt
-    einer Weiterleitung zum Login, da sie ja bereits angemeldet sind."""
+    einer Weiterleitung zum Login, da sie ja bereits angemeldet sind.
+
+    Räumt außerdem bei jedem Aufruf nebenbei abgelaufene Download-Tokens ab (siehe
+    _bereinige_abgelaufene_downloads() weiter unten) - hier zentral statt in jeder
+    einzelnen Admin-Ansicht, damit das nicht vom sorgfältigen Nachtragen bei künftigen
+    neuen Admin-Routen abhängt."""
     @wraps(view)
     def wrapper(*args, **kwargs):
         if not session.get("benutzername"):
             return redirect(url_for("login"))
         if not session.get("ist_admin"):
             abort(403)
+        _bereinige_abgelaufene_downloads()
         return view(*args, **kwargs)
     return wrapper
 
@@ -261,8 +337,20 @@ def admin_benutzer():
         }:
             fehler = f"Der Benutzername '{benutzername}' ist bereits vergeben."
         if fehler is None:
-            db.benutzer_anlegen(conn, benutzername, passwort, ist_admin=(rolle == "admin"))
-            return redirect(url_for("admin_benutzer"))
+            try:
+                db.benutzer_anlegen(conn, benutzername, passwort, ist_admin=(rolle == "admin"))
+            except Exception:
+                # Die Prüfung oben schließt eine doppelte Schreibweise im Normalfall
+                # bereits aus, lässt aber (wie bei der Admin-Lösch-Race-Condition, siehe
+                # db.benutzer_loeschen) ein kurzes Zeitfenster für zwei gleichzeitige
+                # Anfragen offen - der zusätzliche Unique-Index auf LOWER(benutzername)
+                # (db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER) fängt genau diesen seltenen
+                # Fall dann auf Datenbankebene ab. Statt eines rohen 500-Fehlers bekommt
+                # der Admin dieselbe verständliche Meldung wie beim normalen Duplikat.
+                conn.rollback()
+                fehler = f"Der Benutzername '{benutzername}' ist bereits vergeben."
+            else:
+                return redirect(url_for("admin_benutzer"))
     return render_template("admin_benutzer.html", benutzer=db.liste_benutzer(conn), fehler=fehler)
 
 
@@ -301,7 +389,45 @@ def admin_benutzer_loeschen(benutzername):
 # einer einzigen Antwort ausliefern zu müssen. Ein einfaches Prozess-Dict genügt dafür -
 # `app_web.py` läuft als ein einzelner Container-Prozess (siehe Containerfile/waitress),
 # nicht über mehrere Worker-Prozesse hinweg verteilt.
-_ausstehende_downloads: dict[str, tuple[str, str]] = {}
+#
+# QS-Fund (19./20.09.): klickt der Administrator den Download-Link NICHT an (Tab
+# geschlossen, Seite verlassen, Browser abgestürzt o. Ä.), blieb der Eintrag hier für
+# immer stehen UND - schlimmer - die temporäre .sqlite-Datei mit den personenbezogenen
+# Teilnehmer-/Ergebnisdaten lag unbegrenzt lange auf der Festplatte des Containers, ohne
+# dass sie je automatisch abgeräumt worden wäre. Jeder Eintrag trägt deshalb jetzt
+# zusätzlich seinen Erstellungszeitpunkt; _bereinige_abgelaufene_downloads() löscht
+# Einträge (samt Datei), die länger als _DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN nicht
+# abgeholt wurden.
+_ausstehende_downloads: dict[str, tuple[str, str, float]] = {}
+
+# Wie lange ein Download-Link gültig bleibt, bevor er (samt der zugehörigen temporären
+# Datei) automatisch verworfen wird - großzügig genug, um dem Administrator Zeit für den
+# Klick auf der Bestätigungsseite zu lassen, aber kurz genug, um personenbezogene Daten
+# nicht unnötig lange auf der Festplatte des Containers liegen zu lassen.
+_DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN = 15 * 60
+
+
+def _bereinige_abgelaufene_downloads() -> None:
+    """Entfernt alle Einträge aus _ausstehende_downloads, die älter als
+    _DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN sind, und löscht dabei jeweils auch die
+    zugehörige temporäre Datei von der Festplatte (siehe QS-Kommentar oben). Wird bei
+    jedem Aufruf einer admin-geschützten Ansicht ausgeführt (siehe _admin_erforderlich
+    unten) - so bleibt kein künftiger neuer Admin-Bereich versehentlich davon
+    ausgenommen, und ein Administrator, der irgendetwas im Admin-Bereich tut, räumt dabei
+    nebenbei auch verwaiste Downloads vorheriger Sitzungen mit auf."""
+    jetzt = time.monotonic()
+    abgelaufene_tokens = [
+        token for token, (_, _, erstellt_um) in _ausstehende_downloads.items()
+        if jetzt - erstellt_um > _DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN
+    ]
+    for token in abgelaufene_tokens:
+        temp_pfad, _, _ = _ausstehende_downloads.pop(token)
+        try:
+            os.remove(temp_pfad)
+        except FileNotFoundError:
+            # Wurde die Datei bereits anderweitig entfernt (sollte nicht vorkommen,
+            # aber kein Grund, die Bereinigung der übrigen Einträge abzubrechen).
+            pass
 
 
 def _hochgeladene_termin_datei_speichern(datei) -> str:
@@ -389,7 +515,7 @@ def admin_termin_zurueckholen(schema_name):
     # Klick vorgehalten - siehe Kommentar bei _ausstehende_downloads oben.
     token = secrets.token_urlsafe(16)
     download_name = secure_filename(datei.filename) or "termin.sqlite"
-    _ausstehende_downloads[token] = (temp_pfad, download_name)
+    _ausstehende_downloads[token] = (temp_pfad, download_name, time.monotonic())
 
     return render_template(
         "admin_termine.html", termine=db.liste_termine_postgres(conn),
@@ -403,7 +529,7 @@ def admin_termin_download(token):
     eintrag = _ausstehende_downloads.pop(token, None)
     if eintrag is None:
         abort(404)
-    temp_pfad, download_name = eintrag
+    temp_pfad, download_name, _ = eintrag
     with open(temp_pfad, "rb") as f:
         daten = f.read()
     os.remove(temp_pfad)

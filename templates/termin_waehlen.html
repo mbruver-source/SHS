@@ -9,6 +9,7 @@
 <div class="karte" style="padding: 0;">
   {% for termin in termine %}
     <form method="post" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="schema_name" value="{{ termin.schema_name }}">
       <button type="submit" class="knopf-sekundaer" style="width: 100%; text-align: left; border-radius: 0;
               border: none; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};

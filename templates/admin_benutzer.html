@@ -5,6 +5,7 @@
   <h1>Benutzer verwalten</h1>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="benutzername">Benutzername</label>
     <input type="text" id="benutzername" name="benutzername" autocomplete="off" required
            autocapitalize="none" autocorrect="off" spellcheck="false">
@@ -32,6 +33,7 @@
       </td>
       <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
         <form method="post" action="{{ url_for('admin_benutzer_loeschen', benutzername=b.benutzername) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="knopf-sekundaer">Löschen</button>
         </form>
       </td>

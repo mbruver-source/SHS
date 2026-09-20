@@ -27,9 +27,13 @@ psycopg2 und läuft überall, deckt aber die komplette übrige Anwendungslogik
 Datenbankzugriffen statt gemockten Rückgabewerten ab."""
 
 import os
+import secrets
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
+
+from flask.testing import FlaskClient
 
 import app_web
 import db
@@ -97,7 +101,43 @@ def _fake_importiere_ergebnisse(fall, postgres_conn, schema_name, sqlite_conn):
     return fall.import_bericht
 
 
-class TestAppWeb(unittest.TestCase):
+# TestCsrfSchutz weiter unten braucht bewusst den UNVERÄNDERTEN Flask-Test-Client zurück
+# (statt des _CsrfTestClient direkt unten), um den CSRF-Mechanismus selbst zu prüfen -
+# siehe dortiger Docstring. app.test_client_class ist standardmäßig None (Flask
+# verwendet dann intern FlaskClient) - hier deshalb explizit importiert statt vom
+# (noch ungesetzten) Attribut abgeleitet.
+class _CsrfTestClient(FlaskClient):
+    """Test-Client, der jeder POST-Anfrage automatisch ein gültiges CSRF-Token beilegt
+    (siehe app_web._csrf_pruefen/_csrf_token) - genau wie es ein echter Browser hätte,
+    der zuvor die Seite mit dem jeweiligen Formular aufgerufen und dessen verstecktes
+    csrf_token-Feld übernommen hätte. Ohne das müssten alle ~30 POST-Testaufrufe in
+    dieser Datei einzeln um dieses rein technische Feld ergänzt werden, obwohl sie
+    eigentlich die FACHLICHE Formularlogik prüfen sollen. Der CSRF-Mechanismus selbst
+    (Ablehnung OHNE oder mit FALSCHEM Token) wird unabhängig davon in
+    TestCsrfSchutz weiter unten geprüft - dort bewusst OHNE diesen Test-Client."""
+
+    def post(self, *args, **kwargs):
+        with self.session_transaction() as sess:
+            token = sess.get("csrf_token")
+            if not token:
+                token = secrets.token_urlsafe(32)
+                sess["csrf_token"] = token
+        daten = kwargs.get("data")
+        if daten is None:
+            kwargs["data"] = {"csrf_token": token}
+        elif isinstance(daten, dict) and "csrf_token" not in daten:
+            kwargs["data"] = {**daten, "csrf_token": token}
+        return super().post(*args, **kwargs)
+
+
+class _AppWebTestBasis(unittest.TestCase):
+    """Gemeinsames setUp/tearDown/_anmelden für TestAppWeb UND TestCsrfSchutz weiter
+    unten (Testdatenbank, gemockte PostgreSQL-Klebefunktionen, Login-Hilfsfunktion) -
+    OHNE eigene test_*-Methoden, damit TestCsrfSchutz nicht versehentlich die komplette
+    fachliche Testsuite von TestAppWeb mit dem dortigen, CSRF-Token automatisch
+    beilegenden Test-Client noch einmal mitlaufen lässt (siehe dortiger Docstring: dort
+    ist genau das ja erwünscht, hier hingegen nicht)."""
+
     def setUp(self):
         fd, self.pfad = tempfile.mkstemp(suffix=".sqlite")
         os.close(fd)
@@ -109,6 +149,11 @@ class TestAppWeb(unittest.TestCase):
         # nur ohne das "public."-Präfix (SQLite kennt - anders als PostgreSQL - kein
         # gleichnamiges Schema/keine gleichnamige Datenbank "public").
         self.conn.execute(db._WEB_BENUTZER_SCHEMA.replace("public.web_benutzer", "web_benutzer"))
+        # Derselbe zusätzliche Unique-Index wie in verbinde_postgres_server() (siehe dort
+        # und db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER) - ohne ihn würde die
+        # Nebenläufigkeits-Absicherung gegen unterschiedlich geschriebene Benutzernamen in
+        # dieser SQLite-Testdatei gar nicht mitgeprüft.
+        self.conn.execute(db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
 
         # Von den Tests steuerbare "aktuell veröffentlichte Termine" für termin_waehlen()
         # - Standard: genau ein Termin (passend zu _TEST_SCHEMA), damit die Auswahl wie
@@ -139,6 +184,11 @@ class TestAppWeb(unittest.TestCase):
             p.start()
 
         app_web.app.config.update(TESTING=True, SHS_POSTGRES_DSN="postgresql://test-dsn")
+        # _CsrfTestClient statt des normalen Test-Clients - siehe dortiger Docstring:
+        # ergänzt jede POST-Anfrage automatisch um ein gültiges CSRF-Token, damit diese
+        # Tests weiterhin die fachliche Formularlogik prüfen, ohne an der (separat
+        # geprüften) CSRF-Absicherung zu scheitern.
+        app_web.app.test_client_class = _CsrfTestClient
         self.client = app_web.app.test_client()
 
     def tearDown(self):
@@ -158,6 +208,8 @@ class TestAppWeb(unittest.TestCase):
             follow_redirects=True,
         )
 
+
+class TestAppWeb(_AppWebTestBasis):
     # --- Ersteinrichtung ---------------------------------------------------------
 
     def test_ersteinrichtung_wird_angezeigt_wenn_kein_admin_existiert(self):
@@ -317,6 +369,30 @@ class TestAppWeb(unittest.TestCase):
             },
         )
         self.assertIn("bereits vergeben".encode(), antwort.data)
+
+    def test_race_zwischen_vorabpruefung_und_insert_wird_ueber_datenbank_index_abgefangen(self):
+        """QS-Fund (19./20.09.): die Vorab-Prüfung in admin_benutzer() (siehe oben) ist
+        eine separate Python-Abfrage VOR dem eigentlichen INSERT - zwischen beiden bleibt
+        theoretisch ein Zeitfenster für eine zweite, gleichzeitige Anfrage. Simuliert hier
+        direkt, indem db.liste_benutzer() für die Vorab-Prüfung (nicht aber für den
+        anschließenden Render-Aufruf) so getan wird, als gäbe es den Namen noch nicht -
+        der INSERT selbst muss trotzdem am Unique-Index auf LOWER(benutzername)
+        (db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER) scheitern und darf NICHT als rohe
+        Server-Fehlerseite durchschlagen, sondern muss dieselbe verständliche Meldung wie
+        beim normalen Duplikat zeigen."""
+        self._anmelden()
+        with patch("app_web.db.liste_benutzer", return_value=[]):
+            antwort = self.client.post(
+                "/admin/benutzer",
+                data={
+                    "benutzername": _ADMIN_NAME.upper(), "passwort": "irgendein_passwort",
+                    "passwort_wiederholung": "irgendein_passwort", "rolle": "eintragen",
+                },
+            )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("bereits vergeben".encode(), antwort.data)
+        # Es wurde tatsächlich kein zweites Konto angelegt.
+        self.assertEqual(len(db.liste_benutzer(self.conn)), 1)
 
     def test_admin_kann_benutzer_loeschen(self):
         self._anmelden()
@@ -529,6 +605,49 @@ class TestAppWeb(unittest.TestCase):
         self.assertIn("Bitte dieselbe".encode(), antwort.data)
         self.assertEqual(self.import_aufrufe, [])
 
+    def test_admin_bereinigt_abgelaufene_download_tokens_und_loescht_temporaere_datei(self):
+        """QS-Fund (19./20.09.): klickt der Administrator den Download-Link nach
+        "Ergebnisse zurückholen" nie an, blieben Eintrag UND die temporäre .sqlite-Datei
+        mit personenbezogenen Teilnehmer-/Ergebnisdaten unbegrenzt lange liegen (siehe
+        Kommentar bei app_web._ausstehende_downloads). Simuliert hier einen "alten"
+        Eintrag direkt (statt _DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN in einem Test wirklich
+        abzuwarten) und prüft, dass ein beliebiger Aufruf einer admin-geschützten Ansicht
+        (hier: die Terminliste selbst) ihn zusammen mit der Datei abräumt."""
+        self._anmelden()
+        fd, temp_pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        alter_token = secrets.token_urlsafe(16)
+        app_web._ausstehende_downloads[alter_token] = (
+            temp_pfad, "alt.sqlite",
+            self._monotonic_vor(app_web._DOWNLOAD_TOKEN_GUELTIGKEIT_SEKUNDEN + 1),
+        )
+
+        self.client.get("/admin/termine")
+
+        self.assertNotIn(alter_token, app_web._ausstehende_downloads)
+        self.assertFalse(os.path.exists(temp_pfad))
+
+    def test_admin_laesst_noch_gueltige_download_tokens_unangetastet(self):
+        self._anmelden()
+        fd, temp_pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self.addCleanup(lambda: os.path.exists(temp_pfad) and os.remove(temp_pfad))
+        frischer_token = secrets.token_urlsafe(16)
+        app_web._ausstehende_downloads[frischer_token] = (temp_pfad, "frisch.sqlite", time.monotonic())
+
+        self.client.get("/admin/termine")
+
+        self.assertIn(frischer_token, app_web._ausstehende_downloads)
+        self.assertTrue(os.path.exists(temp_pfad))
+
+    @staticmethod
+    def _monotonic_vor(sekunden):
+        """Liefert einen Zeitstempel im selben Zeitmaß wie time.monotonic(), der so weit
+        in der Vergangenheit liegt, wie er hier als Sekunden übergeben wird - ohne dafür
+        wirklich warten oder time.monotonic() selbst mocken zu müssen (das würde auch das
+        Flask/Werkzeug-interne Timing der Testanfrage verfälschen)."""
+        return time.monotonic() - sekunden
+
     def test_termin_loeschen_entfernt_termin_und_session(self):
         self._anmelden()
         self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
@@ -540,6 +659,70 @@ class TestAppWeb(unittest.TestCase):
         # landet deshalb wieder bei der (jetzt leeren) Terminauswahl.
         antwort = self.client.get("/teilnehmer", follow_redirects=True)
         self.assertIn("kein Termin veröffentlicht".encode(), antwort.data)
+
+
+class TestCsrfSchutz(_AppWebTestBasis):
+    """Prüft den CSRF-Mechanismus selbst (QS-Review 19./20.09., siehe
+    app_web._csrf_pruefen/_csrf_token) - bewusst mit dem UNVERÄNDERTEN Flask-Test-Client
+    (FlaskClient statt des _CsrfTestClient von oben, der diesen Schutz für TestAppWeb
+    automatisch umgeht), damit hier tatsächlich geprüft wird, was ein echter Browser
+    ohne (oder mit einem falschen) Token erlebt. Erbt von _AppWebTestBasis (nicht von
+    TestAppWeb!) nur wegen des gemeinsamen setUp/tearDown (Testdatenbank, gemockte
+    PostgreSQL-Klebefunktionen) - führt dadurch keinen der fachlichen Tests aus
+    TestAppWeb ein zweites Mal aus."""
+
+    def setUp(self):
+        super().setUp()
+        app_web.app.test_client_class = FlaskClient
+        self.client = app_web.app.test_client()
+
+    def test_post_ohne_csrf_token_wird_mit_403_abgelehnt(self):
+        antwort = self.client.post(
+            "/",
+            data={
+                "benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT,
+                "passwort_wiederholung": _ADMIN_PASSWORT,
+            },
+        )
+        self.assertEqual(antwort.status_code, 403)
+        self.assertFalse(db.gibt_es_admin(self.conn))
+
+    def test_post_mit_falschem_csrf_token_wird_mit_403_abgelehnt(self):
+        self.client.get("/")  # legt ein echtes Token in der Session an
+        antwort = self.client.post(
+            "/",
+            data={
+                "benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT,
+                "passwort_wiederholung": _ADMIN_PASSWORT, "csrf_token": "ein-falsches-token",
+            },
+        )
+        self.assertEqual(antwort.status_code, 403)
+        self.assertFalse(db.gibt_es_admin(self.conn))
+
+    def test_post_mit_dem_echten_token_aus_der_seite_funktioniert(self):
+        """Entspricht dem normalen Ablauf eines echten Browsers: erst die Seite mit dem
+        Formular laden (das versteckte csrf_token-Feld kommt von dort), dann genau
+        dieses Token beim Abschicken mitschicken."""
+        import re
+        seite = self.client.get("/")
+        treffer = re.search(r'name="csrf_token" value="([^"]+)"', seite.data.decode())
+        self.assertIsNotNone(treffer)
+        antwort = self.client.post(
+            "/",
+            data={
+                "benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT,
+                "passwort_wiederholung": _ADMIN_PASSWORT, "csrf_token": treffer.group(1),
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertTrue(db.gibt_es_admin(self.conn))
+
+    def test_get_anfragen_brauchen_kein_csrf_token(self):
+        # GET verändert nichts - hier wäre eine CSRF-Prüfung wirkungslos gegen den
+        # eigentlichen Angriff (unerwünschte SCHREIBENDE Aktionen) und würde nur ganz
+        # normales Navigieren/Verlinken behindern.
+        self.assertEqual(self.client.get("/").status_code, 200)
 
 
 if __name__ == "__main__":

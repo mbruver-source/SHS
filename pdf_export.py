@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime
 import math
 import sqlite3
+from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -114,6 +115,20 @@ def _wert(v) -> str:
     return "" if v in (None, "") else str(v)
 
 
+def _p_wert(v) -> str:
+    """Wie _wert(), aber zusätzlich XML-escaped (& < >) - für alle Werte, die in einen
+    reportlab-Paragraph eingebettet werden. Paragraph() parst seinen Text als kleine
+    Mini-Auszeichnungssprache (<b>, <i>, <br/> ...); ohne dieses Escaping ließ z. B. ein
+    Zwingername mit einem einzelnen '<' (frei eingegebener Text, kein von uns kontrolliertes
+    Format) den kompletten PDF-Export mit einem ValueError abbrechen - bei "alle
+    Bewertungsbögen" sogar für ALLE Teilnehmer auf einmal, nicht nur den betroffenen
+    (QS-Review 19./20.09., per Reproduktion bestätigt).
+    Bewusst NICHT in _wert() selbst eingebaut: _wert() wird auch für reine Tabellenzellen-
+    Strings (kein Paragraph, kein Markup-Parsing) verwendet - dort würde ein Escaping
+    Sonderzeichen wie '&' sichtbar als "&amp;" im PDF anzeigen statt sie normal darzustellen."""
+    return _xml_escape(_wert(v))
+
+
 def _euro_text(wert: str | None) -> str:
     """Formatiert eine hinterlegte Prüfungsgebühr (z. B. "12,00") mit Euro-Zeichen, oder
     "", wenn (noch) keine hinterlegt ist."""
@@ -163,16 +178,16 @@ def _wertungsnoten_tabelle_dk() -> Table:
 
 
 def _stammdaten_tabelle(t: dict) -> Table:
-    hund = _wert(t["zwingername"])
-    rufname = _wert(t["rufname_hund"])
+    hund = _p_wert(t["zwingername"])
+    rufname = _p_wert(t["rufname_hund"])
     hund_text = f"{hund}, Rufname: „{rufname}“" if hund else f"Rufname: „{rufname}“"
     daten = [
-        [Paragraph("Name HF:", _TEXT), Paragraph(f"{_wert(t['nachname'])}, {_wert(t['vorname'])}", _TEXT),
+        [Paragraph("Name HF:", _TEXT), Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TEXT),
          Paragraph("Name Hund:", _TEXT), Paragraph(hund_text, _TEXT)],
-        [Paragraph("Verein:", _TEXT), Paragraph(_wert(t["verein"]), _TEXT),
-         Paragraph("Chip-Nr.:", _TEXT), Paragraph(_wert(t["chip_nr"]), _TEXT)],
-        [Paragraph("Widerristhöhe:", _TEXT), Paragraph(f"{_wert(t['schulterhoehe_cm'])} cm" if t["schulterhoehe_cm"] else "", _TEXT),
-         Paragraph("Geschlecht:", _TEXT), Paragraph(_wert(t["geschlecht"]), _TEXT)],
+        [Paragraph("Verein:", _TEXT), Paragraph(_p_wert(t["verein"]), _TEXT),
+         Paragraph("Chip-Nr.:", _TEXT), Paragraph(_p_wert(t["chip_nr"]), _TEXT)],
+        [Paragraph("Widerristhöhe:", _TEXT), Paragraph(f"{_p_wert(t['schulterhoehe_cm'])} cm" if t["schulterhoehe_cm"] else "", _TEXT),
+         Paragraph("Geschlecht:", _TEXT), Paragraph(_p_wert(t["geschlecht"]), _TEXT)],
     ]
     tabelle = Table(daten, colWidths=[26 * mm, 62 * mm, 24 * mm, 58 * mm])
     tabelle.setStyle(TableStyle([
@@ -206,7 +221,7 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     elemente.append(freiflaeche)
 
     punktzahl = Table(
-        [[Paragraph(f"<i>Punktzahl:</i> {_wert(suche)}", _TEXT), Paragraph(f"<i>Punktzahl:</i> {_wert(anzeige)}", _TEXT)]],
+        [[Paragraph(f"<i>Punktzahl:</i> {_p_wert(suche)}", _TEXT), Paragraph(f"<i>Punktzahl:</i> {_p_wert(anzeige)}", _TEXT)]],
         colWidths=[85 * mm, 85 * mm],
     )
     punktzahl.setStyle(TableStyle([
@@ -235,11 +250,11 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     else:
         links = Paragraph(
             "<b>Position Gegenstand:</b> (Freifläche oben zum Einzeichnen)<br/>"
-            f"Zu suchender Gegenstand: {_wert(gegenstand) or '.....................'}",
+            f"Zu suchender Gegenstand: {_p_wert(gegenstand) or '.....................'}",
             _TEXT,
         )
     rechts = Table(
-        [[Paragraph(f"<b>Gesamtpunktzahl<br/>{gesamt_label}</b>", _TEXT), Paragraph(_wert(gesamt), _TEXT_FETT)]],
+        [[Paragraph(f"<b>Gesamtpunktzahl<br/>{gesamt_label}</b>", _TEXT), Paragraph(_p_wert(gesamt), _TEXT_FETT)]],
         colWidths=[45 * mm, 25 * mm],
     )
     rechts.setStyle(TableStyle([("GRID", (1, 0), (1, 0), 0.8, colors.black), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
@@ -292,7 +307,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
             zugeordnete_disziplin = t.get(f"{feld}_disziplin")
             zusatz = f" ({zugeordnete_disziplin})" if zugeordnete_disziplin else ""
             gegenstand_zeilen.append(
-                Paragraph(f"{i}. zu suchender Gegenstand: {_wert(t[feld]) or '.....'}{zusatz}", _TEXT)
+                Paragraph(f"{i}. zu suchender Gegenstand: {_p_wert(t[feld]) or '.....'}{zusatz}", _TEXT)
             )
         story.extend(gegenstand_zeilen)
         story.append(Spacer(1, 2 * mm))
@@ -338,7 +353,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     story.append(Spacer(1, 4 * mm))
     verein = veranstaltung["verein"] if veranstaltung else ""
     datum = veranstaltung["datum"] if veranstaltung else ""
-    story.append(Paragraph(f"austragender Verein: {_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_wert(datum)}", _TEXT))
+    story.append(Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_p_wert(datum)}", _TEXT))
 
     return story
 
@@ -415,7 +430,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
             story.append(tabelle)
         offene = [t for t in ausstehend if leistungsklasse_label(t) == lk]
         if offene:
-            namen = ", ".join(f"{t['nachname']}, {t['vorname']}" for t in offene)
+            namen = ", ".join(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}" for t in offene)
             story.append(Spacer(1, 1 * mm))
             story.append(Paragraph(f"<i>Noch ohne vollständiges Ergebnis: {namen}</i>", _HINWEIS))
         story.append(Spacer(1, 3 * mm))
@@ -501,8 +516,8 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     vorab mit Namen/Verein zu beschriften); die Punktzahl-Felder bleiben dort dann leer
     zum späteren handschriftlichen Nachtragen, statt Werte zu zeigen."""
     veranstaltung = get_veranstaltung(conn)
-    austragender_verein = _wert(veranstaltung["verein"]) if veranstaltung else ""
-    datum = _wert(veranstaltung["datum"]) if veranstaltung else ""
+    austragender_verein = _p_wert(veranstaltung["verein"]) if veranstaltung else ""
+    datum = _p_wert(veranstaltung["datum"]) if veranstaltung else ""
 
     fertig, _ausstehend = berechne_auswertung(conn)
     fertig_je_id = {erg.id: erg for erg in fertig}
@@ -521,9 +536,9 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
         erg = fertig_je_id.get(str(t["id"]))
         ergebnis = ergebnis_je_id.get(str(t["id"]), {})
 
-        name_info = f"{t['nachname']}, {t['vorname']}, {_wert(t['verein'])}"
+        name_info = f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}, {_p_wert(t['verein'])}"
         if t["rufname_hund"]:
-            name_info += f", {t['rufname_hund']}"
+            name_info += f", {_p_wert(t['rufname_hund'])}"
 
         if erg is not None:
             truemmer_text = f"Trümmer: {_disziplin_gesamt_text(ergebnis, 'Trümmerfeld')}"
@@ -654,7 +669,7 @@ def _statistik_kopftabelle(veranstaltung: dict | None) -> Table:
     v = veranstaltung or {}
 
     def zelle(label: str, wert) -> list:
-        return [Paragraph(label, _STAT_KOPF_LABEL), Paragraph(_wert(wert), _STAT_KOPF_WERT)]
+        return [Paragraph(label, _STAT_KOPF_LABEL), Paragraph(_p_wert(wert), _STAT_KOPF_WERT)]
 
     daten = [
         zelle("Verein:", v.get("verein")) + zelle("Vereins-Nr.:", v.get("vereins_nr")),
@@ -780,11 +795,11 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
         for t in teilnehmer:
             gebuehr = _euro_text(pruefungsgebuehr_fuer_art(veranstaltung, t["art"]))
             daten.append([
-                Paragraph(_wert(t["nachname"]), _UEBERSICHT_ZELLE),
-                Paragraph(_wert(t["vorname"]), _UEBERSICHT_ZELLE),
-                Paragraph(_wert(t["verein"]), _UEBERSICHT_ZELLE),
-                Paragraph(_wert(t["rufname_hund"]), _UEBERSICHT_ZELLE),
-                Paragraph(_wert(t["chip_nr"]), _UEBERSICHT_ZELLE),
+                Paragraph(_p_wert(t["nachname"]), _UEBERSICHT_ZELLE),
+                Paragraph(_p_wert(t["vorname"]), _UEBERSICHT_ZELLE),
+                Paragraph(_p_wert(t["verein"]), _UEBERSICHT_ZELLE),
+                Paragraph(_p_wert(t["rufname_hund"]), _UEBERSICHT_ZELLE),
+                Paragraph(_p_wert(t["chip_nr"]), _UEBERSICHT_ZELLE),
                 Paragraph(leistungsklasse_label(t), _UEBERSICHT_ZELLE),
                 Paragraph(gebuehr, _UEBERSICHT_ZELLE),
                 Paragraph("Ja" if t["bezahlt"] else "", _UEBERSICHT_ZELLE),
@@ -937,7 +952,7 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
         if zeile["typ"] == "pause":
             daten.append([
                 Paragraph(zeit_text, _ZEITPLAN_ZEIT),
-                Paragraph(zeile["bezeichnung"], _ZEITPLAN_PAUSE_TEXT),
+                Paragraph(_p_wert(zeile["bezeichnung"]), _ZEITPLAN_PAUSE_TEXT),
                 "", "", "", "",
             ])
             stil.append(("SPAN", (1, i), (5, i)))
@@ -956,10 +971,10 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
             daten.append([
                 Paragraph(zeit_text, _ZEITPLAN_ZEIT),
                 Paragraph(art_text, _ZEITPLAN_ZEILE),
-                Paragraph(_wert(t["startnummer"]), _ZEITPLAN_ZEILE),
-                Paragraph(f"{_wert(t['nachname'])}, {_wert(t['vorname'])}", _ZEITPLAN_ZEILE),
-                Paragraph(_wert(t["rufname_hund"]), _ZEITPLAN_ZEILE),
-                Paragraph(_wert(t["verein"]), _ZEITPLAN_ZEILE),
+                Paragraph(_p_wert(t["startnummer"]), _ZEITPLAN_ZEILE),
+                Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _ZEITPLAN_ZEILE),
+                Paragraph(_p_wert(t["rufname_hund"]), _ZEITPLAN_ZEILE),
+                Paragraph(_p_wert(t["verein"]), _ZEITPLAN_ZEILE),
             ])
         stil.append(("BACKGROUND", (0, i), (-1, i), _zeitplan_zeile_farbe(zeile)))
 

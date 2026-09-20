@@ -6,6 +6,7 @@
   <p>Bitte mit deinem Benutzernamen und Passwort anmelden (vom Administrator erhalten).</p>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="benutzername">Benutzername</label>
     <input type="text" id="benutzername" name="benutzername" autocomplete="username" autofocus required
            autocapitalize="none" autocorrect="off" spellcheck="false">

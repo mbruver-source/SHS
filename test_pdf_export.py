@@ -87,6 +87,59 @@ class TestPdfExport(unittest.TestCase):
         # ED LK 1 hat laut Original-Vorlage KEINEN Verleitungs-Hinweis
         self.assertNotIn("Spielzeugverleitung", text)
 
+    def test_bewertungsbogen_mit_reportlab_sonderzeichen_in_freitext_bricht_nicht_ab(self):
+        # QS-Fund (19./20.09.): Paragraph() aus reportlab parst seinen Text als kleine
+        # Mini-Auszeichnungssprache (<b>, <i>, <br/> ...). Freitextfelder wie Zwingername,
+        # Rufname, Verein oder Gegenstand sind aber ganz normaler, von Nutzern frei
+        # eingegebener Text - enthält so ein Feld z.B. ein einzelnes "<" oder einen nicht
+        # als Markup gemeinten Tag-Namen, ließ das den PDF-Export vorher mit einem
+        # ValueError abstürzen (siehe _p_wert() in pdf_export.py). Dieser Test reproduziert
+        # genau das und prüft zusätzlich, dass die Sonderzeichen unverändert (nicht als
+        # könnte man aus vom Nutzer eingegebenem "&" ein sichtbares "&amp;" auf dem PDF
+        # machen) im extrahierten PDF-Text erscheinen.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster & Sohn", vorname="<b>Max</wrongtag", rufname_hund="Rex</br>",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1,
+            verein="H&K Sportverein", zwingername="vom Wald <i>Sued",
+            gegenstand_1="Schlüssel <b>bund", gegenstand_1_disziplin="Trümmerfeld",
+        ))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=58, anzeige=38)
+
+        pfad = self._pfad("bogen_sonderzeichen.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)  # darf nicht werfen
+        text = _text(pfad)
+        self.assertIn("Muster & Sohn", text)
+        self.assertIn("vom Wald <i>Sued", text)
+        self.assertIn("Schlüssel <b>bund", text)
+        self.assertNotIn("&amp;", text)
+        self.assertNotIn("&lt;", text)
+
+        # Die Sammel-PDF darf durch EINEN betroffenen Teilnehmer nicht komplett blockiert
+        # werden (vorher: ein einziger "kaputter" Teilnehmer verhinderte den Export für alle).
+        sammel_pfad = self._pfad("alle_sonderzeichen.pdf")
+        anzahl = pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, sammel_pfad)
+        self.assertEqual(anzahl, 1)
+
+    def test_ergebnisliste_etiketten_und_zeitplan_mit_sonderzeichen_brechen_nicht_ab(self):
+        # Dieselbe Sonderzeichen-Absicherung wie im obigen Test, aber für die drei weiteren
+        # Stellen, an denen Freitext (Name, Verein, Rufname, Pausenbezeichnung) OHNE Umweg
+        # über _wert() direkt in einen Paragraph eingebaut wurde (name_info bei den
+        # Etiketten, "namen" der noch ausstehenden Teilnehmer in der Ergebnisliste, sowie
+        # eine frei benannte Zeitplan-Pause).
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster & Sohn", vorname="<i>Max", rufname_hund="Rex<br/>",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1,
+            verein="H&K Sportverein",
+        ))
+        # Bewusst OHNE Ergebnis -> landet in der "noch ausstehend"-Liste der Ergebnisliste.
+
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, self._pfad("ergebnisliste_sz.pdf"))
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, self._pfad("etiketten_sz.pdf"))
+
+        richter_id = add_zeitplan_richter(self.conn, "Richter A")
+        add_zeitplan_pause(self.conn, richter_id, bezeichnung="Mittagspause <b>&amp;", dauer_minuten=30)
+        pdf_export.erstelle_zeitplan_pdf(self.conn, self._pfad("zeitplan_sz.pdf"))  # darf nicht werfen
+
     def test_bewertungsbogen_ed_ohne_gegenstand_zuordnung_zeigt_platzhalter(self):
         # Ohne explizite Zuordnung ("frei", der Default) erscheint der Gegenstand NICHT auf
         # dem Bogen - es gibt bewusst keine automatische Zuordnung mehr nach Position.

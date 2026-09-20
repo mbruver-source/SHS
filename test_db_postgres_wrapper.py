@@ -62,6 +62,30 @@ class TestPostgresConnectionWrapper(unittest.TestCase):
         gesendetes_sql, _ = self.roh_cursor.execute.call_args[0]
         self.assertEqual(gesendetes_sql.count("RETURNING"), 1)
 
+    def test_fragezeichen_innerhalb_eines_string_literals_wird_nicht_uebersetzt(self):
+        """QS-Fund (19./20.09.): das frühere blinde sql.replace('?', '%s') hätte ein
+        echtes, als Text gemeintes Fragezeichen innerhalb eines SQL-String-Literals
+        fälschlich mitersetzt. Kommt aktuell in keiner echten Abfrage dieses Moduls vor -
+        hier direkt simuliert, um die Übersetzungslogik selbst unabhängig davon
+        abzusichern."""
+        self.conn.execute("SELECT * FROM teilnehmer WHERE bemerkung = 'Wirklich?' AND id = ?", (1,))
+        gesendetes_sql, gesendete_params = self.roh_cursor.execute.call_args[0]
+        self.assertEqual(gesendetes_sql, "SELECT * FROM teilnehmer WHERE bemerkung = 'Wirklich?' AND id = %s")
+        self.assertEqual(gesendete_params, (1,))
+
+    def test_escapetes_apostroph_im_string_literal_wird_korrekt_erkannt(self):
+        # SQL-Schreibweise für ein Apostroph INNERHALB eines String-Literals ist ein
+        # doppeltes Apostroph (''), nicht ein Backslash - das Literal 'O''Brien?' endet
+        # deshalb erst beim LETZTEN Apostroph, nicht schon beim mittleren.
+        self.conn.execute("SELECT * FROM teilnehmer WHERE bemerkung = 'O''Brien?' AND id = ?", (1,))
+        gesendetes_sql, _ = self.roh_cursor.execute.call_args[0]
+        self.assertEqual(gesendetes_sql, "SELECT * FROM teilnehmer WHERE bemerkung = 'O''Brien?' AND id = %s")
+
+    def test_mehrere_platzhalter_ausserhalb_von_string_literalen_werden_alle_uebersetzt(self):
+        self.conn.execute("SELECT * FROM teilnehmer WHERE nachname = ? AND vorname = ?", ("A", "B"))
+        gesendetes_sql, _ = self.roh_cursor.execute.call_args[0]
+        self.assertEqual(gesendetes_sql, "SELECT * FROM teilnehmer WHERE nachname = %s AND vorname = %s")
+
     def test_executescript_leitet_an_execute_weiter(self):
         self.conn.executescript(db.SCHEMA_POSTGRES)
         self.roh_cursor.execute.assert_called_once_with(db.SCHEMA_POSTGRES)
@@ -86,6 +110,51 @@ class TestPostgresConnectionWrapper(unittest.TestCase):
         cur = self.conn.execute("SELECT * FROM teilnehmer")
         self.assertEqual(cur.fetchone(), {"id": 1})
         self.assertEqual(cur.fetchall(), [{"id": 1}, {"id": 2}])
+
+
+class TestBenutzerLoeschenSperrtAdminZeilenBeiPostgres(unittest.TestCase):
+    """QS-Review (19./20.09.): db.benutzer_loeschen() muss beim Löschen eines Admin-Kontos
+    gegen eine ECHTE _PostgresConnection zuerst 'SELECT ... FOR UPDATE' auf den
+    Admin-Zeilen ausführen, bevor gezählt wird (siehe Docstring dort) - sonst könnten zwei
+    gleichzeitige Löschversuche beide denselben veralteten Zählerstand sehen. Die echte
+    Nebenläufigkeits-Absicherung selbst kann nur gegen einen echten PostgreSQL-Server
+    geprüft werden (siehe test_db.TestBenutzerkontenPostgres,
+    test_gleichzeitiges_loeschen_beider_admins_laesst_mindestens_einen_uebrig) - dieser
+    Test prüft hier nur unit-testbar (mit einer gemockten rohen Verbindung, kein
+    Postgres-Server nötig), dass die FOR-UPDATE-Sperre bei diesem Verbindungstyp
+    tatsächlich ausgelöst wird, in genau der richtigen Reihenfolge (VOR dem Zählen)."""
+
+    def setUp(self):
+        self.roh_conn = MagicMock()
+        self.roh_cursor = MagicMock()
+        self.roh_conn.cursor.return_value = self.roh_cursor
+        self.conn = db._PostgresConnection(self.roh_conn)
+
+    def test_loescht_zweiten_von_zwei_admins_mit_vorheriger_sperre(self):
+        self.roh_cursor.fetchone.side_effect = [
+            {"ist_admin": 1},  # Antwort auf "ist der zu löschende Benutzer Admin?"
+            {"anzahl": 2},  # Antwort auf COUNT(*) NACH der Sperre
+        ]
+
+        db.benutzer_loeschen(self.conn, "chef2")
+
+        gesendete_statements = [call.args[0] for call in self.roh_cursor.execute.call_args_list]
+        sperr_index = next(i for i, sql in enumerate(gesendete_statements) if "FOR UPDATE" in sql)
+        zaehl_index = next(i for i, sql in enumerate(gesendete_statements) if "COUNT(*)" in sql)
+        loesch_index = next(i for i, sql in enumerate(gesendete_statements) if sql.strip().startswith("DELETE"))
+        self.assertIn("ist_admin = 1", gesendete_statements[sperr_index])
+        # Reihenfolge ist entscheidend für die Race-Condition-Absicherung: erst sperren,
+        # dann zählen, erst danach löschen.
+        self.assertLess(sperr_index, zaehl_index)
+        self.assertLess(zaehl_index, loesch_index)
+
+    def test_ohne_admin_konto_keine_sperre_noetig(self):
+        self.roh_cursor.fetchone.return_value = {"ist_admin": 0}
+
+        db.benutzer_loeschen(self.conn, "helfer")
+
+        gesendete_statements = [call.args[0] for call in self.roh_cursor.execute.call_args_list]
+        self.assertFalse(any("FOR UPDATE" in sql for sql in gesendete_statements))
 
 
 class TestVorhandeneSpaltenPostgresZweig(unittest.TestCase):

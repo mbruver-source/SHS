@@ -410,6 +410,36 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 "Bitte eine andere Startnummer wählen.",
             )
             return
+        # QS-Review (19./20.09.): Jede Disziplin darf nur EINEM der drei Gegenstand-Felder
+        # zugeordnet sein - sonst würde gegenstand_fuer_disziplin() (db.py) für diese
+        # Disziplin nur den ersten der beiden Treffer liefern und der zweite Gegenstand
+        # spurlos verschwinden (z.B. auf dem Bewertungsbogen). Das ist unabhängig von der
+        # Leistungsklasse: dass DERSELBE Gegenstand für mehrere Disziplinen gesucht wird
+        # (z.B. LK1: 1 Gegenstand in allen 3 Disziplinen, LK2: 1 Gegenstand in bis zu 2
+        # Disziplinen), bildet man ab, indem man den GLEICHEN Text in mehrere Gegenstand-
+        # Felder einträgt, jedes davon mit einer ANDEREN Disziplin-Zuordnung - das bleibt
+        # hier ausdrücklich erlaubt und wird von dieser Prüfung nicht angerührt. Verboten ist
+        # nur, dieselbe Disziplin zweimal zu vergeben (siehe Absprache mit Marco).
+        vergebene_disziplinen = [
+            d for d in (
+                self.gegenstand_1_disziplin.currentText(),
+                self.gegenstand_2_disziplin.currentText(),
+                self.gegenstand_3_disziplin.currentText(),
+            )
+            if d != _GEGENSTAND_ZUORDNUNG_FREI
+        ]
+        doppelt_vergeben = sorted({d for d in vergebene_disziplinen if vergebene_disziplinen.count(d) > 1})
+        if doppelt_vergeben:
+            QMessageBox.warning(
+                self, "Gegenstand-Zuordnung doppelt vergeben",
+                "Zwei der drei Gegenstände sind derselben Disziplin zugeordnet: "
+                f"{', '.join(doppelt_vergeben)}.\n\n"
+                "Jede Disziplin darf nur einem der drei Gegenstand-Felder zugeordnet werden. "
+                "Soll derselbe Gegenstand in mehreren Disziplinen gesucht werden, bitte den "
+                "gleichen Text in mehrere Gegenstand-Felder eintragen und dort jeweils eine "
+                "andere Disziplin zuordnen.",
+            )
+            return
         self.accept()
 
     def ergebnis(self) -> NeuerTeilnehmer:
@@ -2337,9 +2367,37 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         beendet wird - auf Wunsch des Nutzers, damit beim Schließen (z.B. über das
         Fenster-X) nichts verloren geht, ohne dass dafür extra nachgefragt werden muss
         (anders als beim Tabwechsel/Terminwechsel, wo weiterhin gefragt wird, siehe
-        _tab_gewechselt/_termin_wechseln oben)."""
+        _tab_gewechselt/_termin_wechseln oben).
+
+        QS-Fund (19./20.09.): alle_speichern() kann NICHT jede Zeile speichern - z.B.
+        wenn nur eines von zwei zusammengehörigen Feldern ausgefüllt ist, zeigt es zwar
+        eine Warnung, lässt die betroffene Zeile aber ungespeichert. Vorher schloss sich
+        das Fenster direkt danach TROTZDEM (event.accept() ohne erneute Prüfung) - die
+        Warnung verschwand zusammen mit dem Fenster, ohne dass die Änderung je gespeichert
+        wurde und ohne dass der Nutzer noch die Möglichkeit gehabt hätte, sie zu
+        korrigieren. Nach dem Speicherversuch wird deshalb erneut geprüft: bleiben
+        Änderungen ungespeichert übrig, wird - genau wie bei _tab_gewechselt/
+        _termin_wechseln - nachgefragt, ob trotzdem beendet (und diese Änderungen
+        verworfen) oder das Schließen abgebrochen werden soll, damit die fehlerhafte
+        Zeile noch korrigiert werden kann. Vorbelegter Standard ist "Nein" (nicht
+        schließen) - anders als bei den übrigen Ja/Nein-Rückfragen in diesem Fenster, wo
+        der übliche Fall (Speichern) vorbelegt ist, ist hier der sicherere Standard das
+        NICHT versehentliche Verwerfen von Daten."""
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
             self.ergebnis_tab.alle_speichern()
+            if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
+                antwort = QMessageBox.question(
+                    self,
+                    "Nicht alle Ergebnisse gespeichert",
+                    "Einige Ergebnisse konnten nicht automatisch gespeichert werden (siehe "
+                    "vorherige Meldung).\n\nProgramm trotzdem beenden und diese ungespeicherten "
+                    "Änderungen verwerfen?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if antwort != QMessageBox.Yes:
+                    event.ignore()
+                    return
         event.accept()
 
     def _termin_setzen(self, conn, pfad: str) -> None:

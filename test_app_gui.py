@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton
 
 from app import VERSION, _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab, VersionDialog
 from db import NeuerTeilnehmer, add_teilnehmer, eintragen_ergebnis, init_db, list_teilnehmer, set_veranstaltung
@@ -166,6 +166,66 @@ def test_gegenstand_disziplin_frei_waehlbar_unabhaengig_von_position(qtbot):
     # Nicht explizit zugeordnete Gegenstände bleiben unabhängig davon "frei".
     assert ergebnis.gegenstand_1_disziplin is None
     assert ergebnis.gegenstand_3_disziplin is None
+
+
+def test_doppelte_disziplin_zuordnung_wird_beim_speichern_abgelehnt(qtbot, monkeypatch):
+    """QS-Review (19./20.09.): Werden zwei der drei Gegenstand-Felder derselben Disziplin
+    zugeordnet, würde gegenstand_fuer_disziplin() (db.py) für diese Disziplin nur den
+    ersten Treffer liefern - der zweite Gegenstand verschwindet dann spurlos, z.B. auf dem
+    Bewertungsbogen. Das muss beim Speichern verhindert werden, unabhängig vom
+    eingetragenen Gegenstand-Text."""
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.gegenstand_1.setText("Schlüsselbund")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    dialog.gegenstand_2.setText("Korken")
+    dialog.gegenstand_2_disziplin.setCurrentText("Trümmerfeld")
+
+    warnung_gezeigt = {}
+    monkeypatch.setattr(
+        "app.QMessageBox.warning",
+        lambda *a, **k: warnung_gezeigt.setdefault("ja", True),
+    )
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert warnung_gezeigt.get("ja") is True
+    assert dialog.result() == 0  # Dialog wurde NICHT akzeptiert (QDialog.Rejected/0)
+
+
+def test_gleicher_gegenstand_in_mehreren_disziplinen_bleibt_erlaubt(qtbot, monkeypatch):
+    """Absprache mit Marco zu Finding #4: derselbe physische Gegenstand darf weiterhin für
+    mehrere Disziplinen gesucht werden (z.B. DK LK1: ein Gegenstand in allen 3 Disziplinen,
+    LK2: ein Gegenstand in bis zu 2 Disziplinen) - das bildet man ab, indem man denselben
+    Text in mehrere Gegenstand-Felder einträgt, jeweils mit EINER ANDEREN Disziplin-
+    Zuordnung. Nur die doppelte DISZIPLIN-Zuordnung ist verboten, nicht der doppelte Text."""
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.gegenstand_1.setText("Schlüsselbund")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    dialog.gegenstand_2.setText("Schlüsselbund")
+    dialog.gegenstand_2_disziplin.setCurrentText("Flächensuche")
+    dialog.gegenstand_3.setText("Schlüsselbund")
+    dialog.gegenstand_3_disziplin.setCurrentText("Behältnisstrecke")
+
+    warnung_gezeigt = {}
+    monkeypatch.setattr(
+        "app.QMessageBox.warning",
+        lambda *a, **k: warnung_gezeigt.setdefault("ja", True),
+    )
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert warnung_gezeigt.get("ja") is None
+    assert dialog.result() == 1  # Dialog wurde akzeptiert (QDialog.Accepted/1)
 
 
 def test_bestehender_teilnehmer_im_dialog_zeigt_gespeicherte_zuordnung(qtbot, conn):
@@ -424,10 +484,21 @@ def test_schliessen_speichert_automatisch_bei_ungespeicherten_aenderungen(qtbot,
     qtbot.addWidget(fenster)
 
     aufgerufen = {}
-    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    # hat_ungespeicherte_aenderungen() liefert VOR alle_speichern() True, DANACH False -
+    # entspricht einem erfolgreichen automatischen Speichern (closeEvent prüft seit dem
+    # QS-Fund unten erneut NACH alle_speichern(), siehe dortiger Kommentar - ohne diesen
+    # Zustandswechsel hier würde das eine echte, blockierende Rückfrage auslösen statt
+    # nur das Auto-Save selbst zu prüfen, wie es dieser Test eigentlich soll).
+    zustand = {"ungespeichert": True}
     monkeypatch.setattr(
-        type(fenster.ergebnis_tab), "alle_speichern", lambda self: aufgerufen.setdefault("gespeichert", True)
+        type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: zustand["ungespeichert"]
     )
+
+    def _speichern(self):
+        aufgerufen.setdefault("gespeichert", True)
+        zustand["ungespeichert"] = False
+
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", _speichern)
 
     fenster.close()
 
@@ -446,6 +517,47 @@ def test_schliessen_speichert_nicht_wenn_bereits_alles_gespeichert(qtbot, termin
     )
 
     fenster.close()
+
+
+def test_schliessen_fragt_nach_wenn_speichern_zeilen_uebrig_laesst_und_bricht_bei_nein_ab(qtbot, termin, monkeypatch):
+    """QS-Fund (19./20.09.): bleiben nach dem automatischen Speichern noch Änderungen
+    ungespeichert (z.B. eine Zeile mit nur einem befüllten Feld), darf das Fenster sich
+    NICHT einfach trotzdem schließen - vorher ging die Warnung dabei spurlos zusammen mit
+    dem Fenster verloren. Hier: Nutzer wählt "Nein" (nicht beenden) - das Fenster muss
+    offen bleiben, damit die Zeile noch korrigiert werden kann."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+
+    # alle_speichern() "gelingt" hier absichtlich nicht (Zustand bleibt ungespeichert) -
+    # simuliert genau den Fall, den die bisherige Warnung in alle_speichern() selbst
+    # anzeigt (z.B. nur ein Feld einer Zeile ausgefüllt).
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+
+    fenster.close()
+
+    assert fenster.isVisible()
+
+
+def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, termin, monkeypatch):
+    """Gegenstück zum Test oben: wählt der Nutzer ausdrücklich "Ja" (trotzdem beenden),
+    wird das respektiert und das Fenster schließt sich - die ungespeicherten Änderungen
+    werden dann bewusst verworfen, statt das Beenden endlos zu verhindern."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+
+    fenster.close()
+
+    assert not fenster.isVisible()
 
 
 # --- Ergebniserfassung: Ergebnis wieder löschen (beide Felder leeren) --------------

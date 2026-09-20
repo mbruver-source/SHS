@@ -13,6 +13,7 @@
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
 
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for zeile in zeilen %}
       <h2 style="margin-top: 1.2em;">{{ zeile.disziplin }}</h2>
       <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–60)</label>

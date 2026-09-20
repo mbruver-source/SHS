@@ -242,6 +242,36 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(t.platzierung, 1)
         self.assertEqual(t.von_startern, 1)
 
+    def test_teilnehmer_ohne_ergebnisse_zeile_stuerzt_nicht_ab_sondern_gilt_als_ausstehend(self):
+        """QS-Fund (19./20.09.): add_teilnehmer() legt normalerweise IMMER zusammen mit
+        dem Teilnehmer eine passende Zeile in ergebnisse an (siehe dort) -
+        berechne_auswertung() verließ sich bisher blind auf diese Invariante
+        (ergebnis_rows[t["id"]]) und wäre mit einem harten KeyError für die GESAMTE
+        Auswertung abgestürzt, sollte sie doch einmal verletzt sein. Hier absichtlich
+        von Hand nachgestellt (z.B. wie durch einen künftigen Programmierfehler oder
+        eine von Hand bearbeitete Termin-Datei), um zu prüfen, dass so ein Teilnehmer
+        stattdessen einfach als "noch nicht vollständig bewertet" behandelt wird -
+        ohne die Auswertung der ÜBRIGEN, korrekten Teilnehmer zu verhindern."""
+        tid_kaputt = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fehlerhaft", vorname="Otto", rufname_hund="Lücke",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=97,
+        ))
+        self.conn.execute("DELETE FROM ergebnisse WHERE teilnehmer_id = ?", (tid_kaputt,))
+        self.conn.commit()
+
+        tid_ok = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Holst", vorname="Katrin", rufname_hund="Freda",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=4,
+        ))
+        eintragen_ergebnis(self.conn, tid_ok, "Trümmerfeld", suche=58, anzeige=38)
+
+        fertig, ausstehend = berechne_auswertung(self.conn)
+
+        self.assertEqual(len(fertig), 1)
+        self.assertEqual(fertig[0].name, "Holst, Katrin")
+        self.assertEqual(len(ausstehend), 1)
+        self.assertEqual(ausstehend[0]["nachname"], "Fehlerhaft")
+
     def test_dk_teilnehmer_braucht_alle_drei_disziplinen(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="Kleemann", vorname="Doris", rufname_hund="Dorie",
@@ -1376,6 +1406,20 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
         with self.assertRaises(self.IntegrityErrorTyp):
             benutzer_anlegen(self.conn, "chef", "irgendein_passwort")
 
+    def test_benutzername_der_sich_nur_in_gross_kleinschreibung_unterscheidet_wird_abgelehnt(self):
+        """QS-Fund (19./20.09.): benutzername ist zwar PRIMARY KEY, das schützt aber nur
+        vor exakt gleich geschriebenen Namen - pruefe_login() vergleicht beim Anmelden
+        GROSS-/kleinschreibungs-UNABHÄNGIG (siehe dortiger Kommentar). Ohne den
+        zusätzlichen Unique-Index auf LOWER(benutzername) (siehe
+        _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER) könnten "chef" und "Chef" gleichzeitig
+        als zwei getrennte Konten existieren, obwohl der Login sie nicht unterscheiden
+        kann."""
+        admin_einrichten(self.conn, "chef", "sicheres_passwort")
+        with self.assertRaises(self.IntegrityErrorTyp):
+            benutzer_anlegen(self.conn, "Chef", "irgendein_passwort")
+        with self.assertRaises(self.IntegrityErrorTyp):
+            benutzer_anlegen(self.conn, "CHEF", "irgendein_passwort")
+
     def test_benutzer_loeschen_entfernt_konto(self):
         admin_einrichten(self.conn, "chef", "sicheres_passwort")
         benutzer_anlegen(self.conn, "helfer", "helferpasswort")
@@ -1410,6 +1454,51 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
             {"benutzername": "Marco", "ist_admin": True},
         )
         self.assertIsNone(pruefe_login(self.conn, "Marco", "Sicheres_Passwort"))
+
+    def test_gleichzeitiges_loeschen_beider_admins_laesst_mindestens_einen_uebrig(self):
+        # QS-Review (19./20.09.): benutzer_loeschen() prüfte vorher "gibt es noch >1
+        # Admin?" per einfachem COUNT(*) OHNE Sperre - zwei zeitgleiche Löschversuche
+        # konnten beide denselben (noch nicht aktualisierten) Zählerstand sehen und am
+        # Ende gemeinsam 0 statt mindestens 1 Administrator übrig lassen. Der Fix (SELECT
+        # ... FOR UPDATE auf den Admin-Zeilen vor dem Zählen) wird hier mit zwei ECHTEN,
+        # unabhängigen Verbindungen und einem threading.Barrier geprüft, das beide Threads
+        # so gut wie gleichzeitig starten lässt - PostgreSQLs Zeilensperre serialisiert die
+        # beiden Transaktionen dann so, dass der zweite Thread den bereits aktualisierten
+        # Zählerstand sieht, statt den veralteten.
+        import threading
+
+        admin_einrichten(self.conn, "chef1", "sicheres_passwort")
+        benutzer_anlegen(self.conn, "chef2", "anderes_passwort", ist_admin=True)
+
+        start = threading.Barrier(2)
+        ergebnisse: dict[str, str] = {}
+
+        def loeschen(name: str, conn) -> None:
+            start.wait(timeout=5)
+            try:
+                benutzer_loeschen(conn, name)
+                ergebnisse[name] = "geloescht"
+            except ValueError:
+                ergebnisse[name] = "abgelehnt"
+            finally:
+                conn.close()
+
+        conn_a = verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        conn_b = verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        t1 = threading.Thread(target=loeschen, args=("chef1", conn_a))
+        t2 = threading.Thread(target=loeschen, args=("chef2", conn_b))
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        # Genau einer der beiden gleichzeitigen Versuche darf durchgekommen sein - NIEMALS
+        # beide (das wäre der alte Bug: 0 Admins übrig, niemand kann sich mehr einloggen).
+        self.assertEqual(sorted(ergebnisse.values()), ["abgelehnt", "geloescht"])
+        self.assertEqual(
+            [b["benutzername"] for b in liste_benutzer(self.conn) if b["ist_admin"]],
+            ["chef1"] if ergebnisse["chef1"] == "abgelehnt" else ["chef2"],
+        )
 
 
 class TestTerminSyncPostgres(unittest.TestCase):

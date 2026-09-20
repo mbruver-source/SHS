@@ -28,10 +28,12 @@ nur der Dokumentation des ursprünglichen Anwendungsfalls.
 from __future__ import annotations
 
 import datetime
+import os
 import re
 import sqlite3
+import tempfile
 import zipfile
-from contextlib import closing
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -171,6 +173,25 @@ _INSERT_TABELLE_RE = re.compile(r"\s*INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)", 
 # der aufrufende Code unverändert bleiben kann.
 _LASTROWID_TABELLEN = {"teilnehmer", "zeitplan_richter", "zeitplan_eintrag"}
 
+# QS-Fund (19./20.09.): _PostgresConnection.execute() übersetzte '?'-Platzhalter bisher
+# über ein blindes sql.replace("?", "%s") auf dem GESAMTEN SQL-Text - das hätte auch ein
+# echtes, als reiner Text gemeintes Fragezeichen innerhalb eines SQL-String-Literals
+# (z.B. '...?' als fest im Code stehender Vergleichs- oder Anzeigetext) fälschlich
+# mitersetzt und die Abfrage unbemerkt kaputt gemacht. Kommt aktuell nirgends in diesem
+# Modul vor, ist aber eine Falle für künftige Änderungen. Dieser Regex erkennt einfach
+# gequotete String-Literale ('...', inkl. der SQL-Schreibweise '' für ein eingebettetes
+# Apostroph) UND einzelne '?'-Zeichen in einem Durchlauf - _uebersetze_platzhalter()
+# unten ersetzt dabei gezielt nur die '?'-Treffer und lässt String-Literale unangetastet
+# durchlaufen, statt sie versehentlich mitzuersetzen.
+_PLATZHALTER_ODER_STRING_RE = re.compile(r"'(?:[^']|'')*'|\?")
+
+
+def _uebersetze_platzhalter(sql: str) -> str:
+    """Ersetzt '?'-Platzhalter durch PostgreSQLs '%s' - siehe Kommentar bei
+    _PLATZHALTER_ODER_STRING_RE oben für die Begründung, warum das NICHT einfach per
+    sql.replace("?", "%s") auf dem gesamten Text passiert."""
+    return _PLATZHALTER_ODER_STRING_RE.sub(lambda m: "%s" if m.group(0) == "?" else m.group(0), sql)
+
 
 class _PostgresCursor:
     """Reicht fetchone()/fetchall() an den echten psycopg2-Cursor durch und stellt
@@ -205,7 +226,7 @@ class _PostgresConnection:
         self._roh_verbindung = roh_verbindung
 
     def execute(self, sql: str, params=()) -> _PostgresCursor:
-        sql_pg = sql.replace("?", "%s")
+        sql_pg = _uebersetze_platzhalter(sql)
         tabelle_treffer = _INSERT_TABELLE_RE.match(sql)
         braucht_lastrowid = (
             tabelle_treffer is not None
@@ -669,7 +690,19 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
     ausstehend: list[dict] = []
 
     for t in teilnehmer_rows:
-        ergebnis = ergebnis_rows[t["id"]]
+        # add_teilnehmer() legt für jeden Teilnehmer sofort eine passende Zeile in
+        # ergebnisse an (siehe dort) - diese Invariante gilt also im Normalfall immer.
+        # QS-Fund (19./20.09.): ein direkter Zugriff über ergebnis_rows[t["id"]] hätte
+        # die komplette Auswertung mit einem harten KeyError abstürzen lassen, sollte
+        # diese Invariante doch einmal verletzt sein (z.B. durch einen künftigen
+        # Programmierfehler oder eine von Hand bearbeitete Termin-Datei) - .get() plus
+        # Behandlung wie "noch nicht vollständig bewertet" ist die sichere Variante:
+        # der betroffene Teilnehmer taucht dann einfach in der ausstehend-Liste statt
+        # die Auswertung für ALLE Teilnehmer zu verhindern.
+        ergebnis = ergebnis_rows.get(t["id"])
+        if ergebnis is None:
+            ausstehend.append(t)
+            continue
         wertnote = _wertnote(t, ergebnis)
         if wertnote is None:
             ausstehend.append(t)
@@ -1170,6 +1203,28 @@ _WEB_BENUTZER_SCHEMA = (
     "erstellt_am TEXT NOT NULL)"
 )
 
+# QS-Fund (19./20.09.): web_benutzer.benutzername ist zwar PRIMARY KEY (schützt also vor
+# exakt gleich geschriebenen Namen), pruefe_login() vergleicht beim Anmelden aber GROSS-/
+# kleinschreibungs-UNABHÄNGIG (LOWER(benutzername), siehe dortiger Kommentar) - damit
+# z. B. Mobilgeräte mit Autokapitalisierung nicht an der Schreibweise scheitern. Ohne
+# diesen zusätzlichen, ebenfalls gross-/kleinschreibungsunabhängigen Unique-Index könnten
+# zwei Konten wie "MHelfer" und "mhelfer" gleichzeitig angelegt werden - app_web.py prüft
+# das zwar bereits VOR dem Anlegen (separate Python-Abfrage in admin_benutzer()), aber
+# zwischen dieser Prüfung und dem eigentlichen INSERT bleibt ein kurzes Zeitfenster für
+# einen echten Wettlauf zweier gleichzeitiger Anfragen - ganz analog zur
+# Admin-Lösch-Race-Condition in benutzer_loeschen() weiter unten. Welches der beiden
+# Konten sich dann beim Login durchsetzt, wäre von der SQL-Sortierung abhängig und für
+# den Nutzer nicht nachvollziehbar. "CREATE UNIQUE INDEX ... ON (LOWER(...))" ist sowohl
+# unter PostgreSQL als auch unter SQLite (ab 3.9, Ausdrucks-Indizes) identisch gültige
+# Syntax - deshalb hier, wie schon bei _WEB_BENUTZER_SCHEMA, EINE gemeinsame Anweisung für
+# beide Datenbanken statt einer Übersetzung je Datenbanktyp. IF NOT EXISTS sorgt dafür,
+# dass auch bereits produktiv angelegte Datenbanken (ohne diesen Index) ihn beim nächsten
+# verbinde_postgres_server()-Aufruf automatisch nachgerüstet bekommen.
+_WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_web_benutzer_benutzername_lower "
+    "ON web_benutzer (LOWER(benutzername))"
+)
+
 
 def _jetzt_iso() -> str:
     """ISO-8601-Zeitstempel (UTC) für web_benutzer.erstellt_am - bewusst als TEXT von
@@ -1207,8 +1262,14 @@ def admin_einrichten(conn, benutzername: str, passwort: str) -> bool:
 def benutzer_anlegen(conn, benutzername: str, passwort: str, ist_admin: bool = False) -> None:
     """Legt ein neues Web-Benutzerkonto an (vom Administrator über '/admin/benutzer',
     siehe app_web.py) - Benutzername muss eindeutig sein (Primärschlüssel der Tabelle,
-    siehe _WEB_BENUTZER_SCHEMA), sonst wirft dies denselben IntegrityError wie jede
-    andere doppelt vergebene eindeutige Spalte in diesem Modul.
+    siehe _WEB_BENUTZER_SCHEMA, PLUS der zusätzliche Unique-Index auf LOWER(benutzername),
+    siehe _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER - schützt auch vor einer Schreibweise,
+    die sich nur in Groß-/Kleinschreibung von einem vorhandenen Konto unterscheidet), sonst
+    wirft dies denselben IntegrityError wie jede andere doppelt vergebene eindeutige Spalte
+    in diesem Modul. app_web.admin_benutzer() prüft das zwar schon vorher explizit, damit
+    der Admin sofort eine verständliche Fehlermeldung sieht - dieser Unique-Index ist die
+    zusätzliche, race-sichere Absicherung auf Datenbankebene für den seltenen Fall zweier
+    gleichzeitiger Anfragen (siehe dortiger Kommentar).
 
     Importiert werkzeug.security bewusst erst hier statt am Modulanfang - genau wie
     psycopg2 in verbinde_postgres_server() weiter oben: werkzeug ist nur eine
@@ -1231,7 +1292,22 @@ def benutzer_loeschen(conn, benutzername: str) -> None:
     Administrator gelöscht wird (sonst gäbe es niemanden mehr, der neue Konten anlegen
     oder die Ersteinrichtung erneut durchlaufen könnte, ohne direkt in der Datenbank zu
     hantieren) - wirft in diesem Fall ValueError, ganz analog zur Schema-Namen-Prüfung
-    in _pruefe_schema_name weiter oben."""
+    in _pruefe_schema_name weiter oben.
+
+    Sperrt bei PostgreSQL vor dem Zählen ALLE Admin-Zeilen (SELECT ... FOR UPDATE) - ohne
+    das könnten zwei gleichzeitige Löschversuche (z. B. zwei Administratoren, die im
+    selben Moment je ihr eigenes Konto löschen) beide unabhängig "es gibt noch 2 Admins"
+    sehen, bevor einer committet, und am Ende gemeinsam 0 statt mindestens 1
+    Administrator übrig lassen - eine sperrfreie COUNT(*)-Prüfung allein reicht dafür
+    NICHT, da ein reiner lesender Zugriff unter PostgreSQLs Standard-Isolationsstufe
+    (READ COMMITTED) keine anderen Transaktionen blockiert (QS-Review 19./20.09.). Für
+    SQLite (nur in Tests relevant - web_benutzer existiert produktiv ausschließlich in
+    der PostgreSQL-Variante, siehe verbinde_postgres_server) gibt es kein FOR UPDATE und
+    keine echte Nebenläufigkeit auf derselben Verbindung. Bewusst POSITIV auf
+    _PostgresConnection geprüft statt negativ auf sqlite3.Connection (wie in
+    _vorhandene_spalten() weiter oben) - test_app_web.py lässt db.verbinde_postgres_server
+    für seine SQLite-Testdatei durch einen eigenen, NICHT-sqlite3.Connection-Test-Wrapper
+    (_NichtSchliessendeVerbindung) ersetzen, der aber ebenfalls kein FOR UPDATE kann."""
     _setze_termin_suchpfad(conn, "public")
     zeile = conn.execute(
         "SELECT ist_admin FROM web_benutzer WHERE benutzername = ?", (benutzername,)
@@ -1239,6 +1315,8 @@ def benutzer_loeschen(conn, benutzername: str) -> None:
     if zeile is None:
         return
     if zeile["ist_admin"]:
+        if isinstance(conn, _PostgresConnection):
+            conn.execute("SELECT benutzername FROM web_benutzer WHERE ist_admin = 1 FOR UPDATE")
         anzahl_admins = conn.execute(
             "SELECT COUNT(*) AS anzahl FROM web_benutzer WHERE ist_admin = 1"
         ).fetchone()["anzahl"]
@@ -1321,6 +1399,7 @@ def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
     # um eine einzige, unabhängige Spalte ohne Constraints geht.
     conn.execute("ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS zugangscode TEXT")
     conn.execute(_WEB_BENUTZER_SCHEMA)
+    conn.execute(_WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
     conn.commit()
     return conn
 
@@ -1606,6 +1685,29 @@ class PasswortFalschError(Exception):
     ist falsch (siehe sicherung_inhalt()/sicherung_wiederherstellen())."""
 
 
+def _ist_sicherer_dateiname(name: str) -> bool:
+    """Prüft, ob `name` ein "flacher" Dateiname ohne Pfadanteile ist - also ohne '/'
+    oder '\\\\' und ohne '..'-Segmente. sicherung_erstellen() schreibt ZIP-Einträge
+    immer nur mit ihrem reinen Dateinamen (arcname=datei.name, siehe dort), ein
+    legitimes, von dieser App selbst erstelltes Backup enthält also nie etwas anderes.
+
+    QS-Review (19./20.09., Path Traversal beim Backup-Import): Ohne diese Prüfung wurde
+    ein ZIP-Eintragsname wie '../../irgendwas/wichtig.sqlite' unverändert als Zielname für
+    os.replace() in sicherung_wiederherstellen() übernommen - ein präpariertes (nicht
+    selbst erstelltes) Sicherungs-ZIP hätte damit beim "Wiederherstellen" eine Datei
+    AUSSERHALB des Termine-Ordners schreiben/überschreiben können. Da ein solcher Name nie
+    mit einer vorhandenen Termin-Datei im Zielordner übereinstimmt, wurde dabei sogar der
+    Konflikt-Dialog übersprungen (Behandlung wie "neuer Termin", stiller
+    Überschreibversuch). Wird sowohl in sicherung_inhalt() angewendet (unsichere Einträge
+    tauchen erst gar nicht in der dem Nutzer angezeigten Liste auf) als auch sicherheitshalber
+    nochmal in sicherung_wiederherstellen() direkt vor dem Schreiben geprüft."""
+    if not name or name != os.path.basename(name):
+        return False
+    if "\\" in name or ".." in Path(name).parts:
+        return False
+    return True
+
+
 def eindeutigen_dateinamen_finden(ordner: Path, gewuenschter_name: str) -> str:
     """Hängt bei einem im Ordner bereits vergebenen Dateinamen einen Zähler an (z.B.
     'Termin (2).sqlite'), bis ein noch freier Name gefunden ist - für die Option "als
@@ -1667,7 +1769,10 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
         with pyzipper.AESZipFile(zip_pfad) as zf:
             if passwort:
                 zf.setpassword(passwort.encode("utf-8"))
-            namen = [n for n in zf.namelist() if n.lower().endswith(".sqlite")]
+            # _ist_sicherer_dateiname() filtert Einträge mit Pfadanteilen (z.B.
+            # '../../wichtig.sqlite') schon hier heraus, BEVOR sie dem Nutzer in der
+            # Konflikt-Auswahl angezeigt werden (siehe Docstring dort).
+            namen = [n for n in zf.namelist() if n.lower().endswith(".sqlite") and _ist_sicherer_dateiname(n)]
             if not namen:
                 raise ValueError("Das ZIP enthält keine Termin-Dateien (.sqlite).")
             # Erzwingt die Passwortprüfung sofort (Lesen der ersten Datei), statt erst
@@ -1701,6 +1806,14 @@ def sicherung_wiederherstellen(
     Namensgleichheit mit einer vorhandenen Datei wird diese überschrieben; für "als Kopie
     importieren" vorher eindeutigen_dateinamen_finden() für einen freien Zielnamen
     verwenden. Gibt die Liste der tatsächlich geschriebenen Zieldateinamen zurück.
+
+    Jede Datei wird ATOMAR geschrieben (temporäre Datei im selben Zielordner, danach
+    os.replace()) statt direkt in die Zieldatei - bricht das Schreiben mittendrin ab
+    (Absturz, Stromausfall, volle Platte während GENAU dieser Datei), bleibt entweder
+    die alte Datei vollständig unverändert oder die neue vollständig geschrieben zurück,
+    nie eine abgeschnittene/korrupte Datei mit einem dabei unwiederbringlich verlorenen
+    bisherigen Terminstand (QS-Review 19./20.09.: vorher direktes Path.write_bytes() auf
+    die Zieldatei selbst, ohne diese Absicherung).
     """
     ordner = ordner or termine_ordner()
     geschrieben: list[str] = []
@@ -1709,8 +1822,26 @@ def sicherung_wiederherstellen(
             if passwort:
                 zf.setpassword(passwort.encode("utf-8"))
             for quelle, ziel in entscheidungen.items():
+                # Zweite, unabhängige Absicherung gegen Path Traversal (siehe
+                # _ist_sicherer_dateiname()) - auch wenn sicherung_inhalt() unsichere
+                # Namen bereits vorher herausfiltert, verlässt sich diese Funktion hier
+                # nicht darauf, dass jeder Aufrufer das auch tatsächlich vorschaltet.
+                if not _ist_sicherer_dateiname(ziel):
+                    raise ValueError(f"Unsicherer Zieldateiname: {ziel!r}")
                 daten = zf.read(quelle)
-                (ordner / ziel).write_bytes(daten)
+                ziel_pfad = ordner / ziel
+                # os.replace() ist nur innerhalb DESSELBEN Dateisystems atomar - die
+                # temporäre Datei muss deshalb im selben Ordner liegen wie das Ziel, nicht
+                # z.B. im System-Temp-Verzeichnis.
+                tmp_fd, tmp_pfad_str = tempfile.mkstemp(dir=ordner, prefix=f".{ziel}.", suffix=".tmp")
+                try:
+                    with os.fdopen(tmp_fd, "wb") as tmp_datei:
+                        tmp_datei.write(daten)
+                    os.replace(tmp_pfad_str, ziel_pfad)
+                except BaseException:
+                    with suppress(FileNotFoundError):
+                        os.remove(tmp_pfad_str)
+                    raise
                 geschrieben.append(ziel)
     except RuntimeError as exc:
         if "password" in str(exc).lower():
