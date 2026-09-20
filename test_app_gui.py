@@ -178,6 +178,31 @@ def test_bezahlt_umschalten_per_klick_aendert_datenbank_und_tabelle(qtbot, conn)
     assert list_teilnehmer(conn)[0]["bezahlt"] == 1
     assert "bezahlt" in tab.tabelle.item(0, 6).text()
 
+
+def test_filter_bezahlt_blendet_zeilen_nach_status_aus(qtbot, conn):
+    # Nutzerwunsch (20.09.): Filter nach Bezahlt-Status, z.B. um am Anmeldetisch schnell
+    # zu sehen, wer noch nicht bezahlt hat.
+    _teilnehmer_anlegen(conn, nachname="Bezahlt", startnummer=1, bezahlt=True)
+    _teilnehmer_anlegen(conn, nachname="Offen", startnummer=2, bezahlt=False)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+
+    # "Alle" (Vorbelegung): beide Zeilen sichtbar.
+    assert not tab.tabelle.isRowHidden(0)
+    assert not tab.tabelle.isRowHidden(1)
+
+    tab.filter_bezahlt.setCurrentText("Bezahlt")
+    assert not tab.tabelle.isRowHidden(0)
+    assert tab.tabelle.isRowHidden(1)
+
+    tab.filter_bezahlt.setCurrentText("Nicht bezahlt")
+    assert tab.tabelle.isRowHidden(0)
+    assert not tab.tabelle.isRowHidden(1)
+
+    tab.filter_bezahlt.setCurrentText("Alle")
+    assert not tab.tabelle.isRowHidden(0)
+    assert not tab.tabelle.isRowHidden(1)
+
     # Erneuter Klick schaltet wieder zurück (Toggle-Verhalten, nicht nur "setzen").
     qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
     assert list_teilnehmer(conn)[0]["bezahlt"] == 0

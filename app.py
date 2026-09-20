@@ -514,6 +514,13 @@ class TeilnehmerTab(QWidget):
         self.filter_startnummer.setMaximumWidth(80)
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
+        # Nutzerwunsch (20.09.): zusätzlicher Filter nach Bezahlt-Status, z.B. um am
+        # Anmeldetisch schnell zu sehen, wer noch nicht bezahlt hat. Feste drei Einträge
+        # (anders als filter_combo oben) - keine Neubefüllung bei jedem aktualisieren() nötig.
+        self.filter_bezahlt = QComboBox()
+        self.filter_bezahlt.addItems(["Alle", "Bezahlt", "Nicht bezahlt"])
+        self.filter_bezahlt.currentTextChanged.connect(self._filter_anwenden)
+
         hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
         hinzufuegen_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
         hinzufuegen_btn.clicked.connect(self._teilnehmer_hinzufuegen)
@@ -545,6 +552,9 @@ class TeilnehmerTab(QWidget):
         filter_zeile.addSpacing(16)
         filter_zeile.addWidget(QLabel("Filter Start-Nr.:"))
         filter_zeile.addWidget(self.filter_startnummer)
+        filter_zeile.addSpacing(16)
+        filter_zeile.addWidget(QLabel("Filter Bezahlt:"))
+        filter_zeile.addWidget(self.filter_bezahlt)
         filter_zeile.addStretch()
 
         layout = QVBoxLayout(self)
@@ -565,10 +575,16 @@ class TeilnehmerTab(QWidget):
         entspricht dem gleichnamigen Filter in der Ergebniserfassung (siehe ErgebnisTab)."""
         filter_wert = self.filter_combo.currentText()
         filter_startnr = self.filter_startnummer.text().strip()
+        filter_bezahlt = self.filter_bezahlt.currentText()
         for row, t in enumerate(self._teilnehmer_je_zeile):
             passt = (
-                filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert
-            ) and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
+                (filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert)
+                and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
+                and (
+                    filter_bezahlt == "Alle"
+                    or (filter_bezahlt == "Bezahlt") == bool(t["bezahlt"])
+                )
+            )
             self.tabelle.setRowHidden(row, not passt)
 
     def _auswahl_geaendert(self) -> None:
