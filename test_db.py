@@ -1417,6 +1417,12 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
         admin_einrichten(self.conn, "chef", "sicheres_passwort")
         with self.assertRaises(self.IntegrityErrorTyp):
             benutzer_anlegen(self.conn, "Chef", "irgendein_passwort")
+        # rollback() zwischen den beiden Versuchen nötig - siehe Kommentar in tearDown()
+        # oben: PostgreSQL markiert die Transaktion nach dem ersten absichtlich
+        # ausgelösten IntegrityError als abgebrochen, jeder weitere Befehl auf derselben
+        # Verbindung (auch der zweite benutzer_anlegen()-Versuch hier) schlägt sonst mit
+        # InFailedSqlTransaction statt mit dem hier erwarteten IntegrityError fehl.
+        self.conn.rollback()
         with self.assertRaises(self.IntegrityErrorTyp):
             benutzer_anlegen(self.conn, "CHEF", "irgendein_passwort")
 
