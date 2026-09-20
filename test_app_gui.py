@@ -25,7 +25,16 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QMessageBox, QPushButton
 
-from app import VERSION, _QSS_MODERN_MINIMAL, HauptFenster, HilfeDialog, TeilnehmerDialog, TeilnehmerTab, VersionDialog
+from app import (
+    VERSION,
+    _QSS_MODERN_MINIMAL,
+    AuswertungTab,
+    HauptFenster,
+    HilfeDialog,
+    TeilnehmerDialog,
+    TeilnehmerTab,
+    VersionDialog,
+)
 from db import NeuerTeilnehmer, add_teilnehmer, eintragen_ergebnis, init_db, list_teilnehmer, set_veranstaltung
 
 
@@ -82,6 +91,18 @@ def test_teilnehmer_hinzufuegen_ist_primaerbutton(qtbot, conn):
     gefunden = [b for b in tab.findChildren(QPushButton) if b.objectName() == "primaerButton"]
     assert len(gefunden) == 1
     assert gefunden[0].text() == "Teilnehmer hinzufügen…"
+
+
+# --- Zeilennummern-Spalte ausgeblendet (in allen drei Tabellen-Tabs einheitlich) ----
+# Nutzerhinweis (20.09.): bei der Auswertung waren die Zeilennummern links noch sichtbar,
+# obwohl sie bei Teilnehmer und Ergebniserfassung bereits ausgeblendet sind - jetzt überall
+# konsistent versteckt (verticalHeader().setVisible(False)).
+
+
+def test_auswertung_tabelle_zeigt_keine_zeilennummern(qtbot, conn):
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    assert not tab.tabelle.verticalHeader().isVisible()
 
 
 # --- Bezahlt-Markierung -------------------------------------------------------------

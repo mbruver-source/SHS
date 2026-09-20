@@ -1010,6 +1010,9 @@ class AuswertungTab(QWidget):
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
+        # Zeilennummern links ausblenden - wie bereits bei TeilnehmerTab/ErgebnisTab, hier
+        # bisher übersehen (Nutzerhinweis 20.09.).
+        self.tabelle.verticalHeader().setVisible(False)
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange

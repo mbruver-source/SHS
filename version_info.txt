@@ -12,8 +12,8 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
     # filevers/prodvers sind 4er-Tupel (Major, Minor, Patch, Build).
-    filevers=(1, 0, 12, 0),
-    prodvers=(1, 0, 12, 0),
+    filevers=(1, 0, 13, 0),
+    prodvers=(1, 0, 13, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,        # VOS_NT_WINDOWS32
@@ -29,12 +29,12 @@ VSVersionInfo(
           [
             StringStruct("CompanyName", "SHS Verein"),
             StringStruct("FileDescription", "SHS-Pruefungsprogramm - Verwaltung von Spuerhundsport-Pruefungen"),
-            StringStruct("FileVersion", "1.0.12.0"),
+            StringStruct("FileVersion", "1.0.13.0"),
             StringStruct("InternalName", "SHS-Pruefungsprogramm"),
             StringStruct("LegalCopyright", "SHS Verein"),
             StringStruct("OriginalFilename", "SHS-Pruefungsprogramm.exe"),
             StringStruct("ProductName", "SHS-Pruefungsprogramm"),
-            StringStruct("ProductVersion", "1.0.12.0"),
+            StringStruct("ProductVersion", "1.0.13.0"),
           ]
         )
       ]
