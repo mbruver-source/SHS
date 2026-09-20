@@ -645,7 +645,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
 #
 # Layout nach Vorlage aus der Originaldatei (Tabellenblatt "HSVRM Statistik/Sportbeitrag"):
 # Kopf-Angaben zum Termin (Verein, Vereins-Nr., Prüfungsnummer, Prüfungstag,
-# Wertungsrichter 1/2, Prüfungsleiter), darunter eine Kreuztabelle "Prädikat" mit einer
+# Wertungsrichter 1-5, Prüfungsleiter), darunter eine Kreuztabelle "Prädikat" mit einer
 # Spalte je Art/Leistungsklasse (Dreikampf LK1-3, sowie je Einzeldisziplin LK1-3) und
 # einer Zeile je Prädikat (V/SG/G/B/nB) mit der jeweiligen Teilnehmerzahl. Bewusst OHNE
 # das Vereinslogo der Vorlage (oben links) - das ist vereinsspezifisch und nicht Teil
@@ -675,7 +675,10 @@ def _statistik_kopftabelle(veranstaltung: dict | None) -> Table:
         zelle("Verein:", v.get("verein")) + zelle("Vereins-Nr.:", v.get("vereins_nr")),
         zelle("Prüfungsnummer:", v.get("pruefungsnummer")) + zelle("Prüfungstag:", _datum_lang(v.get("datum"))),
         zelle("Wertungsrichter 1:", v.get("wertungsrichter_1")) + zelle("Prüfungsleiter:", v.get("pruefungsleiter")),
-        zelle("Wertungsrichter 2:", v.get("wertungsrichter_2")) + ["", ""],
+        # Wertungsrichter 3-5 (Nutzerwunsch 20.09., vorher nur 1/2): rechte Spalte bleibt
+        # für Prüfungsleiter reserviert, daher hier zu zweit statt gepaart mit ihm.
+        zelle("Wertungsrichter 2:", v.get("wertungsrichter_2")) + zelle("Wertungsrichter 3:", v.get("wertungsrichter_3")),
+        zelle("Wertungsrichter 4:", v.get("wertungsrichter_4")) + zelle("Wertungsrichter 5:", v.get("wertungsrichter_5")),
     ]
     tabelle = Table(daten, colWidths=[42 * mm, 68 * mm, 42 * mm, 68 * mm])
     tabelle.setStyle(TableStyle([
@@ -725,7 +728,7 @@ def _statistik_praedikat_matrix(fertig) -> Table:
 
 def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     """Statistik-PDF nach der Original-Vorlage: Kopf-Angaben zum Termin (Verein,
-    Vereins-Nr., Prüfungsnummer, Prüfungstag, Wertungsrichter 1/2, Prüfungsleiter) sowie
+    Vereins-Nr., Prüfungsnummer, Prüfungstag, Wertungsrichter 1-5, Prüfungsleiter) sowie
     eine Kreuztabelle, die für jede Art/Leistungsklasse-Kombination zählt, wie viele
     Teilnehmer welches Prädikat (V/SG/G/B/nB) erreicht haben. Nur vollständig erfasste
     Ergebnisse fließen in die Zählung ein."""

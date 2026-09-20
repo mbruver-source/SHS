@@ -382,6 +382,7 @@ class TestPdfExport(unittest.TestCase):
             self.conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern",
             vereins_nr="19010", pruefungsnummer="P-2026-04",
             wertungsrichter_1="A. Muster", wertungsrichter_2="B. Beispiel",
+            wertungsrichter_3="C. Vorbild", wertungsrichter_4="D. Vorlage", wertungsrichter_5="E. Original",
             pruefungsleiter="Katja Bruver",
         )
         a = add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -401,6 +402,9 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("P-2026-04", text)
         self.assertIn("A. Muster", text)
         self.assertIn("B. Beispiel", text)
+        self.assertIn("C. Vorbild", text)
+        self.assertIn("D. Vorlage", text)
+        self.assertIn("E. Original", text)
         self.assertIn("Katja Bruver", text)
         self.assertIn("Samstag, 19. September 2026", text)
         # Prädikat-Matrix: Spaltenüberschriften und die Zeile für den erreichten Wert.

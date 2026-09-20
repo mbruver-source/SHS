@@ -56,8 +56,13 @@ CREATE TABLE IF NOT EXISTS veranstaltung (
     -- optional, da sie oft erst im Lauf der Planung/am Prüfungstag feststehen.
     vereins_nr TEXT,
     pruefungsnummer TEXT,
+    -- Nutzerwunsch (20.09.): bis zu 5 Wertungsrichter statt bisher fest 2 (manche
+    -- Prüfungen sind entsprechend größer besetzt) - alle weiterhin optional.
     wertungsrichter_1 TEXT,
     wertungsrichter_2 TEXT,
+    wertungsrichter_3 TEXT,
+    wertungsrichter_4 TEXT,
+    wertungsrichter_5 TEXT,
     pruefungsleiter TEXT
 );
 
@@ -267,6 +272,8 @@ ALLE_DISZIPLINEN = list(DISZIPLIN_SPALTEN)
 _VERANSTALTUNG_NEUE_SPALTEN = [
     "vereins_nr", "pruefungsnummer", "wertungsrichter_1", "wertungsrichter_2", "pruefungsleiter",
     "pruefungsgebuehr_ed", "pruefungsgebuehr_dk", "zeitplan_start",
+    # Nutzerwunsch (20.09.): Wertungsrichter 3-5, siehe Kommentar bei SCHEMA oben.
+    "wertungsrichter_3", "wertungsrichter_4", "wertungsrichter_5",
 ]
 
 
@@ -408,6 +415,9 @@ def set_veranstaltung(
     pruefungsnummer: str | None = None,
     wertungsrichter_1: str | None = None,
     wertungsrichter_2: str | None = None,
+    wertungsrichter_3: str | None = None,
+    wertungsrichter_4: str | None = None,
+    wertungsrichter_5: str | None = None,
     pruefungsleiter: str | None = None,
     pruefungsgebuehr_ed: str | None = None,
     pruefungsgebuehr_dk: str | None = None,
@@ -417,19 +427,22 @@ def set_veranstaltung(
         """
         INSERT INTO veranstaltung (
             id, verein, ort, datum, vereins_nr, pruefungsnummer,
-            wertungsrichter_1, wertungsrichter_2, pruefungsleiter,
-            pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            wertungsrichter_1, wertungsrichter_2, wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
+            pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             verein=excluded.verein, ort=excluded.ort, datum=excluded.datum,
             vereins_nr=excluded.vereins_nr, pruefungsnummer=excluded.pruefungsnummer,
             wertungsrichter_1=excluded.wertungsrichter_1, wertungsrichter_2=excluded.wertungsrichter_2,
+            wertungsrichter_3=excluded.wertungsrichter_3, wertungsrichter_4=excluded.wertungsrichter_4,
+            wertungsrichter_5=excluded.wertungsrichter_5,
             pruefungsleiter=excluded.pruefungsleiter,
             pruefungsgebuehr_ed=excluded.pruefungsgebuehr_ed, pruefungsgebuehr_dk=excluded.pruefungsgebuehr_dk,
             zeitplan_start=excluded.zeitplan_start
         """,
         (
             verein, ort, datum, vereins_nr, pruefungsnummer, wertungsrichter_1, wertungsrichter_2,
+            wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
         ),
     )
@@ -1540,6 +1553,9 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             pruefungsnummer=veranstaltung.get("pruefungsnummer"),
             wertungsrichter_1=veranstaltung.get("wertungsrichter_1"),
             wertungsrichter_2=veranstaltung.get("wertungsrichter_2"),
+            wertungsrichter_3=veranstaltung.get("wertungsrichter_3"),
+            wertungsrichter_4=veranstaltung.get("wertungsrichter_4"),
+            wertungsrichter_5=veranstaltung.get("wertungsrichter_5"),
             pruefungsleiter=veranstaltung.get("pruefungsleiter"),
             pruefungsgebuehr_ed=veranstaltung.get("pruefungsgebuehr_ed"),
             pruefungsgebuehr_dk=veranstaltung.get("pruefungsgebuehr_dk"),

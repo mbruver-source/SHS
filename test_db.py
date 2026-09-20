@@ -159,11 +159,13 @@ class TestDatenbank(unittest.TestCase):
         v = get_veranstaltung(self.conn)
         self.assertIsNone(v["vereins_nr"])
         self.assertIsNone(v["pruefungsleiter"])
+        self.assertIsNone(v["wertungsrichter_3"])
 
         set_veranstaltung(
             self.conn, verein="SGV Köppern e.V.", datum="2026-09-19",
             vereins_nr="19010", pruefungsnummer="P-2026-04",
             wertungsrichter_1="A. Muster", wertungsrichter_2="B. Beispiel",
+            wertungsrichter_3="C. Vorbild", wertungsrichter_4="D. Vorlage", wertungsrichter_5="E. Original",
             pruefungsleiter="Katja Bruver",
         )
         v = get_veranstaltung(self.conn)
@@ -171,6 +173,9 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(v["pruefungsnummer"], "P-2026-04")
         self.assertEqual(v["wertungsrichter_1"], "A. Muster")
         self.assertEqual(v["wertungsrichter_2"], "B. Beispiel")
+        self.assertEqual(v["wertungsrichter_3"], "C. Vorbild")
+        self.assertEqual(v["wertungsrichter_4"], "D. Vorlage")
+        self.assertEqual(v["wertungsrichter_5"], "E. Original")
         self.assertEqual(v["pruefungsleiter"], "Katja Bruver")
 
     def test_pruefungsgebuehr_je_art_ed_und_dk(self):
@@ -218,6 +223,7 @@ class TestDatenbank(unittest.TestCase):
         self.assertIsNone(v["pruefungsnummer"])
         self.assertIsNone(v["pruefungsgebuehr_ed"])
         self.assertIsNone(v["pruefungsgebuehr_dk"])
+        self.assertIsNone(v["wertungsrichter_5"])
         # set_veranstaltung funktioniert danach ganz normal weiter.
         set_veranstaltung(conn, verein="Alt-Verein", datum="2025-01-01", pruefungsnummer="P-1")
         self.assertEqual(get_veranstaltung(conn)["pruefungsnummer"], "P-1")
@@ -1026,7 +1032,7 @@ class TestTerminSync(unittest.TestCase):
     def test_kopiert_veranstaltung_und_teilnehmer(self):
         set_veranstaltung(
             self.quelle, verein="Testverein", ort="Testort", datum="2026-09-19",
-            wertungsrichter_1="Richter A",
+            wertungsrichter_1="Richter A", wertungsrichter_5="Richter E",
         )
         add_teilnehmer(self.quelle, NeuerTeilnehmer(
             nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
@@ -1038,6 +1044,7 @@ class TestTerminSync(unittest.TestCase):
         veranstaltung = get_veranstaltung(self.ziel)
         self.assertEqual(veranstaltung["verein"], "Testverein")
         self.assertEqual(veranstaltung["wertungsrichter_1"], "Richter A")
+        self.assertEqual(veranstaltung["wertungsrichter_5"], "Richter E")
 
         ziel_teilnehmer = list_teilnehmer(self.ziel)
         self.assertEqual(len(ziel_teilnehmer), 1)

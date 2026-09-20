@@ -132,6 +132,9 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
         "pruefungsnummer": aktuell.get("pruefungsnummer"),
         "wertungsrichter_1": aktuell.get("wertungsrichter_1"),
         "wertungsrichter_2": aktuell.get("wertungsrichter_2"),
+        "wertungsrichter_3": aktuell.get("wertungsrichter_3"),
+        "wertungsrichter_4": aktuell.get("wertungsrichter_4"),
+        "wertungsrichter_5": aktuell.get("wertungsrichter_5"),
         "pruefungsleiter": aktuell.get("pruefungsleiter"),
         "pruefungsgebuehr_ed": aktuell.get("pruefungsgebuehr_ed"),
         "pruefungsgebuehr_dk": aktuell.get("pruefungsgebuehr_dk"),
@@ -1635,7 +1638,7 @@ class ExportTab(QWidget):
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
             "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
             "geplanten Ablauf je Leistungsrichter (eine Seite je Richter) zusammen. "
-            "Vereins-Nr., Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter sowie die "
+            "Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter sowie die "
             "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
             "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
             "gepflegt."
@@ -1783,7 +1786,7 @@ class ExportTab(QWidget):
 
 class VerwaltungTab(QWidget):
     """Verwaltungsdaten der Veranstaltung: Verein/Ort/Datum und Zusatzangaben (Vereins-Nr.,
-    Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
+    Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
     Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
     deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
 
@@ -1797,7 +1800,7 @@ class VerwaltungTab(QWidget):
 
         hinweis = QLabel(
             "Über \"Veranstaltungsdaten bearbeiten…\" lassen sich Verein, Ort und Datum "
-            "sowie Vereins-Nr., Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter und die "
+            "sowie Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
             "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest."
@@ -1834,6 +1837,9 @@ class VerwaltungTab(QWidget):
             pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
             wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
             wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
+            wertungsrichter_3=dialog.wertungsrichter_3.text().strip() or None,
+            wertungsrichter_4=dialog.wertungsrichter_4.text().strip() or None,
+            wertungsrichter_5=dialog.wertungsrichter_5.text().strip() or None,
             pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
             pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
             pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
@@ -2109,7 +2115,7 @@ Anzeige.</p>
 
 <h3>Reiter "Verwaltung"</h3>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
-Prüfungsnummer, Wertungsrichter 1/2, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
+Prüfungsnummer, Wertungsrichter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
 Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").</p>
 
@@ -2504,7 +2510,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     (inklusive Speicherort, der aus Verein + Datum vorgeschlagen wird und sich anpasst,
     solange der Nutzer ihn nicht selbst geändert hat) oder zum nachträglichen Bearbeiten
     eines bereits geöffneten Termins (ohne Speicherort-Feld, mit den bisherigen Werten
-    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Wertungsrichter 1/2,
+    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Wertungsrichter 1-5,
     Prüfungsleiter) sind rein optional und werden nur für die Statistik-PDF gebraucht
     (siehe pdf_export.erstelle_statistik_pdf) - sie stehen oft erst kurz vor oder am
     Prüfungstag fest, daher lassen sie sich jederzeit nachträglich ergänzen/ändern. Die
@@ -2532,6 +2538,9 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self.pruefungsnummer = feld("pruefungsnummer")
         self.wertungsrichter_1 = feld("wertungsrichter_1")
         self.wertungsrichter_2 = feld("wertungsrichter_2")
+        self.wertungsrichter_3 = feld("wertungsrichter_3")
+        self.wertungsrichter_4 = feld("wertungsrichter_4")
+        self.wertungsrichter_5 = feld("wertungsrichter_5")
         self.pruefungsleiter = feld("pruefungsleiter")
         self.pruefungsgebuehr_ed = geld_feld("pruefungsgebuehr_ed")
         self.pruefungsgebuehr_dk = geld_feld("pruefungsgebuehr_dk")
@@ -2548,6 +2557,9 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Prüfungsleiter", self.pruefungsleiter)
         form.addRow("Wertungsrichter 1", self.wertungsrichter_1)
         form.addRow("Wertungsrichter 2", self.wertungsrichter_2)
+        form.addRow("Wertungsrichter 3", self.wertungsrichter_3)
+        form.addRow("Wertungsrichter 4", self.wertungsrichter_4)
+        form.addRow("Wertungsrichter 5", self.wertungsrichter_5)
         form.addRow("Prüfungsgebühr ED (€)", self.pruefungsgebuehr_ed)
         form.addRow("Prüfungsgebühr DK (€)", self.pruefungsgebuehr_dk)
 
@@ -2709,6 +2721,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
             wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
             wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
+            wertungsrichter_3=dialog.wertungsrichter_3.text().strip() or None,
+            wertungsrichter_4=dialog.wertungsrichter_4.text().strip() or None,
+            wertungsrichter_5=dialog.wertungsrichter_5.text().strip() or None,
             pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
             pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
             pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
