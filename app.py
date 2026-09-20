@@ -1139,9 +1139,9 @@ class AuswertungTab(QWidget):
 
 class TeilnehmerUebersichtTab(QWidget):
     """Zeigt Teilnehmerzahlen je Art/Leistungsklasse inkl. der ED-Disziplin-Aufschlüsselung
-    sowie die daraus abgeleitete Anzahl benötigter Leistungsrichter - entspricht der Sicht
+    sowie die daraus abgeleitete Anzahl benötigter Richter - entspricht der Sicht
     "Übersicht Teilnehmer" aus der ursprünglichen Excel-Vorlage (siehe Grobkonzept.md), hier
-    mit "SH-R" durch den in diesem Programm sonst verwendeten Begriff "Leistungsrichter"
+    mit "SH-R" durch den in diesem Programm sonst verwendeten Begriff "Richter"
     ersetzt. Datenquelle ist db.berechne_teilnehmer_lk_uebersicht() - wie bei AuswertungTab
     kein Zwischenspeicher, baut sich bei jedem Tabwechsel neu aus der DB auf."""
 
@@ -1214,11 +1214,11 @@ class TeilnehmerUebersichtTab(QWidget):
 
         self.teilnehmer_label.setText(f"Teilnehmer gesamt: {daten['teilnehmer_gesamt']}")
         self.abteilungen_label.setText(f"Abteilungen gesamt: {daten['abteilungen_gesamt']}")
-        self.richter_label.setText(f"Anzahl benötigter Leistungsrichter: {daten['leistungsrichter_benoetigt']}")
+        self.richter_label.setText(f"Anzahl benötigter Richter: {daten['leistungsrichter_benoetigt']}")
 
 
 class PruefungsblockDialog(ResponsiveSchriftMixin, QDialog):
-    """Formular zum Hinzufügen eines Prüfungsblocks in einer Leistungsrichter-Spur des
+    """Formular zum Hinzufügen eines Prüfungsblocks in einer Richter-Spur des
     Zeitplans. Anders als bei der Teilnehmererfassung ist die Disziplin hier auch bei DK
     Pflicht: ein Dreikampf-Teilnehmer durchläuft die drei Disziplinen nacheinander, im
     Zeitplan also als drei getrennte Blöcke (ggf. auf unterschiedliche Richter/Zeiten
@@ -1277,7 +1277,7 @@ class PruefungsblockDialog(ResponsiveSchriftMixin, QDialog):
 
 
 class PauseDialog(ResponsiveSchriftMixin, QDialog):
-    """Formular zum Hinzufügen/Bearbeiten einer Pause in einer Leistungsrichter-Spur."""
+    """Formular zum Hinzufügen/Bearbeiten einer Pause in einer Richter-Spur."""
 
     def __init__(self, parent=None, dauer_minuten: int = 15, bezeichnung: str = ""):
         super().__init__(parent)
@@ -1313,7 +1313,7 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
 
 
 class ZeitplanTab(QWidget):
-    """Zeitplan-Planung: beliebig viele Leistungsrichter-Spuren, jede mit einer frei
+    """Zeitplan-Planung: beliebig viele Richter-Spuren, jede mit einer frei
     sortierbaren Abfolge aus Prüfungsblöcken und Pausen (siehe db.py, Abschnitt
     "Zeitplan"). "Automatisch verteilen…" erzeugt über db.automatische_zeitplan_verteilung
     einen ausgewogenen Erstvorschlag über alle Richter, der danach beliebig von Hand
@@ -1355,7 +1355,7 @@ class ZeitplanTab(QWidget):
         self.standard_dauer.setValue(10)
         self.standard_dauer.setSuffix(" Min.")
 
-        richter_hinzufuegen_btn = QPushButton("Leistungsrichter hinzufügen")
+        richter_hinzufuegen_btn = QPushButton("Richter hinzufügen")
         richter_hinzufuegen_btn.clicked.connect(self._richter_hinzufuegen)
 
         verteilen_btn = QPushButton("Automatisch verteilen…")
@@ -1378,9 +1378,9 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addWidget(export_btn)
 
         hinweis = QLabel(
-            "Je Leistungsrichter eine eigene Spalte mit frei sortierbarer Abfolge aus "
+            "Je Richter eine eigene Spalte mit frei sortierbarer Abfolge aus "
             "Prüfungsblöcken und Pausen. \"Automatisch verteilen…\" erstellt einen "
-            "ausgewogenen Erstvorschlag über ALLE angelegten Leistungsrichter (ersetzt "
+            "ausgewogenen Erstvorschlag über ALLE angelegten Richter (ersetzt "
             "dabei deren bisherigen Zeitplan) - die \"Standard-Prüfungsdauer\" ist dabei "
             "nur ein Vorschlagswert und lässt sich je Block einzeln überschreiben. "
             "Pausendauer und -platzierung sind ebenso frei wählbar wie die Reihenfolge "
@@ -1425,7 +1425,7 @@ class ZeitplanTab(QWidget):
 
         richter_liste = list_zeitplan_richter(self.conn)
         if not richter_liste:
-            hinweis = QLabel("Noch keine Leistungsrichter angelegt - über „Leistungsrichter hinzufügen“ starten.")
+            hinweis = QLabel("Noch keine Richter angelegt - über „Richter hinzufügen“ starten.")
             hinweis.setWordWrap(True)
             self._spalten_layout.addWidget(hinweis)
         else:
@@ -1486,7 +1486,7 @@ class ZeitplanTab(QWidget):
         block_btn.clicked.connect(lambda: self._pruefungsblock_hinzufuegen(richter_id))
         pause_btn = QPushButton("Pause hinzufügen…")
         pause_btn.clicked.connect(lambda: self._pause_hinzufuegen(richter_id))
-        loeschen_btn = QPushButton("Leistungsrichter löschen")
+        loeschen_btn = QPushButton("Richter löschen")
         loeschen_btn.clicked.connect(lambda: self._richter_loeschen(richter_id, richter["name"]))
 
         layout = QVBoxLayout(box)
@@ -1543,7 +1543,7 @@ class ZeitplanTab(QWidget):
 
     def _richter_umbenennen(self, richter_id: int) -> None:
         aktueller_name = next((r["name"] for r in list_zeitplan_richter(self.conn) if r["id"] == richter_id), "")
-        name, ok = QInputDialog.getText(self, "Leistungsrichter umbenennen", "Name:", text=aktueller_name)
+        name, ok = QInputDialog.getText(self, "Richter umbenennen", "Name:", text=aktueller_name)
         if not ok or not name.strip():
             return
         umbenennen_zeitplan_richter(self.conn, richter_id, name.strip())
@@ -1555,7 +1555,7 @@ class ZeitplanTab(QWidget):
 
     def _richter_loeschen(self, richter_id: int, name: str) -> None:
         antwort = QMessageBox.question(
-            self, "Leistungsrichter löschen",
+            self, "Richter löschen",
             f"„{name}“ samt allen dort eingeplanten Prüfungsblöcken/Pausen löschen?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
@@ -1568,13 +1568,13 @@ class ZeitplanTab(QWidget):
         richter = list_zeitplan_richter(self.conn)
         if not richter:
             QMessageBox.information(
-                self, "Keine Leistungsrichter",
-                "Bitte zuerst mindestens einen Leistungsrichter anlegen.",
+                self, "Keine Richter",
+                "Bitte zuerst mindestens einen Richter anlegen.",
             )
             return
         antwort = QMessageBox.question(
             self, "Automatisch verteilen",
-            "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Leistungsrichter "
+            "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter "
             "und ERSETZT dabei deren bisherigen Zeitplan (bereits eingefügte Pausen und "
             "von Hand geänderte Reihenfolgen gehen dabei verloren). Fortfahren?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
@@ -1703,7 +1703,7 @@ class ExportTab(QWidget):
         pruefungsleitung_btn = QPushButton("Übersicht für Prüfungsleitung (PDF)…")
         pruefungsleitung_btn.clicked.connect(self._pruefungsleitung_exportieren)
 
-        leistungsrichter_btn = QPushButton("Leistungsrichter-Bedarf (PDF)…")
+        leistungsrichter_btn = QPushButton("Richter-Bedarf (PDF)…")
         leistungsrichter_btn.clicked.connect(self._leistungsrichter_exportieren)
 
         zeitplan_btn = QPushButton("Zeitplan (PDF)…")
@@ -1731,11 +1731,11 @@ class ExportTab(QWidget):
             "Die \"Übersicht für Prüfungsleitung\" zeigt je Teilnehmer die Stammdaten und "
             "die Prüfungsgebühr (je nach Art ED/DK); die Spalten \"bezahlt?\", \"Kontrolle "
             "Impfpass erledigt?\" und \"Abgabe Sportbeitrag\" bleiben leer zum Abhaken am "
-            "Prüfungstag. Der \"Leistungsrichter-Bedarf\" errechnet aus der Teilnehmerzahl "
+            "Prüfungstag. Der \"Richter-Bedarf\" errechnet aus der Teilnehmerzahl "
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
             "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
-            "geplanten Ablauf je Leistungsrichter (eine Seite je Richter) zusammen. "
-            "Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter sowie die "
+            "geplanten Ablauf je Richter (eine Seite je Richter) zusammen. "
+            "Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter sowie die "
             "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
             "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
             "gepflegt."
@@ -1847,7 +1847,7 @@ class ExportTab(QWidget):
 
     def _leistungsrichter_exportieren(self) -> None:
         pfad = self._speicherort_waehlen(
-            "Leistungsrichter-Bedarf speichern", self._export_dateiname("Leistungsrichter_Bedarf")
+            "Richter-Bedarf speichern", self._export_dateiname("Richter_Bedarf")
         )
         if not pfad:
             return
@@ -1856,7 +1856,7 @@ class ExportTab(QWidget):
         except Exception as exc:
             self._export_fehler_anzeigen(exc)
             return
-        self.status_label.setText(f"Leistungsrichter-Bedarf gespeichert: {pfad}")
+        self.status_label.setText(f"Richter-Bedarf gespeichert: {pfad}")
 
     def _zeitplan_exportieren(self) -> None:
         pfad = self._speicherort_waehlen("Zeitplan speichern", self._export_dateiname("Zeitplan"))
@@ -1883,7 +1883,7 @@ class ExportTab(QWidget):
 
 class VerwaltungTab(QWidget):
     """Verwaltungsdaten der Veranstaltung: Verein/Ort/Datum und Zusatzangaben (Vereins-Nr.,
-    Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
+    Prüfungsnummer, Richter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
     Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
     deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
 
@@ -1897,7 +1897,7 @@ class VerwaltungTab(QWidget):
 
         hinweis = QLabel(
             "Über \"Veranstaltungsdaten bearbeiten…\" lassen sich Verein, Ort und Datum "
-            "sowie Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter und die "
+            "sowie Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
             "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest."
@@ -2188,7 +2188,7 @@ Zahlungsstatus des markierten Teilnehmers, ohne den ganzen Dialog zu öffnen. De
 Art/LK bzw. Start-Nr. (wie in der Ergebniserfassung) blendet Zeilen nur aus.</p>
 
 <h3>Reiter "Zeitplan"</h3>
-<p>Plant den Tagesablauf je Leistungsrichter. Startzeit oben festlegen, dann je Richter eine
+<p>Plant den Tagesablauf je Richter. Startzeit oben festlegen, dann je Richter eine
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…". Reihenfolge mit
 "Hoch"/"Runter" anpassen. "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
 (ersetzt den bisherigen Plan der gewählten Richter, mit Rückfrage) – danach frei von Hand
@@ -2212,13 +2212,13 @@ Anzeige.</p>
 
 <h3>Reiter "Verwaltung"</h3>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
-Prüfungsnummer, Leistungsrichter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
+Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
 Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").</p>
 
 <h3>Reiter "Export"</h3>
 <p>Alle PDF-Ausgaben an einer Stelle: Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
-Etiketten, Statistik, Übersicht für Prüfungsleitung, Leistungsrichter-Bedarf, Zeitplan sowie
+Etiketten, Statistik, Übersicht für Prüfungsleitung, Richter-Bedarf, Zeitplan sowie
 alle Bewertungsbögen gesammelt. "Ablageort öffnen" zeigt den Ordner der zuletzt gespeicherten
 PDFs im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen sich denselben Speicherort.</p>
 
@@ -2609,7 +2609,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     (inklusive Speicherort, der aus Verein + Datum vorgeschlagen wird und sich anpasst,
     solange der Nutzer ihn nicht selbst geändert hat) oder zum nachträglichen Bearbeiten
     eines bereits geöffneten Termins (ohne Speicherort-Feld, mit den bisherigen Werten
-    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Leistungsrichter 1-5,
+    vorbelegt). Die Zusatzfelder (Vereins-Nr., Prüfungsnummer, Richter 1-5,
     Prüfungsleiter) sind rein optional und werden nur für die Statistik-PDF gebraucht
     (siehe pdf_export.erstelle_statistik_pdf) - sie stehen oft erst kurz vor oder am
     Prüfungstag fest, daher lassen sie sich jederzeit nachträglich ergänzen/ändern. Die
@@ -2654,11 +2654,11 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Datum* (JJJJ-MM-TT)", self.datum)
         form.addRow("Prüfungsnummer", self.pruefungsnummer)
         form.addRow("Prüfungsleiter", self.pruefungsleiter)
-        form.addRow("Leistungsrichter 1", self.wertungsrichter_1)
-        form.addRow("Leistungsrichter 2", self.wertungsrichter_2)
-        form.addRow("Leistungsrichter 3", self.wertungsrichter_3)
-        form.addRow("Leistungsrichter 4", self.wertungsrichter_4)
-        form.addRow("Leistungsrichter 5", self.wertungsrichter_5)
+        form.addRow("Richter 1", self.wertungsrichter_1)
+        form.addRow("Richter 2", self.wertungsrichter_2)
+        form.addRow("Richter 3", self.wertungsrichter_3)
+        form.addRow("Richter 4", self.wertungsrichter_4)
+        form.addRow("Richter 5", self.wertungsrichter_5)
         form.addRow("Prüfungsgebühr ED (€)", self.pruefungsgebuehr_ed)
         form.addRow("Prüfungsgebühr DK (€)", self.pruefungsgebuehr_dk)
 

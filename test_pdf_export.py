@@ -509,9 +509,9 @@ class TestPdfExport(unittest.TestCase):
         pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, pfad)
         self.assertTrue(os.path.exists(pfad))
         text = _text(pfad)
-        self.assertIn("Leistungsrichter-Bedarf", text)
+        self.assertIn("Richter-Bedarf", text)
         self.assertIn("Gesamteinheiten: 8", text)
-        self.assertIn("Benötigte Leistungsrichter", text)
+        self.assertIn("Benötigte Richter", text)
         self.assertIn(": 1", text)
 
     def test_leistungsrichter_bedarf_rundet_auf(self):
@@ -587,7 +587,7 @@ class TestPdfExport(unittest.TestCase):
         self.assertTrue(os.path.exists(pfad))
         text = _text(pfad)
         self.assertIn("Zeitplan", text)
-        self.assertIn("keine Leistungsrichter", text)
+        self.assertIn("keine Richter", text)
 
     def test_zeitplan_pdf_richter_ohne_eintraege_zeigt_hinweis(self):
         add_zeitplan_richter(self.conn, name="Herr Ohne Plan")

@@ -219,7 +219,7 @@ class TestDatenbank(unittest.TestCase):
         # Szenario aus der Original-Vorlage ("Übersicht Teilnehmer"): 13 ED-LK1-Teilnehmer
         # in Trümmerfeld, 2 DK-LK1- und 2 DK-LK2-Teilnehmer. Prüft insbesondere die
         # Abteilungen-Zählung (DK = 3 je Teilnehmer) und die daraus resultierende
-        # Leistungsrichterzahl.
+        # Richterzahl.
         startnummer = 1
         for _ in range(13):
             add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -705,7 +705,7 @@ class TestDatenbank(unittest.TestCase):
 
 
 class TestZeitplan(unittest.TestCase):
-    """Tests für die Zeitplan-Verwaltung: Leistungsrichter-Spuren mit frei sortierbaren
+    """Tests für die Zeitplan-Verwaltung: Richter-Spuren mit frei sortierbaren
     Prüfungsblöcken/Pausen, Teilnehmer-Gruppierung, automatische Verteilung sowie die
     zeitliche Berechnung (Start-/Endzeiten je Zeile bzw. je Block)."""
 
@@ -734,8 +734,8 @@ class TestZeitplan(unittest.TestCase):
         r2 = add_zeitplan_richter(self.conn)
         richter = list_zeitplan_richter(self.conn)
         self.assertEqual([r["id"] for r in richter], [r1, r2])
-        self.assertEqual(richter[0]["name"], "Leistungsrichter 1")
-        self.assertEqual(richter[1]["name"], "Leistungsrichter 2")
+        self.assertEqual(richter[0]["name"], "Richter 1")
+        self.assertEqual(richter[1]["name"], "Richter 2")
         self.assertEqual([r["reihenfolge"] for r in richter], [0, 1])
 
     def test_richter_eigener_name(self):

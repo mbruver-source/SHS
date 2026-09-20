@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS ergebnisse (
     anzeige_behaeltnis INTEGER CHECK (anzeige_behaeltnis BETWEEN 0 AND 40)
 );
 
--- Zeitplan: je Termin beliebig viele "Leistungsrichter"-Spuren (zeitplan_richter), jede
+-- Zeitplan: je Termin beliebig viele "Richter"-Spuren (zeitplan_richter), jede
 -- mit einer eigenen, frei sortierbaren Abfolge aus Prüfungsblöcken und Pausen
 -- (zeitplan_eintrag). Start-/Endzeiten werden NICHT gespeichert, sondern bei Bedarf aus
 -- der Zeitplan-Startzeit (veranstaltung.zeitplan_start) und den Dauern der Einträge neu
@@ -667,10 +667,10 @@ def leistungsklasse_label(teilnehmer: dict) -> str:
     return f"ED LK {teilnehmer['stufe']} {teilnehmer['disziplin']}"
 
 
-# Konstanten für die Leistungsrichter-Bedarfsberechnung nach Vorgabe des Vereins: 1
+# Konstanten für die Richter-Bedarfsberechnung nach Vorgabe des Vereins: 1
 # Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf (DK) = 3 Einheiten (ein Dreikampf-
 # Teilnehmer durchläuft alle drei Disziplinen und bindet einen Richter entsprechend
-# länger). Ein Leistungsrichter darf höchstens 36 Einheiten an einem Prüfungstag richten -
+# länger). Ein Richter darf höchstens 36 Einheiten an einem Prüfungstag richten -
 # die benötigte Richterzahl ergibt sich aus den Gesamteinheiten, aufgerundet. Zentral hier
 # statt doppelt gepflegt (analog dazu, wie shs_core.py die Wertnoten-Logik zentralisiert):
 # gemeinsame Grundlage für pdf_export.erstelle_leistungsrichter_bedarf_pdf() und
@@ -682,7 +682,7 @@ LR_EINHEITEN_PRO_RICHTER = 36
 def berechne_teilnehmer_lk_uebersicht(conn) -> dict:
     """Liefert eine Übersicht der Teilnehmerzahlen je Art/Leistungsklasse (bei ED
     zusätzlich je Disziplin aufgeschlüsselt), sowie die daraus resultierende Anzahl
-    benötigter Leistungsrichter. Grundlage für den GUI-Reiter "Übersicht Teilnehmer und
+    benötigter Richter. Grundlage für den GUI-Reiter "Übersicht Teilnehmer und
     LK" (siehe app.py) - fachlich identisch mit
     pdf_export.erstelle_leistungsrichter_bedarf_pdf() (nutzt dieselben Konstanten
     LR_EINHEITEN_JE_ART/LR_EINHEITEN_PRO_RICHTER, daher immer konsistente Zahlen
@@ -825,7 +825,7 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
 # --- Zeitplan --------------------------------------------------------------
 #
 # Siehe Tabellenkommentar bei SCHEMA weiter oben: ein Zeitplan besteht aus einer frei
-# wählbaren Anzahl "Leistungsrichter"-Spuren, jede mit einer eigenen, frei sortierbaren
+# wählbaren Anzahl "Richter"-Spuren, jede mit einer eigenen, frei sortierbaren
 # Abfolge aus Prüfungsblöcken und Pausen. Ein Prüfungsblock deckt alle Teilnehmer einer
 # Art/Leistungsklasse(/Disziplin bei ED) ab; wie viele das sind (und damit wie lange der
 # Block insgesamt dauert) ergibt sich erst bei der Berechnung (berechne_zeitplan*) aus den
@@ -837,10 +837,10 @@ def list_zeitplan_richter(conn: sqlite3.Connection) -> list[dict]:
 
 
 def add_zeitplan_richter(conn: sqlite3.Connection, name: str | None = None) -> int:
-    """Legt einen neuen Leistungsrichter (Zeitplan-Spur) an und hängt ihn ans Ende an.
-    Ohne Namen wird automatisch 'Leistungsrichter N' vergeben (frei umbenennbar)."""
+    """Legt einen neuen Richter (Zeitplan-Spur) an und hängt ihn ans Ende an.
+    Ohne Namen wird automatisch 'Richter N' vergeben (frei umbenennbar)."""
     naechste_reihenfolge = len(list_zeitplan_richter(conn))
-    name = name or f"Leistungsrichter {naechste_reihenfolge + 1}"
+    name = name or f"Richter {naechste_reihenfolge + 1}"
     cur = conn.execute(
         "INSERT INTO zeitplan_richter (name, reihenfolge) VALUES (?, ?)",
         (name, naechste_reihenfolge),
@@ -855,7 +855,7 @@ def umbenennen_zeitplan_richter(conn: sqlite3.Connection, richter_id: int, name:
 
 
 def loesche_zeitplan_richter(conn: sqlite3.Connection, richter_id: int) -> None:
-    """Löscht einen Leistungsrichter samt aller seiner Zeitplan-Einträge (ON DELETE CASCADE)
+    """Löscht einen Richter samt aller seiner Zeitplan-Einträge (ON DELETE CASCADE)
     und rückt die reihenfolge der verbliebenen Richter lückenlos nach."""
     conn.execute("DELETE FROM zeitplan_richter WHERE id = ?", (richter_id,))
     for neue_position, richter in enumerate(list_zeitplan_richter(conn)):
@@ -1017,7 +1017,7 @@ def _zeitplan_startzeit(veranstaltung: dict | None) -> datetime.datetime:
 
 
 def berechne_zeitplan(conn: sqlite3.Connection) -> list[dict]:
-    """Berechnet für jeden Leistungsrichter die vollständige, zeilenweise Abfolge (eine
+    """Berechnet für jeden Richter die vollständige, zeilenweise Abfolge (eine
     Zeile je Teilnehmer bzw. je Pause) mit Start-/Endzeit - Grundlage für die Zeitplan-PDF
     sowie für die Planungsansicht im Zeitplan-Tab (dort werden so auch einzelne Teilnehmer
     statt nur ganzer Prüfungsblöcke angezeigt). Jede Zeile trägt zusätzlich "eintrag_id" -

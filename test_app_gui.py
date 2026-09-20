@@ -111,7 +111,7 @@ def test_auswertung_tabelle_zeigt_keine_zeilennummern(qtbot, conn):
 
 def test_uebersicht_zeigt_teilnehmerzahlen_und_leistungsrichter_bedarf(qtbot, conn):
     # 13 ED-Teilnehmer LK1/Trümmerfeld + 2 DK-Teilnehmer LK1 + 2 DK-Teilnehmer LK2
-    # -> 17 Teilnehmer gesamt, Abteilungen = 13*1 + 4*3 = 25, Leistungsrichter = ceil(25/36) = 1.
+    # -> 17 Teilnehmer gesamt, Abteilungen = 13*1 + 4*3 = 25, Richter = ceil(25/36) = 1.
     startnummer = 1
     for _ in range(13):
         _teilnehmer_anlegen(
@@ -130,7 +130,7 @@ def test_uebersicht_zeigt_teilnehmerzahlen_und_leistungsrichter_bedarf(qtbot, co
 
     assert tab.teilnehmer_label.text() == "Teilnehmer gesamt: 17"
     assert tab.abteilungen_label.text() == "Abteilungen gesamt: 25"
-    assert tab.richter_label.text() == "Anzahl benötigter Leistungsrichter: 1"
+    assert tab.richter_label.text() == "Anzahl benötigter Richter: 1"
 
     # ED LK 1 (Zeile 0): 13 Teilnehmer, alle Trümmerfeld, 13 Abteilungen.
     assert tab.tabelle.item(0, 0).text() == "ED LK 1"

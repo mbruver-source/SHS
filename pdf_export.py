@@ -647,7 +647,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
 #
 # Layout nach Vorlage aus der Originaldatei (Tabellenblatt "HSVRM Statistik/Sportbeitrag"):
 # Kopf-Angaben zum Termin (Verein, Vereins-Nr., Prüfungsnummer, Prüfungstag,
-# Leistungsrichter 1-5, Prüfungsleiter), darunter eine Kreuztabelle "Prädikat" mit einer
+# Richter 1-5, Prüfungsleiter), darunter eine Kreuztabelle "Prädikat" mit einer
 # Spalte je Art/Leistungsklasse (Dreikampf LK1-3, sowie je Einzeldisziplin LK1-3) und
 # einer Zeile je Prädikat (V/SG/G/B/nB) mit der jeweiligen Teilnehmerzahl. Bewusst OHNE
 # das Vereinslogo der Vorlage (oben links) - das ist vereinsspezifisch und nicht Teil
@@ -676,11 +676,11 @@ def _statistik_kopftabelle(veranstaltung: dict | None) -> Table:
     daten = [
         zelle("Verein:", v.get("verein")) + zelle("Vereins-Nr.:", v.get("vereins_nr")),
         zelle("Prüfungsnummer:", v.get("pruefungsnummer")) + zelle("Prüfungstag:", _datum_lang(v.get("datum"))),
-        zelle("Leistungsrichter 1:", v.get("wertungsrichter_1")) + zelle("Prüfungsleiter:", v.get("pruefungsleiter")),
-        # Leistungsrichter 3-5 (Nutzerwunsch 20.09., vorher nur 1/2): rechte Spalte bleibt
+        zelle("Richter 1:", v.get("wertungsrichter_1")) + zelle("Prüfungsleiter:", v.get("pruefungsleiter")),
+        # Richter 3-5 (Nutzerwunsch 20.09., vorher nur 1/2): rechte Spalte bleibt
         # für Prüfungsleiter reserviert, daher hier zu zweit statt gepaart mit ihm.
-        zelle("Leistungsrichter 2:", v.get("wertungsrichter_2")) + zelle("Leistungsrichter 3:", v.get("wertungsrichter_3")),
-        zelle("Leistungsrichter 4:", v.get("wertungsrichter_4")) + zelle("Leistungsrichter 5:", v.get("wertungsrichter_5")),
+        zelle("Richter 2:", v.get("wertungsrichter_2")) + zelle("Richter 3:", v.get("wertungsrichter_3")),
+        zelle("Richter 4:", v.get("wertungsrichter_4")) + zelle("Richter 5:", v.get("wertungsrichter_5")),
     ]
     tabelle = Table(daten, colWidths=[42 * mm, 68 * mm, 42 * mm, 68 * mm])
     tabelle.setStyle(TableStyle([
@@ -730,7 +730,7 @@ def _statistik_praedikat_matrix(fertig) -> Table:
 
 def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     """Statistik-PDF nach der Original-Vorlage: Kopf-Angaben zum Termin (Verein,
-    Vereins-Nr., Prüfungsnummer, Prüfungstag, Leistungsrichter 1-5, Prüfungsleiter) sowie
+    Vereins-Nr., Prüfungsnummer, Prüfungstag, Richter 1-5, Prüfungsleiter) sowie
     eine Kreuztabelle, die für jede Art/Leistungsklasse-Kombination zählt, wie viele
     Teilnehmer welches Prädikat (V/SG/G/B/nB) erreicht haben. Nur vollständig erfasste
     Ergebnisse fließen in die Zählung ein."""
@@ -831,11 +831,11 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     ).build(story)
 
 
-# --- Leistungsrichter-Bedarf -----------------------------------------------
+# --- Richter-Bedarf -----------------------------------------------
 #
 # Berechnung nach Vorgabe des Vereins: 1 Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf
 # (DK) = 3 Einheiten (ein Dreikampf-Teilnehmer bindet einen Richter für alle drei
-# Disziplinen). Ein Leistungsrichter darf höchstens 36 Einheiten an einem Prüfungstag
+# Disziplinen). Ein Richter darf höchstens 36 Einheiten an einem Prüfungstag
 # richten - die benötigte Richterzahl ergibt sich aus den Gesamteinheiten, aufgerundet.
 # Konstanten LR_EINHEITEN_JE_ART/LR_EINHEITEN_PRO_RICHTER zentral in db.py (single source
 # of truth, auch für db.berechne_teilnehmer_lk_uebersicht() - den GUI-Reiter "Übersicht
@@ -843,22 +843,22 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
 
 
 def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) -> None:
-    """Übersicht zur Berechnung der benötigten Leistungsrichter: zeigt je Art/
+    """Übersicht zur Berechnung der benötigten Richter: zeigt je Art/
     Leistungsklasse die Teilnehmerzahl und die daraus resultierenden Einheiten
     (1 ED = 1 Einheit, 1 DK = 3 Einheiten), sowie darunter die Gesamteinheiten und die
-    (aufgerundete) Anzahl benötigter Leistungsrichter bei höchstens 36 Einheiten je
+    (aufgerundete) Anzahl benötigter Richter bei höchstens 36 Einheiten je
     Richter."""
     veranstaltung = get_veranstaltung(conn)
     teilnehmer = list_teilnehmer(conn)
 
     story: list = []
-    titel = "Leistungsrichter-Bedarf"
+    titel = "Richter-Bedarf"
     if veranstaltung:
         titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "1 Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf (DK) = 3 Einheiten. Ein "
-        f"Leistungsrichter darf höchstens {LR_EINHEITEN_PRO_RICHTER} Einheiten an einem "
+        f"Richter darf höchstens {LR_EINHEITEN_PRO_RICHTER} Einheiten an einem "
         "Prüfungstag richten.",
         _HINWEIS,
     ))
@@ -893,7 +893,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     story.append(Spacer(1, 5 * mm))
     story.append(Paragraph(f"Gesamteinheiten: {gesamt_einheiten}", _TEXT_FETT))
     story.append(Paragraph(
-        f"Benötigte Leistungsrichter (je höchstens {LR_EINHEITEN_PRO_RICHTER} Einheiten, "
+        f"Benötigte Richter (je höchstens {LR_EINHEITEN_PRO_RICHTER} Einheiten, "
         f"aufgerundet): {richter_benoetigt}",
         _TEXT_FETT,
     ))
@@ -908,7 +908,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
 #
 # Layout eigens entworfen (das Original hatte für den Zeitplan keine Berechnungslogik,
 # siehe Fortschritt.md - es wurde dort nur eine von Hand geplante Liste eingelesen und
-# angezeigt): eine Seite je Leistungsrichter mit einer Zeile je Teilnehmer bzw. je Pause,
+# angezeigt): eine Seite je Richter mit einer Zeile je Teilnehmer bzw. je Pause,
 # jeweils mit Start-/Endzeit (siehe db.berechne_zeitplan). Jede Art/Leistungsklasse-
 # Kombination (ED LK 1-3, DK LK 1-3) bekommt eine EIGENE, feste Farbe (unabhängig von der
 # Disziplin) als schnelle visuelle Orientierung für den Richter - z. B. damit alle drei
@@ -989,11 +989,11 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
 
 
 def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
-    """Zeitplan-PDF: eine Seite je Leistungsrichter mit der vollständigen, zeilenweise
+    """Zeitplan-PDF: eine Seite je Richter mit der vollständigen, zeilenweise
     berechneten Abfolge (siehe db.berechne_zeitplan) aus Prüfungsblöcken (eine Zeile je
     Teilnehmer, mit Start-/Endzeit) und Pausen - farblich nach Art/Leistungsklasse
     unterschieden (jede der sechs möglichen Kombinationen ED/DK × LK 1-3 hat eine feste,
-    eigene Farbe, siehe _ZEITPLAN_FARBE_JE_LK). Ist noch kein Leistungsrichter angelegt,
+    eigene Farbe, siehe _ZEITPLAN_FARBE_JE_LK). Ist noch kein Richter angelegt,
     enthält die PDF nur einen entsprechenden Hinweis statt einer leeren Seite."""
     veranstaltung = get_veranstaltung(conn)
     plaene = berechne_zeitplan(conn)
@@ -1004,7 +1004,7 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
         if veranstaltung:
             titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
         story.append(Paragraph(titel, _TITEL))
-        story.append(Paragraph("Es sind noch keine Leistungsrichter/Zeitplan-Einträge angelegt.", _TEXT))
+        story.append(Paragraph("Es sind noch keine Richter/Zeitplan-Einträge angelegt.", _TEXT))
     else:
         for i, plan in enumerate(plaene):
             if i > 0:
@@ -1015,7 +1015,7 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
             story.append(Paragraph(titel, _TITEL))
             story.append(Spacer(1, 2 * mm))
             if not plan["zeilen"]:
-                story.append(Paragraph("Noch keine Prüfungsblöcke/Pausen für diesen Leistungsrichter eingeplant.", _TEXT))
+                story.append(Paragraph("Noch keine Prüfungsblöcke/Pausen für diesen Richter eingeplant.", _TEXT))
             else:
                 story.append(_zeitplan_richter_tabelle(plan))
 
