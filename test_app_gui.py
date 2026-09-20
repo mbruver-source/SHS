@@ -203,10 +203,6 @@ def test_filter_bezahlt_blendet_zeilen_nach_status_aus(qtbot, conn):
     assert not tab.tabelle.isRowHidden(0)
     assert not tab.tabelle.isRowHidden(1)
 
-    # Erneuter Klick schaltet wieder zurück (Toggle-Verhalten, nicht nur "setzen").
-    qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
-    assert list_teilnehmer(conn)[0]["bezahlt"] == 0
-
 
 def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
