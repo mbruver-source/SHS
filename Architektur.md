@@ -23,7 +23,7 @@ SQLite und PostgreSQL.
 ```mermaid
 flowchart TB
     subgraph Desktop["Desktop-App (PySide6)"]
-        AppPy["app.py (2918 Zeilen)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung"]
+        AppPy["app.py (4144 Zeilen)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung"]
     end
 
     subgraph WebBackend["Web-Backend (Flask, im Container)"]
@@ -32,7 +32,7 @@ flowchart TB
     end
 
     subgraph Shared["Gemeinsame Schicht"]
-        DbPy["db.py (1850 Zeilen)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Zeitplan-Berechnung, Sicherung (ZIP/pyzipper)"]
+        DbPy["db.py (2442 Zeilen)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Zeitplan-Berechnung, Sicherung (ZIP/pyzipper)"]
         ShsCore["shs_core.py (197 Zeilen)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
         PdfExport["pdf_export.py (1020 Zeilen)<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan"]
     end
@@ -127,8 +127,8 @@ Kurzfassung - die vollständige, für jede Sitzung geltende Fassung steht in `CL
 Repo-Wurzelverzeichnis (wird von Claude-Sitzungen, die in diesem Ordner arbeiten, automatisch
 gelesen):
 
-1. **Explore-Subagent vor neuen, nicht-trivialen Aufgaben** - statt `app.py` (2918 Zeilen) oder
-   `db.py` (1850 Zeilen) komplett zu lesen, zuerst einen schnellen Such-Subagent die relevante
+1. **Explore-Subagent vor neuen, nicht-trivialen Aufgaben** - statt `app.py` (4144 Zeilen) oder
+   `db.py` (2442 Zeilen) komplett zu lesen, zuerst einen schnellen Such-Subagent die relevante
    Stelle lokalisieren lassen.
 2. **Bereichs-Subagents bei bereichsübergreifenden Änderungen** - betrifft eine Änderung
    mehrere der drei Bereiche Desktop (`app.py`), Web (`app_web.py`+`templates/`) und Daten

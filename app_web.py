@@ -50,6 +50,7 @@ from __future__ import annotations
 import io
 import os
 import secrets
+import sqlite3
 import tempfile
 import time
 from functools import wraps
@@ -178,14 +179,39 @@ def _verbindung_schliessen(exception=None):
         conn.close()
 
 
+def _aktueller_benutzer_oder_redirect():
+    """Re-validiert session["benutzername"] gegen den AKTUELLEN Datenbankstand
+    (db.benutzer_stand()) statt der Session blind zu vertrauen - QS-Fund (21.09.): ohne
+    das blieb die Session eines Nutzers bis zum Abmelden/Sitzungsablauf voll nutzbar
+    (ggf. sogar mit Admin-Rechten), selbst wenn ein Administrator dessen Konto
+    zwischenzeitlich gelöscht hatte. Von _login_erforderlich, _admin_erforderlich UND
+    _termin_erforderlich unten gemeinsam genutzt statt die Prüfung dreimal zu
+    duplizieren.
+
+    Liefert (True, None), wenn die Anmeldung noch gültig ist - dabei wird
+    session["ist_admin"] nebenbei aktualisiert, falls sich die Rolle des Kontos
+    zwischenzeitlich geändert hat (z. B. Administrator degradiert). Liefert sonst
+    (False, <Redirect zum Login>) und leert dabei die Session (session.clear())."""
+    benutzername = session.get("benutzername")
+    if not benutzername:
+        return False, redirect(url_for("login"))
+    konto = db.benutzer_stand(_postgres_verbindung(), benutzername)
+    if konto is None:
+        session.clear()
+        return False, redirect(url_for("login"))
+    session["ist_admin"] = konto["ist_admin"]
+    return True, None
+
+
 def _login_erforderlich(view):
     """Decorator für alle Ansichten, die ein angemeldetes Benutzerkonto voraussetzen
     (egal ob Admin oder "nur Eintragen") - Gegenstück zum früheren, rein
     zugangscodebasierten _termin_erforderlich (siehe unten)."""
     @wraps(view)
     def wrapper(*args, **kwargs):
-        if not session.get("benutzername"):
-            return redirect(url_for("login"))
+        ok, antwort = _aktueller_benutzer_oder_redirect()
+        if not ok:
+            return antwort
         return view(*args, **kwargs)
     return wrapper
 
@@ -202,8 +228,9 @@ def _admin_erforderlich(view):
     neuen Admin-Routen abhängt."""
     @wraps(view)
     def wrapper(*args, **kwargs):
-        if not session.get("benutzername"):
-            return redirect(url_for("login"))
+        ok, antwort = _aktueller_benutzer_oder_redirect()
+        if not ok:
+            return antwort
         if not session.get("ist_admin"):
             abort(403)
         _bereinige_abgelaufene_downloads()
@@ -216,16 +243,28 @@ def _termin_erforderlich(view):
     einen ausgewählten Termin voraussetzen (siehe termin_waehlen() unten) - wechselt die
     Verbindung vorab auf dessen Schema (siehe db.oeffne_termin_postgres()) und reicht conn
     als ersten Parameter durch, damit die Ansichten selbst ganz normal die
-    db.py-Funktionen aufrufen können."""
+    db.py-Funktionen aufrufen können.
+
+    QS-Fund (21.09.): löschte ein Administrator einen Termin, während ein anderer Nutzer
+    noch mit dessen schema_name in der Session unterwegs war, scheiterte
+    db.oeffne_termin_postgres() (Schema existiert nicht mehr) bisher mit einer
+    unbehandelten Exception (rohe 500-Fehlerseite) statt einer sauberen Weiterleitung -
+    deshalb jetzt in try/except, das die veraltete Session-Auswahl entfernt und zur
+    Terminauswahl zurückschickt."""
     @wraps(view)
     def wrapper(*args, **kwargs):
-        if not session.get("benutzername"):
-            return redirect(url_for("login"))
+        ok, antwort = _aktueller_benutzer_oder_redirect()
+        if not ok:
+            return antwort
         schema_name = session.get("schema_name")
         if not schema_name:
             return redirect(url_for("termin_waehlen"))
         conn = _postgres_verbindung()
-        db.oeffne_termin_postgres(conn, schema_name)
+        try:
+            db.oeffne_termin_postgres(conn, schema_name)
+        except Exception:
+            session.pop("schema_name", None)
+            return redirect(url_for("termin_waehlen"))
         return view(conn, *args, **kwargs)
     return wrapper
 
@@ -448,6 +487,40 @@ def admin_termine():
     return render_template("admin_termine.html", termine=db.liste_termine_postgres(conn))
 
 
+def _ungueltige_termin_datei_fehler(conn, termine=None):
+    """Gemeinsame Fehler-Antwort für admin_termin_veroeffentlichen()/
+    admin_termin_zurueckholen(), wenn eine hochgeladene .sqlite-Datei zwar die richtige
+    Dateiendung hat, ihr Inhalt aber keine gültige SQLite-Datenbank ist (db.init_db()
+    scheitert dann mit sqlite3.Error - QS-Fund 21.09.: führte vorher zu einer rohen
+    500-Fehlerseite statt der sonst üblichen verständlichen Meldung)."""
+    return render_template(
+        "admin_termine.html",
+        termine=termine if termine is not None else db.liste_termine_postgres(conn),
+        fehler="Diese Datei ist keine gültige SHS-Termin-Datei.",
+    )
+
+
+def _dublette_hinweis_pruefen(conn, veranstaltung: dict | None) -> str | None:
+    """Prüft VOR dem eigentlichen Export, ob unter den bereits veröffentlichten Terminen
+    schon einer mit demselben Verein+Datum existiert (QS-Fund 21.09.: bisher legte jeder
+    Klick auf "Veröffentlichen" einen neuen, unabhängigen Termin an, auch wenn Verein+
+    Datum bereits als veröffentlichter Termin vorhanden waren). Blockiert das
+    Veröffentlichen selbst NICHT (ein Administrator könnte z. B. bewusst einen zweiten,
+    korrigierten Stand hochladen wollen) - liefert stattdessen nur einen nicht
+    blockierenden Hinweistext für die Erfolgsseite, oder None, falls keine Dublette
+    gefunden wurde."""
+    if not veranstaltung or not veranstaltung.get("verein") or not veranstaltung.get("datum"):
+        return None
+    for bestehender in db.liste_termine_postgres(conn):
+        if bestehender.verein == veranstaltung["verein"] and bestehender.datum == veranstaltung["datum"]:
+            return (
+                f"Hinweis: Es gibt bereits einen veröffentlichten Termin für "
+                f"„{veranstaltung['verein']}“ am {veranstaltung['datum']} "
+                f"(Schema {bestehender.schema_name}) - bei Bedarf den alten selbst löschen."
+            )
+    return None
+
+
 @app.route("/admin/termine/veroeffentlichen", methods=["POST"])
 @_admin_erforderlich
 def admin_termin_veroeffentlichen():
@@ -464,8 +537,12 @@ def admin_termin_veroeffentlichen():
 
     temp_pfad = _hochgeladene_termin_datei_speichern(datei)
     try:
-        sqlite_conn = db.init_db(temp_pfad)
         try:
+            sqlite_conn = db.init_db(temp_pfad)
+        except sqlite3.Error:
+            return _ungueltige_termin_datei_fehler(conn)
+        try:
+            dublette_hinweis = _dublette_hinweis_pruefen(conn, db.get_veranstaltung(sqlite_conn))
             termin = db.exportiere_termin_nach_postgres(sqlite_conn, conn)
         finally:
             sqlite_conn.close()
@@ -474,7 +551,7 @@ def admin_termin_veroeffentlichen():
 
     return render_template(
         "admin_termine.html", termine=db.liste_termine_postgres(conn),
-        veroeffentlicht=termin,
+        veroeffentlicht=termin, dublette_hinweis=dublette_hinweis,
     )
 
 
@@ -499,6 +576,13 @@ def admin_termin_zurueckholen(schema_name):
     temp_pfad = _hochgeladene_termin_datei_speichern(datei)
     try:
         sqlite_conn = db.init_db(temp_pfad)
+    except sqlite3.Error:
+        # Wie beim Veröffentlichen (siehe _ungueltige_termin_datei_fehler oben) wird die
+        # temporäre Datei bei einer ungültigen/beschädigten Upload-Datei sofort gelöscht -
+        # es gibt hier ja keinen nachfolgenden Download-Klick, der sie noch bräuchte.
+        os.remove(temp_pfad)
+        return _ungueltige_termin_datei_fehler(conn, termine=termine)
+    try:
         try:
             bericht = db.importiere_ergebnisse_aus_postgres(conn, schema_name, sqlite_conn)
         finally:
@@ -570,6 +654,13 @@ def _feld_zu_text(formular, name: str) -> str:
     return (formular.get(name) or "").strip()
 
 
+def _disziplin_text_werte(formular, disziplin: str) -> tuple[str, str]:
+    """Rohe (nicht geparste) Formulartexte einer Disziplin - gemeinsame Grundlage sowohl
+    für die Validierung (_pruefe_und_parse_formular) als auch für den
+    Lost-Update-Vergleich (siehe _geladene_werte_aus_formular/ergebnis_erfassen)."""
+    return _feld_zu_text(formular, f"suche_{disziplin}"), _feld_zu_text(formular, f"anzeige_{disziplin}")
+
+
 def _pruefe_und_parse_formular(formular, disziplinen: list[str]) -> tuple[dict, str | None]:
     """Parst und validiert die Formularfelder einer Ergebniserfassung. Liefert
     (Werte je Disziplin als {disziplin: (suche, anzeige)}, Fehlertext oder None).
@@ -584,8 +675,7 @@ def _pruefe_und_parse_formular(formular, disziplinen: list[str]) -> tuple[dict, 
     Fehlermeldung für die Richter ist aber, das erst gar nicht so weit kommen zu lassen."""
     werte: dict[str, tuple[int | None, int | None]] = {}
     for disziplin in disziplinen:
-        suche_text = _feld_zu_text(formular, f"suche_{disziplin}")
-        anzeige_text = _feld_zu_text(formular, f"anzeige_{disziplin}")
+        suche_text, anzeige_text = _disziplin_text_werte(formular, disziplin)
         try:
             suche = int(suche_text) if suche_text else None
             anzeige = int(anzeige_text) if anzeige_text else None
@@ -599,9 +689,100 @@ def _pruefe_und_parse_formular(formular, disziplinen: list[str]) -> tuple[dict, 
     return werte, None
 
 
+def _feld_roh(formular, name: str) -> str | None:
+    """Wie _feld_zu_text, liefert aber None statt einer leeren Zeichenkette, wenn das
+    Feld im Formular komplett FEHLT (nicht bloß leer ist) - wichtig für den
+    Lost-Update-Vergleich in _geladene_werte_aus_formular unten: ein fehlendes
+    "geladen_*"-Feld bedeutet "keine Information über den ursprünglich geladenen Stand
+    vorhanden" und muss deshalb IMMER als "verändert" (also: speichern) behandelt werden
+    - sicherer Standard, lieber einmal zu viel speichern als eine echte Eingabe
+    stillschweigend verwerfen."""
+    wert = formular.get(name)
+    return None if wert is None else wert.strip()
+
+
+def _geladene_werte_aus_formular(formular, disziplinen: list[str]) -> dict[str, tuple[str | None, str | None]]:
+    """Liest die beim Laden der Seite (GET, siehe ergebnis_erfassen/_zeilen_aus_ergebnis)
+    in versteckten Formularfeldern ("geladen_suche_<disziplin>"/"geladen_anzeige_
+    <disziplin>", siehe templates/ergebnis_erfassen.html) mitgeschickten Werte je
+    Disziplin aus - der zu diesem Zeitpunkt sichtbare DB-Stand. Dient als
+    Vergleichsbasis gegen die gerade abgeschickten Formularwerte, um einen "Lost Update"
+    bei gleichzeitiger Bearbeitung verschiedener Disziplinen desselben
+    Dreikampf-Teilnehmers durch zwei Richter zu vermeiden (QS-Fund 21.09., siehe
+    ergebnis_erfassen: ohne das überschrieb ein Richter beim Speichern IMMER alle drei
+    Disziplinen mit dem bei ihm noch alten Stand, auch die von einem anderen Richter
+    zwischenzeitlich geänderte)."""
+    return {
+        disziplin: (_feld_roh(formular, f"geladen_suche_{disziplin}"), _feld_roh(formular, f"geladen_anzeige_{disziplin}"))
+        for disziplin in disziplinen
+    }
+
+
+def _wert_zu_text(wert: int | None) -> str:
+    return "" if wert is None else str(wert)
+
+
+def _zeilen_aus_ergebnis(ergebnis: dict, disziplinen: list[str]) -> list[dict]:
+    """Baut die Zeilen fürs Formular-Template beim erstmaligen Laden der Seite (GET) aus
+    dem aktuellen DB-Stand auf - "suche"/"anzeige" (für die sichtbaren Eingabefelder)
+    und "geladen_suche"/"geladen_anzeige" (für die versteckten Vergleichsfelder, siehe
+    _geladene_werte_aus_formular) sind hier bewusst identisch: der "geladene" Stand ist
+    genau der, der beim GET sichtbar war."""
+    zeilen = []
+    for disziplin in disziplinen:
+        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+        suche_text = _wert_zu_text(ergebnis.get(spalte_suche))
+        anzeige_text = _wert_zu_text(ergebnis.get(spalte_anzeige))
+        zeilen.append({
+            "disziplin": disziplin,
+            "suche": suche_text, "anzeige": anzeige_text,
+            "geladen_suche": suche_text, "geladen_anzeige": anzeige_text,
+        })
+    return zeilen
+
+
+def _zeilen_aus_formular(formular, disziplinen: list[str]) -> list[dict]:
+    """Baut die Zeilen fürs Formular-Template nach einem Validierungsfehler (POST) aus
+    den GERADE ABGESCHICKTEN Werten auf, NICHT aus dem (ggf. davon abweichenden)
+    DB-Stand - QS-Fund 21.09.: sonst gingen bei einem Fehler in einer Disziplin (z. B.
+    Wert außerhalb 0-60) auch die korrekt eingegebenen Werte der übrigen Disziplinen
+    derselben Absendung verloren. Die "geladen_*"-Felder werden dabei UNVERÄNDERT aus
+    dem Formular übernommen (sie stammen aus dem ursprünglichen GET-Aufruf und müssen für
+    den Lost-Update-Vergleich beim nächsten Speicherversuch weiterhin den ECHTEN
+    ursprünglichen DB-Stand widerspiegeln, nicht die fehlerhafte Zwischeneingabe - siehe
+    ergebnis_erfassen)."""
+    geladene_werte = _geladene_werte_aus_formular(formular, disziplinen)
+    zeilen = []
+    for disziplin in disziplinen:
+        suche_text, anzeige_text = _disziplin_text_werte(formular, disziplin)
+        geladen_suche, geladen_anzeige = geladene_werte[disziplin]
+        zeilen.append({
+            "disziplin": disziplin,
+            "suche": suche_text, "anzeige": anzeige_text,
+            "geladen_suche": "" if geladen_suche is None else geladen_suche,
+            "geladen_anzeige": "" if geladen_anzeige is None else geladen_anzeige,
+        })
+    return zeilen
+
+
 @app.route("/teilnehmer/<int:teilnehmer_id>", methods=["GET", "POST"])
 @_termin_erforderlich
 def ergebnis_erfassen(conn, teilnehmer_id):
+    """GET zeigt die Erfassungsseite (vorbelegt mit dem aktuellen DB-Stand), POST
+    speichert. Die Seite trägt je Disziplin zusätzlich versteckte "geladen_*"-Felder mit
+    dem beim GET sichtbaren Stand (siehe _zeilen_aus_ergebnis/
+    templates/ergebnis_erfassen.html) - Grundlage für den Lost-Update-Schutz unten.
+
+    QS-Fund 21.09.: bei einem Dreikampf-Teilnehmer wurden bisher IMMER alle drei
+    Disziplinen gemeinsam gespeichert, basierend auf dem beim Laden der Seite sichtbaren
+    Stand. Bearbeiteten zwei Richter gleichzeitig verschiedene Disziplinen desselben
+    Hundes (am Prüfungstag normal), überschrieb der später speichernde Richter die
+    zwischenzeitliche Eintragung des anderen mit dem bei ihm noch alten Wert -
+    stillschweigend, ohne Warnung. Deshalb wird beim Speichern jetzt je Disziplin
+    verglichen: submitted Wert == geladener (versteckter Feld-)Wert? Wenn ja, wurde diese
+    Disziplin vom aktuellen Richter gar nicht bearbeitet - dann wird NICHTS geschrieben,
+    damit eine zwischenzeitliche fremde Änderung nicht überschrieben wird. Wenn nein
+    (Richter hat diese Disziplin tatsächlich bearbeitet), wird wie bisher gespeichert."""
     teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
     if teilnehmer is None:
         abort(404)
@@ -611,19 +792,22 @@ def ergebnis_erfassen(conn, teilnehmer_id):
     if request.method == "POST":
         werte, fehler = _pruefe_und_parse_formular(request.form, disziplinen)
         if fehler is None:
+            geladene_werte = _geladene_werte_aus_formular(request.form, disziplinen)
             for disziplin, (suche, anzeige) in werte.items():
+                aktuell = _disziplin_text_werte(request.form, disziplin)
+                geladen = geladene_werte[disziplin]
+                if None not in geladen and aktuell == geladen:
+                    # Diese Disziplin wurde vom aktuellen Richter nicht verändert - siehe
+                    # Funktionsdocstring (Lost-Update-Schutz).
+                    continue
                 db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
             return redirect(url_for("teilnehmerliste"))
+        # Fehlerfall: Seite mit den gerade abgeschickten (nicht den gespeicherten) Werten
+        # neu aufbauen, siehe _zeilen_aus_formular.
+        zeilen = _zeilen_aus_formular(request.form, disziplinen)
+    else:
+        zeilen = _zeilen_aus_ergebnis(db.get_ergebnis(conn, teilnehmer_id) or {}, disziplinen)
 
-    ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
-    zeilen = []
-    for disziplin in disziplinen:
-        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
-        zeilen.append({
-            "disziplin": disziplin,
-            "suche": ergebnis.get(spalte_suche),
-            "anzeige": ergebnis.get(spalte_anzeige),
-        })
     return render_template(
         "ergebnis_erfassen.html",
         teilnehmer=teilnehmer,

@@ -3,7 +3,7 @@
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: 2918 Zeilen, `db.py`: 1850 Zeilen) durcharbeitest.
+  selbst durch die großen Module (`app.py`: 4144 Zeilen, `db.py`: 2442 Zeilen) durcharbeitest.
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.

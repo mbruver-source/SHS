@@ -92,6 +92,11 @@ def _import(postgres_dsn: str | None, schema_name: str, sqlite_pfad: str) -> Non
             "Startnummern aus der Web-Erfassung ohne Entsprechung in der Termin-Datei: "
             + ", ".join(bericht.nicht_gefunden)
         )
+    if bericht.fehler:
+        print(
+            "Fehler beim Übertragen (bitte für diese Teilnehmer manuell prüfen): "
+            + ", ".join(bericht.fehler)
+        )
 
 
 def main() -> None:

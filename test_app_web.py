@@ -26,7 +26,9 @@ psycopg2 und läuft überall, deckt aber die komplette übrige Anwendungslogik
 (Formularvalidierung, Session, Weiterleitung, Statusanzeige, Rollenprüfung) mit echten
 Datenbankzugriffen statt gemockten Rückgabewerten ab."""
 
+import io
 import os
+import re
 import secrets
 import tempfile
 import time
@@ -273,6 +275,22 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertNotIn("falsch".encode(), antwort.data)
         self.assertIn("Teilnehmer".encode(), antwort.data)
 
+    def test_login_ruft_check_password_hash_auch_bei_unbekanntem_benutzernamen_auf(self):
+        """QS-Fund 21.09. (Timing-Seitenkanal): db.pruefe_login() rief
+        check_password_hash() (teures PBKDF2) früher NUR bei bekanntem Benutzernamen
+        auf - bei unbekanntem Benutzernamen kam der Funktionsaufruf gar nicht erst
+        zustande, die Antwortzeit unterschied sich dadurch messbar. Prüft hier direkt
+        (statt über eine im CI unzuverlässige Zeitmessung), dass jetzt in BEIDEN Fällen
+        genau einmal check_password_hash() aufgerufen wird - bei unbekanntem
+        Benutzernamen gegen den in db._DUMMY_PASSWORT_HASH einmalig erzeugten
+        Dummy-Hash."""
+        self._anmelden()
+        with patch("werkzeug.security.check_password_hash", return_value=False) as mock_check:
+            self.assertIsNone(db.pruefe_login(self.conn, "gibtsnicht", "irgendwas123"))
+            self.assertEqual(mock_check.call_count, 1)
+            self.assertIsNone(db.pruefe_login(self.conn, _ADMIN_NAME, "falsches_passwort"))
+            self.assertEqual(mock_check.call_count, 2)
+
     def test_teilnehmerliste_ohne_login_leitet_zum_login(self):
         antwort = self.client.get("/teilnehmer")
         self.assertEqual(antwort.status_code, 302)
@@ -320,6 +338,32 @@ class TestAppWeb(_AppWebTestBasis):
         self.termine = []
         antwort = self._anmelden()
         self.assertIn("kein Termin veröffentlicht".encode(), antwort.data)
+
+    def test_geloeschtes_termin_schema_leitet_sauber_zur_terminauswahl_um(self):
+        """QS-Fund 21.09.: löschte ein Administrator einen Termin, während ein anderer
+        Nutzer noch mit dessen schema_name in der Session unterwegs war, scheiterte der
+        nächste Datenbankzugriff bisher mit einer unbehandelten Exception (rohe
+        500-Fehlerseite) statt einer sauberen Weiterleitung zu '/termin-waehlen'.
+        Simuliert das geänderte/gelöschte Schema hier, indem db.oeffne_termin_postgres()
+        für diese eine Anfrage eine Exception wirft (im normalen Testaufbau ein No-Op,
+        siehe _fake_oeffne_termin)."""
+        self._anmelden()  # setzt session["schema_name"], self.termine hat 1 Eintrag
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
+
+        def _schema_existiert_nicht_mehr(conn, schema_name):
+            raise Exception("Schema existiert nicht mehr (simuliert gelöscht)")
+
+        with patch("app_web.db.oeffne_termin_postgres", _schema_existiert_nicht_mehr):
+            antwort = self.client.get("/teilnehmer")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/termin-waehlen", antwort.headers["Location"])
+
+        # Die veraltete Session-Auswahl wurde entfernt - ein normaler Folgeaufruf (ohne
+        # die simulierte Exception) landet wieder sauber bei der Teilnehmerliste, statt
+        # dauerhaft auf dem kaputten Schema hängenzubleiben.
+        antwort2 = self.client.get("/teilnehmer", follow_redirects=True)
+        self.assertEqual(antwort2.status_code, 200)
+        self.assertIn("Teilnehmer".encode(), antwort2.data)
 
     # --- Benutzerverwaltung ------------------------------------------------------
 
@@ -407,6 +451,48 @@ class TestAppWeb(_AppWebTestBasis):
         # das Konto existiert weiterhin.
         self.assertIsNotNone(db.pruefe_login(self.conn, _ADMIN_NAME, _ADMIN_PASSWORT))
 
+    def test_geloeschtes_konto_wird_bei_naechster_anfrage_ausgeloggt(self):
+        """QS-Fund 21.09.: _login_erforderlich/_admin_erforderlich/_termin_erforderlich
+        prüften bisher nur den in der Session hinterlegten Stand, nie den aktuellen
+        Datenbankstand - löschte ein Administrator währenddessen das Konto eines
+        anderen angemeldeten Nutzers, blieb dessen Session bis zum Abmelden/
+        Sitzungsablauf voll nutzbar. Simuliert hier: "helfer" ist angemeldet, ein
+        (anderer) Administrator löscht sein Konto direkt in der Datenbank - der nächste
+        Aufruf von "helfer" muss zum Login zurückschicken UND die Session tatsächlich
+        geleert haben (nicht nur einmalig abweisen)."""
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.get("/logout")
+        self.client.post(
+            "/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True
+        )
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
+
+        db.benutzer_loeschen(self.conn, "helfer")
+
+        antwort = self.client.get("/teilnehmer", follow_redirects=True)
+        self.assertIn("Benutzername".encode(), antwort.data)  # zurück auf der Login-Seite
+        # Die Session wurde wirklich geleert (session.clear()), nicht nur diese eine
+        # Anfrage abgewiesen - auch admin-geschützte Bereiche sind jetzt wieder zu.
+        self.assertEqual(self.client.get("/admin/benutzer").status_code, 302)
+
+    def test_rollenaenderung_wird_ohne_neuanmeldung_uebernommen(self):
+        """Teil desselben Fixes: _aktueller_benutzer_oder_redirect() aktualisiert
+        session["ist_admin"] bei JEDER Anfrage neu aus der Datenbank - ein
+        zwischenzeitlich auf die Rolle "Eintragen" zurückgestuftes Konto verliert damit
+        seine Admin-Rechte, ohne sich neu anmelden zu müssen (und ohne dass die stale
+        Session weiterhin Admin-Zugriff gewähren würde)."""
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort", ist_admin=True)
+        self.client.get("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"})
+        self.assertEqual(self.client.get("/admin/benutzer").status_code, 200)
+
+        self.conn.execute("UPDATE web_benutzer SET ist_admin = 0 WHERE benutzername = 'helfer'")
+        self.conn.commit()
+
+        self.assertEqual(self.client.get("/admin/benutzer").status_code, 403)
+
     # --- Teilnehmerliste ---------------------------------------------------------
 
     def test_teilnehmerliste_zeigt_status_offen_und_fertig(self):
@@ -431,6 +517,31 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIn("status-fertig", text)
 
     # --- Ergebnis erfassen -------------------------------------------------------
+
+    @staticmethod
+    def _formularfeld(html: str, name: str) -> str:
+        """Liest den value-Attributwert eines Formularfelds (Eingabe- oder verstecktes
+        Feld) direkt aus dem gerenderten HTML - für die Lost-Update-/
+        Validierungsfehler-Tests unten, die prüfen, was tatsächlich im wiederholt
+        angezeigten Formular steht bzw. es als Formulardaten eines "geladenen" Richters
+        weiterverwenden."""
+        treffer = re.search(rf'name="{re.escape(name)}"[^>]*value="([^"]*)"', html)
+        return treffer.group(1) if treffer else ""
+
+    @classmethod
+    def _formulardaten_aus_seite(cls, html: str, disziplinen) -> dict:
+        """Baut die Formulardaten nach, die ein Browser beim Absenden der Seite
+        mitschicken würde - inklusive der versteckten "geladen_*"-Felder (siehe
+        app_web._geladene_werte_aus_formular/templates/ergebnis_erfassen.html) -,
+        basierend auf dem gerade per GET geladenen Formularstand. Simuliert damit einen
+        Richter, der die Seite geladen hat und sie (ggf. mit ein paar geänderten
+        Feldern) wieder abschickt."""
+        daten = {}
+        for disziplin in disziplinen:
+            for prefix in ("suche_", "anzeige_", "geladen_suche_", "geladen_anzeige_"):
+                name = f"{prefix}{disziplin}"
+                daten[name] = cls._formularfeld(html, name)
+        return daten
 
     def test_ergebnis_speichern_ed(self):
         teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
@@ -505,6 +616,71 @@ class TestAppWeb(_AppWebTestBasis):
         antwort = self.client.get("/teilnehmer/999999")
         self.assertEqual(antwort.status_code, 404)
 
+    def test_dk_lost_update_schutz_bei_gleichzeitiger_bearbeitung_durch_zwei_richter(self):
+        """QS-Fund 21.09. (höchste Priorität): bei einem Dreikampf-Teilnehmer wurden
+        bisher IMMER alle drei Disziplinen gemeinsam gespeichert, basierend auf dem beim
+        Laden der Seite sichtbaren Stand. Bearbeiten zwei Richter gleichzeitig
+        verschiedene Disziplinen desselben Hundes, überschrieb der später speichernde
+        Richter die zwischenzeitliche Eintragung des anderen mit dem bei ihm noch alten
+        (leeren) Wert. Simuliert hier: beide Richter laden zuerst dieselbe (leere) Seite,
+        Richter A speichert Trümmerfeld, DANACH speichert Richter B (mit dem beim Laden
+        noch leeren Formularstand) Flächensuche - Richter As Eintragung darf dabei NICHT
+        verloren gehen."""
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="F", rufname_hund="Rex", art="DK", stufe=2, startnummer=6,
+        ))
+        self._anmelden()
+        seite_a = self.client.get(f"/teilnehmer/{teilnehmer_id}").data.decode()
+        seite_b = self.client.get(f"/teilnehmer/{teilnehmer_id}").data.decode()
+        formular_a = self._formulardaten_aus_seite(seite_a, db.ALLE_DISZIPLINEN)
+        formular_b = self._formulardaten_aus_seite(seite_b, db.ALLE_DISZIPLINEN)
+
+        formular_a["suche_Trümmerfeld"] = "50"
+        formular_a["anzeige_Trümmerfeld"] = "30"
+        antwort_a = self.client.post(f"/teilnehmer/{teilnehmer_id}", data=formular_a)
+        self.assertEqual(antwort_a.status_code, 302)
+
+        # Richter B schickt sein Formular ab, das noch auf dem ALTEN (vor Richter As
+        # Speicherung geladenen) Stand basiert - er hat nur Flächensuche geändert.
+        formular_b["suche_Flächensuche"] = "40"
+        formular_b["anzeige_Flächensuche"] = "20"
+        antwort_b = self.client.post(f"/teilnehmer/{teilnehmer_id}", data=formular_b)
+        self.assertEqual(antwort_b.status_code, 302)
+
+        ergebnis = db.get_ergebnis(self.conn, teilnehmer_id)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 50)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 30)
+        self.assertEqual(ergebnis["suche_flaechensuche"], 40)
+        self.assertEqual(ergebnis["anzeige_flaechensuche"], 20)
+
+    def test_dk_validierungsfehler_behaelt_korrekt_eingegebene_werte_der_anderen_disziplin(self):
+        """QS-Fund 21.09.: bei einem Validierungsfehler wurde die Seite bisher aus dem
+        GESPEICHERTEN DB-Stand neu aufgebaut statt aus den gerade abgeschickten
+        Formulardaten - alle korrekt eingegebenen Werte derselben Absendung gingen
+        dadurch verloren, auch wenn nur EINE Disziplin einen ungültigen Wert enthielt."""
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="G", rufname_hund="Rex", art="DK", stufe=2, startnummer=7,
+        ))
+        self._anmelden()
+        antwort = self.client.post(
+            f"/teilnehmer/{teilnehmer_id}",
+            data={
+                "suche_Trümmerfeld": "999", "anzeige_Trümmerfeld": "10",
+                "suche_Flächensuche": "42", "anzeige_Flächensuche": "22",
+            },
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.data.decode()
+        self.assertIn("nur Werte von 0 bis 60".encode(), antwort.data)
+        # Der korrekt eingegebene Wert der ANDEREN Disziplin steht weiterhin im
+        # erneut angezeigten Formular, statt verworfen worden zu sein.
+        self.assertEqual(self._formularfeld(text, "suche_Flächensuche"), "42")
+        self.assertEqual(self._formularfeld(text, "anzeige_Flächensuche"), "22")
+        # Nichts wurde gespeichert (wie bisher schon bei einem Validierungsfehler).
+        ergebnis = db.get_ergebnis(self.conn, teilnehmer_id)
+        self.assertIsNone(ergebnis["suche_truemmerfeld"])
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+
     # --- Termine veröffentlichen/zurückholen/löschen (Upload/Download) -----------
 
     @staticmethod
@@ -515,6 +691,31 @@ class TestAppWeb(_AppWebTestBasis):
         _fake_importiere_ergebnisse oben)."""
         import io
         return (io.BytesIO(b""), "termin_verein.sqlite")
+
+    @staticmethod
+    def _kaputte_sqlite_datei():
+        """Eine Datei mit der richtigen Endung (.sqlite), aber ungültigem Inhalt - QS-Fund
+        21.09.: db.init_db() scheitert dabei mit sqlite3.DatabaseError ("file is not a
+        database", eine Unterklasse von sqlite3.Error), siehe
+        app_web._ungueltige_termin_datei_fehler."""
+        return (io.BytesIO(b"das ist keine sqlite-datenbank, nur irgendein text"), "termin.sqlite")
+
+    @staticmethod
+    def _echte_sqlite_datei_mit_veranstaltung(verein: str, datum: str):
+        """Baut - anders als _leere_sqlite_datei() oben - eine ECHTE, gültige
+        Termin-Datei MIT befüllten Veranstaltungsdaten (für den
+        Dubletten-Hinweis-Test unten, der db.get_veranstaltung() der hochgeladenen Datei
+        braucht, um sie mit den bereits veröffentlichten Terminen zu vergleichen)."""
+        fd, pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(pfad)
+        sqlite_conn = db.init_db(pfad)
+        db.set_veranstaltung(sqlite_conn, verein=verein, datum=datum)
+        sqlite_conn.close()
+        with open(pfad, "rb") as f:
+            inhalt = f.read()
+        os.remove(pfad)
+        return (io.BytesIO(inhalt), "termin_verein.sqlite")
 
     def test_nicht_admin_bekommt_403_bei_termineverwaltung(self):
         self._anmelden()
@@ -561,6 +762,50 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIn("keine .sqlite-Termin-Datei".encode(), antwort.data)
         self.assertEqual(self.export_aufrufe, [])
 
+    def test_termin_veroeffentlichen_mit_beschaedigter_datei_zeigt_verstaendliche_meldung(self):
+        """QS-Fund 21.09.: eine Upload-Datei mit der richtigen Endung, aber ungültigem
+        Inhalt führte bisher zu einer rohen 500-Fehlerseite (db.init_db() scheiterte mit
+        einer unbehandelten sqlite3.DatabaseError) statt der sonst üblichen
+        verständlichen Fehlermeldung."""
+        self._anmelden()
+        antwort = self.client.post(
+            "/admin/termine/veroeffentlichen",
+            data={"sqlite_datei": self._kaputte_sqlite_datei()},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("keine gültige SHS-Termin-Datei".encode(), antwort.data)
+        self.assertEqual(self.export_aufrufe, [])
+
+    def test_termin_veroeffentlichen_zeigt_dublette_hinweis_bei_gleichem_verein_und_datum(self):
+        """QS-Fund 21.09. (niedrigste Priorität der 6): bisher legte jeder Klick auf
+        "Veröffentlichen" einen neuen, unabhängigen Termin an, auch wenn bereits ein
+        Termin mit demselben Verein+Datum veröffentlicht war. Blockiert das
+        Veröffentlichen NICHT, zeigt aber einen Hinweis auf der Erfolgsseite."""
+        self.termine = [_termin_info(_TEST_SCHEMA, verein="Testverein", datum="2026-09-19")]
+        self._anmelden()
+        antwort = self.client.post(
+            "/admin/termine/veroeffentlichen",
+            data={"sqlite_datei": self._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19")},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("bereits einen veröffentlichten Termin".encode(), antwort.data)
+        self.assertIn("Testverein".encode(), antwort.data)
+
+    def test_termin_veroeffentlichen_ohne_dublette_zeigt_keinen_hinweis(self):
+        self.termine = [_termin_info(_TEST_SCHEMA, verein="Anderer Verein", datum="2020-01-01")]
+        self._anmelden()
+        antwort = self.client.post(
+            "/admin/termine/veroeffentlichen",
+            data={"sqlite_datei": self._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19")},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertNotIn("bereits einen veröffentlichten Termin".encode(), antwort.data)
+
     def test_termin_zurueckholen_zeigt_bericht_und_download_funktioniert(self):
         self.import_bericht = db.ImportBericht(
             aktualisiert=2, ohne_startnummer_uebersprungen=["Muster, A"], nicht_gefunden=["7"]
@@ -603,6 +848,20 @@ class TestAppWeb(_AppWebTestBasis):
             f"/admin/termine/{_TEST_SCHEMA}/zurueckholen", data={}, content_type="multipart/form-data"
         )
         self.assertIn("Bitte dieselbe".encode(), antwort.data)
+        self.assertEqual(self.import_aufrufe, [])
+
+    def test_termin_zurueckholen_mit_beschaedigter_datei_zeigt_verstaendliche_meldung(self):
+        """QS-Fund 21.09. - Gegenstück zu
+        test_termin_veroeffentlichen_mit_beschaedigter_datei_zeigt_verstaendliche_meldung
+        oben, für die "Ergebnisse zurückholen"-Route."""
+        self._anmelden()
+        antwort = self.client.post(
+            f"/admin/termine/{_TEST_SCHEMA}/zurueckholen",
+            data={"sqlite_datei": self._kaputte_sqlite_datei()},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("keine gültige SHS-Termin-Datei".encode(), antwort.data)
         self.assertEqual(self.import_aufrufe, [])
 
     def test_admin_bereinigt_abgelaufene_download_tokens_und_loescht_temporaere_datei(self):

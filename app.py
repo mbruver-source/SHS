@@ -192,6 +192,20 @@ def _pdf_export_fehler_anzeigen(parent, exc: Exception) -> None:
     )
 
 
+def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
+    """Gemeinsame Umsetzung für den Zeitplan-PDF-Export - vorher wortgleich in
+    ZeitplanTab._pdf_exportieren und ExportTab._zeitplan_exportieren dupliziert."""
+    pfad = _pdf_speicherort_waehlen(parent, ablageort, "Zeitplan speichern", _export_dateiname(conn, "Zeitplan"))
+    if not pfad:
+        return
+    try:
+        pdf_export.erstelle_zeitplan_pdf(conn, pfad)
+    except Exception as exc:
+        _pdf_export_fehler_anzeigen(parent, exc)
+        return
+    status_label.setText(f"Zeitplan gespeichert: {pfad}")
+
+
 def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900, pt_schmal: float = 8.0, pt_breit: float = 10.0) -> float:
     """Berechnet eine Schriftgröße (pt) zwischen pt_schmal und pt_breit, linear nach
     der Fensterbreite interpoliert - damit Beschriftungen (Spaltenköpfe, Filter- und
@@ -227,6 +241,18 @@ def _fehler_anzeigen(parent, exc: Exception) -> None:
         parent,
         "Eingabe konnte nicht gespeichert werden",
         f"Die Daten verletzen eine Fachregel und wurden nicht gespeichert:\n\n{exc}",
+    )
+
+
+def _db_fehler_anzeigen(parent, exc: Exception) -> None:
+    """Zeigt einen unerwarteten Datenbankfehler (z.B. gesperrte Datei, voller Datenträger) als
+    Dialog statt die App abstürzen zu lassen - für einfache Aktionen ohne eigene
+    Fachregel-Prüfung (Richter/Zeitplan verwalten u.ä.), bei denen ein sqlite3.Error bisher
+    unbehandelt durchschlug."""
+    QMessageBox.critical(
+        parent,
+        "Datenbankfehler",
+        f"Die Änderung konnte nicht gespeichert werden:\n\n{exc}",
     )
 
 
@@ -283,6 +309,20 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # der Hinweis konkret wird statt nur "ist bereits vergeben" zu sagen.
         self._namen_je_startnummer = namen_je_startnummer or {}
 
+        self._felder_erstellen(naechste_nummer)
+        self._layout_aufbauen()
+
+        self._art_geaendert(self.art.currentText())
+        if vorhandener:
+            self._vorbelegung_uebernehmen(vorhandener)
+
+        self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
+        self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
+        self._schriftgroesse_anwenden()
+
+    def _felder_erstellen(self, naechste_nummer: int) -> None:
+        """Legt alle Eingabe-Widgets als Attribute an (noch ohne Layout/Vorbelegung -
+        siehe _layout_aufbauen/_vorbelegung_uebernehmen)."""
         self.nachname = QLineEdit()
         self.vorname = QLineEdit()
         # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Geburtsdatum des
@@ -369,6 +409,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.halter_mitgliedsnummer = QLineEdit()
         self.halter_lu_nr = QLineEdit()
 
+    def _layout_aufbauen(self) -> None:
+        """Ordnet die in _felder_erstellen angelegten Widgets in Formularen/Gruppen an und
+        setzt das Dialog-Layout (Gesamtinhalt scrollbar, siehe Kommentare unten)."""
         # Zwei Spalten nebeneinander statt einer langen Liste untereinander - bei allen
         # Feldern (inkl. der neuen Verwaltungs-/Kontaktfelder) ging das Fenster sonst in
         # der Höhe über den Bildschirm hinaus, ohne dass sich der Dialog scrollen ließ.
@@ -479,62 +522,58 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.resize(780, 640)
 
-        self._art_geaendert(self.art.currentText())
-
-        if vorhandener:
-            self.nachname.setText(vorhandener["nachname"])
-            self.vorname.setText(vorhandener["vorname"])
-            self.geburtsdatum.setText(vorhandener["geburtsdatum"] or "")
-            self.verein.setText(vorhandener["verein"] or "")
-            self.verband.setText(vorhandener["verband"] or "")
-            self.mitgliedsnummer.setText(vorhandener["mitgliedsnummer"] or "")
-            self.strasse.setText(vorhandener["strasse"] or "")
-            self.hausnummer.setText(vorhandener["hausnummer"] or "")
-            self.plz.setText(vorhandener["plz"] or "")
-            self.ort.setText(vorhandener["ort"] or "")
-            self.email.setText(vorhandener["email"] or "")
-            self.telefon.setText(vorhandener["telefon"] or "")
-            self.zwingername.setText(vorhandener["zwingername"] or "")
-            self.rufname_hund.setText(vorhandener["rufname_hund"])
-            if vorhandener["geschlecht"]:
-                self.geschlecht.setCurrentText(vorhandener["geschlecht"])
-            self.schulterhoehe.setValue(vorhandener["schulterhoehe_cm"] or 0)
-            self.chip_nr.setText(vorhandener["chip_nr"] or "")
-            self.rasse.setText(vorhandener["rasse"] or "")
-            self.wurftag.setText(vorhandener["wurftag"] or "")
-            self.tollwutimpfung_bis.setText(vorhandener["tollwutimpfung_bis"] or "")
-            if vorhandener["startnummer"] is not None:
-                self.startnummer.setValue(vorhandener["startnummer"])
-            else:
-                self.startnummer_unbekannt.setChecked(True)
-            self.art.setCurrentText(vorhandener["art"])
-            self.stufe.setCurrentText(str(vorhandener["stufe"]))
-            if vorhandener["disziplin"]:
-                self.disziplin.setCurrentText(vorhandener["disziplin"])
-            self.gegenstand_1.setText(vorhandener["gegenstand_1"] or "")
-            self.gegenstand_2.setText(vorhandener["gegenstand_2"] or "")
-            self.gegenstand_3.setText(vorhandener["gegenstand_3"] or "")
-            self.gegenstand_1_disziplin.setCurrentText(vorhandener["gegenstand_1_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
-            self.gegenstand_2_disziplin.setCurrentText(vorhandener["gegenstand_2_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
-            self.gegenstand_3_disziplin.setCurrentText(vorhandener["gegenstand_3_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
-            self.bezahlt.setChecked(bool(vorhandener["bezahlt"]))
-            # Ein Halter-Datensatz gilt als "abweichend" hinterlegt, sobald mindestens
-            # eines der halter_*-Felder gesetzt ist - dann Block gleich aufklappen, statt
-            # bereits erfasste Angaben hinter der Checkbox zu verstecken.
-            halter_felder = {
-                "halter_vorname": self.halter_vorname, "halter_nachname": self.halter_nachname,
-                "halter_strasse": self.halter_strasse, "halter_hausnummer": self.halter_hausnummer,
-                "halter_plz": self.halter_plz, "halter_ort": self.halter_ort,
-                "halter_mitgliedsverein": self.halter_mitgliedsverein,
-                "halter_mitgliedsnummer": self.halter_mitgliedsnummer, "halter_lu_nr": self.halter_lu_nr,
-            }
-            for spalte, feld in halter_felder.items():
-                feld.setText(vorhandener[spalte] or "")
-            self.halter_weicht_ab.setChecked(any(vorhandener[spalte] for spalte in halter_felder))
-
-        self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
-        self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
-        self._schriftgroesse_anwenden()
+    def _vorbelegung_uebernehmen(self, vorhandener: dict) -> None:
+        """Übernimmt beim Bearbeiten eines vorhandenen Teilnehmers dessen Werte in die
+        zuvor per _felder_erstellen angelegten Eingabefelder."""
+        self.nachname.setText(vorhandener["nachname"])
+        self.vorname.setText(vorhandener["vorname"])
+        self.geburtsdatum.setText(vorhandener["geburtsdatum"] or "")
+        self.verein.setText(vorhandener["verein"] or "")
+        self.verband.setText(vorhandener["verband"] or "")
+        self.mitgliedsnummer.setText(vorhandener["mitgliedsnummer"] or "")
+        self.strasse.setText(vorhandener["strasse"] or "")
+        self.hausnummer.setText(vorhandener["hausnummer"] or "")
+        self.plz.setText(vorhandener["plz"] or "")
+        self.ort.setText(vorhandener["ort"] or "")
+        self.email.setText(vorhandener["email"] or "")
+        self.telefon.setText(vorhandener["telefon"] or "")
+        self.zwingername.setText(vorhandener["zwingername"] or "")
+        self.rufname_hund.setText(vorhandener["rufname_hund"])
+        if vorhandener["geschlecht"]:
+            self.geschlecht.setCurrentText(vorhandener["geschlecht"])
+        self.schulterhoehe.setValue(vorhandener["schulterhoehe_cm"] or 0)
+        self.chip_nr.setText(vorhandener["chip_nr"] or "")
+        self.rasse.setText(vorhandener["rasse"] or "")
+        self.wurftag.setText(vorhandener["wurftag"] or "")
+        self.tollwutimpfung_bis.setText(vorhandener["tollwutimpfung_bis"] or "")
+        if vorhandener["startnummer"] is not None:
+            self.startnummer.setValue(vorhandener["startnummer"])
+        else:
+            self.startnummer_unbekannt.setChecked(True)
+        self.art.setCurrentText(vorhandener["art"])
+        self.stufe.setCurrentText(str(vorhandener["stufe"]))
+        if vorhandener["disziplin"]:
+            self.disziplin.setCurrentText(vorhandener["disziplin"])
+        self.gegenstand_1.setText(vorhandener["gegenstand_1"] or "")
+        self.gegenstand_2.setText(vorhandener["gegenstand_2"] or "")
+        self.gegenstand_3.setText(vorhandener["gegenstand_3"] or "")
+        self.gegenstand_1_disziplin.setCurrentText(vorhandener["gegenstand_1_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
+        self.gegenstand_2_disziplin.setCurrentText(vorhandener["gegenstand_2_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
+        self.gegenstand_3_disziplin.setCurrentText(vorhandener["gegenstand_3_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
+        self.bezahlt.setChecked(bool(vorhandener["bezahlt"]))
+        # Ein Halter-Datensatz gilt als "abweichend" hinterlegt, sobald mindestens
+        # eines der halter_*-Felder gesetzt ist - dann Block gleich aufklappen, statt
+        # bereits erfasste Angaben hinter der Checkbox zu verstecken.
+        halter_felder = {
+            "halter_vorname": self.halter_vorname, "halter_nachname": self.halter_nachname,
+            "halter_strasse": self.halter_strasse, "halter_hausnummer": self.halter_hausnummer,
+            "halter_plz": self.halter_plz, "halter_ort": self.halter_ort,
+            "halter_mitgliedsverein": self.halter_mitgliedsverein,
+            "halter_mitgliedsnummer": self.halter_mitgliedsnummer, "halter_lu_nr": self.halter_lu_nr,
+        }
+        for spalte, feld in halter_felder.items():
+            feld.setText(vorhandener[spalte] or "")
+        self.halter_weicht_ab.setChecked(any(vorhandener[spalte] for spalte in halter_felder))
 
     def _halter_sichtbarkeit_aktualisieren(self, abweichend: bool) -> None:
         self.gruppe_halter.setVisible(abweichend)
@@ -1040,7 +1079,11 @@ class TeilnehmerTab(QWidget):
         if dialog.exec() == QDialog.Accepted:
             partner_id = dialog.ausgewaehlte_partner_id()
             if partner_id is not None:
-                tausche_startnummern(self.conn, teilnehmer_id, partner_id)
+                try:
+                    tausche_startnummern(self.conn, teilnehmer_id, partner_id)
+                except sqlite3.IntegrityError as exc:
+                    _fehler_anzeigen(self, exc)
+                    return
                 self.aktualisieren()
 
     def _aus_anderem_termin_importieren(self) -> None:
@@ -1049,7 +1092,15 @@ class TeilnehmerTab(QWidget):
             if dialog.exec() == QDialog.Accepted:
                 quelle = dialog.quelle_conn()
                 ausgewaehlt = dialog.ausgewaehlte_ids()
-                if quelle is not None and ausgewaehlt:
+                if quelle is None:
+                    # Praktisch nur erreichbar, wenn die gewählte Quell-Termin-Datei
+                    # zwischenzeitlich nicht mehr geöffnet werden konnte - statt
+                    # kommentarlos abzubrechen, den Nutzer darüber informieren.
+                    QMessageBox.warning(
+                        self, "Import nicht möglich",
+                        "Die gewählte Quell-Termin-Datei konnte nicht geöffnet werden."
+                    )
+                elif ausgewaehlt:
                     anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
                     self.aktualisieren()
                     QMessageBox.information(
@@ -1104,7 +1155,11 @@ class TeilnehmerTab(QWidget):
         if teilnehmer_id is None:
             return
         aktuell = next(t for t in list_teilnehmer(self.conn) if t["id"] == teilnehmer_id)
-        setze_bezahlt(self.conn, teilnehmer_id, not aktuell["bezahlt"])
+        try:
+            setze_bezahlt(self.conn, teilnehmer_id, not aktuell["bezahlt"])
+        except sqlite3.IntegrityError as exc:
+            _fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def aktualisieren(self) -> None:
@@ -1493,7 +1548,11 @@ class ErgebnisTab(QWidget):
 
         self.tabelle.setRowCount(len(self._teilnehmer_je_zeile))
         for row, t in enumerate(self._teilnehmer_je_zeile):
-            aktuell = ergebnis_rows[t["id"]]
+            # .get() statt [] - dieselbe Absicherung wie in db.berechne_auswertung() (dort
+            # als "Fix 10" dokumentiert): sollte die Teilnehmer/Ergebnisse-1:1-Invariante
+            # doch einmal verletzt sein, führt das nur zu leeren Punktefeldern statt zu
+            # einem Absturz des gesamten Tabs.
+            aktuell = ergebnis_rows.get(t["id"], {})
             zutreffende_disziplinen = ALLE_DISZIPLINEN if t["art"] == "DK" else [t["disziplin"]]
             punkte_override = werte_override.get(t["id"], {})
 
@@ -1515,8 +1574,8 @@ class ErgebnisTab(QWidget):
                     continue
 
                 db_spalte_suche, db_spalte_anzeige = DISZIPLIN_SPALTEN[disziplin]
-                suche_wert = aktuell[db_spalte_suche]
-                anzeige_wert = aktuell[db_spalte_anzeige]
+                suche_wert = aktuell.get(db_spalte_suche)
+                anzeige_wert = aktuell.get(db_spalte_anzeige)
                 angezeigt_suche, angezeigt_anzeige = punkte_override.get(
                     disziplin, (suche_wert, anzeige_wert)
                 )
@@ -1694,29 +1753,50 @@ class ErgebnisTab(QWidget):
             return None
 
     def _zeile_ist_ungespeichert(self, row: int) -> bool:
+        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+        status_geaendert = (dq_box.isChecked(), abbruch_box.isChecked()) != self._status_geladen_je_zeile[row]
+        if dq_box.isChecked() or abbruch_box.isChecked():
+            # Punkte-Felder sind gesperrt und geleert (siehe _punkteeingabe_sperren) - ihr
+            # (leerer) Inhalt sagt nichts über einen noch zu speichernden Punkte-Stand aus,
+            # sonst würde eine bereits gespeicherte Disqualifiziert-/Abbruch-Zeile mit
+            # weiterhin in der DB stehenden Punkten dauerhaft als "nicht gespeichert"
+            # markiert bleiben.
+            return status_geaendert
         boxen = self._boxen_je_zeile[row]
         geladen = self._geladen_je_zeile[row]
         punkte_geaendert = any(
             (self._feldwert(suche_feld), self._feldwert(anzeige_feld)) != geladen[disziplin]
             for disziplin, (suche_feld, anzeige_feld) in boxen.items()
         )
-        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-        status_geaendert = (dq_box.isChecked(), abbruch_box.isChecked()) != self._status_geladen_je_zeile[row]
         return punkte_geaendert or status_geaendert
 
     def _status_umgeschaltet(self, row: int) -> None:
         """Reagiert auf das Umschalten einer Disqualifiziert-/Abbruch-Checkbox: sperrt/
         leert bei Bedarf die Punkte-Eingabefelder dieser Zeile und aktualisiert den
-        Gespeichert-Status."""
+        Gespeichert-Status. Beim Entsperren (Häkchen entfernt) werden die Felder zuvor
+        wieder mit dem zuletzt aus der DB geladenen Stand befüllt statt leer zu bleiben -
+        die zugehörigen Punkte wurden beim Sperren NICHT gelöscht (siehe alle_speichern),
+        das Feld soll also wieder den tatsächlichen, in der DB stehenden Wert zeigen."""
         dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-        self._punkteeingabe_sperren(row, dq_box.isChecked() or abbruch_box.isChecked())
+        sperren = dq_box.isChecked() or abbruch_box.isChecked()
+        if not sperren:
+            geladen = self._geladen_je_zeile[row]
+            for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
+                suche_wert, anzeige_wert = geladen[disziplin]
+                suche_feld.setText("" if suche_wert is None else str(suche_wert))
+                anzeige_feld.setText("" if anzeige_wert is None else str(anzeige_wert))
+        self._punkteeingabe_sperren(row, sperren)
         self._aktualisiere_zeilenstatus(row)
 
     def _punkteeingabe_sperren(self, row: int, sperren: bool) -> None:
         """Sperrt (und leert) die Punkte-Eingabefelder einer Zeile, solange Disqualifiziert
         oder Abbruch gesetzt ist - eine Punkteeingabe wäre dann ohnehin irrelevant, da
         berechne_auswertung() für einen solchen Teilnehmer keine aus Punkten berechnete
-        Wertnote mehr bildet (siehe db.py)."""
+        Wertnote mehr bildet (siehe db.py). Rührt beim Entsperren den Feldinhalt bewusst
+        NICHT an (siehe _status_umgeschaltet für die interaktive Wiederherstellung) - beim
+        Neuaufbau der Tabelle (_zeilen_aufbauen) ist der Feldinhalt zu diesem Zeitpunkt
+        bereits korrekt (ggf. inkl. einer noch nicht gespeicherten Eingabe aus
+        werte_override) und darf nicht überschrieben werden."""
         for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
             if sperren:
                 suche_feld.setText("")
@@ -1763,38 +1843,45 @@ class ErgebnisTab(QWidget):
             name = f"{t['nachname']}, {t['vorname']}"
             boxen = self._boxen_je_zeile[row]
             geladen = self._geladen_je_zeile[row]
-
-            for disziplin, (suche_feld, anzeige_feld) in boxen.items():
-                suche_wert, anzeige_wert = self._feldwert(suche_feld), self._feldwert(anzeige_feld)
-                if (suche_wert, anzeige_wert) == geladen[disziplin]:
-                    continue  # unverändert - nichts zu tun
-
-                if suche_wert is None and anzeige_wert is None:
-                    # Beide Felder wurden geleert - vorher eingetragenes Ergebnis wird
-                    # als gelöscht gespeichert (NULL in der DB), statt nur in der
-                    # Tabelle leer auszusehen, aber beim nächsten Laden wieder
-                    # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
-                    # bleiben.
-                    eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
-                    geladen[disziplin] = (None, None)
-                    gespeichert += 1
-                    continue
-
-                if suche_wert is None or anzeige_wert is None:
-                    fehler.append(f"{name} – {disziplin}: bitte sowohl Suche als auch Anzeige eintragen")
-                    continue
-
-                try:
-                    eintragen_ergebnis(self.conn, t["id"], disziplin, suche_wert, anzeige_wert)
-                except sqlite3.IntegrityError as exc:
-                    fehler.append(f"{name} – {disziplin}: {exc}")
-                    continue
-
-                geladen[disziplin] = (suche_wert, anzeige_wert)
-                gespeichert += 1
-
             dq_box, abbruch_box = self._status_boxen_je_zeile[row]
             status_wert = (dq_box.isChecked(), abbruch_box.isChecked())
+            punkte_gesperrt = status_wert[0] or status_wert[1]
+
+            if not punkte_gesperrt:
+                for disziplin, (suche_feld, anzeige_feld) in boxen.items():
+                    suche_wert, anzeige_wert = self._feldwert(suche_feld), self._feldwert(anzeige_feld)
+                    if (suche_wert, anzeige_wert) == geladen[disziplin]:
+                        continue  # unverändert - nichts zu tun
+
+                    if suche_wert is None and anzeige_wert is None:
+                        # Beide Felder wurden geleert - vorher eingetragenes Ergebnis wird
+                        # als gelöscht gespeichert (NULL in der DB), statt nur in der
+                        # Tabelle leer auszusehen, aber beim nächsten Laden wieder
+                        # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
+                        # bleiben.
+                        eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
+                        geladen[disziplin] = (None, None)
+                        gespeichert += 1
+                        continue
+
+                    if suche_wert is None or anzeige_wert is None:
+                        fehler.append(f"{name} – {disziplin}: bitte sowohl Suche als auch Anzeige eintragen")
+                        continue
+
+                    try:
+                        eintragen_ergebnis(self.conn, t["id"], disziplin, suche_wert, anzeige_wert)
+                    except sqlite3.IntegrityError as exc:
+                        fehler.append(f"{name} – {disziplin}: {exc}")
+                        continue
+
+                    geladen[disziplin] = (suche_wert, anzeige_wert)
+                    gespeichert += 1
+            # Ist die Zeile gesperrt (Disqualifiziert/Abbruch), werden die (geleerten)
+            # Punkte-Felder beim Speichern bewusst NICHT ausgewertet: eine ggf. weiterhin
+            # in der DB stehende Punktzahl bleibt unangetastet (siehe
+            # db.setze_ergebnis_status()-Docstring) - vorher wurden hier fälschlich beide
+            # Felder als "geleert" erkannt und die echten Punkte dauerhaft gelöscht.
+
             if status_wert != self._status_geladen_je_zeile[row]:
                 setze_ergebnis_status(self.conn, t["id"], status_wert[0], status_wert[1])
                 self._status_geladen_je_zeile[row] = status_wert
@@ -2402,7 +2489,11 @@ class ZeitplanTab(QWidget):
         self.aktualisieren()
 
     def _richter_hinzufuegen(self) -> None:
-        add_zeitplan_richter(self.conn)
+        try:
+            add_zeitplan_richter(self.conn)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _richter_umbenennen(self, richter_id: int) -> None:
@@ -2410,11 +2501,19 @@ class ZeitplanTab(QWidget):
         name, ok = QInputDialog.getText(self, "Richter umbenennen", "Name:", text=aktueller_name)
         if not ok or not name.strip():
             return
-        umbenennen_zeitplan_richter(self.conn, richter_id, name.strip())
+        try:
+            umbenennen_zeitplan_richter(self.conn, richter_id, name.strip())
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _richter_verschieben(self, richter_id: int, richtung: int) -> None:
-        verschiebe_zeitplan_richter(self.conn, richter_id, richtung)
+        try:
+            verschiebe_zeitplan_richter(self.conn, richter_id, richtung)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _richter_loeschen(self, richter_id: int, name: str) -> None:
@@ -2425,7 +2524,11 @@ class ZeitplanTab(QWidget):
         )
         if antwort != QMessageBox.Yes:
             return
-        loesche_zeitplan_richter(self.conn, richter_id)
+        try:
+            loesche_zeitplan_richter(self.conn, richter_id)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _automatisch_verteilen(self) -> None:
@@ -2445,9 +2548,13 @@ class ZeitplanTab(QWidget):
         )
         if antwort != QMessageBox.Yes:
             return
-        automatische_zeitplan_verteilung(
-            self.conn, [r["id"] for r in richter], standard_dauer_minuten=self.standard_dauer.value(),
-        )
+        try:
+            automatische_zeitplan_verteilung(
+                self.conn, [r["id"] for r in richter], standard_dauer_minuten=self.standard_dauer.value(),
+            )
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.status_label.setText("Automatischer Zeitplan-Vorschlag erstellt.")
         self.aktualisieren()
 
@@ -2457,14 +2564,22 @@ class ZeitplanTab(QWidget):
         dialog = PruefungsblockDialog(self, standard_dauer_minuten=self.standard_dauer.value())
         if dialog.exec() != QDialog.Accepted:
             return
-        add_zeitplan_pruefungsblock(self.conn, richter_id, **dialog.werte())
+        try:
+            add_zeitplan_pruefungsblock(self.conn, richter_id, **dialog.werte())
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _pause_hinzufuegen(self, richter_id: int) -> None:
         dialog = PauseDialog(self)
         if dialog.exec() != QDialog.Accepted:
             return
-        add_zeitplan_pause(self.conn, richter_id, **dialog.werte())
+        try:
+            add_zeitplan_pause(self.conn, richter_id, **dialog.werte())
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _eintrag_verschieben(self, liste: QListWidget, richtung: int) -> None:
@@ -2472,7 +2587,11 @@ class ZeitplanTab(QWidget):
         if item is None:
             return
         eintrag_id = item.data(Qt.UserRole)
-        verschiebe_zeitplan_eintrag(self.conn, eintrag_id, richtung)
+        try:
+            verschiebe_zeitplan_eintrag(self.conn, eintrag_id, richtung)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         # Nach dem Neuaufbau bleibt derselbe Block markiert, damit "Hoch"/"Runter" auch
         # mehrfach hintereinander geklickt werden kann, ohne ihn jedes Mal neu auszuwählen.
         self._markierter_eintrag_id = eintrag_id
@@ -2495,20 +2614,24 @@ class ZeitplanTab(QWidget):
         if eintrag is None:
             return
 
-        if eintrag["typ"] == "pause":
-            dialog = PauseDialog(self, dauer_minuten=eintrag["dauer_minuten"], bezeichnung=eintrag["bezeichnung"] or "")
-            if dialog.exec() != QDialog.Accepted:
-                return
-            werte = dialog.werte()
-            aktualisiere_zeitplan_eintrag(self.conn, eintrag_id, dauer_minuten=werte["dauer_minuten"], bezeichnung=werte["bezeichnung"] or "Pause")
-        else:
-            neue_dauer, ok = QInputDialog.getInt(
-                self, "Prüfungsblock bearbeiten", "Dauer je Teilnehmer (Minuten):",
-                value=eintrag["dauer_minuten"], minValue=1, maxValue=240,
-            )
-            if not ok:
-                return
-            aktualisiere_zeitplan_eintrag(self.conn, eintrag_id, dauer_minuten=neue_dauer)
+        try:
+            if eintrag["typ"] == "pause":
+                dialog = PauseDialog(self, dauer_minuten=eintrag["dauer_minuten"], bezeichnung=eintrag["bezeichnung"] or "")
+                if dialog.exec() != QDialog.Accepted:
+                    return
+                werte = dialog.werte()
+                aktualisiere_zeitplan_eintrag(self.conn, eintrag_id, dauer_minuten=werte["dauer_minuten"], bezeichnung=werte["bezeichnung"] or "Pause")
+            else:
+                neue_dauer, ok = QInputDialog.getInt(
+                    self, "Prüfungsblock bearbeiten", "Dauer je Teilnehmer (Minuten):",
+                    value=eintrag["dauer_minuten"], minValue=1, maxValue=240,
+                )
+                if not ok:
+                    return
+                aktualisiere_zeitplan_eintrag(self.conn, eintrag_id, dauer_minuten=neue_dauer)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self._markierter_eintrag_id = eintrag_id
         self.aktualisieren()
 
@@ -2517,22 +2640,18 @@ class ZeitplanTab(QWidget):
         if item is None:
             QMessageBox.information(self, "Kein Eintrag ausgewählt", "Bitte zuerst einen Eintrag in der Liste auswählen.")
             return
-        loesche_zeitplan_eintrag(self.conn, item.data(Qt.UserRole))
+        try:
+            loesche_zeitplan_eintrag(self.conn, item.data(Qt.UserRole))
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self._markierter_eintrag_id = None
         self.aktualisieren()
 
     # --- Export --------------------------------------------------------------
 
     def _pdf_exportieren(self) -> None:
-        pfad = _pdf_speicherort_waehlen(self, self._ablageort, "Zeitplan speichern", _export_dateiname(self.conn, "Zeitplan"))
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_zeitplan_pdf(self.conn, pfad)
-        except Exception as exc:
-            _pdf_export_fehler_anzeigen(self, exc)
-            return
-        self.status_label.setText(f"Zeitplan gespeichert: {pfad}")
+        _zeitplan_pdf_exportieren(self, self.conn, self._ablageort, self.status_label)
 
 
 class BewertungsbogenAuswahlDialog(QDialog):
@@ -2729,101 +2848,75 @@ class ExportTab(QWidget):
     def _export_fehler_anzeigen(self, exc: Exception) -> None:
         _pdf_export_fehler_anzeigen(self, exc)
 
-    def _ergebnisliste_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen("Ergebnisliste speichern", self._export_dateiname("Ergebnisliste"))
+    def _pdf_export_ausfuehren(self, titel: str, dateiname_praefix: str, export_fn, status_text) -> None:
+        """Gemeinsamer Ablauf für die PDF-Export-Buttons dieses Tabs: Speicherort wählen,
+        export_fn(pfad) aufrufen, Fehler behandeln, Status setzen - vorher wortgleich in
+        >8 fast identischen Methoden dieser Klasse dupliziert. `export_fn` bekommt den
+        gewählten Pfad und darf optional ein Ergebnis zurückgeben (z.B. eine Anzahl);
+        `status_text` ist entweder ein fester String oder eine Funktion
+        Ergebnis -> String, für Fälle wie "N Bewertungsbögen gespeichert"."""
+        pfad = self._speicherort_waehlen(titel, self._export_dateiname(dateiname_praefix))
         if not pfad:
             return
         try:
-            pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
-        except Exception as exc:  # breiter GUI-Fehlerfänger für beliebige Export-Fehler
+            ergebnis = export_fn(pfad)
+        except Exception as exc:
             self._export_fehler_anzeigen(exc)
             return
-        self.status_label.setText(f"Ergebnisliste gespeichert: {pfad}")
+        text = status_text(ergebnis) if callable(status_text) else status_text
+        self.status_label.setText(f"{text}: {pfad}")
+
+    def _ergebnisliste_exportieren(self) -> None:
+        self._pdf_export_ausfuehren(
+            "Ergebnisliste speichern", "Ergebnisliste",
+            lambda pfad: pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad),
+            "Ergebnisliste gespeichert",
+        )
 
     def _etiketten_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen("Etiketten speichern", self._export_dateiname("Etiketten"))
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Etiketten gespeichert: {pfad}")
+        self._pdf_export_ausfuehren(
+            "Etiketten speichern", "Etiketten",
+            lambda pfad: pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad),
+            "Etiketten gespeichert",
+        )
 
     def _leere_ergebnisliste_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen(
-            "Ergebnisliste zum Ausfüllen speichern", self._export_dateiname("Ergebnisliste_leer")
+        self._pdf_export_ausfuehren(
+            "Ergebnisliste zum Ausfüllen speichern", "Ergebnisliste_leer",
+            lambda pfad: pdf_export.erstelle_leere_ergebnisliste_pdf(self.conn, pfad),
+            "Ergebnisliste zum Ausfüllen gespeichert",
         )
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_leere_ergebnisliste_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Ergebnisliste zum Ausfüllen gespeichert: {pfad}")
 
     def _statistik_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen("Statistik speichern", self._export_dateiname("Statistik"))
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_statistik_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Statistik gespeichert: {pfad}")
+        self._pdf_export_ausfuehren(
+            "Statistik speichern", "Statistik",
+            lambda pfad: pdf_export.erstelle_statistik_pdf(self.conn, pfad),
+            "Statistik gespeichert",
+        )
 
     def _pruefungsleitung_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen(
-            "Übersicht für Prüfungsleitung speichern", self._export_dateiname("Uebersicht_Pruefungsleitung")
+        self._pdf_export_ausfuehren(
+            "Übersicht für Prüfungsleitung speichern", "Uebersicht_Pruefungsleitung",
+            lambda pfad: pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, pfad),
+            "Übersicht für Prüfungsleitung gespeichert",
         )
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Übersicht für Prüfungsleitung gespeichert: {pfad}")
 
     def _chipliste_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen(
-            "Chipnummernliste speichern", self._export_dateiname("Chipnummernliste")
+        self._pdf_export_ausfuehren(
+            "Chipnummernliste speichern", "Chipnummernliste",
+            lambda pfad: pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad),
+            "Chipnummernliste gespeichert",
         )
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Chipnummernliste gespeichert: {pfad}")
 
     def _leistungsrichter_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen(
-            "Richter-Bedarf speichern", self._export_dateiname("Richter_Bedarf")
+        self._pdf_export_ausfuehren(
+            "Richter-Bedarf speichern", "Richter_Bedarf",
+            lambda pfad: pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, pfad),
+            "Richter-Bedarf gespeichert",
         )
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Richter-Bedarf gespeichert: {pfad}")
 
     def _zeitplan_exportieren(self) -> None:
-        pfad = self._speicherort_waehlen("Zeitplan speichern", self._export_dateiname("Zeitplan"))
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_zeitplan_pdf(self.conn, pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"Zeitplan gespeichert: {pfad}")
+        _zeitplan_pdf_exportieren(self, self.conn, self._ablageort, self.status_label)
 
     def _bewertungsboegen_exportieren(self) -> None:
         # Nutzerwunsch (21.09.): Auswahl, welche LK/Disziplin gedruckt werden sollen (siehe
@@ -2834,15 +2927,11 @@ class ExportTab(QWidget):
             return
         erlaubte_labels = auswahl_dialog.ausgewaehlte_labels()
 
-        pfad = self._speicherort_waehlen("Bewertungsbögen speichern", self._export_dateiname("Bewertungsboegen"))
-        if not pfad:
-            return
-        try:
-            anzahl = pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad, erlaubte_labels=erlaubte_labels)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        self.status_label.setText(f"{anzahl} Bewertungsbögen gespeichert: {pfad}")
+        self._pdf_export_ausfuehren(
+            "Bewertungsbögen speichern", "Bewertungsboegen",
+            lambda pfad: pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad, erlaubte_labels=erlaubte_labels),
+            lambda anzahl: f"{anzahl} Bewertungsbögen gespeichert",
+        )
 
 
 class VerwaltungTab(QWidget):
@@ -2978,8 +3067,13 @@ class DatensicherungTab(QWidget):
     der übrigen Tabs. Deckt den bisher fehlenden Datensicherungsweg ab: bislang ließ sich
     der Termine-Ordner nur manuell (Datei-Explorer) sichern."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, aktueller_pfad: str | None = None):
         super().__init__(parent)
+        # Nur zur Erkennung eines Namenskonflikts mit dem GERADE GEÖFFNETEN Termin beim
+        # Wiederherstellen (siehe _sicherung_wiederherstellen/_konflikt_abfragen) - ein
+        # Überschreiben dieser Datei würde mit der noch offenen sqlite3.Connection des
+        # Hauptfensters kollidieren.
+        self._aktueller_pfad = aktueller_pfad
 
         hinweis = QLabel(
             "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner "
@@ -3067,6 +3161,7 @@ class DatensicherungTab(QWidget):
 
         ordner = termine_ordner()
         vorhandene = {p.name for p in ordner.glob("*.sqlite")}
+        offener_name = os.path.basename(self._aktueller_pfad) if self._aktueller_pfad else None
 
         entscheidungen: dict[str, str] = {}
         uebersprungen = 0
@@ -3074,7 +3169,7 @@ class DatensicherungTab(QWidget):
             if name not in vorhandene:
                 entscheidungen[name] = name
                 continue
-            aktion = self._konflikt_abfragen(name)
+            aktion = self._konflikt_abfragen(name, ist_offener_termin=(name == offener_name))
             if aktion == "ueberschreiben":
                 entscheidungen[name] = name
             elif aktion == "kopie":
@@ -3101,23 +3196,30 @@ class DatensicherungTab(QWidget):
             "Neue Termine erscheinen in der Terminübersicht beim nächsten „Anderen Termin öffnen…“."
         )
 
-    def _konflikt_abfragen(self, dateiname: str) -> str:
+    def _konflikt_abfragen(self, dateiname: str, ist_offener_termin: bool = False) -> str:
         """Fragt bei einem Namenskonflikt (Termin existiert bereits) nach, wie verfahren
-        werden soll. Gibt "ueberschreiben", "kopie" oder "ueberspringen" zurück."""
+        werden soll. Gibt "ueberschreiben", "kopie" oder "ueberspringen" zurück. Ist
+        `dateiname` gerade der im Hauptfenster geöffnete Termin, wird "Überschreiben" gar
+        nicht erst angeboten - die noch offene Datenbankverbindung würde damit kollidieren
+        (auf Windows vermutlich mit einer schwer verständlichen Dateisperren-Fehlermeldung)."""
         box = QMessageBox(self)
         box.setWindowTitle("Termin bereits vorhanden")
-        box.setText(
-            f"Der Termin „{dateiname}“ ist im Termine-Ordner bereits vorhanden.\n\n"
-            "Wie soll damit verfahren werden?"
-        )
-        ueberschreiben_btn = box.addButton("Überschreiben", QMessageBox.AcceptRole)
+        text = f"Der Termin „{dateiname}“ ist im Termine-Ordner bereits vorhanden.\n\nWie soll damit verfahren werden?"
+        if ist_offener_termin:
+            text += (
+                "\n\nDieser Termin ist gerade im Hauptfenster geöffnet und kann deshalb "
+                "nicht überschrieben werden - bitte zuerst als Kopie importieren oder "
+                "überspringen."
+            )
+        box.setText(text)
+        ueberschreiben_btn = None if ist_offener_termin else box.addButton("Überschreiben", QMessageBox.AcceptRole)
         kopie_btn = box.addButton("Als Kopie importieren", QMessageBox.ActionRole)
         ueberspringen_btn = box.addButton("Überspringen", QMessageBox.RejectRole)
         box.setDefaultButton(ueberspringen_btn)
         box.exec()
 
         geklickt = box.clickedButton()
-        if geklickt is ueberschreiben_btn:
+        if ueberschreiben_btn is not None and geklickt is ueberschreiben_btn:
             return "ueberschreiben"
         if geklickt is kopie_btn:
             return "kopie"
@@ -3333,6 +3435,10 @@ class VersionDialog(QDialog):
 
         self._ergebnis_zeile = QLabel("")
         self._ergebnis_zeile.setWordWrap(True)
+        # Reiner Text statt Qts automatischer Rich-Text-Erkennung - der angezeigte Text
+        # stammt aus der GitHub-API (tag_name), ein dort manipulierter Rich-Text-artiger
+        # Inhalt soll im Label keinesfalls als HTML interpretiert werden.
+        self._ergebnis_zeile.setTextFormat(Qt.PlainText)
         self._ergebnis_zeile.hide()
 
         self._download_btn = QPushButton("Neue Version herunterladen (GitHub öffnen)")
@@ -3484,6 +3590,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         """Verbindet das Fenster mit einem (neuen oder anfänglichen) Termin: setzt Titel
         und baut alle Tabs für diesen Termin neu auf."""
         self.conn = conn
+        self.pfad = pfad
         self.setWindowTitle(f"SHS Prüfungsprogramm – {pfad}")
 
         veranstaltung = get_veranstaltung(conn)
@@ -3512,7 +3619,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
         # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
         # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
-        self.datensicherung_tab = DatensicherungTab()
+        # aktueller_pfad wird nur mitgegeben, damit ein Wiederherstellen den gerade
+        # geöffneten Termin nicht versehentlich überschreibt (siehe DatensicherungTab).
+        self.datensicherung_tab = DatensicherungTab(aktueller_pfad=pfad)
 
         self._tabs.addTab(self.teilnehmer_tab, "Teilnehmer")
         self._tabs.addTab(self.formular_import_tab, "Formular-Import")
@@ -3541,7 +3650,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             if antwort == QMessageBox.Yes:
                 self.ergebnis_tab.alle_speichern()
 
-        dialog = StartDialog(self)
+        dialog = StartDialog(self, aktueller_pfad=self.pfad)
         if dialog.exec() != QDialog.Accepted or not dialog.pfad:
             return
 
@@ -3692,12 +3801,15 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
     db.termine_ordner) zum Öffnen/Löschen, sowie neuen Termin anlegen oder eine
     Termin-Datei an anderer Stelle öffnen (z. B. von einem USB-Stick)."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, aktueller_pfad: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("SHS Prüfungsprogramm")
         self.resize(600, 380)
         self.pfad: str | None = None
         self._termine: list = []
+        # Nur gesetzt, wenn der Dialog aus einem bereits offenen Hauptfenster heraus
+        # ("Anderen Termin öffnen…") gestartet wurde - siehe _termin_loeschen.
+        self._aktueller_pfad = aktueller_pfad
 
         self.tabelle = QTableWidget(0, 4)
         self.tabelle.setHorizontalHeaderLabels(["Datum", "Verein", "Ort", "Teilnehmer"])
@@ -3833,6 +3945,14 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
     def _termin_loeschen(self) -> None:
         termin = self._ausgewaehlter_termin()
         if termin is None:
+            return
+        if self._aktueller_pfad and os.path.abspath(termin.pfad) == os.path.abspath(self._aktueller_pfad):
+            QMessageBox.warning(
+                self, "Termin gerade geöffnet",
+                "Dieser Termin ist gerade im Hauptfenster geöffnet und kann deshalb nicht "
+                "gelöscht werden. Bitte zuerst einen anderen Termin öffnen oder das "
+                "Programm schließen.",
+            )
             return
         antwort = QMessageBox.question(
             self,

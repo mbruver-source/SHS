@@ -16,14 +16,21 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for zeile in zeilen %}
       <h2 style="margin-top: 1.2em;">{{ zeile.disziplin }}</h2>
+      {# Versteckte Felder mit dem beim Laden der Seite sichtbaren Stand - Grundlage für
+         den Lost-Update-Schutz beim Speichern (siehe app_web._geladene_werte_aus_formular/
+         ergebnis_erfassen): unverändert lassende Disziplinen werden dadurch beim
+         Speichern nicht angefasst, auch wenn zwischenzeitlich ein anderer Richter eine
+         ANDERE Disziplin desselben Teilnehmers geändert hat. #}
+      <input type="hidden" name="geladen_suche_{{ zeile.disziplin }}" value="{{ zeile.geladen_suche }}">
+      <input type="hidden" name="geladen_anzeige_{{ zeile.disziplin }}" value="{{ zeile.geladen_anzeige }}">
       <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–60)</label>
       <input type="number" id="suche_{{ zeile.disziplin }}" name="suche_{{ zeile.disziplin }}"
              inputmode="numeric" min="0" max="60"
-             value="{{ zeile.suche if zeile.suche is not none else '' }}">
+             value="{{ zeile.suche }}">
       <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–40)</label>
       <input type="number" id="anzeige_{{ zeile.disziplin }}" name="anzeige_{{ zeile.disziplin }}"
              inputmode="numeric" min="0" max="40"
-             value="{{ zeile.anzeige if zeile.anzeige is not none else '' }}">
+             value="{{ zeile.anzeige }}">
     {% endfor %}
     <p><button type="submit">Speichern</button></p>
   </form>

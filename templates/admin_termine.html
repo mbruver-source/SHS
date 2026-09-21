@@ -14,6 +14,7 @@
       Termin veröffentlicht: <strong>{{ veroeffentlicht.verein or "(ohne Vereinsnamen)" }}</strong>
       {% if veroeffentlicht.ort %}, {{ veroeffentlicht.ort }}{% endif %}
       – {{ veroeffentlicht.anzahl_teilnehmer }} Teilnehmer.
+      {% if dublette_hinweis %}<br><small>{{ dublette_hinweis }}</small>{% endif %}
     </div>
   {% endif %}
   <form method="post" action="{{ url_for('admin_termin_veroeffentlichen') }}" enctype="multipart/form-data">
@@ -36,6 +37,10 @@
       {% if zurueckgeholt_bericht.nicht_gefunden %}
         <br>Startnummern aus der Web-Erfassung ohne Entsprechung in der Termin-Datei:
         {{ zurueckgeholt_bericht.nicht_gefunden | join(", ") }}
+      {% endif %}
+      {% if zurueckgeholt_bericht.fehler %}
+        <br>Fehler beim Übertragen (bitte für diese Teilnehmer manuell prüfen):
+        {{ zurueckgeholt_bericht.fehler | join(", ") }}
       {% endif %}
     </p>
     <p>

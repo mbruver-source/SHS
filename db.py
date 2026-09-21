@@ -32,11 +32,12 @@ import datetime
 import math
 import os
 import re
+import secrets
 import sqlite3
 import tempfile
 import zipfile
 from contextlib import closing, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pyzipper
@@ -333,18 +334,33 @@ def _vorhandene_spalten(conn, tabelle: str) -> set[str]:
     return {row["column_name"] for row in rows}
 
 
+def _migriere_spalten(conn, tabelle: str, neue_spalten: list) -> None:
+    """Gemeinsame Hilfsfunktion für _migriere_veranstaltung_spalten/
+    _migriere_teilnehmer_spalten/_migriere_ergebnisse_spalten unten (waren vorher drei bis
+    auf Tabellen-/Spaltenliste identische Funktionen, siehe Codeprüfung 21.09.): ergänzt in
+    `tabelle` alle in `neue_spalten` genannten, noch fehlenden Spalten per ALTER TABLE ADD
+    COLUMN (CREATE TABLE IF NOT EXISTS allein reicht dafür nicht, da die Tabelle in
+    Altdateien schon ohne diese Spalten existiert - keine Datenverluste, bestehende Zeilen
+    bekommen für die neue Spalte einfach NULL). Funktioniert dialektunabhängig, siehe
+    _vorhandene_spalten(). Jeder Eintrag in `neue_spalten` ist entweder nur ein Spaltenname
+    (Typ dann TEXT, siehe _VERANSTALTUNG_NEUE_SPALTEN) oder ein (Spaltenname, SQL-Typ)-Tupel,
+    falls ein anderer Typ/DEFAULT/NOT NULL gebraucht wird (siehe _TEILNEHMER_NEUE_SPALTEN/
+    _ERGEBNISSE_NEUE_SPALTEN)."""
+    vorhandene_spalten = _vorhandene_spalten(conn, tabelle)
+    for eintrag in neue_spalten:
+        spalte, sql_typ = eintrag if isinstance(eintrag, tuple) else (eintrag, "TEXT")
+        if spalte not in vorhandene_spalten:
+            conn.execute(f"ALTER TABLE {tabelle} ADD COLUMN {spalte} {sql_typ}")
+    conn.commit()
+
+
 def _migriere_veranstaltung_spalten(conn) -> None:
     """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien/
-    Datenbanken die neuen, optionalen Veranstaltungs-Spalten nachträglich (CREATE TABLE
-    IF NOT EXISTS allein reicht dafür nicht, da die Tabelle in Altdateien schon ohne
-    diese Spalten existiert). ALTER TABLE ADD COLUMN ist dafür in SQLite wie PostgreSQL
-    unproblematisch: keine Datenverluste, bestehende Zeilen bekommen für die neue Spalte
-    einfach NULL. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
-    vorhandene_spalten = _vorhandene_spalten(conn, "veranstaltung")
-    for spalte in _VERANSTALTUNG_NEUE_SPALTEN:
-        if spalte not in vorhandene_spalten:
-            conn.execute(f"ALTER TABLE veranstaltung ADD COLUMN {spalte} TEXT")
-    conn.commit()
+    Datenbanken die neuen, optionalen Veranstaltungs-Spalten nachträglich - siehe
+    _migriere_spalten() oben. Dünner Wrapper (statt direktem Aufruf von _migriere_spalten
+    an den drei Aufrufstellen unten), damit der Funktionsname weiterhin erkennen lässt,
+    welche Tabelle gemeint ist."""
+    _migriere_spalten(conn, "veranstaltung", _VERANSTALTUNG_NEUE_SPALTEN)
 
 
 _TEILNEHMER_NEUE_SPALTEN = [
@@ -399,12 +415,8 @@ def _migriere_teilnehmer_spalten(conn) -> None:
     neuen Verwaltungs-/Kontaktfelder als leer (NULL) - andernfalls würde allein durch das
     Öffnen einer alten Termin-Datei fälschlich der Eindruck entstehen, bereits erfasste
     Teilnehmer hätten schon bezahlt, eine bestimmte Gegenstand-Zuordnung oder Kontaktdaten
-    hinterlegt. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
-    vorhandene_spalten = _vorhandene_spalten(conn, "teilnehmer")
-    for spalte, sql_typ in _TEILNEHMER_NEUE_SPALTEN:
-        if spalte not in vorhandene_spalten:
-            conn.execute(f"ALTER TABLE teilnehmer ADD COLUMN {spalte} {sql_typ}")
-    conn.commit()
+    hinterlegt. Siehe _migriere_spalten() oben (dünner Wrapper, siehe dortiger Kommentar)."""
+    _migriere_spalten(conn, "teilnehmer", _TEILNEHMER_NEUE_SPALTEN)
 
 
 _ERGEBNISSE_NEUE_SPALTEN = [
@@ -419,24 +431,31 @@ def _migriere_ergebnisse_spalten(conn) -> None:
     zu _migriere_veranstaltung_spalten/_migriere_teilnehmer_spalten oben). Bestehende
     Ergebniszeilen gelten dabei als "weder disqualifiziert noch Abbruch" (Default 0) -
     ihre bisherige, aus den Punktwerten berechnete Wertnote bleibt dadurch unverändert
-    gültig. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
-    vorhandene_spalten = _vorhandene_spalten(conn, "ergebnisse")
-    for spalte, sql_typ in _ERGEBNISSE_NEUE_SPALTEN:
-        if spalte not in vorhandene_spalten:
-            conn.execute(f"ALTER TABLE ergebnisse ADD COLUMN {spalte} {sql_typ}")
-    conn.commit()
+    gültig. Siehe _migriere_spalten() oben (dünner Wrapper, siehe dortiger Kommentar)."""
+    _migriere_spalten(conn, "ergebnisse", _ERGEBNISSE_NEUE_SPALTEN)
 
 
 def init_db(pfad: str) -> sqlite3.Connection:
-    """Öffnet (oder erstellt) die Termin-Datenbankdatei unter `pfad`."""
+    """Öffnet (oder erstellt) die Termin-Datenbankdatei unter `pfad`.
+
+    Schließt die gerade erst geöffnete Verbindung wieder, falls das Anlegen des Schemas/
+    der Migrationen fehlschlägt (z. B. `pfad` ist gar keine gültige SQLite-Datenbank,
+    siehe app_web.admin_termin_veroeffentlichen()/admin_termin_zurueckholen(), QS-Fund
+    21.09.) - sonst bliebe die Datei über die offene, nie wieder erreichbare Verbindung
+    gesperrt (unter Windows verhindert das ein anschließendes os.remove() der
+    temporären Upload-Datei mit einem PermissionError)."""
     conn = sqlite3.connect(pfad)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(SCHEMA)
-    conn.commit()
-    _migriere_veranstaltung_spalten(conn)
-    _migriere_teilnehmer_spalten(conn)
-    _migriere_ergebnisse_spalten(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(SCHEMA)
+        conn.commit()
+        _migriere_veranstaltung_spalten(conn)
+        _migriere_teilnehmer_spalten(conn)
+        _migriere_ergebnisse_spalten(conn)
+    except Exception:
+        conn.close()
+        raise
     return conn
 
 
@@ -838,12 +857,34 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
     ab, sondern wird übersprungen und im Ergebnis aufgeführt - der Rest der Datei wird
     trotzdem importiert. 'utf-8-sig' statt 'utf-8', damit ein von Excel/Windows-Tools
     gespeichertes BOM am Dateianfang nicht versehentlich Teil des ersten Spaltennamens
-    wird (sonst würde 'nachname' der ersten Spalte nicht erkannt)."""
+    wird (sonst würde 'nachname' der ersten Spalte nicht erkannt).
+
+    Eine mit einer anderen Kodierung (z.B. Windows-ANSI statt UTF-8) gespeicherte Datei
+    löst beim Weiterlesen einen UnicodeDecodeError aus - der tritt außerhalb der
+    zeilenweisen try/except-Behandlung auf (beim Vorrücken des Datei-Iterators selbst),
+    wird daher separat abgefangen: der Import bricht an der betroffenen Stelle sauber ab
+    statt mit einer unbehandelten Exception, bereits importierte Zeilen bleiben erhalten
+    (add_teilnehmer() committet pro Zeile einzeln)."""
     fehler: list[str] = []
     importiert = 0
+    letzte_zeile = 1  # Zeile 1 = Kopfzeile
     with open(pfad, newline="", encoding="utf-8-sig") as datei:
         reader = csv.DictReader(datei)
-        for zeilennummer, zeile in enumerate(reader, start=2):  # Zeile 1 = Kopfzeile
+        iterator = enumerate(reader, start=2)
+        while True:
+            try:
+                zeilennummer, zeile = next(iterator)
+            except StopIteration:
+                break
+            except UnicodeDecodeError as exc:
+                fehler.append(
+                    f"Import nach Zeile {letzte_zeile} abgebrochen - Datei ist nicht "
+                    f"UTF-8-kodiert ({exc}). Bitte die CSV-Datei mit UTF-8-Kodierung "
+                    "speichern und erneut importieren; bereits importierte Zeilen bleiben "
+                    "erhalten."
+                )
+                break
+            letzte_zeile = zeilennummer
             try:
                 teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
                 add_teilnehmer(conn, teilnehmer)
@@ -1551,34 +1592,45 @@ def automatische_zeitplan_verteilung(
     Gruppe zuerst - jeweils dem Richter mit der aktuell geringsten Gesamtdauer zugeteilt
     (Longest-Processing-Time-Heuristik für eine ausgewogene Auslastung). Das Ergebnis ist
     nur ein Vorschlag und bleibt danach frei editierbar (verschieben, Dauer ändern, Pausen
-    einfügen, zwischen Richtern verschieben)."""
+    einfügen, zwischen Richtern verschieben).
+
+    DELETE und alle folgenden INSERTs laufen bewusst in EINER gemeinsamen Transaktion (ein
+    einziges conn.commit() erst ganz am Ende, kein Zwischen-Commit nach dem DELETE) und bei
+    einem Fehler mit conn.rollback() vollständig zurückgerollt: ein Teilfehler mittendrin
+    (z. B. bei einem der INSERTs) soll weder den alten Zeitplan committet-gelöscht noch
+    einen halb befüllten neuen zurücklassen, sondern garantiert den Stand VOR diesem Aufruf
+    unangetastet erhalten (siehe Fund "kann bei Teilfehler den kompletten Zeitplan leeren",
+    Codeprüfung 21.09.)."""
     if not richter_ids:
         return
-    for richter_id in richter_ids:
-        conn.execute("DELETE FROM zeitplan_eintrag WHERE richter_id = ?", (richter_id,))
-    conn.commit()
+    try:
+        for richter_id in richter_ids:
+            conn.execute("DELETE FROM zeitplan_eintrag WHERE richter_id = ?", (richter_id,))
 
-    gruppen = [g for g in zeitplan_gruppen(conn) if g["teilnehmer"]]
-    gruppen.sort(key=lambda g: len(g["teilnehmer"]), reverse=True)
+        gruppen = [g for g in zeitplan_gruppen(conn) if g["teilnehmer"]]
+        gruppen.sort(key=lambda g: len(g["teilnehmer"]), reverse=True)
 
-    gesamtdauer_je_richter = {richter_id: 0 for richter_id in richter_ids}
-    naechste_reihenfolge = {richter_id: 0 for richter_id in richter_ids}
-    for gruppe in gruppen:
-        ziel_richter = min(richter_ids, key=lambda r: gesamtdauer_je_richter[r])
-        dauer = len(gruppe["teilnehmer"]) * standard_dauer_minuten
-        conn.execute(
-            """
-            INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, art, stufe, disziplin, dauer_minuten)
-            VALUES (?, ?, 'pruefung', ?, ?, ?, ?)
-            """,
-            (
-                ziel_richter, naechste_reihenfolge[ziel_richter],
-                gruppe["art"], gruppe["stufe"], gruppe["disziplin"], standard_dauer_minuten,
-            ),
-        )
-        naechste_reihenfolge[ziel_richter] += 1
-        gesamtdauer_je_richter[ziel_richter] += dauer
-    conn.commit()
+        gesamtdauer_je_richter = {richter_id: 0 for richter_id in richter_ids}
+        naechste_reihenfolge = {richter_id: 0 for richter_id in richter_ids}
+        for gruppe in gruppen:
+            ziel_richter = min(richter_ids, key=lambda r: gesamtdauer_je_richter[r])
+            dauer = len(gruppe["teilnehmer"]) * standard_dauer_minuten
+            conn.execute(
+                """
+                INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, art, stufe, disziplin, dauer_minuten)
+                VALUES (?, ?, 'pruefung', ?, ?, ?, ?)
+                """,
+                (
+                    ziel_richter, naechste_reihenfolge[ziel_richter],
+                    gruppe["art"], gruppe["stufe"], gruppe["disziplin"], standard_dauer_minuten,
+                ),
+            )
+            naechste_reihenfolge[ziel_richter] += 1
+            gesamtdauer_je_richter[ziel_richter] += dauer
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 # --- Terminübersicht -----------------------------------------------------------
@@ -1899,6 +1951,46 @@ def liste_benutzer(conn) -> list[dict]:
     ]
 
 
+def benutzer_stand(conn, benutzername: str) -> dict | None:
+    """Liefert den AKTUELLEN Stand eines Web-Benutzerkontos ({"benutzername": ...,
+    "ist_admin": bool}) oder None, falls das Konto nicht (mehr) existiert - anders als
+    pruefe_login() OHNE Passwort-Prüfung, dient also nicht dem Login selbst, sondern der
+    Re-Validierung einer bereits bestehenden Session (siehe
+    app_web._aktueller_benutzer_oder_redirect()).
+
+    QS-Fund (21.09.): _login_erforderlich/_admin_erforderlich/_termin_erforderlich in
+    app_web.py prüften bisher nur den in der (signierten, aber sonst ungeprüften)
+    Session hinterlegten Stand - löschte ein Administrator währenddessen das Konto eines
+    anderen angemeldeten Nutzers, blieb dessen Session bis zum Abmelden/Sitzungsablauf
+    voll nutzbar, ggf. sogar mit Admin-Rechten. Jede Anfrage re-validiert deshalb jetzt
+    gegen diese Funktion.
+
+    Analog zu liste_benutzer()/pruefe_login() implementiert (LOWER()-Vergleich wie beim
+    Login, _setze_termin_suchpfad(conn, "public") nicht vergessen - web_benutzer liegt
+    immer im "public"-Schema, unabhängig davon, auf welches Termin-Schema die Verbindung
+    zuvor ggf. gewechselt war)."""
+    _setze_termin_suchpfad(conn, "public")
+    zeile = conn.execute(
+        "SELECT benutzername, ist_admin FROM web_benutzer WHERE LOWER(benutzername) = LOWER(?)",
+        (benutzername.strip(),),
+    ).fetchone()
+    if zeile is None:
+        return None
+    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"])}
+
+
+# Dummy-Passwort-Hash für den Timing-Seitenkanal-Schutz in pruefe_login() unten - EINMALIG
+# lazy (beim ersten pruefe_login()-Aufruf, nicht bei jedem einzelnen) berechnet und dann
+# wiederverwendet, nicht bereits hier auf Modulebene: werkzeug.security wird in diesem
+# Modul bewusst erst innerhalb der jeweiligen Funktion importiert (siehe Begründung in
+# benutzer_anlegen()), damit die Desktop-Version (die dieses Modul ebenfalls importiert,
+# aber kein Flask/werkzeug installiert hat) nicht plötzlich davon abhängt. Der zufällige
+# Klartext dahinter spielt keine Rolle - es wird nie ein echtes Passwort damit verglichen,
+# nur die Rechenzeit von check_password_hash() an den "bekannter Benutzername"-Fall
+# angeglichen (siehe pruefe_login()).
+_DUMMY_PASSWORT_HASH: str | None = None
+
+
 def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
     """Prüft Benutzername/Passwort gegen web_benutzer und liefert bei Erfolg
     {"benutzername": ..., "ist_admin": bool}, sonst None - Grundlage für den Login in
@@ -1907,20 +1999,36 @@ def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
     sich über die Fehlermeldung keine vorhandenen Benutzernamen erraten lassen. Importiert
     werkzeug.security bewusst erst hier - siehe Begründung in benutzer_anlegen().
 
+    QS-Fund (21.09.): bei unbekanntem Benutzernamen wurde check_password_hash() (teures
+    PBKDF2) bisher gar nicht erst aufgerufen, bei bekanntem Benutzernamen (falsches
+    Passwort) dagegen schon - die Antwortzeit unterschied sich dadurch messbar und hätte
+    sich zum Erraten gültiger Benutzernamen ausnutzen lassen (Timing-Seitenkanal). Deshalb
+    jetzt IMMER genau ein check_password_hash()-Aufruf, bei unbekanntem Benutzernamen
+    gegen den oben einmalig erzeugten Dummy-Hash - dessen Ergebnis wird verworfen (führt
+    ohnehin zu None über den zeile-is-None-Zweig), nur die Rechenzeit soll angeglichen
+    werden.
+
     Der Vergleich läuft über LOWER() auf beiden Seiten, GROSS-/Kleinschreibung beim
     Benutzernamen spielt also keine Rolle (Passwörter bleiben dagegen wie gespeichert
     GROSS-/kleinschreibungsempfindlich) - ohne das würden z. B. Mobilgeräte, die den
     ersten Buchstaben eines Textfelds automatisch groß schreiben ("Autokapitalisierung"),
     beim Anmelden leicht einen ansonsten korrekten Benutzernamen ablehnen, nur weil er beim
     Anlegen des Kontos anders geschrieben wurde als beim späteren Anmelden."""
-    from werkzeug.security import check_password_hash
+    from werkzeug.security import check_password_hash, generate_password_hash
+
+    global _DUMMY_PASSWORT_HASH
+    if _DUMMY_PASSWORT_HASH is None:
+        _DUMMY_PASSWORT_HASH = generate_password_hash(secrets.token_hex(32))
 
     _setze_termin_suchpfad(conn, "public")
     zeile = conn.execute(
         "SELECT benutzername, passwort_hash, ist_admin FROM web_benutzer WHERE LOWER(benutzername) = LOWER(?)",
         (benutzername.strip(),),
     ).fetchone()
-    if zeile is None or not check_password_hash(zeile["passwort_hash"], passwort):
+    if zeile is None:
+        check_password_hash(_DUMMY_PASSWORT_HASH, passwort)  # Ergebnis verworfen, siehe Docstring oben
+        return None
+    if not check_password_hash(zeile["passwort_hash"], passwort):
         return None
     return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"])}
 
@@ -2167,7 +2275,23 @@ def exportiere_termin_nach_postgres(sqlite_conn: sqlite3.Connection, postgres_co
     # gefunden: IndexError beim anschließenden Import, weil das neue Schema leer
     # blieb, siehe Fortschritt.md).
     _setze_termin_suchpfad(postgres_conn, neuer_termin.schema_name)
-    kopiere_termin_daten(sqlite_conn, postgres_conn)
+    try:
+        kopiere_termin_daten(sqlite_conn, postgres_conn)
+    except Exception:
+        # kopiere_termin_daten() committet über add_teilnehmer()/eintragen_ergebnis() PRO
+        # TEILNEHMER einzeln (diese beiden Funktionen committen selbst - so gewollt für den
+        # normalen Desktop-Einzelbetrieb, siehe dortige Kommentare). Bricht das Kopieren
+        # mittendrin ab, sind dadurch bereits mehrere Teilnehmer committet - ein echtes
+        # Rollback des bisher Kopierten ist an dieser Stelle also nicht mehr möglich.
+        # Stattdessen KOMPENSIERENDE Bereinigung: den gerade erst angelegten, dadurch nur
+        # teilweise befüllten Termin komplett wieder entfernen, statt ihn als scheinbar
+        # vollständigen Termin in der Web-Terminauswahl stehen zu lassen (siehe Fund
+        # "Postgres-Export nicht atomar", Codeprüfung 21.09.). Die ursprüngliche Exception
+        # wird danach unverändert weitergereicht, damit der Aufrufer (sync_termin.py/
+        # app_web.py) den Fehlschlag wie bisher meldet.
+        _setze_termin_suchpfad(postgres_conn, "public")
+        loesche_termin_postgres(postgres_conn, neuer_termin.schema_name)
+        raise
     postgres_conn.commit()
     # anzahl_teilnehmer/verein/ort/datum in erstelle_termin_postgres()s Rückgabe waren noch
     # leer/0 (vor dem Kopieren) - aktuellen Stand für die Rückgabe nachladen.
@@ -2189,6 +2313,13 @@ class ImportBericht:
     # Startnummer gibt (z. B. wenn ein Teilnehmer nach dem Export noch umbenannt/gelöscht
     # oder die Startnummer geändert wurde).
     nicht_gefunden: list[str]
+    # "Nachname, Vorname" von Teilnehmern, bei denen eintragen_ergebnis() fehlgeschlagen ist
+    # (z. B. eine defekte Zieldatenbank-Verbindung mittendrin im Import) - der Import bricht
+    # dafür NICHT komplett ab (siehe importiere_ergebnisse_nach_startnummer unten), macht
+    # stattdessen mit dem nächsten Teilnehmer weiter, analog zum bereits etablierten Muster
+    # in importiere_teilnehmer_aus_csv(). Default leer, damit bestehende Aufrufstellen (die
+    # dieses Feld nicht setzen) unverändert funktionieren.
+    fehler: list[str] = field(default_factory=list)
 
 
 def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBericht:
@@ -2198,13 +2329,20 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
     Datenbanken beim Export unabhängig voneinander vergebene IDs bekommen haben (siehe
     kopiere_termin_daten oben) - die Startnummer ist das einzige beiden Seiten gemeinsame,
     eindeutige Merkmal. Überschreibt dabei die Ergebnisse im Ziel vollständig mit dem
-    Stand der Quelle (nach der Prüfung gilt die Web-Erfassung als maßgeblich)."""
+    Stand der Quelle (nach der Prüfung gilt die Web-Erfassung als maßgeblich).
+
+    eintragen_ergebnis() committet pro Teilnehmer einzeln (siehe dortiger Kommentar) - ein
+    Fehler bei einem einzelnen Teilnehmer (z. B. ein zwischenzeitlicher DB-Fehler) bricht
+    den Import für die übrigen Teilnehmer deshalb NICHT ab, analog zum bereits etablierten
+    Muster in importiere_teilnehmer_aus_csv(): der Name landet stattdessen im `fehler`-Feld
+    des zurückgegebenen ImportBericht, der Import macht mit dem nächsten Teilnehmer weiter."""
     ziel_nach_startnummer = {
         t["startnummer"]: t["id"] for t in list_teilnehmer(ziel_conn) if t.get("startnummer") is not None
     }
     aktualisiert = 0
     ohne_startnummer: list[str] = []
     nicht_gefunden: list[str] = []
+    fehler: list[str] = []
     for quelle_teilnehmer in list_teilnehmer(quelle_conn):
         startnummer = quelle_teilnehmer.get("startnummer")
         name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
@@ -2219,17 +2357,22 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
         if not ergebnis:
             continue
         hat_wert = False
-        for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
-            suche, anzeige = ergebnis[spalte_suche], ergebnis[spalte_anzeige]
-            if suche is not None or anzeige is not None:
-                eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
-                hat_wert = True
+        try:
+            for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
+                suche, anzeige = ergebnis[spalte_suche], ergebnis[spalte_anzeige]
+                if suche is not None or anzeige is not None:
+                    eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
+                    hat_wert = True
+        except Exception:
+            fehler.append(name)
+            continue
         if hat_wert:
             aktualisiert += 1
     return ImportBericht(
         aktualisiert=aktualisiert,
         ohne_startnummer_uebersprungen=ohne_startnummer,
         nicht_gefunden=nicht_gefunden,
+        fehler=fehler,
     )
 
 

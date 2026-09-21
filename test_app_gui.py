@@ -1057,11 +1057,15 @@ def test_ergebnis_disqualifiziert_sperrt_und_leert_punkteeingabe(qtbot, conn):
     assert not suche_feld.isEnabled()
     assert not anzeige_feld.isEnabled()
 
-    # Wieder abwählen gibt die Felder wieder frei (bewusst ohne die zuvor gelöschten
-    # Werte wiederherzustellen - der Nutzer trägt sie bei Bedarf neu ein).
+    # Wieder abwählen gibt die Felder wieder frei - befüllt sie dabei mit dem zuletzt aus
+    # der DB geladenen Stand (hier leer, da die Eingabe oben nie gespeichert wurde; siehe
+    # test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht für den Fall mit
+    # bereits gespeicherten Punkten).
     dq_box.setChecked(False)
     assert suche_feld.isEnabled()
     assert anzeige_feld.isEnabled()
+    assert suche_feld.text() == ""
+    assert anzeige_feld.text() == ""
 
 
 def test_ergebnis_disqualifiziert_und_abbruch_werden_unabhaengig_gespeichert(qtbot, conn):
@@ -1109,6 +1113,51 @@ def test_ergebnis_disqualifiziert_bleibt_beim_sortieren_und_laedt_gesperrte_feld
     zorn_suche, zorn_anzeige = tab._boxen_je_zeile[1]["Flächensuche"]
     assert not zorn_suche.isEnabled()
     assert not zorn_anzeige.isEnabled()
+
+
+def test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht(qtbot, conn):
+    # QS-Fund (Codeprüfung 21.09.): Punkte eintragen+speichern -> Disqualifiziert
+    # ankreuzen+speichern -> Häkchen wieder entfernen durfte NICHT dazu führen, dass die
+    # ursprünglichen Punkte aus der DB gelöscht werden (setze_ergebnis_status() dokumentiert
+    # ausdrücklich, dass eine ggf. weiterhin in suche_*/anzeige_*-Spalten stehende Punktzahl
+    # unangetastet bleibt - das wurde vorher durch alle_speichern() verletzt).
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+    tab.alle_speichern()
+    ergebnis = get_ergebnis(conn, tid)
+    assert ergebnis["suche_flaechensuche"] == 58
+    assert ergebnis["anzeige_flaechensuche"] == 38
+
+    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]
+    dq_box.setChecked(True)
+    tab.alle_speichern()
+    # Direkt nach dem Speichern einer gesperrten Zeile gilt sie als gespeichert - die
+    # (leeren, gesperrten) Punktefelder dürfen die Zeile nicht dauerhaft als "nicht
+    # gespeichert" markieren.
+    assert not tab._zeile_ist_ungespeichert(0)
+
+    ergebnis = get_ergebnis(conn, tid)
+    assert ergebnis["disqualifiziert"] == 1
+    assert ergebnis["suche_flaechensuche"] == 58
+    assert ergebnis["anzeige_flaechensuche"] == 38
+
+    dq_box.setChecked(False)
+    assert suche_feld.text() == "58"
+    assert anzeige_feld.text() == "38"
+
+    # Erneutes Speichern OHNE weitere Eingabe darf die wiederhergestellten Werte nicht
+    # versehentlich als "unverändert" verwerfen oder erneut löschen.
+    tab.alle_speichern()
+    ergebnis = get_ergebnis(conn, tid)
+    assert ergebnis["disqualifiziert"] == 0
+    assert ergebnis["suche_flaechensuche"] == 58
+    assert ergebnis["anzeige_flaechensuche"] == 38
 
 
 def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch):

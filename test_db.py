@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from db import (
     NeuerTeilnehmer,
+    TerminInfoPostgres,
     add_teilnehmer,
     add_zeitplan_pause,
     add_zeitplan_pruefungsblock,
@@ -948,6 +949,42 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
 
+    def test_importiere_teilnehmer_aus_csv_bricht_bei_falscher_kodierung_sauber_ab(self):
+        # QS-Fund (Codeprüfung 21.09.): eine mit Windows-ANSI statt UTF-8 gespeicherte
+        # CSV-Datei (auf deutschem Windows beim "CSV speichern unter" in Excel der
+        # Standard) löste beim Weiterlesen einen UnicodeDecodeError AUSSERHALB der
+        # zeilenweisen try/except-Behandlung aus - der Import brach dadurch komplett mit
+        # einer unbehandelten Exception ab statt "nur die fehlerhafte Zeile zu
+        # überspringen" (siehe Docstring). Jetzt: sauberer Abbruch mit verständlicher
+        # Fehlermeldung statt Absturz; bereits verarbeitete Zeilen bleiben importiert.
+        #
+        # Genug gültige Zeilen VOR der fehlerhaften, um den internen Lesepuffer von
+        # TextIOWrapper (io.DEFAULT_BUFFER_SIZE = 8192 Byte) zu überschreiten - sonst
+        # würde Python den ungültigen Byte bereits beim Decodieren des ERSTEN Puffer-
+        # Blocks bemerken, bevor auch nur eine Zeile daraus ausgeliefert wurde, und der
+        # Test würde fälschlich "0 importiert" statt des eigentlich interessanten
+        # Verhaltens (Teilimport + sauberer Abbruch) prüfen.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "wb") as f:
+            f.write("nachname,vorname,rufname_hund,art,stufe,disziplin\n".encode("utf-8"))
+            for i in range(300):
+                f.write(f"Gut{i},Vorname{i},Hund{i},ED,1,Trümmerfeld\n".encode("utf-8"))
+            # Eine mit Windows-1252 statt UTF-8 kodierte Zeile (enthält ein ü als 0xFC,
+            # in UTF-8 ungültig als Fortsetzungsbyte) - löst beim Lesen als UTF-8 einen
+            # UnicodeDecodeError aus.
+            f.write("Schlecht,Zweiter,H\xfcndchen,ED,1,Trümmerfeld\n".encode("cp1252"))
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertGreater(ergebnis.importiert, 0)
+            self.assertEqual(len(ergebnis.fehler), 1)
+            self.assertIn("UTF-8", ergebnis.fehler[0])
+            namen = {t["nachname"] for t in list_teilnehmer(self.conn)}
+            self.assertNotIn("Schlecht", namen)
+            self.assertEqual(len(namen), ergebnis.importiert)
+        finally:
+            os.remove(pfad)
+
     def test_teilnehmer_loeschen_entfernt_auch_ergebnis(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1,
@@ -1321,6 +1358,33 @@ class TestZeitplan(unittest.TestCase):
         self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
         automatische_zeitplan_verteilung(self.conn, [], standard_dauer_minuten=10)  # darf nicht crashen
 
+    def test_automatische_verteilung_rollt_bei_teilfehler_komplett_zurueck(self):
+        # Fund "automatische_zeitplan_verteilung kann bei Teilfehler den kompletten
+        # Zeitplan leeren" (Codeprüfung 21.09.): DELETE wurde vorher sofort committet,
+        # die INSERTs erst am Ende - ein Fehler beim zweiten INSERT hätte den alten Plan
+        # (schon gelöscht) UND den neuen (nur halb eingefügt) verloren. Simuliert den
+        # Teilfehler über eine gefälschte zweite Gruppe mit ungültiger Stufe (verletzt die
+        # CHECK-Constraint auf zeitplan_eintrag.stufe) - die erste Gruppe würde ohne den
+        # Fix bereits erfolgreich eingefügt UND committet.
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
+        rid = add_zeitplan_richter(self.conn)
+        add_zeitplan_pause(self.conn, rid, dauer_minuten=99, bezeichnung="Alter Plan")
+        gefaelschte_gruppen = [
+            {"art": "ED", "stufe": 1, "disziplin": "Trümmerfeld", "teilnehmer": [1]},
+            {"art": "ED", "stufe": 99, "disziplin": "Trümmerfeld", "teilnehmer": [1]},
+        ]
+
+        with patch("db.zeitplan_gruppen", return_value=gefaelschte_gruppen):
+            with self.assertRaises(self.IntegrityErrorTyp):
+                automatische_zeitplan_verteilung(self.conn, [rid], standard_dauer_minuten=10)
+
+        # Weder der alte Plan blieb committet gelöscht, noch ein halb-neuer zurück - der
+        # Stand VOR diesem fehlgeschlagenen Aufruf ist unverändert erhalten.
+        eintraege = list_zeitplan_eintraege(self.conn, rid)
+        self.assertEqual(len(eintraege), 1)
+        self.assertEqual(eintraege[0]["typ"], "pause")
+        self.assertEqual(eintraege[0]["bezeichnung"], "Alter Plan")
+
     def test_berechne_zeitplan_kaskadiert_startzeiten(self):
         set_veranstaltung(self.conn, verein="V", datum="2026-09-19", zeitplan_start="09:00")
         self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1, nachname="Erst")
@@ -1637,6 +1701,95 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(ergebnis["suche_truemmerfeld"], 40)
         self.assertEqual(ergebnis["suche_flaechensuche"], 40)
         self.assertEqual(ergebnis["suche_behaeltnis"], 40)
+
+    def test_import_sammelt_fehler_und_macht_mit_naechstem_teilnehmer_weiter(self):
+        # Fund "importiere_ergebnisse_nach_startnummer(): kein Teilbericht bei Fehler
+        # mittendrin" (Codeprüfung 21.09.) - eintragen_ergebnis() committet pro
+        # Teilnehmer einzeln; ein Fehler bei einem einzelnen Teilnehmer darf den Import
+        # für die übrigen Teilnehmer nicht abbrechen, sondern landet im neuen
+        # `fehler`-Feld des ImportBericht, während der nächste Teilnehmer trotzdem
+        # übertragen wird.
+        fehler_quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Fehler", vorname="Eins", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, fehler_quelle_id, "Trümmerfeld", 40, 20)
+        ok_quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2,
+        ))
+        eintragen_ergebnis(self.quelle, ok_quelle_id, "Trümmerfeld", 45, 25)
+
+        fehler_ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Fehler", vorname="Eins", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        ok_ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2,
+        ))
+
+        # eintragen_ergebnis() für den Fehler-Teilnehmer im Ziel künstlich scheitern
+        # lassen (simuliert z. B. einen zwischenzeitlichen DB-Fehler), für alle anderen
+        # normal durchreichen - die echte, unveränderte Funktion bleibt über die lokal
+        # importierte Referenz erreichbar (patch() ersetzt nur das Attribut im db-Modul).
+        echtes_eintragen_ergebnis = eintragen_ergebnis
+
+        def _eintragen_ergebnis_mit_fehler(conn, teilnehmer_id, disziplin, suche, anzeige):
+            if teilnehmer_id == fehler_ziel_id:
+                raise sqlite3.IntegrityError("simulierter Fehler")
+            return echtes_eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
+
+        with patch("db.eintragen_ergebnis", side_effect=_eintragen_ergebnis_mit_fehler):
+            bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(bericht.fehler, ["Fehler, Eins"])
+        self.assertEqual(bericht.nicht_gefunden, [])
+        ergebnis_ok = get_ergebnis(self.ziel, ok_ziel_id)
+        self.assertEqual(ergebnis_ok["suche_truemmerfeld"], 45)
+        self.assertEqual(ergebnis_ok["anzeige_truemmerfeld"], 25)
+
+
+class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
+    """Prüft den Fehlerpfad von exportiere_termin_nach_postgres() rein über Mocks für
+    erstelle_termin_postgres/kopiere_termin_daten/loesche_termin_postgres/
+    _setze_termin_suchpfad (keine echte PostgreSQL-Verbindung nötig - läuft daher auch
+    ohne SHS_TEST_POSTGRES_DSN/psycopg2 lokal). Fund "Postgres-Export nicht atomar"
+    (Codeprüfung 21.09.): bricht kopiere_termin_daten() mittendrin ab (dessen einzelne
+    add_teilnehmer()/eintragen_ergebnis()-Aufrufe committen bereits, ein echtes Rollback
+    ist also nicht mehr möglich), muss der gerade erst angelegte, dadurch nur teilweise
+    befüllte Termin per loesche_termin_postgres() wieder vollständig entfernt werden,
+    statt als scheinbar vollständiger Termin in der Web-Terminauswahl stehen zu bleiben -
+    und die ursprüngliche Exception muss unverändert weiter nach oben gereicht werden."""
+
+    def test_bereinigt_angefangenen_termin_bei_fehler_und_reicht_exception_weiter(self):
+        neuer_termin = TerminInfoPostgres(
+            id=42, schema_name="termin_42", verein=None, ort=None, datum=None,
+            anzahl_teilnehmer=0, erstellt_am="2026-09-21T00:00:00Z",
+        )
+        postgres_conn = object()  # wird nur an die Mocks weitergereicht, nie selbst benutzt
+        sqlite_conn = object()
+
+        with patch("db.erstelle_termin_postgres", return_value=neuer_termin) as mock_erstelle, \
+             patch("db._setze_termin_suchpfad") as mock_suchpfad, \
+             patch("db.kopiere_termin_daten", side_effect=RuntimeError("Verbindungsabbruch")) as mock_kopiere, \
+             patch("db.loesche_termin_postgres") as mock_loesche, \
+             patch("db.liste_termine_postgres") as mock_liste:
+            with self.assertRaises(RuntimeError):
+                exportiere_termin_nach_postgres(sqlite_conn, postgres_conn)
+
+        mock_erstelle.assert_called_once_with(postgres_conn)
+        mock_kopiere.assert_called_once_with(sqlite_conn, postgres_conn)
+        # Der angefangene Termin wurde vollständig entfernt statt für die Web-Oberfläche
+        # sichtbar zu bleiben.
+        mock_loesche.assert_called_once_with(postgres_conn, "termin_42")
+        # search_path: einmal auf das neue Schema (vor dem Kopieren), einmal zurück auf
+        # "public" (vor der Bereinigung) - der Erfolgspfad danach (liste_termine_postgres,
+        # also auch das dortige erneute Umschalten) wird NICHT mehr erreicht.
+        mock_suchpfad.assert_any_call(postgres_conn, "termin_42")
+        mock_suchpfad.assert_any_call(postgres_conn, "public")
+        mock_liste.assert_not_called()
 
 
 class TestTerminImportStammdaten(unittest.TestCase):

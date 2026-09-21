@@ -451,3 +451,236 @@ zusätzlich bestehen (aktiv für Cowork-Sitzungen), `CLAUDE.md` ist jetzt aber d
 Umgebungen gelesene, gemeinsame Quelle für diese Absprachen. Reine Dokumentationsänderung,
 kein Code betroffen - direkt in beide Geräte-Ordner übertragen und committet (kein
 Versionsbump nötig).
+
+## Codeprüfung (21.09.): 3 Bereichs-Subagents (Desktop/Web/Daten), 12 Punkte im Desktop-Bereich umgesetzt
+
+Auf Marcos Wunsch ("prüfe den Code") vollständige Prüfung des aktuellen Codestands über alle
+drei Bereiche, je ein Subagent für Desktop (`app.py`/`test_app_gui.py`), Web
+(`app_web.py`/`templates/`/`test_app_web.py`) und Daten (`db.py`/`shs_core.py`/
+`pdf_export.py`/`sync_termin.py`). Insgesamt 33 neue Befunde (keiner davon bereits als
+"offen"/akzeptiertes Restrisiko bekannt). Marco hat die Punkte 1-12 (alle im Desktop-Bereich,
+`app.py`/`db.py`) zur sofortigen Umsetzung freigegeben; die übrigen Punkte (Web-Bereich:
+Lost-Update bei gleichzeitiger DK-Ergebniserfassung durch mehrere Richter, fehlende
+Session-Invalidierung bei Kontolöschung, u.a.; Daten-Bereich: nicht-atomarer
+Postgres-Export, Zeitplan-Verteilung kann bei Teilfehler Daten löschen, u.a.) sind noch
+unbesprochen und **bewusst nicht umgesetzt** - siehe "Noch offen" unten.
+
+### Wichtigster Fund und Fix: Datenverlust bei Disqualifiziert/Abbruch (`app.py`, `ErgebnisTab`)
+
+Wurde am 21.09. (siehe oben, "Disqualifiziert/Abbruch") eingeführt, aber ein Zusammenspiel
+zweier für sich genommen sinnvoller Mechanismen führte zu echtem, für den Nutzer nicht
+offensichtlichem Datenverlust: `_punkteeingabe_sperren()` leert die Punkte-Eingabefelder
+beim Ankreuzen von Disqualifiziert/Abbruch (Absicht: Eingabe wäre ohnehin irrelevant).
+`alle_speichern()` interpretierte zwei leere Felder aber als "der Nutzer hat die Werte
+bewusst gelöscht" und schrieb aktiv `NULL` in die Datenbank - dadurch gingen bereits
+gespeicherte, echte Punktwerte verloren, sobald DANACH Disqualifiziert/Abbruch angehakt und
+gespeichert wurde. Szenario: Punkte eintragen+speichern → Disqualifiziert ankreuzen+speichern
+→ Häkchen wieder entfernen → die ursprünglichen Punkte waren weg. Widersprach der eigenen
+Dokumentation in `db.setze_ergebnis_status()` ("eine ggf. weiterhin in suche_*/anzeige_*-
+Spalten stehende Punktzahl bleibt dabei unangetastet").
+
+**Fix:** `alle_speichern()` fasst Punkte einer Zeile jetzt gar nicht mehr an, solange
+Disqualifiziert/Abbruch gesetzt ist (`punkte_gesperrt`-Flag). `_status_umgeschaltet()`
+befüllt die Felder beim Entsperren (Häkchen entfernen) wieder mit dem zuletzt aus der DB
+geladenen Stand, statt sie leer zu lassen. `_zeile_ist_ungespeichert()` ignoriert bei
+gesperrter Zeile den (leeren) Punkte-Feldinhalt beim Vergleich, damit eine gesperrte,
+gespeicherte Zeile nicht dauerhaft fälschlich als "nicht gespeichert" markiert bleibt. Neuer
+Regressionstest `test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht` in
+`test_app_gui.py` deckt genau dieses Szenario ab.
+
+### Weitere 11 Punkte (alle Desktop-Bereich, `app.py`/`db.py`)
+
+2. `ergebnis_rows[t["id"]]` in `ErgebnisTab._zeilen_aufbauen()` auf `.get(t["id"], {})` plus
+   `.get()` für die Spaltenzugriffe umgestellt - dieselbe Absicherung wie in
+   `db.berechne_auswertung()` (dort bereits als "Fix 10" umgesetzt), verhindert einen
+   KeyError-Absturz des gesamten Tabs bei verletzter Teilnehmer/Ergebnisse-Invariante.
+3. `db.importiere_teilnehmer_aus_csv()`: `UnicodeDecodeError` (z.B. eine mit Windows-ANSI
+   statt UTF-8 gespeicherte CSV, auf deutschem Windows beim Excel-"Speichern unter" der
+   Standard) wird jetzt separat abgefangen - vorher brach der komplette Import mit einer
+   unbehandelten Exception ab, im Widerspruch zum eigenen Docstring ("eine fehlerhafte Zeile
+   bricht den Import nicht ab"). Neuer Test in `test_db.py` (mit genug gültigen Zeilen vor
+   der Fehlzeile, um den TextIOWrapper-Lesepuffer realistisch zu überschreiten).
+4. Datensicherung wiederherstellen (`DatensicherungTab`) und Termin löschen
+   (`StartDialog._termin_loeschen`) verweigern jetzt gezielt das Überschreiben/Löschen des
+   GERADE GEÖFFNETEN Termins mit klarer Meldung, statt in eine (schwer verständliche)
+   Windows-Dateisperre zu laufen.
+5. `TeilnehmerTab._aus_anderem_termin_importieren()`: zeigt jetzt eine Meldung, falls
+   `quelle_conn()` unerwartet `None` ist, statt kommentarlos ohne Rückmeldung abzubrechen.
+6. `VersionDialog`: `setTextFormat(Qt.PlainText)` für das Label, das den von der GitHub-API
+   gelieferten Release-Text anzeigt (kein Rich-Text-Spoofing über eine kompromittierte
+   GitHub-Quelle möglich).
+7. Bisher ungeschützte DB-Aktionen (Bezahlt umschalten, Startnummer tauschen, Richter/
+   Zeitplan-Einträge verwalten - insgesamt 9 Stellen) haben jetzt try/except mit
+   Fehlerdialog (`_fehler_anzeigen`/neue `_db_fehler_anzeigen`) statt einer bei einem
+   unerwarteten DB-Fehler (gesperrte Datei, voller Datenträger) unbehandelten Exception.
+8. Duplizierter Zeitplan-PDF-Export-Code (`ZeitplanTab._pdf_exportieren`/
+   `ExportTab._zeitplan_exportieren`, vorher wortgleich) in eine gemeinsame Funktion
+   `_zeitplan_pdf_exportieren()` zusammengeführt.
+9. `TeilnehmerDialog.__init__()` (~260 Zeilen) rein strukturell in `_felder_erstellen()`/
+   `_layout_aufbauen()`/`_vorbelegung_uebernehmen()` aufgeteilt, ohne Verhaltensänderung.
+10. Die 8 fast identischen Export-Methoden in `ExportTab` (Ergebnisliste, Etiketten, leere
+    Ergebnisliste, Statistik, Übersicht Prüfungsleitung, Chipliste, Leistungsrichter,
+    Bewertungsbögen) auf einen gemeinsamen Helfer `_pdf_export_ausfuehren()` umgestellt.
+11. **Nicht umgesetzt** (bewusst): Dialoggrößen als "Magic Numbers" - bei genauerer Prüfung
+    kein echtes Duplikationsproblem, da jede Dialoggröße nur genau einmal verwendet wird und
+    bewusst pro Dialog gewählt ist. Benannte Konstanten hätten hier nichts vereinheitlicht.
+12. `Architektur.md`/`CLAUDE.md`: veraltete Zeilenzahlen für `app.py`/`db.py` aktualisiert
+    (2918→4144 bzw. 1850→2442 Zeilen, nach allen obigen Änderungen).
+
+### Tests und Verifikation
+
+PySide6/pytest/pytest-qt waren in dieser Sitzung lokal installiert (anders als der
+Testbefehl-Hinweis in `CLAUDE.md` nahelegt) - dadurch auch die GUI-Tests lokal ausführbar,
+nicht nur simuliert. Kompletter non-GUI-Testlauf: 335 Tests, 0 fehlgeschlagen (139
+übersprungen, PostgreSQL-Tests ohne laufenden Server). Kompletter GUI-Testlauf (`pytest`,
+`QT_QPA_PLATFORM=offscreen`): 68 bestanden, 1 bekannter `xfail`, 0 fehlgeschlagen. Zusätzlich
+`py_compile` für `app.py`/`db.py` fehlerfrei. Beim ersten GUI-Testlauf nach dem
+Disqualifiziert/Abbruch-Fix schlug `test_ergebnis_sortierung_verliert_keine_ungespeicherte_
+eingabe` fehl (eine echte Regression: `_punkteeingabe_sperren()` überschrieb beim
+Neuaufbau/Sortieren fälschlich eine noch nicht gespeicherte Eingabe mit dem DB-Wert) - vor
+dem Weitermachen korrigiert (Wiederherstellung nur noch in `_status_umgeschaltet()`, nicht
+mehr in `_punkteeingabe_sperren()` selbst), danach grün.
+
+Die 7 auf den neuen `_pdf_export_ausfuehren()`-Helfer umgestellten Export-Methoden haben
+keine dedizierte GUI-Testabdeckung - zusätzlich per Hand mit einer echten temporären
+Termin-Datenbank smoke-getestet (alle 8 Methoden inkl. Bewertungsbögen-Sammelexport
+erzeugen korrekte PDFs mit unverändertem Statustext; Fehlerpfad separat mit einem
+ungültigen Zielpfad geprüft - Fehlerdialog erscheint wie vorher, Status bleibt leer).
+
+**Unabhängiger Verifikations-Subagent** hat den kompletten Diff sowie alle Testläufe
+zusätzlich selbst gegengeprüft (alle 12 Punkte einzeln, inkl. gezieltem Nachtest
+`-k ergebnis_disqualifiziert`, Zeilenzahl-Abgleich per `wc -l`) - Verdikt: alle 12 Punkte
+korrekt umgesetzt, keine Regressionen.
+
+**Stand:** alle Änderungen (`app.py`, `db.py`, `test_app_gui.py`, `test_db.py`,
+`Architektur.md`, `CLAUDE.md`) liegen wie vereinbart nur im Arbeitsstand - **noch nicht
+committet, kein Versionsbump**, bis Marco das ausdrücklich anfordert.
+
+## Codeprüfung (21.09.), Fortsetzung: 10 weitere Punkte (Web- + Daten-Bereich) umgesetzt
+
+Auf Marcos Wunsch ("fixe erst den Rest") wurden im Anschluss an die 12 Desktop-Punkte auch
+die restlichen Befunde aus derselben Codeprüfung umgesetzt - Web-Bereich (6 Punkte) und
+Daten-Bereich (4 Punkte) parallel über je einen Bereichs-Subagent, danach wie beim
+Desktop-Teil ein unabhängiger Verifikations-Subagent über den kombinierten Diff.
+
+**Vorab geklärt:** "Disqualifiziert/Abbruch im Web setzbar machen" war als offene
+Scope-Frage markiert - Marco hat sich bewusst dagegen entschieden (Web bleibt bei reiner
+Punkte-Ergebniserfassung, Disqualifiziert/Abbruch wird weiterhin nur am Desktop-Rechner
+gepflegt). Nicht umgesetzt, kein neuer Befund.
+
+### Web-Bereich (`app_web.py`, `templates/ergebnis_erfassen.html`, `templates/admin_termine.html`)
+
+1. **Lost Update bei gleichzeitiger DK-Ergebniserfassung durch mehrere Richter (wichtigster
+   Fix).** Neue versteckte Formularfelder `geladen_suche_<disziplin>`/
+   `geladen_anzeige_<disziplin>`, beim Laden der Seite aus dem echten DB-Stand befüllt.
+   Beim Speichern wird je Disziplin der abgeschickte Wert gegen den geladenen verglichen -
+   nur bei tatsächlicher Änderung wird geschrieben, eine vom aktuellen Richter unberührte
+   Disziplin bleibt unangetastet (schützt vor stillschweigendem Überschreiben einer
+   zwischenzeitlichen fremden Eintragung). Fehlt das versteckte Feld (z. B. eine ältere
+   Anfrage ohne vorheriges GET), wird sicherheitshalber immer geschrieben.
+2. **Validierungsfehler verwirft korrekt eingegebene Werte.** Bei einem Formularfehler wird
+   die Seite jetzt aus den gerade abgeschickten Formulardaten neu aufgebaut statt aus dem
+   (älteren) DB-Stand - die `geladen_*`-Felder aus Punkt 1 bleiben dabei unverändert aus dem
+   ursprünglichen Seitenaufruf erhalten, damit ein nachfolgender erfolgreicher
+   Speicherversuch weiterhin korrekt gegen den echten Ausgangsstand vergleicht.
+3. **Keine Session-Invalidierung bei Kontolöschung / gelöschtes Termin-Schema führte zu
+   hartem Fehler.** Neue Funktion `db.benutzer_stand()` (Existenz+Rolle ohne
+   Passwort-Prüfung) sowie gemeinsame Hilfsfunktion `_aktueller_benutzer_oder_redirect()` in
+   `app_web.py`, jetzt von `_login_erforderlich`/`_admin_erforderlich`/`_termin_erforderlich`
+   gemeinsam genutzt (vorher dreifach dieselbe unvollständige Prüfung) - validiert bei
+   JEDER Anfrage gegen den aktuellen DB-Stand, leert die Session und leitet zum Login um,
+   sobald ein Konto zwischenzeitlich gelöscht wurde; aktualisiert `session["ist_admin"]` bei
+   Rollenänderung. `_termin_erforderlich` fängt zusätzlich einen Fehler beim Öffnen eines
+   inzwischen gelöschten Termin-Schemas ab und leitet sauber zu `/termin-waehlen` um.
+4. **Ungültige/beschädigte hochgeladene `.sqlite`-Datei führte zu roher 500-Fehlerseite.**
+   `db.init_db(temp_pfad)` wird beim Veröffentlichen/Zurückholen jetzt mit
+   `except sqlite3.Error` abgefangen, zeigt dieselbe verständliche Meldung wie der
+   bestehende Dateiendungs-Check. Notwendiger Begleitfix in `db.init_db()`: schließt die
+   Datenbankverbindung bei einem Fehler während Schema-Anlage/Migration jetzt selbst, bevor
+   die Exception weitergereicht wird - sonst blieb die kaputte Upload-Datei unter Windows
+   durch die offene Verbindung gesperrt und das anschließende Aufräumen scheiterte
+   zusätzlich mit `PermissionError` (im ersten Testlauf tatsächlich aufgetreten, dabei
+   gefunden und behoben).
+5. **Timing-Seitenkanal beim Login.** `db.pruefe_login()` ruft jetzt in jedem Fall genau
+   einmal `check_password_hash()` auf - bei unbekanntem Benutzernamen gegen einen lazy beim
+   ersten Aufruf erzeugten (nicht bei jedem Modulimport berechneten, damit die
+   Desktop-Version ohne Flask/werkzeug unberührt bleibt) Dummy-Hash statt gegen einen echten.
+   Die Antwortzeit unterscheidet sich dadurch nicht mehr danach, ob der Benutzername
+   existiert.
+6. **Kein Schutz vor doppeltem Veröffentlichen desselben Termins.** Neue, rein informative
+   Prüfung vor dem Export: existiert bereits ein veröffentlichter Termin mit demselben
+   Verein+Datum, erscheint auf der Erfolgsseite ein nicht blockierender Hinweis - der Admin
+   kann den alten bei Bedarf selbst löschen, das Veröffentlichen selbst wird nicht verhindert.
+
+### Daten-Bereich (`db.py`, `sync_termin.py`)
+
+7. **Postgres-Export (`exportiere_termin_nach_postgres`) nicht atomar.** Bricht der
+   Kopiervorgang mittendrin ab, wird der bereits angefangene, nur teilweise befüllte Termin
+   jetzt automatisch wieder gelöscht (kompensierende Bereinigung statt eines echten
+   Rollbacks, da die Teil-Kopien wegen des Commit-pro-Teilnehmer-Musters von
+   `add_teilnehmer()`/`eintragen_ergebnis()` bereits committet sind) - kein für die
+   Web-Oberfläche sichtbarer, kaputter Termin mehr nach einem Fehlschlag.
+8. **`automatische_zeitplan_verteilung` konnte bei einem Teilfehler den kompletten
+   Zeitplan leeren.** DELETE und alle INSERTs laufen jetzt in einer gemeinsamen Transaktion
+   (der bisherige Zwischen-Commit direkt nach dem DELETE wurde entfernt), bei einem Fehler
+   sorgt ein expliziter Rollback dafür, dass der alte Zeitplan unverändert erhalten bleibt
+   statt leer oder halb-neu zurückzubleiben.
+9. **`importiere_ergebnisse_nach_startnummer` brach beim ersten Fehler komplett ab, ohne
+   Rückmeldung was schon übertragen wurde.** Ein Fehler bei einem einzelnen Teilnehmer wird
+   jetzt gesammelt (neues Feld `ImportBericht.fehler`), der Import macht mit dem nächsten
+   Teilnehmer weiter - analog zum bereits etablierten Muster beim CSV-Import. Anzeige der
+   neuen Fehlerliste in `sync_termin.py` (CLI) und `templates/admin_termine.html` ergänzt.
+10. **Drei fast identische Migrations-Funktionen zusammengefasst.** Neue interne
+    `_migriere_spalten(conn, tabelle, neue_spalten)`, die bisherigen drei Funktionen sind
+    jetzt dünne Wrapper darum - rein mechanisch, verhaltensgleich (String- und
+    Tupel-Spaltenlisten werden weiterhin korrekt unterschieden).
+
+**Nicht umgesetzt (bewusst, bereits als unproblematisch eingestuft):** ZIP-Quell-Eintragsname
+bei `sicherung_wiederherstellen()` (kein eigenständiges Risiko), `_LASTROWID_TABELLEN`-Liste
+(nur ein Hinweis für künftige Änderungen), uneinheitliches Commit-Muster (reine Beobachtung).
+
+### Tests und Verifikation
+
+Kompletter non-GUI-Testlauf nach Zusammenführung beider Bereichs-Subagents: 349 Tests, 0
+fehlgeschlagen (140 übersprungen, PostgreSQL-Tests ohne laufenden Server). GUI-Testlauf
+unverändert bei 68 bestanden/1 bekannter xfail. `py_compile` für alle geänderten
+Python-Dateien fehlerfrei. 17 neue Tests in `test_app_web.py` (je einer/mehrere pro
+Web-Punkt), 3 neue Tests in `test_db.py` (Postgres-Export-Fehlerpfad rein mock-basiert ohne
+echte PostgreSQL-Verbindung, Zeitplan-Rollback, Import-Fehlersammlung).
+
+**Unabhängiger Verifikations-Subagent** hat den kombinierten Diff aus beiden
+Bereichs-Subagents sowie alle Testläufe zusätzlich selbst gegengeprüft (alle 10 Punkte
+einzeln, inkl. Prüfung auf mögliche Doppel-Close-/Kompatibilitätsprobleme durch den
+`init_db()`-Begleitfix und die `ImportBericht`-Erweiterung) - Verdikt: alle 10 Punkte korrekt
+umgesetzt, keine Regressionen. Eine nicht-blockierende Beobachtung (kein Fund): der
+explizite `_setze_termin_suchpfad(postgres_conn, "public")`-Aufruf vor
+`loesche_termin_postgres()` in Punkt 7 ist redundant, da Letzteres das intern ohnehin selbst
+tut - funktional harmlos, keine Änderung vorgenommen.
+
+Damit sind ALLE 22 Befunde aus der Codeprüfung vom 21.09. abgearbeitet (12 Desktop + 10
+Web/Daten), bis auf die bewusst nicht umgesetzten Punkte (Dialoggrößen, DQ/Abbruch im Web,
+die drei oben genannten Daten-Kleinfunde). Marco hat direkt im Anschluss Commit, Push, Tag
+und Versionsbump angefordert - siehe Abschnitt "Version 1.0.22" unten.
+
+## Version 1.0.22 (21.09., neuer Build auf ausdrücklichen Wunsch "comitten und push, tag, versionsbump")
+
+Bündelt alle 22 in dieser Sitzung umgesetzten QS-Fund-Fixes (12 Desktop + 10 Web/Daten, siehe
+beide Abschnitte oben) - erster Build seit Version 1.0.21.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.22 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`, `test_db_postgres_wrapper`,
+`test_backup`, `test_pdf_export`, `test_app_web`, `test_bump_version`, `test_shs_core`) 349
+Tests, 0 fehlgeschlagen (140 übersprungen, PostgreSQL-Tests ohne laufenden Server); GUI
+(`test_app_gui.py` via pytest-qt, `QT_QPA_PLATFORM=offscreen`) 68 bestanden, 1 bekannter
+xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py`/`db.py`/`pdf_export.py`/
+`shs_core.py`/`sync_termin.py`/`bump_version.py` fehlerfrei.
+
+**Push und Tag (`v1.0.22`) muss wie gehabt Marco selbst ausführen** (feste Regel in
+`CLAUDE.md`, gilt auch wenn im Chat ausdrücklich "push, tag" mit angefordert wird):
+```
+git push
+git tag v1.0.22
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release) - `build-container.yml`
+nur bei Bedarf (Web/Container-Image).
