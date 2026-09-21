@@ -49,3 +49,71 @@ python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export
 GUI-Tests (`test_app_gui.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
 PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2` und laufen nur in der CI
 (`.github/workflows/tests.yml`).
+
+## Sitzungsablauf bei Rückmeldungen/Aufgaben (aus dem Cowork-Arbeitsablauf übernommen, 21.09.2026)
+
+Bis zur Migration auf Claude Code lief die Zusammenarbeit über Cowork, mit einem eigenen
+Cowork-Skill (`shs-projekt-workflow`) für das Sitzungs-/Drumherum. Damit diese mit Marco
+abgestimmten Abläufe nicht verloren gehen, stehen sie ab jetzt hier - unabhängig vom
+jeweils genutzten Werkzeug (Cowork oder Claude Code).
+
+### Feedback-Aufnahme
+
+Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
+
+1. Jeden Punkt einzeln analysieren und einordnen: bereits umgesetzt / echte Rückfrage nötig /
+   direkt umsetzbar / bereits bewusst akzeptiertes Restrisiko (siehe Abschnitt oben).
+2. Bei Unklarheiten (z. B. Datenmodell-Entscheidungen, Umfang eines Wunsches) IMMER zuerst
+   nachfragen, bevor Code geändert wird - nicht raten.
+3. Jeden Punkt in `Fortschritt.md` dokumentieren, auch wenn er nur geklärt und nicht
+   code-seitig umgesetzt wurde (z. B. Erklärung statt Fix). `Fortschritt.md` ist die einzige
+   durchgängige Historie über alle Sitzungen hinweg.
+
+### Build-/Versionsdisziplin ("erst nach Absprache")
+
+- Code-Änderungen bleiben zunächst nur im Arbeitsstand + `Fortschritt.md`-Eintrag - KEINE
+  Auslieferung, KEIN Versionsbump, KEIN Commit, bis Marco explizit einen Build anfordert
+  ("jetzt neuen Build erzeugen" o. ä.). Reine Dokumentationsänderungen (z. B. an dieser Datei,
+  `Fortschritt.md`, `Architektur.md`) sind davon ausgenommen und können direkt committet
+  werden.
+- Wenn Marco einen Build anfordert: alle seit dem letzten Build gesammelten Änderungen
+  bündeln, Version per `bump_version.py` erhöhen, lokale Tests laufen lassen, committen
+  (Attribution-Footer aus dem System-Reminder anhängen, sofern vorhanden).
+- `git push`, `git tag`, `git push --tags` NIE selbst ausführen - das bleibt immer Marcos
+  eigene Aktion. Ihm die genauen Befehle nennen, wenn nötig.
+
+### Bekannte Fallstricke bei der Auslieferung (traten bisher beim Arbeiten über die Cowork-Geräte-Brücke auf)
+
+- Stale `.git/index.lock`/`.git/HEAD.lock` blockieren gelegentlich `git commit` (kein echter
+  Git-Prozess läuft, vermutlich ein Hintergrundprozess auf dem Rechner). Workaround: Lock-Datei
+  vor dem Commit-Versuch verschieben oder löschen, dann committen.
+- Nach wichtigen Schreibvorgängen zur Sicherheit Byte-Anzahl/Inhalt gegenprüfen (z. B.
+  `wc -c`/`grep`) - insbesondere wenn der Schreibweg (z. B. eine Cowork-Geräte-Brücke) einen
+  stillen No-Op melden könnte, ohne den Inhalt tatsächlich zu aktualisieren.
+
+### Geplante/zeitversetzte Aufgaben
+
+Wenn Marco jetzt Feedback gibt und Rückfragen klärt, die eigentliche Umsetzung aber erst zu
+einem späteren Zeitpunkt (z. B. als geplante/automatisierte Aufgabe) laufen soll:
+
+1. Jetzt analysieren und alle nötigen Rückfragen stellen und beantworten lassen - die spätere
+   Ausführung startet ohne Gedächtnis an dieses Gespräch und kann selbst nichts mehr
+   nachfragen.
+2. Die vollständige, detaillierte Arbeitsanweisung NICHT in einen kurzen Trigger-/Task-Prompt
+   packen - lange Prompts haben in der Praxis (Cowork `create_trigger`) wiederholt zu Timeouts
+   beim Tool-Aufruf geführt. Stattdessen: ausführliches Briefing als neuen Abschnitt in
+   `Fortschritt.md` schreiben, den eigentlichen Trigger-/Task-Prompt kurz halten und nur auf
+   diesen Abschnitt verweisen.
+3. Das Briefing in `Fortschritt.md` muss vollständig eigenständig sein: exakten lokalen
+   Testbefehl nennen und den vollständigen Ablauf festhalten (Explore-Subagent → umsetzen/
+   testen → Verifikations-Subagent → `Fortschritt.md` aktualisieren → committen mit
+   Attribution-Footer → NICHT pushen/taggen/Version bumpen, außer explizit angefordert →
+   ausführliche Abschlussmeldung, da Marco bei der Ausführung nicht dabei ist).
+
+### Projekt-Orte und Dokumenten-Synchronisation
+
+- Neben diesem Repo (`SHS-Pruefungsprogramm-Git`) hält Marco einen reinen Quellcode-Spiegel
+  ohne Git (`SHS-Pruefungsprogramm-Quellcode`) - bekommt bei Auslieferungen dieselben Dateien.
+- `Fortschritt.md`, `Architektur.md` und `Grobkonzept.md` werden zusätzlich in der
+  claude.ai-Projekt-Ablage "SHS" synchron gehalten - bei Änderungen an einer der drei Dateien
+  auch dort nachziehen, sofern die jeweilige Sitzung Zugriff darauf hat.

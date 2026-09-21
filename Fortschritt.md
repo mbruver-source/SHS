@@ -434,3 +434,20 @@ git tag v1.0.21
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release) - `build-container.yml` nur bei Bedarf (Web/Container-Image).
+
+## Umsetzung (21.09.): Cowork-Arbeitsablauf zusätzlich in CLAUDE.md nachgebildet (Vorbereitung Migration auf Claude Code)
+
+Nutzerwunsch: Der bisherige Cowork-spezifische Arbeitsablauf (Skill `shs-projekt-workflow`:
+Feedback-Aufnahme, Build-/Versionsdisziplin, `create_trigger`-Vorgehen für geplante Aufgaben)
+sollte als eigenständige Doku - unabhängig vom Cowork-Skill - festgehalten werden, damit bei
+einer künftigen Migration auf Claude Code nichts von den mit Marco abgestimmten Absprachen
+verloren geht. Umgesetzt durch einen neuen Abschnitt "Sitzungsablauf bei
+Rückmeldungen/Aufgaben" in `CLAUDE.md` (wird von jeder Sitzung in diesem Ordner automatisch
+gelesen, auch außerhalb von Cowork) mit den Kerninhalten des Skills: Feedback-Aufnahme,
+Build-/Versionsdisziplin ("erst nach Absprache"), bekannte Fallstricke bei der
+Geräte-Auslieferung sowie das Vorgehen bei geplanten/zeitversetzten Aufgaben (vollständiges
+Briefing in `Fortschritt.md` statt im kurzen Trigger-Prompt). Der Cowork-Skill selbst bleibt
+zusätzlich bestehen (aktiv für Cowork-Sitzungen), `CLAUDE.md` ist jetzt aber die von beiden
+Umgebungen gelesene, gemeinsame Quelle für diese Absprachen. Reine Dokumentationsänderung,
+kein Code betroffen - direkt in beide Geräte-Ordner übertragen und committet (kein
+Versionsbump nötig).
