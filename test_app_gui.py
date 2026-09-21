@@ -464,21 +464,27 @@ def test_halter_block_ist_standardmaessig_ausgeblendet_und_leer(qtbot):
 def test_halter_checkbox_blendet_block_ein_und_uebernimmt_werte(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
-    dialog.show()
+    # CI-Fund (20.09.), KORRIGIERT (21.09.): gruppe_halter wird weiter unten zum
+    # allerersten Mal überhaupt sichtbar gemacht (bis dahin immer explizit
+    # ausgeblendet). Der erste Versuch, das über ein einfaches qtbot.wait(50) NACH
+    # dem Klick abzufangen, hat laut echtem CI-Lauf NICHT funktioniert (isVisible()
+    # blieb weiterhin fälschlich False) - vermutlich, weil das kein reines
+    # Nachverarbeitungs-Problem ist, sondern das Dialogfenster selbst unter der
+    # "offscreen"-QPA-Plattform noch nicht als vollständig "exposed" gilt, wenn wir
+    # direkt nach show() weiterarbeiten (siehe pytest-qt-Doku zu qtbot.waitExposed,
+    # gedacht genau für solche asynchronen Fenstersysteme). Deshalb hier stattdessen
+    # das show() selbst in waitExposed einbetten, statt nur danach zu warten -
+    # verifiziert aber noch NICHT lokal (PySide6 in dieser Umgebung nicht
+    # installierbar), da unsicher, ob das tatsächlich die Ursache behebt oder nur
+    # ein reines Testumgebungs-Artefakt ist und keine echte Auswirkung auf die
+    # Anwendung beim Nutzer hat - siehe Rückfrage an Marco in Fortschritt.md.
+    with qtbot.waitExposed(dialog):
+        dialog.show()
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
 
     qtbot.mouseClick(dialog.halter_weicht_ab, Qt.MouseButton.LeftButton)
-    # CI-Fund (20.09.): gruppe_halter wird hier zum allerersten Mal überhaupt sichtbar
-    # gemacht (bis dahin immer explizit ausgeblendet) - anders als bei einem einfachen
-    # Leaf-Widget (z.B. einem Button) braucht das erste Einblenden einer QGroupBox mit
-    # eigenem, noch nie aktiviertem Layout laut echtem CI-Lauf (PySide6/Qt6, offscreen-
-    # Plattform) einen zusätzlichen Verarbeitungsschritt, bevor isVisible() korrekt True
-    # liefert - ohne qtbot.wait() lieferte isVisible() hier fälschlich noch False, obwohl
-    # setVisible(True) bereits synchron aufgerufen wurde (siehe _halter_sichtbarkeit_
-    # aktualisieren in app.py, unverändert korrekt). Analog zum bereits oben im
-    # Moduldocstring dokumentierten Klick-vor-erstem-Show-Fund.
     qtbot.wait(50)
     assert dialog.gruppe_halter.isVisible() is True
 
