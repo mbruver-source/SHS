@@ -114,6 +114,7 @@ from db import (
     vergebene_startnummern,
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
+    zeitplan_gruppen_status,
 )
 import pdf_export
 
@@ -1946,6 +1947,29 @@ class ZeitplanTab(QWidget):
         self._scroll.setWidget(spalten_container)
         self._scroll.setWidgetResizable(True)
 
+        # Feste Seitenleiste "Offene Starts" (Nutzerwunsch 21.09.: "ich tue mir etwas
+        # schwer, ob ich von den benötigten Starts auch schon alles erwischt habe,
+        # nachdem ich scrollen muss" - zeigt je Art/Leistungsklasse/Disziplin mit
+        # Teilnehmern, ob dafür bereits ein Prüfungsblock angelegt wurde. Bewusst
+        # AUSSERHALB von self._scroll platziert, damit sie beim horizontalen Scrollen durch
+        # viele Richter-Spalten sichtbar bleibt statt mit-zu-scrollen.
+        self._offene_starts_box = QGroupBox("Offene Starts")
+        self._offene_starts_box.setMinimumWidth(230)
+        self._offene_starts_box.setMaximumWidth(280)
+        self._offene_starts_label = QLabel("")
+        self._offene_starts_label.setWordWrap(True)
+        self._offene_starts_label.setTextFormat(Qt.RichText)
+        self._offene_starts_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        offene_starts_scroll = QScrollArea()
+        offene_starts_scroll.setWidget(self._offene_starts_label)
+        offene_starts_scroll.setWidgetResizable(True)
+        offene_starts_layout = QVBoxLayout(self._offene_starts_box)
+        offene_starts_layout.addWidget(offene_starts_scroll)
+
+        inhalt_zeile = QHBoxLayout()
+        inhalt_zeile.addWidget(self._scroll, stretch=1)
+        inhalt_zeile.addWidget(self._offene_starts_box)
+
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
 
@@ -1953,7 +1977,7 @@ class ZeitplanTab(QWidget):
         layout.addWidget(QLabel("Zeitplan"))
         layout.addLayout(kopf_zeile)
         layout.addWidget(hinweis)
-        layout.addWidget(self._scroll, stretch=1)
+        layout.addLayout(inhalt_zeile, stretch=1)
         layout.addWidget(self.status_label)
 
         self.aktualisieren()
@@ -1986,6 +2010,30 @@ class ZeitplanTab(QWidget):
                     self._richter_spalte(richter, zeilen_je_richter_id.get(richter["id"], []))
                 )
         self._spalten_layout.addStretch()
+        self._offene_starts_aktualisieren()
+
+    def _offene_starts_aktualisieren(self) -> None:
+        """Baut den Text der Seitenleiste "Offene Starts" aus zeitplan_gruppen_status()
+        neu auf: eine Zeile je Art/Leistungsklasse/Disziplin mit mindestens einem
+        Teilnehmer, grün mit Haken wenn bereits ein Prüfungsblock dafür angelegt wurde,
+        sonst rot/fett hervorgehoben mit "noch offen"."""
+        status_liste = zeitplan_gruppen_status(self.conn)
+        if not status_liste:
+            self._offene_starts_label.setText("Noch keine Teilnehmer erfasst.")
+            return
+        zeilen = []
+        for eintrag in status_liste:
+            bezeichnung = f"{eintrag['art']} LK {eintrag['stufe']} – {eintrag['disziplin']}"
+            if eintrag["eingeplant"]:
+                zeilen.append(
+                    f'<span style="color:#2e7d32;">✓ {bezeichnung} ({eintrag["anzahl"]} TN)</span>'
+                )
+            else:
+                zeilen.append(
+                    '<span style="color:#c62828; font-weight:bold;">'
+                    f'✗ {bezeichnung} ({eintrag["anzahl"]} TN) – noch offen</span>'
+                )
+        self._offene_starts_label.setText("<br>".join(zeilen))
 
     def _richter_spalte(self, richter: dict, zeilen: list) -> QGroupBox:
         richter_id = richter["id"]
@@ -2743,8 +2791,18 @@ Art/LK bzw. Start-Nr. (wie in der Ergebniserfassung) blendet Zeilen nur aus.</p>
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…". Reihenfolge mit
 "Hoch"/"Runter" anpassen. "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
 (ersetzt den bisherigen Plan der gewählten Richter, mit Rückfrage) – danach frei von Hand
-änderbar. Start-/Endzeiten berechnen sich automatisch. "Zeitplan (PDF)…" exportiert eine
-Seite je Richter.</p>
+änderbar. Start-/Endzeiten berechnen sich automatisch. Die Seitenleiste "Offene Starts"
+zeigt je Art/Leistungsklasse/Disziplin, ob dafür schon ein Prüfungsblock angelegt wurde
+(grün) oder noch fehlt (rot, "noch offen") – bleibt auch beim seitlichen Scrollen durch
+viele Richter-Spalten sichtbar. "Zeitplan (PDF)…" exportiert eine Seite je Richter.</p>
+<p><b>Wichtig zu "Entfernen":</b> Ein Prüfungsblock speichert nur Art/Leistungsklasse/
+Disziplin und die Dauer je Teilnehmer – WER genau darin geprüft wird, wird bei jeder
+Anzeige automatisch aus den aktuellen Teilnehmerdaten ermittelt, nicht einzeln gespeichert.
+"Entfernen" löscht deshalb immer den GANZEN Block (alle darin zusammengefassten
+Teilnehmer), nicht nur einen einzelnen Teilnehmer. Fällt z. B. ein Teilnehmer kurzfristig
+aus (Krankmeldung), muss im Zeitplan nichts angefasst werden: einfach im Reiter
+"Teilnehmer" austragen – der Block bleibt bestehen und zeigt beim nächsten Öffnen des
+Zeitplans automatisch einen Teilnehmer (und entsprechend weniger Zeit) weniger.</p>
 
 <h3>Reiter "Ergebniserfassung"</h3>
 <p>Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Suchleistung (0–60)

@@ -1314,6 +1314,33 @@ def zeitplan_gruppen(conn: sqlite3.Connection) -> list[dict]:
     return ergebnis
 
 
+def zeitplan_gruppen_status(conn: sqlite3.Connection) -> list[dict]:
+    """Wie zeitplan_gruppen(), zusätzlich je Gruppe mit "anzahl" (Teilnehmerzahl) und
+    "eingeplant" (bool), ob für diese Art/Stufe/Disziplin bereits mindestens ein
+    Prüfungsblock in irgendeiner Richter-Spur angelegt wurde. Ein einzelner passender
+    Block reicht dafür aus, egal bei welchem Richter - er deckt ohnehin automatisch ALLE
+    Teilnehmer der Gruppe ab (siehe _teilnehmer_fuer_pruefungseintrag: die Zuteilung
+    erfolgt live über Art/Stufe/Disziplin, nicht über eine gespeicherte Teilnehmerliste je
+    Block). Grundlage für die Übersicht "Offene Starts" im Zeitplan-Tab (Nutzerwunsch
+    21.09.: "ob ich von den benötigten Starts auch schon alles erwischt habe" - beim
+    horizontalen Scrollen durch viele Richter-Spalten sonst schwer im Blick zu behalten)."""
+    geplante_schluessel = {
+        (eintrag["art"], eintrag["stufe"], eintrag["disziplin"])
+        for richter in list_zeitplan_richter(conn)
+        for eintrag in list_zeitplan_eintraege(conn, richter["id"])
+        if eintrag["typ"] == "pruefung"
+    }
+    ergebnis = []
+    for gruppe in zeitplan_gruppen(conn):
+        schluessel = (gruppe["art"], gruppe["stufe"], gruppe["disziplin"])
+        ergebnis.append({
+            **gruppe,
+            "anzahl": len(gruppe["teilnehmer"]),
+            "eingeplant": schluessel in geplante_schluessel,
+        })
+    return ergebnis
+
+
 def _teilnehmer_fuer_pruefungseintrag(alle_teilnehmer: list[dict], eintrag: dict) -> list[dict]:
     """Filtert die zu einem Prüfungsblock-Eintrag passenden Teilnehmer (siehe zeitplan_gruppen
     für die Gruppenlogik) - wird bei jeder Zeitplan-Berechnung neu ausgewertet, damit

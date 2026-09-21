@@ -65,6 +65,7 @@ from db import (
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
     zeitplan_gruppen,
+    zeitplan_gruppen_status,
 )
 
 
@@ -1083,6 +1084,43 @@ class TestZeitplan(unittest.TestCase):
 
     def test_zeitplan_gruppen_ohne_teilnehmer_leer(self):
         self.assertEqual(zeitplan_gruppen(self.conn), [])
+
+    def test_zeitplan_gruppen_status_markiert_eingeplant_und_offen(self):
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=2)
+        self._teilnehmer("ED", 2, "Flächensuche", startnummer=3)
+        rid = add_zeitplan_richter(self.conn)
+        add_zeitplan_pruefungsblock(self.conn, rid, art="ED", stufe=1, disziplin="Trümmerfeld", dauer_minuten=10)
+        status = zeitplan_gruppen_status(self.conn)
+        self.assertEqual(len(status), 2)
+        truemmer = next(g for g in status if g["disziplin"] == "Trümmerfeld")
+        flaeche = next(g for g in status if g["disziplin"] == "Flächensuche")
+        self.assertTrue(truemmer["eingeplant"])
+        self.assertEqual(truemmer["anzahl"], 2)
+        self.assertFalse(flaeche["eingeplant"])
+        self.assertEqual(flaeche["anzahl"], 1)
+
+    def test_zeitplan_gruppen_status_eingeplant_unabhaengig_vom_richter(self):
+        # Ein passender Block reicht aus, egal bei welchem Richter er liegt - die
+        # Zuteilung der Teilnehmer erfolgt ohnehin live über Art/Stufe/Disziplin.
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
+        r1 = add_zeitplan_richter(self.conn, name="R1")
+        r2 = add_zeitplan_richter(self.conn, name="R2")
+        add_zeitplan_pruefungsblock(self.conn, r2, art="ED", stufe=1, disziplin="Trümmerfeld", dauer_minuten=10)
+        status = zeitplan_gruppen_status(self.conn)
+        self.assertEqual(len(status), 1)
+        self.assertTrue(status[0]["eingeplant"])
+
+    def test_zeitplan_gruppen_status_pause_zaehlt_nicht_als_eingeplant(self):
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
+        rid = add_zeitplan_richter(self.conn)
+        add_zeitplan_pause(self.conn, rid, dauer_minuten=15, bezeichnung="Pause")
+        status = zeitplan_gruppen_status(self.conn)
+        self.assertEqual(len(status), 1)
+        self.assertFalse(status[0]["eingeplant"])
+
+    def test_zeitplan_gruppen_status_ohne_teilnehmer_leer(self):
+        self.assertEqual(zeitplan_gruppen_status(self.conn), [])
 
     def test_automatische_verteilung_balanciert_last(self):
         # 6 ED-Teilnehmer in derselben Gruppe, 2 Richter -> sollte NICHT beide Blöcke

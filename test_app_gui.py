@@ -38,12 +38,15 @@ from app import (
     TeilnehmerUebersichtTab,
     TerminImportDialog,
     VersionDialog,
+    ZeitplanTab,
 )
 from db import (
     CSV_IMPORT_SPALTEN,
     NeuerTeilnehmer,
     TerminInfo,
     add_teilnehmer,
+    add_zeitplan_pruefungsblock,
+    add_zeitplan_richter,
     eintragen_ergebnis,
     init_db,
     leistungsklasse_label,
@@ -161,6 +164,36 @@ def test_uebersicht_zeigt_teilnehmerzahlen_und_leistungsrichter_bedarf(qtbot, co
     # DK LK 2 (Zeile 4): 2 Teilnehmer, 6 Abteilungen.
     assert tab.tabelle.item(4, 1).text() == "2"
     assert tab.tabelle.item(4, 5).text() == "6"
+
+
+# --- Zeitplan: Seitenleiste "Offene Starts" ------------------------------------------
+
+
+def test_offene_starts_markiert_eingeplante_und_fehlende_gruppen(qtbot, conn):
+    # Nutzerwunsch (21.09.): Überblick, welche benötigten Starts (Art/LK/Disziplin)
+    # bereits als Prüfungsblock im Zeitplan stecken und welche noch fehlen, ohne durch
+    # alle Richter-Spalten scrollen zu müssen (siehe zeitplan_gruppen_status in db.py).
+    _teilnehmer_anlegen(conn, art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1)
+    _teilnehmer_anlegen(conn, art="ED", stufe=2, disziplin="Flächensuche", startnummer=2)
+    richter_id = add_zeitplan_richter(conn)
+    add_zeitplan_pruefungsblock(conn, richter_id, art="ED", stufe=1, disziplin="Trümmerfeld", dauer_minuten=10)
+
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+
+    text = tab._offene_starts_label.text()
+    assert "ED LK 1 – Trümmerfeld" in text
+    assert "ED LK 2 – Flächensuche" in text
+    assert "noch offen" in text
+    # Die bereits eingeplante Gruppe ist NICHT als "noch offen" markiert.
+    eingeplante_zeile = next(z for z in text.split("<br>") if "Trümmerfeld" in z)
+    assert "noch offen" not in eingeplante_zeile
+
+
+def test_offene_starts_ohne_teilnehmer_zeigt_hinweis(qtbot, conn):
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    assert tab._offene_starts_label.text() == "Noch keine Teilnehmer erfasst."
 
 
 # --- Bezahlt-Markierung -------------------------------------------------------------
