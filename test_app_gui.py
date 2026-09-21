@@ -470,6 +470,16 @@ def test_halter_checkbox_blendet_block_ein_und_uebernimmt_werte(qtbot):
     dialog.rufname_hund.setText("Bello")
 
     qtbot.mouseClick(dialog.halter_weicht_ab, Qt.MouseButton.LeftButton)
+    # CI-Fund (20.09.): gruppe_halter wird hier zum allerersten Mal überhaupt sichtbar
+    # gemacht (bis dahin immer explizit ausgeblendet) - anders als bei einem einfachen
+    # Leaf-Widget (z.B. einem Button) braucht das erste Einblenden einer QGroupBox mit
+    # eigenem, noch nie aktiviertem Layout laut echtem CI-Lauf (PySide6/Qt6, offscreen-
+    # Plattform) einen zusätzlichen Verarbeitungsschritt, bevor isVisible() korrekt True
+    # liefert - ohne qtbot.wait() lieferte isVisible() hier fälschlich noch False, obwohl
+    # setVisible(True) bereits synchron aufgerufen wurde (siehe _halter_sichtbarkeit_
+    # aktualisieren in app.py, unverändert korrekt). Analog zum bereits oben im
+    # Moduldocstring dokumentierten Klick-vor-erstem-Show-Fund.
+    qtbot.wait(50)
     assert dialog.gruppe_halter.isVisible() is True
 
     dialog.halter_vorname.setText("Peter")
@@ -496,6 +506,7 @@ def test_halter_checkbox_blendet_block_ein_und_uebernimmt_werte(qtbot):
     # Checkbox wieder deaktivieren: Block verschwindet und die Werte fließen NICHT mehr
     # in ergebnis() ein, obwohl sie noch in den Feldern stehen (siehe TeilnehmerDialog.ergebnis()).
     qtbot.mouseClick(dialog.halter_weicht_ab, Qt.MouseButton.LeftButton)
+    qtbot.wait(50)
     assert dialog.gruppe_halter.isVisible() is False
     ergebnis_ohne = dialog.ergebnis()
     assert ergebnis_ohne.halter_vorname is None

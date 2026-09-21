@@ -701,7 +701,12 @@ class TestDatenbank(unittest.TestCase):
         # Nutzerwunsch (20.09.): Meldeformulare per KI-System in eine CSV umwandeln lassen
         # (siehe FormularImportTab/_formular_import_prompt() in app.py) und diese CSV hier
         # importieren, statt Teilnehmer von Hand abzutippen.
-        pfad = os.path.join(os.path.dirname(self.pfad), "import.csv")
+        # Eigene temporäre Datei statt einer Ableitung aus self.pfad (das existiert bei
+        # TestDatenbankPostgres nicht - dort setzt _PostgresBackendMixin.setUp() kein
+        # self.pfad, da es dort keine SQLite-Datei gibt; die CSV-Datei selbst hat mit dem
+        # jeweiligen Datenbank-Backend ohnehin nichts zu tun, siehe CI-Fund in Fortschritt.md).
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
         with open(pfad, "w", newline="", encoding="utf-8") as f:
             f.write(
                 "nachname,vorname,rufname_hund,art,stufe,disziplin,verein,rasse,halter_vorname\n"
@@ -723,7 +728,10 @@ class TestDatenbank(unittest.TestCase):
             os.remove(pfad)
 
     def test_importiere_teilnehmer_aus_csv_ueberspringt_fehlerhafte_zeile_und_importiert_rest(self):
-        pfad = os.path.join(os.path.dirname(self.pfad), "import_fehler.csv")
+        # Eigene temporäre Datei statt Ableitung aus self.pfad, siehe Kommentar im
+        # vorigen Test.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
         with open(pfad, "w", newline="", encoding="utf-8") as f:
             f.write(
                 "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
@@ -751,7 +759,10 @@ class TestDatenbank(unittest.TestCase):
         # auslöste, die NICHT vom try/except ValueError abgefangen wurde - dadurch brach der
         # komplette Import ab, statt nur die eine Zeile zu überspringen (im Widerspruch zum
         # eigenen Docstring von importiere_teilnehmer_aus_csv()). Siehe Fortschritt.md.
-        pfad = os.path.join(os.path.dirname(self.pfad), "import_geschlecht.csv")
+        # Eigene temporäre Datei statt Ableitung aus self.pfad, siehe Kommentar im
+        # ersten CSV-Import-Test oben.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
         with open(pfad, "w", newline="", encoding="utf-8") as f:
             f.write(
                 "nachname,vorname,rufname_hund,art,stufe,disziplin,geschlecht\n"

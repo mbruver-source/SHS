@@ -741,6 +741,28 @@ class TerminImportDialog(QDialog):
             self._quelle_conn = None
 
 
+class _NumerischSortierbaresItem(QTableWidgetItem):
+    """QTableWidgetItem für die Start-Nr.-Spalte der Teilnehmerliste: sortiert nach einem
+    echten Zahlenwert (2 vor 10) statt nach dem angezeigten Text ("10" vor "2").
+
+    Der naheliegendere Ansatz - `item.setData(Qt.DisplayRole, zahl)` und sich auf Qts
+    eingebauten Vergleich (QTableWidgetItem.operator<, liest Qt.DisplayRole) zu verlassen
+    - sortiert in einem echten CI-Lauf (PySide6/Qt6) NICHT numerisch, sondern weiterhin
+    rein alphabetisch (per CI-Fund am 20.09. entdeckt, siehe Fortschritt.md; lokal ohne
+    installiertes PySide6 nicht überprüfbar gewesen). Stattdessen hier `__lt__` direkt
+    überschrieben - das ist der Vergleich, den `QTableWidget.sortItems()`/`sortByColumn()`
+    tatsächlich aufruft, unabhängig von Datenrollen-Feinheiten."""
+
+    def __init__(self, text: str, sortierwert: int) -> None:
+        super().__init__(text)
+        self._sortierwert = sortierwert
+
+    def __lt__(self, other) -> bool:  # noqa: D105 - siehe Klassen-Docstring
+        if isinstance(other, _NumerischSortierbaresItem):
+            return self._sortierwert < other._sortierwert
+        return super().__lt__(other)
+
+
 class TeilnehmerTab(QWidget):
     def __init__(self, conn, parent=None, pfad: str | None = None):
         super().__init__(parent)
@@ -1024,19 +1046,21 @@ class TeilnehmerTab(QWidget):
                 "✓ bezahlt" if t["bezahlt"] else "",
             ]
             for col, wert in enumerate(werte):
-                item = QTableWidgetItem(wert)
                 if col == 0:
                     # Start-Nr.-Spalte: Sortierung soll numerisch erfolgen (2 vor 10), nicht
-                    # alphabetisch wie bei reinem Text ("10" vor "2"). Qt sortiert Items nach
-                    # Qt.DisplayRole - mit einer echten int-Zahl als DisplayRole sortiert Qt
-                    # numerisch, während der angezeigte Text (bei fehlender Startnummer: "")
-                    # unverändert bleibt.
-                    if t["startnummer"] is not None:
-                        item.setData(Qt.DisplayRole, t["startnummer"])
+                    # alphabetisch wie bei reinem Text ("10" vor "2") - siehe
+                    # _NumerischSortierbaresItem. Fehlende Startnummer (None) sortiert mit
+                    # -1 vor allen echten (>=1) Startnummern, analog zum bisherigen
+                    # NULL-zuerst-Verhalten von list_teilnehmer()s "ORDER BY startnummer".
+                    item = _NumerischSortierbaresItem(
+                        wert, t["startnummer"] if t["startnummer"] is not None else -1
+                    )
                     # Stabile Zuordnung Tabellenzeile -> Teilnehmer-ID (siehe _ausgewaehlte_id/
                     # _filter_anwenden) - unverzichtbar, sobald per Spaltenklick sortiert wird
                     # und die Zeilenreihenfolge nicht mehr der Listenreihenfolge entspricht.
                     item.setData(Qt.UserRole, t["id"])
+                else:
+                    item = QTableWidgetItem(wert)
                 self.tabelle.setItem(row, col, item)
             # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_MODERN_MINIMAL) -
             # nur die Textfarbe, der Zelleninhalt selbst bleibt wie zuvor ("" bei nicht
