@@ -359,3 +359,161 @@ Stand: 21.09.2026 (aktualisiert: Nutzer-Feedback zu Ergebniserfassung/Auswertung
 ## Ausgelieferte Dateien (im Chat, und lokal auf dem PC des Nutzers gesichert)
 
 `shs_core.py`, `test_shs_core.py`, `db.py`, `test_db.py`, `test_db_postgres_wrapper.py` (Wrapper-Tests für die PostgreSQL/Podman-Variante), `app.py`, `test_app_gui.py` (echte GUI-Tests via pytest-qt), `test_backup.py` (Tests für die Datensicherung), `pytest.ini`, `pdf_export.py`, `test_pdf_export.py`, `requirements.txt`, `requirements-postgres.txt`, `build.spec`, `version.txt`, `bump_version.py`, `test_bump_version.py`, `version_info.txt`, `installer.iss`, `build_installer.bat`, `README_INSTALLER.md`, `gui_vorschau.html` (statische, interaktive Layout-Vorschau), `.gitignore`, `.github/workflows/tests.yml`, `.github/workflows/build-installer.yml`, `app_web.py` (19.09.: Flask-Backend der Web-Version; Fortsetzung 5: Login über Benutzerkonten statt Zugangscode, Termin-Auswahl, Benutzerverwaltung; Fortsetzung 6: Termin veröffentlichen/zurückholen/löschen per Datei-Upload/Download; 19.09. Bugfix: Duplikat-Prüfung beim Benutzeranlegen GROSS-/kleinschreibungsunabhängig), `test_app_web.py` (19.09., Fortsetzung 5: komplett neu strukturiert, 26 Tests; Fortsetzung 6: 8 weitere Tests für die neuen Upload/Download-Routen, 34 insgesamt; 19.09. Bugfix: 2 weitere Tests zur Groß-/Kleinschreibung, 36 insgesamt), `sync_termin.py` (19.09.: Export/Import-Werkzeug SQLite↔PostgreSQL; Fortsetzung 5: Export-Ausgabe ohne Zugangscode), `requirements-web.txt` (19.09.), `templates/base.html` (19.09.; Fortsetzung 5: Kopfzeile mit Termin-wechseln/Benutzer-Link; Fortsetzung 6: zusätzlicher "Termine"-Link für Administratoren), `templates/login.html` (19.09.; Fortsetzung 5: Benutzername/Passwort statt Zugangscode; 19.09. Bugfix: Benutzername-Feld ohne Autokapitalisierung/-korrektur), `templates/ersteinrichtung.html` (19.09. Bugfix: ebenfalls ohne Autokapitalisierung/-korrektur), `templates/termin_waehlen.html`, `templates/admin_benutzer.html` (alle Fortsetzung 5, neu; admin_benutzer.html 19.09. Bugfix: ebenfalls ohne Autokapitalisierung/-korrektur), `templates/admin_termine.html` (Fortsetzung 6, neu), `templates/teilnehmerliste.html`, `templates/ergebnis_erfassen.html` (beide 19.09.), `db.py`/`test_db.py` (19.09., aktualisiert: vier reale, per CI gegen PostgreSQL gefundene Bugs behoben – DROP-TABLE-CASCADE, zwei `.fetchone()[0]`-Stellen in Tests, fehlender `search_path`-Wechsel beim Export, unqualifizierte Registry-Bereinigung im Test-Teardown, siehe eigener Abschnitt oben; Fortsetzung 5: `web_benutzer`-Tabelle + Benutzerkonten-Funktionen, Zugangscode-Mechanismus entfernt; 19.09. Bugfix: Login-Benutzername GROSS-/kleinschreibungsunabhängig, 1 weiterer Test), `Containerfile` (19.09.: baut das Web-Backend-Image), `.containerignore` (19.09.), `compose.yaml` (19.09.: Web + PostgreSQL als Compose-Stack; Fortsetzung 4 Ende: `db`-Port `127.0.0.1:5432:5432` für `sync_termin.py`), `.env.example` (19.09.), `README_CONTAINER.md` (19.09.; Fortsetzung 5: Abschnitt "Benutzerkonten" statt "Zugangscode erzeugen"; Fortsetzung 6: neuer Unterabschnitt zum Veröffentlichen/Zurückholen über die Web-Oberfläche), `.github/workflows/build-container.yml` (19.09.: Smoke-Test bei jedem Push, Build+Veröffentlichung nach ghcr.io bei einem Versions-Tag – siehe eigener Abschnitt oben), `app.py`/`db.py`/`pdf_export.py`/`shs_core.py`/`test_db.py`/`test_pdf_export.py`/`test_app_gui.py` (21.09., aktualisiert: Sortierung per Spaltenklick in der Ergebniserfassung, Disqualifiziert-/Abbruch-Status inkl. Migration und Statistik-PDF-Zeilen, neuer PDF-Export "Chipnummernliste" – siehe eigener Abschnitt oben)
+
+## Aufgabe für ca. 12:00 Uhr (21.09.) - 6 Punkte aus Marcos Rückmeldung (6 Fotos, Bereiche Übersicht PL/Statistik/Etikettendruck/Ergebnisliste/Bewertungsbögen)
+
+**WICHTIG - Reihenfolge:** Diese Aufgabe darf erst starten, NACHDEM die vorherige geplante Aufgabe
+("Sortierung Ergebniserfassung, DQ/Abbruch, Chipnummernliste", siehe Abschnitt oben) fertig und
+committet ist - beide Aufgaben ändern teils dieselben Dateien (`app.py`, `pdf_export.py`,
+`Fortschritt.md`, `test_app_gui.py`, `test_pdf_export.py`). **Vor jeglicher Code-Änderung
+zuerst prüfen:** per `device_bash` in `SHS-Pruefungsprogramm-Git` `git log --oneline -5`
+ausführen. Die vorherige Aufgabe ist fertig, wenn dort ein Commit zu finden ist, der die
+Sortierfunktion in der Ergebniserfassung bzw. Disqualifikation/Abbruch bzw. Chipnummernliste
+umsetzt (Commit NACH `6c883b5`). Falls dieser Commit noch fehlt: NICHT sofort abbrechen, sondern
+bis zu ca. 45 Minuten lang alle ca. 5 Minuten per `device_bash` (`sleep 300 && git log --oneline -5`)
+erneut prüfen. Ist der Commit auch danach noch nicht da, OHNE jede Datei-Änderung abbrechen und im
+Abschlussbericht klar sagen, dass die Vorgänger-Aufgabe offenbar noch läuft oder hängen geblieben
+ist - diese Aufgabe dann NICHT nachholen/neu einplanen, das entscheidet Marco selbst.
+
+Marco hat 6 Fotos mit handschriftlichen Notizen geschickt (Themen: Übersicht PL, Kosmetik/Statistik,
+Statistik/Jugendliche, Etikettendruck, Ergebnisliste Leer, Bewertungsbögen) und die offenen Fragen
+dazu bereits vorab beantwortet (siehe unten je Punkt). Alle 6 Punkte in dieser Reihenfolge
+nacheinander abarbeiten.
+
+### 1. Übersicht für Prüfungsleitung (`pdf_export.py`, vermutlich `erstelle_pruefungsleitung_uebersicht_pdf()`)
+
+- **Bestätigt, keine Änderung:** "Übertrag bezahlt/nicht bezahlt klappt." - nur als bestätigtes
+  Feedback dokumentieren.
+- **Neu: digitaler Impfpass, MIT Datum.** Marco: "Vielleicht kannst ja im Programm das mit dem
+  Impfpass auch noch ergänzen? Dann hätte man alles digital." Entscheidung (Rückfrage beantwortet):
+  nicht nur ein Ja/Nein-Häkchen, sondern ein **Datum** (z. B. Ablauf/Gültigkeit der Impfung) pro
+  Teilnehmer/Hund. Umsetzung:
+  - Neues Feld z. B. `impfung_gueltig_bis` (Datum, nullable) in den Teilnehmer-Stammdaten
+    (`db.py`: analog zum bestehenden `_migriere_teilnehmer_spalten()`-Muster eine Migration
+    ergänzen, `SCHEMA`-String für neue Termin-Dateien ebenfalls erweitern; `init_db_postgres()`
+    parallel pflegen).
+  - Eingabe im Teilnehmer-Dialog (`app.py`, `TeilnehmerTab`/Dialog) ergänzen - Datumsfeld analog zu
+    vorhandenen Datumsfeldern im Projekt (existierende Widgets/Validierung als Vorbild nehmen).
+  - In der Übersicht für Prüfungsleitung (PDF und ggf. UI-Vorschau) das Datum anzeigen, analog zur
+    bestehenden Spalte "bezahlt/nicht bezahlt" - bei bereits abgelaufenem Datum (Datum in der
+    Vergangenheit relativ zum Prüfungsdatum) optisch hervorheben (z. B. wie bestehende
+    Hervorhebungen im Projekt, z. B. rot), damit es der Prüfungsleitung auffällt.
+- **Feld "Abgabe Sportbeitrag" aus der Übersicht entfernen.** Marco: "Abgabe Sportbeitrag berechnet
+  unser Verband anhand der im Portal erfassten Starterzahl selbst. Ist ja eine „Leistung" des
+  Vereins an den Verband. Könnte man aus der Übersicht raus lassen." Genauen Feldnamen/genaue
+  Stelle im Code (PDF-Tabelle und/oder UI-Vorschau) per Explore-Subagent verifizieren und
+  entfernen (keine Rückfrage mehr nötig, Marco möchte es einfach raus).
+
+### 2. Statistik-PDF - Spaltenüberschriften-Umbruch (`pdf_export.py`, `_statistik_praedikat_matrix()`/`erstelle_statistik_pdf()`)
+
+Marco: "Kosmetik - mir gefällt der Umbruch bei Behältnisstrecke und Flächensuche nicht bzw.
+Trümmerfeld" (Spaltenköpfe wie "Trümmerfeld LK 1" brechen unschön in der Tabelle "Einzeldisziplin"
+um). Entscheidung (Rückfrage beantwortet): **Spalten verbreitern**, volle Bezeichnung behalten,
+statt abzukürzen. Spaltenbreiten in der Matrix anpassen und/oder Schriftgröße der Kopfzeile leicht
+reduzieren, damit jede Spaltenüberschrift einzeilig passt (Seitenformat/Ränder bei Bedarf
+mitprüfen, ob genug Platz vorhanden ist).
+
+### 3. Statistik-PDF - Jugendliche gesondert ausweisen (`db.py`, `pdf_export.py`, ggf. `app.py`)
+
+Marco: "Statistik: (bei uns im Verband müssen Jugendliche gesondert ausgewiesen werden - weiß
+nicht ob das bei euch auch ist?)". Entscheidung (Rückfrage beantwortet): **jetzt umsetzen**, als
+generelles Feature (nicht Verband-spezifisch konfigurierbar). Alterskriterium: **unter 18 Jahre**,
+Stichtag = Prüfungsdatum. Umsetzung:
+- Zuerst per Explore-Subagent prüfen, ob Teilnehmer/Hundeführer-Stammdaten bereits ein
+  Geburtsdatum-Feld haben. Falls nicht: neues Feld (z. B. `geburtsdatum`) ergänzen, inkl. Migration
+  wie bei Punkt 1 (`_migriere_teilnehmer_spalten()`-Muster), Eingabe im Teilnehmer-Dialog.
+- In der Statistik (PDF, ggf. UI-Vorschau) Jugendliche (unter 18 zum Prüfungsdatum) als eigene,
+  gesonderte Kategorie ausweisen - ob als zusätzliche Zeile/Spalte in der bestehenden
+  Prädikat-Matrix oder als eigene kleine Tabelle: an die bestehende Statistik-Struktur anlehnen,
+  eigene Einschätzung. Wenn beim Explorieren etwas grundsätzlich unklar bleibt (z. B. mehrdeutige
+  Verortung), lieber sauber umsetzen und die getroffene Wahl im Fortschritt.md klar begründen, statt
+  zu raten oder zu blockieren.
+
+### 4. Etikettendruck - Höhe anpassen (`pdf_export.py` bzw. `app.py`, Etiketten-Generierung)
+
+Marco: "Etikettendruck: fast ein bisschen zu Hoch - 1-2mm - ist aber bei anderen Sparten auch -
+reinpassen tut es". Entscheidung (Rückfrage beantwortet): **trotzdem anpassen**, Höhe um ca. 1-2mm
+reduzieren. Vorsichtig vorgehen - Marco bestätigt, dass aktuell alles noch hineinpasst, also beim
+Verkleinern nicht übertreiben, damit nichts abgeschnitten wird. Nach der Änderung prüfen
+(rechnerisch bzw. per erzeugtem Test-PDF), dass der komplette Etiketteninhalt weiterhin passt.
+
+### 5. Ergebnisliste Leer - Verein ragt ins Gesamtpunktefeld (`pdf_export.py`)
+
+Marco (mit Screenshot, DK LK2/DK LK3-Tabellen): lange Vereinsnamen ragen in der leeren
+Ergebnisliste in die Spalte "Gesamtpunkte" hinein. Entscheidung (Rückfrage beantwortet):
+**Schrift verkleinern** bei langen Vereinsnamen (bleibt einzeilig, keine Zeilenumbrüche in der
+Zelle). Umsetzung: Text-Breite der Vereins-Spalte prüfen, bei zu langem Namen die Schriftgröße für
+diese Zelle automatisch reduzieren, bis er hineinpasst (falls im Projekt an anderer Stelle schon
+ein ähnliches Muster für automatische Schriftanpassung existiert, das wiederverwenden statt neu
+zu bauen).
+
+### 6. Bewertungsbögen - drei Änderungen (`app.py`, `pdf_export.py`)
+
+- **Direkt-Button pro Teilnehmer in der Teilnehmerliste.** Marco: "In Teilnehmerliste Absprung zu
+  Bewertungsbögen erzeugen einfügen?" Entscheidung (Rückfrage beantwortet): **Direkt-Button pro
+  Teilnehmer**, kein bloßer Link zum Export-Tab. Ein Button/eine Aktion je Zeile in der
+  Teilnehmerliste (`TeilnehmerTab`) erzeugt sofort den PDF-Bewertungsbogen für genau diesen einen
+  Teilnehmer (Speichern-Dialog wie bei den bestehenden Export-Funktionen). Muss die passenden
+  LK/Disziplinen für diesen Teilnehmer korrekt ermitteln (bestehende Zuordnungslogik
+  Teilnehmer→Prüfungsblöcke/Disziplinen wiederverwenden, z. B. `_teilnehmer_fuer_pruefungseintrag()`
+  bzw. die Logik, die der bestehende Bewertungsbogen-Export in `ExportTab` schon nutzt).
+- **Trümmerfeld-Eingabefeld vergrößern + Trennstrich.** Marco: "Bei ED LK 1 Trümmerfeld ist das
+  Feld zum eintragen doch etwas schmal. Gerne etwas größer + Trennstrich zw. Suchleistung +
+  Anzeige." Im Bewertungsbogen-PDF-Layout (Tabelle "Bewertung Trümmerfeld", Spalten
+  "Suchleistung des Hundes"/"Anzeigeleistung des Hundes") das Eintragsfeld höher/größer machen und
+  eine sichtbare Trennlinie zwischen den beiden Spalten "Suchleistung" und "Anzeige" ergänzen.
+- **Auswahl, welche LK/Disziplin gedruckt werden.** Marco: "Das PDF enthält jetzt alle LK +
+  Disziplinen. Auf einmal ein Doppelseitiger Druck führt dann dazu, dass ich bei den ED auf der
+  Rückseite ein anderes Team habe. Gäbe es dazu eine Lösung? ggf. auch nur Auswählbar, welche
+  LK/Disziplin ich gedruckt haben will?" Marco schlägt die Lösung selbst vor - keine Rückfrage
+  mehr nötig. Umsetzung: beim Bewertungsbogen-Export im Export-Tab (`ExportTab`) eine Auswahl
+  (z. B. Checkboxen) ergänzen, welche LK/Disziplinen ins PDF sollen, Standard = alle ausgewählt
+  (heutiges Verhalten bleibt Default). An bestehende Auswahl-Muster im Export-Tab anlehnen, falls
+  dort schon ähnliche Filter existieren.
+
+### Tests
+
+Wie gewohnt zu jeder Änderung Tests ergänzen: `test_db.py` (neue Migrationen/Felder,
+Alterskriterium-Berechnung), `test_pdf_export.py` (läuft LOKAL vollständig, unbedingt selbst
+verifizieren - Spaltenbreiten/Schriftanpassung lassen sich meist nur indirekt testen, z. B. dass
+die erzeugte PDF-Datei ohne Fehler entsteht und die neuen Felder/Inhalte enthält), `test_app_gui.py`
+(neue Buttons/Eingabefelder, nur CI/`py_compile` hier). Testbefehl (non-GUI, lokal):
+```
+PYTHONPATH=/tmp/stub_pkgs python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core
+```
+Falls `/tmp/stub_pkgs/pyzipper.py` in der Sandbox fehlt: Quellcode steht im Abschnitt zur
+vorherigen Aufgabe oben, von dort übernehmen.
+
+### Vorgehen
+
+1. Reihenfolge-Prüfung oben zuerst (Vorgänger-Aufgabe fertig?).
+2. `CLAUDE.md` lesen, Dateien aus `SHS-Pruefungsprogramm-Git` per `device_stage_files` holen (nicht
+   von einer alten Arbeitskopie ausgehen - frische Session hat keinen Zugriff auf frühere Stände).
+3. Explore-Subagent zur Lokalisierung der relevanten Stellen für alle 6 Punkte. Bei Bedarf
+   Bereichs-Subagents parallel (Daten: `db.py`/`test_db.py`/`pdf_export.py`/`test_pdf_export.py`;
+   Desktop: `app.py`/`test_app_gui.py`).
+4. Alle 6 Punkte der Reihe nach umsetzen, nach jedem Punkt lokalen Testlauf (Befehl oben) +
+   `py_compile` auf geänderten Dateien.
+5. Unabhängigen Verifikations-Subagenten gegen Diff und Tests prüfen lassen, bevor etwas als
+   fertig gilt - insbesondere Migrationen (bestehende DB ohne neue Spalten) und die
+   Alterskriterium-Berechnung für Jugendliche.
+6. Diese Fortschritt.md-Sektion durch die üblichen datierten Einträge ersetzen/ergänzen (Zitat je
+   Punkt, Umsetzung, Testergebnis). Punkt "Übertrag bezahlt/nicht bezahlt" als bestätigtes Feedback
+   ohne Code-Änderung dokumentieren.
+7. Alle geänderten Dateien per `SendUserFile` + `device_commit_files` in BEIDE Ordner schreiben:
+   `SHS-Pruefungsprogramm-Git` UND `SHS-Pruefungsprogramm-Quellcode`. Nach dem Schreiben Inhalt
+   gegenprüfen (Byte-Anzahl/Inhalt), nicht nur auf die "written"-Antwort vertrauen.
+8. In `SHS-Pruefungsprogramm-Git` per `device_bash` committen (NICHT pushen, NICHT taggen, KEIN
+   Versionsbump - macht Marco erst auf ausdrücklichen Wunsch). Bekanntes Lock-Problem:
+   `mv .git/index.lock .git/index.lock.stale-$(date +%s)` (analog `HEAD.lock`) unmittelbar vor dem
+   `git commit`-Versuch, in derselben `device_bash`-Anweisung. Commit-Message auf Deutsch im
+   Projektstil, mit Fußzeile:
+```
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EPu7D8zizBDq3StFAcXwMD
+```
+9. Ausführliche Abschlussmeldung (Umsetzung je Punkt, Testergebnis, Verifikations-Verdikt, dass
+   Push/Tag/Version noch aussteht) - Marco war beim Umsetzen nicht dabei, daher lieber etwas
+   ausführlicher berichten als sonst üblich. Falls ein Punkt aus Zeit-/Kontextgründen nicht fertig
+   wurde: klar benennen, was fertig ist und was noch offen ist, nichts unvollständig als "erledigt"
+   melden.
