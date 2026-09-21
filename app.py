@@ -404,9 +404,16 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         gruppe_rechts = QGroupBox("Hund && Prüfung")
         gruppe_rechts.setLayout(form_rechts)
 
+        # CI-Fund (21.09., echter Nutzertest): OHNE Stretch-Faktoren bekommt die linke
+        # Spalte (weniger/kürzere Pflichtfelder) von QHBoxLayout viel zu wenig Platz
+        # zugeteilt, sobald die rechte Spalte (mehr/breitere Felder wie das Datumsfeld
+        # "Tollwutimpfung gültig bis") ihren natürlichen Platzbedarf einfordert - die
+        # Eingabefelder links liefen dadurch sichtbar ab ("uver" statt "Bruver"). Mit
+        # gleichem Stretch-Faktor (1:1) bekommen beide Spalten unabhängig von ihrem
+        # jeweiligen Inhalt die Hälfte der verfügbaren Breite.
         spalten_zeile = QHBoxLayout()
-        spalten_zeile.addWidget(gruppe_links)
-        spalten_zeile.addWidget(gruppe_rechts)
+        spalten_zeile.addWidget(gruppe_links, 1)
+        spalten_zeile.addWidget(gruppe_rechts, 1)
 
         form_halter = QFormLayout()
         form_halter.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -428,15 +435,36 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)
 
+        # CI-Fund (21.09., echter Nutzertest): mit aufgeklapptem Halter-Block (siehe
+        # gruppe_halter oben) reichte die feste Startgröße nicht mehr aus - der Block war
+        # nicht komplett einsehbar und OK/Abbrechen lagen außerhalb des Bildschirms, ohne
+        # Möglichkeit zu scrollen. Deshalb jetzt der komplette Formularinhalt (beide Spalten
+        # + Halter-Block) in einem QScrollArea (Muster wie bereits in TerminZeitplanTab
+        # verwendet) - nur OK/Abbrechen bleiben fest am unteren Rand, immer erreichbar,
+        # unabhängig von Fenstergröße oder aufgeklapptem Halter-Block.
+        inhalt_layout = QVBoxLayout()
+        inhalt_layout.addLayout(spalten_zeile)
+        inhalt_layout.addWidget(self.halter_weicht_ab)
+        inhalt_layout.addWidget(self.gruppe_halter)
+        inhalt_container = QWidget()
+        inhalt_container.setLayout(inhalt_layout)
+
+        inhalt_scroll = QScrollArea()
+        inhalt_scroll.setWidget(inhalt_container)
+        inhalt_scroll.setWidgetResizable(True)
+
         layout = QVBoxLayout(self)
-        layout.addLayout(spalten_zeile)
-        layout.addWidget(self.halter_weicht_ab)
-        layout.addWidget(self.gruppe_halter)
+        layout.addWidget(inhalt_scroll, 1)
         layout.addWidget(buttons)
 
         # Feste, bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch
-        # die vielen Felder - passt dadurch auch auf kleinere Bildschirme, ohne dass
-        # gescrollt werden muss. Der Dialog bleibt trotzdem frei in der Größe änderbar.
+        # die vielen Felder - passt dadurch auch auf kleinere Bildschirme (der Inhalt
+        # scrollt jetzt bei Bedarf, siehe oben, statt abgeschnitten zu werden). Der Dialog
+        # bleibt frei in der Größe änderbar UND jetzt auch maximierbar (CI-Fund 21.09.:
+        # QDialog zeigt standardmäßig keinen Maximieren-Button, obwohl der Nutzer bei
+        # einer Menge Felder/aufgeklapptem Halter-Block mehr Platz braucht als die
+        # Startgröße bietet).
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         self.resize(780, 640)
 
         self._art_geaendert(self.art.currentText())
