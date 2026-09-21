@@ -55,6 +55,7 @@ from db import (
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
     setze_bezahlt,
+    setze_ergebnis_status,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
     termine_ordner,
@@ -67,6 +68,7 @@ from db import (
     zeitplan_gruppen,
     zeitplan_gruppen_status,
 )
+from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT
 
 
 class TestDatenbank(unittest.TestCase):
@@ -147,6 +149,52 @@ class TestDatenbank(unittest.TestCase):
             "startnummer INTEGER UNIQUE, gegenstand_1 TEXT, gegenstand_2 TEXT, gegenstand_3 TEXT"
             f"{zusatz_spalten_sql})"
         )
+
+    def _lege_alte_ergebnisse_tabelle_an(self) -> None:
+        """Ersetzt die Tabelle 'ergebnisse' durch eine ältere Fassung ohne die Status-
+        Spalten 'disqualifiziert'/'abbruch' (simuliert eine vor deren Einführung
+        angelegte Termin-Datei/-Datenbank) - für
+        test_migration_ergaenzt_disqualifiziert_abbruch_spalten_in_alter_ergebnisse_tabelle
+        unten. Standard-SQL, für SQLite wie PostgreSQL identisch gültig (keine
+        Autoincrement-Spalte hier, siehe _lege_alte_teilnehmer_tabelle_an oben)."""
+        self.conn.execute("DROP TABLE ergebnisse")
+        self.conn.execute(
+            "CREATE TABLE ergebnisse ("
+            "teilnehmer_id INTEGER PRIMARY KEY REFERENCES teilnehmer(id), "
+            "suche_truemmerfeld INTEGER, anzeige_truemmerfeld INTEGER, "
+            "suche_flaechensuche INTEGER, anzeige_flaechensuche INTEGER, "
+            "suche_behaeltnis INTEGER, anzeige_behaeltnis INTEGER)"
+        )
+        self.conn.commit()
+
+    def test_migration_ergaenzt_disqualifiziert_abbruch_spalten_in_alter_ergebnisse_tabelle(self):
+        # Nutzerwunsch (21.09.): init_db muss die beiden neuen Status-Spalten in einer
+        # bereits vorher angelegten Termin-Datei/-Datenbank nachträglich ergänzen, ohne
+        # bestehende Ergebnis-Daten zu verlieren. Bestehende Ergebniszeilen gelten dabei
+        # als "weder disqualifiziert noch Abbruch" (Default 0).
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Alt", vorname="Vorname", rufname_hund="Hund", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        self._lege_alte_ergebnisse_tabelle_an()
+        self.conn.execute(
+            "INSERT INTO ergebnisse (teilnehmer_id, suche_truemmerfeld, anzeige_truemmerfeld) "
+            "VALUES (?, ?, ?)",
+            (tid, 58, 38),
+        )
+        self.conn.commit()
+
+        conn = self._neu_verbinden()
+        ergebnis = get_ergebnis(conn, tid)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 58)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 38)
+        self.assertEqual(ergebnis["disqualifiziert"], 0)
+        self.assertEqual(ergebnis["abbruch"], 0)
+        # berechne_auswertung()/setze_ergebnis_status() funktionieren danach ganz normal weiter.
+        fertig, _ausstehend = berechne_auswertung(conn)
+        self.assertEqual(fertig[0].wertnote.abkuerzung, "V")
+        setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
+        self.assertEqual(get_ergebnis(conn, tid)["disqualifiziert"], 1)
 
     def test_veranstaltung_anlegen_und_lesen(self):
         self.assertIsNone(get_veranstaltung(self.conn))
@@ -436,6 +484,77 @@ class TestDatenbank(unittest.TestCase):
         # C ist alleine in ED LK 2 Flächensuche -> eigener Platz 1, unabhängig von DK-Gruppe
         self.assertEqual(by_id[str(c)].platzierung, 1)
         self.assertEqual(by_id[str(c)].von_startern, 1)
+
+    def test_disqualifiziert_bekommt_keine_aus_punkten_berechnete_wertnote(self):
+        # Nutzerwunsch (21.09.): ein disqualifizierter Teilnehmer bekommt unabhängig von
+        # ggf. doch vorhandenen Punktwerten KEINE aus Punkten berechnete Wertnote -
+        # erscheint ähnlich einem "nicht bestanden"-Teilnehmer (keine Platzierung, zählt
+        # aber als Starter mit), mit eigenem Status-Text statt Wertnote.
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="A", vorname="A", rufname_hund="Hund A", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=50))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="B", vorname="B", rufname_hund="Hund B", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=51))
+        eintragen_ergebnis(self.conn, a, "Trümmerfeld", suche=58, anzeige=38)  # 96, "V"
+        # b hat (z.B. vor der Disqualifikation) noch Punktwerte eingetragen - diese
+        # dürfen die Wertnote trotzdem nicht mehr beeinflussen.
+        eintragen_ergebnis(self.conn, b, "Trümmerfeld", suche=58, anzeige=38)
+        setze_ergebnis_status(self.conn, b, disqualifiziert=True, abbruch=False)
+
+        fertig, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual(len(ausstehend), 0)
+        self.assertEqual(len(fertig), 2)
+        by_id = {t.id: t for t in fertig}
+
+        disq = by_id[str(b)]
+        self.assertEqual(disq.wertnote.abkuerzung, DISQUALIFIZIERT_ABK)
+        self.assertEqual(disq.wertnote.notentext, DISQUALIFIZIERT_TEXT)
+        self.assertFalse(disq.bestanden)
+        self.assertIsNone(disq.platzierung)
+        self.assertEqual(disq.von_startern, 2)  # zählt trotzdem als Starter mit
+
+        # A bleibt unbeeinflusst und bekommt weiterhin Platz 1.
+        self.assertEqual(by_id[str(a)].platzierung, 1)
+        self.assertEqual(by_id[str(a)].von_startern, 2)
+
+    def test_abbruch_bekommt_keine_aus_punkten_berechnete_wertnote(self):
+        # Analog zu Disqualifiziert oben, aber für den unabhängigen zweiten Status
+        # "Abbruch" - hier ganz ohne eingetragene Punktwerte (Abbruch mitten in der
+        # Prüfung, bevor überhaupt etwas eingetragen wurde).
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="C", vorname="C", rufname_hund="Hund C", art="DK", stufe=1, startnummer=52))
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=True)
+
+        fertig, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual(len(ausstehend), 0)
+        self.assertEqual(len(fertig), 1)
+        ergebnis = fertig[0]
+        self.assertEqual(ergebnis.wertnote.abkuerzung, ABBRUCH_ABK)
+        self.assertEqual(ergebnis.wertnote.notentext, ABBRUCH_TEXT)
+        self.assertFalse(ergebnis.bestanden)
+        self.assertIsNone(ergebnis.platzierung)
+        self.assertEqual(ergebnis.von_startern, 1)
+
+    def test_setze_ergebnis_status_disqualifiziert_und_abbruch_sind_unabhaengig(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="D", vorname="D", rufname_hund="Hund D", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=53))
+        # Neu angelegter Teilnehmer: beide Status zunächst 0 (siehe SCHEMA-Default).
+        ergebnis = get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["disqualifiziert"], 0)
+        self.assertEqual(ergebnis["abbruch"], 0)
+
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False)
+        ergebnis = get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["disqualifiziert"], 1)
+        self.assertEqual(ergebnis["abbruch"], 0)
+
+        # Zurücksetzen funktioniert ebenso (z.B. Checkbox in der GUI wieder deaktiviert).
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=False)
+        ergebnis = get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["disqualifiziert"], 0)
+        self.assertEqual(ergebnis["abbruch"], 0)
 
     def test_check_constraint_ed_braucht_disziplin(self):
         with self.assertRaises(self.IntegrityErrorTyp):

@@ -63,6 +63,16 @@ PUNKTE_MAX = {
 NICHT_BESTANDEN_TEXT = "nicht Bestanden"
 NICHT_BESTANDEN_ABK = "nB"
 
+# Disqualifikation/Abbruch (Nutzerwunsch 21.09., siehe db.berechne_auswertung() und
+# app.ErgebnisTab): zwei weitere, von "nicht Bestanden" unabhängige Status - bewusst
+# eigene Konstanten statt Wiederverwendung von NICHT_BESTANDEN_*, damit z.B. die
+# Statistik-PDF (pdf_export._statistik_praedikat_matrix) sie als eigene Prädikat-Zeilen
+# zählen kann, statt sie mit echten "nicht bestanden"-Ergebnissen zu vermischen.
+DISQUALIFIZIERT_TEXT = "Disqualifiziert"
+DISQUALIFIZIERT_ABK = "DISQ"
+ABBRUCH_TEXT = "Abbruch"
+ABBRUCH_ABK = "ABBR"
+
 
 @dataclass(frozen=True)
 class Wertnote:

@@ -103,6 +103,7 @@ from db import (
     PasswortFalschError,
     set_veranstaltung,
     setze_bezahlt,
+    setze_ergebnis_status,
     sicherung_erstellen,
     sicherung_inhalt,
     sicherung_wiederherstellen,
@@ -117,6 +118,7 @@ from db import (
     zeitplan_gruppen_status,
 )
 import pdf_export
+from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT
 
 try:
     # version.py wird von bump_version.py automatisch erzeugt (siehe dort) und ist daher
@@ -1249,13 +1251,36 @@ class FormularImportTab(QWidget):
 FARBE_UNGESPEICHERT = QColor("#fff3cd")   # dezentes Gelb - Zeile hat noch nicht gespeicherte Änderungen
 FARBE_GESPEICHERT = QColor("white")
 
+
+def _zentrierte_zelle(widget: QWidget) -> QWidget:
+    """Bettet `widget` (z.B. eine QCheckBox) in einen kleinen Container mit zentriertem
+    Layout ein - als setCellWidget-Inhalt einer QTableWidget-Zelle, da eine QCheckBox
+    allein dort automatisch linksbündig erscheint. Siehe ErgebnisTab (Disqualifiziert-/
+    Abbruch-Spalten)."""
+    zelle = QWidget()
+    # Ein einfaches QWidget malt seinen per Stylesheet gesetzten Hintergrund (siehe
+    # _aktualisiere_zeilenstatus) standardmäßig NICHT selbst - anders als z.B. QLineEdit,
+    # das seinen Hintergrund ohnehin über den Stil zeichnet. WA_StyledBackground schaltet
+    # das für dieses Widget gezielt ein.
+    zelle.setAttribute(Qt.WA_StyledBackground, True)
+    layout = QHBoxLayout(zelle)
+    layout.addWidget(widget)
+    layout.setAlignment(Qt.AlignCenter)
+    layout.setContentsMargins(0, 0, 0, 0)
+    return zelle
+
 # Spaltenreihenfolge in der Ergebniserfassung: je Disziplin ein Such-/Anzeigeleistungs-Paar,
 # alle drei nebeneinander in einer Zeile - bei DK sind alle drei aktiv, bei ED nur die
 # jeweils zutreffende (die anderen beiden Spalten bleiben leer/gesperrt).
 _ERGEBNIS_SPALTEN_JE_DISZIPLIN = {
     disziplin: (3 + 2 * i, 3 + 2 * i + 1) for i, disziplin in enumerate(ALLE_DISZIPLINEN)
 }
-_STATUS_SPALTE = 3 + 2 * len(ALLE_DISZIPLINEN)
+# Nutzerwunsch (21.09.): zwei zusätzliche Spalten für die unabhängigen Status
+# "Disqualifiziert"/"Abbruch", vor der bestehenden Status-Spalte (die den
+# gespeichert/nicht-gespeichert-Hinweis dieser Zeile zeigt, siehe _aktualisiere_zeilenstatus).
+_DQ_SPALTE = 3 + 2 * len(ALLE_DISZIPLINEN)
+_ABBRUCH_SPALTE = _DQ_SPALTE + 1
+_STATUS_SPALTE = _ABBRUCH_SPALTE + 1
 
 
 class ErgebnisTab(QWidget):
@@ -1276,11 +1301,15 @@ class ErgebnisTab(QWidget):
         self._teilnehmer_je_zeile: list[dict] = []
         self._boxen_je_zeile: list[dict[str, tuple[QLineEdit, QLineEdit]]] = []
         self._geladen_je_zeile: list[dict[str, tuple[int | None, int | None]]] = []
+        # Nutzerwunsch (21.09.): analog zu den Punkte-Eingabefeldern oben, aber für die
+        # beiden Status-Checkboxen "Disqualifiziert"/"Abbruch" je Zeile.
+        self._status_boxen_je_zeile: list[tuple[QCheckBox, QCheckBox]] = []
+        self._status_geladen_je_zeile: list[tuple[bool, bool]] = []
 
         spalten = ["Start-Nr.", "Name", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
             spalten += [f"{disziplin} – Suche (0-60)", f"{disziplin} – Anzeige (0-40)"]
-        spalten.append("Status")
+        spalten += ["Disqualifiziert", "Abbruch", "Status"]
 
         self.tabelle = QTableWidget(0, len(spalten))
         self.tabelle.setHorizontalHeaderLabels(spalten)
@@ -1290,6 +1319,20 @@ class ErgebnisTab(QWidget):
         # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
         # ebenso im Reiter "Teilnehmer" (siehe TeilnehmerTab).
         self.tabelle.verticalHeader().setVisible(False)
+        # Nutzerwunsch (21.09., Rückmeldung zur Ergebniserfassung): "klappt gut, ggf. hier
+        # auch Sortierungsfunktion" - Klick auf eine Spaltenüberschrift sortiert danach,
+        # erneuter Klick auf dieselbe Spalte kehrt die Richtung um (wie in der
+        # Teilnehmerliste, siehe TeilnehmerTab). WICHTIG: hier bewusst NICHT
+        # setSortingEnabled(True)/sortIndicatorChanged wie dort, weil diese Tabelle die
+        # Punkte-Eingabefelder über setCellWidget setzt (echte QLineEdit-Widgets) - Qts
+        # eigene sortItems()-Sortierung verschiebt nur QTableWidgetItems, NICHT per
+        # setCellWidget gesetzte Widgets, und würde die Eingabefelder von den falschen
+        # Zeilen trennen. Stattdessen eine eigene Sortierlogik (siehe _spalte_geklickt/
+        # _sortieren_und_neu_aufbauen), die vor dem Neuaufbau zuerst die aktuellen
+        # (ggf. noch nicht gespeicherten) Werte je Teilnehmer-ID sichert.
+        self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
+        self._sortierspalte: int | None = None
+        self._sortieraufsteigend = True
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
@@ -1350,21 +1393,55 @@ class ErgebnisTab(QWidget):
     def aktualisieren(self) -> None:
         """Baut die Tabelle komplett neu aus der Datenbank auf (verwirft dabei nicht
         gespeicherte Änderungen!) und aktualisiert den Filter. Wird beim ersten Öffnen
-        sowie über "Liste aktualisieren" aufgerufen."""
-        teilnehmer = list_teilnehmer(self.conn)
+        sowie über "Liste aktualisieren" aufgerufen. Die zuletzt per Spaltenklick
+        gewählte Sortierung bleibt dabei erhalten (siehe _zeilen_aufbauen)."""
+        self._teilnehmer_je_zeile = list_teilnehmer(self.conn)
+        self._zeilen_aufbauen()
+
+        # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
+        # "Alle" zurückzuspringen.
+        bisherige_auswahl = self.filter_combo.currentText()
+        self.filter_combo.blockSignals(True)
+        self.filter_combo.clear()
+        self.filter_combo.addItem("Alle")
+        self.filter_combo.addItems(alle_leistungsklassen(self.conn))
+        index = self.filter_combo.findText(bisherige_auswahl)
+        self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
+        self.filter_combo.blockSignals(False)
+
+        self.status_label.setText("")
+        self._filter_anwenden()
+
+    def _zeilen_aufbauen(
+        self,
+        werte_override: dict[int, dict[str, tuple[int | None, int | None]]] | None = None,
+        status_override: dict[int, tuple[bool, bool]] | None = None,
+    ) -> None:
+        """Baut die Tabellenzeilen aus `self._teilnehmer_je_zeile` (in dessen aktueller
+        Reihenfolge) komplett neu auf - gemeinsam genutzt von aktualisieren() (frisch aus
+        der DB, keine Overrides) und _sortieren_und_neu_aufbauen() (Overrides = die vor
+        dem Sortieren gesicherten, ggf. noch nicht gespeicherten Eingaben je Teilnehmer-
+        ID). `werte_override`/`status_override` überschreiben dabei nur die ANGEZEIGTEN
+        Werte - `_geladen_je_zeile`/`_status_geladen_je_zeile` bleiben trotzdem auf dem
+        zuletzt aus der DB gelesenen (= gespeicherten) Stand, damit der
+        "ungespeichert"-Vergleich (siehe _zeile_ist_ungespeichert) korrekt bleibt."""
         ergebnis_rows = {
             r["teilnehmer_id"]: dict(r)
             for r in self.conn.execute("SELECT * FROM ergebnisse").fetchall()
         }
+        werte_override = werte_override or {}
+        status_override = status_override or {}
 
-        self._teilnehmer_je_zeile = teilnehmer
         self._boxen_je_zeile = []
         self._geladen_je_zeile = []
+        self._status_boxen_je_zeile = []
+        self._status_geladen_je_zeile = []
 
-        self.tabelle.setRowCount(len(teilnehmer))
-        for row, t in enumerate(teilnehmer):
+        self.tabelle.setRowCount(len(self._teilnehmer_je_zeile))
+        for row, t in enumerate(self._teilnehmer_je_zeile):
             aktuell = ergebnis_rows[t["id"]]
             zutreffende_disziplinen = ALLE_DISZIPLINEN if t["art"] == "DK" else [t["disziplin"]]
+            punkte_override = werte_override.get(t["id"], {})
 
             self.tabelle.setItem(row, 0, QTableWidgetItem(str(t["startnummer"] or "")))
             self.tabelle.setItem(row, 1, QTableWidgetItem(f"{t['nachname']}, {t['vorname']}"))
@@ -1386,6 +1463,9 @@ class ErgebnisTab(QWidget):
                 db_spalte_suche, db_spalte_anzeige = DISZIPLIN_SPALTEN[disziplin]
                 suche_wert = aktuell[db_spalte_suche]
                 anzeige_wert = aktuell[db_spalte_anzeige]
+                angezeigt_suche, angezeigt_anzeige = punkte_override.get(
+                    disziplin, (suche_wert, anzeige_wert)
+                )
 
                 # Leeres Feld = "noch nicht eingetragen" - ohne jede Vorbelegung (weder
                 # "0" noch ein Platzhalterzeichen), damit ein versehentlich stehen
@@ -1393,15 +1473,15 @@ class ErgebnisTab(QWidget):
                 suche_feld = QLineEdit()
                 suche_feld.setValidator(QIntValidator(0, 60, suche_feld))
                 suche_feld.setAlignment(Qt.AlignCenter)
-                if suche_wert is not None:
-                    suche_feld.setText(str(suche_wert))
+                if angezeigt_suche is not None:
+                    suche_feld.setText(str(angezeigt_suche))
                 self.tabelle.setCellWidget(row, spalte_suche, suche_feld)
 
                 anzeige_feld = QLineEdit()
                 anzeige_feld.setValidator(QIntValidator(0, 40, anzeige_feld))
                 anzeige_feld.setAlignment(Qt.AlignCenter)
-                if anzeige_wert is not None:
-                    anzeige_feld.setText(str(anzeige_wert))
+                if angezeigt_anzeige is not None:
+                    anzeige_feld.setText(str(angezeigt_anzeige))
                 self.tabelle.setCellWidget(row, spalte_anzeige, anzeige_feld)
 
                 suche_feld.textChanged.connect(lambda _text, r=row: self._aktualisiere_zeilenstatus(r))
@@ -1413,9 +1493,36 @@ class ErgebnisTab(QWidget):
             self._boxen_je_zeile.append(boxen)
             self._geladen_je_zeile.append(geladen)
 
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): zwei unabhängige Checkboxen,
+            # zentriert in ihrer Zelle über einen kleinen Container (QCheckBox selbst hat
+            # keine eingebaute Zentrierung als Cell-Widget).
+            db_disqualifiziert = bool(aktuell.get("disqualifiziert"))
+            db_abbruch = bool(aktuell.get("abbruch"))
+            angezeigt_dq, angezeigt_abbruch = status_override.get(
+                t["id"], (db_disqualifiziert, db_abbruch)
+            )
+
+            dq_box = QCheckBox()
+            dq_box.setChecked(angezeigt_dq)
+            self.tabelle.setCellWidget(row, _DQ_SPALTE, _zentrierte_zelle(dq_box))
+
+            abbruch_box = QCheckBox()
+            abbruch_box.setChecked(angezeigt_abbruch)
+            self.tabelle.setCellWidget(row, _ABBRUCH_SPALTE, _zentrierte_zelle(abbruch_box))
+
+            dq_box.toggled.connect(lambda _checked, r=row: self._status_umgeschaltet(r))
+            abbruch_box.toggled.connect(lambda _checked, r=row: self._status_umgeschaltet(r))
+
+            self._status_boxen_je_zeile.append((dq_box, abbruch_box))
+            self._status_geladen_je_zeile.append((db_disqualifiziert, db_abbruch))
+
             status_item = QTableWidgetItem("")
             status_item.setFlags(status_item.flags() & ~Qt.ItemIsEditable)
             self.tabelle.setItem(row, _STATUS_SPALTE, status_item)
+
+            # Punkteeingabe sperren/leeren, wenn Disqualifiziert/Abbruch bereits gesetzt
+            # ist (auch direkt nach dem Aufbau, nicht erst bei der nächsten Umschaltung).
+            self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
 
         # Spaltenbreiten an den tatsächlichen Inhalt/Spaltenkopf anpassen, damit z.B.
@@ -1423,18 +1530,72 @@ class ErgebnisTab(QWidget):
         # die Spalten weiterhin von Hand nachziehbar.
         self.tabelle.resizeColumnsToContents()
 
-        # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
-        # "Alle" zurückzuspringen.
-        bisherige_auswahl = self.filter_combo.currentText()
-        self.filter_combo.blockSignals(True)
-        self.filter_combo.clear()
-        self.filter_combo.addItem("Alle")
-        self.filter_combo.addItems(alle_leistungsklassen(self.conn))
-        index = self.filter_combo.findText(bisherige_auswahl)
-        self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.filter_combo.blockSignals(False)
+    def _spalte_geklickt(self, spalte: int) -> None:
+        """Reagiert auf einen Klick auf eine Spaltenüberschrift: sortiert danach, erneuter
+        Klick auf dieselbe Spalte kehrt die Richtung um (siehe Klassen-/Konstruktor-
+        Docstring zur Begründung der eigenen Sortierlogik statt Qt-Bordmittel)."""
+        if self._sortierspalte == spalte:
+            self._sortieraufsteigend = not self._sortieraufsteigend
+        else:
+            self._sortierspalte = spalte
+            self._sortieraufsteigend = True
+        self._sortieren_und_neu_aufbauen()
 
-        self.status_label.setText("")
+    def _sortierschluessel_fuer_zeile(self, row: int, spalte: int):
+        """Sortierschlüssel für Zeile `row` bezogen auf die VOR dem Sortieren gültige
+        Zeilenreihenfolge (self._teilnehmer_je_zeile/_boxen_je_zeile/
+        _status_boxen_je_zeile sind zu diesem Zeitpunkt noch nicht umsortiert)."""
+        if spalte == 0:
+            startnummer = self._teilnehmer_je_zeile[row]["startnummer"]
+            return startnummer if startnummer is not None else -1
+        if spalte == 1:
+            t = self._teilnehmer_je_zeile[row]
+            return f"{t['nachname']}, {t['vorname']}".lower()
+        if spalte == 2:
+            return leistungsklasse_label(self._teilnehmer_je_zeile[row]).lower()
+        if spalte == _DQ_SPALTE:
+            return self._status_boxen_je_zeile[row][0].isChecked()
+        if spalte == _ABBRUCH_SPALTE:
+            return self._status_boxen_je_zeile[row][1].isChecked()
+        if spalte == _STATUS_SPALTE:
+            item = self.tabelle.item(row, spalte)
+            return item.text() if item is not None else ""
+        for disziplin, (spalte_suche, spalte_anzeige) in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.items():
+            if spalte not in (spalte_suche, spalte_anzeige):
+                continue
+            boxen = self._boxen_je_zeile[row].get(disziplin)
+            if boxen is None:
+                return -1
+            feld = boxen[0] if spalte == spalte_suche else boxen[1]
+            wert = self._feldwert(feld)
+            return wert if wert is not None else -1
+        return ""
+
+    def _sortieren_und_neu_aufbauen(self) -> None:
+        """Sortiert self._teilnehmer_je_zeile nach der zuletzt gewählten Spalte/Richtung
+        und baut die Tabelle neu auf - sichert VORHER die aktuellen (ggf. noch nicht
+        gespeicherten) Eingaben je Teilnehmer-ID, damit beim Neuaufbau keine ungespeicherte
+        Eingabe verloren geht (siehe Klassen-/Konstruktor-Docstring)."""
+        werte_je_id = {
+            t["id"]: {
+                disziplin: (self._feldwert(suche_feld), self._feldwert(anzeige_feld))
+                for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items()
+            }
+            for row, t in enumerate(self._teilnehmer_je_zeile)
+        }
+        status_je_id = {
+            t["id"]: (dq_box.isChecked(), abbruch_box.isChecked())
+            for t, (dq_box, abbruch_box) in zip(self._teilnehmer_je_zeile, self._status_boxen_je_zeile)
+        }
+
+        reihenfolge = sorted(
+            range(len(self._teilnehmer_je_zeile)),
+            key=lambda row: self._sortierschluessel_fuer_zeile(row, self._sortierspalte),
+            reverse=not self._sortieraufsteigend,
+        )
+        self._teilnehmer_je_zeile = [self._teilnehmer_je_zeile[i] for i in reihenfolge]
+
+        self._zeilen_aufbauen(werte_je_id, status_je_id)
         self._filter_anwenden()
 
     def _aktualisieren_mit_rueckfrage(self) -> None:
@@ -1481,10 +1642,33 @@ class ErgebnisTab(QWidget):
     def _zeile_ist_ungespeichert(self, row: int) -> bool:
         boxen = self._boxen_je_zeile[row]
         geladen = self._geladen_je_zeile[row]
-        return any(
+        punkte_geaendert = any(
             (self._feldwert(suche_feld), self._feldwert(anzeige_feld)) != geladen[disziplin]
             for disziplin, (suche_feld, anzeige_feld) in boxen.items()
         )
+        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+        status_geaendert = (dq_box.isChecked(), abbruch_box.isChecked()) != self._status_geladen_je_zeile[row]
+        return punkte_geaendert or status_geaendert
+
+    def _status_umgeschaltet(self, row: int) -> None:
+        """Reagiert auf das Umschalten einer Disqualifiziert-/Abbruch-Checkbox: sperrt/
+        leert bei Bedarf die Punkte-Eingabefelder dieser Zeile und aktualisiert den
+        Gespeichert-Status."""
+        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+        self._punkteeingabe_sperren(row, dq_box.isChecked() or abbruch_box.isChecked())
+        self._aktualisiere_zeilenstatus(row)
+
+    def _punkteeingabe_sperren(self, row: int, sperren: bool) -> None:
+        """Sperrt (und leert) die Punkte-Eingabefelder einer Zeile, solange Disqualifiziert
+        oder Abbruch gesetzt ist - eine Punkteeingabe wäre dann ohnehin irrelevant, da
+        berechne_auswertung() für einen solchen Teilnehmer keine aus Punkten berechnete
+        Wertnote mehr bildet (siehe db.py)."""
+        for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
+            if sperren:
+                suche_feld.setText("")
+                anzeige_feld.setText("")
+            suche_feld.setEnabled(not sperren)
+            anzeige_feld.setEnabled(not sperren)
 
     def _aktualisiere_zeilenstatus(self, row: int) -> None:
         """Färbt die Zeile gelb und setzt den Status-Text, solange sich mindestens ein
@@ -1494,7 +1678,10 @@ class ErgebnisTab(QWidget):
 
         for col in range(self.tabelle.columnCount()):
             widget = self.tabelle.cellWidget(row, col)
-            if isinstance(widget, QLineEdit):
+            if widget is not None:
+                # Gilt sowohl für die Punkte-QLineEdit-Felder als auch für den Container
+                # der Disqualifiziert-/Abbruch-Checkbox (siehe _zentrierte_zelle) -
+                # QSS-Hintergrundfarbe funktioniert für beide Widget-Arten gleich.
                 widget.setStyleSheet(
                     f"background-color: {farbe.name()};" if ungespeichert else ""
                 )
@@ -1550,6 +1737,13 @@ class ErgebnisTab(QWidget):
                     continue
 
                 geladen[disziplin] = (suche_wert, anzeige_wert)
+                gespeichert += 1
+
+            dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+            status_wert = (dq_box.isChecked(), abbruch_box.isChecked())
+            if status_wert != self._status_geladen_je_zeile[row]:
+                setze_ergebnis_status(self.conn, t["id"], status_wert[0], status_wert[1])
+                self._status_geladen_je_zeile[row] = status_wert
                 gespeichert += 1
 
             self._aktualisiere_zeilenstatus(row)
@@ -1661,18 +1855,35 @@ class AuswertungTab(QWidget):
 
         self.tabelle.setRowCount(len(fertig_gefiltert))
         for row, t in enumerate(fertig_gefiltert):
-            if t.platzierung is None:
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): db.berechne_auswertung() gibt
+            # solchen Teilnehmern eine Platzhalter-Wertnote mit abkuerzung=DISQUALIFIZIERT_ABK/
+            # ABBRUCH_ABK statt einer aus Punkten berechneten - hier ähnlich der bestehenden
+            # "nicht bestanden"-Behandlung (keine Platzierung, zählt als Starter, rot
+            # markiert über t.bestanden weiter unten), aber mit eigenem Text statt "nB"/
+            # Wertnote.
+            ist_disqualifiziert = t.wertnote.abkuerzung == DISQUALIFIZIERT_ABK
+            ist_abbruch = t.wertnote.abkuerzung == ABBRUCH_ABK
+            if ist_disqualifiziert or ist_abbruch:
+                status_text = DISQUALIFIZIERT_TEXT if ist_disqualifiziert else ABBRUCH_TEXT
+                wertnote_text = status_text
+                punkte_text = "–"
+            else:
                 # nicht bestanden (mind. eine Disziplin unter 70 Punkten) -> keine
                 # Platzierung, entspricht im Original dem Kürzel "nB" in der Rankingliste.
-                platz_text = f"nB (von {t.von_startern} Startern)"
+                status_text = "nB"
+                wertnote_text = f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"
+                punkte_text = str(t.gesamtpunkte)
+
+            if t.platzierung is None:
+                platz_text = f"{status_text} (von {t.von_startern} Startern)"
             else:
                 platz_text = f"{t.platzierung}. von {t.von_startern}"
             werte = [
                 str(self._startnummer_je_id.get(t.id) or ""),
                 t.leistungsklasse,
                 t.name,
-                str(t.gesamtpunkte),
-                f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})",
+                punkte_text,
+                wertnote_text,
                 platz_text,
             ]
             for col, wert in enumerate(werte):
@@ -2302,6 +2513,13 @@ class ExportTab(QWidget):
         pruefungsleitung_btn = QPushButton("Übersicht für Prüfungsleitung (PDF)…")
         pruefungsleitung_btn.clicked.connect(self._pruefungsleitung_exportieren)
 
+        # Nutzerwunsch (21.09.): Chip-Nr. steht zwar schon auf jedem Bewertungsbogen und
+        # in der Übersicht für Prüfungsleitung, Marco bekommt aber weiterhin Nachfragen
+        # anderer Vereinsmitglieder danach - eigener, kompakter Export zum Abgleich am
+        # Prüfungstag (siehe pdf_export.erstelle_chipnummernliste_pdf).
+        chipliste_btn = QPushButton("Chipnummernliste (PDF)…")
+        chipliste_btn.clicked.connect(self._chipliste_exportieren)
+
         leistungsrichter_btn = QPushButton("Richter-Bedarf (PDF)…")
         leistungsrichter_btn.clicked.connect(self._leistungsrichter_exportieren)
 
@@ -2330,7 +2548,9 @@ class ExportTab(QWidget):
             "Die \"Übersicht für Prüfungsleitung\" zeigt je Teilnehmer die Stammdaten und "
             "die Prüfungsgebühr (je nach Art ED/DK); die Spalten \"bezahlt?\", \"Kontrolle "
             "Impfpass erledigt?\" und \"Abgabe Sportbeitrag\" bleiben leer zum Abhaken am "
-            "Prüfungstag. Der \"Richter-Bedarf\" errechnet aus der Teilnehmerzahl "
+            "Prüfungstag. Die \"Chipnummernliste\" ist ein kompakter Export nur mit "
+            "Start-Nr./Name/Hund/Chip-Nr., sortiert nach Startnummer - z.B. zum Abgleich "
+            "an einer Chip-Scanner-Station am Prüfungstag. Der \"Richter-Bedarf\" errechnet aus der Teilnehmerzahl "
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
             "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
             "geplanten Ablauf je Richter (eine Seite je Richter) zusammen. "
@@ -2355,6 +2575,7 @@ class ExportTab(QWidget):
         layout.addWidget(etiketten_btn)
         layout.addWidget(statistik_btn)
         layout.addWidget(pruefungsleitung_btn)
+        layout.addWidget(chipliste_btn)
         layout.addWidget(leistungsrichter_btn)
         layout.addWidget(zeitplan_btn)
         layout.addWidget(boegen_btn)
@@ -2443,6 +2664,19 @@ class ExportTab(QWidget):
             self._export_fehler_anzeigen(exc)
             return
         self.status_label.setText(f"Übersicht für Prüfungsleitung gespeichert: {pfad}")
+
+    def _chipliste_exportieren(self) -> None:
+        pfad = self._speicherort_waehlen(
+            "Chipnummernliste speichern", self._export_dateiname("Chipnummernliste")
+        )
+        if not pfad:
+            return
+        try:
+            pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad)
+        except Exception as exc:
+            self._export_fehler_anzeigen(exc)
+            return
+        self.status_label.setText(f"Chipnummernliste gespeichert: {pfad}")
 
     def _leistungsrichter_exportieren(self) -> None:
         pfad = self._speicherort_waehlen(

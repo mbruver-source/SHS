@@ -20,6 +20,7 @@ from db import (
     eintragen_ergebnis,
     init_db,
     set_veranstaltung,
+    setze_ergebnis_status,
 )
 import pdf_export
 
@@ -420,6 +421,34 @@ class TestPdfExport(unittest.TestCase):
         # Der ausstehende Teilnehmer B fließt nicht in die Zählung ein.
         self.assertNotIn("B, B", text)
 
+    def test_statistik_zaehlt_disqualifikation_und_abbruch_in_eigenen_zeilen(self):
+        # Nutzerwunsch (21.09.): die Prädikat-Matrix bekommt zwei neue Zeilen
+        # "Disqualifikation"/"Abbruch", die pro Art/LK-Spalte zählen wie viele
+        # Teilnehmer den jeweiligen Status haben - wie die bestehenden Prädikat-Zeilen.
+        disq = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Diskval", vorname="D", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        setze_ergebnis_status(self.conn, disq, disqualifiziert=True, abbruch=False)
+        abbr = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Abbrecher", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        setze_ergebnis_status(self.conn, abbr, disqualifiziert=False, abbruch=True)
+
+        pfad = self._pfad("statistik_disq_abbruch.pdf")
+        pdf_export.erstelle_statistik_pdf(self.conn, pfad)
+        text = _text(pfad)
+        # Die Zeilenbeschriftung "Disqualifikation (DISQ)" ist länger als die übrigen
+        # Prädikat-Zeilen und wird in der schmalen Matrix-Spalte umgebrochen - pypdf
+        # extrahiert das als getrennte Textfragmente (siehe auch "Trümmerfeld"-Umbruch
+        # weiter oben in test_statistik_zeigt_kopfangaben_und_praedikat_matrix).
+        text_ohne_umbrueche = text.replace("\n", "")
+
+        self.assertIn("Disqualifikation(DISQ)", text_ohne_umbrueche)
+        self.assertIn("Abbruch (ABBR)", text)
+        # Beide Teilnehmer fließen NICHT in die "ausstehend"-Behandlung, sondern werden
+        # als eigene Zeile gezählt - kein Absturz und keine falsche Wertnote.
+        self.assertNotIn("Diskval", text)  # Namen erscheinen nicht in der Statistik-PDF
+
     def test_statistik_ohne_teilnehmer_erzeugt_leere_matrix_statt_fehler(self):
         pfad = self._pfad("statistik_leer.pdf")
         pdf_export.erstelle_statistik_pdf(self.conn, pfad)
@@ -488,6 +517,57 @@ class TestPdfExport(unittest.TestCase):
     def test_pruefungsleitung_uebersicht_ohne_teilnehmer_zeigt_hinweis(self):
         pfad = self._pfad("pruefungsleitung_leer.pdf")
         pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, pfad)
+        self.assertTrue(os.path.exists(pfad))
+        text = _text(pfad)
+        self.assertIn("Keine Teilnehmer erfasst.", text)
+
+    def test_chipnummernliste_zeigt_start_nr_name_hund_und_chip_nr_sortiert_nach_startnummer(self):
+        # Nutzerwunsch (21.09.): eigener, kompakter Export nur mit Start-Nr./Name/Hund/
+        # Chip-Nr., sortiert nach Startnummer (Anwendungsfall: Abgleich am Prüfungstag,
+        # z.B. an einer Chip-Scanner-Station) - bewusst unabhängig von der "Übersicht für
+        # Prüfungsleitung" (die nach Name sortiert).
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Zweiter", vorname="Z", rufname_hund="Rex",
+            chip_nr="981189900092729", art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=2))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Erster", vorname="E", rufname_hund="Molly",
+            chip_nr="276095300089410", art="DK", stufe=1, startnummer=1))
+
+        pfad = self._pfad("chipliste.pdf")
+        pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad)
+        self.assertTrue(os.path.exists(pfad))
+        text = _text(pfad)
+
+        self.assertIn("Chipnummernliste", text)
+        self.assertIn("Erster", text)
+        self.assertIn("276095300089410", text)
+        self.assertIn("Molly", text)
+        self.assertIn("Zweiter", text)
+        self.assertIn("981189900092729", text)
+        # Nach Startnummer sortiert: Start-Nr. 1 (Erster) muss VOR Start-Nr. 2 (Zweiter)
+        # im extrahierten Text erscheinen, obwohl "Zweiter" alphabetisch vor "Erster"
+        # zuerst angelegt wurde.
+        self.assertLess(text.index("Erster"), text.index("Zweiter"))
+
+    def test_chipnummernliste_ohne_startnummer_stuerzt_nicht_ab(self):
+        # Die Startnummer ist optional (INTEGER UNIQUE, kann NULL sein) - ein Teilnehmer
+        # ohne Startnummer darf die Sortierung nicht mit einem TypeError abbrechen lassen.
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="OhneStartnummer", vorname="O", rufname_hund="H",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=None))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="MitStartnummer", vorname="M", rufname_hund="H",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1))
+
+        pfad = self._pfad("chipliste_ohne_startnummer.pdf")
+        pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad)
+        text = _text(pfad)
+        self.assertIn("OhneStartnummer", text)
+        self.assertIn("MitStartnummer", text)
+
+    def test_chipnummernliste_ohne_teilnehmer_zeigt_hinweis(self):
+        pfad = self._pfad("chipliste_leer.pdf")
+        pdf_export.erstelle_chipnummernliste_pdf(self.conn, pfad)
         self.assertTrue(os.path.exists(pfad))
         text = _text(pfad)
         self.assertIn("Keine Teilnehmer erfasst.", text)

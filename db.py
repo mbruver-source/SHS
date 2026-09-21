@@ -42,7 +42,12 @@ from pathlib import Path
 import pyzipper
 
 from shs_core import (
+    ABBRUCH_ABK,
+    ABBRUCH_TEXT,
+    DISQUALIFIZIERT_ABK,
+    DISQUALIFIZIERT_TEXT,
     Teilnehmerergebnis,
+    Wertnote,
     berechne_rangliste,
     berechne_wertnote_dk,
     berechne_wertnote_ed,
@@ -138,7 +143,13 @@ CREATE TABLE IF NOT EXISTS ergebnisse (
     suche_flaechensuche INTEGER CHECK (suche_flaechensuche BETWEEN 0 AND 60),
     anzeige_flaechensuche INTEGER CHECK (anzeige_flaechensuche BETWEEN 0 AND 40),
     suche_behaeltnis INTEGER CHECK (suche_behaeltnis BETWEEN 0 AND 60),
-    anzeige_behaeltnis INTEGER CHECK (anzeige_behaeltnis BETWEEN 0 AND 40)
+    anzeige_behaeltnis INTEGER CHECK (anzeige_behaeltnis BETWEEN 0 AND 40),
+    -- Disqualifikation/Abbruch (Nutzerwunsch 21.09.): zwei getrennte, unabhängige Status
+    -- je Teilnehmer (bewusst NICHT ein gemeinsamer Status) - bei gesetztem Status wird
+    -- keine aus den Punktwerten berechnete Wertnote gebildet (siehe berechne_auswertung()
+    -- unten). Boolean-Konvention wie teilnehmer.bezahlt (INTEGER 0/1).
+    disqualifiziert INTEGER NOT NULL DEFAULT 0 CHECK (disqualifiziert IN (0, 1)),
+    abbruch INTEGER NOT NULL DEFAULT 0 CHECK (abbruch IN (0, 1))
 );
 
 -- Zeitplan: je Termin beliebig viele "Richter"-Spuren (zeitplan_richter), jede
@@ -386,6 +397,26 @@ def _migriere_teilnehmer_spalten(conn) -> None:
     conn.commit()
 
 
+_ERGEBNISSE_NEUE_SPALTEN = [
+    ("disqualifiziert", "INTEGER NOT NULL DEFAULT 0"),
+    ("abbruch", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _migriere_ergebnisse_spalten(conn) -> None:
+    """Ergänzt in bereits vor dieser Programmversion angelegten Termin-Dateien/
+    Datenbanken die neuen Status-Spalten 'disqualifiziert'/'abbruch' nachträglich (analog
+    zu _migriere_veranstaltung_spalten/_migriere_teilnehmer_spalten oben). Bestehende
+    Ergebniszeilen gelten dabei als "weder disqualifiziert noch Abbruch" (Default 0) -
+    ihre bisherige, aus den Punktwerten berechnete Wertnote bleibt dadurch unverändert
+    gültig. Funktioniert dialektunabhängig, siehe _vorhandene_spalten()."""
+    vorhandene_spalten = _vorhandene_spalten(conn, "ergebnisse")
+    for spalte, sql_typ in _ERGEBNISSE_NEUE_SPALTEN:
+        if spalte not in vorhandene_spalten:
+            conn.execute(f"ALTER TABLE ergebnisse ADD COLUMN {spalte} {sql_typ}")
+    conn.commit()
+
+
 def init_db(pfad: str) -> sqlite3.Connection:
     """Öffnet (oder erstellt) die Termin-Datenbankdatei unter `pfad`."""
     conn = sqlite3.connect(pfad)
@@ -395,6 +426,7 @@ def init_db(pfad: str) -> sqlite3.Connection:
     conn.commit()
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
+    _migriere_ergebnisse_spalten(conn)
     return conn
 
 
@@ -408,6 +440,7 @@ def _richte_schema_im_aktuellen_suchpfad_ein(conn) -> None:
     conn.commit()
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
+    _migriere_ergebnisse_spalten(conn)
 
 
 def init_db_postgres(dsn: str) -> _PostgresConnection:
@@ -889,6 +922,23 @@ def eintragen_ergebnis(
     conn.commit()
 
 
+def setze_ergebnis_status(
+    conn: sqlite3.Connection, teilnehmer_id: int, disqualifiziert: bool, abbruch: bool
+) -> None:
+    """Setzt die beiden unabhängigen Status "Disqualifiziert"/"Abbruch" eines Teilnehmers
+    (Nutzerwunsch 21.09., siehe ErgebnisTab in app.py). Ist mindestens einer der beiden
+    gesetzt, bildet berechne_auswertung() unten KEINE aus den Punktwerten berechnete
+    Wertnote mehr - eine ggf. weiterhin in suche_*/anzeige_*-Spalten stehende Punktzahl
+    bleibt dabei unangetastet (die GUI leert/sperrt die Eingabe zwar, siehe
+    ErgebnisTab._punkteeingabe_sperren, ein direkter DB-Zugriff wie z.B. sync_termin.py
+    könnte sie aber weiterhin enthalten)."""
+    conn.execute(
+        "UPDATE ergebnisse SET disqualifiziert = ?, abbruch = ? WHERE teilnehmer_id = ?",
+        (int(disqualifiziert), int(abbruch), teilnehmer_id),
+    )
+    conn.commit()
+
+
 def _disziplin_punkte(ergebnis: dict, disziplin: str) -> int | None:
     """Summe aus Such- und Anzeigeleistung einer einzelnen Disziplin, oder None,
     wenn eine der beiden noch nicht erfasst ist."""
@@ -1124,10 +1174,24 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
         if ergebnis is None:
             ausstehend.append(t)
             continue
-        wertnote = _wertnote(t, ergebnis)
-        if wertnote is None:
-            ausstehend.append(t)
-            continue
+        if ergebnis.get("disqualifiziert") or ergebnis.get("abbruch"):
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): unabhängig davon, ob
+            # (versehentlich oder über einen direkten DB-Zugriff) noch Punktwerte
+            # hinterlegt sind, wird KEINE aus Punkten berechnete Wertnote gebildet -
+            # stattdessen eine Platzhalter-Wertnote mit dem jeweiligen Status-Text, damit
+            # der Teilnehmer wie ein "nicht bestanden"-Teilnehmer in der Rangliste
+            # erscheint (keine Platzierung, zählt aber als Starter, siehe
+            # berechne_rangliste()) statt fälschlich als "noch ausstehend" zu gelten.
+            if ergebnis.get("disqualifiziert"):
+                notentext, abkuerzung = DISQUALIFIZIERT_TEXT, DISQUALIFIZIERT_ABK
+            else:
+                notentext, abkuerzung = ABBRUCH_TEXT, ABBRUCH_ABK
+            wertnote = Wertnote(punkte=0, notentext=notentext, abkuerzung=abkuerzung, bestanden=False)
+        else:
+            wertnote = _wertnote(t, ergebnis)
+            if wertnote is None:
+                ausstehend.append(t)
+                continue
         fertig.append(
             Teilnehmerergebnis(
                 id=str(t["id"]),
@@ -1909,6 +1973,7 @@ def oeffne_termin_postgres(conn, schema_name: str) -> None:
     _setze_termin_suchpfad(conn, schema_name)
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
+    _migriere_ergebnisse_spalten(conn)
 
 
 def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:

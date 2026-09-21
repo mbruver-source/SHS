@@ -52,7 +52,7 @@ from db import (
     list_teilnehmer,
     pruefungsgebuehr_fuer_art,
 )
-from shs_core import berechne_wertnote_dk, berechne_wertnote_ed
+from shs_core import ABBRUCH_ABK, DISQUALIFIZIERT_ABK, berechne_wertnote_dk, berechne_wertnote_ed
 
 # --- Gemeinsame Stile -------------------------------------------------------
 
@@ -661,9 +661,15 @@ _STAT_SPALTEN: list[tuple[str, str]] = (
         for stufe in (1, 2, 3)
     ]
 )
-_PRAEDIKAT_REIHENFOLGE = ["V", "SG", "G", "B", "nB"]
+# Nutzerwunsch (21.09.): zwei zusätzliche Zeilen "Disqualifikation"/"Abbruch", die wie
+# die bestehenden Prädikat-Zeilen zählen - db.berechne_auswertung() gibt DQ/Abbruch-
+# Teilnehmern bereits eine Platzhalter-Wertnote mit abkuerzung=DISQUALIFIZIERT_ABK/
+# ABBRUCH_ABK (siehe shs_core), _statistik_praedikat_matrix() unten muss dafür nicht
+# geändert werden - die Zählung läuft rein über diese beiden Listen.
+_PRAEDIKAT_REIHENFOLGE = ["V", "SG", "G", "B", "nB", DISQUALIFIZIERT_ABK, ABBRUCH_ABK]
 _PRAEDIKAT_TEXT = {
     "V": "Vorzüglich", "SG": "Sehr Gut", "G": "Gut", "B": "Befriedigend", "nB": "nicht Bestanden",
+    DISQUALIFIZIERT_ABK: "Disqualifikation", ABBRUCH_ABK: "Abbruch",
 }
 
 
@@ -828,6 +834,67 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     SimpleDocTemplate(
         pfad, pagesize=landscape(A4),
         topMargin=12 * mm, bottomMargin=12 * mm, leftMargin=15 * mm, rightMargin=15 * mm,
+    ).build(story)
+
+
+# --- Chipnummernliste -------------------------------------------------------
+#
+# Nutzerwunsch (21.09.): die Chip-Nr. steht zwar schon auf jedem Bewertungsbogen und als
+# eigene Spalte in der "Übersicht für Prüfungsleitung"-PDF - Marco bekommt aber weiterhin
+# von anderen Vereinsmitgliedern Nachfragen danach. Deshalb ein eigener, bewusst
+# kompakter Export nur mit Start-Nr./Name/Hund/Chip-Nr. (der Hund-Rufname zusätzlich zur
+# Eindeutigkeit, falls zwei Teilnehmer denselben Nachnamen haben), sortiert nach
+# Startnummer statt wie die Übersicht für Prüfungsleitung nach Name - Anwendungsfall ist
+# der Abgleich am Prüfungstag, z.B. an einer Chip-Scanner-Station, wo die Startnummer die
+# naheliegendere Sortierung ist.
+
+_CHIPLISTE_KOPF = ParagraphStyle(
+    "SHSChiplisteKopf", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold", leading=11,
+)
+_CHIPLISTE_ZELLE = ParagraphStyle("SHSChiplisteZelle", parent=_STYLES["Normal"], fontSize=10, leading=12)
+
+
+def erstelle_chipnummernliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+    """Kompakter Export nur mit Start-Nr./Name/Hund/Chip-Nr., sortiert nach Startnummer -
+    siehe Modulkommentar oben."""
+    veranstaltung = get_veranstaltung(conn)
+    teilnehmer = sorted(
+        list_teilnehmer(conn), key=lambda t: (t["startnummer"] is None, t["startnummer"])
+    )
+
+    story: list = []
+    titel = "Chipnummernliste"
+    if veranstaltung:
+        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+    story.append(Paragraph(titel, _TITEL))
+    story.append(Spacer(1, 2 * mm))
+
+    if not teilnehmer:
+        story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
+    else:
+        kopf_texte = ["Start-Nr.", "Name", "Hund", "Chip-Nr."]
+        daten = [[Paragraph(k, _CHIPLISTE_KOPF) for k in kopf_texte]]
+        for t in teilnehmer:
+            daten.append([
+                Paragraph(_p_wert(t["startnummer"]), _CHIPLISTE_ZELLE),
+                Paragraph(_p_wert(f"{t['nachname']}, {t['vorname']}"), _CHIPLISTE_ZELLE),
+                Paragraph(_p_wert(t["rufname_hund"]), _CHIPLISTE_ZELLE),
+                Paragraph(_p_wert(t["chip_nr"]), _CHIPLISTE_ZELLE),
+            ])
+        spalten = [22 * mm, 60 * mm, 42 * mm, 42 * mm]
+        tabelle = Table(daten, colWidths=spalten, repeatRows=1)
+        tabelle.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+        ]))
+        story.append(tabelle)
+
+    SimpleDocTemplate(
+        pfad, pagesize=A4,
+        topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
     ).build(story)
 
 

@@ -29,6 +29,7 @@ from app import (
     VERSION,
     _QSS_MODERN_MINIMAL,
     AuswertungTab,
+    ErgebnisTab,
     FormularImportTab,
     HauptFenster,
     HilfeDialog,
@@ -48,11 +49,13 @@ from db import (
     add_zeitplan_pruefungsblock,
     add_zeitplan_richter,
     eintragen_ergebnis,
+    get_ergebnis,
     init_db,
     leistungsklasse_label,
     list_teilnehmer,
     set_veranstaltung,
     setze_bezahlt,
+    setze_ergebnis_status,
 )
 
 
@@ -966,6 +969,145 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     ).fetchone()
     assert zeile["suche_flaechensuche"] == 45
     assert zeile["anzeige_flaechensuche"] == 28
+
+
+# --- Ergebniserfassung: Sortierung per Spaltenklick ---------------------------------
+# Nutzerwunsch (21.09., Rückmeldung "klappt gut, ggf. hier auch Sortierungsfunktion").
+# WICHTIG anders als bei TeilnehmerTab (siehe unten): diese Tabelle setzt die Punkte-
+# Eingabefelder über setCellWidget (echte QLineEdit-Widgets) - Qts eigene
+# sortItems()-Sortierung würde diese Widgets NICHT mitverschieben und Eingaben von der
+# falschen Zeile trennen. ErgebnisTab verwendet deshalb eine eigene Sortierlogik
+# (_spalte_geklickt, hier über das sectionClicked-Signal wie bei einem echten Klick auf
+# die Spaltenüberschrift ausgelöst), die hier gezielt getestet wird - insbesondere, dass
+# dabei keine ungespeicherte Eingabe verloren geht.
+
+
+def test_ergebnis_spaltenklick_sortiert_nach_name(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # Spalte 1 = Name
+
+    assert tab.tabelle.item(0, 1).text() == "Adler, Max"
+    assert tab.tabelle.item(1, 1).text() == "Zorn, Max"
+
+    # Erneuter Klick auf dieselbe Spalte kehrt die Richtung um.
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)
+    assert tab.tabelle.item(0, 1).text() == "Zorn, Max"
+    assert tab.tabelle.item(1, 1).text() == "Adler, Max"
+
+
+def test_ergebnis_sortierung_verliert_keine_ungespeicherte_eingabe(qtbot, conn):
+    """Kern des technischen Fallstricks (siehe Modulkommentar oben): eine noch nicht
+    gespeicherte Eingabe in einem Punkte-Feld darf beim Sortieren weder verloren gehen
+    noch auf der falschen Zeile landen."""
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    # Zorn (vor der Sortierung Zeile 0) bekommt eine noch nicht gespeicherte Eingabe.
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+    assert tab._zeile_ist_ungespeichert(0)
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # nach Name sortieren
+
+    # Zorn steht jetzt in Zeile 1 (Adler < Zorn) - die Eingabe muss ihm gefolgt sein.
+    assert tab.tabelle.item(0, 1).text() == "Adler, Max"
+    assert tab.tabelle.item(1, 1).text() == "Zorn, Max"
+    zorn_suche, zorn_anzeige = tab._boxen_je_zeile[1]["Flächensuche"]
+    assert zorn_suche.text() == "58"
+    assert zorn_anzeige.text() == "38"
+    assert tab._zeile_ist_ungespeichert(1)
+    # Adler (jetzt Zeile 0) hat weiterhin keine Eingabe.
+    assert not tab._zeile_ist_ungespeichert(0)
+
+    # Die ungespeicherte Eingabe lässt sich nach der Sortierung ganz normal speichern.
+    tab.alle_speichern()
+    assert not tab._zeile_ist_ungespeichert(1)
+
+
+# --- Ergebniserfassung: Disqualifiziert/Abbruch ---------------------------------------
+# Nutzerwunsch (21.09.): zwei unabhängige Checkboxen je Zeile, die bei Aktivierung die
+# Punkte-Eingabefelder dieser Zeile sperren/leeren.
+
+
+def test_ergebnis_disqualifiziert_sperrt_und_leert_punkteeingabe(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+
+    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]
+    dq_box.setChecked(True)
+
+    assert suche_feld.text() == ""
+    assert anzeige_feld.text() == ""
+    assert not suche_feld.isEnabled()
+    assert not anzeige_feld.isEnabled()
+
+    # Wieder abwählen gibt die Felder wieder frei (bewusst ohne die zuvor gelöschten
+    # Werte wiederherzustellen - der Nutzer trägt sie bei Bedarf neu ein).
+    dq_box.setChecked(False)
+    assert suche_feld.isEnabled()
+    assert anzeige_feld.isEnabled()
+
+
+def test_ergebnis_disqualifiziert_und_abbruch_werden_unabhaengig_gespeichert(qtbot, conn):
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    dq_box, abbruch_box = tab._status_boxen_je_zeile[0]
+    dq_box.setChecked(True)
+    assert tab._zeile_ist_ungespeichert(0)
+
+    tab.alle_speichern()
+
+    ergebnis = get_ergebnis(conn, tid)
+    assert ergebnis["disqualifiziert"] == 1
+    assert ergebnis["abbruch"] == 0
+    assert not tab._zeile_ist_ungespeichert(0)
+
+    # Nach dem "Liste aktualisieren" bleibt der gespeicherte Status sichtbar gesetzt.
+    tab.aktualisieren()
+    dq_box, abbruch_box = tab._status_boxen_je_zeile[0]
+    assert dq_box.isChecked()
+    assert not abbruch_box.isChecked()
+
+
+def test_ergebnis_disqualifiziert_bleibt_beim_sortieren_und_laedt_gesperrte_felder(qtbot, conn):
+    # Kombiniert Sortierung und Status: eine (noch nicht gespeicherte) Disqualifiziert-
+    # Markierung muss dieselbe Behandlung wie ungespeicherte Punktwerte erfahren -
+    # sowohl der Checkbox-Zustand als auch die daraus folgende Felder-Sperre.
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]  # Zorn, vor der Sortierung Zeile 0
+    dq_box.setChecked(True)
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # nach Name sortieren
+
+    assert tab.tabelle.item(1, 1).text() == "Zorn, Max"
+    zorn_dq_box, _ = tab._status_boxen_je_zeile[1]
+    assert zorn_dq_box.isChecked()
+    zorn_suche, zorn_anzeige = tab._boxen_je_zeile[1]["Flächensuche"]
+    assert not zorn_suche.isEnabled()
+    assert not zorn_anzeige.isEnabled()
 
 
 def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch):
