@@ -346,3 +346,100 @@ Stand: 19.09.2026 (aktualisiert: Code Signing Policy für die kostenlose SignPat
 ## Ausgelieferte Dateien (im Chat, und lokal auf dem PC des Nutzers gesichert)
 
 `shs_core.py`, `test_shs_core.py`, `db.py`, `test_db.py`, `test_db_postgres_wrapper.py` (Wrapper-Tests für die PostgreSQL/Podman-Variante), `app.py`, `test_app_gui.py` (echte GUI-Tests via pytest-qt), `test_backup.py` (Tests für die Datensicherung), `pytest.ini`, `pdf_export.py`, `test_pdf_export.py`, `requirements.txt`, `requirements-postgres.txt`, `build.spec`, `version.txt`, `bump_version.py`, `test_bump_version.py`, `version_info.txt`, `installer.iss`, `build_installer.bat`, `README_INSTALLER.md`, `gui_vorschau.html` (statische, interaktive Layout-Vorschau), `.gitignore`, `.github/workflows/tests.yml`, `.github/workflows/build-installer.yml`, `app_web.py` (19.09.: Flask-Backend der Web-Version; Fortsetzung 5: Login über Benutzerkonten statt Zugangscode, Termin-Auswahl, Benutzerverwaltung; Fortsetzung 6: Termin veröffentlichen/zurückholen/löschen per Datei-Upload/Download; 19.09. Bugfix: Duplikat-Prüfung beim Benutzeranlegen GROSS-/kleinschreibungsunabhängig), `test_app_web.py` (19.09., Fortsetzung 5: komplett neu strukturiert, 26 Tests; Fortsetzung 6: 8 weitere Tests für die neuen Upload/Download-Routen, 34 insgesamt; 19.09. Bugfix: 2 weitere Tests zur Groß-/Kleinschreibung, 36 insgesamt), `sync_termin.py` (19.09.: Export/Import-Werkzeug SQLite↔PostgreSQL; Fortsetzung 5: Export-Ausgabe ohne Zugangscode), `requirements-web.txt` (19.09.), `templates/base.html` (19.09.; Fortsetzung 5: Kopfzeile mit Termin-wechseln/Benutzer-Link; Fortsetzung 6: zusätzlicher "Termine"-Link für Administratoren), `templates/login.html` (19.09.; Fortsetzung 5: Benutzername/Passwort statt Zugangscode; 19.09. Bugfix: Benutzername-Feld ohne Autokapitalisierung/-korrektur), `templates/ersteinrichtung.html` (19.09. Bugfix: ebenfalls ohne Autokapitalisierung/-korrektur), `templates/termin_waehlen.html`, `templates/admin_benutzer.html` (alle Fortsetzung 5, neu; admin_benutzer.html 19.09. Bugfix: ebenfalls ohne Autokapitalisierung/-korrektur), `templates/admin_termine.html` (Fortsetzung 6, neu), `templates/teilnehmerliste.html`, `templates/ergebnis_erfassen.html` (beide 19.09.), `db.py`/`test_db.py` (19.09., aktualisiert: vier reale, per CI gegen PostgreSQL gefundene Bugs behoben – DROP-TABLE-CASCADE, zwei `.fetchone()[0]`-Stellen in Tests, fehlender `search_path`-Wechsel beim Export, unqualifizierte Registry-Bereinigung im Test-Teardown, siehe eigener Abschnitt oben; Fortsetzung 5: `web_benutzer`-Tabelle + Benutzerkonten-Funktionen, Zugangscode-Mechanismus entfernt; 19.09. Bugfix: Login-Benutzername GROSS-/kleinschreibungsunabhängig, 1 weiterer Test), `Containerfile` (19.09.: baut das Web-Backend-Image), `.containerignore` (19.09.), `compose.yaml` (19.09.: Web + PostgreSQL als Compose-Stack; Fortsetzung 4 Ende: `db`-Port `127.0.0.1:5432:5432` für `sync_termin.py`), `.env.example` (19.09.), `README_CONTAINER.md` (19.09.; Fortsetzung 5: Abschnitt "Benutzerkonten" statt "Zugangscode erzeugen"; Fortsetzung 6: neuer Unterabschnitt zum Veröffentlichen/Zurückholen über die Web-Oberfläche), `.github/workflows/build-container.yml` (19.09.: Smoke-Test bei jedem Push, Build+Veröffentlichung nach ghcr.io bei einem Versions-Tag – siehe eigener Abschnitt oben)
+
+## Aufgabe für 10:25 Uhr (21.09.) - Sortierung Ergebniserfassung, DQ/Abbruch, Chipnummernliste
+
+**Diese Sektion ist ein vollständiges, eigenständiges Arbeitspaket für eine geplante Aufgabe, die um 10:25 Uhr in einer FRISCHEN Sitzung startet (ohne Erinnerung an das Planungsgespräch mit Marco).** Alle nötigen fachlichen Entscheidungen wurden vorab mit Marco geklärt (per AskUserQuestion) und stehen hier vollständig - nicht erneut nachfragen, direkt umsetzen.
+
+### Zugriff auf den Code
+
+Der echte Code liegt auf Marcos Windows-Rechner im verbundenen Ordner "Documents", in zwei Unterordnern mit identischen Dateien:
+- `SHS-Pruefungsprogramm-Git` (echtes Git-Repository, `origin` = GitHub `mbruver-source/SHS`)
+- `SHS-Pruefungsprogramm-Quellcode` (reine Dateikopie ohne Git)
+
+Zuerst `mcp__remote-devices__get_device_info` prüfen (Ordner "Documents" sollte in `connectedFolders` stehen), dann relevante Dateien aus `SHS-Pruefungsprogramm-Git` per `mcp__remote-devices__device_stage_files` in die Cloud-Umgebung holen (mindestens: `app.py`, `db.py`, `pdf_export.py`, `test_app_gui.py`, `test_db.py`, `test_pdf_export.py`, `Fortschritt.md`, `CLAUDE.md`, `version.py`, `version.txt`, `version_info.txt`) und dort mit Read/Edit/Write bearbeiten. NICHT `pip install PySide6` versuchen (kein PyPI-Netzwerkzugriff für dieses Paket in der Cloud-Sandbox) und NICHT versuchen, in `device_bash` (Marcos Windows-Rechner) pytest/PySide6-Tests laufen zu lassen (dort keine Python-Testumgebung eingerichtet).
+
+**Zuerst `CLAUDE.md` lesen** (Arbeitsweise mit Subagents: Explore-Subagent vor neuen Aufgaben, Bereichs-Subagents bei bereichsübergreifenden Änderungen zwischen Desktop/`app.py`+`test_app_gui.py` und Daten/`db.py`+`test_db.py`+`pdf_export.py`+`test_pdf_export.py`, unabhängiger Verifikations-Subagent nach jeder Umsetzung) sowie den Befehl für den lokalen Testlauf.
+
+**pyzipper-Stub für lokale Tests:** `db.py` importiert `pyzipper`, in dieser Sandbox nicht per pip installierbar. Vor dem ersten Testlauf prüfen, ob `/tmp/stub_pkgs/pyzipper.py` bereits existiert; falls nicht, dort anlegen:
+
+```python
+"""Minimal Test-Stub fuer 'pyzipper' - siehe db.py-Import. Bildet nur die tatsaechlich
+genutzte Teilmenge nach (AESZipFile als Kontextmanager, ZIP_LZMA/WZ_AES, BadZipFile),
+OHNE echte AES-Verschluesselung (Passwortpruefung ueber eine Marker-Datei im ZIP)."""
+import zipfile as _zipfile_std
+zipfile = _zipfile_std
+ZIP_LZMA = _zipfile_std.ZIP_LZMA
+WZ_AES = "WZ_AES"
+_PASSWORT_MARKER = "__pyzipper_stub_passwort_marker__"
+
+class AESZipFile:
+    def __init__(self, file, mode="r", compression=_zipfile_std.ZIP_STORED, encryption=None):
+        self._zf = _zipfile_std.ZipFile(file, mode, compression=compression)
+        self._mode = mode
+        self._passwort = None
+        self._marker_geschrieben = False
+
+    def setpassword(self, passwort):
+        self._passwort = passwort
+
+    def write(self, filename, arcname=None):
+        self._zf.write(filename, arcname=arcname)
+        if self._passwort is not None and not self._marker_geschrieben:
+            self._zf.writestr(_PASSWORT_MARKER, self._passwort)
+            self._marker_geschrieben = True
+
+    def namelist(self):
+        return [n for n in self._zf.namelist() if n != _PASSWORT_MARKER]
+
+    def read(self, name):
+        if _PASSWORT_MARKER in self._zf.namelist():
+            erwartet = self._zf.read(_PASSWORT_MARKER)
+            if self._passwort is None or self._passwort != erwartet:
+                raise RuntimeError(f"Bad password for file {name!r}")
+        return self._zf.read(name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self._zf.close()
+```
+
+Testbefehl (non-GUI-Tests, laufen hier lokal):
+```
+PYTHONPATH=/tmp/stub_pkgs python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core
+```
+`test_pdf_export.py` läuft lokal vollständig (kein PySide6 nötig) - PDF-Änderungen also unbedingt lokal testen. GUI-Tests (`test_app_gui.py`) und echte PostgreSQL-Tests laufen nur in der CI - trotzdem wie gewohnt Tests ergänzen, hier nur per `py_compile` geprüft.
+
+### Auftrag: drei Punkte aus Marcos Rückmeldung (Screenshot vom 21.09., Bereiche "Ergebniserfassung"/"Auswertung")
+
+**1. Ergebniserfassung: Sortierfunktion per Klick auf Spaltenkopf.** Marco: "klappt gut, ggf. hier auch Sortierungsfunktion" - analog zur vorhandenen Sortierung in der Teilnehmerliste (`TeilnehmerTab`, siehe "Fix 22" oben: Klick auf Spaltenkopf sortiert, Standardverhalten wie LibreOffice/Excel). **Wichtige technische Falle:** `ErgebnisTab` (`app.py`) setzt die Eingabefelder für Suchleistung/Anzeigeleistung je Zeile über `self.tabelle.setCellWidget(...)` (echte `QLineEdit`-Widgets, keine reinen `QTableWidgetItem`-Texte). Qt's `QTableWidget.sortItems()`/`setSortingEnabled(True)` verschiebt nur `QTableWidgetItem`s, NICHT per `setCellWidget` gesetzte Widgets - ein naiver `setSortingEnabled(True)` würde die Eingabefelder von den falschen Zeilen trennen. Sauberer Ansatz: eigene Sortierlogik bei Klick auf `horizontalHeader().sectionClicked`, die `self._teilnehmer_je_zeile` nach der geklickten Spalte sortiert (erneuter Klick auf dieselbe Spalte kehrt die Richtung um), dabei VORHER die aktuellen (ggf. ungespeicherten) Werte je Teilnehmer-ID sichert und die Tabelle in neuer Reihenfolge komplett neu aufbaut (ähnlich `aktualisieren()`, aber mit den gesicherten statt den DB-Werten befüllt) - damit geht keine ungespeicherte Eingabe beim Sortieren verloren. Test in `test_app_gui.py`: sortieren nach Name prüft Zeilenreihenfolge UND dass eine ungespeicherte Eingabe erhalten bleibt.
+
+**2. Auswertung: keine Änderung nötig.** Marco bestätigt nur, dass es gut funktioniert (inkl. Namensanzeige bei fehlender Eingabe). Als bestätigtes Feedback dokumentieren, keine Code-Änderung.
+
+**3. Disqualifikation/Abbruch (Ergebniserfassung + Auswertung + Statistik-PDF).** Aktuell kein Feld dafür - nur Punktwerte Suche (0-60)/Anzeige (0-40) je Disziplin. Mit Marco abgestimmt: **zwei getrennte, unabhängige Status je Teilnehmer** - "Disqualifiziert" und "Abbruch" (NICHT ein gemeinsamer Status).
+- **Datenmodell (`db.py`):** zwei neue Spalten auf `ergebnisse`: `disqualifiziert INTEGER NOT NULL DEFAULT 0`, `abbruch INTEGER NOT NULL DEFAULT 0` (Boolean-Konvention wie `teilnehmer.bezahlt`). WICHTIG: `init_db()` legt Tabellen nur per `CREATE TABLE IF NOT EXISTS` an - für bereits existierende, ECHTE Termin-Dateien (Marco nutzt die App schon produktiv!) reicht eine Ergänzung im `SCHEMA`-String NICHT aus. Etabliertes Migrations-Muster nutzen: `_migriere_veranstaltung_spalten()`/`_migriere_teilnehmer_spalten()` (nutzen `_vorhandene_spalten()` + `ALTER TABLE ... ADD COLUMN`, aus `init_db()` aufgerufen) - analog `_migriere_ergebnisse_spalten()` ergänzen, in `init_db()` aufrufen, UND prüfen ob `init_db_postgres()` ein äquivalentes Muster braucht (dort gibt es schon `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` als Vorbild). Auch `SCHEMA`-String selbst ergänzen für neue Termin-Dateien.
+- **Ergebniserfassung (`ErgebnisTab`, `app.py`):** je Zeile zwei Checkboxen "Disqualifiziert"/"Abbruch" (eigene Einschätzung zur Platzierung, z.B. zwei zusätzliche Spalten oder in der Status-Spalte). Bei gesetztem Status Punkteingabe für diese Zeile sinnvollerweise sperren/leeren (eigene Einschätzung zur UX). `eintragen_ergebnis()`/neue Funktion muss die beiden Felder mit speichern.
+- **Auswertung (`db.py`: `_wertnote()`/`berechne_auswertung()`, `app.py`: `AuswertungTab`):** ein Teilnehmer mit `disqualifiziert`/`abbruch` bekommt KEINE aus Punkten berechnete Wertnote, erscheint in der Rangliste ähnlich der bestehenden "nicht bestanden"-Behandlung (siehe `app.py` ca. Zeile 1654-1665: rot markiert, keine Platzzahl, zählt weiter als Starter) - aber mit Text "Disqualifiziert" bzw. "Abbruch" statt Wertnote/"nicht bestanden". Bestehende Logik als Vorbild nehmen, nicht neu bauen.
+- **Statistik-PDF (`pdf_export.py`, `_statistik_praedikat_matrix()`/`erstelle_statistik_pdf()`):** Marco bestätigt: die Prädikat-Matrix bekommt zwei neue Zeilen "Disqualifikation" und "Abbruch", die pro Art/Leistungsklasse-Spalte (`_STAT_SPALTEN`) zählen wie viele Teilnehmer den jeweiligen Status haben - wie die bestehenden Prädikat-Zeilen (V/SG/G/B/nB). Dafür braucht die aufrufende Stelle zusätzlich zur "fertig"-Liste auch die DQ/Abbruch-Teilnehmer (aktuell vermutlich in der "ausstehend"-Liste, da keine Wertnote - ggf. `berechne_auswertung()` erweitern, damit DQ/Abbruch erkennbar getrennt von "noch nicht bewertet" zurückkommt).
+- **Tests:** `test_db.py` (Migration greift bei "alter" DB ohne die Spalten, Speichern von DQ/Abbruch, `berechne_auswertung()` behandelt DQ/Abbruch korrekt), `test_pdf_export.py` (Statistik-PDF zählt DQ/Abbruch korrekt - läuft LOKAL, unbedingt selbst verifizieren), `test_app_gui.py` (Checkboxen, nur CI/`py_compile`).
+
+**4. Chipnummernliste (zusätzlicher PDF-Export).** Chip-Nr. steht schon auf jedem Bewertungsbogen und als eigene Spalte in der "Übersicht für Prüfungsleitung"-PDF - reicht Marco selbst, ABER er bekommt von anderen im Verein weiterhin Nachfragen danach. Abgestimmt: zusätzlich ein eigener, kompakter PDF-Export nur mit Start-Nr./Name/Chip-Nr. (plus Hund-Rufname zur Eindeutigkeit - eigene Einschätzung), sortiert nach Startnummer (Anwendungsfall: Abgleich am Prüfungstag, z.B. Chip-Scanner-Station). Umsetzung analog zu bestehenden kompakten Exports in `pdf_export.py` (`erstelle_leistungsrichter_bedarf_pdf`/`erstelle_pruefungsleitung_uebersicht_pdf` als Vorbild). Neuer Button im Tab "Export" (`ExportTab`, `app.py`), z.B. "Chipnummernliste (PDF)…". Test in `test_pdf_export.py` (läuft lokal).
+
+### Vorgehen
+
+1. `CLAUDE.md` lesen, dann Dateien aus `SHS-Pruefungsprogramm-Git` staged holen.
+2. Explore-Subagent zur Lokalisierung gegenprüfen (auch wenn oben schon viel vorrecherchiert ist). Bei Bedarf Bereichs-Subagents (Daten: db.py/test_db.py/pdf_export.py/test_pdf_export.py; Desktop: app.py/test_app_gui.py) parallel.
+3. Umsetzen, lokalen Testlauf (Befehl oben) ausführen, `py_compile` auf allen geänderten Dateien.
+4. Unabhängigen Verifikations-Subagenten gegenprüfen lassen - insbesondere: Migrationslogik greift bei bestehender DB ohne die neuen Spalten, Sortierung verliert keine ungespeicherten Eingaben, Statistik-PDF zählt korrekt.
+5. Diese Fortschritt.md-Sektion durch die üblichen datierten Einträge ersetzen/ergänzen (Zitat aus Marcos Rückmeldung, Umsetzung, Testabdeckung/Testlauf-Ergebnis je Punkt), Punkt 2 als bestätigtes Feedback ohne Code-Änderung.
+6. Alle geänderten Dateien per `SendUserFile` + `mcp__remote-devices__device_commit_files` (stagedPath reicht) in BEIDE Ordner schreiben: `SHS-Pruefungsprogramm-Git` UND `SHS-Pruefungsprogramm-Quellcode`.
+7. In `SHS-Pruefungsprogramm-Git` per `device_bash` committen (NICHT pushen, NICHT taggen, KEINE neue Versionsnummer/bump_version.py - macht Marco erst auf ausdrücklichen Wunsch). Bekanntes Problem: `.git/index.lock`/`.git/HEAD.lock` können durch einen Hintergrundprozess kurzzeitig blockiert sein - Workaround: `mv .git/index.lock .git/index.lock.stale-$(date +%s)` (bzw. `HEAD.lock` analog) unmittelbar vor dem `git commit`-Versuch in DERSELBEN `device_bash`-Anweisung, dann erneut versuchen (Löschen ist nicht erlaubt, daher `mv` statt `rm`). Commit-Message auf Deutsch im Projektstil, mit dieser Fußzeile:
+```
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EPu7D8zizBDq3StFAcXwMD
+```
+8. Kurze, klare Zusammenfassung am Ende (Umsetzung, Testergebnis, Verifikations-Verdikt, dass Push/Tag/Version noch aussteht) - Marco sieht diese Sitzung separat und war beim Umsetzen nicht dabei, daher lieber etwas ausführlicher berichten als sonst üblich.
+
+Falls beim Start etwas Grundlegendes nicht passt (Rechner nicht verbunden, Ordner nicht auffindbar, Dateien seit der Planung unerwartet anders) - lieber anhalten und den aktuellen Stand klar zusammenfassen, statt zu raten.
