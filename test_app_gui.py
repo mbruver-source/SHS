@@ -29,6 +29,7 @@ from app import (
     VERSION,
     _QSS_MODERN_MINIMAL,
     AuswertungTab,
+    BewertungsbogenAuswahlDialog,
     ErgebnisTab,
     FormularImportTab,
     HauptFenster,
@@ -1303,6 +1304,87 @@ def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monke
     namen_zu_nummer = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
     assert namen_zu_nummer["Erste"] == 2
     assert namen_zu_nummer["Zweite"] == 1
+
+
+# --- Bewertungsbogen-Direkt-Export aus der Teilnehmerliste (21.09.) ----------------
+# Nutzerwunsch: "In Teilnehmerliste Absprung zu Bewertungsbögen erzeugen einfügen?" -
+# Entscheidung (Rückfrage beantwortet): Direkt-Button pro Teilnehmer statt nur eines
+# Links zum Export-Tab.
+
+
+def test_bewertungsbogen_btn_aktiviert_sich_erst_bei_auswahl(qtbot, conn):
+    _teilnehmer_anlegen(conn)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    assert not tab.bewertungsbogen_btn.isEnabled()
+    tab.tabelle.selectRow(0)
+    assert tab.bewertungsbogen_btn.isEnabled()
+
+
+def test_bewertungsbogen_direktexport_erzeugt_pdf_fuer_ausgewaehlten_teilnehmer(qtbot, conn, tmp_path, monkeypatch):
+    _teilnehmer_anlegen(conn, nachname="Eins", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Zwei", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    zeile_zwei = next(row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Zwei")
+    tab.tabelle.selectRow(zeile_zwei)
+
+    ziel_pfad = tmp_path / "bogen.pdf"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel_pfad), "PDF-Datei (*.pdf)"))
+
+    qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+
+    assert ziel_pfad.exists()
+    assert "gespeichert" in tab.status_label.text()
+    assert str(ziel_pfad) in tab.status_label.text()
+
+
+def test_teilnehmerdialog_geburtsdatum_wird_gespeichert_und_geladen(qtbot, conn):
+    # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Geburtsdatum als
+    # Grundlage, um Jugendliche unter 18 Jahren in der Statistik-PDF auszuweisen.
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.geburtsdatum.setText("2010-05-01")
+
+    assert dialog.ergebnis().geburtsdatum == "2010-05-01"
+
+    teilnehmer_id = add_teilnehmer(conn, dialog.ergebnis())
+    bearbeiten_dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0], vergebene_nummern=set())
+    qtbot.addWidget(bearbeiten_dialog)
+    assert bearbeiten_dialog.geburtsdatum.text() == "2010-05-01"
+    assert teilnehmer_id > 0
+
+
+# --- Auswahl, welche LK/Disziplin in die Bewertungsbögen-Sammel-PDF sollen (21.09.) -
+# Nutzerwunsch: "Das PDF enthält jetzt alle LK + Disziplinen. Auf einmal ein
+# Doppelseitiger Druck führt dann dazu, dass ich bei den ED auf der Rückseite ein
+# anderes Team habe. [...] ggf. auch nur Auswählbar, welche LK/Disziplin ich gedruckt
+# haben will?" Standard = alle angehakt (heutiges Verhalten bleibt Default).
+
+
+def test_bewertungsbogen_auswahl_dialog_standardmaessig_alle_angehakt(qtbot):
+    dialog = BewertungsbogenAuswahlDialog(None, ["DK LK 1", "ED LK 2 Trümmerfeld"])
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.ausgewaehlte_labels() == {"DK LK 1", "ED LK 2 Trümmerfeld"}
+
+    dialog.liste.item(0).setCheckState(Qt.Unchecked)
+    assert dialog.ausgewaehlte_labels() == {"ED LK 2 Trümmerfeld"}
+
+
+def test_bewertungsbogen_auswahl_dialog_ohne_teilnehmer_deaktiviert_ok(qtbot):
+    dialog = BewertungsbogenAuswahlDialog(None, [])
+    qtbot.addWidget(dialog)
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
 
 
 # --- Warnsymbol bei fehlenden Prüfungsdaten in der Teilnehmerliste (20.09.) --------

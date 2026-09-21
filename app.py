@@ -285,6 +285,14 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
         self.nachname = QLineEdit()
         self.vorname = QLineEdit()
+        # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Geburtsdatum des
+        # Hundeführers/der Hundeführerin, um Jugendliche (unter 18 Jahre am Prüfungstag)
+        # in der Statistik-PDF gesondert auszuweisen (siehe db.ist_jugendlicher()).
+        # Gleiche freie Text-Konvention wie die übrigen Datumsfelder im Projekt
+        # (wurftag/tollwutimpfung_bis) statt eines QDateEdit-Widgets - im Projekt gibt es
+        # bislang an keiner Stelle ein echtes Datumsauswahl-Widget als Vorbild.
+        self.geburtsdatum = QLineEdit()
+        self.geburtsdatum.setPlaceholderText("JJJJ-MM-TT")
         self.verein = QLineEdit()
         self.verband = QLineEdit()
         self.mitgliedsnummer = QLineEdit()
@@ -372,6 +380,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_links.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form_links.addRow("Nachname*", self.nachname)
         form_links.addRow("Vorname*", self.vorname)
+        form_links.addRow("Geburtsdatum (JJJJ-MM-TT)", self.geburtsdatum)
         form_links.addRow("Verein", self.verein)
         form_links.addRow("Verband", self.verband)
         form_links.addRow("Mitgliedsnummer", self.mitgliedsnummer)
@@ -475,6 +484,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         if vorhandener:
             self.nachname.setText(vorhandener["nachname"])
             self.vorname.setText(vorhandener["vorname"])
+            self.geburtsdatum.setText(vorhandener["geburtsdatum"] or "")
             self.verein.setText(vorhandener["verein"] or "")
             self.verband.setText(vorhandener["verband"] or "")
             self.mitgliedsnummer.setText(vorhandener["mitgliedsnummer"] or "")
@@ -599,6 +609,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             chip_nr=self.chip_nr.text().strip() or None,
             rasse=self.rasse.text().strip() or None,
             tollwutimpfung_bis=self.tollwutimpfung_bis.text().strip() or None,
+            geburtsdatum=self.geburtsdatum.text().strip() or None,
             startnummer=None if self.startnummer_unbekannt.isChecked() else self.startnummer.value(),
             gegenstand_1=self.gegenstand_1.text().strip() or None,
             gegenstand_2=self.gegenstand_2.text().strip() or None,
@@ -795,12 +806,18 @@ class _NumerischSortierbaresItem(QTableWidgetItem):
 
 
 class TeilnehmerTab(QWidget):
-    def __init__(self, conn, parent=None, pfad: str | None = None):
+    def __init__(self, conn, parent=None, pfad: str | None = None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
         # Nur für TerminImportDialog: der eigene Dateipfad wird aus der Terminauswahl dort
         # ausgeschlossen, damit man nicht "aus sich selbst" importieren kann.
         self._pfad = pfad
+        # Gemeinsamer Ablageort mit den Tabs "Zeitplan"/"Export" (siehe _Ablageort weiter
+        # oben) - der Direkt-Export-Button "Bewertungsbogen (PDF)…" unten nutzt denselben
+        # zuletzt gewählten Ordner wie die übrigen PDF-Exporte.
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(
+            os.path.dirname(pfad) if pfad else str(termine_ordner())
+        )
         self._teilnehmer_ids: list[int] = []  # Zeile -> Teilnehmer-ID, parallel zur Tabelle
         self._teilnehmer_je_zeile: list[dict] = []  # Zeile -> Teilnehmer-Datensatz, für den Filter
 
@@ -882,6 +899,14 @@ class TeilnehmerTab(QWidget):
         import_btn = QPushButton("Aus anderem Termin importieren…")
         import_btn.clicked.connect(self._aus_anderem_termin_importieren)
 
+        # Nutzerwunsch (21.09.): "In Teilnehmerliste Absprung zu Bewertungsbögen erzeugen
+        # einfügen?" - Entscheidung (Rückfrage beantwortet): Direkt-Button pro Teilnehmer
+        # statt nur eines Links zum Export-Tab, erzeugt sofort den Bewertungsbogen für den
+        # ausgewählten Teilnehmer (siehe _bewertungsbogen_exportieren unten).
+        self.bewertungsbogen_btn = QPushButton("Bewertungsbogen (PDF)…")
+        self.bewertungsbogen_btn.clicked.connect(self._bewertungsbogen_exportieren)
+        self.bewertungsbogen_btn.setEnabled(False)
+
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(hinzufuegen_btn)
         button_zeile.addWidget(self.bearbeiten_btn)
@@ -889,6 +914,7 @@ class TeilnehmerTab(QWidget):
         button_zeile.addWidget(self.bezahlt_btn)
         button_zeile.addWidget(self.tauschen_btn)
         button_zeile.addWidget(import_btn)
+        button_zeile.addWidget(self.bewertungsbogen_btn)
         button_zeile.addStretch()
 
         filter_zeile = QHBoxLayout()
@@ -902,10 +928,14 @@ class TeilnehmerTab(QWidget):
         filter_zeile.addWidget(self.filter_bezahlt)
         filter_zeile.addStretch()
 
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+
         layout = QVBoxLayout(self)
         layout.addLayout(filter_zeile)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
+        layout.addWidget(self.status_label)
 
         self.aktualisieren()
 
@@ -952,6 +982,7 @@ class TeilnehmerTab(QWidget):
         self.loeschen_btn.setEnabled(hat_auswahl)
         self.bezahlt_btn.setEnabled(hat_auswahl)
         self.tauschen_btn.setEnabled(hat_auswahl and len(self._teilnehmer_je_zeile) > 1)
+        self.bewertungsbogen_btn.setEnabled(hat_auswahl)
 
     def _namen_je_startnummer(self, ausser_teilnehmer_id: int | None = None) -> dict[int, str]:
         """Für die Warnmeldung bei doppelt vergebener Startnummer im TeilnehmerDialog -
@@ -1029,6 +1060,29 @@ class TeilnehmerTab(QWidget):
             # geschlossen werden - unabhängig davon, ob der Dialog akzeptiert oder
             # abgebrochen wurde.
             dialog.schliesse_quelle()
+
+    def _bewertungsbogen_exportieren(self) -> None:
+        """Erzeugt den Bewertungsbogen für genau den ausgewählten Teilnehmer (Nutzerwunsch
+        21.09., siehe bewertungsbogen_btn oben) - nutzt dieselbe Kernfunktion
+        (pdf_export.erstelle_bewertungsbogen_pdf) wie der bisherige Weg über den Reiter
+        "Export" (dort weiterhin als Sammel-Export für alle Teilnehmer vorhanden)."""
+        teilnehmer_id = self._ausgewaehlte_id()
+        if teilnehmer_id is None:
+            return
+        aktuell = next((t for t in self._teilnehmer_je_zeile if t["id"] == teilnehmer_id), None)
+        if aktuell is None:
+            return
+        start_teil = str(aktuell["startnummer"]) if aktuell["startnummer"] is not None else "ohne-Nr"
+        vorschlag = f"Bewertungsbogen_{start_teil}_{aktuell['nachname']}.pdf"
+        pfad = _pdf_speicherort_waehlen(self, self._ablageort, "Bewertungsbogen speichern", vorschlag)
+        if not pfad:
+            return
+        try:
+            pdf_export.erstelle_bewertungsbogen_pdf(self.conn, teilnehmer_id, pfad)
+        except Exception as exc:
+            _pdf_export_fehler_anzeigen(self, exc)
+            return
+        self.status_label.setText(f"Bewertungsbogen gespeichert: {pfad}")
 
     def _teilnehmer_loeschen(self) -> None:
         teilnehmer_id = self._ausgewaehlte_id()
@@ -2481,6 +2535,64 @@ class ZeitplanTab(QWidget):
         self.status_label.setText(f"Zeitplan gespeichert: {pfad}")
 
 
+class BewertungsbogenAuswahlDialog(QDialog):
+    """Auswahl, welche Art/Leistungsklasse(n)/Disziplin(en) in die Sammel-PDF "alle
+    Bewertungsbögen" aufgenommen werden (Nutzerwunsch 21.09., Marcos eigener Lösungs-
+    vorschlag: "ggf. auch nur Auswählbar, welche LK/Disziplin ich gedruckt haben will?" -
+    Hintergrund: bei doppelseitigem Druck der kompletten Sammel-PDF landet sonst auf der
+    Rückseite eines Blatts ggf. ein anderes ED-Team). Standard = alle Einträge angehakt
+    (heutiges Verhalten bleibt Default) - an dasselbe Checkbox-Listen-Muster wie
+    TerminImportDialog oben angelehnt."""
+
+    def __init__(self, parent, labels: list[str]):
+        super().__init__(parent)
+        self.setWindowTitle("Bewertungsbögen – Auswahl LK/Disziplin")
+        self.resize(420, 420)
+
+        self.liste = QListWidget()
+        for label in labels:
+            item = QListWidgetItem(label)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.liste.addItem(item)
+
+        alle_btn = QPushButton("Alle auswählen")
+        alle_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Checked))
+        keine_btn = QPushButton("Keine auswählen")
+        keine_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Unchecked))
+        auswahl_zeile = QHBoxLayout()
+        auswahl_zeile.addWidget(alle_btn)
+        auswahl_zeile.addWidget(keine_btn)
+        auswahl_zeile.addStretch()
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        if not labels:
+            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(
+            "Welche Art/Leistungsklasse(n) sollen in die Sammel-PDF aufgenommen werden? "
+            "Standardmäßig sind alle angehakt (bisheriges Verhalten)."
+            if labels else "Keine Teilnehmer erfasst."
+        ))
+        layout.addLayout(auswahl_zeile)
+        layout.addWidget(self.liste)
+        layout.addWidget(self.buttons)
+
+    def _alle_umschalten(self, zustand) -> None:
+        for row in range(self.liste.count()):
+            self.liste.item(row).setCheckState(zustand)
+
+    def ausgewaehlte_labels(self) -> set[str]:
+        return {
+            self.liste.item(row).text()
+            for row in range(self.liste.count())
+            if self.liste.item(row).checkState() == Qt.Checked
+        }
+
+
 class ExportTab(QWidget):
     """PDF-Ausgabe: Ergebnislisten, Statistik und Bewertungsbögen (siehe pdf_export.py).
     Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
@@ -2536,7 +2648,12 @@ class ExportTab(QWidget):
             "Die Bewertungsbögen entsprechen den bisherigen Serienbrief-Vorlagen (Layout, "
             "Verleitungs-Hinweise und Punktebänder je Leistungsklasse/Disziplin). Bereits "
             "eingetragene Ergebnisse werden vorausgefüllt; noch offene Felder bleiben zum "
-            "handschriftlichen Ausfüllen vor Ort leer. Die \"Ergebnisliste zum Ausfüllen\" "
+            "handschriftlichen Ausfüllen vor Ort leer. Für EINEN einzelnen Teilnehmer geht "
+            "es schneller direkt über den Button \"Bewertungsbogen (PDF)…\" im Reiter "
+            "\"Teilnehmer\"; der Button hier erzeugt weiterhin eine Sammel-PDF und fragt "
+            "vorher ab, welche Art/Leistungsklasse(n) enthalten sein sollen (Standard: "
+            "alle) - praktisch, wenn beim doppelseitigen Druck sonst ein anderes Team auf "
+            "der Rückseite landen würde. Die \"Ergebnisliste zum Ausfüllen\" "
             "ist ein reines Formular (Start-Nr./Name/Verein vorausgefüllt, Platz/Punkte/"
             "Wertnote leer) - z.B. um die Ergebnisse zunächst auf Papier festzuhalten und "
             "erst später in die Ergebniserfassung zu übertragen. Der Button \"Etiketten "
@@ -2546,14 +2663,20 @@ class ExportTab(QWidget):
             "die Punktzahl-Felder bleiben dort zum Nachtragen leer. Das Feld „SH-R“ auf "
             "jedem Etikett bleibt bewusst leer - Platzhalter zum Abstempeln/Unterschreiben. "
             "Die \"Übersicht für Prüfungsleitung\" zeigt je Teilnehmer die Stammdaten und "
-            "die Prüfungsgebühr (je nach Art ED/DK); die Spalten \"bezahlt?\", \"Kontrolle "
-            "Impfpass erledigt?\" und \"Abgabe Sportbeitrag\" bleiben leer zum Abhaken am "
-            "Prüfungstag. Die \"Chipnummernliste\" ist ein kompakter Export nur mit "
+            "die Prüfungsgebühr (je nach Art ED/DK). Die Spalte \"bezahlt?\" kommt aus dem "
+            "digitalen Bezahlt-Status, \"Impfpass gültig bis\" aus dem Stammdatenfeld "
+            "\"Tollwutimpfung gültig bis\" (Teilnehmer-Dialog) - fehlt das Datum oder ist "
+            "es zum Prüfungstag bereits abgelaufen, erscheint die Zelle rot. Die "
+            "\"Chipnummernliste\" ist ein kompakter Export nur mit "
             "Start-Nr./Name/Hund/Chip-Nr., sortiert nach Startnummer - z.B. zum Abgleich "
             "an einer Chip-Scanner-Station am Prüfungstag. Der \"Richter-Bedarf\" errechnet aus der Teilnehmerzahl "
             "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
-            "benötigte Richterzahl. Der \"Zeitplan\" fasst den im gleichnamigen Tab "
-            "geplanten Ablauf je Richter (eine Seite je Richter) zusammen. "
+            "benötigte Richterzahl. Die \"Statistik\" zeigt unterhalb der Prädikat-Matrix "
+            "zusätzlich, wie viele der vollständig bewerteten Teilnehmer je Art/"
+            "Leistungsklasse zum Prüfungstag noch Jugendliche (unter 18 Jahre) waren - "
+            "Grundlage ist das Geburtsdatum im Teilnehmer-Dialog. Der \"Zeitplan\" fasst "
+            "den im gleichnamigen Tab geplanten Ablauf je Richter (eine Seite je Richter) "
+            "zusammen. "
             "Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter sowie die "
             "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
             "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
@@ -2703,11 +2826,19 @@ class ExportTab(QWidget):
         self.status_label.setText(f"Zeitplan gespeichert: {pfad}")
 
     def _bewertungsboegen_exportieren(self) -> None:
+        # Nutzerwunsch (21.09.): Auswahl, welche LK/Disziplin gedruckt werden sollen (siehe
+        # BewertungsbogenAuswahlDialog oben) - Standard bleibt "alle" (Dialog startet mit
+        # allen Einträgen angehakt), Abbrechen bricht den kompletten Export ab.
+        auswahl_dialog = BewertungsbogenAuswahlDialog(self, alle_leistungsklassen(self.conn))
+        if auswahl_dialog.exec() != QDialog.Accepted:
+            return
+        erlaubte_labels = auswahl_dialog.ausgewaehlte_labels()
+
         pfad = self._speicherort_waehlen("Bewertungsbögen speichern", self._export_dateiname("Bewertungsboegen"))
         if not pfad:
             return
         try:
-            anzahl = pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad)
+            anzahl = pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad, erlaubte_labels=erlaubte_labels)
         except Exception as exc:
             self._export_fehler_anzeigen(exc)
             return
@@ -3370,7 +3501,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # als neuer Standard gilt (siehe _Ablageort oben).
         ablageort = _Ablageort(os.path.dirname(pfad) if pfad else str(termine_ordner()))
 
-        self.teilnehmer_tab = TeilnehmerTab(conn, pfad=pfad)
+        self.teilnehmer_tab = TeilnehmerTab(conn, pfad=pfad, ablageort=ablageort)
         self.formular_import_tab = FormularImportTab(conn)
         self.zeitplan_tab = ZeitplanTab(conn, ablageort)
         self.ergebnis_tab = ErgebnisTab(conn)

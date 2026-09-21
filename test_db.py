@@ -39,6 +39,7 @@ from db import (
     importiere_teilnehmer_stammdaten,
     init_db,
     init_db_postgres,
+    ist_jugendlicher,
     kopiere_termin_daten,
     liste_benutzer,
     liste_termine,
@@ -816,6 +817,53 @@ class TestDatenbank(unittest.TestCase):
         aktualisiert = get_teilnehmer(conn, alt["id"])
         self.assertEqual(aktualisiert["rasse"], "Beagle")
         self.assertEqual(aktualisiert["halter_vorname"], "Peter")
+
+    def test_migration_ergaenzt_geburtsdatum_spalte_in_alter_termin_datei(self):
+        # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): init_db muss das neue
+        # Feld 'geburtsdatum' (Grundlage für ist_jugendlicher()) in einer bereits vorher
+        # angelegten Termin-Datei/-Datenbank nachträglich ergänzen, ohne bestehende Daten
+        # zu verlieren. Simuliert eine Termin-Datei von VOR dieser Migration, aber MIT den
+        # bereits vorher vorhandenen Rasse/Tollwutimpfung/Halter-Feldern (die kamen früher
+        # dazu, siehe vorheriger Test).
+        self._lege_alte_teilnehmer_tabelle_an(
+            ", bezahlt INTEGER NOT NULL DEFAULT 0, gegenstand_1_disziplin TEXT, "
+            "gegenstand_2_disziplin TEXT, gegenstand_3_disziplin TEXT, verband TEXT, "
+            "mitgliedsnummer TEXT, wurftag TEXT, strasse TEXT, hausnummer TEXT, plz TEXT, "
+            "ort TEXT, email TEXT, telefon TEXT, rasse TEXT, tollwutimpfung_bis TEXT, "
+            "halter_vorname TEXT, halter_nachname TEXT, halter_strasse TEXT, "
+            "halter_hausnummer TEXT, halter_plz TEXT, halter_ort TEXT, "
+            "halter_mitgliedsverein TEXT, halter_mitgliedsnummer TEXT, halter_lu_nr TEXT"
+        )
+        self.conn.execute(
+            "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer) "
+            "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1)"
+        )
+        self.conn.commit()
+
+        conn = self._neu_verbinden()
+        alt = list_teilnehmer(conn)[0]
+        self.assertEqual(alt["nachname"], "Alt")
+        self.assertIsNone(alt["geburtsdatum"])
+        # update_teilnehmer funktioniert danach ganz normal weiter, auch für das neue Feld.
+        update_teilnehmer(conn, alt["id"], NeuerTeilnehmer(
+            nachname="Alt", vorname="Vorname", rufname_hund="Hund", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, geburtsdatum="2010-05-01",
+        ))
+        self.assertEqual(get_teilnehmer(conn, alt["id"])["geburtsdatum"], "2010-05-01")
+
+    def test_ist_jugendlicher_alterskriterium(self):
+        # Nutzerwunsch (21.09.): unter 18 Jahre am Prüfungstag (Stichtag), nicht am
+        # heutigen Tag - reine Datumsrechnung, braucht keine Datenbank.
+        self.assertTrue(ist_jugendlicher("2010-01-01", "2026-09-19"))  # 16 Jahre
+        self.assertFalse(ist_jugendlicher("2000-01-01", "2026-09-19"))  # 26 Jahre
+        # Geburtstag ist genau der Stichtag: an diesem Tag bereits (gerade) volljährig.
+        self.assertFalse(ist_jugendlicher("2008-09-19", "2026-09-19"))  # wird an diesem Tag 18
+        # Einen Tag vor dem 18. Geburtstag noch minderjährig.
+        self.assertTrue(ist_jugendlicher("2008-09-20", "2026-09-19"))
+        # Fehlende/nicht lesbare Werte liefern sicher False statt eines Fehlers.
+        self.assertFalse(ist_jugendlicher(None, "2026-09-19"))
+        self.assertFalse(ist_jugendlicher("2010-01-01", None))
+        self.assertFalse(ist_jugendlicher("keine-datumsangabe", "2026-09-19"))
 
     def test_importiere_teilnehmer_aus_csv_legt_teilnehmer_an(self):
         # Nutzerwunsch (20.09.): Meldeformulare per KI-System in eine CSV umwandeln lassen

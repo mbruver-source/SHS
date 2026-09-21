@@ -120,6 +120,11 @@ CREATE TABLE IF NOT EXISTS teilnehmer (
     -- bleiben leer (NULL), solange kein abweichender Halter angegeben wird.
     rasse TEXT,
     tollwutimpfung_bis TEXT,
+    -- Geburtsdatum des Hundeführers/der Hundeführerin (Nutzerwunsch 21.09., Statistik:
+    -- Jugendliche unter 18 Jahren müssen gesondert ausgewiesen werden) - siehe
+    -- ist_jugendlicher() weiter unten. Optional, da nicht bei jedem Verband/Verein
+    -- verpflichtend.
+    geburtsdatum TEXT,
     halter_vorname TEXT,
     halter_nachname TEXT,
     halter_strasse TEXT,
@@ -366,6 +371,11 @@ _TEILNEHMER_NEUE_SPALTEN = [
     # reicht dafür wie schon beim Teilnehmer selbst.
     ("rasse", "TEXT"),
     ("tollwutimpfung_bis", "TEXT"),
+    # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Geburtsdatum des
+    # Hundeführers/der Hundeführerin, um Jugendliche (unter 18 Jahre am Prüfungstag)
+    # gesondert in der Statistik-PDF auszuweisen (siehe ist_jugendlicher() unten und
+    # pdf_export._statistik_jugendliche_tabelle()).
+    ("geburtsdatum", "TEXT"),
     ("halter_vorname", "TEXT"),
     ("halter_nachname", "TEXT"),
     ("halter_strasse", "TEXT"),
@@ -576,6 +586,9 @@ class NeuerTeilnehmer:
     # Bleibt komplett leer, solange kein abweichender Halter angegeben wird.
     rasse: str | None = None
     tollwutimpfung_bis: str | None = None
+    # Geburtsdatum des Hundeführers/der Hundeführerin (Nutzerwunsch 21.09., siehe SCHEMA/
+    # _TEILNEHMER_NEUE_SPALTEN oben) - Grundlage für ist_jugendlicher() weiter unten.
+    geburtsdatum: str | None = None
     halter_vorname: str | None = None
     halter_nachname: str | None = None
     halter_strasse: str | None = None
@@ -596,12 +609,12 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
             gegenstand_1, gegenstand_2, gegenstand_3,
             gegenstand_1_disziplin, gegenstand_2_disziplin, gegenstand_3_disziplin, bezahlt,
             verband, mitgliedsnummer, wurftag, strasse, hausnummer, plz, ort, email, telefon,
-            rasse, tollwutimpfung_bis,
+            rasse, tollwutimpfung_bis, geburtsdatum,
             halter_vorname, halter_nachname, halter_strasse, halter_hausnummer,
             halter_plz, halter_ort, halter_mitgliedsverein, halter_mitgliedsnummer, halter_lu_nr
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         """,
         (
@@ -610,7 +623,7 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
             t.gegenstand_1, t.gegenstand_2, t.gegenstand_3,
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin, int(t.bezahlt),
             t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
-            t.rasse, t.tollwutimpfung_bis,
+            t.rasse, t.tollwutimpfung_bis, t.geburtsdatum,
             t.halter_vorname, t.halter_nachname, t.halter_strasse, t.halter_hausnummer,
             t.halter_plz, t.halter_ort, t.halter_mitgliedsverein, t.halter_mitgliedsnummer, t.halter_lu_nr,
         ),
@@ -664,7 +677,7 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             gegenstand_1=?, gegenstand_2=?, gegenstand_3=?,
             gegenstand_1_disziplin=?, gegenstand_2_disziplin=?, gegenstand_3_disziplin=?, bezahlt=?,
             verband=?, mitgliedsnummer=?, wurftag=?, strasse=?, hausnummer=?, plz=?, ort=?, email=?, telefon=?,
-            rasse=?, tollwutimpfung_bis=?,
+            rasse=?, tollwutimpfung_bis=?, geburtsdatum=?,
             halter_vorname=?, halter_nachname=?, halter_strasse=?, halter_hausnummer=?,
             halter_plz=?, halter_ort=?, halter_mitgliedsverein=?, halter_mitgliedsnummer=?, halter_lu_nr=?
         WHERE id=?
@@ -676,7 +689,7 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
             t.gegenstand_1_disziplin, t.gegenstand_2_disziplin, t.gegenstand_3_disziplin,
             int(t.bezahlt),
             t.verband, t.mitgliedsnummer, t.wurftag, t.strasse, t.hausnummer, t.plz, t.ort, t.email, t.telefon,
-            t.rasse, t.tollwutimpfung_bis,
+            t.rasse, t.tollwutimpfung_bis, t.geburtsdatum,
             t.halter_vorname, t.halter_nachname, t.halter_strasse, t.halter_hausnummer,
             t.halter_plz, t.halter_ort, t.halter_mitgliedsverein, t.halter_mitgliedsnummer, t.halter_lu_nr,
             teilnehmer_id,
@@ -875,6 +888,7 @@ def importiere_teilnehmer_stammdaten(
             verein=alt.get("verein"), zwingername=alt.get("zwingername"), geschlecht=alt.get("geschlecht"),
             schulterhoehe_cm=alt.get("schulterhoehe_cm"), chip_nr=alt.get("chip_nr"),
             rasse=alt.get("rasse"), tollwutimpfung_bis=alt.get("tollwutimpfung_bis"),
+            geburtsdatum=alt.get("geburtsdatum"),
             verband=alt.get("verband"), mitgliedsnummer=alt.get("mitgliedsnummer"), wurftag=alt.get("wurftag"),
             strasse=alt.get("strasse"), hausnummer=alt.get("hausnummer"), plz=alt.get("plz"), ort=alt.get("ort"),
             email=alt.get("email"), telefon=alt.get("telefon"),
@@ -1147,6 +1161,33 @@ def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
     zum Befüllen eines Filters in der Oberfläche."""
     labels = {leistungsklasse_label(t) for t in list_teilnehmer(conn)}
     return sorted(labels)
+
+
+# Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): "bei uns im Verband müssen
+# Jugendliche gesondert ausgewiesen werden" - als generelles Feature umgesetzt (nicht
+# verbandsspezifisch konfigurierbar, siehe Rückfrage-Antwort). Alterskriterium: unter 18
+# Jahre, Stichtag ist das Prüfungsdatum (veranstaltung.datum) - nicht das heutige Datum,
+# da die Statistik auch nach dem Prüfungstag noch unverändert erzeugt werden können soll.
+JUGENDLICHE_ALTERSGRENZE = 18
+
+
+def ist_jugendlicher(geburtsdatum: str | None, stichtag: str | None) -> bool:
+    """True, wenn die Person am `stichtag` (i.d.R. das Prüfungsdatum) jünger als
+    JUGENDLICHE_ALTERSGRENZE (18) Jahre ist. Beide Werte werden im Format JJJJ-MM-TT
+    erwartet (wie die übrigen Datumsfelder im Projekt, siehe tollwutimpfung_bis/wurftag).
+    Fehlt eines der beiden Daten oder lässt es sich nicht als Datum lesen (z. B. leeres
+    Geburtsdatum, noch nicht gepflegtes Prüfungsdatum), liefert die Funktion bewusst False
+    statt eines Fehlers - ohne bekanntes Geburtsdatum kann niemand als Jugendliche/r
+    ausgewiesen werden, das ist der sichere Default (keine falsche Zuordnung)."""
+    if not geburtsdatum or not stichtag:
+        return False
+    try:
+        geburt = datetime.date.fromisoformat(geburtsdatum.strip())
+        tag = datetime.date.fromisoformat(stichtag.strip())
+    except ValueError:
+        return False
+    alter = tag.year - geburt.year - ((tag.month, tag.day) < (geburt.month, geburt.day))
+    return alter < JUGENDLICHE_ALTERSGRENZE
 
 
 def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebnis], list[dict]]:
@@ -2086,6 +2127,7 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             strasse=alt.get("strasse"), hausnummer=alt.get("hausnummer"), plz=alt.get("plz"), ort=alt.get("ort"),
             email=alt.get("email"), telefon=alt.get("telefon"),
             rasse=alt.get("rasse"), tollwutimpfung_bis=alt.get("tollwutimpfung_bis"),
+            geburtsdatum=alt.get("geburtsdatum"),
             halter_vorname=alt.get("halter_vorname"), halter_nachname=alt.get("halter_nachname"),
             halter_strasse=alt.get("halter_strasse"), halter_hausnummer=alt.get("halter_hausnummer"),
             halter_plz=alt.get("halter_plz"), halter_ort=alt.get("halter_ort"),

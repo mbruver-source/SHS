@@ -28,6 +28,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
     HRFlowable,
     KeepTogether,
@@ -48,6 +49,7 @@ from db import (
     berechne_zeitplan,
     gegenstand_fuer_disziplin,
     get_veranstaltung,
+    ist_jugendlicher,
     leistungsklasse_label,
     list_teilnehmer,
     pruefungsgebuehr_fuer_art,
@@ -67,7 +69,14 @@ _TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.
 _STAT_TITEL = ParagraphStyle("SHSStatTitel", parent=_STYLES["Heading1"], fontSize=16, alignment=1, spaceAfter=0)
 _STAT_KOPF_LABEL = ParagraphStyle("SHSStatKopfLabel", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold")
 _STAT_KOPF_WERT = ParagraphStyle("SHSStatKopfWert", parent=_STYLES["Normal"], fontSize=9.5)
-_STAT_MATRIX_KOPF = ParagraphStyle("SHSStatMatrixKopf", parent=_STYLES["Normal"], fontSize=7.5, fontName="Helvetica-Bold", alignment=1, leading=9)
+# Nutzerwunsch (21.09., "Kosmetik"): die Spaltenüberschriften der Prädikat-Matrix
+# (insbesondere "Behältnisstrecke"/"Flächensuche"/"Trümmerfeld") brachen bei der
+# ursprünglichen Schriftgröße 7.5 mitten im Wort um, da die einzelnen ED-Spalten
+# schmaler waren als das jeweils längste Wort. Entscheidung (Rückfrage beantwortet):
+# Spalten verbreitern UND Kopfschrift leicht verkleinern (statt Wörter abzukürzen), siehe
+# _stat_spalte_breite() unten - beides zusammen sorgt dafür, dass jede Überschrift
+# einzeilig passt.
+_STAT_MATRIX_KOPF = ParagraphStyle("SHSStatMatrixKopf", parent=_STYLES["Normal"], fontSize=6.5, fontName="Helvetica-Bold", alignment=1, leading=8)
 _STAT_MATRIX_ZELLE = ParagraphStyle("SHSStatMatrixZelle", parent=_STYLES["Normal"], fontSize=9, alignment=1)
 
 _WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
@@ -89,6 +98,39 @@ def _datum_lang(iso_datum: str | None) -> str:
     except ValueError:
         return iso_datum
     return f"{_WOCHENTAGE[d.weekday()]}, {d.day}. {_MONATE[d.month - 1]} {d.year}"
+
+
+def _datum_kurz(iso_datum: str | None) -> str:
+    """Formatiert ein Datum im Format JJJJ-MM-TT kompakt als TT.MM.JJJJ - für Tabellen-
+    spalten, in denen der ausgeschriebene Langtext (_datum_lang) zu breit wäre (siehe
+    Impfpass-Spalte in erstelle_pruefungsleitung_uebersicht_pdf). Ist der Wert leer oder
+    nicht als Datum erkennbar, wird er wie bei _datum_lang unverändert zurückgegeben."""
+    if not iso_datum:
+        return ""
+    try:
+        d = datetime.date.fromisoformat(iso_datum.strip())
+    except ValueError:
+        return iso_datum
+    return f"{d.day:02d}.{d.month:02d}.{d.year}"
+
+
+def _schriftgroesse_fuer_breite(
+    text: str, max_breite_pt: float, start_groesse: float, min_groesse: float, font: str = "Helvetica",
+) -> float:
+    """Ermittelt die größte Schriftgröße (zwischen `min_groesse` und `start_groesse`, in
+    0,5-Schritten), bei der `text` in genau EINER Zeile innerhalb `max_breite_pt` Punkt
+    Platz findet - Grundlage für die automatische Schriftverkleinerung langer
+    Vereinsnamen in der leeren Ergebnisliste (Nutzerwunsch 21.09.: Text soll einzeilig
+    bleiben statt in die Nachbarspalte hineinzuragen, keine Zeilenumbrüche in der
+    Zelle). Passt `text` auch bei `min_groesse` nicht (sehr langer Name), wird trotzdem
+    `min_groesse` geliefert statt weiter zu schrumpfen - ein minimal überstehender,
+    aber noch lesbarer Name ist der praktikablere Kompromiss als eine unleserlich
+    kleine Schrift."""
+    groesse = start_groesse
+    while groesse > min_groesse and stringWidth(text, font, groesse) > max_breite_pt:
+        groesse -= 0.5
+    return max(groesse, min_groesse)
+
 
 # Welcher der drei Gegenstände (frei eingetragener Text) welcher Disziplin zugeordnet ist,
 # wird seit Einführung der Gegenstand-Zuordnung (siehe NeuerTeilnehmer.gegenstand_N_disziplin
@@ -218,7 +260,17 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     ]))
     elemente.append(kopf)
 
-    freiflaeche = Table([[""]], colWidths=[170 * mm], rowHeights=[22 * mm])
+    # Nutzerwunsch (21.09.): "Bei ED LK 1 Trümmerfeld ist das Feld zum eintragen doch
+    # etwas schmal. Gerne etwas größer + Trennstrich zw. Suchleistung + Anzeige."
+    # Betrifft technisch alle Disziplinen gleichermaßen (dieselbe Vorlage wird für
+    # Trümmerfeld/Flächensuche/Behältnisstrecke gemeinsam genutzt, siehe Docstring oben) -
+    # eigene Einschätzung: die Vergrößerung + der Trennstrich gelten daher einheitlich für
+    # alle drei, nicht nur für Trümmerfeld. Höhe von 22mm auf 30mm vergrößert (mehr Platz
+    # zum handschriftlichen Einzeichnen der Suchfläche); als zwei Zellen (statt einer
+    # durchgehenden) angelegt, exakt so breit wie die Suchleistung/Anzeige-Kopfzeile
+    # darüber (je 85mm) - GRID zeichnet dadurch automatisch eine durchgehende
+    # Trennlinie genau zwischen beiden Bereichen.
+    freiflaeche = Table([["", ""]], colWidths=[85 * mm, 85 * mm], rowHeights=[30 * mm])
     freiflaeche.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))
     elemente.append(freiflaeche)
 
@@ -370,11 +422,24 @@ def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, p
     dokument.build(_bewertungsbogen_story(t, dict(ergebnis_row) if ergebnis_row else None, veranstaltung))
 
 
-def erstelle_alle_bewertungsboegen_pdf(conn: sqlite3.Connection, pfad: str) -> int:
+def erstelle_alle_bewertungsboegen_pdf(
+    conn: sqlite3.Connection, pfad: str, erlaubte_labels: set[str] | None = None,
+) -> int:
     """Erzeugt EINE Sammel-PDF mit dem Bewertungsbogen jedes Teilnehmers (sortiert nach
     Startnummer, wie die Teilnehmerliste) - praktisch zum Ausdrucken für alle Richter auf
-    einmal. Gibt die Anzahl enthaltener Bögen zurück."""
+    einmal. Gibt die Anzahl enthaltener Bögen zurück.
+
+    `erlaubte_labels` (Nutzerwunsch 21.09.: "Das PDF enthält jetzt alle LK + Disziplinen.
+    Auf einmal ein Doppelseitiger Druck führt dann dazu, dass ich bei den ED auf der
+    Rückseite ein anderes Team habe. [...] ggf. auch nur Auswählbar, welche LK/Disziplin
+    ich gedruckt haben will?") schränkt die Sammel-PDF optional auf die genannten Art/LK-
+    Labels ein (wie leistungsklasse_label() sie liefert, z. B. "DK LK 1", "ED LK 2
+    Trümmerfeld" - siehe BewertungsbogenAuswahlDialog in app.py). None (Standard, auch bei
+    einem leeren Set gälte sonst 'nichts auswählen') bedeutet weiterhin ALLE Teilnehmer,
+    identisch zum bisherigen Verhalten."""
     teilnehmer = list_teilnehmer(conn)
+    if erlaubte_labels is not None:
+        teilnehmer = [t for t in teilnehmer if leistungsklasse_label(t) in erlaubte_labels]
     veranstaltung = get_veranstaltung(conn)
     ergebnis_rows = {r["teilnehmer_id"]: dict(r) for r in conn.execute("SELECT * FROM ergebnisse").fetchall()}
 
@@ -440,13 +505,21 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     SimpleDocTemplate(pfad, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm).build(story)
 
 
-# Physische Etikettengröße wie vom Verein vorgegeben: Lang = 17 cm, Hoch = 2 cm (je
-# Teilnehmer EIN zweizeiliges Etikett dieser Größe, siehe erstelle_ergebnisliste_etiketten_pdf
-# unten). Die Spaltenbreiten müssen sich exakt zu ETIKETT_BREITE_MM aufsummieren und die
-# beiden Zeilenhöhen exakt zu ETIKETT_HOEHE_MM - vorher waren es (ungewollt) rund 17,8 cm
-# Breite und eine von reportlab automatisch bestimmte, deutlich kleinere Höhe als 2 cm.
+# Physische Etikettengröße wie vom Verein vorgegeben: Lang = 17 cm, Hoch ursprünglich
+# 2 cm (je Teilnehmer EIN zweizeiliges Etikett dieser Größe, siehe
+# erstelle_ergebnisliste_etiketten_pdf unten). Die Spaltenbreiten müssen sich exakt zu
+# ETIKETT_BREITE_MM aufsummieren und die beiden Zeilenhöhen exakt zu ETIKETT_HOEHE_MM -
+# vorher waren es (ungewollt) rund 17,8 cm Breite und eine von reportlab automatisch
+# bestimmte, deutlich kleinere Höhe als die vorgegebene.
 #
-# Weil die Zeilenhöhe jetzt FEST ist (statt sich wie vorher automatisch an den Inhalt
+# Nutzerwunsch (21.09.): "fast ein bisschen zu Hoch - 1-2mm - ist aber bei anderen
+# Sparten auch - reinpassen tut es". Entscheidung (Rückfrage beantwortet): trotzdem um
+# 2mm verkleinert (18mm statt 20mm) - vorsichtig gewählt am oberen Ende der genannten
+# Spanne, da Marco bestätigt hat, dass aktuell noch alles hineinpasst (siehe TOPPADDING/
+# BOTTOMPADDING unten: bei 18mm bleiben je Zeile weiterhin gut 2,5mm Luft über dem
+# tatsächlichen Platzbedarf des Texts - rechnerisch geprüft, siehe test_pdf_export.py).
+#
+# Weil die Zeilenhöhe FEST ist (statt sich wie vorher automatisch an den Inhalt
 # anzupassen), müssen die Felder mit bekanntem Wertebereich auf einer Zeile bleiben, sonst
 # würde umgebrochener Text optisch mit der Zeile darunter überlappen: die Spaltenbreiten
 # unten sind bewusst so gewählt, dass die Punktzahl-Felder (max. "Trümmer: 100" bzw.
@@ -456,7 +529,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
 # Werten weiterhin umbrechen - das war schon vorher so und lässt sich bei Freitext nicht
 # generell ausschließen.
 ETIKETT_BREITE_MM = 170
-ETIKETT_HOEHE_MM = 20
+ETIKETT_HOEHE_MM = 18
 _ETIKETT_SPALTEN = [30 * mm, 29 * mm, 24 * mm, 21 * mm, 25 * mm, 23 * mm, 18 * mm]
 # math.isclose statt "==": Summe von sieben einzeln mit dem (nicht exakt binär
 # darstellbaren) Faktor "mm" multiplizierten Werten kann durch Gleitkomma-Rundung um
@@ -508,8 +581,8 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     auseinandergeschnitten wird.
 
     Jedes einzelne Etikett ist exakt ETIKETT_BREITE_MM x ETIKETT_HOEHE_MM groß (aktuell
-    17 x 2 cm, siehe dort) - die gestrichelte Schnittlinie zwischen zwei Etiketten kommt
-    beim Ausschneiden zusätzlich oben drauf, ist also nicht Teil der 2 cm Etikettenhöhe.
+    17 x 1,8 cm, siehe dort) - die gestrichelte Schnittlinie zwischen zwei Etiketten kommt
+    beim Ausschneiden zusätzlich oben drauf, ist also nicht Teil der Etikettenhöhe.
 
     Das Feld "SH-R" bleibt bewusst leer - es ist ein Platzhalter, den der Spürhundesport-
     Richter später von Hand abstempelt und unterschreibt.
@@ -623,10 +696,29 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
             key=lambda t: (t["startnummer"] is None, t["startnummer"] or 0),
         )
         story.append(Paragraph(label, _ABSCHNITT))
+        verein_spalte_breite = 40 * mm
+        # Nutzerwunsch (21.09., Screenshot DK LK2/LK3): lange Vereinsnamen ragten bei
+        # fester Schriftgröße 9 in die Nachbarspalte "Gesamtpunkte" hinein - die
+        # Vereins-Zelle ist ein reiner String (kein Paragraph), reportlab bricht solche
+        # Tabellenzellen nicht automatisch um. Entscheidung (Rückfrage beantwortet):
+        # Schrift verkleinern statt umbrechen, bleibt dabei einzeilig. Nur die einzelnen
+        # Vereins-Zellen bekommen bei Bedarf eine kleinere Schrift (per FONTSIZE-Eintrag
+        # gezielt für diese eine Zelle) - alle übrigen Spalten/Zeilen bleiben bei der
+        # üblichen Schriftgröße 9.
+        _VEREIN_PADDING_PT = 12  # Standard-Zellinnenabstand (6pt links + 6pt rechts)
+        verein_stile = []
         daten = [["Platz", "Start-Nr.", "Name", "Verein", "Gesamtpunkte", "Wertnote"]]
-        for t in gruppe:
-            daten.append(["", _wert(t["startnummer"]), f"{t['nachname']}, {t['vorname']}", _wert(t["verein"]), "", ""])
-        tabelle = Table(daten, colWidths=[16 * mm, 18 * mm, 46 * mm, 40 * mm, 26 * mm, 24 * mm], repeatRows=1)
+        for zeile, t in enumerate(gruppe, start=1):
+            verein_text = _wert(t["verein"])
+            daten.append(["", _wert(t["startnummer"]), f"{t['nachname']}, {t['vorname']}", verein_text, "", ""])
+            if verein_text and stringWidth(verein_text, "Helvetica", 9) > verein_spalte_breite - _VEREIN_PADDING_PT:
+                groesse = _schriftgroesse_fuer_breite(
+                    verein_text, verein_spalte_breite - _VEREIN_PADDING_PT, start_groesse=9, min_groesse=5.5,
+                )
+                verein_stile.append(("FONTSIZE", (3, zeile), (3, zeile), groesse))
+        tabelle = Table(
+            daten, colWidths=[16 * mm, 18 * mm, 46 * mm, verein_spalte_breite, 26 * mm, 24 * mm], repeatRows=1,
+        )
         tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
@@ -636,6 +728,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
             # Schreiben bleibt (reine Kopfzeile bleibt kompakt).
             ("TOPPADDING", (0, 1), (-1, -1), 3.5 * mm),
             ("BOTTOMPADDING", (0, 1), (-1, -1), 3.5 * mm),
+            *verein_stile,
         ]))
         story.append(tabelle)
         story.append(Spacer(1, 4 * mm))
@@ -671,6 +764,33 @@ _PRAEDIKAT_TEXT = {
     "V": "Vorzüglich", "SG": "Sehr Gut", "G": "Gut", "B": "Befriedigend", "nB": "nicht Bestanden",
     DISQUALIFIZIERT_ABK: "Disqualifikation", ABBRUCH_ABK: "Abbruch",
 }
+
+# Spaltenbreiten der Prädikat-Matrix (Nutzerwunsch 21.09., siehe _STAT_MATRIX_KOPF oben):
+# je knapp genug bemessen, dass das jeweils längste Wort der Spaltenüberschrift bei
+# Schriftgröße 6.5 (Helvetica-Bold) einzeilig hineinpasst (Textbreite + Standard-
+# Zellinnenabstand 6pt links/rechts), aber nicht großzügiger - die Gesamtbreite muss auf
+# die nutzbare Seitenbreite (A4 quer, 267mm bei 15mm Rand) passen. Die DK-Spalten
+# brauchen dafür deutlich weniger Platz ("LK 1"/"LK 2"/"LK 3") als die ED-Spalten (volle
+# Disziplinnamen) - deshalb bewusst unterschiedliche Breiten statt einer für alle 12
+# Spalten gemeinsamen Breite wie zuvor.
+_STAT_SPALTE_BREITE_LABEL = 30 * mm
+_STAT_SPALTE_BREITE_DK = 14 * mm
+_STAT_SPALTE_BREITEN_ED = {
+    "Trümmerfeld": 19 * mm,
+    "Behältnisstrecke": 23 * mm,
+    "Flächensuche": 20 * mm,
+}
+
+
+def _stat_spalte_breite(spalte_key: str) -> float:
+    """Liefert die passende Spaltenbreite zu einem _STAT_SPALTEN-Schlüssel ("DK LK 1"
+    bzw. "ED LK <n> <Disziplin>", siehe leistungsklasse_label() in db.py)."""
+    if spalte_key.startswith("DK "):
+        return _STAT_SPALTE_BREITE_DK
+    for disziplin, breite in _STAT_SPALTE_BREITEN_ED.items():
+        if disziplin in spalte_key:
+            return breite
+    return _STAT_SPALTE_BREITE_DK  # Fallback, sollte bei den heutigen 6 Kombinationen nie eintreten
 
 
 def _statistik_kopftabelle(veranstaltung: dict | None) -> Table:
@@ -717,7 +837,7 @@ def _statistik_praedikat_matrix(fertig) -> Table:
         zeile += [Paragraph(str(zaehler[(spalte_key, abk)]), _STAT_MATRIX_ZELLE) for spalte_key, _ in _STAT_SPALTEN]
         daten.append(zeile)
 
-    spalten_breiten = [32 * mm] + [19 * mm] * len(_STAT_SPALTEN)
+    spalten_breiten = [_STAT_SPALTE_BREITE_LABEL] + [_stat_spalte_breite(spalte_key) for spalte_key, _ in _STAT_SPALTEN]
     tabelle = Table(daten, colWidths=spalten_breiten, repeatRows=2)
     tabelle.setStyle(TableStyle([
         ("GRID", (0, 1), (-1, -1), 0.5, colors.black),
@@ -734,14 +854,58 @@ def _statistik_praedikat_matrix(fertig) -> Table:
     return tabelle
 
 
+def _statistik_jugendliche_tabelle(fertig, teilnehmer_je_id: dict, pruefungsdatum: str | None) -> Table:
+    """Zusatztabelle 'Jugendliche' (Nutzerwunsch 21.09., Rückmeldung 'Statistik/
+    Jugendliche': '(bei uns im Verband müssen Jugendliche gesondert ausgewiesen werden -
+    weiß nicht ob das bei euch auch ist?)'. Entscheidung (Rückfrage beantwortet): jetzt
+    als generelles Feature umgesetzt, nicht verbandsspezifisch konfigurierbar;
+    Alterskriterium unter 18 Jahre, Stichtag Prüfungsdatum - siehe db.ist_jugendlicher().
+    Zählt - unabhängig vom erreichten Prädikat - wie viele der vollständig bewerteten
+    Teilnehmer je Art/Leistungsklasse-Spalte (dieselben Spalten wie die Prädikat-Matrix
+    oben, gleiche Breiten) zum Prüfungstag noch minderjährig waren. Lehnt sich bewusst an
+    die Prädikat-Matrix an, nur mit einer einzigen Datenzeile statt einer je Prädikat -
+    eigene Einschätzung, da eine zusätzliche Zeile INNERHALB der Prädikat-Matrix die dort
+    gezählten Prädikate verfälscht hätte (Jugendliche verteilen sich auf alle Prädikate,
+    sind keine eigene Prädikats-Kategorie)."""
+    zaehler = {spalte_key: 0 for spalte_key, _ in _STAT_SPALTEN}
+    for t in fertig:
+        alt_teilnehmer = teilnehmer_je_id.get(t.id)
+        if alt_teilnehmer and ist_jugendlicher(alt_teilnehmer.get("geburtsdatum"), pruefungsdatum):
+            if t.leistungsklasse in zaehler:
+                zaehler[t.leistungsklasse] += 1
+
+    zeile_unterkopf = [Paragraph("Jugendliche<br/>(u18)", _STAT_MATRIX_KOPF)] + [
+        Paragraph(header, _STAT_MATRIX_KOPF) for _, header in _STAT_SPALTEN
+    ]
+    zeile_werte = [Paragraph("Anzahl", _STAT_MATRIX_KOPF)] + [
+        Paragraph(str(zaehler[spalte_key]), _STAT_MATRIX_ZELLE) for spalte_key, _ in _STAT_SPALTEN
+    ]
+
+    spalten_breiten = [_STAT_SPALTE_BREITE_LABEL] + [_stat_spalte_breite(spalte_key) for spalte_key, _ in _STAT_SPALTEN]
+    tabelle = Table([zeile_unterkopf, zeile_werte], colWidths=spalten_breiten)
+    tabelle.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.5 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5 * mm),
+    ]))
+    return tabelle
+
+
 def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     """Statistik-PDF nach der Original-Vorlage: Kopf-Angaben zum Termin (Verein,
     Vereins-Nr., Prüfungsnummer, Prüfungstag, Richter 1-5, Prüfungsleiter) sowie
     eine Kreuztabelle, die für jede Art/Leistungsklasse-Kombination zählt, wie viele
     Teilnehmer welches Prädikat (V/SG/G/B/nB) erreicht haben. Nur vollständig erfasste
-    Ergebnisse fließen in die Zählung ein."""
+    Ergebnisse fließen in die Zählung ein. Darunter (Nutzerwunsch 21.09.) eine gesonderte
+    kleine Tabelle, wie viele dieser Teilnehmer je Spalte zum Prüfungsdatum noch
+    Jugendliche (unter 18 Jahre) waren - siehe _statistik_jugendliche_tabelle()."""
     veranstaltung = get_veranstaltung(conn)
     fertig, _ausstehend = berechne_auswertung(conn)
+    teilnehmer_je_id = {str(t["id"]): t for t in list_teilnehmer(conn)}
+    pruefungsdatum = veranstaltung.get("datum") if veranstaltung else None
 
     story: list = [
         Paragraph("Spürhundsport (SHS) – Statistik / Sportbeitrag", _STAT_TITEL),
@@ -749,6 +913,10 @@ def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
         _statistik_kopftabelle(veranstaltung),
         Spacer(1, 5 * mm),
         _statistik_praedikat_matrix(fertig),
+        Spacer(1, 5 * mm),
+        Paragraph("Jugendliche (unter 18 Jahre am Prüfungstag):", _STAT_KOPF_LABEL),
+        Spacer(1, 1.5 * mm),
+        _statistik_jugendliche_tabelle(fertig, teilnehmer_je_id, pruefungsdatum),
     ]
 
     SimpleDocTemplate(
@@ -760,28 +928,45 @@ def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
 # --- Übersicht für Prüfungsleitung ----------------------------------------
 #
 # Layout nach Vorlage aus der Originaldatei ("Übersicht für Prüfungsleitung"): eine Zeile
-# je Teilnehmer mit Stammdaten und der Prüfungsgebühr, dazu drei Spalten, die am
-# Prüfungstag am Anmeldetisch von Hand abgehakt werden (bezahlt?/Impfpass kontrolliert?/
-# Sportbeitrag abgegeben?) - bewusst KEINE digitalen Felder dafür, siehe Rückmeldung des
-# Nutzers: diese drei Punkte werden erst am Prüfungstag selbst erledigt, die Prüfungsgebühr
-# dagegen ist vorab bekannt (siehe Veranstaltungsdaten/pruefungsgebuehr_fuer_art).
+# je Teilnehmer mit Stammdaten und der Prüfungsgebühr. "bezahlt?" wird aus dem digital
+# gepflegten Bezahlt-Status befüllt (siehe db.setze_bezahlt/app.TeilnehmerTab).
+#
+# Nutzerwunsch (21.09.): "Vielleicht kannst ja im Programm das mit dem Impfpass auch noch
+# ergänzen? Dann hätte man alles digital." Entscheidung (Rückfrage beantwortet): kein
+# bloßes Ja/Nein-Häkchen, sondern ein DATUM je Teilnehmer/Hund. Bewusst KEIN neues,
+# separates Datenbankfeld dafür angelegt: das bereits bestehende Teilnehmerfeld
+# `tollwutimpfung_bis` ("Tollwutimpfung gültig bis", siehe TeilnehmerDialog/
+# _TEILNEHMER_NEUE_SPALTEN in db.py) IST inhaltlich genau das, was am Prüfungstag als
+# "Impfpass kontrolliert" geprüft wird (Tollwut ist die für den Start relevante Pflicht-
+# impfung) - ein zweites Feld hätte nur Doppelpflege riskiert. Die Spalte "Kontrolle
+# Impfpass erledigt?" zeigt daher jetzt direkt dieses Datum statt eines leeren
+# Ankreuzfelds; ist das Datum vor dem Prüfungstag abgelaufen (oder ganz leer), wird die
+# Zelle rot/fett hervorgehoben, damit es der Prüfungsleitung sofort auffällt.
+#
+# "Abgabe Sportbeitrag" wurde auf Wunsch des Nutzers ("berechnet unser Verband anhand der
+# im Portal erfassten Starterzahl selbst [...] Könnte man aus der Übersicht raus lassen")
+# ersatzlos entfernt.
 
 _UEBERSICHT_KOPF = ParagraphStyle(
     "SHSUebersichtKopf", parent=_STYLES["Normal"], fontSize=8, fontName="Helvetica-Bold", leading=9.5,
 )
 _UEBERSICHT_ZELLE = ParagraphStyle("SHSUebersichtZelle", parent=_STYLES["Normal"], fontSize=8.5, leading=10)
+_UEBERSICHT_ZELLE_ROT = ParagraphStyle(
+    "SHSUebersichtZelleRot", parent=_UEBERSICHT_ZELLE, textColor=colors.red, fontName="Helvetica-Bold",
+)
 
 
 def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     """Übersicht für die Prüfungsleitung: Nachname/Vorname/Verein/Hund/Chip-Nr./
     Leistungsklasse aus den Stammdaten, dazu die Prüfungsgebühr (aus den
-    Veranstaltungsdaten, je nach Art ED/DK unterschiedlich) sowie die Spalte "bezahlt?"
-    (jetzt aus dem in der Teilnehmerliste gepflegten Bezahlt-Status befüllt, siehe
-    db.setze_bezahlt/app.TeilnehmerTab), und zwei weiterhin leere Ankreuzspalten
-    ("Kontrolle Impfpass erledigt?", "Abgabe Sportbeitrag"), die am Prüfungstag von Hand
-    abgehakt werden. Sortiert nach Nachname/Vorname."""
+    Veranstaltungsdaten, je nach Art ED/DK unterschiedlich), die Spalte "bezahlt?" (aus
+    dem in der Teilnehmerliste gepflegten Bezahlt-Status) sowie - seit 21.09. digital
+    statt Ankreuzfeld - "Impfpass gültig bis" (aus dem Stammdatenfeld
+    `tollwutimpfung_bis`, siehe Modulkommentar oben), rot hervorgehoben bei fehlendem
+    oder zum Prüfungstag bereits abgelaufenem Datum. Sortiert nach Nachname/Vorname."""
     veranstaltung = get_veranstaltung(conn)
     teilnehmer = sorted(list_teilnehmer(conn), key=lambda t: (t["nachname"], t["vorname"]))
+    pruefungsdatum = veranstaltung.get("datum") if veranstaltung else None
 
     story: list = []
     titel = "Übersicht für Prüfungsleitung"
@@ -789,8 +974,8 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
         titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
-        "„Kontrolle Impfpass erledigt?“ und „Abgabe Sportbeitrag“ "
-        "bitte am Prüfungstag von Hand abhaken.",
+        "Rot hervorgehobene „Impfpass gültig bis“-Einträge sind zum Prüfungstag "
+        "abgelaufen oder noch nicht hinterlegt.",
         _HINWEIS,
     ))
     story.append(Spacer(1, 2 * mm))
@@ -800,11 +985,20 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     else:
         kopf_texte = [
             "Nachname", "Vorname", "Verein", "Hund", "Chip-Nr.", "Leistungs-\nklasse",
-            "Prüfungs-\ngebühr", "bezahlt?", "Kontrolle\nImpfpass\nerledigt?", "Abgabe\nSportbeitrag",
+            "Prüfungs-\ngebühr", "bezahlt?", "Impfpass\ngültig bis",
         ]
         daten = [[Paragraph(k.replace("\n", "<br/>"), _UEBERSICHT_KOPF) for k in kopf_texte]]
         for t in teilnehmer:
             gebuehr = _euro_text(pruefungsgebuehr_fuer_art(veranstaltung, t["art"]))
+            impfung_iso = t["tollwutimpfung_bis"]
+            # Abgelaufen = Datum liegt vor dem Prüfungstag; beide Werte im Format
+            # JJJJ-MM-TT (siehe db.py) sortieren als String bereits korrekt chronologisch,
+            # ein echtes Datums-Parsing ist dafür nicht nötig. Kein Datum hinterlegt gilt
+            # ebenfalls als hervorhebenswert (unbekannt = ungeprüft).
+            abgelaufen_oder_leer = (
+                not impfung_iso or (pruefungsdatum and impfung_iso.strip() < pruefungsdatum.strip())
+            )
+            impfung_stil = _UEBERSICHT_ZELLE_ROT if abgelaufen_oder_leer else _UEBERSICHT_ZELLE
             daten.append([
                 Paragraph(_p_wert(t["nachname"]), _UEBERSICHT_ZELLE),
                 Paragraph(_p_wert(t["vorname"]), _UEBERSICHT_ZELLE),
@@ -814,9 +1008,9 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
                 Paragraph(leistungsklasse_label(t), _UEBERSICHT_ZELLE),
                 Paragraph(gebuehr, _UEBERSICHT_ZELLE),
                 Paragraph("Ja" if t["bezahlt"] else "", _UEBERSICHT_ZELLE),
-                "", "",
+                Paragraph(_datum_kurz(impfung_iso) or "–", impfung_stil),
             ])
-        spalten = [26 * mm, 22 * mm, 32 * mm, 24 * mm, 30 * mm, 34 * mm, 20 * mm, 20 * mm, 30 * mm, 28 * mm]
+        spalten = [26 * mm, 22 * mm, 32 * mm, 24 * mm, 30 * mm, 34 * mm, 20 * mm, 20 * mm, 28 * mm]
         tabelle = Table(daten, colWidths=spalten, repeatRows=1)
         tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -824,8 +1018,6 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("TOPPADDING", (0, 0), (-1, 0), 1.5 * mm),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 1.5 * mm),
-            # Extra Innenabstand in den Datenzeilen, damit die drei leeren Spalten von
-            # Hand gut abzuhaken sind.
             ("TOPPADDING", (0, 1), (-1, -1), 2.5 * mm),
             ("BOTTOMPADDING", (0, 1), (-1, -1), 2.5 * mm),
         ]))

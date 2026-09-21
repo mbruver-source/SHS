@@ -409,17 +409,25 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Katja Bruver", text)
         self.assertIn("Samstag, 19. September 2026", text)
         # Prädikat-Matrix: Spaltenüberschriften und die Zeile für den erreichten Wert.
-        # Hinweis: In der schmalen Matrix-Spalte wird "Trümmerfeld" zeilenweise
-        # umgebrochen (auch mitten im Wort); pypdf extrahiert das als getrennte
-        # Textfragmente. Zeilenumbrüche entfernen wir daher vor dieser Prüfung.
+        # Nutzerwunsch (21.09., "Kosmetik"): die Spalten wurden verbreitert und die
+        # Kopfschrift verkleinert (siehe _stat_spalte_breite() in pdf_export.py), damit
+        # "Trümmerfeld"/"Flächensuche"/"Behältnisstrecke" NICHT mehr mitten im Wort
+        # umbrechen - text.replace("\n", "") ist dadurch nicht mehr zwingend nötig, bleibt
+        # hier aber defensiv stehen (schadet nicht, falls künftig doch wieder umgebrochen
+        # würde).
         text_ohne_umbrueche = text.replace("\n", "")
         self.assertIn("Dreikampf", text)
         self.assertIn("Einzeldisziplin", text)
         self.assertIn("Trümmerfeld", text_ohne_umbrueche)
+        self.assertIn("Flächensuche", text_ohne_umbrueche)
+        self.assertIn("Behältnisstrecke", text_ohne_umbrueche)
         self.assertIn("Vorzüglich (V)", text)
         self.assertIn("nicht Bestanden (nB)", text)
         # Der ausstehende Teilnehmer B fließt nicht in die Zählung ein.
         self.assertNotIn("B, B", text)
+        # Jugendliche-Zusatztabelle (Nutzerwunsch 21.09., siehe eigener Test unten) ist
+        # immer Teil der Statistik-PDF, auch ohne Jugendliche im Termin.
+        self.assertIn("Jugendliche", text)
 
     def test_statistik_zaehlt_disqualifikation_und_abbruch_in_eigenen_zeilen(self):
         # Nutzerwunsch (21.09.): die Prädikat-Matrix bekommt zwei neue Zeilen
@@ -437,17 +445,45 @@ class TestPdfExport(unittest.TestCase):
         pfad = self._pfad("statistik_disq_abbruch.pdf")
         pdf_export.erstelle_statistik_pdf(self.conn, pfad)
         text = _text(pfad)
-        # Die Zeilenbeschriftung "Disqualifikation (DISQ)" ist länger als die übrigen
-        # Prädikat-Zeilen und wird in der schmalen Matrix-Spalte umgebrochen - pypdf
-        # extrahiert das als getrennte Textfragmente (siehe auch "Trümmerfeld"-Umbruch
-        # weiter oben in test_statistik_zeigt_kopfangaben_und_praedikat_matrix).
-        text_ohne_umbrueche = text.replace("\n", "")
-
-        self.assertIn("Disqualifikation(DISQ)", text_ohne_umbrueche)
+        # Die Zeilenbeschriftung "Disqualifikation (DISQ)" passt seit der Spaltenbreiten-
+        # Anpassung (21.09., siehe test_statistik_zeigt_kopfangaben_und_praedikat_matrix
+        # oben) einzeilig in die Prädikat-Spalte, kein Umbruch mehr nötig.
+        self.assertIn("Disqualifikation (DISQ)", text)
         self.assertIn("Abbruch (ABBR)", text)
         # Beide Teilnehmer fließen NICHT in die "ausstehend"-Behandlung, sondern werden
         # als eigene Zeile gezählt - kein Absturz und keine falsche Wertnote.
         self.assertNotIn("Diskval", text)  # Namen erscheinen nicht in der Statistik-PDF
+
+    def test_statistik_zaehlt_jugendliche_getrennt(self):
+        # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Teilnehmer, die zum
+        # Prüfungsdatum noch unter 18 Jahre alt sind, werden in einer eigenen Zusatztabelle
+        # gezählt - unabhängig vom erreichten Prädikat.
+        set_veranstaltung(self.conn, verein="Verein", datum="2026-09-19", ort="Ort")
+        jugendlich = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Jung", vorname="J", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, geburtsdatum="2009-09-20"))  # am 19.09.2026 noch 16
+        eintragen_ergebnis(self.conn, jugendlich, "Trümmerfeld", suche=58, anzeige=38)
+        erwachsen = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Alt", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2, geburtsdatum="2000-01-01"))
+        eintragen_ergebnis(self.conn, erwachsen, "Trümmerfeld", suche=58, anzeige=38)
+        ohne_geburtsdatum = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Unbekannt", vorname="U", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=3))
+        eintragen_ergebnis(self.conn, ohne_geburtsdatum, "Trümmerfeld", suche=58, anzeige=38)
+
+        pfad = self._pfad("statistik_jugendliche.pdf")
+        pdf_export.erstelle_statistik_pdf(self.conn, pfad)
+        text = _text(pfad)
+
+        self.assertIn("Jugendliche", text)
+        # Nur EIN Jugendlicher wurde gezählt (Alt und Unbekannt zählen nicht mit) - die
+        # Namen selbst erscheinen (wie bei der Prädikat-Matrix) nicht in der PDF, deshalb
+        # hier indirekt über die Werte-Zeile der Jugendlichen-Tabelle (12 Spalten, davon
+        # genau eine "1") geprüft.
+        jugend_index = text.index("Anzahl")
+        werte_zeile = text[jugend_index:jugend_index + 60]
+        self.assertEqual(werte_zeile.count("1"), 1)
 
     def test_statistik_ohne_teilnehmer_erzeugt_leere_matrix_statt_fehler(self):
         pfad = self._pfad("statistik_leer.pdf")
@@ -479,16 +515,42 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("18,00 €", text)  # DK-Gebühr
         self.assertIn("Moebus", text)
         self.assertIn("12,00 €", text)  # ED-Gebühr
-        # "Kontrolle Impfpass erledigt?"/"Abgabe Sportbeitrag" bleiben weiterhin leer (werden
-        # von Hand abgehakt) - nur die Spaltenüberschriften erscheinen. "bezahlt?" selbst wird
-        # dagegen inzwischen aus dem gepflegten Bezahlt-Status befüllt; beide Teilnehmer hier
-        # sind (Standardwert) noch nicht als bezahlt markiert, also erscheint auch dort noch
-        # kein "Ja".
+        # Nutzerwunsch (21.09.): "Abgabe Sportbeitrag" wurde ersatzlos entfernt, "Kontrolle
+        # Impfpass erledigt?" ist jetzt die digitale Spalte "Impfpass gültig bis" (siehe
+        # eigener Test unten für die Datums-/Hervorhebungslogik). "bezahlt?" selbst wird
+        # weiterhin aus dem gepflegten Bezahlt-Status befüllt; beide Teilnehmer hier sind
+        # (Standardwert) noch nicht als bezahlt markiert, also erscheint dort noch kein "Ja".
         self.assertIn("bezahlt?", text)
-        self.assertIn("Kontrolle", text)
-        self.assertIn("Sportbeitrag", text)
+        self.assertIn("Impfpass", text)
+        self.assertIn("gültig bis", text)
+        self.assertNotIn("Kontrolle", text)
+        self.assertNotIn("Sportbeitrag", text)
         self.assertNotIn("Ja", text)
         self.assertNotIn("Nein", text)
+
+    def test_pruefungsleitung_uebersicht_zeigt_impfpass_datum(self):
+        # Nutzerwunsch (21.09.): digitaler Impfpass mit Datum statt leerem Ankreuzfeld -
+        # aus dem bestehenden Stammdatenfeld tollwutimpfung_bis befüllt (siehe
+        # Modulkommentar in pdf_export.py). Drei Fälle: gültig (nach dem Prüfungstag),
+        # abgelaufen (vor dem Prüfungstag) und gar nicht hinterlegt.
+        set_veranstaltung(self.conn, verein="Verein", datum="2026-09-19", ort="Ort")
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Gueltig", vorname="G", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, tollwutimpfung_bis="2027-01-01"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Abgelaufen", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2, tollwutimpfung_bis="2026-01-01"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Unbekannt", vorname="U", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=3))
+
+        pfad = self._pfad("pruefungsleitung_impfpass.pdf")
+        pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, pfad)
+        text = _text(pfad)
+
+        self.assertIn("01.01.2027", text)  # gültig, im kurzen TT.MM.JJJJ-Format
+        self.assertIn("01.01.2026", text)  # abgelaufen, wird trotzdem angezeigt
+        self.assertIn("–", text)  # kein Datum hinterlegt
 
     def test_pruefungsleitung_uebersicht_zeigt_bezahlt_status(self):
         add_teilnehmer(self.conn, NeuerTeilnehmer(
