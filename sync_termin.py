@@ -97,6 +97,17 @@ def _import(postgres_dsn: str | None, schema_name: str, sqlite_pfad: str) -> Non
             "Fehler beim Übertragen (bitte für diese Teilnehmer manuell prüfen): "
             + ", ".join(bericht.fehler)
         )
+    if bericht.abweichungen:
+        print(
+            "NICHT übernommen - Startnummer gehört in der Termin-Datei zu einem anderen "
+            "Teilnehmer (bitte manuell prüfen/nachtragen): " + "; ".join(bericht.abweichungen)
+        )
+    if bericht.im_web_leer:
+        # Codeprüfung 22.09., G2
+        print(
+            "Hinweis - im Web leer, Wert der Termin-Datei beibehalten (bitte prüfen, ob das "
+            "so gewollt ist): " + "; ".join(bericht.im_web_leer)
+        )
 
 
 def main() -> None:

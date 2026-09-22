@@ -19,7 +19,6 @@ Zielpfad, unter dem die PDF-Datei geschrieben wird.
 
 from __future__ import annotations
 
-import datetime
 import math
 import sqlite3
 from xml.sax.saxutils import escape as _xml_escape
@@ -41,27 +40,36 @@ from reportlab.platypus import (
 )
 
 from db import (
+    _GEGENSTAND_FELDER,
     ALLE_DISZIPLINEN,
     DISZIPLIN_SPALTEN,
     LR_EINHEITEN_JE_ART,
     LR_EINHEITEN_PRO_RICHTER,
     berechne_auswertung,
     berechne_zeitplan,
+    datum_anzeige,
+    datum_oder_none,
     gegenstand_fuer_disziplin,
     get_veranstaltung,
     ist_jugendlicher,
     leistungsklasse_label,
+    lies_datum,
     list_teilnehmer,
     pruefungsgebuehr_fuer_art,
 )
-from shs_core import ABBRUCH_ABK, DISQUALIFIZIERT_ABK, berechne_wertnote_dk, berechne_wertnote_ed
+from shs_core import (
+    ABBRUCH_ABK,
+    ABBRUCH_TEXT,
+    DISQUALIFIZIERT_ABK,
+    DISQUALIFIZIERT_TEXT,
+    berechne_wertnote_dk,
+)
 
 # --- Gemeinsame Stile -------------------------------------------------------
 
 _STYLES = getSampleStyleSheet()
 _TITEL = ParagraphStyle("SHSTitel", parent=_STYLES["Heading1"], fontSize=14, spaceAfter=2 * mm)
 _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20, spaceAfter=0)
-_UNTERTITEL = ParagraphStyle("SHSUntertitel", parent=_STYLES["Normal"], fontSize=10, spaceAfter=4 * mm)
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
 _HINWEIS = ParagraphStyle("SHSHinweis", parent=_STYLES["Normal"], fontSize=8, alignment=1, spaceAfter=2 * mm)
 _TEXT = ParagraphStyle("SHSText", parent=_STYLES["Normal"], fontSize=9.5)
@@ -91,12 +99,12 @@ def _datum_lang(iso_datum: str | None) -> str:
     ("Sonntag, 27. April 2025") - wie im Original-Statistikbogen. Ist der Wert leer oder
     nicht als Datum erkennbar, wird er unverändert zurückgegeben statt einen Fehler
     auszulösen (z. B. falls jemand ein anderes Datumsformat eingetragen hat)."""
-    if not iso_datum:
-        return ""
     try:
-        d = datetime.date.fromisoformat(iso_datum.strip())
+        d = lies_datum(iso_datum)
     except ValueError:
         return iso_datum
+    if d is None:
+        return ""
     return f"{_WOCHENTAGE[d.weekday()]}, {d.day}. {_MONATE[d.month - 1]} {d.year}"
 
 
@@ -105,13 +113,7 @@ def _datum_kurz(iso_datum: str | None) -> str:
     spalten, in denen der ausgeschriebene Langtext (_datum_lang) zu breit wäre (siehe
     Impfpass-Spalte in erstelle_pruefungsleitung_uebersicht_pdf). Ist der Wert leer oder
     nicht als Datum erkennbar, wird er wie bei _datum_lang unverändert zurückgegeben."""
-    if not iso_datum:
-        return ""
-    try:
-        d = datetime.date.fromisoformat(iso_datum.strip())
-    except ValueError:
-        return iso_datum
-    return f"{d.day:02d}.{d.month:02d}.{d.year}"
+    return datum_anzeige(iso_datum)
 
 
 def _schriftgroesse_fuer_breite(
@@ -135,8 +137,9 @@ def _schriftgroesse_fuer_breite(
 # Welcher der drei Gegenstände (frei eingetragener Text) welcher Disziplin zugeordnet ist,
 # wird seit Einführung der Gegenstand-Zuordnung (siehe NeuerTeilnehmer.gegenstand_N_disziplin
 # in db.py) pro Teilnehmer frei gewählt statt fest nach Position angenommen - Nachschlagen
-# über db.gegenstand_fuer_disziplin(). Gilt einheitlich für ED und DK.
-_GEGENSTAND_FELDER = ("gegenstand_1", "gegenstand_2", "gegenstand_3")
+# über db.gegenstand_fuer_disziplin(). Gilt einheitlich für ED und DK. Die Feldnamen
+# (_GEGENSTAND_FELDER) kommen aus db.py statt hier ein zweites Mal definiert zu werden
+# (Codeprüfung 22.09., G14).
 
 # "Verleitungen"-Hinweise und Anzahl Behältnis-Positionen je Leistungsklasse/Disziplin -
 # 1:1 aus den 12 Original-Vorlagen übernommen (siehe dortige Klammer-Hinweise).
@@ -157,6 +160,22 @@ _SUCHGEGENSTAENDE_TEXT = {1: "ein Suchgegenstand", 2: "zwei Suchgegenstände", 3
 
 def _wert(v) -> str:
     return "" if v in (None, "") else str(v)
+
+
+# Disqualifiziert/Abbruch: Abkürzung -> Anzeigetext (Codeprüfung 22.09., M3).
+_STATUS_TEXT = {DISQUALIFIZIERT_ABK: DISQUALIFIZIERT_TEXT, ABBRUCH_ABK: ABBRUCH_TEXT}
+
+
+def _status_abkuerzung(ergebnis: dict | None) -> str | None:
+    """DISQUALIFIZIERT_ABK/ABBRUCH_ABK, falls der Ergebnis-Datensatz entsprechend markiert
+    ist, sonst None - gleiche Priorität wie in db.berechne_auswertung()."""
+    if not ergebnis:
+        return None
+    if ergebnis.get("disqualifiziert"):
+        return DISQUALIFIZIERT_ABK
+    if ergebnis.get("abbruch"):
+        return ABBRUCH_ABK
+    return None
 
 
 def _p_wert(v) -> str:
@@ -188,7 +207,9 @@ def _wertungsnoten_tabelle_ed() -> Table:
     daten = [
         ["Wertungsnoten", "V = mind. 96%", "SG = 95–90%", "G = 89–80%", "B = 79–70%", "n.B. = 69–0%"],
         ["SUCHE", "60 – 58", "57 – 54", "53 – 48", "47 – 42", "41 – 0"],
-        ["ANZEIGE", "40 – 38", "37 – 36", "35 – 32", "31 – 28", "27 – 0"],
+        # ANZEIGE "V" ab 39 statt 38 (Codeprüfung 22.09., G10, Marcos Entscheidung): 96 %
+        # von 40 sind aufgerundet 39 - 38 war aus der Original-Vorlage übernommen.
+        ["ANZEIGE", "40 – 39", "38 – 36", "35 – 32", "31 – 28", "27 – 0"],
         ["von 100 P", "100 – 96", "95 – 90", "89 – 80", "79 – 70", "69 – 0"],
     ]
     tabelle = Table(daten, colWidths=[28 * mm] + [26.4 * mm] * 5)
@@ -377,6 +398,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         gegenstand = gegenstand_fuer_disziplin(t, disziplin)
         story.append(KeepTogether(_bewertungsabschnitt(disziplin, t["stufe"], suche, anzeige, gegenstand)))
 
+    status_abk = _status_abkuerzung(ergebnis)
     if t["art"] == "DK":
         story.append(Spacer(1, 3 * mm))
         vollstaendig = all(einzelpunkte[d][0] is not None and einzelpunkte[d][1] is not None for d in ALLE_DISZIPLINEN)
@@ -384,7 +406,12 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         werte_zeile = [
             _wert(sum(einzelpunkte[d]) if None not in einzelpunkte[d] else None) for d in ALLE_DISZIPLINEN
         ]
-        if vollstaendig:
+        if status_abk is not None:
+            # Disqualifiziert/Abbruch (Codeprüfung 22.09., M3): keine aus Punkten berechnete
+            # Wertnote - wie in berechne_auswertung(). Die Einzelpunkte oben bleiben als
+            # Dokumentation der Richterbewertung bewusst stehen (Marcos Entscheidung).
+            werte_zeile.append(f"{_STATUS_TEXT[status_abk]} ({status_abk})")
+        elif vollstaendig:
             gesamt = sum(sum(einzelpunkte[d]) for d in ALLE_DISZIPLINEN)
             wertnote = berechne_wertnote_dk(
                 sum(einzelpunkte["Trümmerfeld"]), sum(einzelpunkte["Flächensuche"]), sum(einzelpunkte["Behältnisstrecke"])
@@ -403,10 +430,28 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         story.append(gesamt_tabelle)
         story.append(Spacer(1, 2 * mm))
         story.append(_wertungsnoten_tabelle_dk())
+    elif status_abk is not None:
+        # ED bei Disqualifiziert/Abbruch (Marcos Entscheidung 22.09., Nachtrag zu M3): die
+        # Gesamtpunktzahl der Disziplin oben bleibt wie beim DK-Bogen als Dokumentation
+        # stehen, darunter derselbe Status wie im DK-GESAMT-Feld - sonst sähe der Bogen
+        # wie ein normal bewerteter aus.
+        story.append(Spacer(1, 3 * mm))
+        status_tabelle = Table(
+            [["ERGEBNIS", f"{_STATUS_TEXT[status_abk]} ({status_abk})"]],
+            colWidths=[42.5 * mm, 127.5 * mm],
+        )
+        status_tabelle.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("BACKGROUND", (0, 0), (0, 0), colors.whitesmoke),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ]))
+        story.append(status_tabelle)
 
     story.append(Spacer(1, 4 * mm))
     verein = veranstaltung["verein"] if veranstaltung else ""
-    datum = veranstaltung["datum"] if veranstaltung else ""
+    datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
     story.append(Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_p_wert(datum)}", _TEXT))
 
     return story
@@ -468,7 +513,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     story: list = []
     titel = "Ergebnisliste"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
@@ -485,7 +530,10 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
         daten = [["Platz", "Start-Nr.", "Name", "Gesamtpunkte", "Wertnote"]]
         for t in gruppe:
             platz = "nB" if t.platzierung is None else f"{t.platzierung}. von {t.von_startern}"
-            daten.append([platz, _wert(startnummer_je_id.get(t.id)), t.name, str(t.gesamtpunkte), f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
+            # Bei Disqualifiziert/Abbruch "–" statt einer irreführenden "0" (wie im
+            # Auswertungs-Tab der Desktop-App).
+            punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
+            daten.append([platz, _wert(startnummer_je_id.get(t.id)), t.name, punkte, f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
         if len(daten) > 1:
             tabelle = Table(daten, colWidths=[28 * mm, 20 * mm, 50 * mm, 30 * mm, 42 * mm], repeatRows=1)
             tabelle.setStyle(TableStyle([
@@ -538,6 +586,9 @@ assert math.isclose(sum(_ETIKETT_SPALTEN), ETIKETT_BREITE_MM * mm)
 _ETIKETT_ZEILEN = [ETIKETT_HOEHE_MM / 2 * mm, ETIKETT_HOEHE_MM / 2 * mm]
 _ETIKETT_TEXT = ParagraphStyle("SHSEtikettText", parent=_STYLES["Normal"], fontSize=8.5, leading=10)
 _ETIKETT_FELD = ParagraphStyle("SHSEtikettFeld", parent=_STYLES["Normal"], fontSize=8.5, fontName="Helvetica-Bold", leading=10)
+# "Gesamt: DISQ"/"Gesamt: ABBR" ist in 8,5 pt breiter als das Gesamt-Feld (Codeprüfung
+# 22.09., M3) - nur dieser Fall bekommt eine kleinere Schrift (Marcos Entscheidung).
+_ETIKETT_FELD_STATUS = ParagraphStyle("SHSEtikettFeldStatus", parent=_ETIKETT_FELD, fontSize=7)
 _ETIKETT_SHR = ParagraphStyle("SHSEtikettSHR", parent=_STYLES["Normal"], fontSize=7.5, alignment=1)
 
 # Kurzform der Disziplin nur für das Art/LK-Feld des Etiketts (z.B. "ED LK 3 Behältnis"
@@ -592,7 +643,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     zum späteren handschriftlichen Nachtragen, statt Werte zu zeigen."""
     veranstaltung = get_veranstaltung(conn)
     austragender_verein = _p_wert(veranstaltung["verein"]) if veranstaltung else ""
-    datum = _p_wert(veranstaltung["datum"]) if veranstaltung else ""
+    datum = _p_wert(_datum_kurz(veranstaltung["datum"])) if veranstaltung else ""
 
     fertig, _ausstehend = berechne_auswertung(conn)
     fertig_je_id = {erg.id: erg for erg in fertig}
@@ -615,7 +666,16 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
         if t["rufname_hund"]:
             name_info += f", {_p_wert(t['rufname_hund'])}"
 
-        if erg is not None:
+        gesamt_stil = _ETIKETT_FELD
+        if erg is not None and erg.wertnote.abkuerzung in _STATUS_TEXT:
+            # Disqualifiziert/Abbruch (Codeprüfung 22.09., M3, Marcos Entscheidung): keine
+            # Punkte auf dem offiziellen Etikett, nur der Status statt "Gesamt: 0".
+            truemmer_text = "Trümmer: -"
+            flaeche_text = "Fläche: -"
+            behaeltnis_text = "Behältnis: -"
+            gesamt_text = f"Gesamt: {erg.wertnote.abkuerzung}"
+            gesamt_stil = _ETIKETT_FELD_STATUS
+        elif erg is not None:
             truemmer_text = f"Trümmer: {_disziplin_gesamt_text(ergebnis, 'Trümmerfeld')}"
             flaeche_text = f"Fläche: {_disziplin_gesamt_text(ergebnis, 'Flächensuche')}"
             behaeltnis_text = f"Behältnis: {_disziplin_gesamt_text(ergebnis, 'Behältnisstrecke')}"
@@ -634,7 +694,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
                 Paragraph(truemmer_text, _ETIKETT_FELD),
                 Paragraph(flaeche_text, _ETIKETT_FELD),
                 Paragraph(behaeltnis_text, _ETIKETT_FELD),
-                Paragraph(gesamt_text, _ETIKETT_FELD),
+                Paragraph(gesamt_text, gesamt_stil),
                 Paragraph("SH-R", _ETIKETT_SHR),
             ],
             [Paragraph(datum, _ETIKETT_TEXT), Paragraph(name_info, _ETIKETT_TEXT), "", "", "", "", ""],
@@ -677,7 +737,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
     story: list = []
     titel = "Ergebnisliste – Formular zum Ausfüllen"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "Start-Nr., Name und Verein sind vorausgefüllt. Platz, Gesamtpunkte und Wertnote "
@@ -956,6 +1016,16 @@ _UEBERSICHT_ZELLE_ROT = ParagraphStyle(
 )
 
 
+def _impfung_hervorheben(impfung_bis: str | None, pruefungsdatum: str | None) -> bool:
+    """True, wenn die Impfpass-Zelle rot hervorgehoben werden soll: Impfung vor dem
+    Prüfungstag abgelaufen, oder kein bzw. ein nicht lesbares Impfdatum (unbekannt =
+    ungeprüft). Echter Datumsvergleich statt Stringvergleich (Codeprüfung 22.09., M5):
+    ein Altbestand in TT.MM.JJJJ wurde vorher falsch einsortiert."""
+    impfung = datum_oder_none(impfung_bis)
+    pruefung = datum_oder_none(pruefungsdatum)
+    return impfung is None or (pruefung is not None and impfung < pruefung)
+
+
 def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     """Übersicht für die Prüfungsleitung: Nachname/Vorname/Verein/Hund/Chip-Nr./
     Leistungsklasse aus den Stammdaten, dazu die Prüfungsgebühr (aus den
@@ -971,7 +1041,7 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     story: list = []
     titel = "Übersicht für Prüfungsleitung"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "Rot hervorgehobene „Impfpass gültig bis“-Einträge sind zum Prüfungstag "
@@ -991,14 +1061,9 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
         for t in teilnehmer:
             gebuehr = _euro_text(pruefungsgebuehr_fuer_art(veranstaltung, t["art"]))
             impfung_iso = t["tollwutimpfung_bis"]
-            # Abgelaufen = Datum liegt vor dem Prüfungstag; beide Werte im Format
-            # JJJJ-MM-TT (siehe db.py) sortieren als String bereits korrekt chronologisch,
-            # ein echtes Datums-Parsing ist dafür nicht nötig. Kein Datum hinterlegt gilt
-            # ebenfalls als hervorhebenswert (unbekannt = ungeprüft).
-            abgelaufen_oder_leer = (
-                not impfung_iso or (pruefungsdatum and impfung_iso.strip() < pruefungsdatum.strip())
+            impfung_stil = (
+                _UEBERSICHT_ZELLE_ROT if _impfung_hervorheben(impfung_iso, pruefungsdatum) else _UEBERSICHT_ZELLE
             )
-            impfung_stil = _UEBERSICHT_ZELLE_ROT if abgelaufen_oder_leer else _UEBERSICHT_ZELLE
             daten.append([
                 Paragraph(_p_wert(t["nachname"]), _UEBERSICHT_ZELLE),
                 Paragraph(_p_wert(t["vorname"]), _UEBERSICHT_ZELLE),
@@ -1057,7 +1122,7 @@ def erstelle_chipnummernliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     story: list = []
     titel = "Chipnummernliste"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
@@ -1113,7 +1178,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     story: list = []
     titel = "Richter-Bedarf"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "1 Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf (DK) = 3 Einheiten. Ein "
@@ -1260,7 +1325,7 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     if not plaene:
         titel = "Zeitplan"
         if veranstaltung:
-            titel += f" – {veranstaltung['verein']} ({veranstaltung['datum']})"
+            titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
         story.append(Paragraph(titel, _TITEL))
         story.append(Paragraph("Es sind noch keine Richter/Zeitplan-Einträge angelegt.", _TEXT))
     else:
@@ -1269,7 +1334,7 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
                 story.append(PageBreak())
             titel = f"Zeitplan – {plan['richter']}"
             if veranstaltung:
-                titel += f" ({veranstaltung['verein']}, {veranstaltung['datum']})"
+                titel += f" ({veranstaltung['verein']}, {_datum_kurz(veranstaltung['datum'])})"
             story.append(Paragraph(titel, _TITEL))
             story.append(Spacer(1, 2 * mm))
             if not plan["zeilen"]:

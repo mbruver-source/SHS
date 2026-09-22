@@ -53,6 +53,9 @@ jobs:
     env:
       SHS_DB_PASSWORD: smoketest
       SHS_WEB_SECRET_KEY: smoketest
+      # Seit Codeprüfung 22.09. (G1) Pflichtwert in compose.yaml - ohne ihn bricht
+      # "compose up" im Smoke-Test ab.
+      SHS_ADMIN_SETUP_CODE: smoketest
     steps:
       - name: Code auschecken
         uses: actions/checkout@v4

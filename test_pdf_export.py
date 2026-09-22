@@ -2,6 +2,7 @@
 erzeugten PDF-Text wieder ein und kontrolliert die wichtigsten Inhalte (Werte, die
 "nicht Bestanden"-Regel, die LK-abhängigen Verleitungs-Hinweise/Behältnis-Positionen)."""
 
+import math
 import os
 import tempfile
 import unittest
@@ -23,6 +24,116 @@ from db import (
     setze_ergebnis_status,
 )
 import pdf_export
+
+
+class TestImpfungHervorheben(unittest.TestCase):
+    """Codeprüfung 22.09. (M5): echter Datumsvergleich statt Stringvergleich - braucht
+    weder pypdf noch eine Datenbank."""
+
+    def test_abgelaufen_gueltig_und_unbekannt(self):
+        hervorheben = pdf_export._impfung_hervorheben
+        self.assertFalse(hervorheben("2027-01-01", "2026-09-19"))
+        self.assertTrue(hervorheben("2026-01-01", "2026-09-19"))
+        self.assertTrue(hervorheben(None, "2026-09-19"))
+        self.assertTrue(hervorheben("unleserlich", "2026-09-19"))
+        # Vorher falsch: "30.08.2026" < "2026-09-19" ist als String False -> nicht rot.
+        self.assertTrue(hervorheben("30.08.2026", "2026-09-19"))
+        self.assertFalse(hervorheben("01.01.2027", "2026-09-19"))
+        # Ohne Prüfungsdatum lässt sich "abgelaufen" nicht beurteilen.
+        self.assertFalse(hervorheben("2026-01-01", None))
+
+
+class TestRegelKonsistenz(unittest.TestCase):
+    """Codeprüfung 22.09., G10: die Bewertungsregeln stehen bewusst an mehreren Stellen
+    (shs_core-Tabellen, gedruckte Wertnoten-Bänder im Bewertungsbogen, CHECK-Constraints
+    im db.SCHEMA, Überschriften "max. 60/40 P.") - statt sie umzubauen, schlagen diese
+    Tests Alarm, sobald eine Stelle geändert wird und die anderen nicht mitziehen. Braucht
+    weder pypdf noch eine Datenbank (prüft direkt die Tabellendaten/den Quelltext)."""
+
+    # Erwartete Höchstpunktzahlen je Disziplin - bewusst hier als eigene Konstante, damit
+    # eine Änderung an nur einer Produktionsstelle auffällt.
+    SUCHE_MAX = 60
+    ANZEIGE_MAX = 40
+
+    @staticmethod
+    def _band(text: str) -> tuple[int, int]:
+        """"60 – 58" -> (60, 58)."""
+        oben, unten = (int(teil.strip()) for teil in text.split("–"))
+        return oben, unten
+
+    def _pruefe_baender(self, zeile: list[str], maximum: int, untergrenzen: list[int]):
+        """Zeile = [Beschriftung, V, SG, G, B, n.B.]: die Bänder müssen bei `maximum`
+        beginnen, lückenlos absteigen, bei 0 enden und die erwarteten Untergrenzen haben."""
+        baender = [self._band(zelle) for zelle in zeile[1:]]
+        self.assertEqual(baender[0][0], maximum, zeile)
+        self.assertEqual(baender[-1][1], 0, zeile)
+        for (_, unten), (oben_naechstes, _) in zip(baender, baender[1:]):
+            self.assertEqual(oben_naechstes, unten - 1, zeile)
+        self.assertEqual([unten for _, unten in baender[:-1]], untergrenzen, zeile)
+
+    def test_gedruckte_ed_baender_passen_zu_shs_core(self):
+        from shs_core import MINDESTPUNKTE_JE_DISZIPLIN, PUNKTE_MAX, WERTNOTEN_ED, Disziplinart
+
+        maximum = PUNKTE_MAX[Disziplinart.EINZELDISZIPLIN]
+        self.assertEqual(maximum, self.SUCHE_MAX + self.ANZEIGE_MAX)
+        daten = pdf_export._wertungsnoten_tabelle_ed()._cellvalues
+        kopf, suche, anzeige, gesamt = daten
+
+        schwellen = [schwelle for schwelle, _, _ in WERTNOTEN_ED]
+        self.assertEqual(schwellen[-1], MINDESTPUNKTE_JE_DISZIPLIN)
+        self.assertEqual(gesamt[0], f"von {maximum} P")
+        self.assertEqual(
+            [abk for _, _, abk in WERTNOTEN_ED], [zelle.split(" =")[0] for zelle in kopf[1:5]]
+        )
+        self._pruefe_baender(gesamt, maximum, schwellen)
+        # Prozent-Kopfzeile (bei ED entsprechen Punkte von 100 genau Prozent).
+        self.assertEqual(kopf[1], f"V = mind. {schwellen[0]}%")
+        prozent_untergrenzen = [int(zelle.split("–")[1].rstrip("%")) for zelle in kopf[2:5]]
+        self.assertEqual(prozent_untergrenzen, schwellen[1:])
+
+        self.assertEqual(suche[0], "SUCHE")
+        self.assertEqual(anzeige[0], "ANZEIGE")
+        # Teilleistungs-Bänder = aufgerundeter Prozentsatz der Teil-Höchstpunktzahl.
+        # (ANZEIGE "V" war bis 22.09. ab 38 gedruckt - auf Marcos Entscheidung auf 39
+        # korrigiert, jetzt ohne Ausnahme.)
+        def untergrenzen(teil_max: int) -> list[int]:
+            return [math.ceil(schwelle * teil_max / maximum) for schwelle in schwellen]
+
+        self._pruefe_baender(suche, self.SUCHE_MAX, untergrenzen(self.SUCHE_MAX))
+        self._pruefe_baender(anzeige, self.ANZEIGE_MAX, untergrenzen(self.ANZEIGE_MAX))
+
+    def test_gedruckte_dk_baender_passen_zu_shs_core(self):
+        from shs_core import PUNKTE_MAX, WERTNOTEN_DK, Disziplinart
+
+        maximum = PUNKTE_MAX[Disziplinart.DREIKAMPF]
+        self.assertEqual(maximum, 3 * PUNKTE_MAX[Disziplinart.EINZELDISZIPLIN])
+        kopf, gesamt = pdf_export._wertungsnoten_tabelle_dk()._cellvalues
+        self.assertEqual(kopf[1:5], [abk for _, _, abk in WERTNOTEN_DK])
+        self.assertEqual(gesamt[0], f"von {maximum} P")
+        self._pruefe_baender(gesamt, maximum, [schwelle for schwelle, _, _ in WERTNOTEN_DK])
+
+    def test_hoechstpunkte_im_db_schema(self):
+        import re
+
+        import db
+
+        grenzen = re.findall(r"(suche|anzeige)_\w+ INTEGER CHECK \(\w+ BETWEEN 0 AND (\d+)\)", db.SCHEMA)
+        self.assertEqual(len(grenzen), 2 * len(db.DISZIPLIN_SPALTEN))
+        for art, grenze in grenzen:
+            erwartet = self.SUCHE_MAX if art == "suche" else self.ANZEIGE_MAX
+            self.assertEqual(int(grenze), erwartet, art)
+
+    def test_hoechstpunkte_in_bewertungsbogen_ueberschrift(self):
+        import inspect
+        import re
+
+        quelltext = inspect.getsource(pdf_export)
+        self.assertEqual(
+            re.findall(r"Suchleistung des Hundes \(max\. (\d+) P\.\)", quelltext), [str(self.SUCHE_MAX)]
+        )
+        self.assertEqual(
+            re.findall(r"Anzeigeleistung des Hundes \(max\. (\d+) P\.\)", quelltext), [str(self.ANZEIGE_MAX)]
+        )
 
 
 def _text(pfad: str) -> str:
@@ -87,6 +198,8 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("96", text)  # Gesamtpunktzahl (58+38)
         # ED LK 1 hat laut Original-Vorlage KEINEN Verleitungs-Hinweis
         self.assertNotIn("Spielzeugverleitung", text)
+        # Fußzeile: Datum als TT.MM.JJJJ (Marcos Wunsch 22.09.).
+        self.assertIn("Datum: 19.09.2026", text)
 
     def test_bewertungsbogen_mit_reportlab_sonderzeichen_in_freitext_bricht_nicht_ab(self):
         # QS-Fund (19./20.09.): Paragraph() aus reportlab parst seinen Text als kleine
@@ -272,6 +385,9 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Schlecht, B", text)
         self.assertIn("nicht Bestanden", text)
         self.assertIn("nB", text)
+        # Titel: Datum als TT.MM.JJJJ (Marcos Wunsch 22.09.).
+        self.assertIn("(19.09.2026)", text)
+        self.assertNotIn("2026-09-19", text)
 
     def test_ergebnisliste_zeigt_ausstehende_teilnehmer(self):
         add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -303,7 +419,8 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Behältnis: 80", text)
         self.assertIn("Gesamt: 280", text)
         # Zeile 2: Datum, Name, eigener Verein, Rufname des Hundes.
-        self.assertIn("2026-09-19", text)
+        self.assertIn("19.09.2026", text)  # Anzeige TT.MM.JJJJ (22.09.)
+        self.assertNotIn("2026-09-19", text)
         self.assertIn("Siegreich, A, VPS Schwanheim, Bella", text)
         # Platzhalter-Feld zum späteren Abstempeln/Unterschreiben.
         self.assertIn("SH-R", text)
@@ -453,6 +570,90 @@ class TestPdfExport(unittest.TestCase):
         # Beide Teilnehmer fließen NICHT in die "ausstehend"-Behandlung, sondern werden
         # als eigene Zeile gezählt - kein Absturz und keine falsche Wertnote.
         self.assertNotIn("Diskval", text)  # Namen erscheinen nicht in der Statistik-PDF
+
+    def _dk_mit_vollen_punkten(self, nachname: str, startnummer: int) -> int:
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname=nachname, vorname="A", rufname_hund="H", verein="SGV Köppern e.V.",
+            art="DK", stufe=1, startnummer=startnummer))
+        for disziplin, punkte in [("Trümmerfeld", (60, 40)), ("Flächensuche", (60, 40)), ("Behältnisstrecke", (50, 30))]:
+            eintragen_ergebnis(self.conn, tid, disziplin, *punkte)
+        return tid
+
+    def test_bewertungsbogen_dk_disqualifiziert_zeigt_status_statt_wertnote(self):
+        # Codeprüfung 22.09. (M3): trotz vollständiger, weiter gespeicherter Punkte darf
+        # der Bogen keine berechnete Wertnote ("280 (SG)") zeigen - Einzelpunkte bleiben
+        # als Dokumentation der Richterbewertung stehen (Marcos Entscheidung).
+        tid = self._dk_mit_vollen_punkten("Diskval", 1)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False)
+
+        pfad = self._pfad("bogen_dk_disq.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+        text = _text(pfad)
+        self.assertIn("Disqualifiziert (DISQ)", text)
+        self.assertNotIn("(SG)", text)
+        self.assertNotIn("280", text)
+        self.assertIn("100", text)  # Einzelpunkte Trümmer/Fläche bleiben sichtbar
+
+    def test_bewertungsbogen_ed_abbruch_zeigt_punkte_und_status(self):
+        # Nachtrag zu M3 (Marcos Entscheidung 22.09.): wie beim DK-Bogen bleiben die
+        # Punkte stehen, zusätzlich erscheint der Status - ohne zusätzliche Seite.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Abbrecher", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=58, anzeige=38)
+        normal_pfad = self._pfad("bogen_ed_normal.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, normal_pfad)
+        self.assertNotIn("ERGEBNIS", _text(normal_pfad))
+
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=True)
+        pfad = self._pfad("bogen_ed_abbr.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+        text = _text(pfad)
+        self.assertIn("ERGEBNIS", text)
+        self.assertIn("Abbruch (ABBR)", text)
+        self.assertIn("96", text)
+        self.assertEqual(len(PdfReader(pfad).pages), len(PdfReader(normal_pfad).pages))
+
+    def test_etiketten_bei_disqualifikation_nur_status_ohne_punkte(self):
+        # Codeprüfung 22.09. (M3, Marcos Entscheidung): auf dem offiziellen Etikett keine
+        # Punkte, die nicht zählen, und kein irreführendes "Gesamt: 0".
+        tid = self._dk_mit_vollen_punkten("Diskval", 1)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False)
+
+        pfad = self._pfad("etiketten_disq.pdf")
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
+        text = _text(pfad)
+        # Einzeilig - kein Umbruch im Gesamt-Feld (dank kleinerer Schrift, siehe
+        # _ETIKETT_FELD_STATUS).
+        self.assertIn("Gesamt: DISQ", text)
+        self.assertIn("Trümmer: -", text)
+        self.assertIn("Fläche: -", text)
+        self.assertIn("Behältnis: -", text)
+        self.assertNotIn("Trümmer: 100", text)
+        self.assertNotIn("Gesamt: 0", text)
+
+    def test_etiketten_bei_abbruch_gesamt_einzeilig(self):
+        # "Gesamt: ABBR" ist der breiteste Fall (50,2 von 53,5 pt in 7 pt) - bricht er
+        # um, taucht er in der Textextraktion nicht mehr zusammenhängend auf.
+        tid = self._dk_mit_vollen_punkten("Abbrecher", 1)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=True)
+
+        pfad = self._pfad("etiketten_abbr.pdf")
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
+        self.assertIn("Gesamt: ABBR", _text(pfad))
+
+    def test_ergebnisliste_bei_abbruch_bindestrich_statt_null_punkte(self):
+        tid = self._dk_mit_vollen_punkten("Abbrecher", 1)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=True)
+
+        pfad = self._pfad("ergebnisliste_abbr.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = _text(pfad)
+        # pypdf liefert jede Tabellenzelle als eigene Zeile.
+        zeilen = [z.strip() for z in text.splitlines()]
+        self.assertIn("Abbruch (ABBR)", zeilen)
+        self.assertIn("–", zeilen)
+        self.assertNotIn("0", zeilen)
 
     def test_statistik_zaehlt_jugendliche_getrennt(self):
         # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Teilnehmer, die zum

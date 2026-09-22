@@ -45,6 +45,9 @@ _TEST_SCHEMA = "termin_test"  # Platzhalter - die SQLite-Ersatzfunktion unten ig
                                # keine Schemas/search_path)
 _ADMIN_NAME = "chef"
 _ADMIN_PASSWORT = "sicheres_passwort"
+# Codeprüfung 22.09., G1: Einrichtungs-Code für die Ersteinrichtung (in den Tests über
+# app.config statt der Umgebungsvariablen SHS_ADMIN_SETUP_CODE gesetzt, siehe setUp).
+_EINRICHTUNGS_CODE = "test-einrichtungs-code"
 
 
 def _termin_info(schema_name: str, **override) -> db.TerminInfoPostgres:
@@ -185,7 +188,10 @@ class _AppWebTestBasis(unittest.TestCase):
         for p in self._patches:
             p.start()
 
-        app_web.app.config.update(TESTING=True, SHS_POSTGRES_DSN="postgresql://test-dsn")
+        self._alter_einrichtungs_code = app_web.app.config.get("SHS_ADMIN_SETUP_CODE")
+        app_web.app.config.update(
+            TESTING=True, SHS_POSTGRES_DSN="postgresql://test-dsn", SHS_ADMIN_SETUP_CODE=_EINRICHTUNGS_CODE,
+        )
         # _CsrfTestClient statt des normalen Test-Clients - siehe dortiger Docstring:
         # ergänzt jede POST-Anfrage automatisch um ein gültiges CSRF-Token, damit diese
         # Tests weiterhin die fachliche Formularlogik prüfen, ohne an der (separat
@@ -196,6 +202,7 @@ class _AppWebTestBasis(unittest.TestCase):
     def tearDown(self):
         for p in self._patches:
             p.stop()
+        app_web.app.config["SHS_ADMIN_SETUP_CODE"] = self._alter_einrichtungs_code
         self.conn.close()
         if os.path.exists(self.pfad):
             os.remove(self.pfad)
@@ -206,7 +213,10 @@ class _AppWebTestBasis(unittest.TestCase):
         direkt auf der Teilnehmerliste, wie es die bestehenden Tests unten erwarten."""
         return self.client.post(
             "/",
-            data={"benutzername": benutzername, "passwort": passwort, "passwort_wiederholung": passwort},
+            data={
+                "benutzername": benutzername, "passwort": passwort, "passwort_wiederholung": passwort,
+                "einrichtungs_code": _EINRICHTUNGS_CODE,
+            },
             follow_redirects=True,
         )
 
@@ -226,7 +236,10 @@ class TestAppWeb(_AppWebTestBasis):
 
     def test_ersteinrichtung_lehnt_zu_kurzes_passwort_ab(self):
         antwort = self.client.post(
-            "/", data={"benutzername": _ADMIN_NAME, "passwort": "kurz", "passwort_wiederholung": "kurz"}
+            "/", data={
+                "benutzername": _ADMIN_NAME, "passwort": "kurz", "passwort_wiederholung": "kurz",
+                "einrichtungs_code": _EINRICHTUNGS_CODE,
+            }
         )
         self.assertIn("mindestens 8 Zeichen".encode(), antwort.data)
         self.assertFalse(db.gibt_es_admin(self.conn))
@@ -234,10 +247,58 @@ class TestAppWeb(_AppWebTestBasis):
     def test_ersteinrichtung_lehnt_unterschiedliche_passwoerter_ab(self):
         antwort = self.client.post(
             "/",
-            data={"benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT, "passwort_wiederholung": "anders123"},
+            data={
+                "benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT, "passwort_wiederholung": "anders123",
+                "einrichtungs_code": _EINRICHTUNGS_CODE,
+            },
         )
         self.assertIn("stimmen nicht überein".encode(), antwort.data)
         self.assertFalse(db.gibt_es_admin(self.conn))
+
+    # Codeprüfung 22.09., G1: Ersteinrichtung nur mit dem Einrichtungs-Code aus
+    # SHS_ADMIN_SETUP_CODE (hier über app.config gesetzt, siehe setUp).
+
+    def _ersteinrichtung_mit_code(self, code):
+        daten = {"benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT, "passwort_wiederholung": _ADMIN_PASSWORT}
+        if code is not None:
+            daten["einrichtungs_code"] = code
+        return self.client.post("/", data=daten)
+
+    def test_ersteinrichtung_mit_falschem_code_legt_keinen_admin_an(self):
+        antwort = self._ersteinrichtung_mit_code("falscher-code")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Einrichtungs-Code ist falsch".encode(), antwort.data)
+        self.assertFalse(db.gibt_es_admin(self.conn))
+
+    def test_ersteinrichtung_ohne_code_feld_legt_keinen_admin_an(self):
+        antwort = self._ersteinrichtung_mit_code(None)
+        self.assertIn("Einrichtungs-Code ist falsch".encode(), antwort.data)
+        self.assertFalse(db.gibt_es_admin(self.conn))
+
+    def test_ersteinrichtung_mit_nicht_ascii_code_liefert_fehler_statt_absturz(self):
+        # secrets.compare_digest wirft bei str mit Nicht-ASCII-Zeichen einen TypeError -
+        # deshalb vergleicht login() Bytes (siehe dortiger Kommentar).
+        antwort = self._ersteinrichtung_mit_code("Prüfung-ä")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertFalse(db.gibt_es_admin(self.conn))
+
+    def test_ersteinrichtung_mit_richtigem_code_legt_admin_an(self):
+        antwort = self._ersteinrichtung_mit_code(_EINRICHTUNGS_CODE)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(db.gibt_es_admin(self.conn))
+
+    def test_ersteinrichtung_ohne_konfigurierten_code_wird_verweigert(self):
+        for nicht_konfiguriert in ("", None):
+            with self.subTest(code=nicht_konfiguriert):
+                app_web.app.config["SHS_ADMIN_SETUP_CODE"] = nicht_konfiguriert
+                seite = self.client.get("/")
+                self.assertIn("Ersteinrichtung ist gesperrt".encode(), seite.data)
+                self.assertNotIn(b'name="benutzername"', seite.data)
+                # Auch ein leer mitgeschickter Code darf gegen einen leeren
+                # "konfigurierten" Code NICHT als Treffer durchgehen.
+                antwort = self._ersteinrichtung_mit_code("")
+                self.assertIn("Ersteinrichtung ist gesperrt".encode(), antwort.data)
+                self.assertFalse(db.gibt_es_admin(self.conn))
 
     def test_normaler_login_erscheint_sobald_admin_existiert(self):
         self._anmelden()
@@ -315,6 +376,17 @@ class TestAppWeb(_AppWebTestBasis):
         antwort = self._anmelden()
         self.assertIn("Verein A".encode(), antwort.data)
         self.assertIn("Verein B".encode(), antwort.data)
+
+    def test_terminauswahl_zeigt_datum_deutsch(self):
+        # Marcos Wunsch 22.09.: Datum überall als TT.MM.JJJJ (Template-Filter "datum").
+        self.termine = [
+            _termin_info("termin_a", verein="Verein A", datum="2026-09-27"),
+            _termin_info("termin_b", verein="Verein B"),
+        ]
+        antwort = self._anmelden()
+        self.assertIn(b"27.09.2026", antwort.data)
+        self.assertNotIn(b"2026-09-27", antwort.data)
+        self.assertIn(b"ohne Datum", antwort.data)
 
     def test_termin_auswahl_per_post_setzt_schema_und_leitet_weiter(self):
         self.termine = [
@@ -681,6 +753,84 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIsNone(ergebnis["suche_truemmerfeld"])
         self.assertIsNone(ergebnis["suche_flaechensuche"])
 
+    # --- Halb ausgefüllte Disziplin (Codeprüfung 22.09., G6) ---------------------
+
+    def test_nur_suche_ohne_anzeige_wird_abgelehnt_und_nichts_gespeichert(self):
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="H", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=8,
+        ))
+        self._anmelden()
+        antwort = self.client.post(
+            f"/teilnehmer/{teilnehmer_id}",
+            data={"suche_Trümmerfeld": "45", "anzeige_Trümmerfeld": ""},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.data.decode()
+        self.assertIn("Suche UND Anzeige", text)
+        # Eingabe bleibt im Formular stehen (siehe _zeilen_aus_formular).
+        self.assertEqual(self._formularfeld(text, "suche_Trümmerfeld"), "45")
+        ergebnis = db.get_ergebnis(self.conn, teilnehmer_id)
+        self.assertIsNone(ergebnis["suche_truemmerfeld"])
+        self.assertIsNone(ergebnis["anzeige_truemmerfeld"])
+
+    def test_dk_halbe_disziplin_blockiert_speichern_aller_disziplinen(self):
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="I", rufname_hund="Rex", art="DK", stufe=2, startnummer=9,
+        ))
+        self._anmelden()
+        seite = self.client.get(f"/teilnehmer/{teilnehmer_id}").data.decode()
+        formular = self._formulardaten_aus_seite(seite, db.ALLE_DISZIPLINEN)
+        formular["suche_Flächensuche"] = "40"
+        formular["anzeige_Flächensuche"] = "20"
+        formular["anzeige_Trümmerfeld"] = "30"  # Suche fehlt
+        antwort = self.client.post(f"/teilnehmer/{teilnehmer_id}", data=formular)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Suche UND Anzeige", antwort.data.decode())
+        self.assertIn("Trümmerfeld", antwort.data.decode())
+        ergebnis = db.get_ergebnis(self.conn, teilnehmer_id)
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+        self.assertIsNone(ergebnis["anzeige_truemmerfeld"])
+
+    def test_unveraenderter_halber_altbestand_blockiert_andere_disziplin_nicht(self):
+        """Eine bereits halb gespeicherte Disziplin (Altbestand von vor dieser Prüfung)
+        wird nur dann bemängelt, wenn der Richter sie selbst bearbeitet - das Speichern
+        einer ANDEREN Disziplin desselben Teilnehmers muss weiterhin klappen, und der
+        Altbestand bleibt unangetastet (Lost-Update-Schutz)."""
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="J", rufname_hund="Rex", art="DK", stufe=2, startnummer=10,
+        ))
+        # Direkt per SQL statt über db.eintragen_ergebnis, damit der Altbestand auch dann
+        # entsteht, falls eintragen_ergebnis selbst halbe Eingaben künftig ablehnt.
+        self.conn.execute(
+            "UPDATE ergebnisse SET suche_truemmerfeld = 50, anzeige_truemmerfeld = NULL WHERE teilnehmer_id = ?",
+            (teilnehmer_id,),
+        )
+        self.conn.commit()
+        self._anmelden()
+        seite = self.client.get(f"/teilnehmer/{teilnehmer_id}").data.decode()
+        formular = self._formulardaten_aus_seite(seite, db.ALLE_DISZIPLINEN)
+        self.assertEqual(formular["suche_Trümmerfeld"], "50")
+        formular["suche_Flächensuche"] = "40"
+        formular["anzeige_Flächensuche"] = "20"
+        antwort = self.client.post(f"/teilnehmer/{teilnehmer_id}", data=formular)
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, teilnehmer_id)
+        self.assertEqual(ergebnis["suche_flaechensuche"], 40)
+        self.assertEqual(ergebnis["anzeige_flaechensuche"], 20)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 50)
+        self.assertIsNone(ergebnis["anzeige_truemmerfeld"])
+
+        # Bearbeitet der Richter den halben Altbestand dagegen selbst (weiterhin halb),
+        # wird er abgelehnt.
+        seite = self.client.get(f"/teilnehmer/{teilnehmer_id}").data.decode()
+        formular = self._formulardaten_aus_seite(seite, db.ALLE_DISZIPLINEN)
+        formular["suche_Trümmerfeld"] = "55"
+        antwort = self.client.post(f"/teilnehmer/{teilnehmer_id}", data=formular)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Suche UND Anzeige", antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, teilnehmer_id)["suche_truemmerfeld"], 50)
+
     # --- Termine veröffentlichen/zurückholen/löschen (Upload/Download) -----------
 
     @staticmethod
@@ -806,6 +956,25 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertEqual(antwort.status_code, 200)
         self.assertNotIn("bereits einen veröffentlichten Termin".encode(), antwort.data)
 
+    def test_termin_zurueckholen_zeigt_abweichungen(self):
+        # Codeprüfung 22.09. (M2): nicht übernommene Ergebnisse wegen abweichendem
+        # Teilnehmer müssen für den Admin sichtbar sein.
+        self.import_bericht = db.ImportBericht(
+            aktualisiert=0, ohne_startnummer_uebersprungen=[], nicht_gefunden=[],
+            abweichungen=["Nr. 1: Web Muster, A (Rex, ED LK 1 Trümmerfeld) ≠ Termin-Datei Beispiel, B (Bello, ED LK 1 Trümmerfeld)"],
+        )
+        self._anmelden()
+        antwort = self.client.post(
+            f"/admin/termine/{_TEST_SCHEMA}/zurueckholen",
+            data={"sqlite_datei": self._leere_sqlite_datei()},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.data.decode()
+        self.assertIn("NICHT übernommen", text)
+        self.assertIn("Beispiel, B (Bello, ED LK 1 Trümmerfeld)", text)
+
     def test_termin_zurueckholen_zeigt_bericht_und_download_funktioniert(self):
         self.import_bericht = db.ImportBericht(
             aktualisiert=2, ohne_startnummer_uebersprungen=["Muster, A"], nicht_gefunden=["7"]
@@ -919,6 +1088,45 @@ class TestAppWeb(_AppWebTestBasis):
         antwort = self.client.get("/teilnehmer", follow_redirects=True)
         self.assertIn("kein Termin veröffentlicht".encode(), antwort.data)
 
+    def test_termin_loeschen_lehnt_unbekanntes_schema_ab(self):
+        # Codeprüfung 22.09., G7: wie beim Zurückholen nur registrierte Termine - ein
+        # unbekannter (wenn auch formal gültiger) Schema-Name erreicht
+        # db.loesche_termin_postgres gar nicht erst.
+        self._anmelden()
+        antwort = self.client.post("/admin/termine/termin_unbekannt/loeschen")
+        self.assertEqual(antwort.status_code, 400)
+        self.assertEqual(self.geloeschte_termine, [])
+        self.assertEqual([t.schema_name for t in self.termine], [_TEST_SCHEMA])
+
+    # --- Session-Gültigkeit (Codeprüfung 22.09., G8) -----------------------------
+
+    def _session_cookie_mit_alter(self, sekunden: int) -> str:
+        """Erzeugt ein korrekt signiertes Session-Cookie für den angemeldeten Admin,
+        dessen (von itsdangerous mitsignierter) Zeitstempel `sekunden` in der
+        Vergangenheit liegt - simuliert ein altes, z. B. abgegriffenes Cookie."""
+        serializer = app_web.app.session_interface.get_signing_serializer(app_web.app)
+        daten = {"benutzername": _ADMIN_NAME, "ist_admin": True, "schema_name": _TEST_SCHEMA}
+        with patch("time.time", return_value=time.time() - sekunden):
+            return serializer.dumps(daten)
+
+    def test_session_lebensdauer_ist_12_stunden(self):
+        from datetime import timedelta
+        self.assertEqual(app_web.app.permanent_session_lifetime, timedelta(hours=12))
+
+    def test_session_cookie_aelter_als_12_stunden_wird_abgewiesen(self):
+        db.admin_einrichten(self.conn, _ADMIN_NAME, _ADMIN_PASSWORT)
+        cookie_name = app_web.app.config["SESSION_COOKIE_NAME"]
+
+        # Gegenprobe: ein 11 Stunden altes Cookie gilt noch.
+        self.client.set_cookie(cookie_name, self._session_cookie_mit_alter(11 * 3600))
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
+
+        # 13 Stunden alt: abgewiesen, leere Session -> Weiterleitung zum Login.
+        self.client.set_cookie(cookie_name, self._session_cookie_mit_alter(13 * 3600))
+        antwort = self.client.get("/teilnehmer")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(antwort.headers["Location"].endswith("/"))
+
 
 class TestCsrfSchutz(_AppWebTestBasis):
     """Prüft den CSRF-Mechanismus selbst (QS-Review 19./20.09., siehe
@@ -958,6 +1166,12 @@ class TestCsrfSchutz(_AppWebTestBasis):
         self.assertEqual(antwort.status_code, 403)
         self.assertFalse(db.gibt_es_admin(self.conn))
 
+    def test_csrf_token_mit_sonderzeichen_ergibt_403_statt_500(self):
+        # Codeprüfung 22.09.: compare_digest auf str mit Nicht-ASCII warf TypeError (500).
+        self.client.get("/")
+        antwort = self.client.post("/", data={"benutzername": "x", "csrf_token": "Tökén"})
+        self.assertEqual(antwort.status_code, 403)
+
     def test_post_mit_dem_echten_token_aus_der_seite_funktioniert(self):
         """Entspricht dem normalen Ablauf eines echten Browsers: erst die Seite mit dem
         Formular laden (das versteckte csrf_token-Feld kommt von dort), dann genau
@@ -971,6 +1185,7 @@ class TestCsrfSchutz(_AppWebTestBasis):
             data={
                 "benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT,
                 "passwort_wiederholung": _ADMIN_PASSWORT, "csrf_token": treffer.group(1),
+                "einrichtungs_code": _EINRICHTUNGS_CODE,
             },
             follow_redirects=True,
         )

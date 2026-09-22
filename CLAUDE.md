@@ -3,7 +3,8 @@
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: 4144 Zeilen, `db.py`: 2442 Zeilen) durcharbeitest.
+  selbst durch die großen Module (`app.py`: rund 4500 Zeilen, `db.py`: rund 2700 Zeilen,
+  Stand 22.09.2026) durcharbeitest.
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.
@@ -45,6 +46,9 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ```
 python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core
 ```
+
+Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf) stehen in `requirements-dev.txt`. Ohne
+`pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
 
 GUI-Tests (`test_app_gui.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
 PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2` und laufen nur in der CI

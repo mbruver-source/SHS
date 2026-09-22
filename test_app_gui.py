@@ -30,6 +30,7 @@ from app import (
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
     _erzeuge_qss,
+    _wiederherstellungsziele_planen,
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
     ErgebnisTab,
@@ -41,6 +42,7 @@ from app import (
     TeilnehmerTab,
     TeilnehmerUebersichtTab,
     TerminImportDialog,
+    VeranstaltungsDialog,
     VersionDialog,
     ZeitplanTab,
 )
@@ -56,6 +58,7 @@ from db import (
     init_db,
     leistungsklasse_label,
     list_teilnehmer,
+    pruefe_ergebnis_eingabe,
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
@@ -469,7 +472,7 @@ def test_bestehender_teilnehmer_im_dialog_zeigt_verwaltungs_und_kontaktfelder(qt
 
     assert dialog.verband.text() == "VDH"
     assert dialog.mitgliedsnummer.text() == "12345"
-    assert dialog.wurftag.text() == "2023-04-01"
+    assert dialog.wurftag.text() == "01.04.2023"  # Anzeige TT.MM.JJJJ (M5, 22.09.)
     assert dialog.strasse.text() == "Hauptstraße"
     assert dialog.hausnummer.text() == "12a"
     assert dialog.plz.text() == "61479"
@@ -593,7 +596,7 @@ def test_bestehender_teilnehmer_mit_halter_zeigt_block_direkt_aufgeklappt(qtbot,
     dialog.show()
 
     assert dialog.rasse.text() == "Beagle"
-    assert dialog.tollwutimpfung_bis.text() == "2027-05-01"
+    assert dialog.tollwutimpfung_bis.text() == "01.05.2027"  # Anzeige TT.MM.JJJJ (M5, 22.09.)
     assert dialog.halter_weicht_ab.isChecked() is True
     assert dialog.gruppe_halter.isVisible() is True
     assert dialog.halter_vorname.text() == "Peter"
@@ -971,10 +974,12 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     suche_feld.clear()
 
     warnung_gezeigt = {}
-    monkeypatch.setattr(
-        "app.QMessageBox.warning",
-        lambda *a, **k: warnung_gezeigt.setdefault("ja", True),
-    )
+
+    def _warnung(*args, **kwargs):
+        warnung_gezeigt["ja"] = True
+        warnung_gezeigt["text"] = args[2]
+
+    monkeypatch.setattr("app.QMessageBox.warning", _warnung)
 
     speichern_btn = next(
         b for b in fenster.findChildren(QPushButton) if b.text() == "Alle Ergebnisse speichern"
@@ -982,6 +987,9 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     qtbot.mouseClick(speichern_btn, Qt.MouseButton.LeftButton)
 
     assert warnung_gezeigt.get("ja") is True
+    # Codeprüfung 22.09., G6: Meldung kommt aus der gemeinsamen Regel db.pruefe_ergebnis_eingabe
+    # (dieselbe wie im Web-Frontend), weiterhin mit Name und Disziplin der betroffenen Zeile.
+    assert "Muster, Max – Flächensuche: " + pruefe_ergebnis_eingabe(None, 28) in warnung_gezeigt["text"]
     # Der alte Wert bleibt in der DB unverändert (Anzeige-Feld war ja noch gültig
     # gefüllt, aber ohne Gegenstück nicht speicherbar).
     zeile = conn.execute(
@@ -1598,8 +1606,74 @@ def test_teilnehmerdialog_geburtsdatum_wird_gespeichert_und_geladen(qtbot, conn)
     teilnehmer_id = add_teilnehmer(conn, dialog.ergebnis())
     bearbeiten_dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0], vergebene_nummern=set())
     qtbot.addWidget(bearbeiten_dialog)
-    assert bearbeiten_dialog.geburtsdatum.text() == "2010-05-01"
+    assert bearbeiten_dialog.geburtsdatum.text() == "01.05.2010"  # Anzeige TT.MM.JJJJ (M5, 22.09.)
     assert teilnehmer_id > 0
+
+
+def test_teilnehmerdialog_deutsches_datum_wird_als_iso_gespeichert(qtbot, monkeypatch):
+    # Codeprüfung 22.09. (M5): TT.MM.JJJJ (auch ohne führende Nullen) ist erlaubt,
+    # gespeichert wird immer JJJJ-MM-TT.
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.geburtsdatum.setText("1.5.2010")
+    dialog.wurftag.setText("01.04.2023")
+    dialog.tollwutimpfung_bis.setText("2027-05-01")
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda self, titel, text: warnungen.append(text))
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert warnungen == []
+    assert dialog.result() == 1
+    ergebnis = dialog.ergebnis()
+    assert ergebnis.geburtsdatum == "2010-05-01"
+    assert ergebnis.wurftag == "2023-04-01"
+    assert ergebnis.tollwutimpfung_bis == "2027-05-01"
+
+
+def test_teilnehmerdialog_ungueltiges_datum_wird_abgelehnt(qtbot, monkeypatch):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.tollwutimpfung_bis.setText("31.02.2027")
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda self, titel, text: warnungen.append(text))
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert len(warnungen) == 1
+    assert "Tollwutimpfung" in warnungen[0]
+    assert dialog.result() == 0
+
+
+def test_veranstaltungsdialog_datum_deutsch_anzeigen_und_iso_liefern(qtbot, monkeypatch):
+    dialog = VeranstaltungsDialog(vorbelegung={"verein": "SGV", "datum": "2026-09-27"}, bearbeiten=True)
+    qtbot.addWidget(dialog)
+    assert dialog.datum.text() == "27.09.2026"
+
+    dialog.datum.setText("3.10.2026")
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda self, titel, text: warnungen.append(text))
+    dialog._pruefen_und_akzeptieren()
+    assert warnungen == []
+    assert dialog.datum_iso() == "2026-10-03"
+
+    # Altbestand in TT.MM.JJJJ: wird angezeigt und beim Speichern in ISO umgewandelt.
+    altbestand = VeranstaltungsDialog(vorbelegung={"verein": "SGV", "datum": "27.09.2026"}, bearbeiten=True)
+    qtbot.addWidget(altbestand)
+    assert altbestand.datum.text() == "27.09.2026"
+    assert altbestand.datum_iso() == "2026-09-27"
+
+    dialog.datum.setText("2026/10/03")
+    dialog.setResult(0)
+    dialog._pruefen_und_akzeptieren()
+    assert len(warnungen) == 1
+    assert dialog.result() == 0
 
 
 # --- Auswahl, welche LK/Disziplin in die Bewertungsbögen-Sammel-PDF sollen (21.09.) -
@@ -1902,3 +1976,185 @@ def test_startnummer_spalte_sortiert_auch_bei_fehlender_startnummer_ohne_absturz
     # Beide Zeilen müssen über die UserRole-ID weiterhin korrekt auflösbar sein.
     tab.tabelle.selectRow(namen_in_reihenfolge.index("OhneNummer"))
     assert tab._ausgewaehlte_id() == id_ohne
+
+
+# --- Codeprüfung 22.09., G3: Terminwechsel mit nicht speicherbaren Ergebnissen ------
+# Analog zu den closeEvent-Tests oben: bleibt nach "Jetzt speichern? -> Ja" trotzdem etwas
+# ungespeichert (z. B. nur Suche ODER Anzeige eingetragen), wird vor dem Wechsel erneut
+# nachgefragt; Standard/Nein bricht den Wechsel ab. StartDialog wird durch eine Attrappe
+# ersetzt, die nur mitzählt, ob der Wechsel überhaupt bis zur Terminauswahl gekommen ist.
+
+
+class _StartDialogAttrappe:
+    geoeffnet = 0
+
+    def __init__(self, *args, **kwargs):
+        type(self).geoeffnet += 1
+        self.pfad = None
+
+    def exec(self):
+        return QDialog.Rejected
+
+
+def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_gelingt):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    zustand = {"ungespeichert": True}
+    monkeypatch.setattr(
+        type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: zustand["ungespeichert"]
+    )
+
+    def _speichern(self):
+        if speichern_gelingt:
+            zustand["ungespeichert"] = False
+
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", _speichern)
+    fragen = []
+
+    def _frage(*args, **kwargs):
+        fragen.append(args[1])
+        return antworten[len(fragen) - 1]
+
+    monkeypatch.setattr("app.QMessageBox.question", _frage)
+    monkeypatch.setattr(_StartDialogAttrappe, "geoeffnet", 0)
+    monkeypatch.setattr("app.StartDialog", _StartDialogAttrappe)
+    return fenster, fragen
+
+
+def test_terminwechsel_bricht_ab_wenn_speichern_zeilen_uebrig_laesst_und_nein(qtbot, termin, monkeypatch):
+    fenster, fragen = _terminwechsel_vorbereiten(
+        qtbot, termin, monkeypatch, [QMessageBox.Yes, QMessageBox.No], speichern_gelingt=False
+    )
+
+    fenster._termin_wechseln()
+
+    assert fragen == ["Ungespeicherte Ergebnisse", "Nicht alle Ergebnisse gespeichert"]
+    assert _StartDialogAttrappe.geoeffnet == 0
+
+
+def test_terminwechsel_geht_bei_ja_trotz_uebrig_gebliebener_aenderungen_weiter(qtbot, termin, monkeypatch):
+    fenster, fragen = _terminwechsel_vorbereiten(
+        qtbot, termin, monkeypatch, [QMessageBox.Yes, QMessageBox.Yes], speichern_gelingt=False
+    )
+
+    fenster._termin_wechseln()
+
+    assert len(fragen) == 2
+    assert _StartDialogAttrappe.geoeffnet == 1
+
+
+def test_terminwechsel_fragt_nicht_erneut_wenn_speichern_gelingt(qtbot, termin, monkeypatch):
+    fenster, fragen = _terminwechsel_vorbereiten(
+        qtbot, termin, monkeypatch, [QMessageBox.Yes], speichern_gelingt=True
+    )
+
+    fenster._termin_wechseln()
+
+    assert fragen == ["Ungespeicherte Ergebnisse"]
+    assert _StartDialogAttrappe.geoeffnet == 1
+
+
+# --- Codeprüfung 22.09., G4: Geschlecht "nicht angegeben" im TeilnehmerDialog ---------
+
+
+def test_neuer_teilnehmer_startet_ohne_geschlecht(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+
+    assert dialog.geschlecht.currentText() == "–"
+    assert dialog.ergebnis().geschlecht is None
+
+    dialog.geschlecht.setCurrentText("Rüde")
+    assert dialog.ergebnis().geschlecht == "Rüde"
+
+
+def test_bearbeiten_ohne_geschlecht_bleibt_ohne_geschlecht(qtbot, conn):
+    """Vorher wurde ein Teilnehmer mit geschlecht NULL beim bloßen Öffnen und Speichern
+    still zur "Hündin" (erster Combo-Eintrag)."""
+    _teilnehmer_anlegen(conn, geschlecht=None)
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0], vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+
+    assert dialog.geschlecht.currentText() == "–"
+    assert dialog.ergebnis().geschlecht is None
+
+
+def test_bearbeiten_mit_geschlecht_zeigt_gespeicherten_wert(qtbot, conn):
+    _teilnehmer_anlegen(conn, geschlecht="Rüde")
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0], vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+
+    assert dialog.geschlecht.currentText() == "Rüde"
+    assert dialog.ergebnis().geschlecht == "Rüde"
+
+
+# --- Codeprüfung 22.09., G5: Wiederherstellen "als Kopie" ohne doppelte Zieldateien ----
+
+
+@pytest.mark.parametrize("namen", [
+    ["A.sqlite", "A (2).sqlite"],
+    ["A (2).sqlite", "A.sqlite"],
+])
+def test_wiederherstellen_kopie_kollidiert_nicht_mit_anderem_zip_eintrag(tmp_path, namen):
+    (tmp_path / "A.sqlite").write_bytes(b"")
+
+    entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
+        namen, {"A.sqlite"}, tmp_path, lambda name: "kopie"
+    )
+
+    assert entscheidungen == {"A.sqlite": "A (3).sqlite", "A (2).sqlite": "A (2).sqlite"}
+    assert uebersprungen == 0
+
+
+def test_wiederherstellen_mehrere_kopien_und_ueberschreiben_gemischt(tmp_path):
+    for name in ("A.sqlite", "B.sqlite", "C.sqlite"):
+        (tmp_path / name).write_bytes(b"")
+    aktionen = {"A.sqlite": "kopie", "B.sqlite": "ueberschreiben", "C.sqlite": "ueberspringen"}
+    namen = ["A.sqlite", "B.sqlite", "C.sqlite", "A (2).sqlite", "A (3).sqlite", "B (2).sqlite"]
+
+    entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
+        namen, set(aktionen), tmp_path, lambda name: aktionen[name]
+    )
+
+    assert entscheidungen == {
+        "A.sqlite": "A (4).sqlite",
+        "B.sqlite": "B.sqlite",
+        "A (2).sqlite": "A (2).sqlite",
+        "A (3).sqlite": "A (3).sqlite",
+        "B (2).sqlite": "B (2).sqlite",
+    }
+    assert uebersprungen == 1
+    # Kern von G5: keine zwei ZIP-Einträge landen auf derselben Zieldatei.
+    assert len(set(entscheidungen.values())) == len(entscheidungen)
+
+
+# --- Codeprüfung 22.09., G9: Sortierung der Ergebniserfassung übersteht "aktualisieren" --
+
+
+def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Meier", startnummer=3, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    def namen():
+        return [tab.tabelle.item(row, 1).text() for row in range(tab.tabelle.rowCount())]
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # Name aufsteigend
+    assert namen() == ["Adler, Max", "Meier, Max", "Zorn, Max"]
+
+    tab.aktualisieren()
+    assert namen() == ["Adler, Max", "Meier, Max", "Zorn, Max"]
+    # Die Eingabefelder gehören nach dem erneuten Sortieren weiterhin zur richtigen Zeile.
+    assert tab._teilnehmer_je_zeile[0]["nachname"] == "Adler"
+
+    # Nächster Klick auf dieselbe Spalte kehrt die (tatsächlich sichtbare) Richtung um.
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)
+    assert namen() == ["Zorn, Max", "Meier, Max", "Adler, Max"]
+
+    tab.aktualisieren()
+    assert namen() == ["Zorn, Max", "Meier, Max", "Adler, Max"]

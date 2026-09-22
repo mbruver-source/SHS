@@ -42,6 +42,17 @@
         <br>Fehler beim Übertragen (bitte für diese Teilnehmer manuell prüfen):
         {{ zurueckgeholt_bericht.fehler | join(", ") }}
       {% endif %}
+      {% if zurueckgeholt_bericht.abweichungen %}
+        <br><strong>NICHT übernommen</strong> - Startnummer gehört in der Termin-Datei zu einem
+        anderen Teilnehmer (bitte manuell prüfen/nachtragen):
+        {{ zurueckgeholt_bericht.abweichungen | join("; ") }}
+      {% endif %}
+      {# Codeprüfung 22.09., G2 #}
+      {% if zurueckgeholt_bericht.im_web_leer %}
+        <br><strong>Hinweis</strong> - im Web leer, Wert der Termin-Datei beibehalten (bitte
+        prüfen, ob das so gewollt ist):
+        {{ zurueckgeholt_bericht.im_web_leer | join("; ") }}
+      {% endif %}
     </p>
     <p>
       <a class="knopf" href="{{ url_for('admin_termin_download', token=zurueckgeholt_token) }}">
@@ -58,7 +69,7 @@
   {% for termin in termine %}
     <div style="padding: 1em; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
       <strong>{{ termin.verein or "(ohne Vereinsnamen)" }}</strong>{% if termin.ort %}, {{ termin.ort }}{% endif %}<br>
-      <small>{{ termin.datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer · {{ termin.schema_name }}</small>
+      <small>{{ termin.datum | datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer · {{ termin.schema_name }}</small>
       <div style="display: flex; gap: 0.5em; margin-top: 0.6em; flex-wrap: wrap; align-items: center;">
         <form method="post" action="{{ url_for('admin_termin_zurueckholen', schema_name=termin.schema_name) }}"
               enctype="multipart/form-data" style="display: flex; gap: 0.5em; align-items: center; margin: 0;">

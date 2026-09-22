@@ -30,6 +30,9 @@ Thumbs.db
 # außerhalb dieses Ordners (%USERPROFILE%\SHS-Pruefungsprogramm\Termine), hier
 # nur zur Sicherheit falls versehentlich eine Termin-Datenbank im Projektordner landet
 *.sqlite3
+# Termin-Dateien der Desktop-Version (enthalten Personendaten) - sollen nie versehentlich
+# ins Repo gelangen (Codeprüfung 22.09., G13)
+*.sqlite
 
 # Lokale Konfiguration für compose.yaml (Datenbank-Passwort, Session-Schlüssel) - siehe
 # .env.example für die Vorlage. Enthält Geheimnisse, gehört NICHT ins Repo.

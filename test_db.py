@@ -5,7 +5,7 @@ import pathlib
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from db import (
     NeuerTeilnehmer,
@@ -41,6 +41,8 @@ from db import (
     init_db,
     init_db_postgres,
     ist_jugendlicher,
+    normalisiere_datum,
+    datum_anzeige,
     kopiere_termin_daten,
     liste_benutzer,
     liste_termine,
@@ -866,6 +868,34 @@ class TestDatenbank(unittest.TestCase):
         self.assertFalse(ist_jugendlicher(None, "2026-09-19"))
         self.assertFalse(ist_jugendlicher("2010-01-01", None))
         self.assertFalse(ist_jugendlicher("keine-datumsangabe", "2026-09-19"))
+        # Codeprüfung 22.09. (M5): ein Altbestand in TT.MM.JJJJ wird ebenfalls gelesen,
+        # statt still als "nicht jugendlich" zu zählen.
+        self.assertTrue(ist_jugendlicher("01.01.2010", "2026-09-19"))
+        self.assertTrue(ist_jugendlicher("2010-01-01", "19.09.2026"))
+
+    def test_importiere_teilnehmer_aus_csv_uebernimmt_und_normalisiert_datumsfelder(self):
+        # Codeprüfung 22.09. (M5/M6): geburtsdatum wird jetzt importiert, TT.MM.JJJJ wird
+        # in JJJJ-MM-TT umgewandelt, ein ungültiges Datum überspringt die Zeile.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin,geburtsdatum,wurftag,tollwutimpfung_bis\n"
+                "Jung,Jana,Rex,DK,1,,1.5.2010,01.04.2023,2027-05-01\n"
+                "Falsch,Fritz,Bello,DK,1,,,,31.02.2027\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 1)
+            self.assertEqual(len(ergebnis.fehler), 1)
+            self.assertIn("Zeile 3", ergebnis.fehler[0])
+            self.assertIn("Tollwutimpfung", ergebnis.fehler[0])
+            jung = list_teilnehmer(self.conn)[0]
+            self.assertEqual(jung["geburtsdatum"], "2010-05-01")
+            self.assertEqual(jung["wurftag"], "2023-04-01")
+            self.assertEqual(jung["tollwutimpfung_bis"], "2027-05-01")
+        finally:
+            os.remove(pfad)
 
     def test_importiere_teilnehmer_aus_csv_legt_teilnehmer_an(self):
         # Nutzerwunsch (20.09.): Meldeformulare per KI-System in eine CSV umwandeln lassen
@@ -1613,6 +1643,32 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertEqual(liste_termine(self.ordner), [])
 
 
+class TestDatumsfelder(unittest.TestCase):
+    """Codeprüfung 22.09. (M5): Eingabe TT.MM.JJJJ oder JJJJ-MM-TT, Speicherform immer
+    JJJJ-MM-TT, Anzeige TT.MM.JJJJ - reine Funktionen ohne Datenbank."""
+
+    def test_normalisiere_datum_akzeptiert_beide_formate(self):
+        self.assertEqual(normalisiere_datum("2026-09-27"), "2026-09-27")
+        self.assertEqual(normalisiere_datum("27.09.2026"), "2026-09-27")
+        self.assertEqual(normalisiere_datum(" 7.9.2026 "), "2026-09-07")
+        self.assertIsNone(normalisiere_datum(""))
+        self.assertIsNone(normalisiere_datum(None))
+        self.assertEqual(normalisiere_datum("29.02.2024"), "2024-02-29")  # Schaltjahr
+        with self.assertRaises(ValueError):
+            normalisiere_datum("29.02.2025")
+
+    def test_normalisiere_datum_lehnt_ungueltiges_ab(self):
+        for ungueltig in ("31.02.2026", "2026/09/27", "27.09.26", "morgen", "2026-9-27", "20260927"):
+            with self.subTest(ungueltig=ungueltig), self.assertRaises(ValueError):
+                normalisiere_datum(ungueltig)
+
+    def test_datum_anzeige(self):
+        self.assertEqual(datum_anzeige("2026-09-07"), "07.09.2026")
+        self.assertEqual(datum_anzeige(None), "")
+        # Nicht lesbarer Altbestand bleibt sichtbar, damit er korrigiert werden kann.
+        self.assertEqual(datum_anzeige("irgendwann"), "irgendwann")
+
+
 class TestTerminSync(unittest.TestCase):
     """Testet die eigentliche Kopierlogik des Austauschs zwischen einer SQLite-Termin-
     Datei und einem PostgreSQL-Termin-Schema (kopiere_termin_daten/
@@ -1798,6 +1854,125 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(ergebnis_ok["suche_truemmerfeld"], 45)
         self.assertEqual(ergebnis_ok["anzeige_truemmerfeld"], 25)
 
+    def test_import_uebernimmt_nichts_bei_abweichendem_teilnehmer(self):
+        # Codeprüfung 22.09. (M2): Startnummern wurden nach dem Veröffentlichen in der
+        # Termin-Datei getauscht - die Ergebnisse dürfen NICHT still beim jeweils anderen
+        # Teilnehmer landen, sondern werden als Abweichung gemeldet.
+        for nr, name, hund, punkte in [(1, "Muster", "Rex", (50, 30)), (2, "Beispiel", "Bello", (40, 20))]:
+            tid = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+                nachname=name, vorname="A", rufname_hund=hund, art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr,
+            ))
+            eintragen_ergebnis(self.quelle, tid, "Trümmerfeld", *punkte)
+        ziel_ids = [
+            add_teilnehmer(self.ziel, NeuerTeilnehmer(
+                nachname=name, vorname="A", rufname_hund=hund, art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr,
+            ))
+            for nr, name, hund in [(2, "Muster", "Rex"), (1, "Beispiel", "Bello")]
+        ]
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(len(bericht.abweichungen), 2)
+        self.assertIn("Nr. 1", bericht.abweichungen[0])
+        self.assertIn("Muster, A (Rex, ED LK 1 Trümmerfeld)", bericht.abweichungen[0])
+        self.assertIn("Beispiel, A (Bello, ED LK 1 Trümmerfeld)", bericht.abweichungen[0])
+        for ziel_id in ziel_ids:
+            ergebnis = get_ergebnis(self.ziel, ziel_id)
+            self.assertIsNone(ergebnis["suche_truemmerfeld"])
+
+    def test_import_erkennt_abweichung_bei_art_oder_leistungsklasse(self):
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=2,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(len(bericht.abweichungen), 1)
+
+    def test_import_ignoriert_gross_kleinschreibung_und_leerzeichen(self):
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname=" muster ", vorname="Anna", rufname_hund="REX", art="DK", stufe=1, startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1,
+        ))
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(bericht.abweichungen, [])
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 50)
+
+    def test_import_meldet_im_web_leere_disziplin_und_behaelt_zielwert(self):
+        # Codeprüfung 22.09., G2: Disziplin im Web leer, in der Termin-Datei gefüllt - der
+        # Wert der Termin-Datei bleibt erhalten, wird aber im Bericht gemeldet.
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=5,
+        ))
+        eintragen_ergebnis(self.quelle, quelle_id, "Flächensuche", 50, 30)
+        ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=5,
+        ))
+        eintragen_ergebnis(self.ziel, ziel_id, "Trümmerfeld", 45, 30)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(
+            bericht.im_web_leer,
+            ["Nr. 5 Muster, Anna – Trümmerfeld: in der Web-Erfassung leer, "
+             "in der Termin-Datei 45/30 (beibehalten)"],
+        )
+        ergebnis = get_ergebnis(self.ziel, ziel_id)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 45)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 30)
+        self.assertEqual(ergebnis["suche_flaechensuche"], 50)
+
+    def test_import_im_web_leer_bleibt_leer_ohne_zielwert(self):
+        # Beide Seiten leer bzw. Web gefüllt: kein Hinweis (Codeprüfung 22.09., G2).
+        quelle_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        eintragen_ergebnis(self.ziel, ziel_id, "Trümmerfeld", 10, 10)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(bericht.im_web_leer, [])
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 50)
+
+    def test_import_im_web_leer_nicht_bei_abweichendem_teilnehmer(self):
+        # Nicht zuordenbare Teilnehmer landen nur in `abweichungen`, nicht zusätzlich in
+        # `im_web_leer` (Codeprüfung 22.09., G2).
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1,
+        ))
+        ziel_id = add_teilnehmer(self.ziel, NeuerTeilnehmer(
+            nachname="Beispiel", vorname="Bea", rufname_hund="Bello", art="DK", stufe=1, startnummer=1,
+        ))
+        eintragen_ergebnis(self.ziel, ziel_id, "Trümmerfeld", 45, 30)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(len(bericht.abweichungen), 1)
+        self.assertEqual(bericht.im_web_leer, [])
+
 
 class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
     """Prüft den Fehlerpfad von exportiere_termin_nach_postgres() rein über Mocks für
@@ -1816,7 +1991,8 @@ class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
             id=42, schema_name="termin_42", verein=None, ort=None, datum=None,
             anzahl_teilnehmer=0, erstellt_am="2026-09-21T00:00:00Z",
         )
-        postgres_conn = object()  # wird nur an die Mocks weitergereicht, nie selbst benutzt
+        # Nur rollback() wird direkt aufgerufen, alles andere geht an die Mocks.
+        postgres_conn = MagicMock()
         sqlite_conn = object()
 
         with patch("db.erstelle_termin_postgres", return_value=neuer_termin) as mock_erstelle, \
@@ -1838,6 +2014,44 @@ class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
         mock_suchpfad.assert_any_call(postgres_conn, "termin_42")
         mock_suchpfad.assert_any_call(postgres_conn, "public")
         mock_liste.assert_not_called()
+
+    def test_rollback_kommt_vor_der_bereinigung(self):
+        # Codeprüfung 22.09. (M1): nach einem echten PostgreSQL-Fehler ist die Transaktion
+        # abgebrochen - ohne vorheriges rollback() scheitert bereits das SET search_path
+        # (InFailedSqlTransaction) und die Bereinigung läuft nie.
+        neuer_termin = TerminInfoPostgres(
+            id=42, schema_name="termin_42", verein=None, ort=None, datum=None,
+            anzahl_teilnehmer=0, erstellt_am="2026-09-22T00:00:00Z",
+        )
+        reihenfolge = MagicMock()
+        postgres_conn = reihenfolge.conn
+
+        with patch("db.erstelle_termin_postgres", return_value=neuer_termin), \
+             patch("db._setze_termin_suchpfad", reihenfolge.suchpfad), \
+             patch("db.kopiere_termin_daten", side_effect=RuntimeError("PG-Fehler")), \
+             patch("db.loesche_termin_postgres", reihenfolge.loesche):
+            with self.assertRaises(RuntimeError):
+                exportiere_termin_nach_postgres(object(), postgres_conn)
+
+        namen = [aufruf[0] for aufruf in reihenfolge.mock_calls]
+        self.assertIn("conn.rollback", namen)
+        self.assertLess(namen.index("conn.rollback"), namen.index("loesche"))
+        # Das Umschalten auf "public" vor der Bereinigung kommt ebenfalls erst nach dem
+        # rollback() (das erste suchpfad-Umschalten auf das neue Schema liegt davor).
+        self.assertEqual(namen[namen.index("conn.rollback") + 1], "suchpfad")
+
+    def test_fehler_bei_bereinigung_verdeckt_nicht_die_urspruengliche_exception(self):
+        neuer_termin = TerminInfoPostgres(
+            id=42, schema_name="termin_42", verein=None, ort=None, datum=None,
+            anzahl_teilnehmer=0, erstellt_am="2026-09-22T00:00:00Z",
+        )
+        with patch("db.erstelle_termin_postgres", return_value=neuer_termin), \
+             patch("db._setze_termin_suchpfad"), \
+             patch("db.kopiere_termin_daten", side_effect=RuntimeError("Ursprungsfehler")), \
+             patch("db.loesche_termin_postgres", side_effect=ValueError("Bereinigung kaputt")):
+            with self.assertRaises(RuntimeError) as kontext:
+                exportiere_termin_nach_postgres(object(), MagicMock())
+        self.assertEqual(str(kontext.exception), "Ursprungsfehler")
 
 
 class TestTerminImportStammdaten(unittest.TestCase):

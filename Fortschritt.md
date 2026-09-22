@@ -1307,3 +1307,218 @@ Status aller Punkte: **unbesprochen** - Umsetzung erst nach Marcos Go je Punkt.
 - G14 (C12) Ungenutzter Import/Konstante in `pdf_export.py`, `_GEGENSTAND_FELDER` doppelt.
 - Zusatzbeobachtung Verifikation: `disqualifiziert`/`abbruch` werden beim Web-Export/Zurückholen
   nicht übertragen - passt zur Entscheidung "DQ/Abbruch nur am Desktop", kein Fund.
+
+### Umsetzung M1, M3, M2 (22.09., Marcos Go "ja machen wir es so", Arbeitsstand, noch kein Build)
+
+- **M1 (`db.py`, `test_db.py`):** im `except` von `exportiere_termin_nach_postgres` jetzt
+  zuerst `postgres_conn.rollback()`, danach Suchpfad + `loesche_termin_postgres` - alles in
+  `with suppress(Exception)`, damit immer die ursprüngliche Exception beim Aufrufer ankommt.
+  2 neue Tests (Reihenfolge rollback → Bereinigung; Bereinigungsfehler verdeckt Ursprungsfehler
+  nicht). Bleibt ein reiner Mock-Test - ein CI-Test mit echtem PG-Fehler existiert nicht.
+- **M3 (`pdf_export.py`, `test_pdf_export.py`), Darstellung nach Marcos Vorgaben:**
+  DK-Bewertungsbogen: Einzelpunkte bleiben stehen, GESAMT zeigt "Disqualifiziert (DISQ)" /
+  "Abbruch (ABBR)". Etiketten: Trümmer/Fläche/Behältnis "-", "Gesamt: DISQ"/"Gesamt: ABBR" in
+  7 statt 8,5 pt (sonst Umbruch, 8,5 pt bräuchte 61 pt bei nur 53,5 pt Platz; Marco hat
+  "kleinere Schrift" gewählt). Ergebnisliste: Gesamtpunkte "–" statt "0". Neue Helfer
+  `_STATUS_TEXT`/`_status_abkuerzung()`. 4 neue Tests.
+- **M2 (`db.py`, `sync_termin.py`, `templates/admin_termine.html`, Tests), nach Marcos Vorgaben:**
+  `importiere_ergebnisse_nach_startnummer` vergleicht zusätzlich Nachname, Rufname Hund, Art,
+  LK und (ED) Disziplin (Groß-/Kleinschreibung, Rand-Leerzeichen egal, `_teilnehmer_merkmale`).
+  Bei Abweichung wird NICHTS übernommen, stattdessen neues Feld `ImportBericht.abweichungen`
+  ("Nr. X: Web … ≠ Termin-Datei …"), angezeigt in CLI und Web-Bericht. Die Prüfung meldet
+  auch Abweichungen bei Teilnehmern ohne Ergebnis (bewusst: Hinweis auf falsche Datei/Tausch).
+  3 neue DB-Tests, 1 Web-Test.
+- **Tests:** lokal mit Anaconda-Python (`C:\Users\mbruv\anaconda3\python.exe`, inkl. pypdf -
+  dadurch liefen hier auch die PDF-Inhaltstests): 365 Tests, 0 fehlgeschlagen, 106
+  übersprungen. Gegenprobe: alle neuen Tests schlagen gegen den alten Code fehl. GUI-/PG-Tests
+  nur in der CI.
+- **Verifikation:** je ein unabhängiger Verifikations-Subagent für M1, M3, M2 - alle "OK".
+  Zwei kleine Nachbesserungen aus den Verifikationen übernommen (rollback mit in `suppress`;
+  Zusatztest "Gesamt: ABBR" einzeilig).
+- **Nachtrag M3, ED-Bewertungsbogen (Marcos Go "passe den Bogen an"):** Bei DQ/Abbruch zeigte
+  der ED-Bogen bisher nur die berechnete Gesamtpunktzahl ohne Status-Hinweis. Jetzt bleibt die
+  Punktzahl stehen, darunter eine einzeilige Tabelle "ERGEBNIS | Disqualifiziert (DISQ)" bzw.
+  "Abbruch (ABBR)" (170 mm, wie die DK-GESAMT-Tabelle). `status_abk` wird in
+  `_bewertungsbogen_story` einmal vor dem DK/ED-Zweig berechnet. 1 neuer Test (inkl.
+  "keine zusätzliche Seite"). Verifikations-Subagent: OK. Er hat ED LK 3 in allen drei
+  Disziplinen als Einzel- und Sammel-PDF erzeugt: weiterhin 1 Seite je ED-Bogen, noch ca.
+  85 mm Reserve. Die gerenderte Seite ist sauber. Lokal: 366 Tests, 0 fehlgeschlagen,
+  106 übersprungen.
+- **M4 (Marcos Go "go"):** neue `requirements-dev.txt` (pytest, pytest-qt, pypdf).
+  `tests.yml` installiert sie statt `pip install pytest pytest-qt`. Ein zusätzlicher Schritt
+  `python -c "import pypdf"` lässt die CI scheitern, statt die PDF-Tests wieder still zu
+  überspringen. **`requirements-dev.txt` MUSS beim nächsten Build mitcommittet werden**, sonst
+  scheitert die CI beim `pip install`. Der Verifikations-Subagent gibt die Änderung frei: Die
+  PDF-Tests nutzen nur die reportlab-Standardschriften, sind also plattformunabhängig. Getestet
+  hat er lokal mit pypdf 4.0, 5.0 und 6.19, jeweils 42 Tests OK. Das Restrisiko liegt nur bei
+  künftigen pypdf-Versionen (Textextraktion). Optional und noch nicht besprochen:
+  pypdf-Obergrenze (`<7`), Eintrag in `.containerignore`. Installer und Container sind nicht
+  betroffen.
+  Erst der nächste CI-Lauf zeigt, ob alle ~43 PDF-Tests auch unter Linux grün sind.
+- **M5 + M6, Datumsfelder und Geburtsdatum im CSV-Import (Marcos Go "ja", Vorgaben: beide
+  Formate annehmen, intern ISO, Anzeige TT.MM.JJJJ; im CSV ungültiges Datum → Zeile
+  überspringen; M6 gleich mit erledigen):**
+  - **`db.py`:** Neue zentrale Funktionen `lies_datum` (JJJJ-MM-TT oder TT.MM.JJJJ, auch
+    ohne führende Nullen, prüft echte Kalendertage), `normalisiere_datum` (→ JJJJ-MM-TT),
+    `datum_anzeige` (→ TT.MM.JJJJ, nicht lesbarer Altbestand bleibt sichtbar) und
+    `datum_oder_none` (tolerant, für Auswertungen).
+  - **CSV-Import:** Die Spalte `geburtsdatum` ist neu (M6). Alle drei Datumsspalten werden
+    normalisiert, ein ungültiges Datum überspringt die Zeile mit Meldung.
+  - **Auswertungen:** `ist_jugendlicher` liest jetzt auch Altbestand in TT.MM.JJJJ.
+  - **`app.py`:**
+    - TeilnehmerDialog und VeranstaltungsDialog zeigen TT.MM.JJJJ. Bei ungültigem Datum
+      erscheint eine Warnung und der Dialog bleibt offen; gespeichert wird immer ISO.
+    - Neue Methode `VeranstaltungsDialog.datum_iso()`, beide Aufrufer nutzen sie.
+    - Der Dateinamen-Vorschlag verwendet das normalisierte Datum.
+    - Platzhalter und Beschriftungen zeigen "TT.MM.JJJJ".
+    - Der KI-Prompt beschreibt die Spalte `geburtsdatum`.
+  - **`pdf_export.py`:** Neue Funktion `_impfung_hervorheben` vergleicht echte Daten statt
+    Strings ("30.08.2026" wurde vorher nicht rot markiert). `_datum_lang`/`_datum_kurz`
+    lesen beide Formate. Der ungenutzte `import datetime` ist entfernt.
+  - **Tests:**
+    - Neue Klasse `TestDatumsfelder`, CSV-Datumstest, `ist_jugendlicher` mit Altbestand,
+      `TestImpfungHervorheben` (läuft ohne pypdf).
+    - 4 neue GUI-Tests; 3 bestehende GUI-Tests auf die Anzeige TT.MM.JJJJ umgestellt.
+    - Lokal: 372 Nicht-GUI-Tests OK (107 übersprungen). **GUI-Tests diesmal auch lokal:**
+      88 bestanden, 1 bekannter xfail (pytest-qt nur temporär ins Sitzungs-Scratchpad
+      installiert, Anaconda unverändert).
+  - **Verifikations-Subagent: OK.** Die optionalen Testfälle Schaltjahr und
+    Altbestand-Veranstaltungsdatum sind ergänzt. Bewertung des Subagents: Ein nicht lesbarer
+    Altbestand (z. B. "irgendwann") blockiert das Speichern des Dialogs, bis das Datum
+    korrigiert ist - das ist vertretbar.
+  - **Nicht geändert, offen/kosmetisch (Entscheidung Marco):**
+    - Angezeigt wird weiterhin ISO in Fenstertitel, Terminübersicht, Web-Templates,
+      PDF-Titeln, Bewertungsbogen-Fuß und Etikett.
+    - Die Terminliste sortiert und die Web-Duplikatsprüfung vergleicht nach dem rohen
+      Datumsstring - relevant nur für Altbestand in TT.MM.JJJJ.
+- **Datumsanzeige überall TT.MM.JJJJ (Marcos Go "1. ja"):** Gespeichert bleibt JJJJ-MM-TT.
+  - **Desktop (`app.py`):** Terminübersicht, Fenstertitel, StartDialog-Liste und
+    Lösch-Rückfrage nutzen `datum_anzeige`.
+  - **PDFs (`pdf_export.py`):** alle Titel, der Bewertungsbogen-Fuß und das Etikett nutzen
+    `_datum_kurz`.
+  - **Web (`app_web.py`):** neuer Jinja-Filter `datum` (`db.datum_anzeige`) in
+    `admin_termine.html`, `termin_waehlen.html` und `teilnehmerliste.html`, dazu der
+    Dubletten-Hinweistext.
+  - **Bewusst ISO geblieben:** Dateinamen (Termin-Dateien, PDF-Export, Sicherung - damit sie
+    chronologisch sortieren) und der KI-Prompt (maschinelles Austauschformat).
+  - **Tests:** Etiketten-Test umgestellt; neue Prüfungen für Bogen-Fuß, Ergebnisliste-Titel
+    und Web-Terminauswahl. 373 Nicht-GUI-Tests OK, GUI 88 bestanden + 1 xfail.
+  - **Verifikations-Subagent:** OK. Keine weitere Stelle mit roher Anzeige gefunden;
+    Dateinamen, Sortierungen und Vergleiche sind unverändert.
+
+### Umsetzung G1–G14 (22.09., Marcos Go "mit G1-G14 weitermachen", Arbeitsstand, noch kein Build)
+
+Die Entscheidungen hat Marco je Punkt per Rückfrage getroffen. Umgesetzt wurde von drei
+parallelen Bereichs-Subagents (Desktop / Web / Daten+Doku) mit fest zugeteilten Dateien.
+Drei gemeinsame Bausteine hat die Hauptsitzung vorab in `db.py` gelegt:
+`pruefe_ergebnis_eingabe`, `eindeutigen_dateinamen_finden(bereits_vergeben=...)` und
+`_SCHEMA_NAME_MUSTER` mit fullmatch.
+
+- **G1, Einrichtungs-Code (Entscheidung: Code aus .env):**
+  - Die Ersteinrichtung des ersten Admins verlangt `SHS_ADMIN_SETUP_CODE`.
+    `compare_digest` läuft auf Bytes, damit Umlaute nicht zu einem 500 führen.
+  - Ist kein Code konfiguriert, wird die Ersteinrichtung verweigert - auch lokal. Ein
+    zufälliger Code wäre niemandem bekannt, "kein Code = offen" würde die Lücke wieder
+    öffnen.
+  - Geändert: `compose.yaml` (Pflichtwert), `.env.example`, `README_CONTAINER.md` (inkl.
+    Update-Hinweis), `build-container.yml` (Smoke-Env).
+  - **Marco muss `SHS_ADMIN_SETUP_CODE` in seine `.env` eintragen, sonst startet der
+    Container nach dem Update nicht.**
+- **G2, "im Web leer" (Entscheidung: Verhalten lassen, nur melden):** neues Feld
+  `ImportBericht.im_web_leer`. Es listet Disziplinen, die im Web leer sind, in der
+  Termin-Datei aber gefüllt (der Wert bleibt erhalten). Anzeige in CLI und Web-Bericht.
+- **G3:** `_termin_wechseln` fragt nach einem fehlgeschlagenen Speichern nach wie
+  `closeEvent`; Standard ist "Nein".
+- **G4, Geschlecht (Entscheidung: leerer Eintrag, neu = leer):** Die Combo beginnt mit "–",
+  das als NULL gespeichert wird; NULL bleibt beim Bearbeiten erhalten.
+- **G5:** `_wiederherstellungsziele_planen` vergibt die Kopie-Namen in einer zweiten Runde
+  mit `bereits_vergeben`, sodass es keine doppelten Ziele mehr gibt.
+  Restpunkt, nicht umgesetzt: kein casefold-Vergleich unter Windows. Praktisch
+  ausgeschlossen, weil die App selbst nie solche ZIPs erzeugt.
+- **G6, Halbe Disziplin (Entscheidung: Web lehnt ebenfalls ab):**
+  - Neue gemeinsame Regel `db.pruefe_ergebnis_eingabe`, genutzt von Desktop und Web.
+  - Im Web wird sie nur auf tatsächlich geänderte Disziplinen angewendet. Ein halber
+    Altbestand blockiert deshalb keine anderen Disziplinen, und der Lost-Update-Schutz
+    bleibt erhalten.
+- **G7:** Der Schema-Name wird per fullmatch geprüft, und `admin_termin_loeschen` prüft
+  gegen die Registry (sonst 400).
+- **G8, Session-Dauer (Entscheidung: 12 h):** `PERMANENT_SESSION_LIFETIME = 12 h`. Am
+  Flask-Quelltext bestätigt: `max_age` greift auch für nicht-permanente Sessions. Die Frist
+  gleitet, gilt also ab der letzten Aktivität, weil das Cookie bei jeder Anfrage neu
+  signiert wird.
+- **G9:** `ErgebnisTab.aktualisieren` wendet die gemerkte Sortierung erneut an.
+- **G10, Konstanten (Entscheidung: nur Test):**
+  - Neue Klasse `TestRegelKonsistenz`: Sie gleicht die gedruckten Wertnoten-Bänder und die
+    Grenzen 60/40 (Schema-CHECKs, PDF-Überschriften) gegen `shs_core` ab.
+  - **Fund:** Das Band ANZEIGE "V" ist mit "40 – 38" gedruckt; nach "mind. 96 %" wären es
+    39. Im Test als bekannte Ausnahme festgehalten, **Entscheidung Marco offen**.
+- **G11, Doku:**
+  - `Architektur.md`: Zeilenzahlen durch ungefähre Angaben ersetzt, `test_backup` und
+    `test_theme` ergänzt.
+  - `CLAUDE.md`: Zeilenzahlen und ein Hinweis auf `requirements-dev.txt`/pypdf.
+  - Außerdem: `db.py`-Docstring zum pyzipper-Import und `tests.yml`-Kommentar korrigiert.
+- **G12, Obergrenzen (Entscheidung: nächste Major):**
+  - PySide6 <7, reportlab <6, pyzipper <1, Flask <4, waitress <4, psycopg2-binary <3,
+    pytest <10, pytest-qt <5, pypdf <7. Die Untergrenzen sind unverändert.
+  - Laut Verifikation liegen alle installierten Versionen innerhalb der Grenzen. pip liest
+    die Dateien als UTF-8, der Umlaut-Kommentar ist also unproblematisch.
+- **G13:**
+  - Die Dublette `.github/workflows/tests.yml.github-workflows` ist gelöscht. Nur im
+    Dateisystem gelöscht, beim Commit mitnehmen.
+  - `.gitignore` enthält jetzt `*.sqlite`: `anderer.sqlite` erscheint dadurch nicht mehr als
+    untracked. `.containerignore` enthält `requirements-dev.txt`.
+- **G14:** In `pdf_export.py` sind der ungenutzte Import `berechne_wertnote_ed` und
+  `_UNTERTITEL` entfernt; `_GEGENSTAND_FELDER` wird jetzt aus `db` importiert.
+- **Tests:** 391 Nicht-GUI-Tests OK (107 übersprungen); GUI: 98 bestanden, 1 bekannter
+  xfail. `py_compile` ist für alle Module fehlerfrei.
+- **Verifikations-Subagent über alle G-Punkte:** OK, keine blockierenden Funde. Info:
+  `admin_einrichten` prüft erst und legt dann an, zwei gleichzeitige Ersteinrichtungen
+  könnten also zwei Admins anlegen. Das bestand schon vorher und ist seit G1 nur noch mit
+  dem Code möglich.
+- **Entscheidungen Marco zu den drei offenen Punkten ("1 beheben 2 nein 3 ja"):**
+  1. **ANZEIGE-Band "V" korrigiert:** Auf dem ED-Bewertungsbogen steht jetzt "40 – 39" /
+     "38 – 36" statt "40 – 38" / "37 – 36" (96 % von 40 = aufgerundet 39). Die Ausnahme in
+     `TestRegelKonsistenz` ist entfernt; der Test prüft jetzt ohne Sonderfall.
+  2. **Keine absolute Höchstdauer der Web-Session:** Die gleitenden 12 h reichen - bewusst
+     so entschieden, nicht erneut als Befund melden.
+  3. **CSRF-Prüfung behoben:** `_csrf_pruefen` vergleicht jetzt UTF-8-Bytes. Ein Token mit
+     Sonderzeichen ergibt 403 statt 500. Neuer Test; die Gegenprobe gegen den alten Code
+     zeigte den TypeError.
+  - **Tests:** 392 Nicht-GUI-Tests OK (107 übersprungen), GUI 98 bestanden + 1 xfail.
+
+## Version 1.0.29 (22.09., Build auf Marcos Wunsch "ja wir bauen ein neues build")
+
+Bündelt die komplette QS-Runde vom 22.09. (siehe Abschnitt "Codeprüfung (22.09.), gesamter
+Quellcode" oben):
+- M1-M6.
+- Nachtrag ED-Bewertungsbogen bei DQ/Abbruch.
+- Einheitliche Datumsanzeige TT.MM.JJJJ.
+- G1-G14.
+- Korrektur ANZEIGE-Band "V" (39) und CSRF-Vergleich auf Bytes.
+
+**Build-Ablauf:**
+- `version.txt`, `version.py` und `version_info.txt` per `bump_version.py` auf 1.0.29
+  erhöht.
+- Lokaler Testlauf mit Anaconda-Python:
+  - non-GUI 392 Tests, 0 fehlgeschlagen, 107 übersprungen (PostgreSQL-Tests ohne lokalen
+    Server).
+  - GUI (`test_app_gui.py`, `test_theme.py` via pytest-qt, nur temporär im
+    Sitzungs-Scratchpad installiert): 98 bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Neu im Commit: `requirements-dev.txt`. Gelöscht wird die Dublette
+  `.github/workflows/tests.yml.github-workflows`.
+
+**Vor dem nächsten Container-Start:** `SHS_ADMIN_SETUP_CODE` in die eigene `.env`
+eintragen (siehe G1 und README_CONTAINER.md), sonst startet `compose up` nicht.
+
+**Erst der CI-Lauf nach dem Push zeigt:**
+- ob die ~45 PDF-Inhaltstests (jetzt erstmals mit pypdf, M4) auch unter Linux grün sind;
+- ob die echten PostgreSQL-Tests grün sind;
+- ob der Container-Smoke-Test mit dem neuen Pflichtwert durchläuft.
+
+**Push und Tag (`v1.0.29`) führt wie gehabt Marco selbst aus:**
+```
+git push
+git tag v1.0.29
+git push --tags
+```

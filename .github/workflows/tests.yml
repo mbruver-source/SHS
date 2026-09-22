@@ -2,7 +2,8 @@ name: Tests
 
 # Läuft bei jedem Push und bei jedem Pull Request automatisch die komplette
 # Testsuite: test_db.py, test_db_postgres_wrapper.py, test_pdf_export.py,
-# test_shs_core.py, test_bump_version.py (reine Logik/Datenschicht, kein Qt),
+# test_shs_core.py, test_bump_version.py, test_backup.py (reine Logik/Datenschicht, kein Qt),
+# test_theme.py (Farbschemata, braucht PySide6),
 # test_app_web.py (Flask-Backend der geplanten Web-Version, siehe app_web.py) UND
 # test_app_gui.py (echte PySide6-GUI-Tests über pytest-qt: Klicks, Checkbox-Toggle,
 # Dialog-Öffnen usw.). Alles läuft headless über die Qt-eigene "offscreen"-Plattform
@@ -76,7 +77,12 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-postgres.txt
           pip install -r requirements-web.txt
-          pip install pytest pytest-qt
+          pip install -r requirements-dev.txt
+
+      # Codeprüfung 22.09. (M4): ohne pypdf wird TestPdfExport still übersprungen - hier
+      # lieber laut scheitern, als unbemerkt wieder ohne PDF-Inhaltsprüfung zu laufen.
+      - name: Prüfen, dass pypdf für die PDF-Tests verfügbar ist
+        run: python -c "import pypdf"
 
       - name: Tests ausführen
         run: pytest -v

@@ -1,3 +1,9 @@
-PySide6>=6.7
-reportlab>=4.0
-pyzipper>=0.4.0
+# Obergrenzen (Codeprüfung 22.09., G12): jeweils "<" die nächste Major-Version NACH der
+# aktuell (Stand 22.09.2026) neuesten, damit ein künftiger Major-Sprung mit möglicherweise
+# inkompatiblen Änderungen nicht unbemerkt in CI/Installer landet - die derzeit genutzten
+# Versionen bleiben erlaubt, die Untergrenzen sind unverändert. Bei einem neuen Major-
+# Release bewusst testen und die Grenze dann anheben.
+# Stand 22.09.2026: PySide6 6.11.x, reportlab 5.0.x (4.x weiterhin erlaubt), pyzipper 0.4.0.
+PySide6>=6.7,<7
+reportlab>=4.0,<6
+pyzipper>=0.4.0,<1

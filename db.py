@@ -486,9 +486,10 @@ def init_db_postgres(dsn: str) -> _PostgresConnection:
     einfachere Baustein für den Fall einer eigenen Datenbank pro Termin.
 
     Importiert psycopg2 bewusst erst hier statt am Modulanfang, damit db.py für die
-    SQLite-Desktop-Version weiterhin ganz ohne diese zusätzliche Abhängigkeit auskommt -
-    genau wie pyzipper aktuell nur innerhalb der Backup-Funktionen gebraucht wird statt
-    global importiert zu werden.
+    SQLite-Desktop-Version weiterhin ganz ohne diese zusätzliche Abhängigkeit auskommt.
+    (Anders als pyzipper: das wird zwar nur von den Backup-Funktionen gebraucht, aber am
+    Modulanfang global importiert und steht deshalb auch in requirements-web.txt -
+    Codeprüfung 22.09., G11.)
 
     dsn: vollständiger PostgreSQL-Verbindungsstring,
     z. B. "postgresql://benutzer:passwort@host:5432/datenbankname".
@@ -752,6 +753,65 @@ def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
 
 # --- CSV-Import (Meldeformular) ---------------------------------------------
 #
+# --- Datumsfelder (Codeprüfung 22.09., M5) -----------------------------------------------
+#
+# Alle Datumsfelder (Veranstaltungsdatum, Geburtsdatum, Wurftag, Tollwutimpfung) werden
+# intern IMMER als JJJJ-MM-TT gespeichert - darauf bauen ist_jugendlicher(), der
+# Impfpass-Vergleich im PDF und die Dateinamen auf. Eingegeben werden dürfen aber auch
+# deutsche Schreibweisen (TT.MM.JJJJ, auch ohne führende Nullen); vorher landete z. B.
+# "27.09.2026" unverändert in der Datenbank und ließ Jugendlichen-Statistik und
+# Impf-Hervorhebung still falsch rechnen.
+_DATUM_ISO_MUSTER = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+_DATUM_DEUTSCH_MUSTER = re.compile(r"(\d{1,2})\.(\d{1,2})\.(\d{4})")
+
+
+def lies_datum(text: str | None) -> datetime.date | None:
+    """Liest ein Datum in JJJJ-MM-TT oder TT.MM.JJJJ. None bei leerem Wert; ValueError bei
+    einem nicht lesbaren oder ungültigen Datum (z. B. 31.02.2026)."""
+    wert = (text or "").strip()
+    if not wert:
+        return None
+    iso = _DATUM_ISO_MUSTER.fullmatch(wert)
+    deutsch = _DATUM_DEUTSCH_MUSTER.fullmatch(wert)
+    if iso:
+        jahr, monat, tag = iso.groups()
+    elif deutsch:
+        tag, monat, jahr = deutsch.groups()
+    else:
+        raise ValueError(f"ungültiges Datum {wert!r} (bitte TT.MM.JJJJ oder JJJJ-MM-TT)")
+    try:
+        return datetime.date(int(jahr), int(monat), int(tag))
+    except ValueError:
+        raise ValueError(f"ungültiges Datum {wert!r} (diesen Tag gibt es nicht)") from None
+
+
+def normalisiere_datum(text: str | None) -> str | None:
+    """Wandelt eine Datumseingabe (siehe lies_datum) in die Speicherform JJJJ-MM-TT um.
+    None bei leerem Wert, ValueError bei ungültigem Datum."""
+    datum = lies_datum(text)
+    return datum.isoformat() if datum else None
+
+
+def datum_anzeige(gespeichert: str | None) -> str:
+    """Speicherform JJJJ-MM-TT -> TT.MM.JJJJ für Eingabefelder/Anzeige. Ein nicht lesbarer
+    Altbestand wird unverändert angezeigt (damit er korrigiert werden kann, statt zu
+    verschwinden)."""
+    try:
+        datum = lies_datum(gespeichert)
+    except ValueError:
+        return gespeichert or ""
+    return f"{datum.day:02d}.{datum.month:02d}.{datum.year}" if datum else ""
+
+
+def datum_oder_none(text: str | None) -> datetime.date | None:
+    """Wie lies_datum(), aber tolerant: None statt ValueError - für Auswertungen, die bei
+    einem nicht lesbaren Altbestand nicht abbrechen dürfen."""
+    try:
+        return lies_datum(text)
+    except ValueError:
+        return None
+
+
 # Nutzerwunsch (20.09., Anmerkung zum Programm, Abschnitt "Teilnehmer"): Meldeformulare
 # nicht mehr von Hand abtippen müssen. Die Desktop-Anwendung selbst hat keinen eigenen
 # KI-Zugriff (arbeitet komplett offline) - deshalb läuft das Einlesen über einen
@@ -764,7 +824,7 @@ def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
 CSV_IMPORT_SPALTEN = [
     "nachname", "vorname", "rufname_hund", "art", "stufe", "disziplin",
     "verein", "zwingername", "geschlecht", "rasse", "schulterhoehe_cm", "chip_nr",
-    "tollwutimpfung_bis",
+    "tollwutimpfung_bis", "geburtsdatum",
     "verband", "mitgliedsnummer", "wurftag", "strasse", "hausnummer", "plz", "ort",
     "email", "telefon",
     "halter_vorname", "halter_nachname", "halter_strasse", "halter_hausnummer",
@@ -830,15 +890,27 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     if geschlecht is not None and geschlecht not in ("Hündin", "Rüde"):
         raise ValueError(f"ungültiges Geschlecht {geschlecht!r} (muss Hündin oder Rüde sein)")
 
+    # Datumsfelder: TT.MM.JJJJ wird akzeptiert und umgewandelt, ein ungültiges Datum
+    # überspringt die Zeile wie die übrigen Plausibilitätsfehler (Codeprüfung 22.09., M5,
+    # Marcos Entscheidung). geburtsdatum fehlte bis dahin ganz im Import (M6).
+    daten: dict[str, str | None] = {}
+    for spalte, bezeichnung in (
+        ("tollwutimpfung_bis", "Tollwutimpfung"), ("wurftag", "Wurftag"), ("geburtsdatum", "Geburtsdatum"),
+    ):
+        try:
+            daten[spalte] = normalisiere_datum(_csv_wert(zeile, spalte))
+        except ValueError as fehler:
+            raise ValueError(f"{bezeichnung}: {fehler}") from None
+
     return NeuerTeilnehmer(
         nachname=nachname, vorname=vorname, rufname_hund=rufname_hund,
         art=art, stufe=stufe, disziplin=disziplin,
         verein=_csv_wert(zeile, "verein"), zwingername=_csv_wert(zeile, "zwingername"),
         geschlecht=geschlecht, rasse=_csv_wert(zeile, "rasse"),
         schulterhoehe_cm=schulterhoehe_cm, chip_nr=_csv_wert(zeile, "chip_nr"),
-        tollwutimpfung_bis=_csv_wert(zeile, "tollwutimpfung_bis"),
+        tollwutimpfung_bis=daten["tollwutimpfung_bis"], geburtsdatum=daten["geburtsdatum"],
         verband=_csv_wert(zeile, "verband"), mitgliedsnummer=_csv_wert(zeile, "mitgliedsnummer"),
-        wurftag=_csv_wert(zeile, "wurftag"), strasse=_csv_wert(zeile, "strasse"),
+        wurftag=daten["wurftag"], strasse=_csv_wert(zeile, "strasse"),
         hausnummer=_csv_wert(zeile, "hausnummer"), plz=_csv_wert(zeile, "plz"), ort=_csv_wert(zeile, "ort"),
         email=_csv_wert(zeile, "email"), telefon=_csv_wert(zeile, "telefon"),
         halter_vorname=_csv_wert(zeile, "halter_vorname"), halter_nachname=_csv_wert(zeile, "halter_nachname"),
@@ -956,6 +1028,17 @@ def get_ergebnis(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
     Ergebniszeile, siehe dort)."""
     row = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
     return dict(row) if row else None
+
+
+def pruefe_ergebnis_eingabe(suche: int | None, anzeige: int | None) -> str | None:
+    """Gemeinsame Eingaberegel für Desktop und Web (Codeprüfung 22.09., G6): eine
+    Disziplin ist entweder komplett (Suche UND Anzeige) oder gar nicht eingetragen.
+    Liefert einen Fehlertext für den Nutzer oder None, wenn die Eingabe passt. Die
+    Bereichsgrenzen (0-60/0-40) prüfen die Frontends weiterhin selbst bzw. die
+    CHECK-Constraints der Datenbank."""
+    if (suche is None) != (anzeige is None):
+        return "Bitte Suche UND Anzeige eintragen oder beide Felder leer lassen."
+    return None
 
 
 def eintragen_ergebnis(
@@ -1262,18 +1345,15 @@ JUGENDLICHE_ALTERSGRENZE = 18
 
 def ist_jugendlicher(geburtsdatum: str | None, stichtag: str | None) -> bool:
     """True, wenn die Person am `stichtag` (i.d.R. das Prüfungsdatum) jünger als
-    JUGENDLICHE_ALTERSGRENZE (18) Jahre ist. Beide Werte werden im Format JJJJ-MM-TT
-    erwartet (wie die übrigen Datumsfelder im Projekt, siehe tollwutimpfung_bis/wurftag).
+    JUGENDLICHE_ALTERSGRENZE (18) Jahre ist. Gespeichert wird JJJJ-MM-TT (siehe
+    normalisiere_datum); ein Altbestand in TT.MM.JJJJ wird ebenfalls gelesen (M5, 22.09.).
     Fehlt eines der beiden Daten oder lässt es sich nicht als Datum lesen (z. B. leeres
     Geburtsdatum, noch nicht gepflegtes Prüfungsdatum), liefert die Funktion bewusst False
     statt eines Fehlers - ohne bekanntes Geburtsdatum kann niemand als Jugendliche/r
     ausgewiesen werden, das ist der sichere Default (keine falsche Zuordnung)."""
-    if not geburtsdatum or not stichtag:
-        return False
-    try:
-        geburt = datetime.date.fromisoformat(geburtsdatum.strip())
-        tag = datetime.date.fromisoformat(stichtag.strip())
-    except ValueError:
+    geburt = datum_oder_none(geburtsdatum)
+    tag = datum_oder_none(stichtag)
+    if geburt is None or tag is None:
         return False
     alter = tag.year - geburt.year - ((tag.month, tag.day) < (geburt.month, geburt.day))
     return alter < JUGENDLICHE_ALTERSGRENZE
@@ -1789,7 +1869,10 @@ def dateiname_vorschlagen(verein: str, datum: str) -> str:
 # ausdrücklichen Wunsch nicht benötigt, siehe Chatverlauf) - jedes Schema bleibt
 # vollständig eigenständig, wie bisher jede Termin-Datei.
 
-_SCHEMA_NAME_MUSTER = re.compile(r"^termin_[0-9]+$")
+# fullmatch statt match mit "^...$" (Codeprüfung 22.09., G7): Pythons "$" passt auch vor
+# einem abschließenden "\n" - "termin_5\n" war damit ein "gültiger" Name, DROP SCHEMA
+# gelang, das DELETE aus termin_registry traf aber 0 Zeilen (verwaister Registry-Eintrag).
+_SCHEMA_NAME_MUSTER = re.compile(r"termin_[0-9]+")
 
 
 def _pruefe_schema_name(schema_name: str) -> None:
@@ -1799,7 +1882,7 @@ def _pruefe_schema_name(schema_name: str) -> None:
     für Bezeichner). In der Praxis wird `schema_name` in diesem Modul ausschließlich
     intern aus der Registry-ID erzeugt (nie aus direkter Nutzereingabe übernommen) - diese
     Prüfung ist die zusätzliche Absicherung dagegen, falls sich das einmal ändert."""
-    if not _SCHEMA_NAME_MUSTER.match(schema_name):
+    if not _SCHEMA_NAME_MUSTER.fullmatch(schema_name):
         raise ValueError(f"Ungültiger Schema-Name: {schema_name!r}")
 
 
@@ -2337,8 +2420,17 @@ def exportiere_termin_nach_postgres(sqlite_conn: sqlite3.Connection, postgres_co
         # "Postgres-Export nicht atomar", Codeprüfung 21.09.). Die ursprüngliche Exception
         # wird danach unverändert weitergereicht, damit der Aufrufer (sync_termin.py/
         # app_web.py) den Fehlschlag wie bisher meldet.
-        _setze_termin_suchpfad(postgres_conn, "public")
-        loesche_termin_postgres(postgres_conn, neuer_termin.schema_name)
+        #
+        # rollback() ZUERST (Codeprüfung 22.09., M1): war die Ursache ein echter
+        # PostgreSQL-Fehler, ist die laufende Transaktion abgebrochen und JEDER weitere
+        # Befehl - auch schon das SET search_path - scheitert mit InFailedSqlTransaction;
+        # die Bereinigung wäre dann nie gelaufen. rollback() und Bereinigung sind außerdem
+        # abgesichert, damit ein Fehler dabei (z. B. Verbindung weg) nicht die
+        # ursprüngliche Exception verdeckt.
+        with suppress(Exception):
+            postgres_conn.rollback()
+            _setze_termin_suchpfad(postgres_conn, "public")
+            loesche_termin_postgres(postgres_conn, neuer_termin.schema_name)
         raise
     postgres_conn.commit()
     # anzahl_teilnehmer/verein/ort/datum in erstelle_termin_postgres()s Rückgabe waren noch
@@ -2368,6 +2460,37 @@ class ImportBericht:
     # in importiere_teilnehmer_aus_csv(). Default leer, damit bestehende Aufrufstellen (die
     # dieses Feld nicht setzen) unverändert funktionieren.
     fehler: list[str] = field(default_factory=list)
+    # Startnummer gefunden, aber offensichtlich ein ANDERER Teilnehmer (Nachname, Hund,
+    # Art/LK/Disziplin weichen ab - z. B. Startnummern nach dem Veröffentlichen getauscht
+    # oder falsche Termin-Datei hochgeladen). Ergebnis wird dann NICHT übernommen
+    # (Codeprüfung 22.09., M2, Marcos Entscheidung), sondern hier mit beiden Namen gemeldet.
+    abweichungen: list[str] = field(default_factory=list)
+    # Disziplinen zuordenbarer Teilnehmer, die in der Web-Erfassung (Quelle) leer, in der
+    # Termin-Datei (Ziel) aber bereits gefüllt sind - der Wert der Termin-Datei bleibt
+    # dabei unverändert erhalten (Codeprüfung 22.09., G2, Marcos Entscheidung: Verhalten
+    # beibehalten, aber sichtbar melden, damit ein im Web versehentlich nicht erfasstes
+    # oder bewusst gelöschtes Ergebnis nicht unbemerkt bleibt).
+    im_web_leer: list[str] = field(default_factory=list)
+
+
+def _teilnehmer_merkmale(t: dict) -> tuple:
+    """Vergleichsschlüssel für importiere_ergebnisse_nach_startnummer(): Nachname, Rufname
+    des Hundes, Art, Leistungsklasse und (nur ED) Disziplin - Groß-/Kleinschreibung und
+    Leerzeichen am Rand werden ignoriert."""
+    def norm(wert) -> str:
+        return (wert or "").strip().casefold()
+
+    return (
+        norm(t.get("nachname")),
+        norm(t.get("rufname_hund")),
+        t.get("art"),
+        t.get("stufe"),
+        t.get("disziplin") if t.get("art") == "ED" else None,
+    )
+
+
+def _teilnehmer_kurztext(t: dict) -> str:
+    return f"{t['nachname']}, {t['vorname']} ({t.get('rufname_hund') or '-'}, {leistungsklasse_label(t)})"
 
 
 def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBericht:
@@ -2383,34 +2506,63 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
     Fehler bei einem einzelnen Teilnehmer (z. B. ein zwischenzeitlicher DB-Fehler) bricht
     den Import für die übrigen Teilnehmer deshalb NICHT ab, analog zum bereits etablierten
     Muster in importiere_teilnehmer_aus_csv(): der Name landet stattdessen im `fehler`-Feld
-    des zurückgegebenen ImportBericht, der Import macht mit dem nächsten Teilnehmer weiter."""
+    des zurückgegebenen ImportBericht, der Import macht mit dem nächsten Teilnehmer weiter.
+
+    Plausibilitätsprüfung (Codeprüfung 22.09., M2): passt der Teilnehmer mit derselben
+    Startnummer im Ziel nicht zur Quelle (siehe _teilnehmer_merkmale), wird NICHTS
+    übertragen - sonst landeten Ergebnisse nach einem Startnummerntausch oder bei einer
+    falschen Datei still beim falschen Teilnehmer. Meldung im `abweichungen`-Feld.
+
+    Ausnahme vom vollständigen Überschreiben: eine in der Quelle komplett leere Disziplin
+    (Suche UND Anzeige None) wird nicht übertragen, ein Wert im Ziel bleibt also erhalten -
+    solche Fälle landen seit Codeprüfung 22.09., G2 im `im_web_leer`-Feld."""
     ziel_nach_startnummer = {
-        t["startnummer"]: t["id"] for t in list_teilnehmer(ziel_conn) if t.get("startnummer") is not None
+        t["startnummer"]: t for t in list_teilnehmer(ziel_conn) if t.get("startnummer") is not None
     }
     aktualisiert = 0
     ohne_startnummer: list[str] = []
     nicht_gefunden: list[str] = []
     fehler: list[str] = []
+    abweichungen: list[str] = []
+    im_web_leer: list[str] = []
     for quelle_teilnehmer in list_teilnehmer(quelle_conn):
         startnummer = quelle_teilnehmer.get("startnummer")
         name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
         if startnummer is None:
             ohne_startnummer.append(name)
             continue
-        ziel_id = ziel_nach_startnummer.get(startnummer)
-        if ziel_id is None:
+        ziel_teilnehmer = ziel_nach_startnummer.get(startnummer)
+        if ziel_teilnehmer is None:
             nicht_gefunden.append(str(startnummer))
             continue
-        ergebnis = get_ergebnis(quelle_conn, quelle_teilnehmer["id"])
-        if not ergebnis:
+        if _teilnehmer_merkmale(quelle_teilnehmer) != _teilnehmer_merkmale(ziel_teilnehmer):
+            abweichungen.append(
+                f"Nr. {startnummer}: Web {_teilnehmer_kurztext(quelle_teilnehmer)} ≠ "
+                f"Termin-Datei {_teilnehmer_kurztext(ziel_teilnehmer)}"
+            )
             continue
+        ziel_id = ziel_teilnehmer["id"]
+        ergebnis = get_ergebnis(quelle_conn, quelle_teilnehmer["id"]) or {}
+        # Codeprüfung 22.09., G2: Stand der Termin-Datei VOR dem Übertragen, um Disziplinen
+        # zu melden, die im Web leer sind, im Ziel aber einen (beibehaltenen) Wert haben.
+        ziel_ergebnis = get_ergebnis(ziel_conn, ziel_id) or {}
         hat_wert = False
         try:
             for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
-                suche, anzeige = ergebnis[spalte_suche], ergebnis[spalte_anzeige]
+                suche, anzeige = ergebnis.get(spalte_suche), ergebnis.get(spalte_anzeige)
                 if suche is not None or anzeige is not None:
                     eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
                     hat_wert = True
+                else:
+                    ziel_suche = ziel_ergebnis.get(spalte_suche)
+                    ziel_anzeige = ziel_ergebnis.get(spalte_anzeige)
+                    if ziel_suche is not None or ziel_anzeige is not None:
+                        im_web_leer.append(
+                            f"Nr. {startnummer} {name} – {disziplin}: in der Web-Erfassung "
+                            f"leer, in der Termin-Datei "
+                            f"{'-' if ziel_suche is None else ziel_suche}/"
+                            f"{'-' if ziel_anzeige is None else ziel_anzeige} (beibehalten)"
+                        )
         except Exception:
             fehler.append(name)
             continue
@@ -2421,6 +2573,8 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
         ohne_startnummer_uebersprungen=ohne_startnummer,
         nicht_gefunden=nicht_gefunden,
         fehler=fehler,
+        abweichungen=abweichungen,
+        im_web_leer=im_web_leer,
     )
 
 
@@ -2469,17 +2623,28 @@ def _ist_sicherer_dateiname(name: str) -> bool:
     return True
 
 
-def eindeutigen_dateinamen_finden(ordner: Path, gewuenschter_name: str) -> str:
+def eindeutigen_dateinamen_finden(
+    ordner: Path, gewuenschter_name: str, bereits_vergeben: set[str] | frozenset[str] = frozenset()
+) -> str:
     """Hängt bei einem im Ordner bereits vergebenen Dateinamen einen Zähler an (z.B.
     'Termin (2).sqlite'), bis ein noch freier Name gefunden ist - für die Option "als
-    Kopie importieren" beim Wiederherstellen einer Sicherung (siehe app.py)."""
+    Kopie importieren" beim Wiederherstellen einer Sicherung (siehe app.py).
+
+    `bereits_vergeben`: Namen, die noch nicht auf der Platte liegen, aber im selben
+    Vorgang schon als Ziel eingeplant sind (Codeprüfung 22.09., G5: enthielt eine
+    Sicherung "A.sqlite" und "A (2).sqlite", landeten sonst beide auf "A (2).sqlite" und
+    einer überschrieb still den anderen)."""
     ordner = Path(ordner)
-    if not (ordner / gewuenschter_name).exists():
+
+    def belegt(name: str) -> bool:
+        return name in bereits_vergeben or (ordner / name).exists()
+
+    if not belegt(gewuenschter_name):
         return gewuenschter_name
     ziel = Path(gewuenschter_name)
     stamm, endung = ziel.stem, ziel.suffix
     zaehler = 2
-    while (ordner / f"{stamm} ({zaehler}){endung}").exists():
+    while belegt(f"{stamm} ({zaehler}){endung}"):
         zaehler += 1
     return f"{stamm} ({zaehler}){endung}"
 

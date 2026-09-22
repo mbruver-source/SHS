@@ -15,7 +15,7 @@
               border: none; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};
               padding: 1em;">
         <strong>{{ termin.verein or "(ohne Vereinsnamen)" }}</strong>{% if termin.ort %}, {{ termin.ort }}{% endif %}<br>
-        <small>{{ termin.datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer</small>
+        <small>{{ termin.datum | datum or "ohne Datum" }} · {{ termin.anzahl_teilnehmer }} Teilnehmer</small>
       </button>
     </form>
   {% else %}

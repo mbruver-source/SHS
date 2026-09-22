@@ -53,6 +53,7 @@ import secrets
 import sqlite3
 import tempfile
 import time
+from datetime import timedelta
 from functools import wraps
 
 from flask import Flask, abort, g, redirect, render_template, request, send_file, session, url_for
@@ -62,6 +63,9 @@ import db
 from version import VERSION
 
 app = Flask(__name__)
+# Datumsanzeige TT.MM.JJJJ in den Templates (gespeichert wird JJJJ-MM-TT, siehe
+# db.normalisiere_datum) - Marcos Wunsch 22.09., einheitlich mit Desktop und PDFs.
+app.add_template_filter(db.datum_anzeige, "datum")
 
 
 @app.context_processor
@@ -127,7 +131,10 @@ def _csrf_pruefen():
         return None
     erwartet = session.get("csrf_token")
     erhalten = request.form.get("csrf_token", "")
-    if not erwartet or not secrets.compare_digest(erwartet, erhalten):
+    # Auf Bytes vergleichen (Codeprüfung 22.09.): compare_digest wirft bei str mit
+    # Nicht-ASCII-Zeichen einen TypeError - ein manipuliertes Token hätte sonst einen 500
+    # statt eines sauberen 403 ausgelöst.
+    if not erwartet or not secrets.compare_digest(erwartet.encode("utf-8"), erhalten.encode("utf-8")):
         abort(403)
 
 # Verbindungsstring zum gemeinsamen PostgreSQL-Server - siehe db.verbinde_postgres_server()
@@ -156,6 +163,43 @@ app.secret_key = os.environ.get("SHS_WEB_SECRET_KEY") or secrets.token_hex(32)
 # Vereinsnetz - mit Secure=True würde der Browser das Cookie über die dann übliche
 # HTTP-Verbindung gar nicht erst mitschicken und niemand könnte sich mehr anmelden.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# Codeprüfung 22.09., G8: maximale Gültigkeit eines Session-Cookies 12 Stunden statt des
+# Flask-Standards von 31 Tagen. Hintergrund: das Session-Cookie ist rein clientseitig
+# (signiert, siehe oben) - "Abmelden" (logout() unten) löscht es nur im Browser des
+# Nutzers, eine zuvor abgegriffene/kopierte Cookie-Zeichenkette bliebe serverseitig bis
+# zu ihrem Ablauf gültig. 12 Stunden decken einen kompletten Prüfungstag ab.
+#
+# Wirkt auch OHNE session.permanent (wird in dieser Anwendung nirgends gesetzt): Flask
+# prüft beim Einlesen JEDES Session-Cookies dessen signierten Zeitstempel gegen
+# max_age = PERMANENT_SESSION_LIFETIME (flask.sessions.SecureCookieSessionInterface.
+# open_session -> itsdangerous URLSafeTimedSerializer.loads(max_age=...), am
+# installierten Flask 3.1.3/itsdangerous 2.2.0 nachgeprüft) - ein älteres Cookie gilt
+# dann als ungültig (SignatureExpired, Unterklasse von BadSignature) und die Anfrage
+# läuft mit einer leeren Session weiter, also Weiterleitung zum Login. Der Browser
+# selbst verwirft das nicht-permanente Cookie zusätzlich beim Schließen.
+#
+# Wichtig zur Einordnung: der Zeitstempel wird bei jeder Antwort erneuert, in der die
+# Session verändert wurde - und _aktueller_benutzer_oder_redirect() unten schreibt bei
+# jeder angemeldeten Anfrage session["ist_admin"] neu. Praktisch sind die 12 Stunden
+# deshalb eine Grenze für INAKTIVITÄT (bzw. für das Alter eines abgegriffenen, danach
+# nicht mehr benutzten Cookies), keine absolute Höchstdauer einer aktiv genutzten
+# Anmeldung.
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+
+# Codeprüfung 22.09., G1: Einrichtungs-Code für die einmalige Ersteinrichtung des ersten
+# Administrators (siehe login() unten). Ohne ihn konnte bisher JEDER im Vereinsnetz, der
+# die Seite vor dem Verein aufruft, den ersten Administrator anlegen und damit die
+# gesamte Web-Version übernehmen. Anders als bei SHS_WEB_SECRET_KEY oben gibt es hier
+# bewusst KEINEN zufällig erzeugten Ersatzwert: ein zufälliger Signaturschlüssel ist ohne
+# Konfiguration genauso sicher (nur unbequemer, siehe dort), ein Einrichtungs-Code muss
+# dagegen dem Einrichtenden bekannt sein - ein Zufallswert wäre also entweder unbenutzbar
+# oder müsste irgendwo (Konsole/Container-Log) ausgegeben werden. Deshalb sicherer
+# Standard: ist die Variable leer/nicht gesetzt, wird die Ersteinrichtung verweigert
+# (mit Hinweis auf der Seite), auch beim lokalen Entwicklungsstart über app.run(). Im
+# Container ist sie über compose.yaml ohnehin Pflicht. Über app.config (wie
+# SHS_POSTGRES_DSN), damit die Tests sie gezielt setzen können.
+app.config["SHS_ADMIN_SETUP_CODE"] = os.environ.get("SHS_ADMIN_SETUP_CODE", "").strip()
 
 
 def _postgres_verbindung():
@@ -278,11 +322,24 @@ def login():
     # Ersteinrichtung den normalen Login (siehe db.gibt_es_admin/admin_einrichten sowie
     # Modul-Docstring oben) - danach nie wieder, auch nicht nach einem "Abmelden".
     if not db.gibt_es_admin(conn):
+        # Codeprüfung 22.09., G1: ohne konfigurierten Einrichtungs-Code keine
+        # Ersteinrichtung (siehe Kommentar bei app.config["SHS_ADMIN_SETUP_CODE"] oben) -
+        # die Seite zeigt dann nur einen Hinweis statt des Formulars.
+        erwarteter_code = app.config.get("SHS_ADMIN_SETUP_CODE") or ""
+        if not erwarteter_code:
+            return render_template("ersteinrichtung.html", fehler=None, code_nicht_konfiguriert=True)
         if request.method == "POST":
             benutzername = request.form.get("benutzername", "").strip()
             passwort = request.form.get("passwort", "")
             passwort_wiederholung = request.form.get("passwort_wiederholung", "")
-            fehler = _pruefe_benutzername_und_passwort(benutzername, passwort, passwort_wiederholung)
+            eingegebener_code = request.form.get("einrichtungs_code", "").strip()
+            # compare_digest (konstante Laufzeit, siehe _csrf_pruefen oben) auf Bytes statt
+            # auf str: mit str-Argumenten wirft es bei Nicht-ASCII-Zeichen (z. B. einem
+            # "ä" im Code oder in der Eingabe) einen TypeError statt False zu liefern.
+            if not secrets.compare_digest(eingegebener_code.encode("utf-8"), erwarteter_code.encode("utf-8")):
+                fehler = "Der Einrichtungs-Code ist falsch (siehe SHS_ADMIN_SETUP_CODE in der .env-Datei)."
+            else:
+                fehler = _pruefe_benutzername_und_passwort(benutzername, passwort, passwort_wiederholung)
             if fehler is None:
                 # False nur im seltenen Fall, dass zwischenzeitlich (z. B. zwei parallel
                 # geöffnete Ersteinrichtungs-Formulare) bereits ein Administrator angelegt
@@ -294,7 +351,7 @@ def login():
                     session["ist_admin"] = True
                     return redirect(url_for("termin_waehlen"))
                 return redirect(url_for("login"))
-        return render_template("ersteinrichtung.html", fehler=fehler)
+        return render_template("ersteinrichtung.html", fehler=fehler, code_nicht_konfiguriert=False)
 
     if request.method == "POST":
         benutzername = request.form.get("benutzername", "")
@@ -515,7 +572,7 @@ def _dublette_hinweis_pruefen(conn, veranstaltung: dict | None) -> str | None:
         if bestehender.verein == veranstaltung["verein"] and bestehender.datum == veranstaltung["datum"]:
             return (
                 f"Hinweis: Es gibt bereits einen veröffentlichten Termin für "
-                f"„{veranstaltung['verein']}“ am {veranstaltung['datum']} "
+                f"„{veranstaltung['verein']}“ am {db.datum_anzeige(veranstaltung['datum'])} "
                 f"(Schema {bestehender.schema_name}) - bei Bedarf den alten selbst löschen."
             )
     return None
@@ -623,7 +680,14 @@ def admin_termin_download(token):
 @app.route("/admin/termine/<schema_name>/loeschen", methods=["POST"])
 @_admin_erforderlich
 def admin_termin_loeschen(schema_name):
-    db.loesche_termin_postgres(_postgres_verbindung(), schema_name)
+    conn = _postgres_verbindung()
+    # Codeprüfung 22.09., G7: wie bei admin_termin_zurueckholen nur Schemas zulassen, die
+    # tatsächlich als Termin registriert sind - sonst reichte der Schema-Name aus der URL
+    # (allein durch db._pruefe_schema_name auf das Namensmuster geprüft) ungefiltert bis
+    # zum "DROP SCHEMA ... CASCADE" durch.
+    if schema_name not in {t.schema_name for t in db.liste_termine_postgres(conn)}:
+        abort(400)
+    db.loesche_termin_postgres(conn, schema_name)
     # Falls der Administrator gerade selbst mit diesem (jetzt gelöschten) Termin arbeitet,
     # die Auswahl zurücksetzen - sonst würde der nächste Aufruf einer
     # "_termin_erforderlich"-Ansicht auf ein nicht mehr existierendes Schema treffen.
@@ -661,9 +725,31 @@ def _disziplin_text_werte(formular, disziplin: str) -> tuple[str, str]:
     return _feld_zu_text(formular, f"suche_{disziplin}"), _feld_zu_text(formular, f"anzeige_{disziplin}")
 
 
-def _pruefe_und_parse_formular(formular, disziplinen: list[str]) -> tuple[dict, str | None]:
+def _disziplin_unveraendert(formular, disziplin: str, geladene_werte: dict) -> bool:
+    """True, wenn der Richter diese Disziplin seit dem Laden der Seite NICHT verändert hat
+    (abgeschickter Text == versteckter "geladen_*"-Text) - Grundlage sowohl für den
+    Lost-Update-Schutz beim Speichern (siehe ergebnis_erfassen) als auch für die
+    Vollständigkeitsprüfung in _pruefe_und_parse_formular. Fehlt ein "geladen_*"-Feld,
+    gilt die Disziplin als verändert (siehe _feld_roh)."""
+    geladen = geladene_werte[disziplin]
+    return None not in geladen and _disziplin_text_werte(formular, disziplin) == geladen
+
+
+def _pruefe_und_parse_formular(
+    formular, disziplinen: list[str], geladene_werte: dict | None = None
+) -> tuple[dict, str | None]:
     """Parst und validiert die Formularfelder einer Ergebniserfassung. Liefert
     (Werte je Disziplin als {disziplin: (suche, anzeige)}, Fehlertext oder None).
+
+    Codeprüfung 22.09., G6: zusätzlich die gemeinsame Regel "Suche UND Anzeige oder
+    keins von beiden" (db.pruefe_ergebnis_eingabe, dieselbe wie in der Desktop-Version) -
+    bisher speicherte das Web eine halb ausgefüllte Disziplin klaglos. Geprüft werden
+    dabei NUR vom Richter veränderte Disziplinen (siehe _disziplin_unveraendert, dafür
+    geladene_werte aus _geladene_werte_aus_formular): eine unveränderte Disziplin wird
+    ohnehin nicht gespeichert (Lost-Update-Schutz), und ein bereits halb gespeicherter
+    Altbestand (z. B. aus der Zeit vor dieser Prüfung) darf das Speichern der ANDEREN
+    Disziplinen desselben Dreikampf-Teilnehmers nicht blockieren. Ohne geladene_werte
+    (None) werden alle Disziplinen geprüft.
 
     Die Wertebereiche (0-60 Suchleistung, 0-40 Anzeigeleistung) werden hier bewusst
     VOR dem Speichern geprüft, nicht erst über die CHECK-Constraints der Datenbank
@@ -685,6 +771,10 @@ def _pruefe_und_parse_formular(formular, disziplinen: list[str]) -> tuple[dict, 
             return {}, f"Suchleistung {disziplin}: nur Werte von 0 bis 60 möglich."
         if anzeige is not None and not (0 <= anzeige <= 40):
             return {}, f"Anzeigeleistung {disziplin}: nur Werte von 0 bis 40 möglich."
+        if geladene_werte is None or not _disziplin_unveraendert(formular, disziplin, geladene_werte):
+            unvollstaendig = db.pruefe_ergebnis_eingabe(suche, anzeige)
+            if unvollstaendig is not None:
+                return {}, f"{disziplin}: {unvollstaendig}"
         werte[disziplin] = (suche, anzeige)
     return werte, None
 
@@ -790,13 +880,11 @@ def ergebnis_erfassen(conn, teilnehmer_id):
 
     fehler = None
     if request.method == "POST":
-        werte, fehler = _pruefe_und_parse_formular(request.form, disziplinen)
+        geladene_werte = _geladene_werte_aus_formular(request.form, disziplinen)
+        werte, fehler = _pruefe_und_parse_formular(request.form, disziplinen, geladene_werte)
         if fehler is None:
-            geladene_werte = _geladene_werte_aus_formular(request.form, disziplinen)
             for disziplin, (suche, anzeige) in werte.items():
-                aktuell = _disziplin_text_werte(request.form, disziplin)
-                geladen = geladene_werte[disziplin]
-                if None not in geladen and aktuell == geladen:
+                if _disziplin_unveraendert(request.form, disziplin, geladene_werte):
                     # Diese Disziplin wurde vom aktuellen Richter nicht verändert - siehe
                     # Funktionsdocstring (Lost-Update-Schutz).
                     continue

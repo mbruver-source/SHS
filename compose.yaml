@@ -48,6 +48,9 @@ services:
       # Format/Details siehe db.verbinde_postgres_server() bzw. app_web.py.
       SHS_POSTGRES_DSN: postgresql://${SHS_DB_USER:-shs}:${SHS_DB_PASSWORD:?bitte SHS_DB_PASSWORD in .env setzen - siehe .env.example}@db:5432/${SHS_DB_NAME:-shs}
       SHS_WEB_SECRET_KEY: ${SHS_WEB_SECRET_KEY:?bitte SHS_WEB_SECRET_KEY in .env setzen - siehe .env.example}
+      # Einrichtungs-Code für das Anlegen des ersten Administrators (Codeprüfung 22.09.,
+      # G1) - ohne ihn verweigert app_web.py die Ersteinrichtung, siehe .env.example.
+      SHS_ADMIN_SETUP_CODE: ${SHS_ADMIN_SETUP_CODE:?bitte SHS_ADMIN_SETUP_CODE in .env setzen - siehe .env.example}
     ports:
       - "5000:5000"
     healthcheck:

@@ -30,6 +30,7 @@ bump_version.py
 
 # Tests, Dokumentation
 test_*.py
+requirements-dev.txt
 *.md
 
 # Geheimnisse/lokale Konfiguration

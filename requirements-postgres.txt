@@ -10,4 +10,8 @@
 # Wird aktuell installiert von: tests.yml (für die TestDatenbankPostgres/
 # TestZeitplanPostgres-Tests in test_db.py gegen einen echten PostgreSQL-Service-
 # Container) - und später vom eigentlichen Web/Container-Backend, sobald das gebaut wird.
-psycopg2-binary>=2.9
+#
+# Obergrenze (Codeprüfung 22.09., G12): "<" die nächste Major-Version NACH der aktuell
+# (Stand 22.09.2026) neuesten (2.9.x), damit ein Major-Sprung nicht unbemerkt in CI/
+# Container landet - Untergrenze unverändert.
+psycopg2-binary>=2.9,<3

@@ -23,8 +23,15 @@ bleiben Desktop-Aufgaben vor/nach dem Prüfungstag.
 ## Einrichtung (einmalig)
 
 1. `.env.example` nach `.env` kopieren und die Werte eintragen (Datenbank-Passwort,
-   Session-Schlüssel – siehe Kommentare in `.env.example`, insbesondere den Befehl zum
-   Erzeugen des Session-Schlüssels). `.env` **nicht** committen (steht in `.gitignore`).
+   Session-Schlüssel, Einrichtungs-Code `SHS_ADMIN_SETUP_CODE` für den ersten
+   Administrator – siehe Kommentare in `.env.example`, insbesondere die Befehle zum
+   Erzeugen von Session-Schlüssel und Einrichtungs-Code). `.env` **nicht** committen
+   (steht in `.gitignore`).
+
+   **Update einer bestehenden Installation (ab der Version nach 1.0.28):**
+   `SHS_ADMIN_SETUP_CODE` ist jetzt ein Pflichtwert – ohne ihn startet `compose up` nicht,
+   auch wenn bereits ein Administrator existiert. Einfach einen Code erzeugen und als
+   `SHS_ADMIN_SETUP_CODE=...` in die vorhandene `.env` eintragen.
 
    ```
    cp .env.example .env
@@ -83,10 +90,17 @@ db.py, Abschnitt "Benutzerkonten der Web-Version", und app_web.py):
 
 - **Administrator**: richtet sich beim allerersten Aufruf von `http://<Rechner-IP>:5000`
   selbst mit einem frei gewählten Benutzernamen/Passwort ein ("Ersteinrichtung" -
-  erscheint nur, solange noch kein Administrator existiert). Kann danach unter
-  „Benutzer“ in der Kopfzeile weitere Konten anlegen/löschen.
+  erscheint nur, solange noch kein Administrator existiert). Dabei wird zusätzlich der
+  Einrichtungs-Code aus `SHS_ADMIN_SETUP_CODE` (`.env`) abgefragt, damit nicht jeder im
+  Vereinsnetz, der die Seite zuerst aufruft, den Administrator anlegen kann; ist kein
+  Code gesetzt (z. B. beim lokalen Start von `app_web.py` ohne diese Umgebungsvariable),
+  bleibt die Ersteinrichtung gesperrt. Kann danach unter „Benutzer“ in der Kopfzeile
+  weitere Konten anlegen/löschen.
 - **Nur Eintragen**: für Helfer/Richter, dürfen ausschließlich Ergebnisse eintragen,
   keine Benutzerverwaltung.
+
+Eine Anmeldung bleibt höchstens 12 Stunden ohne Aktivität gültig (danach erneut
+anmelden); „Abmelden“ beendet sie sofort im jeweiligen Browser.
 
 Weil Konten global (nicht mehr an einen einzelnen Termin gebunden) sind, wählt jeder
 Nutzer nach dem Login zusätzlich aus, mit welchem gerade veröffentlichten Termin er

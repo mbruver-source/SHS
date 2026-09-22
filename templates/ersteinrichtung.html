@@ -3,17 +3,32 @@
 {% block inhalt %}
 <div class="karte">
   <h1>Ersteinrichtung</h1>
+  {% if code_nicht_konfiguriert %}
+  {# Codeprüfung 22.09., G1: ohne SHS_ADMIN_SETUP_CODE keine Ersteinrichtung - siehe app_web.py. #}
+  <div class="fehler">
+    Die Ersteinrichtung ist gesperrt, weil kein Einrichtungs-Code konfiguriert ist.
+    Bitte in der <code>.env</code>-Datei <code>SHS_ADMIN_SETUP_CODE</code> setzen (siehe
+    <code>.env.example</code> und README_CONTAINER.md) und den Web-Server neu starten.
+  </div>
+  {% else %}
   <p>
     Für diese Web-Version ist noch kein Administrator-Konto eingerichtet. Bitte hier
     einmalig einen Benutzernamen und ein Passwort für den Administrator vergeben - danach
     können unter „Benutzer verwalten“ weitere Konten für Helfer/Richter angelegt werden,
     die nur Ergebnisse eintragen dürfen.
   </p>
+  <p>
+    Zur Absicherung wird zusätzlich der Einrichtungs-Code aus der Server-Konfiguration
+    (<code>SHS_ADMIN_SETUP_CODE</code> in der <code>.env</code>-Datei) abgefragt.
+  </p>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="einrichtungs_code">Einrichtungs-Code</label>
+    <input type="password" id="einrichtungs_code" name="einrichtungs_code" autocomplete="off" required
+           autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
     <label for="benutzername">Benutzername</label>
-    <input type="text" id="benutzername" name="benutzername" autocomplete="username" autofocus required
+    <input type="text" id="benutzername" name="benutzername" autocomplete="username" required
            autocapitalize="none" autocorrect="off" spellcheck="false">
     <label for="passwort">Passwort</label>
     <input type="password" id="passwort" name="passwort" autocomplete="new-password" minlength="8" required>
@@ -22,5 +37,6 @@
            autocomplete="new-password" minlength="8" required>
     <p><button type="submit">Administrator einrichten</button></p>
   </form>
+  {% endif %}
 </div>
 {% endblock %}

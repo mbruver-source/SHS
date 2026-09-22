@@ -93,6 +93,7 @@ from db import (
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
     dateiname_vorschlagen,
+    datum_anzeige,
     delete_teilnehmer,
     eindeutigen_dateinamen_finden,
     eintragen_ergebnis,
@@ -107,7 +108,9 @@ from db import (
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
+    normalisiere_datum,
     PasswortFalschError,
+    pruefe_ergebnis_eingabe,
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
@@ -364,6 +367,13 @@ def _db_fehler_anzeigen(parent, exc: Exception) -> None:
 # unterscheidet. Wird als NULL in der Datenbank abgelegt (siehe db.NeuerTeilnehmer).
 _GEGENSTAND_ZUORDNUNG_FREI = "frei"
 
+# Codeprüfung 22.09., G4: Auswahlwert für "Geschlecht nicht angegeben". Bisher kannte die
+# Combo nur "Hündin"/"Rüde" - ein neuer Teilnehmer startete damit still auf "Hündin", und
+# ein Teilnehmer mit geschlecht NULL (z. B. aus dem CSV-/Web-Import) wurde beim bloßen
+# Öffnen und Speichern im Bearbeiten-Dialog unbemerkt zur "Hündin". Wird als NULL in der
+# Datenbank abgelegt (das Schema erlaubt NULL, siehe db.SCHEMA).
+_GESCHLECHT_UNBEKANNT = "–"
+
 
 def _zuordnung_oder_none(combo: QComboBox) -> str | None:
     text = combo.currentText()
@@ -435,22 +445,24 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # (wurftag/tollwutimpfung_bis) statt eines QDateEdit-Widgets - im Projekt gibt es
         # bislang an keiner Stelle ein echtes Datumsauswahl-Widget als Vorbild.
         self.geburtsdatum = QLineEdit()
-        self.geburtsdatum.setPlaceholderText("JJJJ-MM-TT")
+        self.geburtsdatum.setPlaceholderText("TT.MM.JJJJ")
         self.verein = QLineEdit()
         self.verband = QLineEdit()
         self.mitgliedsnummer = QLineEdit()
         self.zwingername = QLineEdit()
         self.rufname_hund = QLineEdit()
         self.geschlecht = QComboBox()
-        self.geschlecht.addItems(["Hündin", "Rüde"])
+        # Codeprüfung 22.09., G4: leerer erster Eintrag, damit neue Teilnehmer ohne
+        # Angabe starten statt still auf "Hündin" (siehe _GESCHLECHT_UNBEKANNT).
+        self.geschlecht.addItems([_GESCHLECHT_UNBEKANNT, "Hündin", "Rüde"])
         self.schulterhoehe = QSpinBox()
         self.schulterhoehe.setRange(0, 100)
         self.chip_nr = QLineEdit()
         self.rasse = QLineEdit()
         self.wurftag = QLineEdit()
-        self.wurftag.setPlaceholderText("JJJJ-MM-TT")
+        self.wurftag.setPlaceholderText("TT.MM.JJJJ")
         self.tollwutimpfung_bis = QLineEdit()
-        self.tollwutimpfung_bis.setPlaceholderText("JJJJ-MM-TT")
+        self.tollwutimpfung_bis.setPlaceholderText("TT.MM.JJJJ")
         self.strasse = QLineEdit()
         self.hausnummer = QLineEdit()
         self.plz = QLineEdit()
@@ -526,7 +538,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_links.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form_links.addRow("Nachname*", self.nachname)
         form_links.addRow("Vorname*", self.vorname)
-        form_links.addRow("Geburtsdatum (JJJJ-MM-TT)", self.geburtsdatum)
+        form_links.addRow("Geburtsdatum (TT.MM.JJJJ)", self.geburtsdatum)
         form_links.addRow("Verein", self.verein)
         form_links.addRow("Verband", self.verband)
         form_links.addRow("Mitgliedsnummer", self.mitgliedsnummer)
@@ -548,8 +560,8 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_rechts.addRow("Geschlecht", self.geschlecht)
         form_rechts.addRow("Widerristhöhe (cm)", self.schulterhoehe)
         form_rechts.addRow("Chip-Nr.", self.chip_nr)
-        form_rechts.addRow("Wurftag (JJJJ-MM-TT)", self.wurftag)
-        form_rechts.addRow("Tollwutimpfung gültig bis (JJJJ-MM-TT)", self.tollwutimpfung_bis)
+        form_rechts.addRow("Wurftag (TT.MM.JJJJ)", self.wurftag)
+        form_rechts.addRow("Tollwutimpfung gültig bis (TT.MM.JJJJ)", self.tollwutimpfung_bis)
         form_rechts.addRow("Startnummer", _startnummer_zeile(self.startnummer, self.startnummer_unbekannt))
         form_rechts.addRow("Art*", self.art)
         form_rechts.addRow("Leistungsklasse*", self.stufe)
@@ -630,7 +642,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         zuvor per _felder_erstellen angelegten Eingabefelder."""
         self.nachname.setText(vorhandener["nachname"])
         self.vorname.setText(vorhandener["vorname"])
-        self.geburtsdatum.setText(vorhandener["geburtsdatum"] or "")
+        self.geburtsdatum.setText(datum_anzeige(vorhandener["geburtsdatum"]))
         self.verein.setText(vorhandener["verein"] or "")
         self.verband.setText(vorhandener["verband"] or "")
         self.mitgliedsnummer.setText(vorhandener["mitgliedsnummer"] or "")
@@ -642,13 +654,13 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.telefon.setText(vorhandener["telefon"] or "")
         self.zwingername.setText(vorhandener["zwingername"] or "")
         self.rufname_hund.setText(vorhandener["rufname_hund"])
-        if vorhandener["geschlecht"]:
-            self.geschlecht.setCurrentText(vorhandener["geschlecht"])
+        # Codeprüfung 22.09., G4: geschlecht NULL bleibt bewusst auf "–" stehen.
+        self.geschlecht.setCurrentText(vorhandener["geschlecht"] or _GESCHLECHT_UNBEKANNT)
         self.schulterhoehe.setValue(vorhandener["schulterhoehe_cm"] or 0)
         self.chip_nr.setText(vorhandener["chip_nr"] or "")
         self.rasse.setText(vorhandener["rasse"] or "")
-        self.wurftag.setText(vorhandener["wurftag"] or "")
-        self.tollwutimpfung_bis.setText(vorhandener["tollwutimpfung_bis"] or "")
+        self.wurftag.setText(datum_anzeige(vorhandener["wurftag"]))
+        self.tollwutimpfung_bis.setText(datum_anzeige(vorhandener["tollwutimpfung_bis"]))
         if vorhandener["startnummer"] is not None:
             self.startnummer.setValue(vorhandener["startnummer"])
         else:
@@ -692,6 +704,18 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         if not self.nachname.text().strip() or not self.vorname.text().strip() or not self.rufname_hund.text().strip():
             QMessageBox.warning(self, "Fehlende Angaben", "Nachname, Vorname und Rufname des Hundes sind Pflichtfelder.")
             return
+        # Codeprüfung 22.09. (M5): Datumsfelder prüfen, bevor ergebnis() sie umwandelt -
+        # TT.MM.JJJJ und JJJJ-MM-TT sind erlaubt, alles andere bleibt im Dialog stehen.
+        for bezeichnung, feld in (
+            ("Geburtsdatum", self.geburtsdatum), ("Wurftag", self.wurftag),
+            ("Tollwutimpfung gültig bis", self.tollwutimpfung_bis),
+        ):
+            try:
+                normalisiere_datum(feld.text())
+            except ValueError as fehler:
+                QMessageBox.warning(self, "Ungültiges Datum", f"{bezeichnung}: {fehler}")
+                feld.setFocus()
+                return
         if not self.startnummer_unbekannt.isChecked() and self.startnummer.value() in self._vergebene_nummern:
             nummer = self.startnummer.value()
             inhaber = self._namen_je_startnummer.get(nummer)
@@ -746,12 +770,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             disziplin=self.disziplin.currentText() if self.art.currentText() == "ED" else None,
             verein=self.verein.text().strip() or None,
             zwingername=self.zwingername.text().strip() or None,
-            geschlecht=self.geschlecht.currentText(),
+            geschlecht=(
+                None if self.geschlecht.currentText() == _GESCHLECHT_UNBEKANNT
+                else self.geschlecht.currentText()
+            ),
             schulterhoehe_cm=self.schulterhoehe.value() or None,
             chip_nr=self.chip_nr.text().strip() or None,
             rasse=self.rasse.text().strip() or None,
-            tollwutimpfung_bis=self.tollwutimpfung_bis.text().strip() or None,
-            geburtsdatum=self.geburtsdatum.text().strip() or None,
+            tollwutimpfung_bis=normalisiere_datum(self.tollwutimpfung_bis.text()),
+            geburtsdatum=normalisiere_datum(self.geburtsdatum.text()),
             startnummer=None if self.startnummer_unbekannt.isChecked() else self.startnummer.value(),
             gegenstand_1=self.gegenstand_1.text().strip() or None,
             gegenstand_2=self.gegenstand_2.text().strip() or None,
@@ -762,7 +789,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             bezahlt=self.bezahlt.isChecked(),
             verband=self.verband.text().strip() or None,
             mitgliedsnummer=self.mitgliedsnummer.text().strip() or None,
-            wurftag=self.wurftag.text().strip() or None,
+            wurftag=normalisiere_datum(self.wurftag.text()),
             strasse=self.strasse.text().strip() or None,
             hausnummer=self.hausnummer.text().strip() or None,
             plz=self.plz.text().strip() or None,
@@ -849,7 +876,7 @@ class TerminImportDialog(QDialog):
         self.termin_combo = QComboBox()
         for t in self._termine:
             self.termin_combo.addItem(
-                f"{t.verein or '(ohne Verein)'} – {t.datum} ({t.anzahl_teilnehmer} Teilnehmer)"
+                f"{t.verein or '(ohne Verein)'} – {datum_anzeige(t.datum)} ({t.anzahl_teilnehmer} Teilnehmer)"
             )
         self.termin_combo.currentIndexChanged.connect(self._termin_gewaehlt)
 
@@ -1393,6 +1420,8 @@ def _formular_import_prompt() -> str:
         "- verein = Mitgliedsverein des Teilnehmers, verband = übergeordneter Verband "
         "(z.B. VDH), mitgliedsnummer = Mitgl.-Nr., wurftag = Wurfdatum des Hundes "
         "(JJJJ-MM-TT), tollwutimpfung_bis = 'Tollwutimpfung gültig bis' (JJJJ-MM-TT), "
+        "geburtsdatum = Geburtsdatum des Hundeführers/der Hundeführerin, falls auf dem "
+        "Formular angegeben (JJJJ-MM-TT), "
         "schulterhoehe_cm = Größe in cm (nur die Zahl), geschlecht = 'Hündin' oder "
         "'Rüde'.\n"
         "- Die halter_*-Spalten NUR befüllen, wenn das Formular den Abschnitt 'Falls "
@@ -1630,6 +1659,15 @@ class ErgebnisTab(QWidget):
         gewählte Sortierung bleibt dabei erhalten (siehe _zeilen_aufbauen)."""
         self._teilnehmer_je_zeile = list_teilnehmer(self.conn)
         self._zeilen_aufbauen()
+        # Codeprüfung 22.09., G9: list_teilnehmer() liefert immer die DB-Reihenfolge -
+        # ohne erneutes Anwenden ging die per Spaltenklick gewählte Sortierung hier
+        # verloren, während _sortierspalte/_sortieraufsteigend stehen blieben, sodass der
+        # nächste Klick auf dieselbe Spalte die Richtung "umkehrte", obwohl die Tabelle gar
+        # nicht (mehr) danach sortiert war. Erst nach dem Aufbau sortieren, weil einige
+        # Sortierschlüssel (Punkte, DQ/Abbruch, Status) aus den Zeilen-Widgets gelesen
+        # werden; die Werte stammen hier frisch aus der DB, es geht also nichts verloren.
+        if self._sortierspalte is not None:
+            self._sortieren_und_neu_aufbauen()
 
         # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
         # "Alle" zurückzuspringen.
@@ -2090,8 +2128,12 @@ class ErgebnisTab(QWidget):
                         gespeichert += 1
                         continue
 
-                    if suche_wert is None or anzeige_wert is None:
-                        fehler.append(f"{name} – {disziplin}: bitte sowohl Suche als auch Anzeige eintragen")
+                    # Codeprüfung 22.09., G6: gemeinsame Eingaberegel mit dem Web-Frontend
+                    # (db.pruefe_ergebnis_eingabe) statt eigener Prüfung - eine halb
+                    # ausgefüllte Disziplin wird weiterhin abgelehnt und bleibt ungespeichert.
+                    eingabe_fehler = pruefe_ergebnis_eingabe(suche_wert, anzeige_wert)
+                    if eingabe_fehler is not None:
+                        fehler.append(f"{name} – {disziplin}: {eingabe_fehler}")
                         continue
 
                     try:
@@ -3210,7 +3252,7 @@ class VerwaltungTab(QWidget):
         _aktualisiere_veranstaltung_feld(
             self.conn,
             verein=dialog.verein.text().strip(),
-            datum=dialog.datum.text().strip(),
+            datum=dialog.datum_iso(),
             ort=dialog.ort.text().strip() or None,
             vereins_nr=dialog.vereins_nr.text().strip() or None,
             pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
@@ -3287,6 +3329,40 @@ class SicherungErstellenDialog(QDialog):
         if self.passwort_checkbox.isChecked():
             return self.passwort_feld.text()
         return None
+
+
+def _wiederherstellungsziele_planen(namen, vorhandene, ordner, aktion_fuer) -> tuple[dict[str, str], int]:
+    """Legt für jede Termin-Datei einer Sicherung den Zieldateinamen fest und liefert
+    (entscheidungen, anzahl_uebersprungen) für db.sicherung_wiederherstellen().
+    `aktion_fuer(name)` wird nur bei einem Namenskonflikt aufgerufen und liefert
+    "ueberschreiben", "kopie" oder "ueberspringen" (siehe DatensicherungTab._konflikt_abfragen).
+
+    Codeprüfung 22.09., G5: Die Kopie-Namen werden bewusst erst NACH allen Rückfragen
+    vergeben und dabei alle schon eingeplanten Zielnamen (auch die auf sich selbst
+    abgebildeten, also neue und zu überschreibende Einträge) als belegt übergeben. Sonst
+    konnten zwei ZIP-Einträge auf dieselbe Zieldatei landen - z. B. enthält die Sicherung
+    "A.sqlite" (vorhanden, als Kopie -> "A (2).sqlite") UND ein noch nicht vorhandenes
+    "A (2).sqlite", und einer überschrieb still den anderen. Die Reihenfolge der Einträge
+    im ZIP spielt durch die zweite Runde keine Rolle mehr."""
+    entscheidungen: dict[str, str] = {}
+    als_kopie: list[str] = []
+    uebersprungen = 0
+    for name in namen:
+        if name not in vorhandene:
+            entscheidungen[name] = name
+            continue
+        aktion = aktion_fuer(name)
+        if aktion == "ueberschreiben":
+            entscheidungen[name] = name
+        elif aktion == "kopie":
+            als_kopie.append(name)
+        else:  # "ueberspringen"
+            uebersprungen += 1
+    for name in als_kopie:
+        entscheidungen[name] = eindeutigen_dateinamen_finden(
+            ordner, name, bereits_vergeben=set(entscheidungen.values())
+        )
+    return entscheidungen, uebersprungen
 
 
 class DatensicherungTab(QWidget):
@@ -3392,19 +3468,10 @@ class DatensicherungTab(QWidget):
         vorhandene = {p.name for p in ordner.glob("*.sqlite")}
         offener_name = os.path.basename(self._aktueller_pfad) if self._aktueller_pfad else None
 
-        entscheidungen: dict[str, str] = {}
-        uebersprungen = 0
-        for name in namen:
-            if name not in vorhandene:
-                entscheidungen[name] = name
-                continue
-            aktion = self._konflikt_abfragen(name, ist_offener_termin=(name == offener_name))
-            if aktion == "ueberschreiben":
-                entscheidungen[name] = name
-            elif aktion == "kopie":
-                entscheidungen[name] = eindeutigen_dateinamen_finden(ordner, name)
-            else:  # "ueberspringen"
-                uebersprungen += 1
+        entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
+            namen, vorhandene, ordner,
+            lambda name: self._konflikt_abfragen(name, ist_offener_termin=(name == offener_name)),
+        )
 
         if not entscheidungen:
             self.status_label.setText("Wiederherstellen abgebrochen: kein Termin ausgewählt.")
@@ -3861,7 +3928,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         veranstaltung = get_veranstaltung(conn)
         if veranstaltung:
             self.setWindowTitle(
-                f"SHS Prüfungsprogramm – {veranstaltung['verein']} ({veranstaltung['datum']})"
+                f"SHS Prüfungsprogramm – {veranstaltung['verein']} ({datum_anzeige(veranstaltung['datum'])})"
             )
 
         self._tabs.blockSignals(True)
@@ -3914,6 +3981,23 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             )
             if antwort == QMessageBox.Yes:
                 self.ergebnis_tab.alle_speichern()
+                # Codeprüfung 22.09., G3: wie in closeEvent - alle_speichern() kann nicht
+                # jede Zeile speichern (z. B. nur Suche ODER Anzeige eingetragen). Ohne
+                # erneute Prüfung ging der Wechsel trotzdem weiter und die nicht
+                # gespeicherte Zeile beim Neuaufbau der Tabs still verloren. Standard ist
+                # deshalb "Nein" (Wechsel abbrechen, Zeile korrigieren).
+                if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
+                    antwort = QMessageBox.question(
+                        self,
+                        "Nicht alle Ergebnisse gespeichert",
+                        "Einige Ergebnisse konnten nicht gespeichert werden (siehe vorherige "
+                        "Meldung).\n\nTrotzdem den Termin wechseln und diese ungespeicherten "
+                        "Änderungen verwerfen?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No,
+                    )
+                    if antwort != QMessageBox.Yes:
+                        return
 
         dialog = StartDialog(self, aktueller_pfad=self.pfad)
         if dialog.exec() != QDialog.Accepted or not dialog.pfad:
@@ -3981,8 +4065,8 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
 
         self.verein = feld("verein")
         self.ort = feld("ort")
-        self.datum = feld("datum")
-        self.datum.setPlaceholderText("JJJJ-MM-TT")
+        self.datum = QLineEdit(datum_anzeige(vorbelegung.get("datum")))
+        self.datum.setPlaceholderText("TT.MM.JJJJ")
         self.vereins_nr = feld("vereins_nr")
         self.pruefungsnummer = feld("pruefungsnummer")
         self.wertungsrichter_1 = feld("wertungsrichter_1")
@@ -4001,7 +4085,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Austragender Verein*", self.verein)
         form.addRow("Vereins-Nr.", self.vereins_nr)
         form.addRow("Ort", self.ort)
-        form.addRow("Datum* (JJJJ-MM-TT)", self.datum)
+        form.addRow("Datum* (TT.MM.JJJJ)", self.datum)
         form.addRow("Prüfungsnummer", self.pruefungsnummer)
         form.addRow("Prüfungsleiter", self.pruefungsleiter)
         form.addRow("Richter 1", self.wertungsrichter_1)
@@ -4036,13 +4120,24 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         layout.addWidget(buttons)
         self._schriftgroesse_anwenden()
 
+    def datum_iso(self) -> str:
+        """Eingegebenes Datum in Speicherform JJJJ-MM-TT (bereits in
+        _pruefen_und_akzeptieren geprüft, siehe db.normalisiere_datum)."""
+        return normalisiere_datum(self.datum.text()) or ""
+
     def _pfad_manuell_markieren(self, _text: str) -> None:
         self._pfad_manuell_geaendert = True
 
     def _pfad_vorschlagen(self) -> None:
         if self._pfad_manuell_geaendert:
             return
-        name = dateiname_vorschlagen(self.verein.text().strip(), self.datum.text().strip())
+        # Solange das Datum (noch) nicht lesbar ist, z. B. mitten in der Eingabe, den Text
+        # unverändert verwenden - sobald es passt, landet JJJJ-MM-TT im Dateinamen.
+        try:
+            datum = normalisiere_datum(self.datum.text()) or ""
+        except ValueError:
+            datum = self.datum.text().strip()
+        name = dateiname_vorschlagen(self.verein.text().strip(), datum)
         self.pfad_feld.setText(str(termine_ordner() / name))
 
     def _durchsuchen(self) -> None:
@@ -4054,6 +4149,12 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     def _pruefen_und_akzeptieren(self) -> None:
         if not self.verein.text().strip() or not self.datum.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte Verein und Datum angeben.")
+            return
+        try:
+            normalisiere_datum(self.datum.text())
+        except ValueError as fehler:
+            QMessageBox.warning(self, "Ungültiges Datum", f"Datum: {fehler}")
+            self.datum.setFocus()
             return
         if not self._bearbeiten and not self.pfad_feld.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte einen Speicherort angeben.")
@@ -4121,7 +4222,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.tabelle.setRowCount(len(self._termine))
         for row, t in enumerate(self._termine):
             werte = [
-                t.datum or "?",
+                datum_anzeige(t.datum) or "?",
                 t.verein if t.lesbar else f"{t.dateiname} (nicht lesbar)",
                 t.ort or "",
                 str(t.anzahl_teilnehmer) if t.lesbar else "",
@@ -4180,7 +4281,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         set_veranstaltung(
             conn,
             verein=dialog.verein.text().strip(),
-            datum=dialog.datum.text().strip(),
+            datum=dialog.datum_iso(),
             ort=dialog.ort.text().strip() or None,
             vereins_nr=dialog.vereins_nr.text().strip() or None,
             pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
@@ -4222,7 +4323,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         antwort = QMessageBox.question(
             self,
             "Termin löschen",
-            f"Termin „{termin.verein or termin.dateiname}“ ({termin.datum or '?'}) inklusive aller "
+            f"Termin „{termin.verein or termin.dateiname}“ ({datum_anzeige(termin.datum) or '?'}) inklusive aller "
             f"Teilnehmer- und Ergebnisdaten unwiderruflich löschen?\n\nDatei: {termin.pfad}",
         )
         if antwort != QMessageBox.Yes:

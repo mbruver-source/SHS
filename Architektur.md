@@ -1,6 +1,6 @@
 # Architekturüberblick: SHS-Prüfungsprogramm
 
-Stand: 20.09.2026. Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
+Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026). Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
 aktuellen, tatsächlich umgesetzten Stand inkl. der später hinzugekommenen Web/PostgreSQL-Variante.
 Gedacht als schneller Einstieg für neue Sitzungen/Subagents, die den Code noch nicht kennen -
 Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.md`.
@@ -23,18 +23,18 @@ SQLite und PostgreSQL.
 ```mermaid
 flowchart TB
     subgraph Desktop["Desktop-App (PySide6)"]
-        AppPy["app.py (4144 Zeilen)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung"]
+        AppPy["app.py (größtes Modul)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung"]
     end
 
     subgraph WebBackend["Web-Backend (Flask, im Container)"]
-        AppWeb["app_web.py (640 Zeilen)<br/>Login/CSRF, Termin-Auswahl,<br/>Ergebniserfassung, Admin (Benutzer/Termine)"]
+        AppWeb["app_web.py<br/>Login/CSRF, Termin-Auswahl,<br/>Ergebniserfassung, Admin (Benutzer/Termine)"]
         Templates["templates/*.html<br/>(8 Seiten, Jinja2)"]
     end
 
     subgraph Shared["Gemeinsame Schicht"]
-        DbPy["db.py (2442 Zeilen)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Zeitplan-Berechnung, Sicherung (ZIP/pyzipper)"]
-        ShsCore["shs_core.py (197 Zeilen)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
-        PdfExport["pdf_export.py (1020 Zeilen)<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan"]
+        DbPy["db.py (zweitgrößtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Zeitplan-Berechnung, Sicherung (ZIP/pyzipper)"]
+        ShsCore["shs_core.py (klein)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
+        PdfExport["pdf_export.py<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan"]
     end
 
     subgraph Stores["Datenhaltung"]
@@ -72,9 +72,9 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs/Dialoge, `closeEvent`-Handling, Auto-Save | `test_app_gui.py` |
+| `app.py` | Desktop-GUI (PySide6): alle Tabs/Dialoge, `closeEvent`-Handling, Auto-Save, Themes | `test_app_gui.py`, `test_theme.py` (Theme-Erzeugung; braucht ebenfalls PySide6) |
 | `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
-| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Backup/Restore (ZIP, optional `pyzipper`-verschlüsselt) | `test_db.py`, `test_db_postgres_wrapper.py` |
+| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Backup/Restore (ZIP, optional `pyzipper`-verschlüsselt) | `test_db.py`, `test_db_postgres_wrapper.py`, `test_backup.py` (Datensicherung ZIP/pyzipper) |
 | `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung | `test_shs_core.py` |
 | `pdf_export.py` | PDF-Erzeugung (reportlab): Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Zeitplan, Richter-Bedarf | `test_pdf_export.py` |
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
@@ -102,12 +102,17 @@ flowchart TB
 
 ## 4. Test-Suite-Struktur
 
-Ein Testmodul je Produktionsmodul (Tabelle oben), plus Besonderheiten:
+Mindestens ein Testmodul je Kern-Modul (Zuordnung in der Tabelle oben - nicht 1:1: `db.py`
+hat drei Testmodule, `app.py` zwei, `sync_termin.py` und `templates/` keine eigenen), plus
+Besonderheiten:
 
 - **PostgreSQL-Tests** (`Test*Postgres`-Klassen in `test_db.py`, `TestCsrfSchutz`-unabhängige
   Postgres-Fälle) brauchen `SHS_TEST_POSTGRES_DSN` + `psycopg2` - laufen nur in der CI
   (Service-Container in `tests.yml`), werden lokal übersprungen (`skipTest`).
-- **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt` - ebenfalls nur in der CI.
+- **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt` - ebenfalls nur in der CI;
+  `test_theme.py` braucht PySide6 (importiert `app`).
+- **PDF-Inhaltstests** (`test_pdf_export.py`) brauchen `pypdf` - ohne pypdf wird der Großteil
+  übersprungen. Test-/Dev-Abhängigkeiten stehen in `requirements-dev.txt`.
 - **`test_app_web.py`** mockt die PostgreSQL-Klebefunktionen und läuft stattdessen echt gegen
   eine temporäre SQLite-Datei - dadurch überall lauffähig, ohne PostgreSQL zu brauchen.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
@@ -127,8 +132,8 @@ Kurzfassung - die vollständige, für jede Sitzung geltende Fassung steht in `CL
 Repo-Wurzelverzeichnis (wird von Claude-Sitzungen, die in diesem Ordner arbeiten, automatisch
 gelesen):
 
-1. **Explore-Subagent vor neuen, nicht-trivialen Aufgaben** - statt `app.py` (4144 Zeilen) oder
-   `db.py` (2442 Zeilen) komplett zu lesen, zuerst einen schnellen Such-Subagent die relevante
+1. **Explore-Subagent vor neuen, nicht-trivialen Aufgaben** - statt `app.py` oder `db.py` (die beiden
+   mit Abstand größten Module, mehrere tausend Zeilen) komplett zu lesen, zuerst einen schnellen Such-Subagent die relevante
    Stelle lokalisieren lassen.
 2. **Bereichs-Subagents bei bereichsübergreifenden Änderungen** - betrifft eine Änderung
    mehrere der drei Bereiche Desktop (`app.py`), Web (`app_web.py`+`templates/`) und Daten

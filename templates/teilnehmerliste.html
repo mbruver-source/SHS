@@ -3,7 +3,7 @@
 {% block inhalt %}
 <div class="karte">
   <h1>Teilnehmer</h1>
-  {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum }}</p>{% endif %}
+  {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum | datum }}</p>{% endif %}
 </div>
 
 <div class="karte" style="padding: 0;">

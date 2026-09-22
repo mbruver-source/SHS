@@ -15,15 +15,19 @@
 # vorausgesetzt) - ein serverseitig gerenderter Ansatz ohne externe CDN-Abhängigkeiten
 # passt dazu am einfachsten. Der eingebaute Flask-Entwicklungsserver (app.run(), siehe
 # app_web.py) ist dabei nur für lokale Tests gedacht.
-Flask>=3.0
+#
+# Obergrenzen (Codeprüfung 22.09., G12): jeweils "<" die nächste Major-Version NACH der
+# aktuell (Stand 22.09.2026) neuesten (Flask 3.1.x, waitress 3.0.x, pyzipper 0.4.0), damit
+# ein Major-Sprung nicht unbemerkt ins Container-Image gelangt - Untergrenzen unverändert.
+Flask>=3.0,<4
 
 # WSGI-Server für den echten Einsatz im Podman-Container (siehe Containerfile) - ersetzt
 # dort den Flask-Entwicklungsserver. Reine Python-Abhängigkeit (kein C-Compiler im Image
 # nötig, anders als z. B. gunicorn unter manchen Umgebungen).
-waitress>=3.0
+waitress>=3.0,<4
 
 # db.py importiert pyzipper am Modulanfang (für die ZIP-Datensicherung der Desktop-
 # Version, siehe dortiger Kommentar) - das Web-Backend nutzt diese Funktion selbst nie,
 # braucht die Abhängigkeit aber trotzdem, sobald es "import db" ausführt. Deshalb hier
 # mitgeführt statt einer eigenen dritten Requirements-Datei nur für diese eine Zeile.
-pyzipper>=0.4.0
+pyzipper>=0.4.0,<1
