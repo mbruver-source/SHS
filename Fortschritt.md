@@ -1522,3 +1522,13 @@ git push
 git tag v1.0.29
 git push --tags
 ```
+
+**Quellcode-Spiegel nachgezogen (22.09., Marcos Go "ja, spiegel auf Stand bringen"):**
+`SHS-Pruefungsprogramm-Quellcode` stand seit der Migration auf Claude Code noch auf 1.0.21.
+- Alle 52 versionierten Dateien von 1.0.29 wurden hineinkopiert und per Byte-Vergleich
+  geprüft.
+- Die Workflow-Dateien liegen dort wie bisher flach im Hauptordner (`build-container.yml`,
+  `build-installer.yml`, neu auch `tests.yml`).
+- Neu im Spiegel: `README.md`, `pytest.ini`, `requirements-dev.txt`, `test_theme.py`.
+- Bewusst unangetastet: die dortige `.env` (Zugangsdaten), `gui_vorschau.html` und
+  `__pycache__`. Nichts wurde gelöscht.
