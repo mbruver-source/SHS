@@ -227,6 +227,56 @@ def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900,
     return pt_schmal + anteil * (pt_breit - pt_schmal)
 
 
+def _ergebnis_spaltenbreiten_verteilen(
+    natuerliche_breiten: list[int], minimum_breiten: list[int], verfuegbare_breite: int
+) -> list[int]:
+    """Passt Spaltenbreiten proportional an verfuegbare_breite an, ohne minimum_breiten zu
+    unterschreiten - für die Ergebniserfassung (Nutzerwunsch 22.09.: Tabelle soll bei
+    maximiertem Fenster ohne horizontales Scrollen auf den Bildschirm passen). Reicht der
+    Platz bereits, bleiben die natürlichen Breiten unverändert (der Rest geht an die
+    gestreckte Status-Spalte, siehe setStretchLastSection in ErgebnisTab). Reicht selbst das
+    Zusammenstauchen auf die Minima nicht aus (Fenster schmaler als die Summe aller Minima),
+    werden die Minima zurückgegeben - ein Scrollbalken ist dann der akzeptierte Fallback,
+    kein Fehler. Reine Funktion ohne Qt-Abhängigkeit, daher direkt testbar.
+
+    Mehrstufig statt ein einziger globaler Faktor (QS-Fund 22.09.): Spalten, deren Minimum
+    bereits ihrer natürlichen Breite entspricht (z.B. Start-Nr./Name/Hund/Art-LK - reiner
+    Text, der nicht schrumpfen soll), schrumpfen NIE, unabhängig vom globalen Faktor. Würde
+    deren volle natürliche Breite dennoch in die Faktor-Berechnung einfließen, bekämen die
+    tatsächlich schrumpfbaren Spalten (Punkte/Checkbox-Spalten) zu wenig abgezogen und die
+    Summe würde verfuegbare_breite trotzdem überschreiten. Stattdessen iterativ: Spalten, die
+    ihr Minimum erreichen (oder es sowieso schon sind), werden mit exakt ihrem Minimum aus
+    der Verteilung herausgenommen, der verbleibende Faktor wird nur noch aus den übrigen
+    (noch nicht fixierten) Spalten neu berechnet - bis sich nichts mehr ändert."""
+    ziel = list(natuerliche_breiten)
+    gesamt = sum(ziel)
+    if gesamt <= 0 or gesamt <= verfuegbare_breite:
+        return ziel
+
+    offen = list(range(len(ziel)))
+    while offen:
+        fixiert_summe = sum(minimum_breiten[i] for i in range(len(ziel)) if i not in offen)
+        rest_budget = max(verfuegbare_breite - fixiert_summe, 0)
+        rest_gesamt = sum(natuerliche_breiten[i] for i in offen)
+        if rest_gesamt <= 0:
+            break
+        faktor = rest_budget / rest_gesamt
+
+        neu_fixiert = []
+        for i in offen:
+            kandidat = round(natuerliche_breiten[i] * faktor)
+            if kandidat <= minimum_breiten[i]:
+                ziel[i] = minimum_breiten[i]
+                neu_fixiert.append(i)
+            else:
+                ziel[i] = kandidat
+        if not neu_fixiert:
+            break
+        offen = [i for i in offen if i not in neu_fixiert]
+
+    return ziel
+
+
 class ResponsiveSchriftMixin:
     """Mixin für Fenster/Dialoge: passt bei jeder Größenänderung die Schriftgröße von
     Spaltenköpfen und Beschriftungen (QLabel) an die aktuelle Fensterbreite an (siehe
@@ -870,7 +920,7 @@ class TeilnehmerTab(QWidget):
 
         self.tabelle = QTableWidget(0, 8)
         self.tabelle.setHorizontalHeaderLabels(
-            ["Start-Nr.", "Nachname", "Vorname", "Hund", "Art/LK", "Verein", "Bezahlt", "Vollständig"]
+            ["Start-Nr.", "Nachname", "Vorname", "Hund", "Art/LK", "Verein", "Bezahlt", "Anmerkungen"]
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.setSelectionBehavior(QTableWidget.SelectRows)
@@ -1404,12 +1454,12 @@ def _zentrierte_zelle(widget: QWidget) -> QWidget:
 # alle drei nebeneinander in einer Zeile - bei DK sind alle drei aktiv, bei ED nur die
 # jeweils zutreffende (die anderen beiden Spalten bleiben leer/gesperrt).
 _ERGEBNIS_SPALTEN_JE_DISZIPLIN = {
-    disziplin: (3 + 2 * i, 3 + 2 * i + 1) for i, disziplin in enumerate(ALLE_DISZIPLINEN)
+    disziplin: (4 + 2 * i, 4 + 2 * i + 1) for i, disziplin in enumerate(ALLE_DISZIPLINEN)
 }
 # Nutzerwunsch (21.09.): zwei zusätzliche Spalten für die unabhängigen Status
 # "Disqualifiziert"/"Abbruch", vor der bestehenden Status-Spalte (die den
 # gespeichert/nicht-gespeichert-Hinweis dieser Zeile zeigt, siehe _aktualisiere_zeilenstatus).
-_DQ_SPALTE = 3 + 2 * len(ALLE_DISZIPLINEN)
+_DQ_SPALTE = 4 + 2 * len(ALLE_DISZIPLINEN)
 _ABBRUCH_SPALTE = _DQ_SPALTE + 1
 _STATUS_SPALTE = _ABBRUCH_SPALTE + 1
 
@@ -1437,7 +1487,7 @@ class ErgebnisTab(QWidget):
         self._status_boxen_je_zeile: list[tuple[QCheckBox, QCheckBox]] = []
         self._status_geladen_je_zeile: list[tuple[bool, bool]] = []
 
-        spalten = ["Start-Nr.", "Name", "Art/LK"]
+        spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
             spalten += [f"{disziplin} – Suche (0-60)", f"{disziplin} – Anzeige (0-40)"]
         spalten += ["Disqualifiziert", "Abbruch", "Status"]
@@ -1580,7 +1630,8 @@ class ErgebnisTab(QWidget):
 
             self.tabelle.setItem(row, 0, QTableWidgetItem(str(t["startnummer"] or "")))
             self.tabelle.setItem(row, 1, QTableWidgetItem(f"{t['nachname']}, {t['vorname']}"))
-            self.tabelle.setItem(row, 2, QTableWidgetItem(leistungsklasse_label(t)))
+            self.tabelle.setItem(row, 2, QTableWidgetItem(t["rufname_hund"]))
+            self.tabelle.setItem(row, 3, QTableWidgetItem(leistungsklasse_label(t)))
 
             boxen: dict[str, tuple[QLineEdit, QLineEdit]] = {}
             geladen: dict[str, tuple[int | None, int | None]] = {}
@@ -1660,10 +1711,81 @@ class ErgebnisTab(QWidget):
             self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
 
-        # Spaltenbreiten an den tatsächlichen Inhalt/Spaltenkopf anpassen, damit z.B.
-        # lange Namen oder LK-Bezeichnungen nicht abgeschnitten werden - danach bleiben
-        # die Spalten weiterhin von Hand nachziehbar.
+        # Spaltenbreiten (und Schriftgröße) an den tatsächlichen Inhalt UND die verfügbare
+        # Fensterbreite anpassen - siehe _spaltenbreiten_anpassen().
+        self._spaltenbreiten_anpassen()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._spaltenbreiten_anpassen()
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        """Nutzerwunsch (22.09.): Ergebniserfassung soll bei maximiertem Fenster ohne
+        horizontales Scrollen auf den Bildschirm passen. Ein resizeEvent allein reicht nicht,
+        weil dieser Tab beim Maximieren des Fensters inaktiv (nicht die aktuell sichtbare
+        QTabWidget-Seite) sein kann und dann kein zuverlässiges resizeEvent bekommt -
+        showEvent fängt den späteren Wechsel zurück auf diesen Tab ab."""
+        super().showEvent(event)
+        self._spaltenbreiten_anpassen()
+
+    def _spaltenbreiten_anpassen(self) -> None:
+        """Passt Schriftgröße und Spaltenbreiten der Ergebnistabelle an die aktuell
+        verfügbare Breite an (Nutzerwunsch 22.09.: bei maximiertem Fenster soll die Tabelle
+        ohne horizontales Scrollen auf den Bildschirm passen). Die Schriftgröße wird ZUERST
+        gesetzt, weil resizeColumnsToContents() danach bei genau dieser Schriftgröße misst.
+
+        Wichtig: ResponsiveSchriftMixin (siehe dort) setzt bereits eine
+        "QHeaderView::section { font-size: ... }"-Regel auf HauptFenster selbst - die
+        kaskadiert auf JEDEN QHeaderView::section im Fenster, auch den dieser Tabelle. Ein
+        reines setFont() auf den Header würde gegen diese geerbte Stylesheet-Regel verlieren,
+        deshalb hier ein lokales Stylesheet direkt auf self.tabelle (überschreibt die von
+        HauptFenster geerbte Regel nur für diese Tabelle, andere Tabs bleiben unberührt)."""
+        breite = self.tabelle.viewport().width()
+        pt = _responsive_schriftgroesse(breite, schmal=1000, breit=1600, pt_schmal=7.5, pt_breit=9.5)
+
+        self.tabelle.setStyleSheet(
+            f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} "
+            f"QTableWidget::item {{ font-size: {pt:.1f}pt; }}"
+        )
+        font = self.tabelle.font()
+        font.setPointSizeF(pt)
+        for boxen in self._boxen_je_zeile:
+            for suche_feld, anzeige_feld in boxen.values():
+                suche_feld.setFont(font)
+                anzeige_feld.setFont(font)
+        for dq_box, abbruch_box in self._status_boxen_je_zeile:
+            dq_box.setFont(font)
+            abbruch_box.setFont(font)
+
         self.tabelle.resizeColumnsToContents()
+
+        # Spalten 0..(_STATUS_SPALTE-1): Start-Nr./Name/Hund/Art-LK, alle Disziplin-
+        # Punktepaare sowie Disqualifiziert/Abbruch. Die Status-Spalte selbst bleibt außen
+        # vor - die bekommt über setStretchLastSection den Restplatz, dafür wird ihr
+        # längster möglicher Inhalt ("● nicht gespeichert", siehe _aktualisiere_zeilenstatus)
+        # vorab von der verfügbaren Breite abgezogen, damit sie nicht auf (fast) 0
+        # zusammengedrückt wird.
+        status_minimum = self.tabelle.fontMetrics().horizontalAdvance("● nicht gespeichert") + 24
+        breite_fuer_fixspalten = max(breite - status_minimum, 0)
+
+        punktespalten = {c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values() for c in paar}
+        minimum_punkte = max(self.tabelle.fontMetrics().horizontalAdvance("88") + 24, 56)
+
+        natuerlich = [self.tabelle.columnWidth(c) for c in range(_STATUS_SPALTE)]
+        minima = []
+        for c in range(_STATUS_SPALTE):
+            if c in punktespalten:
+                minima.append(minimum_punkte)
+            elif c in (_DQ_SPALTE, _ABBRUCH_SPALTE):
+                minima.append(44)
+            else:
+                # Start-Nr./Name/Hund/Art-LK: reiner Text ohne Eingabefeld, schrumpft nicht
+                # unter die eigene natürliche Breite (soll nicht abgeschnitten werden).
+                minima.append(natuerlich[c])
+
+        ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, breite_fuer_fixspalten)
+        for c, w in enumerate(ziel):
+            self.tabelle.setColumnWidth(c, w)
 
     def _spalte_geklickt(self, spalte: int) -> None:
         """Reagiert auf einen Klick auf eine Spaltenüberschrift: sortiert danach, erneuter
@@ -1687,6 +1809,8 @@ class ErgebnisTab(QWidget):
             t = self._teilnehmer_je_zeile[row]
             return f"{t['nachname']}, {t['vorname']}".lower()
         if spalte == 2:
+            return self._teilnehmer_je_zeile[row]["rufname_hund"].lower()
+        if spalte == 3:
             return leistungsklasse_label(self._teilnehmer_je_zeile[row]).lower()
         if spalte == _DQ_SPALTE:
             return self._status_boxen_je_zeile[row][0].isChecked()
@@ -1932,10 +2056,11 @@ class AuswertungTab(QWidget):
         self._fertig: list = []
         self._ausstehend: list[dict] = []
         self._startnummer_je_id: dict[str, int | None] = {}
+        self._rufname_hund_je_id: dict[str, str] = {}
 
-        self.tabelle = QTableWidget(0, 6)
+        self.tabelle = QTableWidget(0, 7)
         self.tabelle.setHorizontalHeaderLabels(
-            ["Start-Nr.", "Leistungsklasse", "Name", "Gesamtpunkte", "Wertnote", "Platzierung"]
+            ["Start-Nr.", "Leistungsklasse", "Name", "Hund", "Gesamtpunkte", "Wertnote", "Platzierung"]
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
@@ -1981,6 +2106,7 @@ class AuswertungTab(QWidget):
         # Teilnehmerergebnis (shs_core) kennt keine Startnummer - für die Anzeige/den
         # Filter hier separat aus den Stammdaten nachschlagen.
         self._startnummer_je_id = {str(t["id"]): t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self._rufname_hund_je_id = {str(t["id"]): t["rufname_hund"] for t in list_teilnehmer(self.conn)}
 
         alle_labels = sorted({t.leistungsklasse for t in self._fertig} | {leistungsklasse_label(t) for t in self._ausstehend})
         bisherige_auswahl = self.filter_combo.currentText()
@@ -2045,6 +2171,7 @@ class AuswertungTab(QWidget):
                 str(self._startnummer_je_id.get(t.id) or ""),
                 t.leistungsklasse,
                 t.name,
+                self._rufname_hund_je_id.get(t.id, ""),
                 punkte_text,
                 wertnote_text,
                 platz_text,

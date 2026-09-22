@@ -27,6 +27,8 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, Q
 
 from app import (
     VERSION,
+    _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
+    _ergebnis_spaltenbreiten_verteilen,
     _erzeuge_qss,
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
@@ -126,6 +128,22 @@ def test_auswertung_tabelle_zeigt_keine_zeilennummern(qtbot, conn):
     tab = AuswertungTab(conn)
     qtbot.addWidget(tab)
     assert not tab.tabelle.verticalHeader().isVisible()
+
+
+def test_auswertung_zeigt_hund_zwischen_name_und_gesamtpunkte(qtbot, conn):
+    """Nutzerwunsch: eigene Spalte "Hund" zwischen "Name" und "Gesamtpunkte", befüllt mit
+    rufname_hund - Teilnehmerergebnis (shs_core) kennt dieses Feld selbst nicht, AuswertungTab
+    schlägt es analog zur Startnummer separat über die Teilnehmer-Stammdaten nach."""
+    tid = _teilnehmer_anlegen(conn, nachname="Holst", rufname_hund="Freda", disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", suche=58, anzeige=38)
+
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+
+    assert tab.tabelle.horizontalHeaderItem(3).text() == "Hund"
+    assert tab.tabelle.item(0, 2).text() == "Holst, Max"
+    assert tab.tabelle.item(0, 3).text() == "Freda"
+    assert tab.tabelle.item(0, 4).text() == "96"
 
 
 # --- Übersicht Teilnehmer und LK -----------------------------------------------------
@@ -973,6 +991,93 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     assert zeile["anzeige_flaechensuche"] == 28
 
 
+# --- Ergebniserfassung: Responsive Spaltenbreiten/Schriftgröße ----------------------
+# Nutzerwunsch (22.09.): die Tabelle ist inzwischen so breit (13 Spalten), dass sie je nach
+# Bildschirmgröße nicht auf einen Blick sichtbar ist, sondern nach rechts gescrollt werden
+# muss - Schriftgröße und Spaltenbreiten sollen sich so an die Fensterbreite anpassen, dass
+# bei maximiertem Fenster kein horizontales Scrollen mehr nötig ist (siehe
+# _spaltenbreiten_anpassen/_ergebnis_spaltenbreiten_verteilen).
+
+
+def test_ergebnis_spaltenbreiten_keine_stauchung_wenn_platz_reicht():
+    natuerlich = [80, 200, 120]
+    minima = [56, 56, 56]
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 1000)
+    assert ziel == natuerlich
+
+
+def test_ergebnis_spaltenbreiten_stauchen_proportional_bei_ueberlauf():
+    natuerlich = [100, 200, 300]
+    minima = [10, 10, 10]
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 300)
+    assert sum(ziel) <= 300
+    # Verhältnis bleibt erhalten (ungefähr, wegen Rundung): doppelt/dreifach so breit wie
+    # die erste Spalte bleibt auch nach dem Stauchen doppelt/dreifach so breit.
+    assert ziel[1] == pytest.approx(2 * ziel[0], abs=1)
+    assert ziel[2] == pytest.approx(3 * ziel[0], abs=1)
+
+
+def test_ergebnis_spaltenbreiten_respektiert_minimum_auch_bei_extremem_ueberlauf():
+    natuerlich = [100, 200, 300]
+    minima = [80, 150, 250]
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 100)
+    # Bei so wenig Platz reicht selbst das Stauchen auf die Minima nicht aus - die Minima
+    # werden trotzdem nicht unterschritten, ein Scrollbalken ist dann der akzeptierte
+    # Fallback (kein Fehler).
+    assert ziel == minima
+
+
+def test_ergebnis_spaltenbreiten_spalten_mit_minimum_gleich_natuerlich_schrumpfen_nicht():
+    """QS-Fund (22.09., Verifikations-Subagent): eine Spalte, deren Minimum bereits ihrer
+    natürlichen Breite entspricht (z.B. Start-Nr./Name/Hund/Art-LK - reiner Text, der nicht
+    schrumpfen soll), darf trotzdem NICHT mit ihrer vollen natürlichen Breite in die globale
+    Stauchungsfaktor-Berechnung einfließen - sonst bekommen die tatsächlich schrumpfbaren
+    Spalten (Punkte/Checkbox) zu wenig abgezogen und die Summe überschreitet weiterhin die
+    verfügbare Breite (hier ursprünglich gefunden: die reservierte Mindestbreite der
+    gestreckten Status-Spalte wurde dadurch nicht zuverlässig eingehalten)."""
+    natuerlich = [200, 100, 100]
+    minima = [200, 20, 20]  # Spalte 0: Minimum == natürliche Breite, schrumpft nie
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 250)
+    assert ziel[0] == 200
+    assert sum(ziel) <= 250
+    assert ziel[1] == ziel[2]  # gleiche natürliche Breite -> gleich behandelt
+
+
+def test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.resize(1300, 800)
+    tab.show()
+    qtbot.waitExposed(tab)
+
+    assert tab.tabelle.horizontalScrollBar().maximum() == 0
+
+
+def test_ergebnis_tabelle_schrumpft_punktespalten_nicht_unter_minimum_bei_schmalem_fenster(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.resize(700, 800)
+    tab.show()
+    qtbot.waitExposed(tab)
+
+    suche_spalte, _anzeige_spalte = _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"]
+    # Bei dieser Breite ist ein Scrollbalken erwartet/akzeptabel - hier wird nur geprüft,
+    # dass die Punkte-Eingabespalte dabei nicht unter ihr Minimum schrumpft.
+    assert tab.tabelle.columnWidth(suche_spalte) >= 56
+
+
+# Hinweis: dass Spalten bei genügend Platz NICHT über ihre natürliche Breite hinaus
+# aufgebläht werden (Restplatz geht stattdessen an die gestreckte Status-Spalte), ist
+# bereits durch test_ergebnis_spaltenbreiten_keine_stauchung_wenn_platz_reicht oben auf
+# reiner Funktionsebene abgedeckt - die Kopfzeilen dieser Tabelle (z.B. "Flächensuche –
+# Suche (0-60)") sind bei normaler Schriftgröße so breit, dass auf jedem realistischen
+# Bildschirm ohnehin noch gestaucht wird; ein GUI-Test für den "kein Überlauf mehr"-Fall
+# bräuchte eine unrealistisch breite Fensterbreite und wäre nur Pixel-Fummelei ohne echten
+# Mehrwert gegenüber dem Funktionstest.
+
+
 # --- Ergebniserfassung: Sortierung per Spaltenklick ---------------------------------
 # Nutzerwunsch (21.09., Rückmeldung "klappt gut, ggf. hier auch Sortierungsfunktion").
 # WICHTIG anders als bei TeilnehmerTab (siehe unten): diese Tabelle setzt die Punkte-
@@ -1000,6 +1105,33 @@ def test_ergebnis_spaltenklick_sortiert_nach_name(qtbot, conn):
     tab.tabelle.horizontalHeader().sectionClicked.emit(1)
     assert tab.tabelle.item(0, 1).text() == "Zorn, Max"
     assert tab.tabelle.item(1, 1).text() == "Adler, Max"
+
+
+def test_ergebnis_zeigt_hund_und_sortiert_danach(qtbot, conn):
+    """Nutzerwunsch: eigene Spalte "Hund" zwischen "Name" und "Art/LK", befüllt mit
+    rufname_hund - hier sowohl die Anzeige als auch die Sortierbarkeit geprüft (analog zu
+    test_ergebnis_spaltenklick_sortiert_nach_name für die Name-Spalte)."""
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, rufname_hund="Zeus", disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Adler", startnummer=2, rufname_hund="Bello", disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    # Vor jeder Sortierung: Spalte 2 zeigt den jeweiligen Hundenamen, Spalte 3 die Art/LK.
+    assert tab.tabelle.item(0, 2).text() == "Zeus"
+    assert tab.tabelle.item(1, 2).text() == "Bello"
+    assert tab.tabelle.item(0, 3).text() == "ED LK 1 Flächensuche"
+    assert tab.tabelle.item(1, 3).text() == "ED LK 1 Flächensuche"
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(2)  # Spalte 2 = Hund
+
+    assert tab.tabelle.item(0, 2).text() == "Bello"
+    assert tab.tabelle.item(1, 2).text() == "Zeus"
+
+    # Erneuter Klick auf dieselbe Spalte kehrt die Richtung um.
+    tab.tabelle.horizontalHeader().sectionClicked.emit(2)
+    assert tab.tabelle.item(0, 2).text() == "Zeus"
+    assert tab.tabelle.item(1, 2).text() == "Bello"
 
 
 def test_ergebnis_sortierung_verliert_keine_ungespeicherte_eingabe(qtbot, conn):
@@ -1463,6 +1595,10 @@ def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qt
     zeile_vollstaendig = next(
         row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Vollstaendig"
     )
+
+    # Spaltenüberschrift (Rückmeldung 22.09.): "Vollständig" wurde zu "Anmerkungen"
+    # umbenannt - der Zellinhalt (Warn-/Hinweistext) bleibt unverändert derselbe.
+    assert tab.tabelle.horizontalHeaderItem(7).text() == "Anmerkungen"
 
     text_unvollstaendig = tab.tabelle.item(zeile_unvollstaendig, 7).text()
     assert text_unvollstaendig.startswith("⚠")

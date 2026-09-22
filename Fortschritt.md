@@ -1,7 +1,7 @@
 
 # Fortschritt: SHS-Prüfungsprogramm-Ablösung
 
-Stand: 22.09.2026 (aktualisiert: nach dem Theme-Feature zusätzlich Rückmeldung zur Gegenstände-Warnung in der Teilnehmerliste umgesetzt - siehe eigener Abschnitt unten; noch nicht committet/versioniert). Details/Hintergrund siehe `Grobkonzept.md`.
+Stand: 22.09.2026 (aktualisiert: Version 1.0.25 gebaut - Hund-Spalte in Ergebniserfassung und Auswertung, Umbenennung Vollständig→Anmerkungen, responsive Spaltenbreiten/Schriftgröße in der Ergebniserfassung, siehe eigene Abschnitte unten). Details/Hintergrund siehe `Grobkonzept.md`.
 
 ## Erledigt
 
@@ -862,6 +862,150 @@ bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py
 ```
 git push
 git tag v1.0.24
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## Hund-Spalte in der Ergebniserfassung (22.09., Rückmeldung nach Version 1.0.24)
+
+Marcos Rückmeldung: "Feld Hund hinzufügen Ergebnisserfassung mit Rufname Hund füllen,
+zwischen Name und ART/LK".
+
+**Umsetzung (`app.py`, `ErgebnisTab`):** neue Spalte "Hund" zwischen "Name" und "Art/LK"
+eingefügt (`rufname_hund`, bereits bestehendes Feld am Teilnehmer-Datensatz, keine
+DB-Änderung nötig) - analog zum bereits bestehenden Muster in der Teilnehmerliste
+(`TeilnehmerTab`, hat "Hund" schon zwischen "Vorname" und "Art/LK"). Die
+Spalten-Offset-Konstante `_ERGEBNIS_SPALTEN_JE_DISZIPLIN`/`_DQ_SPALTE` (Basis für die
+Disziplin-Punktepaare sowie Disqualifiziert/Abbruch/Status) entsprechend von 3 auf 4
+verschoben, die eigene Klick-Sortierlogik (`_sortierschluessel_fuer_zeile`) um einen neuen
+Sortierschlüssel für die Hund-Spalte ergänzt, bestehender Art/LK-Schlüssel auf die neue
+Spaltenposition verschoben.
+
+**Tests:** neuer Test `test_ergebnis_zeigt_hund_und_sortiert_danach` (Anzeige plus
+Sortierbarkeit inkl. Richtungsumkehr, analog zum bestehenden Namens-Sortiertest). Bestehende
+Tests referenzieren nur Start-Nr.-/Name-Spalte, blieben von der Verschiebung unberührt. Ein
+unabhängiger Verifikations-Subagent hat Diff und Tests gegengeprüft (u. a. auf übersehene
+Spaltenindex-Referenzen, `rufname_hund`-Nullbarkeit, Testannahmen) - Verdikt: keine Funde.
+
+## Hund-Spalte in der Auswertung + Umbenennung "Vollständig" → "Anmerkungen" (22.09.)
+
+Marcos Rückmeldung: "Feld Hund in der Auswertung zwischen Name und Gesamtpunkte einfügen.
+Spaltenname Vollständig in Reiter Teilnehmer umbenennen in Anmerkungen."
+
+**Hund-Spalte in der Auswertung (`app.py`, `AuswertungTab`):** `Teilnehmerergebnis`
+(`shs_core.py`, Rückgabetyp von `db.berechne_auswertung()`) kennt `rufname_hund` nicht -
+`AuswertungTab` löst das analog zur bereits bestehenden Lösung für die fehlende Startnummer
+(`_startnummer_je_id`, separat aus den Stammdaten nachgeschlagen): neue Lookup-Map
+`_rufname_hund_je_id`, in `aktualisieren()` befüllt, in `_rendern()` zwischen `t.name` und
+den Punkte-Spalten eingefügt. `AuswertungTab` hat keine spaltenindex-abhängige
+Klick-Sortierlogik (Sortierung erfolgt vorab über `sorted()` auf der Python-Liste),
+entsprechend keine weiteren Anpassungen nötig. Kein Web-Pendant vorhanden (Auswertung
+existiert nur im Desktop); PDF-Exporte mit Name/Gesamtpunkte-Spalten bewusst unangetastet
+(nicht angefragt).
+
+**Vollständig → Anmerkungen (`app.py`, `TeilnehmerTab`):** auf Rückfrage geklärt - reine
+Label-Änderung, der Zellinhalt (automatisch berechneter Warn-/Hinweistext zu fehlender
+Chip-Nr./Gegenständen, siehe `teilnehmer_fehlende_pflichtangaben()`/
+`teilnehmer_gegenstand_hinweis()` in `db.py`) bleibt unverändert - kein neues freies
+Eingabefeld. Nur die Spaltenüberschrift geändert. Der gleichnamige, aber inhaltlich andere
+`vollstaendig`-Flag in der Web-Version (`app_web.py`, "bereits bewertet"-Status in der
+Teilnehmerliste) ist ein eigenständiges Konzept ohne Bezug zu dieser Spalte und wurde nicht
+angefasst.
+
+**Tests:** neuer Test `test_auswertung_zeigt_hund_zwischen_name_und_gesamtpunkte`; bestehender
+Test `test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden` um eine
+Header-Text-Assertion (`"Anmerkungen"`) ergänzt. Ein unabhängiger Verifikations-Subagent hat
+beide Änderungen gegengeprüft (Spaltenreihenfolge, keine übersehenen Referenzen auf den alten
+Spaltennamen, Testannahmen) - Verdikt: keine Funde.
+
+## Responsive Spaltenbreiten/Schriftgröße in der Ergebniserfassung (22.09.)
+
+Marcos Rückmeldung: "Ergebnisserfassung ist je nach Bildschirmgröße nicht auf einen Blick
+sichtbar, sondern muss nach rechts gescrollt werden." Auf Rückfrage konkretisiert: "passe die
+Schriftgröße und Spaltenbreite an das wenn Fenster maximiert ist alles auf den Bildschirm
+passt".
+
+**Hintergrund:** `ErgebnisTab` ist inzwischen auf 13 Spalten angewachsen (Start-Nr., Name,
+Hund, Art/LK, je 2 Spalten für alle 3 Disziplinen, Disqualifiziert, Abbruch, Status) - vor
+allem seit Disqualifiziert/Abbruch am 21.09. dazukamen. Für diese Tabelle gab es bisher KEIN
+Breiten-Management (nur `setStretchLastSection(True)` für die Status-Spalte), Schriftgröße
+war fest.
+
+**Umsetzung (`app.py`):**
+- Neue reine (Qt-freie) Funktion `_ergebnis_spaltenbreiten_verteilen(natuerliche_breiten,
+  minimum_breiten, verfuegbare_breite)`: reicht der Platz, bleiben die natürlichen Breiten
+  unverändert (Rest geht an die gestreckte Status-Spalte); sonst iterative
+  "Water-Filling"-Verteilung - Spalten, deren proportionaler Anteil unter ihr Minimum fiele,
+  werden mit exakt ihrem Minimum aus der Verteilung herausgenommen, der Faktor für die
+  übrigen Spalten wird anhand des tatsächlich verbleibenden Budgets neu berechnet (mehrstufig
+  statt ein einziger globaler Faktor - Begründung siehe QS-Fund unten).
+- Neue Methode `ErgebnisTab._spaltenbreiten_anpassen()`: Schriftgröße zuerst per bereits
+  bestehender `_responsive_schriftgroesse()` (wiederverwendet, aber mit eigenen, auf die
+  Tabellenbreite zugeschnittenen Schwellwerten statt den Fenster-Schwellwerten von
+  `ResponsiveSchriftMixin`) bestimmen und per lokalem Stylesheet direkt auf `self.tabelle`
+  setzen (wichtig: eine window-weite Stylesheet-Regel von `ResponsiveSchriftMixin` würde ein
+  reines `setFont()` sonst überschreiben - die lokale Regel gewinnt nur für diese Tabelle,
+  andere Tabs bleiben unberührt), dann `resizeColumnsToContents()` und die neue
+  Verteilungsfunktion. Aufgerufen am Ende von `_zeilen_aufbauen()` sowie über neue
+  `resizeEvent`/`showEvent`-Overrides auf `ErgebnisTab` (Letzteres nötig, da der Tab als
+  inaktive `QTabWidget`-Seite beim Maximieren kein zuverlässiges `resizeEvent` bekommt).
+- Minima: Punkte-Eingabespalten dynamisch über Schriftmetrik (Boden 56px), DQ/Abbruch-Spalten
+  fest 44px, die vier reinen Textspalten (Start-Nr./Name/Hund/Art-LK) schrumpfen nicht unter
+  ihre natürliche Breite. Die Status-Spalte bekommt vorab eine eigene Reservierung
+  (`status_minimum`, längster möglicher Inhalt "● nicht gespeichert") von der verfügbaren
+  Breite abgezogen, damit sie nicht auf (fast) 0 zusammengedrückt wird.
+
+**QS-Fund während der Verifikation (behoben, nicht nur akzeptiert):** ein
+Verifikations-Subagent fand, dass die ursprüngliche einstufige Fassung den globalen
+Stauchungsfaktor aus der Summe ALLER natürlichen Breiten berechnete - auch der vier
+nicht-schrumpfbaren Textspalten, die ohnehin immer auf ihre volle natürliche Breite geklammert
+wurden. Dadurch überschritt die tatsächliche Summe der 12 Spalten das vorgesehene Budget
+leicht, die Status-Spalten-Reservierung wurde nicht zuverlässig eingehalten (gemessen: Einbruch
+auf ~100px bei 2200-2560px Fensterbreite statt der vorgesehenen ~252px). Nach Rückfrage
+("jetzt sauber beheben") auf die oben beschriebene mehrstufige Verteilung umgebaut - ein
+zweiter Verifikations-Subagent-Durchlauf bestätigte danach konsistent ~251-252px Status-
+Spaltenbreite bei 1300/1900/2200/2560px (statt vorher ~100px bei den größeren Breiten).
+
+**Tests:** 4 reine Funktionstests für `_ergebnis_spaltenbreiten_verteilen` (genug Platz →
+unverändert; Überlauf ohne Minimum-Verletzung → proportionale Stauchung; extremer Überlauf →
+Minima eingehalten; gezielter Regressionstest für den QS-Fund - eine nicht-schrumpfbare Spalte
+darf nicht in die Faktor-Berechnung einfließen). 2 GUI-Geometrietests (`qtbot`): passt bei
+typischer maximierter Breite (1300px) ohne Scrollbalken; Punkte-Spalte bleibt bei sehr
+schmalem Fenster (700px) nicht unter ihrem Minimum (Scrollbalken dort explizit als akzeptiert
+geprüft, nicht als Fehler). Ein dritter, ursprünglich geplanter GUI-Test ("kein
+Aufblähen bei sehr breitem Fenster") wurde bewusst nicht behalten - empirisch gezeigt, dass die
+Disziplin-Kopfzeilen (z. B. "Flächensuche – Suche (0-60)") bei normaler Schriftgröße so breit
+sind, dass auf jedem realistischen Bildschirm ohnehin weiter gestaucht wird (der "kein
+Überlauf mehr"-Zweig bräuchte >3400px Fensterbreite); die Eigenschaft ist bereits über den
+entsprechenden Funktionstest abgedeckt.
+
+**Tests (Läufe):** `python -m pytest test_app_gui.py -q` (sowohl unter echtem Windows-Fenster
+als auch headless via `QT_QPA_PLATFORM=offscreen`, identisches Ergebnis) 77 bestanden/1
+bekannter xfail. Non-GUI-Lauf unverändert 359 Tests grün. Zwei unabhängige
+Verifikations-Subagenten haben den Diff, die Algorithmus-Korrektheit (inkl. Termination der
+Verteilungs-Schleife), die Qt-Stylesheet-Kaskade (empirisch geprüft) und reale
+Spaltenbreiten bei mehreren Fensterbreiten gegengeprüft (zweiter Durchlauf nach dem
+QS-Fund-Fix) - Verdikt: keine weiteren Funde.
+
+## Version 1.0.25 (22.09., Build auf Marcos Wunsch "alles dokumentieren und comitten und wir
+bauen ein neues Build")
+
+Bündelt die drei oben beschriebenen Rückmeldungen (Hund-Spalte Ergebniserfassung, Hund-Spalte
+Auswertung + Vollständig→Anmerkungen, responsive Spaltenbreiten/Schriftgröße
+Ergebniserfassung) - erster Build seit Version 1.0.24.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.25 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`, `test_db_postgres_wrapper`,
+`test_backup`, `test_pdf_export`, `test_app_web`, `test_bump_version`, `test_shs_core`,
+`test_theme`) 359 Tests, 0 fehlgeschlagen (143 übersprungen, PostgreSQL-Tests ohne laufenden
+Server); GUI (`test_app_gui.py` via pytest-qt) 77 bestanden, 1 bekannter xfail. Zusätzlich
+`py_compile` für `app.py`/`app_web.py`/`db.py`/`pdf_export.py`/`shs_core.py`/
+`sync_termin.py`/`bump_version.py`/`test_app_gui.py`/`test_db.py`/`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.25`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.25
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).
