@@ -1043,6 +1043,19 @@ def test_ergebnis_spaltenbreiten_spalten_mit_minimum_gleich_natuerlich_schrumpfe
     assert ziel[1] == ziel[2]  # gleiche natürliche Breite -> gleich behandelt
 
 
+def test_ergebnis_spaltenbreiten_rundung_ueberschreitet_budget_nicht():
+    """Regressionstest für den CI-Fehlschlag von
+    test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken (22.09.):
+    round() je Spalte kann die Summe der Zielbreiten über verfuegbare_breite hinausschieben,
+    wenn keine offene Spalte dabei ihr Minimum erreicht (hier: 2.7 rundet je Spalte auf 3,
+    keine der 10 Spalten hat mit Minimum 0 einen Grund zu fixieren)."""
+    natuerlich = [3] * 10
+    minima = [0] * 10
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 27)
+    assert sum(ziel) <= 27
+    assert all(w >= 0 for w in ziel)
+
+
 def test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken(qtbot, conn):
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = ErgebnisTab(conn)

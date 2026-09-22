@@ -247,7 +247,17 @@ def _ergebnis_spaltenbreiten_verteilen(
     Summe würde verfuegbare_breite trotzdem überschreiten. Stattdessen iterativ: Spalten, die
     ihr Minimum erreichen (oder es sowieso schon sind), werden mit exakt ihrem Minimum aus
     der Verteilung herausgenommen, der verbleibende Faktor wird nur noch aus den übrigen
-    (noch nicht fixierten) Spalten neu berechnet - bis sich nichts mehr ändert."""
+    (noch nicht fixierten) Spalten neu berechnet - bis sich nichts mehr ändert.
+
+    Rundungs-Korrektur (CI-Regression 22.09., gefunden über test_ergebnis_tabelle_passt_bei_
+    typischer_maximierter_breite_ohne_scrollbalken): das obige round() je Spalte kann die
+    Summe der Zielbreiten trotzdem noch über verfuegbare_breite hinausschieben, wenn keine
+    der offenen Spalten dabei ihr Minimum erreicht (z.B. natuerlich=[3]*10, minima=[0]*10,
+    verfuegbare_breite=27 -> jede Spalte rundet 2.7 auf 3, Summe 30 > 27). Deshalb am Ende
+    eine Korrektur-Passe: liegt die Summe noch über verfuegbare_breite, wird Spalten mit
+    noch vorhandenem Spielraum (ziel > minimum) reihum je 1px abgezogen (größter Spielraum
+    zuerst), bis die Summe passt oder keine Spalte mehr Spielraum hat - dann bleibt der
+    bereits akzeptierte Scrollbalken-Fallback bestehen, ohne ein Minimum zu unterschreiten."""
     ziel = list(natuerliche_breiten)
     gesamt = sum(ziel)
     if gesamt <= 0 or gesamt <= verfuegbare_breite:
@@ -273,6 +283,20 @@ def _ergebnis_spaltenbreiten_verteilen(
         if not neu_fixiert:
             break
         offen = [i for i in offen if i not in neu_fixiert]
+
+    ueberschuss = sum(ziel) - verfuegbare_breite
+    if ueberschuss > 0:
+        spielraum = [i for i in range(len(ziel)) if ziel[i] > minimum_breiten[i]]
+        spielraum.sort(key=lambda i: ziel[i] - minimum_breiten[i], reverse=True)
+        pos = 0
+        while ueberschuss > 0 and spielraum:
+            i = spielraum[pos % len(spielraum)]
+            if ziel[i] > minimum_breiten[i]:
+                ziel[i] -= 1
+                ueberschuss -= 1
+                pos += 1
+            else:
+                spielraum.remove(i)
 
     return ziel
 

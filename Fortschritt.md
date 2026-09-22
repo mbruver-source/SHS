@@ -1086,3 +1086,52 @@ git tag v1.0.26
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## 22.09.2026: CI-Regression nach Version 1.0.26 behoben - Rundungsfehler in
+`_ergebnis_spaltenbreiten_verteilen` (Arbeitsstand, noch kein Build)
+
+Marco hat eine fehlgeschlagene GitHub-Actions-CI-Ausgabe eingefügt: der GUI-Test
+`test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken`
+(`test_app_gui.py`) schlug fehl - `tab.tabelle.horizontalScrollBar().maximum()` lieferte
+`1` statt der erwarteten `0` bei einer auf 1300×800 vergrößerten `ErgebnisTab`-Tabelle.
+
+**Ursache (durch Codelektüre bestätigt):** `_ergebnis_spaltenbreiten_verteilen` (`app.py`)
+rundet die proportional gestauchte Breite jeder Spalte einzeln mit `round()`. Diese
+Rundung kann die Summe der Zielbreiten über `verfuegbare_breite` hinausschieben, wenn
+dabei keine der offenen (noch nicht ans Minimum fixierten) Spalten ihr Minimum erreicht -
+die Funktion garantierte `sum(ziel) <= verfuegbare_breite` bisher nicht, obwohl genau das
+schon in den bestehenden Funktionstests geprüft wurde (nur zufällig nie verletzt, weil die
+gewählten Testzahlen exakt aufgingen). Minimal-Reproduktion auf reiner Funktionsebene
+(vor dem Fix per `git stash` verifiziert):
+`_ergebnis_spaltenbreiten_verteilen([3]*10, [0]*10, 27)` ergab `sum(ziel) == 30 > 27`, weil
+`round(3 * 0.9) == round(2.7) == 3` für jede der 10 Spalten und keine ihr Minimum 0
+erreicht. Verschärft wurde das vermutlich durch Version 1.0.26 (Commit `05f81df`): dort
+wurde für die Spalten "Disqualifiziert"/"Abbruch" das bisherige feste Minimum 44px durch
+`max(44, header_zeilen_breite(c))` ersetzt, was den Stauchungs-Spielraum bei 1300px
+gegenüber der ursprünglich bei Version 1.0.25 validierten Marge verringert hat - eine
+erneute Verifikation der 1300px-Messung nach `05f81df` war in dieser Historie nicht
+dokumentiert.
+
+**Fix:** In `_ergebnis_spaltenbreiten_verteilen` wurde vor dem finalen `return ziel` eine
+Korrektur-Passe ergänzt: Liegt die Summe der Zielbreiten noch über `verfuegbare_breite`,
+wird Spalten mit noch vorhandenem Spielraum (`ziel[i] > minimum_breiten[i]`) reihum je 1px
+abgezogen (größter Spielraum zuerst), bis entweder die Summe passt oder keine Spalte mehr
+Spielraum hat - dann bleibt der bereits akzeptierte Scrollbalken-Fallback bestehen, ohne
+ein Minimum zu unterschreiten. Docstring entsprechend ergänzt.
+
+**Neuer Test:** `test_ergebnis_spaltenbreiten_rundung_ueberschreitet_budget_nicht` in
+`test_app_gui.py` (reine Funktionsebene, kein Qt nötig) deckt genau den obigen
+Rundungsfall dauerhaft ab, damit diese Regressionsklasse nicht wieder nur vom
+langsameren/fragileren Pixel-GUI-Test abhängt.
+
+**Tests:** `python -m pytest test_app_gui.py -v` - 78 bestanden, 1 bekannter xfail
+(inkl. des neuen Tests und des zuvor fehlschlagenden 1300px-Tests, jetzt grün).
+`python -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export
+test_app_web test_bump_version test_shs_core` - 355 Tests, 0 fehlgeschlagen (106
+übersprungen, PostgreSQL-Tests ohne lokale Voraussetzung). Unabhängiger
+Verifikations-Subagent hat die Korrektur-Passe auf Terminierung, Einhaltung der Minima und
+Interaktion mit den vier bestehenden `_ergebnis_spaltenbreiten_verteilen`-Funktionstests
+gegengeprüft sowie beide Testläufe selbst wiederholt - keine Findings, PASS.
+
+**Noch offen:** kein Build/Commit, wie in `CLAUDE.md` festgelegt - Änderung bleibt
+zunächst nur im Arbeitsstand, bis Marco einen Build anfordert.
