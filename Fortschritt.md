@@ -1159,3 +1159,71 @@ git tag v1.0.27
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## 22.09.2026: CI-Regression aus 1.0.27 hartnäckiger als gedacht - harte_minima-Fallback
+ergänzt (Arbeitsstand, noch kein Build)
+
+Marco hat erneut eine fehlgeschlagene CI-Ausgabe eingefügt: derselbe Test
+(`test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken`) schlug
+weiterhin mit `maximum()==1` fehl - obwohl die Testzeilennummer (1067 statt vorher 1054) und
+die Testanzahl (407 statt 406 bestandene) eindeutig zeigen, dass CI bereits den
+Rundungsfix aus Version 1.0.27 enthielt. Der erste Fix war also notwendig, aber nicht
+ausreichend.
+
+**Ursache der Fortsetzung (durch Codelektüre bestätigt):** `_ergebnis_spaltenbreiten_verteilen`
+kann alle Spalten über den `while offen:`-Verteilungsloop regulär (ohne `break`) bis auf ihr
+jeweiliges `minimum_breiten[i]` herunterfixieren - dann ist `ziel == minimum_breiten` exakt,
+ohne jeden Spielraum, und die Rundungs-Korrektur aus 1.0.27 (die nur Spalten MIT Spielraum
+kürzt) kann nichts mehr tun. Übersteigt in diesem Fall `sum(minimum_breiten)` die verfügbare
+Breite, war das von Anfang an ein bewusst akzeptierter Fallback (siehe Test
+`test_ergebnis_spaltenbreiten_respektiert_minimum_auch_bei_extremem_ueberlauf` - Minima
+werden nie unterschritten, ein Scrollbalken ist dann korrekt). Das Problem: dieser
+Fallback greift jetzt vermutlich auch dann, wenn eigentlich nur die Schriftmetriken auf dem
+CI-Linux-Runner (headless `QT_QPA_PLATFORM=offscreen`, andere/fontconfig-ersetzte Schriften
+als lokal unter Windows) die headertext-basierten Minima (`header_zeilen_breite`, seit
+Version 1.0.26) um ein paar Pixel breiter messen als lokal - ohne dass das Fenster
+tatsächlich zu schmal wäre. Lokal unter Windows lässt sich das nicht reproduzieren (siehe
+schon frühere Notiz zu Version 1.0.25: dort war offscreen vs. echtes Fenster auf demselben
+Windows-Rechner identisch - der Unterschied entsteht erst durch andere Schriftarten auf
+einer anderen Plattform, nicht durch den Offscreen-Modus selbst).
+
+**Fix:** `_ergebnis_spaltenbreiten_verteilen` bekommt einen neuen optionalen 4. Parameter
+`harte_minima` (Standard `None` - ohne ihn ist das Verhalten byteidentisch zu vorher, alle
+bisherigen Tests bestehen unverändert). Reicht `minimum_breiten` nicht aus UND ist
+`harte_minima` übergeben, versucht eine zweite Korrektur-Passe, mit `harte_minima` statt
+`minimum_breiten` als Untergrenze weiter zu kürzen - erst wenn auch das nicht reicht, bleibt
+der Scrollbalken-Fallback. In `ErgebnisTab._spaltenbreiten_anpassen` (Aufrufer) wird
+`harte_minima` jetzt parallel zu `minima` aufgebaut: für Punkte-Spalten der reine
+Inhalts-Minimum (`minimum_punkte`, für "88"-Eingabe), für Disqualifiziert/Abbruch die alte
+feste 44px-Grenze (Stand vor Version 1.0.26), für die reinen Textspalten (Start-Nr./Name/
+Hund/Art-LK) unverändert ihre natürliche Breite (die dürfen nie schrumpfen). Effekt: greift
+der harte_minima-Fallback, wird im Extremfall der Headertext einer Punkte- oder DQ/Abbruch-
+Spalte um ein paar Pixel enger als "perfekt lesbar" dargestellt (ggf. mit "…" gekürzt) -
+das wiegt laut Nutzerwunsch (22.09.: "kein Scrollbalken bei maximiertem Fenster") weniger
+schwer als ein Scrollbalken bei einer eigentlich passenden Fensterbreite.
+
+**Neue Tests:** drei neue reine Funktionstests in `test_app_gui.py`, direkt nach dem
+Rundungs-Regressionstest aus 1.0.27:
+`test_ergebnis_spaltenbreiten_ohne_harte_minima_bleibt_scrollbalken_fallback` (Standardfall
+`None` unverändert), `test_ergebnis_spaltenbreiten_faellt_bei_knappem_minimum_auf_harte_minima_zurueck`
+(Kernfall: weiche Minima reichen knapp nicht, harte_minima schon),
+`test_ergebnis_spaltenbreiten_harte_minima_reicht_ebenfalls_nicht_bleibt_bei_harte_minima`
+(auch harte_minima reicht nicht - bleibt dann bei harte_minima, kein schlechteres Verhalten
+als vorher).
+
+**Tests:** `python -m pytest test_app_gui.py -v` - 81 bestanden (inkl. aller 8
+`ergebnis_spaltenbreiten`- und beider `ergebnis_tabelle`-Tests), 1 bekannter xfail.
+`python -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export
+test_app_web test_bump_version test_shs_core test_theme` - 359 Tests, 0 fehlgeschlagen (106
+übersprungen). Unabhängiger Verifikations-Subagent hat Diff (Äquivalenz zur alten
+Rundungs-Korrektur, Grenzen-Einhaltung des neuen Fallbacks, `harte_minima[c] <= minima[c]`-
+Invariante, unveränderte Textspalten, alle bisherigen Tests) sowie beide Testläufe
+gegengeprüft - PASS, keine Findings, mit einem ausdrücklichen Hinweis: **diese Verifikation
+lief lokal unter Windows und beweist NICHT, dass der eigentliche CI-Scrollbalken-Fehler
+behoben ist** (der ist auf Windows nicht reproduzierbar) - nur, dass die neue
+Fallback-Logik in sich korrekt ist und nichts lokal Testbares kaputtgeht. Endgültige
+Bestätigung erst durch den nächsten echten CI-Lauf.
+
+**Noch offen:** kein Build/Commit bisher (Arbeitsstand), Marco muss entscheiden, ob jetzt
+committet/gebaut werden soll, und der nächste CI-Lauf nach einem Push muss den Fix
+tatsächlich bestätigen.

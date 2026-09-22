@@ -228,16 +228,20 @@ def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900,
 
 
 def _ergebnis_spaltenbreiten_verteilen(
-    natuerliche_breiten: list[int], minimum_breiten: list[int], verfuegbare_breite: int
+    natuerliche_breiten: list[int],
+    minimum_breiten: list[int],
+    verfuegbare_breite: int,
+    harte_minima: list[int] | None = None,
 ) -> list[int]:
     """Passt Spaltenbreiten proportional an verfuegbare_breite an, ohne minimum_breiten zu
     unterschreiten - für die Ergebniserfassung (Nutzerwunsch 22.09.: Tabelle soll bei
     maximiertem Fenster ohne horizontales Scrollen auf den Bildschirm passen). Reicht der
     Platz bereits, bleiben die natürlichen Breiten unverändert (der Rest geht an die
     gestreckte Status-Spalte, siehe setStretchLastSection in ErgebnisTab). Reicht selbst das
-    Zusammenstauchen auf die Minima nicht aus (Fenster schmaler als die Summe aller Minima),
-    werden die Minima zurückgegeben - ein Scrollbalken ist dann der akzeptierte Fallback,
-    kein Fehler. Reine Funktion ohne Qt-Abhängigkeit, daher direkt testbar.
+    Zusammenstauchen auf die Minima nicht aus (Fenster schmaler als die Summe aller Minima)
+    UND ist kein harte_minima übergeben, werden die Minima zurückgegeben - ein Scrollbalken
+    ist dann der akzeptierte Fallback, kein Fehler. Reine Funktion ohne Qt-Abhängigkeit,
+    daher direkt testbar.
 
     Mehrstufig statt ein einziger globaler Faktor (QS-Fund 22.09.): Spalten, deren Minimum
     bereits ihrer natürlichen Breite entspricht (z.B. Start-Nr./Name/Hund/Art-LK - reiner
@@ -253,11 +257,22 @@ def _ergebnis_spaltenbreiten_verteilen(
     typischer_maximierter_breite_ohne_scrollbalken): das obige round() je Spalte kann die
     Summe der Zielbreiten trotzdem noch über verfuegbare_breite hinausschieben, wenn keine
     der offenen Spalten dabei ihr Minimum erreicht (z.B. natuerlich=[3]*10, minima=[0]*10,
-    verfuegbare_breite=27 -> jede Spalte rundet 2.7 auf 3, Summe 30 > 27). Deshalb am Ende
+    verfuegbare_breite=27 -> jede Spalte rundet 2.7 auf 3, Summe 30 > 27). Deshalb danach
     eine Korrektur-Passe: liegt die Summe noch über verfuegbare_breite, wird Spalten mit
     noch vorhandenem Spielraum (ziel > minimum) reihum je 1px abgezogen (größter Spielraum
-    zuerst), bis die Summe passt oder keine Spalte mehr Spielraum hat - dann bleibt der
-    bereits akzeptierte Scrollbalken-Fallback bestehen, ohne ein Minimum zu unterschreiten."""
+    zuerst), bis die Summe passt oder keine Spalte mehr Spielraum hat.
+
+    harte_minima-Fallback (CI-Regression 22.09., Fortsetzung: trat auf CI/Linux mit anderen
+    Schriftmetriken als lokal unter Windows selbst nach obiger Rundungs-Korrektur weiter
+    auf): reicht selbst das Zusammenstauchen auf minimum_breiten knapp nicht - z.B. weil
+    andere Fonts die headertext-basierten Minima ein paar Pixel breiter messen als lokal -,
+    UND ist harte_minima übergeben (je Spalte ein inhaltsbasiertes, i.d.R. niedrigeres
+    Minimum ohne Kopfzeilen-Padding-Reserve), wird eine zweite Korrektur-Passe mit
+    harte_minima statt minimum_breiten als Untergrenze versucht. Der Nutzerwunsch "kein
+    Scrollbalken bei maximiertem Fenster" wiegt damit schwerer als ein paar Pixel
+    Kopfzeilen-Luft - erst wenn auch harte_minima nicht ausreicht, bleibt der
+    Scrollbalken-Fallback. Ohne harte_minima (Standard, `None`) ist das Verhalten exakt wie
+    vorher."""
     ziel = list(natuerliche_breiten)
     gesamt = sum(ziel)
     if gesamt <= 0 or gesamt <= verfuegbare_breite:
@@ -284,19 +299,25 @@ def _ergebnis_spaltenbreiten_verteilen(
             break
         offen = [i for i in offen if i not in neu_fixiert]
 
-    ueberschuss = sum(ziel) - verfuegbare_breite
-    if ueberschuss > 0:
-        spielraum = [i for i in range(len(ziel)) if ziel[i] > minimum_breiten[i]]
-        spielraum.sort(key=lambda i: ziel[i] - minimum_breiten[i], reverse=True)
+    def _reihum_abziehen(untergrenzen: list[int], ueberschuss: int) -> int:
+        spielraum = [i for i in range(len(ziel)) if ziel[i] > untergrenzen[i]]
+        spielraum.sort(key=lambda i: ziel[i] - untergrenzen[i], reverse=True)
         pos = 0
         while ueberschuss > 0 and spielraum:
             i = spielraum[pos % len(spielraum)]
-            if ziel[i] > minimum_breiten[i]:
+            if ziel[i] > untergrenzen[i]:
                 ziel[i] -= 1
                 ueberschuss -= 1
                 pos += 1
             else:
                 spielraum.remove(i)
+        return ueberschuss
+
+    ueberschuss = sum(ziel) - verfuegbare_breite
+    if ueberschuss > 0:
+        ueberschuss = _reihum_abziehen(minimum_breiten, ueberschuss)
+    if ueberschuss > 0 and harte_minima is not None:
+        _reihum_abziehen(harte_minima, ueberschuss)
 
     return ziel
 
@@ -1818,17 +1839,31 @@ class ErgebnisTab(QWidget):
 
         natuerlich = [self.tabelle.columnWidth(c) for c in range(_STATUS_SPALTE)]
         minima = []
+        # CI-Regression (22.09.): auf CI/Linux fallen die Schriftmetriken für Headertexte
+        # teils ein paar Pixel breiter aus als lokal unter Windows - dort reichte die
+        # Summe der obigen (headertext-basierten) Minima bei 1300px knapp nicht mehr aus,
+        # obwohl lokal alles passte. harte_minima hält je Spalte den rein inhaltsbasierten
+        # Wert von vor dieser Headertext-Erweiterung vor - als Fallback für
+        # _ergebnis_spaltenbreiten_verteilen, falls die obigen Minima allein nicht reichen
+        # (dann ggf. minimal abgeschnittener Headertext statt Scrollbalken, siehe dortige
+        # Docstring-Erläuterung).
+        harte_minima = []
         for c in range(_STATUS_SPALTE):
             if c in punktespalten:
                 minima.append(max(minimum_punkte, header_zeilen_breite(c)))
+                harte_minima.append(minimum_punkte)
             elif c in (_DQ_SPALTE, _ABBRUCH_SPALTE):
                 minima.append(max(44, header_zeilen_breite(c)))
+                harte_minima.append(44)
             else:
                 # Start-Nr./Name/Hund/Art-LK: reiner Text ohne Eingabefeld, schrumpft nicht
                 # unter die eigene natürliche Breite (soll nicht abgeschnitten werden).
                 minima.append(natuerlich[c])
+                harte_minima.append(natuerlich[c])
 
-        ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, breite_fuer_fixspalten)
+        ziel = _ergebnis_spaltenbreiten_verteilen(
+            natuerlich, minima, breite_fuer_fixspalten, harte_minima
+        )
         for c, w in enumerate(ziel):
             self.tabelle.setColumnWidth(c, w)
 

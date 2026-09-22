@@ -1056,6 +1056,42 @@ def test_ergebnis_spaltenbreiten_rundung_ueberschreitet_budget_nicht():
     assert all(w >= 0 for w in ziel)
 
 
+def test_ergebnis_spaltenbreiten_ohne_harte_minima_bleibt_scrollbalken_fallback():
+    """Ohne harte_minima (Standardfall, `None`) bleibt das Verhalten exakt wie vorher: reicht
+    selbst minimum_breiten nicht aus, sind die Minima das Ergebnis - ein Scrollbalken bleibt
+    der akzeptierte Fallback."""
+    natuerlich = [100, 100]
+    minima = [90, 90]
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 178)
+    assert ziel == minima
+
+
+def test_ergebnis_spaltenbreiten_faellt_bei_knappem_minimum_auf_harte_minima_zurueck():
+    """Regressionstest für die CI-Regression (22.09.), die nach dem obigen Rundungsfix
+    weiter auftrat: auf CI/Linux fielen Schriftmetriken ein paar Pixel breiter aus als
+    lokal unter Windows, sodass selbst minimum_breiten (headertext-basiert) bei 1300px knapp
+    nicht mehr reichte. Reichen die weichen Minima (minimum_breiten) nicht aus, aber die
+    übergebenen harte_minima (inhaltsbasiert, ohne Kopfzeilen-Padding-Reserve) schon, wird
+    darauf zurückgefallen statt sofort auf den Scrollbalken-Fallback."""
+    natuerlich = [100, 100]
+    minima = [90, 90]  # weiche Minima: Summe 180 > verfügbare Breite 178 - reicht knapp nicht
+    harte_minima = [70, 70]  # inhaltsbasierte Minima: Summe 140 <= 178
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 178, harte_minima)
+    assert sum(ziel) <= 178
+    assert all(w >= 70 for w in ziel)
+
+
+def test_ergebnis_spaltenbreiten_harte_minima_reicht_ebenfalls_nicht_bleibt_bei_harte_minima():
+    """Reicht selbst harte_minima nicht aus (extrem schmales Fenster), bleiben die
+    harte_minima das Ergebnis - der Scrollbalken-Fallback greift dann trotzdem, aber nicht
+    schlimmer als ohne harte_minima."""
+    natuerlich = [100, 100]
+    minima = [90, 90]
+    harte_minima = [70, 70]
+    ziel = _ergebnis_spaltenbreiten_verteilen(natuerlich, minima, 100, harte_minima)
+    assert ziel == harte_minima
+
+
 def test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalken(qtbot, conn):
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = ErgebnisTab(conn)
