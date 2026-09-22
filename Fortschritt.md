@@ -1532,3 +1532,14 @@ git push --tags
 - Neu im Spiegel: `README.md`, `pytest.ini`, `requirements-dev.txt`, `test_theme.py`.
 - Bewusst unangetastet: die dortige `.env` (Zugangsdaten), `gui_vorschau.html` und
   `__pycache__`. Nichts wurde gelöscht.
+
+**CI-Bestätigung 1.0.29 (22.09.):** Marco hat Push und Tag ausgeführt. Laut GitHub-API
+sind alle Läufe grün:
+- Tag `v1.0.29`: "Tests", "Container bauen" und "Installer bauen".
+- `main`: "Tests" und "Container bauen".
+
+Damit ist bestätigt:
+- Die PDF-Inhaltstests laufen erstmals auch in der CI (der Pflichtschritt "pypdf
+  verfügbar" ist grün) und sind unter Linux grün.
+- Die echten PostgreSQL-Tests sind grün.
+- Der Container-Smoke-Test läuft mit dem neuen Pflichtwert `SHS_ADMIN_SETUP_CODE`.
