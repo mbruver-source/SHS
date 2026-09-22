@@ -1471,6 +1471,28 @@ def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qt
     assert tab.tabelle.item(zeile_vollstaendig, 7).text() == ""
 
 
+def test_teilnehmerliste_zeigt_nur_info_statt_fehler_wenn_gegenstand_auf_frei_steht(qtbot, conn):
+    """Rückmeldung (22.09.): "Gegenstände unvollständig" soll nur bei einem tatsächlich
+    fehlenden Gegenstand-Text erscheinen - steht "gesucht in" auf "frei" (Text aber
+    vorhanden), gibt es stattdessen nur eine mildere Info, nicht die Fehlermeldung."""
+    _teilnehmer_anlegen(
+        conn, nachname="OhneZuordnung", startnummer=1, chip_nr="112233",
+        art="ED", stufe=1, disziplin="Flächensuche",
+        gegenstand_1="Schlüsselbund", gegenstand_1_disziplin=None,
+    )
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    zeile = next(
+        row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "OhneZuordnung"
+    )
+    zelle = tab.tabelle.item(zeile, 7)
+    assert zelle.text() == "Gegenstände den Suchdisziplinen nicht zugeordnet"
+    assert not zelle.text().startswith("⚠")
+    assert not zelle.font().bold()
+
+
 # --- Teilnehmer aus anderem Termin importieren (20.09.) ----------------------------
 # Nutzerwunsch (Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln eingegeben
 # werden. → ist Option möglich, von anderem Termin importieren?" Geklärt: Auswahl per

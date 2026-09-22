@@ -60,6 +60,7 @@ from db import (
     setze_ergebnis_status,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
+    teilnehmer_gegenstand_hinweis,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
@@ -1118,11 +1119,58 @@ class TestDatenbank(unittest.TestCase):
         )
         self.assertEqual(teilnehmer_fehlende_pflichtangaben(lk1), [])
 
+        # Rückmeldung (22.09.): Gegenstand_3 hat weiterhin einen Text ("X"), steht aber
+        # auf "gesucht in: frei" (disziplin=None) - das ist bewusst KEIN Fehler mehr
+        # (die Zuordnung fehlt lediglich, der Gegenstand selbst ist ja erfasst), sondern
+        # nur noch eine milde Info über teilnehmer_gegenstand_hinweis().
         nicht_alle_disziplinen_abgedeckt = dict(lk1, gegenstand_3_disziplin=None)
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(nicht_alle_disziplinen_abgedeckt), [])
         self.assertEqual(
-            teilnehmer_fehlende_pflichtangaben(nicht_alle_disziplinen_abgedeckt),
+            teilnehmer_gegenstand_hinweis(nicht_alle_disziplinen_abgedeckt),
+            "Gegenstände den Suchdisziplinen nicht zugeordnet",
+        )
+
+    def test_teilnehmer_gegenstand_hinweis_bei_fehlendem_text_statt_frei(self):
+        # Gegensatz zum Test oben: hier fehlt Gegenstand_3 wirklich (kein Text) - das
+        # bleibt ein echter Fehler, keine Info (Rückmeldung 22.09.: "nur bei fehlendem
+        # Gegenstand" soll die Fehlermeldung erscheinen).
+        lk1_ohne_dritten_text = dict(
+            chip_nr="1", art="DK", stufe=1,
+            gegenstand_1="X", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="X", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(lk1_ohne_dritten_text),
             ["Gegenstände unvollständig (Dreikampf)"],
         )
+        self.assertIsNone(teilnehmer_gegenstand_hinweis(lk1_ohne_dritten_text))
+
+    def test_teilnehmer_gegenstand_hinweis_ed_bei_text_ohne_zuordnung(self):
+        # ED-Variante desselben Falls: Text vorhanden, aber "gesucht in: frei".
+        text_ohne_zuordnung = dict(
+            chip_nr="1", art="ED", stufe=1, disziplin="Flächensuche",
+            gegenstand_1="Schlüsselbund", gegenstand_1_disziplin=None,
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(text_ohne_zuordnung), [])
+        self.assertEqual(
+            teilnehmer_gegenstand_hinweis(text_ohne_zuordnung),
+            "Gegenstände den Suchdisziplinen nicht zugeordnet",
+        )
+
+    def test_teilnehmer_gegenstand_hinweis_none_wenn_vollstaendig_oder_echter_fehler(self):
+        vollstaendig = dict(
+            chip_nr="123", art="ED", stufe=1, disziplin="Flächensuche",
+            gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Flächensuche",
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertIsNone(teilnehmer_gegenstand_hinweis(vollstaendig))
+
+        text_fehlt = dict(vollstaendig, gegenstand_1=None, gegenstand_1_disziplin=None)
+        self.assertIsNone(teilnehmer_gegenstand_hinweis(text_fehlt))
 
     def test_alle_leistungsklassen_sortiert_und_ohne_duplikate(self):
         add_teilnehmer(self.conn, NeuerTeilnehmer(

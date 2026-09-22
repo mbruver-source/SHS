@@ -116,6 +116,7 @@ from db import (
     sicherung_wiederherstellen,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
+    teilnehmer_gegenstand_hinweis,
     termine_ordner,
     umbenennen_zeitplan_richter,
     update_teilnehmer,
@@ -1221,15 +1222,29 @@ class TeilnehmerTab(QWidget):
             # Nutzerwunsch (20.09.): Warnhinweis, wenn Chip-Nr. oder die zur Leistungsklasse
             # passende Gegenstand-Zuordnung fehlt ("Kontrollbutton") - bewusst nur bei
             # fehlenden Angaben ein Hinweis, sonst bleibt die Zelle leer (die Ausnahme soll
-            # auffallen, nicht der Normalfall).
+            # auffallen, nicht der Normalfall). Rückmeldung (22.09.): der Fehler
+            # "Gegenstände unvollständig" soll nur noch erscheinen, wenn ein
+            # Gegenstand-Text tatsächlich fehlt - steht er auf "gesucht in: frei", ist das
+            # kein Fehler mehr, sondern nur eine mildere Info (kleinere, nicht fette
+            # Schrift statt orange/fett, damit sie sich klar vom echten Warnhinweis
+            # unterscheidet und trotz Spaltenbreite lesbar bleibt). Ein echter Fehler hat
+            # Vorrang vor der Info (siehe teilnehmer_gegenstand_hinweis()).
             fehlend = teilnehmer_fehlende_pflichtangaben(t)
-            vollstaendig_item = QTableWidgetItem("⚠ " + "; ".join(fehlend) if fehlend else "")
             if fehlend:
+                vollstaendig_item = QTableWidgetItem("⚠ " + "; ".join(fehlend))
                 vollstaendig_item.setForeground(QColor("#b56a00"))
                 vollstaendig_item.setToolTip("Fehlt noch: " + "; ".join(fehlend))
                 schrift = vollstaendig_item.font()
                 schrift.setBold(True)
                 vollstaendig_item.setFont(schrift)
+            else:
+                hinweis = teilnehmer_gegenstand_hinweis(t)
+                vollstaendig_item = QTableWidgetItem(hinweis or "")
+                if hinweis:
+                    vollstaendig_item.setToolTip(hinweis)
+                    schrift = vollstaendig_item.font()
+                    schrift.setPointSize(max(schrift.pointSize() - 1, 1))
+                    vollstaendig_item.setFont(schrift)
             self.tabelle.setItem(row, 7, vollstaendig_item)
         # Zuletzt per Spaltenklick gewählte Sortierung erneut anwenden (statt nach jeder
         # Änderung - Speichern, Bezahlt umschalten, ... - stillschweigend auf die

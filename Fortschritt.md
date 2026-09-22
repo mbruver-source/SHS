@@ -1,7 +1,7 @@
 
 # Fortschritt: SHS-Prüfungsprogramm-Ablösung
 
-Stand: 22.09.2026 (aktualisiert: Feature "mehrere Themes" für die Desktop-App umgesetzt, inkl. während der Umsetzung gefundenem und behobenem GUI-Test-Hänger - siehe eigener Abschnitt unten; noch nicht committet/versioniert). Details/Hintergrund siehe `Grobkonzept.md`.
+Stand: 22.09.2026 (aktualisiert: nach dem Theme-Feature zusätzlich Rückmeldung zur Gegenstände-Warnung in der Teilnehmerliste umgesetzt - siehe eigener Abschnitt unten; noch nicht committet/versioniert). Details/Hintergrund siehe `Grobkonzept.md`.
 
 ## Erledigt
 
@@ -782,6 +782,86 @@ bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py
 ```
 git push
 git tag v1.0.23
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## Gegenstände-Warnung in der Teilnehmerliste differenziert (22.09., Rückmeldung nach dem Theme-Feature)
+
+Marcos Rückmeldung: "Fehlermeldung 'Gegenstände unvollständig' bei Teilnehmer bearbeiten:
+nur bei fehlenden Gegenstand so wie vereinbart. Bei gesucht in 'frei' nur eine Info
+'Gegenstände den Suchdisziplinen nicht zugeordnet' (angepasst an Spaltengröße Schrift
+verkleinern)". **Nur im Arbeitsstand, noch nicht committet** (Build erst auf Marcos
+Wunsch).
+
+**Hintergrund/Fund:** Die Warnspalte "Vollständig" in der Teilnehmerliste
+(`TeilnehmerTab.aktualisieren()`, `app.py`) zeigte die Fehlermeldung "Gegenstände
+unvollständig" bisher UNABHÄNGIG davon, ob ein Gegenstand-Textfeld tatsächlich leer war
+oder ob ein vorhandener Text nur nicht zugeordnet war ("gesucht in: frei") - beide Fälle
+wurden identisch als Fehler behandelt (`db.py`, `_ed_gegenstaende_vollstaendig()`/
+`_dk_gegenstaende_vollstaendig()` zählten nur korrekt zugeordnete Felder, ohne die zwei
+Ursachen zu unterscheiden). Das entsprach nicht mehr der eigentlichen Absicht der am
+20.09. abgestimmten Regel (nur Chip-Nr. und Gegenstand-Zuordnung prüfen, siehe "Erledigt"
+oben) - "frei" ist ein bewusst erlaubter Zustand, kein Fehler.
+
+**Klärung mit Marco:** Treffen ein echter Fehler (z. B. fehlende Chip-Nr. oder ein
+wirklich fehlender Gegenstand-Text) UND die neue Info gleichzeitig zu, wird NUR der
+Fehler angezeigt (Vorrang bestätigt).
+
+**Umsetzung:**
+- `db.py`: `_ed_gegenstaende_vollstaendig()`/`_dk_gegenstaende_vollstaendig()` (gaben
+  `bool` zurück) zu `_ed_gegenstand_status()`/`_dk_gegenstand_status()` umgebaut - liefern
+  jetzt `"ok"`/`"fehlt"`/`"nicht_zugeordnet"`. `"fehlt"` nur noch, wenn tatsächlich zu
+  wenige Gegenstand-Textfelder befüllt sind (bzw. bei DK: zu wenig unterschiedliche Texte
+  trotz vollständiger Disziplin-Abdeckung - bleibt bewusst ein Inhaltsfehler, kein
+  Zuordnungsproblem). `"nicht_zugeordnet"`, wenn genug Texte vorhanden sind, aber
+  mindestens einer nicht der benötigten Disziplin zugeordnet ist. `teilnehmer_fehlende_
+  pflichtangaben()` meldet den Fehlertext nur noch bei `"fehlt"`. Neue Funktion
+  `teilnehmer_gegenstand_hinweis(teilnehmer) -> str | None` liefert die neue Info bei
+  `"nicht_zugeordnet"`.
+- `app.py` (`TeilnehmerTab.aktualisieren()`): Vorrang-Regel direkt in der Anzeige - die
+  Info wird nur geprüft/angezeigt, wenn `teilnehmer_fehlende_pflichtangaben()` leer ist.
+  Die Info erscheint ohne "⚠"-Symbol, nicht fett, mit um 1 Punkt verkleinerter Schrift
+  (`schrift.setPointSize(max(schrift.pointSize() - 1, 1)`), damit sie trotz der längeren
+  Formulierung in die Spalte passt - der bisherige Fehler bleibt optisch unverändert
+  (orange/fett).
+- Tests: `test_db.py` - ein bestehender Test angepasst (ein Fall, der bisher als Fehler
+  erwartet wurde, ist jetzt eine reine Info - siehe
+  `test_teilnehmer_fehlende_pflichtangaben_dk_lk1_reicht_ein_gegenstand_fuer_alle_disziplinen`),
+  plus 3 neue Tests für `teilnehmer_gegenstand_hinweis()` (ED und DK, sowie Abgrenzung
+  zum echten Fehler). `test_app_gui.py` - 1 neuer Test
+  `test_teilnehmerliste_zeigt_nur_info_statt_fehler_wenn_gegenstand_auf_frei_steht`.
+
+**Tests:** `python -m unittest test_db` (209 Tests, 0 fehlgeschlagen) sowie der komplette
+non-GUI-Lauf (359 Tests, 0 fehlgeschlagen, 143 übersprungen) weiterhin grün. GUI-Testlauf
+jetzt 69 bestanden (1 neuer Test)/1 bekannter xfail. `py_compile` fehlerfrei. Ein
+unabhängiger Verifikations-Subagent hat die DK/ED-Statuslogik anhand mehrerer eigener,
+nicht in den Tests vorkommender Beispiele durchgerechnet und die Vorrang-Regel sowie
+fehlende verwaiste Referenzen auf die alten Funktionsnamen gegengeprüft - Verdikt: korrekt,
+keine Funde. Eine nicht-blockierende Beobachtung (kein Fund, nur für spätere Erweiterungen
+vermerkt): die Vorrang-Regel (Fehler vor Info) ist ausschließlich in `app.py`s
+Anzeige-Logik umgesetzt, nicht in `db.py` selbst - ein künftiger, isolierter Aufruf von
+`teilnehmer_gegenstand_hinweis()` (z. B. in einem PDF-Export) ohne vorherige Prüfung von
+`teilnehmer_fehlende_pflichtangaben()` müsste diese Regel selbst wiederholen.
+
+## Version 1.0.24 (22.09., Build auf Marcos Wunsch "ja jetzt ein komplett Build")
+
+Bündelt die oben beschriebene Differenzierung der Gegenstände-Warnung/-Info in der
+Teilnehmerliste - erster Build seit Version 1.0.23.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.24 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`, `test_db_postgres_wrapper`,
+`test_backup`, `test_pdf_export`, `test_app_web`, `test_bump_version`, `test_shs_core`,
+`test_theme`) 359 Tests, 0 fehlgeschlagen (143 übersprungen, PostgreSQL-Tests ohne
+laufenden Server); GUI (`test_app_gui.py` via pytest-qt, `QT_QPA_PLATFORM=offscreen`) 69
+bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py`/`db.py`/
+`pdf_export.py`/`shs_core.py`/`sync_termin.py`/`bump_version.py`/`test_app_gui.py`/
+`test_db.py`/`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.24`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.24
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).

@@ -1137,7 +1137,7 @@ def gegenstand_fuer_disziplin(teilnehmer: dict, disziplin: str) -> str | None:
     return None
 
 
-def _dk_gegenstaende_vollstaendig(teilnehmer: dict, stufe: int) -> bool:
+def _dk_gegenstand_status(teilnehmer: dict, stufe: int) -> str:
     """Prüft die Gegenstand-Disziplin-Zuordnung für Dreikampf (DK) gegen die mit dem
     Nutzer bereits am 16.09. abgestimmte Leistungsklassen-Regel (siehe Fortschritt.md,
     Fix 4): LK1 = mind. 1 Gegenstand-Text, der allen 3 Disziplinen zugeordnet ist
@@ -1146,29 +1146,48 @@ def _dk_gegenstaende_vollstaendig(teilnehmer: dict, stufe: int) -> bool:
     in jedem Fall müssen dabei alle 3 Disziplinen (Trümmerfeld/Flächensuche/
     Behältnisstrecke) einem der drei Gegenstand-Felder zugeordnet sein. Nutzt aus, dass
     eine Disziplin nie zwei Gegenstand-Feldern zugleich zugeordnet sein kann (wird beim
-    Speichern in TeilnehmerDialog._pruefen_und_akzeptieren, app.py, verhindert)."""
+    Speichern in TeilnehmerDialog._pruefen_und_akzeptieren, app.py, verhindert).
+
+    Liefert "ok", "fehlt" (mind. ein Gegenstand-Textfeld ist komplett leer - echter
+    Fehler) oder "nicht_zugeordnet" (alle drei Textfelder sind befüllt, aber mindestens
+    eines davon steht auf "gesucht in: frei" statt einer der drei Disziplinen, weshalb
+    die Zuordnung unvollständig bleibt - Rückmeldung 22.09.: das ist bewusst KEIN Fehler,
+    sondern nur ein Hinweis, anders als ein tatsächlich fehlender Gegenstand-Text)."""
     text_je_disziplin: dict[str, str] = {}
     for feld in _GEGENSTAND_FELDER:
         disziplin = teilnehmer.get(f"{feld}_disziplin")
         text = teilnehmer.get(feld)
         if disziplin and text:
             text_je_disziplin[disziplin] = text
-    if set(text_je_disziplin) != set(ALLE_DISZIPLINEN):
-        return False  # nicht alle 3 Disziplinen mit einem Gegenstand belegt
+    alle_disziplinen_abgedeckt = set(text_je_disziplin) == set(ALLE_DISZIPLINEN)
     mindestanzahl = {1: 1, 2: 2, 3: 3}.get(stufe, 3)
-    return len(set(text_je_disziplin.values())) >= mindestanzahl
+    if alle_disziplinen_abgedeckt and len(set(text_je_disziplin.values())) >= mindestanzahl:
+        return "ok"
+    anzahl_texte = sum(1 for feld in _GEGENSTAND_FELDER if teilnehmer.get(feld))
+    if anzahl_texte < len(_GEGENSTAND_FELDER):
+        return "fehlt"  # mind. ein Gegenstand-Textfeld ist komplett leer
+    if not alle_disziplinen_abgedeckt:
+        return "nicht_zugeordnet"  # alle drei Texte da, aber mind. einer auf "frei"
+    return "fehlt"  # alle drei Disziplinen zugeordnet, aber zu wenig unterschiedliche Texte
 
 
-def _ed_gegenstaende_vollstaendig(teilnehmer: dict, stufe: int, disziplin: str) -> bool:
+def _ed_gegenstand_status(teilnehmer: dict, stufe: int, disziplin: str) -> str:
     """Prüft, ob für Einzeldisziplin (ED) mindestens `stufe` viele Gegenstände der
     gewählten Disziplin zugeordnet sind (LK1=1, LK2=2, LK3=3) - analoge, auf eine
     einzelne Disziplin verengte Anwendung derselben Leistungsklassen-Regel wie
-    _dk_gegenstaende_vollstaendig()."""
-    anzahl = sum(
+    _dk_gegenstand_status(). Liefert "ok"/"fehlt"/"nicht_zugeordnet" - siehe dort für die
+    Bedeutung von "nicht_zugeordnet" (Text vorhanden, aber nicht der benötigten Disziplin
+    zugeordnet, z.B. weil "gesucht in: frei")."""
+    anzahl_zugeordnet = sum(
         1 for feld in _GEGENSTAND_FELDER
         if teilnehmer.get(f"{feld}_disziplin") == disziplin and teilnehmer.get(feld)
     )
-    return anzahl >= stufe
+    if anzahl_zugeordnet >= stufe:
+        return "ok"
+    anzahl_texte = sum(1 for feld in _GEGENSTAND_FELDER if teilnehmer.get(feld))
+    if anzahl_texte >= stufe:
+        return "nicht_zugeordnet"
+    return "fehlt"
 
 
 def teilnehmer_fehlende_pflichtangaben(teilnehmer: dict) -> list[str]:
@@ -1180,7 +1199,12 @@ def teilnehmer_fehlende_pflichtangaben(teilnehmer: dict) -> list[str]:
     alle Sachen Bspl. 3 Gegenstände bei LK 3 erfasst sind'). Geprüft werden bewusst nur
     Chip-Nr. und die zur Leistungsklasse passende Gegenstand-Disziplin-Zuordnung - nicht
     die übrigen, weiterhin bewusst optionalen Erfassungsfelder (Absprache mit dem
-    Nutzer, siehe Fortschritt.md)."""
+    Nutzer, siehe Fortschritt.md).
+
+    Rückmeldung 22.09.: "Gegenstände unvollständig" erscheint hier bewusst NUR noch, wenn
+    tatsächlich ein Gegenstand-Textfeld fehlt - der mildere Fall "Text vorhanden, aber
+    'gesucht in: frei'" ist kein Fehler mehr und taucht hier nicht auf, sondern nur noch
+    als reine Info über teilnehmer_gegenstand_hinweis() (siehe unten)."""
     fehlend: list[str] = []
     if not teilnehmer.get("chip_nr"):
         fehlend.append("Chip-Nr. fehlt")
@@ -1188,13 +1212,37 @@ def teilnehmer_fehlende_pflichtangaben(teilnehmer: dict) -> list[str]:
     art = teilnehmer.get("art")
     if stufe in (1, 2, 3):
         if art == "DK":
-            if not _dk_gegenstaende_vollstaendig(teilnehmer, stufe):
+            if _dk_gegenstand_status(teilnehmer, stufe) == "fehlt":
                 fehlend.append("Gegenstände unvollständig (Dreikampf)")
         elif art == "ED":
             disziplin = teilnehmer.get("disziplin")
-            if disziplin and not _ed_gegenstaende_vollstaendig(teilnehmer, stufe, disziplin):
+            if disziplin and _ed_gegenstand_status(teilnehmer, stufe, disziplin) == "fehlt":
                 fehlend.append("Gegenstände unvollständig")
     return fehlend
+
+
+def teilnehmer_gegenstand_hinweis(teilnehmer: dict) -> str | None:
+    """Liefert eine milde Info (kein Fehler, siehe teilnehmer_fehlende_pflichtangaben()),
+    wenn genug Gegenstand-Texte erfasst sind, aber mindestens einer davon keiner der drei
+    Suchdisziplinen zugeordnet ist ("gesucht in: frei") - oder None, wenn das nicht
+    zutrifft (entweder bereits vollständig zugeordnet, oder es liegt stattdessen ein
+    echter Fehler vor, siehe teilnehmer_fehlende_pflichtangaben(), das hat Vorrang)."""
+    stufe = teilnehmer.get("stufe")
+    art = teilnehmer.get("art")
+    if stufe not in (1, 2, 3):
+        return None
+    if art == "DK":
+        status = _dk_gegenstand_status(teilnehmer, stufe)
+    elif art == "ED":
+        disziplin = teilnehmer.get("disziplin")
+        if not disziplin:
+            return None
+        status = _ed_gegenstand_status(teilnehmer, stufe, disziplin)
+    else:
+        return None
+    if status == "nicht_zugeordnet":
+        return "Gegenstände den Suchdisziplinen nicht zugeordnet"
+    return None
 
 
 def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
