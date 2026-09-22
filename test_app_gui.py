@@ -1071,11 +1071,19 @@ def test_ergebnis_tabelle_schrumpft_punktespalten_nicht_unter_minimum_bei_schmal
 # Hinweis: dass Spalten bei genügend Platz NICHT über ihre natürliche Breite hinaus
 # aufgebläht werden (Restplatz geht stattdessen an die gestreckte Status-Spalte), ist
 # bereits durch test_ergebnis_spaltenbreiten_keine_stauchung_wenn_platz_reicht oben auf
-# reiner Funktionsebene abgedeckt - die Kopfzeilen dieser Tabelle (z.B. "Flächensuche –
-# Suche (0-60)") sind bei normaler Schriftgröße so breit, dass auf jedem realistischen
-# Bildschirm ohnehin noch gestaucht wird; ein GUI-Test für den "kein Überlauf mehr"-Fall
-# bräuchte eine unrealistisch breite Fensterbreite und wäre nur Pixel-Fummelei ohne echten
-# Mehrwert gegenüber dem Funktionstest.
+# reiner Funktionsebene abgedeckt.
+#
+# Nutzerwunsch (22.09.): die Kopfzeilen dieser Tabelle (z.B. "Flächensuche – Suche
+# (0-60)") wurden früher bei schmalem Fenster über ihr Spaltenminimum hinaus
+# zusammengedrückt und dabei abgeschnitten dargestellt, weil das Spaltenminimum nur am
+# Zelleninhalt ("88" bzw. fix 44px), nicht am Headertext bemessen war. Behoben durch:
+# zweizeilige Headertexte je Disziplin-Spalte (get "\n" statt " – " als Trenner - Qt
+# rendert das von sich aus mehrzeilig, siehe ErgebnisTab.__init__) und
+# _spaltenbreiten_anpassen bemisst das Spaltenminimum jetzt zusätzlich an der breitesten
+# Headerzeile (siehe header_zeilen_breite() dort). Ein eigener GUI-Test dafür bräuchte
+# Pixel-genaue Text-/Schriftmetrik-Annahmen und wäre kaum wartbar - die Kernlogik
+# (Minimum je Spalte) bleibt bewusst nur über die bestehenden Funktionstests von
+# _ergebnis_spaltenbreiten_verteilen abgedeckt.
 
 
 # --- Ergebniserfassung: Sortierung per Spaltenklick ---------------------------------

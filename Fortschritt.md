@@ -1009,3 +1009,80 @@ git tag v1.0.25
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## 22.09.2026: Zeitplan-PDF ohne Verein-Spalte + Ergebniserfassung ohne abgeschnittene Header (Arbeitsstand, noch kein Build)
+
+Zwei Rückmeldungen (Text + Screenshot der Ergebniserfassung mit abgeschnittenen Spalten-
+überschriften wie "immerfeld – Suche (0-..." statt "Trümmerfeld – Suche (0-60)"):
+
+1. **Zeitplan-PDF: Spalte "Verein" entfernt.** `pdf_export.py`, Funktion
+   `_zeitplan_richter_tabelle` - Header und alle drei Fallzeilen (Pause/kein-Teilnehmer/
+   normal) von 6 auf 5 Spalten reduziert, SPAN-Bereiche der Pause- und Kein-Teilnehmer-
+   Zeile entsprechend angepasst, `colWidths` neu verteilt
+   (`[28, 55, 20, 55, 42]mm`, weiterhin Summe 200mm) - die frei gewordene Breite ging vor
+   allem an Name/Hund/Art-Disziplin. `db.berechne_zeitplan` liefert `verein` unverändert
+   weiter, nur die PDF-Anzeige wurde entfernt (keine Datenmodell-Änderung).
+
+2. **Ergebniserfassung (Desktop, `ErgebnisTab` in `app.py`): Spaltenüberschriften werden
+   bei schmalem Fenster nicht mehr abgeschnitten.** Ursache war, dass die Mindestbreite
+   der Such-/Anzeige- sowie der Disqualifiziert-/Abbruch-Spalten in
+   `_spaltenbreiten_anpassen` bisher nur am Zelleninhalt ("88"-Textbreite bzw. fix 44px)
+   bemessen war, nicht am (viel längeren) Headertext - bei knappem Platz schrumpfte die
+   Spalte unter die Headerbreite, Qt schnitt den Text dann ab. Fix: die Disziplin-Header
+   nutzen jetzt `"\n"` statt `" – "` als Trenner (z. B. `"Trümmerfeld\nSuche (0-60)"`) -
+   Qt rendert das von sich aus mehrzeilig (Header-Höhe/-Breite passt sich automatisch an,
+   empirisch verifiziert). Ein ursprünglicher Versuch, zusätzlich
+   `self.tabelle.horizontalHeader().setWordWrap(True)` zu setzen, führte zu
+   `AttributeError: 'QHeaderView' object has no attribute 'setWordWrap'` (diese Methode
+   gibt es bei `QHeaderView` in Qt/PySide6 nicht, nur bei `QAbstractItemView` für
+   Zellinhalte) - wieder entfernt, da für das mehrzeilige Header-Rendering nicht nötig.
+   Neue Hilfsfunktion `header_zeilen_breite(spalte)` in `_spaltenbreiten_anpassen` misst
+   die breiteste Headerzeile via `self.tabelle.horizontalHeader().fontMetrics()` und geht
+   als zusätzliche Untergrenze (`max(bisheriges_minimum, header_zeilen_breite(c))`) in die
+   Punkte- sowie DQ/Abbruch-Spalten-Minima ein. Der überholte Dokumentationskommentar in
+   `test_app_gui.py` (der das Abschneiden bisher als hingenommen beschrieb) wurde
+   entsprechend aktualisiert.
+
+**Tests:** `python -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export
+test_app_web test_bump_version test_shs_core` - 355 Tests, 0 fehlgeschlagen (143
+übersprungen, u. a. alle `test_pdf_export`-Tests wegen fehlendem `pypdf` in dieser
+Umgebung - deshalb zusätzlich manuell per Skript `_zeitplan_richter_tabelle`/
+`erstelle_zeitplan_pdf` mit allen drei Zeilentypen aufgerufen: 5 Spalten je Zeile,
+`colWidths`-Summe weiterhin 200mm, kein "Verein" mehr im Header, PDF-Erzeugung ohne
+Fehler). `python -m pytest test_app_gui.py -q` - 77 bestanden, 1 bekannter xfail
+(inkl. aller 15 `ergebnis`-bezogenen Tests). Zusätzlich manuell bei künstlich schmalem
+Fenster (750×400px) geprüft: alle Spaltenbreiten wachsen jetzt auf die tatsächlich
+benötigte Headerbreite (z. B. "Behältnisstrecke\nSuche (0-60)" → 109px statt vorher
+starr 56px). Unabhängiger Verifikations-Subagent hat Diff (SPAN-Bereiche, colWidths-Summe,
+`header_zeilen_breite`-Implementierung, keine verbliebene nicht-existente Qt-API) und
+beide Testläufe gegengeprüft - keine Findings.
+
+**Noch offen (Stand vor dem Build):** visuelle Bestätigung durch Marco am echten
+Bildschirm (Zeitplan-PDF ohne Verein-Spalte, Ergebniserfassung mit lesbaren
+zweizeiligen Headern bei schmalem Fenster) - laut Marco erfolgt dieser Test jetzt anhand
+des unten gebauten Installers.
+
+## Version 1.0.26 (22.09., Build auf Marcos Wunsch "direkt committen und wir erzeugen
+eine neue Version. Diese wird dann getestet")
+
+Bündelt die beiden oben beschriebenen Änderungen (Zeitplan-PDF ohne Verein-Spalte,
+Ergebniserfassung ohne abgeschnittene Spaltenüberschriften) - erster Build seit
+Version 1.0.25.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.26 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`,
+`test_db_postgres_wrapper`, `test_backup`, `test_pdf_export`, `test_app_web`,
+`test_bump_version`, `test_shs_core`) 355 Tests, 0 fehlgeschlagen (143 übersprungen,
+u. a. `pypdf`/PostgreSQL-Tests ohne die jeweilige lokale Voraussetzung); zusätzlich
+`test_theme` (4 Tests, grün). GUI (`test_app_gui.py` via pytest-qt) 77 bestanden, 1
+bekannter xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py`/`db.py`/
+`pdf_export.py`/`shs_core.py`/`sync_termin.py`/`bump_version.py`/`test_app_gui.py`/
+`test_db.py`/`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.26`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.26
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).

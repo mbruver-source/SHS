@@ -1489,12 +1489,19 @@ class ErgebnisTab(QWidget):
 
         spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
-            spalten += [f"{disziplin} – Suche (0-60)", f"{disziplin} – Anzeige (0-40)"]
+            spalten += [f"{disziplin}\nSuche (0-60)", f"{disziplin}\nAnzeige (0-40)"]
         spalten += ["Disqualifiziert", "Abbruch", "Status"]
 
         self.tabelle = QTableWidget(0, len(spalten))
         self.tabelle.setHorizontalHeaderLabels(spalten)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
+        # Nutzerwunsch (22.09.): Spaltenüberschriften sollen bei schmalen Spalten nicht
+        # abgeschnitten werden. Qt rendert einen "\n" in einem Header-Label von sich aus
+        # bereits mehrzeilig (sizeHint/Höhe passen sich automatisch an - kein QHeaderView-
+        # API-Aufruf nötig, es gibt dort anders als bei QAbstractItemView kein setWordWrap()).
+        # Die Disziplin-Header oben nutzen deshalb "\n" statt " – " als Trenner; die
+        # Mindestspaltenbreite unten in _spaltenbreiten_anpassen orientiert sich entsprechend
+        # an der jeweils breitesten Headerzeile statt an festen Platzhaltern.
         # Die von Qt automatisch links angezeigte Zeilennummerierung (1, 2, 3, ...) ist
         # keine echte, überschriebene Spalte und trägt keine zusätzliche Information (die
         # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
@@ -1771,13 +1778,27 @@ class ErgebnisTab(QWidget):
         punktespalten = {c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values() for c in paar}
         minimum_punkte = max(self.tabelle.fontMetrics().horizontalAdvance("88") + 24, 56)
 
+        # Nutzerwunsch (22.09.): Spaltenüberschriften sollen nicht mehr abgeschnitten
+        # werden - die bisherigen Minima oben orientierten sich nur am Zelleninhalt
+        # ("88" bzw. fix 44px für die Checkbox-Spalten), nicht am Headertext. Deshalb hier
+        # zusätzlich je Spalte die Breite der längsten Headerzeile ermitteln (bei den
+        # jetzt mehrzeiligen Disziplin-Headern mit "\n" die breitere der beiden Zeilen,
+        # bei einzeiligen wie "Disqualifiziert"/"Abbruch" die volle Textbreite, da dort
+        # mangels Leerzeichen kein Umbruch möglich ist) und als zusätzliche Untergrenze
+        # verwenden.
+        header_metriken = self.tabelle.horizontalHeader().fontMetrics()
+
+        def header_zeilen_breite(spalte: int) -> int:
+            text = self.tabelle.horizontalHeaderItem(spalte).text()
+            return max(header_metriken.horizontalAdvance(zeile) for zeile in text.split("\n")) + 24
+
         natuerlich = [self.tabelle.columnWidth(c) for c in range(_STATUS_SPALTE)]
         minima = []
         for c in range(_STATUS_SPALTE):
             if c in punktespalten:
-                minima.append(minimum_punkte)
+                minima.append(max(minimum_punkte, header_zeilen_breite(c)))
             elif c in (_DQ_SPALTE, _ABBRUCH_SPALTE):
-                minima.append(44)
+                minima.append(max(44, header_zeilen_breite(c)))
             else:
                 # Start-Nr./Name/Hund/Art-LK: reiner Text ohne Eingabefeld, schrumpft nicht
                 # unter die eigene natürliche Breite (soll nicht abgeschnitten werden).

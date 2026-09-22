@@ -1200,7 +1200,7 @@ def _zeitplan_zeile_farbe(zeile: dict):
 
 
 def _zeitplan_richter_tabelle(plan: dict) -> Table:
-    daten = [["Uhrzeit", "Art / LK / Disziplin", "Start-Nr.", "Name", "Hund", "Verein"]]
+    daten = [["Uhrzeit", "Art / LK / Disziplin", "Start-Nr.", "Name", "Hund"]]
     stil = [
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
@@ -1217,9 +1217,9 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
             daten.append([
                 Paragraph(zeit_text, _ZEITPLAN_ZEIT),
                 Paragraph(_p_wert(zeile["bezeichnung"]), _ZEITPLAN_PAUSE_TEXT),
-                "", "", "", "",
+                "", "", "",
             ])
-            stil.append(("SPAN", (1, i), (5, i)))
+            stil.append(("SPAN", (1, i), (4, i)))
         elif zeile["teilnehmer"] is None:
             # Bereits angelegter Prüfungsblock, für den (noch) kein passender Teilnehmer
             # gemeldet ist - erscheint trotzdem als Zeile, statt spurlos zu fehlen.
@@ -1227,9 +1227,9 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
                 Paragraph(zeit_text, _ZEITPLAN_ZEIT),
                 Paragraph(art_text, _ZEITPLAN_ZEILE),
                 Paragraph("(noch keine Teilnehmer gemeldet)", _ZEITPLAN_PAUSE_TEXT),
-                "", "", "",
+                "", "",
             ])
-            stil.append(("SPAN", (2, i), (5, i)))
+            stil.append(("SPAN", (2, i), (4, i)))
         else:
             t = zeile["teilnehmer"]
             daten.append([
@@ -1238,11 +1238,10 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
                 Paragraph(_p_wert(t["startnummer"]), _ZEITPLAN_ZEILE),
                 Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _ZEITPLAN_ZEILE),
                 Paragraph(_p_wert(t["rufname_hund"]), _ZEITPLAN_ZEILE),
-                Paragraph(_p_wert(t["verein"]), _ZEITPLAN_ZEILE),
             ])
         stil.append(("BACKGROUND", (0, i), (-1, i), _zeitplan_zeile_farbe(zeile)))
 
-    tabelle = Table(daten, colWidths=[30 * mm, 48 * mm, 18 * mm, 42 * mm, 28 * mm, 34 * mm], repeatRows=1)
+    tabelle = Table(daten, colWidths=[28 * mm, 55 * mm, 20 * mm, 55 * mm, 42 * mm], repeatRows=1)
     tabelle.setStyle(TableStyle(stil))
     return tabelle
 
