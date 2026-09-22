@@ -1133,5 +1133,29 @@ Verifikations-Subagent hat die Korrektur-Passe auf Terminierung, Einhaltung der 
 Interaktion mit den vier bestehenden `_ergebnis_spaltenbreiten_verteilen`-Funktionstests
 gegengeprüft sowie beide Testläufe selbst wiederholt - keine Findings, PASS.
 
-**Noch offen:** kein Build/Commit, wie in `CLAUDE.md` festgelegt - Änderung bleibt
-zunächst nur im Arbeitsstand, bis Marco einen Build anfordert.
+**Update:** auf Marcos Wunsch ("commit") zunächst ohne Versionsbump committet (Commit
+`7275280`), anschließend auf Wunsch ("ja ein full build") zu Version 1.0.27 gebaut - siehe
+unten.
+
+## Version 1.0.27 (22.09., Build auf Marcos Wunsch "ja ein full build")
+
+Bündelt die oben beschriebene Rundungsfehler-Behebung in
+`_ergebnis_spaltenbreiten_verteilen` (CI-Regression aus 1.0.26) - erster Build seit
+Version 1.0.26.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.27 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`,
+`test_db_postgres_wrapper`, `test_backup`, `test_pdf_export`, `test_app_web`,
+`test_bump_version`, `test_shs_core`, `test_theme`) 359 Tests, 0 fehlgeschlagen (106
+übersprungen, PostgreSQL-Tests ohne lokale Voraussetzung). GUI (`test_app_gui.py` via
+pytest-qt) 78 bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/
+`app_web.py`/`db.py`/`pdf_export.py`/`shs_core.py`/`sync_termin.py`/`bump_version.py`/
+`version.py`/`test_app_gui.py`/`test_db.py`/`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.27`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.27
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).
