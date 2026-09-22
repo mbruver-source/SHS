@@ -1224,6 +1224,35 @@ behoben ist** (der ist auf Windows nicht reproduzierbar) - nur, dass die neue
 Fallback-Logik in sich korrekt ist und nichts lokal Testbares kaputtgeht. Endgültige
 Bestätigung erst durch den nächsten echten CI-Lauf.
 
-**Noch offen:** kein Build/Commit bisher (Arbeitsstand), Marco muss entscheiden, ob jetzt
-committet/gebaut werden soll, und der nächste CI-Lauf nach einem Push muss den Fix
-tatsächlich bestätigen.
+**Update:** auf Marcos Wunsch ("commit ja, aber erstmal nur die Tests auf git anstoßen und
+falls positiv danach erst build") zunächst ohne Versionsbump committet (Commit `6c7ab47`),
+Push blieb wie immer Marcos eigene Aktion. CI-Lauf auf GitHub Actions nach dem Push war
+grün (Marco: "ok alles grün") - der harte_minima-Fallback ist damit auf dem echten
+CI-Runner (Linux, andere Schriftmetriken als lokal unter Windows) bestätigt, nicht nur
+lokal verifiziert. Anschließend auf Wunsch ("jetzt neues Build") zu Version 1.0.28 gebaut -
+siehe unten.
+
+## Version 1.0.28 (22.09., Build auf Marcos Wunsch "jetzt neues Build", nachdem der
+harte_minima-Fix durch einen grünen CI-Lauf bestätigt war)
+
+Bündelt die zweite Fallback-Stufe (`harte_minima`) für die Ergebnistabellen-Spaltenbreiten
+aus dem obigen Abschnitt - zweiter Build in Folge zur selben CI-Regression (nach 1.0.27,
+das den Rundungsfehler behob, aber die zusätzliche, auf CI/Linux-Schriftmetriken
+beruhende Ursache noch nicht abdeckte).
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.28 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`,
+`test_db_postgres_wrapper`, `test_backup`, `test_pdf_export`, `test_app_web`,
+`test_bump_version`, `test_shs_core`, `test_theme`) 359 Tests, 0 fehlgeschlagen (106
+übersprungen, PostgreSQL-Tests ohne lokale Voraussetzung). GUI (`test_app_gui.py` via
+pytest-qt) 81 bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/
+`app_web.py`/`db.py`/`pdf_export.py`/`shs_core.py`/`sync_termin.py`/`bump_version.py`/
+`version.py`/`test_app_gui.py`/`test_db.py`/`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.28`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.28
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).
