@@ -27,7 +27,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, Q
 
 from app import (
     VERSION,
-    _QSS_MODERN_MINIMAL,
+    _erzeuge_qss,
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
     ErgebnisTab,
@@ -97,13 +97,14 @@ def _teilnehmer_anlegen(connection, **overrides) -> int:
 # Screenshot-Vergleich leisten) - hier nur, dass er tatsächlich gesetzt wird (main(),
 # nicht separat testbar ohne den echten Startdialog durchzuklicken) und dass die als
 # Haupt-Aktion vorgesehenen Buttons den dafür vorgesehenen objectName tragen, über den
-# _QSS_MODERN_MINIMAL sie hervorhebt.
+# _erzeuge_qss() (siehe app.py, mehrere Themes über _THEMES) sie hervorhebt.
 
 
 def test_qss_modern_minimal_enthaelt_kernselektoren():
-    assert "QTabBar::tab:selected" in _QSS_MODERN_MINIMAL
-    assert "QPushButton#primaerButton" in _QSS_MODERN_MINIMAL
-    assert "#2F6FED" in _QSS_MODERN_MINIMAL  # Akzentfarbe
+    qss_blau = _erzeuge_qss("blau")
+    assert "QTabBar::tab:selected" in qss_blau
+    assert "QPushButton#primaerButton" in qss_blau
+    assert "#2F6FED" in qss_blau  # Akzentfarbe des Standard-Themes "blau"
 
 
 def test_teilnehmer_hinzufuegen_ist_primaerbutton(qtbot, conn):

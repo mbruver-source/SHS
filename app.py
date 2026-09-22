@@ -37,8 +37,15 @@ import os
 import sqlite3
 import sys
 
-from PySide6.QtCore import QUrl, Qt
-from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QIntValidator
+from PySide6.QtCore import QSettings, QUrl, Qt
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QCloseEvent,
+    QColor,
+    QDesktopServices,
+    QIntValidator,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -907,7 +914,7 @@ class TeilnehmerTab(QWidget):
         self.filter_bezahlt.currentTextChanged.connect(self._filter_anwenden)
 
         hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
-        hinzufuegen_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
+        hinzufuegen_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         hinzufuegen_btn.clicked.connect(self._teilnehmer_hinzufuegen)
 
         self.bearbeiten_btn = QPushButton("Bearbeiten…")
@@ -1202,7 +1209,7 @@ class TeilnehmerTab(QWidget):
                 else:
                     item = QTableWidgetItem(wert)
                 self.tabelle.setItem(row, col, item)
-            # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_MODERN_MINIMAL) -
+            # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_TEMPLATE) -
             # nur die Textfarbe, der Zelleninhalt selbst bleibt wie zuvor ("" bei nicht
             # bezahlt), damit bestehende Tests darauf weiter verlassen können.
             if t["bezahlt"]:
@@ -1455,7 +1462,7 @@ class ErgebnisTab(QWidget):
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
         speichern_btn = QPushButton("Alle Ergebnisse speichern")
-        speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
+        speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         speichern_btn.clicked.connect(self.alle_speichern)
 
         aktualisieren_btn = QPushButton("Liste aktualisieren")
@@ -2945,7 +2952,7 @@ class VerwaltungTab(QWidget):
         self.conn = conn
 
         veranstaltung_btn = QPushButton("Veranstaltungsdaten bearbeiten…")
-        veranstaltung_btn.setObjectName("primaerButton")  # einzige Aktion dieses Reiters, siehe _QSS_MODERN_MINIMAL
+        veranstaltung_btn.setObjectName("primaerButton")  # einzige Aktion dieses Reiters, siehe _QSS_TEMPLATE
         veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
 
         hinweis = QLabel(
@@ -3506,6 +3513,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def __init__(self, conn, pfad: str):
         super().__init__()
         self.resize(900, 600)
+        self._theme_menue_aufbauen()
 
         # Hilfe-Button oben rechts im Fenster, direkt neben "Anderen Termin öffnen…" -
         # optisch in der Nähe der nativen Minimieren/Maximieren/Schließen-Schaltflächen
@@ -3541,6 +3549,41 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
         self._termin_setzen(conn, pfad)
         self._schriftgroesse_anwenden()
+
+    def _theme_menue_aufbauen(self) -> None:
+        # Eine einzige Verbindung auf QActionGroup.triggered (statt einer eigenen
+        # lambda-Verbindung pro Action in der Schleife) - eine pro-Action-lambda, die
+        # `self` einfängt, hat beim Schließen/Zerstören des Fensters in Tests
+        # (qtbot-Teardown) zu einem Hänger geführt (vermutlich ein PySide6-Problem mit
+        # der Verbindungs-Buchhaltung bei lambda-Slots + Objektzerstörung). Das hier
+        # verwendete Muster (ein einziger, echter gebundener Methodenaufruf, das Theme
+        # über QAction.data() statt über eine eingefangene Schleifenvariable
+        # identifiziert) ist der Qt-übliche Weg für QActionGroups und tritt in den
+        # GUI-Tests (test_app_gui.py) nicht mehr auf.
+        ansicht_menue = self.menuBar().addMenu("&Ansicht")
+        theme_menue = ansicht_menue.addMenu("Theme")
+
+        self._theme_actions: dict[str, QAction] = {}
+        gruppe = QActionGroup(self)
+        gruppe.setExclusive(True)
+        gruppe.triggered.connect(self._theme_aktion_ausgeloest)
+
+        aktives_theme = _gespeichertes_theme_lesen()
+        for schluessel, daten in _THEMES.items():
+            action = QAction(daten["anzeigename"], self)
+            action.setCheckable(True)
+            action.setChecked(schluessel == aktives_theme)
+            action.setData(schluessel)
+            theme_menue.addAction(action)
+            gruppe.addAction(action)
+            self._theme_actions[schluessel] = action
+
+    def _theme_aktion_ausgeloest(self, action: QAction) -> None:
+        self._theme_wechseln(action.data())
+
+    def _theme_wechseln(self, theme_name: str) -> None:
+        QApplication.instance().setStyleSheet(_erzeuge_qss(theme_name))
+        _theme_speichern(theme_name)
 
     def _hilfe_anzeigen(self) -> None:
         HilfeDialog(self).exec()
@@ -3821,7 +3864,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.tabelle.horizontalHeader().setStretchLastSection(True)
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
-        neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_MODERN_MINIMAL
+        neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_TEMPLATE
         neu_btn.clicked.connect(self._neuer_termin)
         self.oeffnen_btn = QPushButton("Öffnen")
         self.oeffnen_btn.clicked.connect(self._termin_oeffnen)
@@ -3976,13 +4019,17 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             self.accept()
 
 
-_QSS_MODERN_MINIMAL = """
+_QSS_TEMPLATE = """
 /* "Modern/Minimal"-Erscheinungsbild (siehe Design-Mockup-Vergleich): kühles Grau-Blau,
-ein einzelner Akzentton (#2F6FED), ruhige Flächen statt vieler Rahmen/Schatten. Global
-über QApplication.setStyleSheet() gesetzt (siehe main() unten) - HauptFenster & Dialoge
-setzen zusätzlich per ResponsiveSchriftMixin eine eigene, nähere QHeaderView::section-/
-QLabel-Regel NUR für font-size bei Größenänderung; das überschreibt hier absichtlich
-nichts anderes, da beide Regelsätze unterschiedliche Eigenschaften des Selektors setzen. */
+ein einzelner Akzentton (je gewähltem Theme, siehe _THEMES/_erzeuge_qss() unten -
+@@AKZENT@@/@@AKZENT_HOVER@@/@@AKZENT_PRESSED@@/@@AKZENT_HELL@@ sind Platzhalter, die vor
+dem Anwenden per str.replace() durch die Theme-Hexwerte ersetzt werden; str.format() geht
+hier nicht, da das Stylesheet selbst voller literaler {}-Blockklammern ist), ruhige
+Flächen statt vieler Rahmen/Schatten. Global über QApplication.setStyleSheet() gesetzt
+(siehe main() unten) - HauptFenster & Dialoge setzen zusätzlich per ResponsiveSchriftMixin
+eine eigene, nähere QHeaderView::section-/QLabel-Regel NUR für font-size bei
+Größenänderung; das überschreibt hier absichtlich nichts anderes, da beide Regelsätze
+unterschiedliche Eigenschaften des Selektors setzen. */
 
 QMainWindow, QDialog {
     background: #FFFFFF;
@@ -4011,7 +4058,7 @@ QTabBar::tab {
 QTabBar::tab:selected {
     color: #16233E;
     font-weight: 600;
-    border-bottom: 2px solid #2F6FED;
+    border-bottom: 2px solid @@AKZENT@@;
 }
 QTabBar::tab:hover:!selected {
     color: #16233E;
@@ -4041,18 +4088,18 @@ QPushButton:disabled {
     border-color: #EDF0F4;
 }
 QPushButton#primaerButton, QPushButton:default:enabled {
-    background: #2F6FED;
+    background: @@AKZENT@@;
     color: #FFFFFF;
-    border: 1px solid #2F6FED;
+    border: 1px solid @@AKZENT@@;
     font-weight: 600;
 }
 QPushButton#primaerButton:hover, QPushButton:default:enabled:hover {
-    background: #2A63D6;
-    border-color: #2A63D6;
+    background: @@AKZENT_HOVER@@;
+    border-color: @@AKZENT_HOVER@@;
 }
 QPushButton#primaerButton:pressed, QPushButton:default:enabled:pressed {
-    background: #2558BF;
-    border-color: #2558BF;
+    background: @@AKZENT_PRESSED@@;
+    border-color: @@AKZENT_PRESSED@@;
 }
 
 /* Eingabefelder */
@@ -4064,7 +4111,7 @@ QLineEdit, QComboBox, QSpinBox, QDateEdit {
     color: #1B2430;
 }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {
-    border: 1px solid #2F6FED;
+    border: 1px solid @@AKZENT@@;
     background: #FFFFFF;
 }
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
@@ -4087,14 +4134,14 @@ QTableWidget {
     gridline-color: #E4E8EE;
     border: 1px solid #E4E8EE;
     border-radius: 6px;
-    selection-background-color: #EAF1FF;
+    selection-background-color: @@AKZENT_HELL@@;
     selection-color: #1B2430;
 }
 QTableWidget::item {
     padding: 4px 6px;
 }
 QTableWidget::item:selected {
-    background: #EAF1FF;
+    background: @@AKZENT_HELL@@;
     color: #1B2430;
 }
 QHeaderView::section {
@@ -4124,10 +4171,66 @@ QScrollBar::handle:hover {
 }
 """
 
+_THEME_DEFAULT = "blau"
+
+# Drei Akzentfarb-Themes (keine Hell/Dunkel-Umschaltung, nur der Akzentton wechselt -
+# alle übrigen Farben in _QSS_TEMPLATE bleiben je Theme identisch). "blau" entspricht
+# bit-für-bit dem bisherigen, fest verdrahteten Erscheinungsbild (siehe test_theme.py).
+_THEMES: dict[str, dict[str, str]] = {
+    "blau": {
+        "anzeigename": "Blau (Standard)",
+        "akzent": "#2F6FED",
+        "akzent_hover": "#2A63D6",
+        "akzent_pressed": "#2558BF",
+        "akzent_hell": "#EAF1FF",
+    },
+    "gruen": {
+        "anzeigename": "Grün",
+        "akzent": "#1E8E5A",
+        "akzent_hover": "#1A7A4D",
+        "akzent_pressed": "#166741",
+        "akzent_hell": "#E7F3EC",
+    },
+    "violett": {
+        "anzeigename": "Violett",
+        "akzent": "#6B4FBB",
+        "akzent_hover": "#5F45A8",
+        "akzent_pressed": "#523B92",
+        "akzent_hell": "#EEEAF8",
+    },
+}
+
+
+def _erzeuge_qss(theme_name: str) -> str:
+    """Setzt die Akzentfarb-Platzhalter in _QSS_TEMPLATE für das gewählte Theme ein."""
+    theme = _THEMES.get(theme_name, _THEMES[_THEME_DEFAULT])
+    text = _QSS_TEMPLATE
+    text = text.replace("@@AKZENT_HOVER@@", theme["akzent_hover"])
+    text = text.replace("@@AKZENT_PRESSED@@", theme["akzent_pressed"])
+    text = text.replace("@@AKZENT_HELL@@", theme["akzent_hell"])
+    text = text.replace("@@AKZENT@@", theme["akzent"])
+    return text
+
+
+_SETTINGS_ORG = "SHS-Pruefungsprogramm"
+_SETTINGS_APP = "Desktop"
+_SETTINGS_KEY_THEME = "darstellung/theme"
+
+
+def _gespeichertes_theme_lesen() -> str:
+    """Liest das zuletzt gewählte Theme pro Windows-Benutzer (QSettings/Registry)."""
+    einstellungen = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    wert = einstellungen.value(_SETTINGS_KEY_THEME, _THEME_DEFAULT)
+    return wert if wert in _THEMES else _THEME_DEFAULT
+
+
+def _theme_speichern(theme_name: str) -> None:
+    QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_KEY_THEME, theme_name)
+
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setStyleSheet(_QSS_MODERN_MINIMAL)
+    app.setStyleSheet(_erzeuge_qss(_gespeichertes_theme_lesen()))
 
     start = StartDialog()
     if start.exec() != QDialog.Accepted or not start.pfad:

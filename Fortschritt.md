@@ -1,7 +1,7 @@
 
 # Fortschritt: SHS-Prüfungsprogramm-Ablösung
 
-Stand: 21.09.2026 (aktualisiert: geplante 12:00-Uhr-Aufgabe - 6 Punkte aus Marcos Rückmeldung zu Übersicht PL/Statistik/Etikettendruck/Ergebnisliste/Bewertungsbögen - vollständig umgesetzt, siehe eigener Abschnitt unten). Details/Hintergrund siehe `Grobkonzept.md`.
+Stand: 22.09.2026 (aktualisiert: Feature "mehrere Themes" für die Desktop-App umgesetzt, inkl. während der Umsetzung gefundenem und behobenem GUI-Test-Hänger - siehe eigener Abschnitt unten; noch nicht committet/versioniert). Details/Hintergrund siehe `Grobkonzept.md`.
 
 ## Erledigt
 
@@ -684,3 +684,104 @@ git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release) - `build-container.yml`
 nur bei Bedarf (Web/Container-Image).
+
+## Mehrere Farbschemata (Themes) für die Desktop-App (22.09., Rückmeldung "mehrere Themes möglich")
+
+Marcos kurzer Feedback-Stichpunkt "mehrere Themes möglich" wurde per Rückfrage präzisiert
+(Umfang, Art des Themes, Speicherort, siehe Klärung unten), dann geplant und umgesetzt -
+**nur im Arbeitsstand, noch nicht committet/versioniert/ausgeliefert** (Projekt-Konvention:
+erst nach Marcos ausdrücklicher Build-Freigabe).
+
+**Klärung/Entscheidungen (per Rückfrage bestätigt):**
+- Nur Desktop-App (`app.py`) betroffen, nicht die Web-App - dort existiert bereits eine
+  eigene CSS-Variablen-Struktur in `templates/base.html`, die für ein späteres, separates
+  Web-Feature ein guter Ansatzpunkt wäre, war hier aber nicht Teil des Auftrags.
+- "Theme" = mehrere fertige Akzentfarbschemata, kein Hell/Dunkel-Modus. 3 Themes: Blau
+  (`#2F6FED`, Standard, identisch zum bisherigen Aussehen), Grün (`#1E8E5A`), Violett
+  (`#6B4FBB`).
+- Speicherung pro Windows-Benutzer via `QSettings` (Registry unter
+  `HKCU\Software\SHS-Pruefungsprogramm\Desktop`) - die Desktop-App hat kein Login/keine
+  Benutzerebene (Single-User pro Installation, Kontext ist nur die geöffnete
+  Termin-SQLite-Datei), "pro Nutzer" bedeutet hier daher technisch "pro
+  Windows-Benutzerkonto".
+- Die 9 bereits bestehenden, fest verdrahteten semantischen Statusfarben (bezahlt=grün,
+  Warnung=orange, Fehler=rot, ungespeichert=gelb) bleiben unverändert und sind NICHT Teil
+  des Themes.
+
+**Umsetzung:**
+- Bisherige QSS-Konstante `_QSS_MODERN_MINIMAL` zu `_QSS_TEMPLATE` umbenannt, die 4
+  Akzentfarben-Stellen (Tab-Unterstrich, Haupt-Button normal/hover/pressed,
+  Eingabefeld-Fokusrahmen, Tabellen-Auswahl-Tönung) durch eigene Marker-Platzhalter
+  (`@@AKZENT@@`/`@@AKZENT_HOVER@@`/`@@AKZENT_PRESSED@@`/`@@AKZENT_HELL@@`) ersetzt, per
+  `str.replace()` statt `str.format()` befüllt (das QSS selbst ist voller literaler
+  `{}`-Blockklammern, mit denen `.format()` kollidieren würde).
+- Neue Datenstruktur `_THEMES` (3 Einträge) + Funktion `_erzeuge_qss(theme_name)`. "Blau"
+  ist bit-für-bit identisch zum bisherigen Aussehen (per Regressionstest abgesichert, siehe
+  unten).
+- Neue Funktionen `_gespeichertes_theme_lesen()`/`_theme_speichern()` auf `QSettings`-Basis.
+  `main()` wendet das gespeicherte Theme bereits vor dem Startdialog an.
+- Neuer Menüpunkt in `HauptFenster` über die bisher ungenutzte `QMenuBar` ("Ansicht" >
+  "Theme", 3 checkbare, exklusive `QAction`s über `QActionGroup`) - Wechsel wirkt sofort
+  (`QApplication.instance().setStyleSheet(...)` neu gesetzt), kein Neustart nötig.
+- Neue Testdatei `test_theme.py` (4 Tests, reine String-Logik: Blau-Regressionstest gegen
+  den vor der Umstellung fest verdrahteten Original-QSS-Text, keine übrig gebliebenen
+  Marker, Fallback bei unbekanntem Theme-Namen, genau 3 erwartete Theme-Schlüssel).
+
+**Während der Umsetzung gefundener und behobener echter Fehler (kein akzeptiertes
+Restrisiko, sondern ein reproduzierbarer Deadlock):** Die ursprüngliche
+`_theme_menue_aufbauen()`-Fassung verband jede der 3 Menü-Actions per eigener
+Lambda-Verbindung in einer Schleife (`action.triggered.connect(lambda checked=False,
+s=schluessel: self._theme_wechseln(s))`). Das führte beim Schließen/Zerstören eines
+`HauptFenster` (z. B. am Ende eines GUI-Tests über `qtbot`-Teardown) reproduzierbar zu
+einem unendlichen Hänger - verifiziert per `git stash` gegen den unveränderten
+Original-Code (dort lief dieselbe Testpaarung in 0,4s durch, der Hänger war also durch die
+Theme-Änderung verursacht). Durch systematisches Ausklammern einzelner Codeteile isoliert:
+Das Entfernen nur der lambda-`connect()`-Zeile behob den Hänger vollständig. Fix: eine
+einzige Verbindung auf `QActionGroup.triggered` statt einer Lambda-Verbindung pro Action,
+jede `QAction` trägt ihr Theme über `action.setData(schluessel)` statt über eine
+eingefangene Schleifenvariable (`_theme_aktion_ausgeloest(self, action)` liest
+`action.data()` und ruft `_theme_wechseln()`) - das Qt-übliche, robustere Muster für
+exklusive Action-Gruppen. Nach dem Fix lief der komplette GUI-Testlauf wiederholt fehlerfrei
+durch (siehe Tests unten). Kurze Suche nach ähnlichen Lambda-in-Schleife-Verbindungen an
+anderer Stelle in `app.py` (Zeilen 1607f./1633f.) ergab: dort werden reguläre
+QLineEdit/QCheckBox-Signale verbunden, keine checkable/exklusiven QActions in einer
+QActionGroup - der Hänger trat spezifisch bei dieser Kombination (Lambda + QActionGroup +
+checkable/exklusive QActions) auf, keine weitere Anpassung dort nötig.
+
+**Tests:** `python -m unittest test_theme` (4/4 bestanden). Kompletter GUI-Testlauf
+(`python -m pytest test_app_gui.py`, zweimal wiederholt zur Flakiness-Kontrolle) weiterhin
+68 bestanden/1 bekannter xfail, jetzt ohne den oben beschriebenen Hänger. Kompletter
+non-GUI-Testlauf (`test_db`, `test_db_postgres_wrapper`, `test_backup`, `test_pdf_export`,
+`test_app_web`, `test_bump_version`, `test_shs_core`) unverändert 349 Tests, 0
+fehlgeschlagen (140 übersprungen). `py_compile` für `app.py`/`test_app_gui.py`/
+`test_theme.py` fehlerfrei. Ein unabhängiger Verifikations-Subagent hat den Diff sowie den
+Hänger-Fix zusätzlich zweimal eigenständig gegengeprüft (erster Durchlauf fand die verwaiste
+`_QSS_MODERN_MINIMAL`-Referenz in `test_app_gui.py`, die daraufhin korrigiert wurde; zweiter
+Durchlauf nach dem Hänger-Fix: keine weiteren Funde, Verdikt "abschlussreif").
+
+**Noch offen:** `CLAUDE.md`-Testbefehlzeile könnte um `test_theme` ergänzt werden (rein
+lokal ohne PySide6 nicht separat lauffähig, da `test_theme.py` `app.py` importiert, das
+PySide6 am Kopf lädt - keine künstliche Trennung erzwungen). Bleibt für den nächsten Build
+offen.
+
+## Version 1.0.23 (22.09., Build auf Marcos Wunsch "Bescheid"/"ja")
+
+Bündelt das oben beschriebene Theme-Feature (inkl. Hänger-Fix) - erster Build seit Version
+1.0.22.
+
+**Build-Ablauf:** `version.txt`/`version.py`/`version_info.txt` per `bump_version.py` auf
+1.0.23 erhöht. Kompletter lokaler Testlauf: non-GUI (`test_db`, `test_db_postgres_wrapper`,
+`test_backup`, `test_pdf_export`, `test_app_web`, `test_bump_version`, `test_shs_core`,
+`test_theme`) 353 Tests, 0 fehlgeschlagen (140 übersprungen, PostgreSQL-Tests ohne
+laufenden Server); GUI (`test_app_gui.py` via pytest-qt, `QT_QPA_PLATFORM=offscreen`) 68
+bestanden, 1 bekannter xfail. Zusätzlich `py_compile` für `app.py`/`app_web.py`/`db.py`/
+`pdf_export.py`/`shs_core.py`/`sync_termin.py`/`bump_version.py`/`test_app_gui.py`/
+`test_theme.py` fehlerfrei.
+
+**Push und Tag (`v1.0.23`) muss wie gehabt Marco selbst ausführen:**
+```
+git push
+git tag v1.0.23
+git push --tags
+```
+Danach läuft `build-installer.yml` automatisch (Installer-Release).
