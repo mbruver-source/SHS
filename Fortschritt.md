@@ -1256,3 +1256,54 @@ git tag v1.0.28
 git push --tags
 ```
 Danach läuft `build-installer.yml` automatisch (Installer-Release).
+
+## Codeprüfung (22.09.), gesamter Quellcode (Stand 1.0.28) - Funde noch unbesprochen
+
+Auf Marcos Wunsch ("QS Prüfung des Source Code", Umfang ausdrücklich: gesamter Quellcode statt
+nur Diff seit 1.0.22). Ablauf nach CLAUDE.md: 3 parallele Reviewer mit differenzierten Rollen
+(Sicherheit / Korrektheit & Edge-Cases / Wartbarkeit & Stil), jeweils mit Ausschlussliste der
+bereits akzeptierten/erledigten Punkte; danach Konsolidierung und ein unabhängiger
+Verifikations-Subagent, der jeden Fund am Code nachgeprüft hat (kein Fund als falsch
+eingestuft, einige in der Schwere korrigiert). Reine Lese-Prüfung, KEINE Code-Änderung.
+Lokaler Testlauf entfiel: auf dem Windows-Rechner ist aktuell kein Python im PATH.
+
+Status aller Punkte: **unbesprochen** - Umsetzung erst nach Marcos Go je Punkt.
+
+**Mittel**
+- M1 (N1, Neubewertung eines 21.09.-Fixes) `db.exportiere_termin_nach_postgres`: im `except`
+  fehlt `rollback()` vor `_setze_termin_suchpfad` - bei echtem PG-Fehler nach dem ersten Commit
+  läuft die kompensierende Löschung nie (InFailedSqlTransaction), halber Termin bleibt sichtbar.
+- M2 (B2) `importiere_ergebnisse_nach_startnummer`: Zuordnung nur über Startnummer ohne
+  Plausibilitätsprüfung (Name/Art) - nach Startnummerntausch oder falscher Upload-Datei
+  landen Ergebnisse still beim falschen Teilnehmer.
+- M3 (B5/C1/C5) DQ/Abbruch in PDFs: DK-Bewertungsbogen zeigt z. B. "285 (SG)" statt DISQ
+  (ruft `berechne_wertnote_dk` direkt), Etiketten "Gesamt: 0" ohne Hinweis inkl. alter
+  Disziplinpunkte; Ergebnisliste nur kosmetisch ("0" bei Gesamtpunkten).
+- M4 (C2) `test_pdf_export.TestPdfExport` läuft auch in der CI nie (pypdf nicht installiert).
+- M5 (B4) Datumsfelder ohne Formatprüfung: TT.MM.JJJJ → `ist_jugendlicher` still False,
+  Impf-Hervorhebung per Stringvergleich falsch.
+- M6 (C6) `geburtsdatum` fehlt im CSV-/Formular-Import; Teilnehmer-Feldliste 7-8fach gepflegt.
+
+**Gering**
+- G1 (S1) Ersteinrichtung: bis der erste Admin angelegt ist, kann jedes Gerät im Netz Admin
+  werden (bewusstes Design, Zeitfenster nur nach Erststart / `compose down -v`).
+- G2 (B1) Zurückholen überträgt im Web geleerte Ergebnisse nicht.
+- G3 (B6) `_termin_wechseln`: keine erneute Prüfung nach fehlgeschlagenem `alle_speichern()`
+  (analog closeEvent-Fix fehlt hier).
+- G4 (B3) Geschlecht NULL wird beim Bearbeiten still auf "Hündin" gesetzt.
+- G5 (B7) Wiederherstellen "als Kopie" kann bei "A.sqlite" + "A (2).sqlite" einen Termin still
+  überschreiben.
+- G6 (C7) Web speichert halb ausgefüllte Disziplin, Desktop lehnt ab; keine zentrale Prüfung.
+- G7 (S3) Schema-Regex `$` akzeptiert "\n"; `admin_termin_loeschen` ohne Registry-Prüfung →
+  (nur durch Admin auslösbar) 500 auf Terminauswahl.
+- G8 (S2) Logout nur clientseitig, Cookie bis 31 Tage nach letzter Nutzung gültig.
+- G9 (B8) Sortierung der Ergebniserfassung geht beim Tabwechsel verloren, Richtung kippt.
+- G10 (C3/C4/C8) Punktegrenzen 60/40, Wertnoten-Bänder, LK-/Art-Labels mehrfach hart kodiert.
+- G11 (C9) Veraltete Doku (Zeilenzahlen Architektur.md/CLAUDE.md, fehlende Testmodule,
+  pyzipper-Docstring).
+- G12 (C10) Abhängigkeiten ohne Obergrenze, keine requirements-dev.txt.
+- G13 (C11) Dublette `.github/workflows/tests.yml.github-workflows`; `.gitignore` ignoriert
+  `*.sqlite` nicht (Datenschutz-Risiko bei `git add -A`).
+- G14 (C12) Ungenutzter Import/Konstante in `pdf_export.py`, `_GEGENSTAND_FELDER` doppelt.
+- Zusatzbeobachtung Verifikation: `disqualifiziert`/`abbruch` werden beim Web-Export/Zurückholen
+  nicht übertragen - passt zur Entscheidung "DQ/Abbruch nur am Desktop", kein Fund.
