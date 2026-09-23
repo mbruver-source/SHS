@@ -1,0 +1,89 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet.
+title: "[Fehler] "
+labels: ["fehler"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass du dir die Zeit nimmst! Bitte vorher kurz ins
+        [Benutzerhandbuch](https://github.com/mbruver-source/SHS/blob/main/docs/HANDBUCH.md) schauen –
+        vielleicht ist das Verhalten dort schon erklärt.
+
+        **Bitte keine echten Teilnehmerdaten** (Namen, Adressen, Chipnummern) in Text oder Screenshots.
+  - type: input
+    id: version
+    attributes:
+      label: Programmversion
+      description: Steht oben rechts auf dem Button „Version“ (z. B. 1.0.30).
+      placeholder: "1.0.30"
+    validations:
+      required: true
+  - type: dropdown
+    id: variante
+    attributes:
+      label: Desktop oder Web?
+      options:
+        - Desktop-Programm
+        - Web-Version (Browser)
+    validations:
+      required: true
+  - type: dropdown
+    id: bereich
+    attributes:
+      label: Bereich
+      options:
+        - Termine / Startbildschirm
+        - Teilnehmer
+        - Formular-Import
+        - Zeitplan
+        - Ergebniserfassung
+        - Auswertung / Übersicht
+        - Export / PDF
+        - Datensicherung
+        - Web-Version
+        - Installation / Update
+        - Sonstiges
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Was hast du gemacht?
+      description: Schritt für Schritt, so dass es jemand nachmachen kann.
+      placeholder: |
+        1. Reiter „Teilnehmer“ geöffnet
+        2. „Teilnehmer hinzufügen…“ geklickt
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: ergebnis
+    attributes:
+      label: Was ist passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hättest du erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: meldung
+    attributes:
+      label: Fehlermeldung (falls vorhanden)
+      description: Text der Meldung, am besten kopiert statt abgetippt.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Bilder einfach hier hineinziehen. Nur mit Testdaten oder geschwärzten Daten.
+  - type: checkboxes
+    id: datenschutz
+    attributes:
+      label: Datenschutz
+      options:
+        - label: Meine Meldung und Screenshots enthalten keine echten Teilnehmerdaten.
+          required: true

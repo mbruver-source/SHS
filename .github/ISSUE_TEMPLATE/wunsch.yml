@@ -1,0 +1,57 @@
+name: Idee / Wunsch
+description: Vorschlag für eine neue Funktion oder eine Verbesserung.
+title: "[Wunsch] "
+labels: ["wunsch"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deine Idee! Beschreibe am besten zuerst, **welches Problem** du lösen möchtest –
+        der passende Lösungsweg lässt sich dann gemeinsam finden.
+
+        **Bitte keine echten Teilnehmerdaten** in Text oder Bildern.
+  - type: dropdown
+    id: bereich
+    attributes:
+      label: Bereich
+      options:
+        - Termine / Startbildschirm
+        - Teilnehmer
+        - Formular-Import
+        - Zeitplan
+        - Ergebniserfassung
+        - Auswertung / Übersicht
+        - Export / PDF
+        - Datensicherung
+        - Web-Version
+        - Installation / Update
+        - Sonstiges
+    validations:
+      required: true
+  - type: textarea
+    id: anlass
+    attributes:
+      label: Worum geht es?
+      description: Was ist heute umständlich oder fehlt dir? In welcher Situation (z. B. am Prüfungstag)?
+    validations:
+      required: true
+  - type: textarea
+    id: vorschlag
+    attributes:
+      label: Dein Vorschlag
+      description: Wie könnte es aussehen? Skizzen oder Beispiele (z. B. aus einem Meldeformular) helfen.
+  - type: dropdown
+    id: wichtigkeit
+    attributes:
+      label: Wie wichtig ist das für euch?
+      options:
+        - Wäre schön
+        - Spart uns spürbar Arbeit
+        - Brauchen wir für die nächste Prüfung
+  - type: checkboxes
+    id: datenschutz
+    attributes:
+      label: Datenschutz
+      options:
+        - label: Mein Vorschlag und angehängte Bilder enthalten keine echten Teilnehmerdaten.
+          required: true

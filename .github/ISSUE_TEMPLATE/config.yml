@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Benutzerhandbuch
+    url: https://github.com/mbruver-source/SHS/blob/main/docs/HANDBUCH.md
+    about: Schritt-für-Schritt-Anleitung zu allen Reitern, zur Web-Version und häufige Fragen.
+  - name: Umstieg von der LibreOffice-Datei
+    url: https://github.com/mbruver-source/SHS/blob/main/docs/UMSTIEG.md
+    about: Was gleich bleibt, was sich ändert und wie der Umstieg gelingt.

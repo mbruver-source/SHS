@@ -115,8 +115,9 @@ Bedarf mit einem Update anpassen. Melde Änderungen bitte über die
 [Issues](https://github.com/mbruver-source/SHS/issues).
 
 **Wo finde ich Hilfe zur Bedienung?**
-Im Programm oben über den Button **„Hilfe“**, mit einem Abschnitt je Reiter.
+Ausführlich im [Benutzerhandbuch](HANDBUCH.md) (auch als [PDF](HANDBUCH.pdf)), kurz im Programm
+oben über den Button **„Hilfe“**, mit einem Abschnitt je Reiter.
 
 **Ich habe einen Fehler gefunden oder einen Wunsch.**
-Bitte über die [Issues](https://github.com/mbruver-source/SHS/issues) melden, mit der
-Programmversion (Button „Version“) und ohne echte Teilnehmerdaten.
+Bitte über die [Issues](https://github.com/mbruver-source/SHS/issues/new/choose) mit der
+Vorlage „Fehler melden“ bzw. „Idee / Wunsch“ melden, ohne echte Teilnehmerdaten.

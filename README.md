@@ -52,7 +52,9 @@ musst du nicht installieren. Administratorrechte sind nicht nötig.
 </tr>
 </table>
 
-Eine Bedienungshilfe zu jedem Reiter steht im Programm unter **„Hilfe“**.
+📖 **[Benutzerhandbuch](docs/HANDBUCH.md)** – Schritt für Schritt durch einen Prüfungstermin,
+mit Screenshots (auch als [PDF zum Ausdrucken](docs/HANDBUCH.pdf)). Eine Kurzhilfe zu jedem
+Reiter steht im Programm unter **„Hilfe“**.
 
 ## Optional: Ergebniserfassung im Browser für mehrere Richter
 
@@ -77,9 +79,10 @@ Für die meisten Vereine reicht die Desktop-App allein. Details: [README_CONTAIN
 ## Fragen, Fehler, Wünsche
 
 Fehler gefunden oder eine Idee? Bitte unter
-[Issues](https://github.com/mbruver-source/SHS/issues) melden. Hilfreich sind die
-Programmversion (Button „Version“), was du gemacht hast und was passiert ist, am besten mit
-Screenshot. **Bitte keine echten Teilnehmerdaten** in Meldungen oder Screenshots.
+[Issues](https://github.com/mbruver-source/SHS/issues/new/choose) mit der Vorlage
+**„Fehler melden“** bzw. **„Idee / Wunsch“** melden. Die Formulare fragen die wichtigen Angaben
+(Programmversion, Schritte, Screenshot) direkt ab. **Bitte keine echten Teilnehmerdaten** in
+Meldungen oder Screenshots.
 
 ## Für Entwickler
 

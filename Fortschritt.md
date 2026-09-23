@@ -1629,3 +1629,66 @@ oben).
   - `py_compile` für alle Module fehlerfrei.
 - Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.30 nachgezogen (8 Dateien,
   Hash-Abgleich identisch). Push/Tag durch Marco.
+## 23.09.2026: Benutzerhandbuch (MD/PDF), Issue-Vorlagen, Hilfe im Programm aktualisiert
+
+- **Nutzerwunsch:** Benutzerhandbuch und Issue-Vorlage.
+- **Entscheidungen Marco (23.09.):**
+  - Format: `docs/HANDBUCH.md` plus `docs/HANDBUCH.pdf` im Repo (kein Release-Asset).
+  - Die Hilfe im Programm wird aktualisiert (kein Link-Button).
+  - Zielgruppe: Prüfungsleitung (Desktop) plus ein Kapitel für Richter (Browser). Die
+    Container-Einrichtung wird nur verlinkt.
+  - Screenshots erzeugt Claude selbst mit Testdaten.
+  - Issues: GitHub-Issue-Formulare „Fehler melden“ und „Idee / Wunsch“ plus `config.yml`.
+- **Neu (Doku, committet):**
+  - `docs/HANDBUCH.md`: 13 Kapitel entlang eines Prüfungstermins, Stand 1.0.30.
+  - `docs/HANDBUCH.pdf`: 22 Seiten A4.
+  - 17 Screenshots `docs/bilder/handbuch_*.png`: 11 Desktop, 6 Web.
+  - `.github/ISSUE_TEMPLATE/fehler.yml`, `wunsch.yml`, `config.yml`: leere Issues aus, Links
+    zu Handbuch und Umstieg.
+  - README und UMSTIEG verlinken auf Handbuch, PDF und Issue-Formulare.
+- **Screenshots:**
+  - Desktop: offscreen mit `QT_QPA_FONTDIR=C:\Windows\Fonts` und Schrift Segoe UI, in einem
+    temporären Benutzerprofil. Der angezeigte Profilpfad ist durch `C:\Users\Name` ersetzt.
+  - Vor jedem `grab()` braucht es `QTest.qWait(...)`. Sonst sitzen die Zellen-Widgets der
+    Ergebniserfassung noch an alter Stelle. Das war zunächst fälschlich als Programmfehler
+    vermutet und mit Marco besprochen; mit echter Windows-Plattform geprüft ist es nur ein
+    Aufnahme-Effekt.
+  - Web: Seiten per Flask-Test-Client gerendert, die PostgreSQL-Funktionen per Patch auf
+    SQLite umgebogen (Muster aus `test_app_web.py`). Fotografiert mit
+    `msedge --headless=new --screenshot`.
+- **PDF neu erzeugen** (nach jeder Handbuch-Änderung nötig):
+  1. `HANDBUCH.md` mit dem Python-Paket `markdown` in HTML umwandeln, mit den Erweiterungen
+     `tables`, `toc` (`slugify=slugify_unicode`) und `sane_lists`. `<base href>` zeigt auf
+     `docs/`.
+  2. Druck-CSS: A4, Segoe UI 10,5 pt, Seitenumbruch vor jedem Kapitel (h2), Bilder mit
+     `max-width:100%`.
+  3. Drucken:
+     `msedge --headless=new --no-pdf-header-footer --print-to-pdf=docs\HANDBUCH.pdf <html>`.
+  - Das Generator-Skript lag nur im Sitzungs-Scratchpad. Bei Bedarf als
+    `tools/handbuch_pdf.py` ins Repo übernehmen.
+- **Hilfe im Programm `_HILFE_HTML` (`app.py`), Arbeitsstand, noch kein Build:**
+  - Teilnehmer: Gegenstand-Regeln ED/DK (1.0.30), Spalte Anmerkungen, „Startnummer
+    tauschen…“, „Aus anderem Termin importieren…“, „Bewertungsbogen (PDF)…“.
+  - Neue Abschnitte Formular-Import und Übersicht.
+  - DQ/Abbruch und automatisches Speichern beim Schließen, Chipnummernliste.
+  - Am Ende ein Hinweis auf das Handbuch.
+  - GUI-Tests 102 bestanden, 1 xfail. Lokale Suite: 404 OK, 113 übersprungen.
+- **Verifikations-Subagent:** hat Handbuch und Hilfetext gegen den Code geprüft.
+  - Korrigiert:
+    - „Suche (0-60)“ mit Bindestrich wie in der Desktop-Spalte
+    - „Sehr Gut“ und „nicht Bestanden“ in der Schreibweise des Codes
+    - FAQ „(nicht lesbar)“ und „Datei beschädigt“ getrennt
+    - Kapitel 12: Desktop **vor** dem Zurückholen schließen, sonst gehen spätere
+      Desktop-Änderungen beim Ersetzen verloren; Dateiname nach dem Download prüfen
+  - Ein Fund war unzutreffend: ED-Altdaten mit Gegenstand in Feld 2/3 werden beim Öffnen
+    nach Feld 1 geholt.
+- **Offene Punkte (nicht geändert, einzeln mit Marco besprechen):**
+  1. DQ/Abbruch lassen sich im Web nicht erfassen und werden beim Zurückholen nicht
+     übertragen.
+  2. Die Web-Seite „Termin wählen“ ohne veröffentlichten Termin verweist auf
+     `sync_termin.py`. Für Richter ist das unverständlich.
+  3. Das Passwort-Feld der Web-Anmeldung ist schmal und ungestaltet: Das CSS erfasst
+     `type=password` offenbar nicht, siehe Screenshot `handbuch_web_login.png`.
+  4. Die Labels `fehler`/`wunsch` müssen auf GitHub einmal angelegt werden, sonst setzen die
+     Issue-Formulare kein Label.
+  5. OK/Cancel-Buttons der Dialoge sind englisch (keine Qt-Übersetzung geladen).
