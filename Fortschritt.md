@@ -1694,3 +1694,38 @@ oben).
   4. Die Labels `fehler`/`wunsch` müssen auf GitHub einmal angelegt werden, sonst setzen die
      Issue-Formulare kein Label.
   5. OK/Cancel-Buttons der Dialoge sind englisch (keine Qt-Übersetzung geladen).
+## 23.09.2026: Community-Dokumente (Verhaltensregeln, Mitwirken, Sicherheit, PR-Vorlage)
+
+Marcos Auftrag: Code of Conduct, Contributing, Security Policy und Pull-Request-Vorlage
+erzeugen und vorher prüfen, ob das sinnvoll ist.
+
+- **Einschätzung:** SECURITY.md klar sinnvoll (öffentliches Repo, Web-Version mit Login,
+  geplante SignPath-Signierung). Ohne die Datei würden Lücken als öffentliches Issue
+  gemeldet. CONTRIBUTING.md sinnvoll. PR-Vorlage nur begrenzt sinnvoll, weil keine PRs von
+  Dritten gewünscht sind. Code of Conduct bringt bei einem Ein-Personen-Projekt am
+  wenigsten, vervollständigt aber GitHubs Community-Standards-Checkliste.
+- **Marcos Entscheidungen:**
+  - Kurzer eigener CoC-Text statt Contributor Covenant.
+  - Sicherheitsmeldungen über GitHubs Private Vulnerability Reporting und per E-Mail.
+  - **Nur Issues, keine Pull Requests von Dritten.**
+  - Ablage unter `.github/` mit Link im README.
+- **Neu:** `.github/CODE_OF_CONDUCT.md`, `.github/CONTRIBUTING.md`, `.github/SECURITY.md`,
+  `.github/pull_request_template.md`. Die PR-Vorlage verweist auf Issues und enthält eine
+  Checkliste für Marcos eigene PRs.
+- **Geändert:**
+  - `README.md`: Hinweis auf die Sicherheitsrichtlinie und Links unter „Für Entwickler“.
+  - `.github/ISSUE_TEMPLATE/config.yml`: zusätzlicher Kontakt-Link „Sicherheitslücke melden“.
+- Die bewusst akzeptierten Restrisiken (kein Upload-Limit, kein Brute-Force-Schutz beim
+  Web-Login) sind in SECURITY.md nicht aufgeführt.
+- **Offen für Marco:** Unter Settings → Code security „Private vulnerability reporting“
+  aktivieren, sonst läuft der Link „Report a vulnerability“ ins Leere.
+- **Verifikations-Subagent:** Er hat Fakten und Links bestätigt. Eingearbeitet wurden:
+  - Weg zum Aktualisieren der Web-Version (neu bauen oder `pull`)
+  - Wortwahl („wir“ und „Sperre“)
+  - Installationshinweis zu den Tests
+  - PR-Vorlage klar als Vorlage für Marcos eigene PRs gekennzeichnet
+- **Offen, mit Marco zu besprechen:** `CODE_SIGNING_POLICY.md` (Rolle Reviewer) sagt noch,
+  ein PR eines Dritten würde geprüft und gemerged. Das widerspricht „nur Issues“. Die Datei
+  ist Grundlage der SignPath-Bewerbung und wurde deshalb nicht angefasst.
+- Die Nennung des Finders in den Release-Notizen muss von Hand ergänzt werden. Der Workflow
+  erzeugt die Notizen automatisch (`generate_release_notes`).

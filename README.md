@@ -84,6 +84,9 @@ Fehler gefunden oder eine Idee? Bitte unter
 (Programmversion, Schritte, Screenshot) direkt ab. **Bitte keine echten Teilnehmerdaten** in
 Meldungen oder Screenshots.
 
+Sicherheitslücken bitte **nicht** als Issue melden, sondern wie in der
+[Sicherheitsrichtlinie](.github/SECURITY.md) beschrieben.
+
 ## Für Entwickler
 
 Python 3.11+, PySide6 (Desktop), Flask + PostgreSQL (Web), reportlab (PDF).
@@ -92,6 +95,8 @@ Python 3.11+, PySide6 (Desktop), Flask + PostgreSQL (Web), reportlab (PDF).
 - Installer bauen und Release erstellen: [README_INSTALLER.md](README_INSTALLER.md)
 - Web-Version / Container: [README_CONTAINER.md](README_CONTAINER.md)
 - Entscheidungs- und Änderungshistorie: [Fortschritt.md](Fortschritt.md)
+- Mitwirken und Verhaltensregeln: [CONTRIBUTING.md](.github/CONTRIBUTING.md),
+  [CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md)
 
 ```
 pip install -r requirements.txt -r requirements-dev.txt

@@ -6,3 +6,6 @@ contact_links:
   - name: Umstieg von der LibreOffice-Datei
     url: https://github.com/mbruver-source/SHS/blob/main/docs/UMSTIEG.md
     about: Was gleich bleibt, was sich ändert und wie der Umstieg gelingt.
+  - name: Sicherheitslücke melden
+    url: https://github.com/mbruver-source/SHS/security/policy
+    about: Bitte nicht als öffentliches Issue – hier steht, wie du eine Lücke vertraulich meldest.
