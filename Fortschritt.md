@@ -1837,3 +1837,7 @@ Marco hat die Farben aller vier Designs anhand der Screenshots freigegeben („p
     bestanden, 1 bekannter xfail.
   - `py_compile` für alle Module fehlerfrei.
 - Push und Tag macht Marco.
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.31 nachgezogen: 12 Dateien,
+  Byte-Abgleich identisch. Darunter auch README und CODE_SIGNING_POLICY aus den
+  Community-Doku-Commits. Die `.github/`-Dateien (Community-Dokumente, Issue-Vorlagen) führt
+  der Spiegel wie bisher nicht; von dort sind nur die Workflows flach enthalten.
