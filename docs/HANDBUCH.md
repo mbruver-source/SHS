@@ -54,7 +54,15 @@ für den optionalen Formular-Import per KI und für die optionale Web-Version.
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
   installieren – deine Termine bleiben erhalten. Eine automatische Suche im Hintergrund gibt es
   bewusst nicht.
-- **Farbschema:** Menü **„Ansicht“ → „Theme“** (Blau, Grün, Violett). Die Wahl wird gespeichert.
+- **Aussehen:** Im Menü **„Ansicht“** gibt es zwei Einstellungen, die sich frei kombinieren
+  lassen und gespeichert werden:
+  - **„Hintergrund“:** Hell (Standard), Warm / Sand, Dunkel oder Hoher Kontrast. Hoher
+    Kontrast eignet sich z. B. für einen Laptop draußen am Prüfungstag.
+  - **„Akzentfarbe“:** Blau, Grün oder Violett, die Farbe der Haupt-Schaltflächen und der
+    Markierungen.
+
+  Beim Design Dunkel bleibt das Windows-Fenster zum Öffnen und Speichern von Dateien hell.
+  Dieses Fenster stammt von Windows selbst.
 
 ## 3. Termine
 

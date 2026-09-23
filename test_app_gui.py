@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QMessageBox, QPushButton
 
 from app import (
@@ -2259,3 +2260,132 @@ def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
 
     tab.aktualisieren()
     assert namen() == ["Zorn, Max", "Meier, Max", "Adler, Max"]
+
+
+# --- Darstellung: Hintergrund-Design + Akzentfarbe (23.09.) ------------------------------
+
+
+@pytest.fixture
+def darstellung_speicher(monkeypatch):
+    """Ersetzt die QSettings-Zugriffe durch einen Speicher im Arbeitsspeicher (keine
+    Schreibzugriffe in Registry/~/.config) und stellt danach den Zustand der
+    QApplication (Stil, Palette, Stylesheet) sowie die Modul-Zustände von app.py wieder
+    her, damit nachfolgende Tests nicht im dunklen Design laufen."""
+    import app as app_modul
+
+    qapp = QApplication.instance()
+    vorher_stylesheet = qapp.styleSheet()
+    qapp.setStyleSheet("")
+    vorher_stil = qapp.style().name()
+    qapp.setStyleSheet(vorher_stylesheet)
+    vorher_palette = QPalette(qapp.palette())
+    for name in ("_aktives_design", "_ursprung_stil", "_ursprung_palette", "_aktueller_stil"):
+        monkeypatch.setattr(app_modul, name, getattr(app_modul, name))
+
+    speicher = {"theme": "blau", "design": "hell"}
+    monkeypatch.setattr(app_modul, "_gespeichertes_theme_lesen", lambda: speicher["theme"])
+    monkeypatch.setattr(app_modul, "_gespeichertes_design_lesen", lambda: speicher["design"])
+    monkeypatch.setattr(app_modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
+    monkeypatch.setattr(app_modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
+    yield speicher
+    qapp.setStyle(vorher_stil)
+    qapp.setPalette(vorher_palette)
+    qapp.setStyleSheet(vorher_stylesheet)
+
+
+def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellung_speicher):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    assert set(fenster._design_actions) == {"hell", "sand", "dunkel", "kontrast"}
+    assert set(fenster._theme_actions) == {"blau", "gruen", "violett"}
+    assert fenster._design_actions["hell"].isChecked()
+    assert fenster._theme_actions["blau"].isChecked()
+
+
+def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung_speicher):
+    import app as app_modul
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    qapp = QApplication.instance()
+
+    fenster._design_actions["dunkel"].trigger()
+    assert darstellung_speicher["design"] == "dunkel"
+    assert qapp.styleSheet() == _erzeuge_qss("blau", "dunkel")
+    assert app_modul._aktueller_stil.lower() == "fusion"
+    assert app_modul._aktives_design == "dunkel"
+
+    fenster._theme_actions["gruen"].trigger()
+    assert darstellung_speicher["theme"] == "gruen"
+    assert qapp.styleSheet() == _erzeuge_qss("gruen", "dunkel")
+
+    fenster._design_actions["hell"].trigger()
+    assert qapp.styleSheet() == _erzeuge_qss("gruen", "hell")
+    assert app_modul._aktives_design == "hell"
+    assert app_modul._aktueller_stil == app_modul._ursprung_stil
+
+
+def test_designwechsel_behaelt_ungespeicherte_ergebnisse(qtbot, termin, darstellung_speicher):
+    """Die Ergebniserfassung wird beim Designwechsel nur umgefärbt, nicht neu geladen -
+    eine noch nicht gespeicherte Eingabe bleibt erhalten und bekommt die neue Farbe."""
+    import app as app_modul
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.ergebnis_tab
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+    assert tab._zeile_ist_ungespeichert(0)
+
+    fenster._design_actions["dunkel"].trigger()
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    assert suche_feld.text() == "58"
+    assert anzeige_feld.text() == "38"
+    assert tab._zeile_ist_ungespeichert(0)
+    dunkel_gelb = app_modul._DESIGNS["dunkel"]["ungespeichert_bg"].lower()
+    assert dunkel_gelb in suche_feld.styleSheet().lower()
+
+
+def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_speicher, monkeypatch):
+    """Unter offscreen ist der Ursprungsstil ohnehin "fusion" - damit der Rückweg
+    Dunkel -> Hell wirklich einen Stilwechsel prüft, wird hier "windows" als
+    Ursprungsstil vorgegeben (auf allen Plattformen verfügbar)."""
+    import app as app_modul
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    qapp = QApplication.instance()
+    app_modul._darstellung_anwenden(qapp)  # Ursprung erfassen
+    monkeypatch.setattr(app_modul, "_ursprung_stil", "windows")
+
+    fenster._design_actions["dunkel"].trigger()
+    assert app_modul._aktueller_stil == "fusion"
+    fenster._design_actions["hell"].trigger()
+    assert app_modul._aktueller_stil == "windows"
+    qapp.setStyleSheet("")
+    assert qapp.style().name().lower() == "windows"
+
+
+def test_design_ohne_beschreibbaren_tempordner_startet_trotzdem(darstellung_speicher, monkeypatch, tmp_path):
+    """Kann das Häkchen-Bild nicht geschrieben werden, darf das weder den Start noch den
+    Designwechsel abbrechen."""
+    import app as app_modul
+
+    unmoeglich = tmp_path / "datei_statt_ordner"
+    unmoeglich.write_text("x")
+    monkeypatch.setattr(app_modul, "_haken_pfad", lambda: str(unmoeglich / "unter" / "haken.png"))
+    darstellung_speicher["design"] = "dunkel"
+
+    app_modul._darstellung_anwenden(QApplication.instance())
+
+    assert app_modul._aktives_design == "dunkel"
+    assert QApplication.instance().styleSheet() == _erzeuge_qss("blau", "dunkel")

@@ -1731,3 +1731,109 @@ erzeugen und vorher prüfen, ob das sinnvoll ist.
   nicht angenommen, externe Beiträge laufen über Issues und werden von Marco selbst umgesetzt.
 - Die Nennung des Finders in den Release-Notizen muss von Hand ergänzt werden. Der Workflow
   erzeugt die Notizen automatisch (`generate_release_notes`).
+
+## 23.09.2026: Hintergrund-Designs für die Desktop-App (Arbeitsstand, noch kein Build)
+
+Marcos Frage: Was ist nötig, um im Theme-Menü den ganzen Hintergrund anzupassen, und
+können wir mehrere Designs zur Auswahl anbieten?
+
+- **Klärung mit Marco:**
+  - Vier Designs: Hell (bisher, Standard), Warm / Sand, Dunkel, Hoher Kontrast.
+  - Hintergrund und Akzentfarbe sind frei kombinierbar, über zwei Untermenüs unter
+    „Ansicht“.
+  - Nur Desktop, die Web-Version bleibt unverändert.
+  - Damit ist die Festlegung vom 22.09. („kein Hell/Dunkel-Modus“) bewusst aufgehoben.
+- **Umsetzung (`app.py`):**
+  - `_QSS_TEMPLATE`: Alle 16 Neutralfarben sind jetzt `@@…@@`-Platzhalter. Neue Tabelle
+    `_DESIGNS` mit Template-Werten und semantischen Farben (ok, warnung, fehler, gedaempft,
+    ungespeichert_bg, zeile_bg).
+  - Neue Signatur `_erzeuge_qss(theme, design="hell")`. **Hell + Blau ist bit-für-bit
+    unverändert**, der alte Regressionstest läuft weiter.
+  - Neu `_darstellung_anwenden(app)` für `main()` und das Umschalten:
+    - Nicht-Hell-Designs setzen zusätzlich eine passende `QPalette`, damit auch
+      Scrollbereiche, Listen, Hilfe-Text und Menüs mitgehen.
+    - Dunkel schaltet auf den Fusion-Stil um, weil native Windows-Stile die dunkle Palette
+      teilweise ignorieren.
+    - Hell stellt Ursprungsstil und Ursprungspalette wieder her.
+  - Checkboxen: Fusion zeichnet den Rahmen im Design Dunkel dunkler als den Hintergrund,
+    die Box war fast unsichtbar. Nicht-Hell-Designs bekommen deshalb eine eigene
+    Indicator-Regel (`_QSS_CHECKBOX_ZUSATZ`): Rahmen gedämpft, angehakt in Akzentfarbe mit
+    weißem Häkchen. Das Häkchen ist ein PNG, das beim Umschalten im Temp-Ordner erzeugt
+    wird (`_haken_bild_bereitstellen()`). Eine eigene Indicator-Regel schaltet das native
+    Häkchen ab.
+  - Feste Farben im Code laufen jetzt über `_farbe()`: Bezahlt, ⚠-Anmerkungen,
+    Ergebniszeilen gelb/normal, „–“, Status gespeichert/nicht gespeichert, „nicht
+    bestanden“, Zeitplan ✓/✗. Kleine Abweichung in Hell: Die drei leicht verschiedenen
+    Grüntöne und die zwei Rottöne sind jetzt je ein Ton (#2E7D32 bzw. #C62828).
+    `FARBE_UNGESPEICHERT`/`FARBE_GESPEICHERT` entfallen.
+  - Ein Wechsel wirkt sofort:
+    - Teilnehmer, Auswertung und Zeitplan laden neu.
+    - Die Ergebniserfassung färbt nur um (`ErgebnisTab.farben_auffrischen()`), damit
+      **ungespeicherte Punkte erhalten bleiben**.
+  - Menü: „Ansicht → Hintergrund“ und „Ansicht → Akzentfarbe“ (vorher „Theme“), gleiches
+    `QActionGroup`-Muster ohne Lambda wie bisher. Neuer QSettings-Schlüssel
+    `darstellung/hintergrund`. `darstellung/theme` bleibt für die Akzentfarbe, bestehende
+    Einstellungen gehen also nicht verloren.
+- **Hilfe und Handbuch:** kurzer Abschnitt zu Ansicht → Hintergrund/Akzentfarbe, mit dem
+  Hinweis, dass der Windows-Dateidialog im Design Dunkel hell bleibt (nativ).
+  `docs/HANDBUCH.pdf` wird beim nächsten Build mit `tools/handbuch_pdf.py` neu erzeugt.
+- **Tests:**
+  - `test_theme.py` hat 15 Tests. Unter anderem prüfen sie alle 12 Kombinationen auf übrige
+    Platzhalter und den **WCAG-Kontrast**: Text mindestens 4.5:1, bei Hoher Kontrast
+    mindestens 7:1; semantische Farben mindestens 3:1; Auswahl in allen Kombinationen
+    lesbar.
+  - `test_app_gui.py` hat 3 neue Tests: Menü, Umschalten samt Speichern und Stil, und dass
+    ungespeicherte Ergebnisse den Wechsel überstehen. Die Tests ersetzen die QSettings
+    durch einen Speicher im Arbeitsspeicher, schreiben also nicht in die Registry.
+  - Lokal:
+    - GUI + Theme: 118 bestanden, 1 xfail.
+    - Standard-Suite aus CLAUDE.md: 404 OK, 113 übersprungen.
+    - `pytest-qt` dafür lokal nachinstalliert, steht bereits in `requirements-dev.txt`.
+- **Vorschau:** Screenshots aller vier Designs (Teilnehmer, Ergebniserfassung, Hilfe im
+  Design Dunkel) wurden erzeugt und Marco zur Farbabstimmung gezeigt.
+- **Verifikations-Subagent:**
+  - Bestätigt:
+    - Hell + Blau/Grün/Violett liefern dasselbe Stylesheet wie `HEAD`; nur der
+      QSS-Kopfkommentar ist erweitert.
+    - Kein Datenverlust in der Ergebniserfassung.
+    - Lambda-freies Menü-Muster.
+    - Stil-Rückweg `windows11` → `fusion` → `windows11` auf der echten Windows-Plattform.
+  - Eingearbeitet:
+    - `_haken_bild_bereitstellen()` fängt `OSError` ab. Ein nicht beschreibbarer
+      Temp-Ordner hätte sonst den Programmstart verhindert. Eine leere `haken.png` wird neu
+      erzeugt.
+    - Die Palette wird beim Start in Hell nicht mehr explizit gesetzt, nur beim Rückweg von
+      einem anderen Design. So folgt Hell weiter dem Windows-Farbschema.
+    - Die Test-Fixture stellt Stil, Palette, Stylesheet und die Modulzustände vollständig
+      wieder her.
+    - Neue Tests: Rückweg mit echtem Stilwechsel, dafür „windows“ als Ursprung vorgegeben;
+      Start ohne beschreibbaren Temp-Ordner.
+    - `Architektur.md` ist ergänzt.
+  - Hingenommen: Beim Designwechsel lädt der Zeitplan-Reiter neu. Das passiert heute schon
+    bei jedem Reiterwechsel. Eine getippte, noch nicht übernommene Startzeit ohne Fokus und
+    die Scrollposition gehen dabei zurück.
+- **Mögliche spätere Punkte** (noch nicht besprochen): PDF-Ausgaben bleiben unabhängig vom
+  Design (gewollt). Die Web-Version hat keine Designs.
+
+## Version 1.0.31 (23.09., Build auf Marcos Wunsch "passt alles, wir bauen ein neues build")
+
+Marco hat die Farben aller vier Designs anhand der Screenshots freigegeben („passt alles“).
+
+**Enthalten seit 1.0.30:**
+- Hintergrund-Designs Hell, Warm / Sand, Dunkel und Hoher Kontrast, frei kombinierbar mit
+  der Akzentfarbe (siehe Abschnitt oben).
+- Aktualisierter Hilfetext im Programm (`_HILFE_HTML`) aus der Handbuch-Sitzung vom 23.09.:
+  Gegenstand-Regeln, Anmerkungen, Formular-Import, Übersicht, DQ/Abbruch,
+  Chipnummernliste, Hinweis aufs Handbuch. Dazu der neue Abschnitt „Aussehen“.
+- `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py` neu erzeugt. Die Abschnitte „Hintergrund“,
+  „Akzentfarbe“ und „Hoher Kontrast“ sind im PDF-Text vorhanden.
+
+**Build-Ablauf:**
+- Versionsdateien per `bump_version.py` auf 1.0.31 gesetzt (`version.txt`, `version.py`,
+  `version_info.txt`).
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: 404 OK, 113 übersprungen.
+  - GUI und Theme (`pytest-qt`, jetzt dauerhaft im Anaconda-Python installiert): 118
+    bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Push und Tag macht Marco.

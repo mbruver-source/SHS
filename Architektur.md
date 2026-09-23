@@ -72,7 +72,7 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs/Dialoge, `closeEvent`-Handling, Auto-Save, Themes | `test_app_gui.py`, `test_theme.py` (Theme-Erzeugung; braucht ebenfalls PySide6) |
+| `app.py` | Desktop-GUI (PySide6): alle Tabs/Dialoge, `closeEvent`-Handling, Auto-Save, Darstellung (Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`) | `test_app_gui.py`, `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht ebenfalls PySide6) |
 | `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
 | `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Backup/Restore (ZIP, optional `pyzipper`-verschlüsselt) | `test_db.py`, `test_db_postgres_wrapper.py`, `test_backup.py` (Datensicherung ZIP/pyzipper) |
 | `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung | `test_shs_core.py` |

@@ -28,5 +28,80 @@ class TestThemes(unittest.TestCase):
         self.assertEqual(set(app._THEMES.keys()), {"blau", "gruen", "violett"})
 
 
+def _relative_leuchtdichte(hexfarbe: str) -> float:
+    kanaele = []
+    for i in (1, 3, 5):
+        c = int(hexfarbe[i:i + 2], 16) / 255
+        kanaele.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    r, g, b = kanaele
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _kontrast(farbe1: str, farbe2: str) -> float:
+    hell, dunkel = sorted((_relative_leuchtdichte(farbe1), _relative_leuchtdichte(farbe2)), reverse=True)
+    return (hell + 0.05) / (dunkel + 0.05)
+
+
+class TestDesigns(unittest.TestCase):
+    def test_vier_designs_vorhanden(self):
+        self.assertEqual(set(app._DESIGNS.keys()), {"hell", "sand", "dunkel", "kontrast"})
+
+    def test_hell_ist_standard_und_identisch_zum_bisherigen(self):
+        self.assertEqual(app._DESIGN_DEFAULT, "hell")
+        for theme in app._THEMES:
+            self.assertEqual(app._erzeuge_qss(theme, "hell"), app._erzeuge_qss(theme))
+
+    def test_keine_marker_uebrig_in_allen_kombinationen(self):
+        for theme in app._THEMES:
+            for design in app._DESIGNS:
+                with self.subTest(theme=theme, design=design):
+                    self.assertNotIn("@@", app._erzeuge_qss(theme, design))
+
+    def test_alle_designs_haben_dieselben_schluessel(self):
+        erwartet = set(app._DESIGNS["hell"].keys())
+        for name, design in app._DESIGNS.items():
+            with self.subTest(design=name):
+                self.assertEqual(set(design.keys()), erwartet)
+
+    def test_unbekanntes_design_faellt_auf_hell_zurueck(self):
+        self.assertEqual(app._erzeuge_qss("blau", "gibt-es-nicht"), app._erzeuge_qss("blau", "hell"))
+
+    def test_designs_unterscheiden_sich_im_hintergrund(self):
+        self.assertIn("#1E2228", app._erzeuge_qss("blau", "dunkel"))
+        self.assertIn("#FBF8F3", app._erzeuge_qss("blau", "sand"))
+
+    def test_dunkles_design_mischt_auswahlfarbe(self):
+        qss = app._erzeuge_qss("blau", "dunkel")
+        self.assertNotIn(app._THEMES["blau"]["akzent_hell"], qss)
+        self.assertIn(app._mische("#2F6FED", "#1E2228", app._AUSWAHL_MISCHANTEIL_DUNKEL), qss)
+
+    def test_mische(self):
+        self.assertEqual(app._mische("#FFFFFF", "#000000", 1.0), "#FFFFFF")
+        self.assertEqual(app._mische("#FFFFFF", "#000000", 0.0), "#000000")
+        self.assertEqual(app._mische("#FF0000", "#0000FF", 0.5), "#800080")
+
+    def test_textkontrast_nach_wcag(self):
+        for name, d in app._DESIGNS.items():
+            mindestens = 7.0 if name == "kontrast" else 4.5
+            with self.subTest(design=name):
+                self.assertGreaterEqual(_kontrast(d["TEXT"], d["HINTERGRUND"]), mindestens)
+                self.assertGreaterEqual(_kontrast(d["TEXT_BUTTON"], d["FLAECHE"]), 4.5)
+                self.assertGreaterEqual(_kontrast(d["TEXT"], d["ungespeichert_bg"]), 4.5)
+
+    def test_semantische_farben_lesbar(self):
+        for name, d in app._DESIGNS.items():
+            for farbe in ("ok", "warnung", "fehler", "gedaempft"):
+                with self.subTest(design=name, farbe=farbe):
+                    self.assertGreaterEqual(_kontrast(d[farbe], d["zeile_bg"]), 3.0)
+            with self.subTest(design=name, farbe="warnung auf ungespeichert"):
+                self.assertGreaterEqual(_kontrast(d["warnung"], d["ungespeichert_bg"]), 3.0)
+
+    def test_auswahl_lesbar_in_allen_kombinationen(self):
+        for theme_name, theme in app._THEMES.items():
+            for name, d in app._DESIGNS.items():
+                with self.subTest(theme=theme_name, design=name):
+                    self.assertGreaterEqual(_kontrast(d["TEXT"], app._auswahlfarbe(theme, d)), 4.5)
+
+
 if __name__ == "__main__":
     unittest.main()
