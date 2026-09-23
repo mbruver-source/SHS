@@ -1543,3 +1543,23 @@ Damit ist bestätigt:
   verfügbar" ist grün) und sind unter Linux grün.
 - Die echten PostgreSQL-Tests sind grün.
 - Der Container-Smoke-Test läuft mit dem neuen Pflichtwert `SHS_ADMIN_SETUP_CODE`.
+
+## Dokumentation (23.09.): README als Startseite für Vereine + Umstiegsanleitung
+
+- **Nutzerwunsch:** Dokumente für GitHub, Schwerpunkt neue Vereine gewinnen und bestehende
+  Nutzer der LibreOffice-Datei beim Umstieg unterstützen.
+- **`README.md` neu geschrieben** (bisher nur Titel + Lizenz): Kurzbeschreibung, Download-Link
+  auf `releases/latest`, Hinweis zur SmartScreen-Warnung (Installer noch unsigniert), Updates,
+  Funktionsübersicht als Tabelle, optionale Web-Version, Abschnitt "Deine Daten"
+  (lokal, Termin löschbar, Datensicherung), Issues-Hinweis (keine echten Teilnehmerdaten),
+  Entwickler-Abschnitt mit Verweisen. Lizenz-Abschnitt beibehalten, Signierung auf
+  "sollen künftig signiert werden" korrigiert (entspricht README_INSTALLER).
+- **Neu `docs/UMSTIEG.md`:** was gleich bleibt (Wertnoten-Grenzen ED/DK aus `shs_core.py`,
+  Mindestpunkte 70 je Disziplin, Rangliste), Zuordnung altes Tabellenblatt → neuer Reiter,
+  Neues/Weggefallenes (kein ODS/XLSX-Export), Altdaten bewusst nicht übernommen
+  (Datenschutz), Umstieg in 5 Schritten mit Probelauf, FAQ.
+- **Screenshots** von Marco mit Testdaten (Testuser1-5) unter `docs/bilder/`:
+  `ergebniserfassung.png`, `zeitplan.png`, `bewertungsbogen.png` (aus PDF gerendert,
+  leere Bereiche beschnitten).
+- Alle inhaltlichen Aussagen gegen den Code (Stand 1.0.29) geprüft. Reine
+  Dokumentationsänderung: kein Build, kein Versionsbump.
