@@ -1113,16 +1113,85 @@ class TestDatenbank(unittest.TestCase):
         )
         self.assertEqual(teilnehmer_fehlende_pflichtangaben(vollstaendig), [])
 
-    def test_teilnehmer_fehlende_pflichtangaben_ed_meldet_chipnr_und_gegenstaende(self):
+    def test_teilnehmer_fehlende_pflichtangaben_ed_meldet_chipnr_und_gegenstand(self):
         unvollstaendig = dict(
             chip_nr=None, art="ED", stufe=2, disziplin="Trümmerfeld",
-            gegenstand_1="Dose", gegenstand_1_disziplin="Trümmerfeld",  # nur 1 statt 2 nötig
+            gegenstand_1=None, gegenstand_1_disziplin=None,
             gegenstand_2=None, gegenstand_2_disziplin=None,
             gegenstand_3=None, gegenstand_3_disziplin=None,
         )
-        fehlend = teilnehmer_fehlende_pflichtangaben(unvollstaendig)
-        self.assertIn("Chip-Nr. fehlt", fehlend)
-        self.assertEqual(len(fehlend), 2)
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(unvollstaendig),
+            ["Chip-Nr. fehlt", "Gegenstand fehlt"],
+        )
+
+    def test_teilnehmer_fehlende_pflichtangaben_ed_braucht_in_jeder_lk_genau_einen_gegenstand(self):
+        # Abstimmung 23.09.: ED hat nur eine Suchdisziplin und daher unabhängig von der
+        # Leistungsklasse genau einen Gegenstand (früher fälschlich LK-Zahl = Anzahl,
+        # was bei LK2/LK3 nie erfüllbar war).
+        for stufe in (1, 2, 3):
+            with self.subTest(stufe=stufe):
+                ein_gegenstand = dict(
+                    chip_nr="1", art="ED", stufe=stufe, disziplin="Trümmerfeld",
+                    gegenstand_1="Dose", gegenstand_1_disziplin="Trümmerfeld",
+                    gegenstand_2=None, gegenstand_2_disziplin=None,
+                    gegenstand_3=None, gegenstand_3_disziplin=None,
+                )
+                self.assertEqual(teilnehmer_fehlende_pflichtangaben(ein_gegenstand), [])
+                self.assertIsNone(teilnehmer_gegenstand_hinweis(ein_gegenstand))
+
+    def test_teilnehmer_gegenstand_hinweis_ed_bei_mehr_als_einem_gegenstand(self):
+        # Altdaten: bei ED mehr als ein Gegenstand erfasst - nur Hinweis, kein Fehler.
+        zwei = dict(
+            chip_nr="1", art="ED", stufe=2, disziplin="Trümmerfeld",
+            gegenstand_1="Dose", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="Schlüssel", gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(zwei), [])
+        self.assertEqual(teilnehmer_gegenstand_hinweis(zwei), "Bei ED ist nur ein Gegenstand vorgesehen")
+
+    def test_teilnehmer_gegenstand_hinweis_ed_gegenstand_einer_anderen_disziplin_zugeordnet(self):
+        andere = dict(
+            chip_nr="1", art="ED", stufe=1, disziplin="Trümmerfeld",
+            gegenstand_1=None, gegenstand_1_disziplin=None,
+            gegenstand_2="Dose", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(andere), [])
+        self.assertEqual(teilnehmer_gegenstand_hinweis(andere), "Gegenstand der Suchdisziplin nicht zugeordnet")
+
+    def test_teilnehmer_fehlende_pflichtangaben_dk_alles_frei_reicht_mindestanzahl(self):
+        # Abstimmung 23.09.: Stehen bei DK alle Gegenstände auf "frei", reicht die
+        # Mindestanzahl unterschiedlicher Gegenstände (LK1=1, LK2=2, LK3=3) - ohne jede
+        # Meldung, auch ohne Info.
+        leer = dict(
+            chip_nr="1", art="DK",
+            gegenstand_1=None, gegenstand_1_disziplin=None,
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        faelle = {
+            1: dict(leer, stufe=1, gegenstand_1="X"),
+            2: dict(leer, stufe=2, gegenstand_1="X", gegenstand_3="Y"),
+            3: dict(leer, stufe=3, gegenstand_1="X", gegenstand_2="Y", gegenstand_3="Z"),
+        }
+        for stufe, teilnehmer in faelle.items():
+            with self.subTest(stufe=stufe):
+                self.assertEqual(teilnehmer_fehlende_pflichtangaben(teilnehmer), [])
+                self.assertIsNone(teilnehmer_gegenstand_hinweis(teilnehmer))
+
+        lk2_nur_einer = dict(leer, stufe=2, gegenstand_1="X")
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(lk2_nur_einer),
+            ["Gegenstände unvollständig (Dreikampf)"],
+        )
+        # Derselbe Text zweimal zählt als ein Gegenstand.
+        lk2_zweimal_derselbe = dict(leer, stufe=2, gegenstand_1="X", gegenstand_2="X")
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(lk2_zweimal_derselbe),
+            ["Gegenstände unvollständig (Dreikampf)"],
+        )
 
     def test_teilnehmer_fehlende_pflichtangaben_dk_lk3_braucht_drei_verschiedene_gegenstaende(self):
         # LK3-Regel (Klärung 16.09., Fortschritt.md): 3 unterschiedliche Gegenstände, je
@@ -1157,24 +1226,69 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(teilnehmer_fehlende_pflichtangaben(nicht_alle_disziplinen_abgedeckt), [])
         self.assertEqual(
             teilnehmer_gegenstand_hinweis(nicht_alle_disziplinen_abgedeckt),
-            "Gegenstände den Suchdisziplinen nicht zugeordnet",
+            "Gegenstände den Suchdisziplinen nicht vollständig zugeordnet",
         )
 
-    def test_teilnehmer_gegenstand_hinweis_bei_fehlendem_text_statt_frei(self):
-        # Gegensatz zum Test oben: hier fehlt Gegenstand_3 wirklich (kein Text) - das
-        # bleibt ein echter Fehler, keine Info (Rückmeldung 22.09.: "nur bei fehlendem
-        # Gegenstand" soll die Fehlermeldung erscheinen).
+    def test_teilnehmer_gegenstand_hinweis_dk_mischfall_nur_info(self):
+        # Abstimmung 23.09.: Sobald eine Disziplin ausgewählt ist, müssen alle 3 belegt
+        # sein - ist die Mindestanzahl an Gegenständen erreicht, ist eine unvollständige
+        # Zuordnung aber nur ein Hinweis, kein Fehler.
+        mischfall = dict(
+            chip_nr="1", art="DK", stufe=1,
+            gegenstand_1="Schlüssel", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2=None, gegenstand_2_disziplin=None,
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(mischfall), [])
+        self.assertEqual(
+            teilnehmer_gegenstand_hinweis(mischfall),
+            "Gegenstände den Suchdisziplinen nicht vollständig zugeordnet",
+        )
+
+        # LK2: zwei verschiedene Gegenstände erfasst, allen 3 Disziplinen aber nur einer
+        # davon zugeordnet - Mindestanzahl erfüllt, Zuordnung unvollständig -> Info.
+        lk2 = dict(
+            chip_nr="1", art="DK", stufe=2,
+            gegenstand_1="X", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="X", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3="Y", gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(lk2), [])
+        self.assertEqual(
+            teilnehmer_gegenstand_hinweis(lk2),
+            "Gegenstände den Suchdisziplinen nicht vollständig zugeordnet",
+        )
+
+    def test_teilnehmer_gegenstand_hinweis_dk_lk1_mit_zwei_zuordnungen_ist_nur_info(self):
+        # Abstimmung 23.09.: bei LK1 reicht ein Gegenstand - dass Gegenstand_3 leer ist,
+        # ist daher kein Fehler mehr (früher: jedes leere Textfeld = Fehler), sondern nur
+        # eine unvollständige Zuordnung (Behältnisstrecke fehlt) -> Info.
         lk1_ohne_dritten_text = dict(
             chip_nr="1", art="DK", stufe=1,
             gegenstand_1="X", gegenstand_1_disziplin="Trümmerfeld",
             gegenstand_2="X", gegenstand_2_disziplin="Flächensuche",
             gegenstand_3=None, gegenstand_3_disziplin=None,
         )
+        self.assertEqual(teilnehmer_fehlende_pflichtangaben(lk1_ohne_dritten_text), [])
         self.assertEqual(
-            teilnehmer_fehlende_pflichtangaben(lk1_ohne_dritten_text),
+            teilnehmer_gegenstand_hinweis(lk1_ohne_dritten_text),
+            "Gegenstände den Suchdisziplinen nicht vollständig zugeordnet",
+        )
+
+    def test_teilnehmer_gegenstand_hinweis_none_bei_echtem_dk_fehler(self):
+        # Fehlt die Mindestanzahl an Gegenständen, ist das ein echter Fehler - die Info
+        # entfällt dann (Fehler hat Vorrang).
+        lk3_nur_zwei = dict(
+            chip_nr="1", art="DK", stufe=3,
+            gegenstand_1="X", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="Y", gegenstand_2_disziplin="Flächensuche",
+            gegenstand_3=None, gegenstand_3_disziplin=None,
+        )
+        self.assertEqual(
+            teilnehmer_fehlende_pflichtangaben(lk3_nur_zwei),
             ["Gegenstände unvollständig (Dreikampf)"],
         )
-        self.assertIsNone(teilnehmer_gegenstand_hinweis(lk1_ohne_dritten_text))
+        self.assertIsNone(teilnehmer_gegenstand_hinweis(lk3_nur_zwei))
 
     def test_teilnehmer_gegenstand_hinweis_ed_bei_text_ohne_zuordnung(self):
         # ED-Variante desselben Falls: Text vorhanden, aber "gesucht in: frei".
@@ -1187,7 +1301,7 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(teilnehmer_fehlende_pflichtangaben(text_ohne_zuordnung), [])
         self.assertEqual(
             teilnehmer_gegenstand_hinweis(text_ohne_zuordnung),
-            "Gegenstände den Suchdisziplinen nicht zugeordnet",
+            "Gegenstand der Suchdisziplin nicht zugeordnet",
         )
 
     def test_teilnehmer_gegenstand_hinweis_none_wenn_vollstaendig_oder_echter_fehler(self):

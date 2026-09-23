@@ -1563,3 +1563,68 @@ Damit ist bestätigt:
   leere Bereiche beschnitten).
 - Alle inhaltlichen Aussagen gegen den Code (Stand 1.0.29) geprüft. Reine
   Dokumentationsänderung: kein Build, kein Versionsbump.
+
+## 23.09.2026: Gegenstände-Vollständigkeit ED/DK korrigiert (Arbeitsstand, noch kein Build)
+
+- **Rückmeldung Marco:** Im Reiter Teilnehmer meldet ED fälschlich „Gegenstände
+  unvollständig“. ED hat nur eine Suchdisziplin und daher unabhängig von der LK nur einen
+  Gegenstand.
+- **Ursache:** `_ed_gegenstand_status` (`db.py`) verlangte seit 20.09. (Eintrag „Warnspalte
+  Vollständig“) so viele der ED-Disziplin zugeordnete Gegenstände wie die LK-Zahl – sinngemäß
+  von DK übertragen. Da der Dialog jede Disziplin nur einmal zulässt, war ED LK2/LK3 nie
+  vollständig (zu wenig Texte → Fehler, sonst dauerhaft Info „nicht zugeordnet“).
+- **Einzelprüfung der Regeln mit Marco (23.09.), Entscheidungen:**
+  1. *ED Anzahl:* genau 1 Gegenstand in jeder LK; mehr als einer (Altdaten) → nur Hinweis.
+  2. *ED Zuordnung:* automatisch – im Dialog ist bei ED nur Gegenstand 1 aktiv, „gesucht in“
+     folgt fest der ED-Disziplin, Gegenstand 2/3 ausgegraut.
+  3. *Fehler vs. Info:* bleibt – Fehler nur, wenn gar kein Gegenstand erfasst ist; Text da,
+     aber nicht zugeordnet (Altdaten) → Info.
+  4. *DK (Fix 4 vom 16.09. präzisiert):* LK1 = mind. 1, LK2 = mind. 2, LK3 = 3 unterschiedliche
+     Gegenstände. Alles auf „frei“: Mindestanzahl reicht, **keine** Meldung (auch keine Info
+     mehr). Sind Disziplinen ausgewählt, müssen alle 3 belegt sein (auch 3× derselbe
+     Gegenstand). Mischfall (teils zugeordnet, Mindestanzahl erreicht) → nur Info.
+     Dialogsperre „dieselbe Disziplin doppelt“ bleibt für DK unverändert.
+- **Umsetzung:**
+  - `db.py`: `_ed_gegenstand_status(teilnehmer, disziplin)` neu (`ok`/`fehlt`/`zu_viele`/
+    `nicht_zugeordnet`, ohne LK-Parameter), `_dk_gegenstand_status` nach Regel 4.
+    Fehlertext ED jetzt „Gegenstand fehlt“ (DK unverändert „Gegenstände unvollständig
+    (Dreikampf)“). Info-Texte: DK „Gegenstände den Suchdisziplinen nicht vollständig
+    zugeordnet“, ED „Gegenstand der Suchdisziplin nicht zugeordnet“ bzw. „Bei ED ist nur ein
+    Gegenstand vorgesehen“.
+  - `app.py`, `TeilnehmerDialog`: neuer Slot `_gegenstand_felder_aktualisieren` (bei Art- und
+    Disziplinwechsel sowie nach dem Laden); `ergebnis()` speichert bei ED nur Gegenstand 1
+    mit ED-Disziplin, 2/3 = NULL. Stehen bei ED noch Einträge in Gegenstand 2/3 (z. B. nach
+    Wechsel DK → ED), fragt der Dialog vor dem Speichern nach. Altdaten: steht der einzige
+    ED-Gegenstand in Feld 2/3, wird er beim Öffnen nach Feld 1 geholt.
+  - Web nicht betroffen (dort gibt es keine Gegenstand-Prüfung).
+- **Tests:** `test_db.py` angepasst/ergänzt (ED LK1–3 mit einem Gegenstand ok, ED ohne/mit
+  zwei/anders zugeordnetem Gegenstand, DK alles frei, DK Mischfall, DK LK3 mit nur zwei
+  Gegenständen). `test_app_gui.py`: bisherige Zuordnungs-Tests laufen jetzt explizit mit DK
+  (Dialog-Standard ist ED), neue Tests für ED-Dialog (Felder gesperrt, Zuordnung folgt
+  Disziplin, `ergebnis()`, Altdaten, Rückfrage), Texte der Listentests aktualisiert. Lokal:
+  404 Tests OK (113 übersprungen); GUI-Tests laufen nur in der CI, Dialogverhalten lokal per
+  Offscreen-Skript geprüft.
+- **Verifikations-Subagent:** fand einen Fehler in der eigenen Änderung – da der Dialog mit
+  ED startet, stand „gesucht in“ von Gegenstand 1 nach Wechsel auf DK ungewollt auf
+  „Trümmerfeld“ statt „frei“ (hätte zwei bestehende GUI-Tests in der CI gebrochen). Behoben:
+  beim Wechsel ED → DK wird die nur automatisch gesetzte Zuordnung wieder auf „frei“
+  gestellt; gespeicherte DK-Zuordnungen bleiben beim Öffnen erhalten (Offscreen geprüft).
+  Bekannte Kleinigkeit: ein ED-Altdatensatz mit zwei Gegenständen zeigt Feld 2 ausgegraut –
+  Entfernen geht über die Rückfrage beim Speichern.
+- Kein Build, kein Versionsbump, kein Commit (Build-Disziplin).
+
+## Version 1.0.30 (23.09., Build auf Marcos Wunsch "ja ein neues Build")
+
+Bündelt die Korrektur der Gegenstände-Vollständigkeit ED/DK vom 23.09. (siehe Abschnitt
+oben).
+
+**Build-Ablauf:**
+- `version.txt`, `version.py` und `version_info.txt` per `bump_version.py` auf 1.0.30
+  erhöht.
+- Lokaler Testlauf mit Anaconda-Python:
+  - non-GUI 404 Tests, 0 fehlgeschlagen, 113 übersprungen (PostgreSQL-Tests ohne lokalen
+    Server).
+  - GUI (`test_app_gui.py`, `test_theme.py` via pytest-qt, nur temporär im
+    Sitzungs-Scratchpad installiert): 102 bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Push/Tag durch Marco; Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` noch nachziehen.

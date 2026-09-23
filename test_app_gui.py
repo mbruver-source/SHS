@@ -291,12 +291,15 @@ def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
 
 
 # --- Gegenstand-Disziplin-Zuordnung (frei wählbar, kein Default) --------------------
+# Gilt für Dreikampf (DK) - bei ED ist seit der Abstimmung vom 23.09. nur Gegenstand 1
+# aktiv und fest der ED-Disziplin zugeordnet (siehe Tests weiter unten).
 
 
 def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
+    dialog.art.setCurrentText("DK")
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -313,6 +316,7 @@ def test_gegenstand_disziplin_frei_waehlbar_unabhaengig_von_position(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
+    dialog.art.setCurrentText("DK")
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -336,6 +340,7 @@ def test_doppelte_disziplin_zuordnung_wird_beim_speichern_abgelehnt(qtbot, monke
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
+    dialog.art.setCurrentText("DK")
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -365,6 +370,7 @@ def test_gleicher_gegenstand_in_mehreren_disziplinen_bleibt_erlaubt(qtbot, monke
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
+    dialog.art.setCurrentText("DK")
     dialog.nachname.setText("Muster")
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
@@ -390,6 +396,8 @@ def test_gleicher_gegenstand_in_mehreren_disziplinen_bleibt_erlaubt(qtbot, monke
 def test_bestehender_teilnehmer_im_dialog_zeigt_gespeicherte_zuordnung(qtbot, conn):
     _teilnehmer_anlegen(
         conn,
+        art="DK",
+        disziplin=None,
         gegenstand_1="Schlüsselbund",
         gegenstand_1_disziplin="Behältnisstrecke",
     )
@@ -403,6 +411,99 @@ def test_bestehender_teilnehmer_im_dialog_zeigt_gespeicherte_zuordnung(qtbot, co
     assert dialog.gegenstand_1_disziplin.currentText() == "Behältnisstrecke"
     # Nicht belegte Gegenstände zeigen "frei", nicht irgendeine Disziplin.
     assert dialog.gegenstand_2_disziplin.currentText() == "frei"
+
+
+# --- ED: nur ein Gegenstand, automatisch der ED-Disziplin zugeordnet (23.09.) -------
+# Abstimmung mit Marco: ED hat nur eine Suchdisziplin und daher unabhängig von der
+# Leistungsklasse genau einen Gegenstand. Im Dialog ist nur Gegenstand 1 aktiv, sein
+# "gesucht in" folgt fest der ED-Disziplin; Gegenstand 2/3 sind ausgegraut.
+
+
+def test_ed_nur_gegenstand_1_aktiv_und_zuordnung_folgt_disziplin(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("ED")
+    dialog.disziplin.setCurrentText("Behältnisstrecke")
+
+    assert dialog.gegenstand_1.isEnabled()
+    assert not dialog.gegenstand_1_disziplin.isEnabled()
+    assert dialog.gegenstand_1_disziplin.currentText() == "Behältnisstrecke"
+    for widget in (
+        dialog.gegenstand_2, dialog.gegenstand_2_disziplin,
+        dialog.gegenstand_3, dialog.gegenstand_3_disziplin,
+    ):
+        assert not widget.isEnabled()
+
+    dialog.disziplin.setCurrentText("Flächensuche")
+    assert dialog.gegenstand_1_disziplin.currentText() == "Flächensuche"
+
+    # Wechsel zu DK gibt alle Felder wieder frei.
+    dialog.art.setCurrentText("DK")
+    for widget in (
+        dialog.gegenstand_1_disziplin, dialog.gegenstand_2, dialog.gegenstand_2_disziplin,
+        dialog.gegenstand_3, dialog.gegenstand_3_disziplin,
+    ):
+        assert widget.isEnabled()
+
+
+def test_ed_ergebnis_ordnet_gegenstand_automatisch_zu(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.art.setCurrentText("ED")
+    dialog.stufe.setCurrentText("3")
+    dialog.disziplin.setCurrentText("Trümmerfeld")
+    dialog.gegenstand_1.setText("Schlüsselbund")
+
+    ergebnis = dialog.ergebnis()
+    assert ergebnis.gegenstand_1 == "Schlüsselbund"
+    assert ergebnis.gegenstand_1_disziplin == "Trümmerfeld"
+    assert ergebnis.gegenstand_2 is None and ergebnis.gegenstand_2_disziplin is None
+    assert ergebnis.gegenstand_3 is None and ergebnis.gegenstand_3_disziplin is None
+
+
+def test_ed_bestehender_teilnehmer_mit_altdaten(qtbot, conn):
+    # Altdaten: ED-Gegenstand steht in Feld 2 und auf "frei" - beim Öffnen wandert er
+    # nach Feld 1 und wird der ED-Disziplin zugeordnet.
+    _teilnehmer_anlegen(
+        conn, art="ED", disziplin="Flächensuche",
+        gegenstand_2="Korken", gegenstand_2_disziplin=None,
+    )
+    vorhandener = list_teilnehmer(conn)[0]
+
+    dialog = TeilnehmerDialog(vorhandener=vorhandener)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.gegenstand_1.text() == "Korken"
+    assert dialog.gegenstand_2.text() == ""
+    assert dialog.gegenstand_1_disziplin.currentText() == "Flächensuche"
+
+
+def test_ed_mit_weiteren_gegenstaenden_fragt_vor_dem_speichern(qtbot, monkeypatch):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1.setText("Schlüsselbund")
+    dialog.gegenstand_2.setText("Korken")
+    dialog.art.setCurrentText("ED")
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    assert dialog.result() == 0  # abgelehnt -> Dialog bleibt offen
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    dialog._pruefen_und_akzeptieren()
+    assert dialog.result() == 1
+    assert dialog.ergebnis().gegenstand_2 is None
 
 
 # --- Verwaltungs-/Kontaktdaten (Verband, Mitgliedsnummer, Wurftag, Anschrift, E-Mail,
@@ -1734,7 +1835,7 @@ def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qt
     text_unvollstaendig = tab.tabelle.item(zeile_unvollstaendig, 7).text()
     assert text_unvollstaendig.startswith("⚠")
     assert "Chip-Nr." in text_unvollstaendig
-    assert "Gegenstände" in text_unvollstaendig
+    assert "Gegenstand fehlt" in text_unvollstaendig
     assert tab.tabelle.item(zeile_vollstaendig, 7).text() == ""
 
 
@@ -1755,7 +1856,7 @@ def test_teilnehmerliste_zeigt_nur_info_statt_fehler_wenn_gegenstand_auf_frei_st
         row for row, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "OhneZuordnung"
     )
     zelle = tab.tabelle.item(zeile, 7)
-    assert zelle.text() == "Gegenstände den Suchdisziplinen nicht zugeordnet"
+    assert zelle.text() == "Gegenstand der Suchdisziplin nicht zugeordnet"
     assert not zelle.text().startswith("⚠")
     assert not zelle.font().bold()
 

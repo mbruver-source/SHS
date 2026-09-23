@@ -428,6 +428,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self._art_geaendert(self.art.currentText())
         if vorhandener:
             self._vorbelegung_uebernehmen(vorhandener)
+            # Die Vorbelegung setzt auch die gespeicherte Zuordnung von Gegenstand 1 -
+            # bei ED danach wieder fest auf die ED-Disziplin stellen.
+            self._gegenstand_felder_aktualisieren()
 
         self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
         self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
@@ -489,6 +492,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
         self.disziplin = QComboBox()
         self.disziplin.addItems(ALLE_DISZIPLINEN)
+        self.disziplin.currentTextChanged.connect(self._gegenstand_felder_aktualisieren)
 
         # Je Gegenstand ein Freitextfeld PLUS eine Zuordnung, für welche Disziplin er
         # gesucht wird ("frei" = keiner bestimmten Disziplin zugeordnet - bewusst OHNE
@@ -672,6 +676,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.gegenstand_1.setText(vorhandener["gegenstand_1"] or "")
         self.gegenstand_2.setText(vorhandener["gegenstand_2"] or "")
         self.gegenstand_3.setText(vorhandener["gegenstand_3"] or "")
+        # Altdaten bei ED (Abstimmung 23.09.: ED hat nur Gegenstand 1): Steht der einzige
+        # Gegenstand in Feld 2 oder 3, ihn nach Feld 1 holen, statt ihn in einem
+        # ausgegrauten Feld zu verstecken.
+        if vorhandener["art"] == "ED" and not self.gegenstand_1.text():
+            for feld in (self.gegenstand_2, self.gegenstand_3):
+                if feld.text():
+                    self.gegenstand_1.setText(feld.text())
+                    feld.clear()
+                    break
         self.gegenstand_1_disziplin.setCurrentText(vorhandener["gegenstand_1_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
         self.gegenstand_2_disziplin.setCurrentText(vorhandener["gegenstand_2_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
         self.gegenstand_3_disziplin.setCurrentText(vorhandener["gegenstand_3_disziplin"] or _GEGENSTAND_ZUORDNUNG_FREI)
@@ -699,6 +712,28 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     def _art_geaendert(self, art: str) -> None:
         # Disziplin ist nur bei Einzeldisziplin (ED) relevant/erlaubt
         self.disziplin.setEnabled(art == "ED")
+        self._gegenstand_felder_aktualisieren()
+
+    def _gegenstand_felder_aktualisieren(self, *_args) -> None:
+        """Abstimmung mit Marco (23.09.): ED hat nur eine Suchdisziplin und damit
+        unabhängig von der Leistungsklasse genau einen Gegenstand. Bei ED ist daher nur
+        Gegenstand 1 eingabebereit, sein "gesucht in" folgt fest der gewählten
+        ED-Disziplin (automatische Zuordnung); Gegenstand 2/3 sind ausgegraut. Bei DK
+        sind alle drei Felder samt Zuordnung frei wählbar."""
+        ist_ed = self.art.currentText() == "ED"
+        for widget in (
+            self.gegenstand_2, self.gegenstand_2_disziplin,
+            self.gegenstand_3, self.gegenstand_3_disziplin,
+        ):
+            widget.setEnabled(not ist_ed)
+        self.gegenstand_1_disziplin.setEnabled(not ist_ed)
+        if ist_ed:
+            self.gegenstand_1_disziplin.setCurrentText(self.disziplin.currentText())
+        elif getattr(self, "_gegenstand_1_fest_zugeordnet", False):
+            # Wechsel ED -> DK: die nur automatisch gesetzte ED-Zuordnung nicht als
+            # scheinbar bewusste DK-Zuordnung stehen lassen, sondern wieder auf "frei".
+            self.gegenstand_1_disziplin.setCurrentText(_GEGENSTAND_ZUORDNUNG_FREI)
+        self._gegenstand_1_fest_zugeordnet = ist_ed
 
     def _pruefen_und_akzeptieren(self) -> None:
         if not self.nachname.text().strip() or not self.vorname.text().strip() or not self.rufname_hund.text().strip():
@@ -738,7 +773,19 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Felder einträgt, jedes davon mit einer ANDEREN Disziplin-Zuordnung - das bleibt
         # hier ausdrücklich erlaubt und wird von dieser Prüfung nicht angerührt. Verboten ist
         # nur, dieselbe Disziplin zweimal zu vergeben (siehe Absprache mit Marco).
-        vergebene_disziplinen = [
+        # Bei ED greift die Prüfung nicht: dort zählt nur Gegenstand 1 mit fester
+        # Zuordnung, Gegenstand 2/3 werden gar nicht gespeichert (Abstimmung 23.09.).
+        ist_ed = self.art.currentText() == "ED"
+        if ist_ed and (self.gegenstand_2.text().strip() or self.gegenstand_3.text().strip()):
+            antwort = QMessageBox.question(
+                self, "Nur ein Gegenstand bei ED",
+                "Bei einer Einzeldisziplin (ED) gibt es nur einen Gegenstand. Die Einträge "
+                "in Gegenstand 2 und 3 werden nicht gespeichert.\n\nTrotzdem speichern?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if antwort != QMessageBox.Yes:
+                return
+        vergebene_disziplinen = [] if ist_ed else [
             d for d in (
                 self.gegenstand_1_disziplin.currentText(),
                 self.gegenstand_2_disziplin.currentText(),
@@ -760,6 +807,24 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             return
         self.accept()
 
+    def _gegenstaende_ergebnis(self) -> dict:
+        if self.art.currentText() == "ED":
+            text = self.gegenstand_1.text().strip() or None
+            return dict(
+                gegenstand_1=text,
+                gegenstand_1_disziplin=self.disziplin.currentText() if text else None,
+                gegenstand_2=None, gegenstand_2_disziplin=None,
+                gegenstand_3=None, gegenstand_3_disziplin=None,
+            )
+        return dict(
+            gegenstand_1=self.gegenstand_1.text().strip() or None,
+            gegenstand_2=self.gegenstand_2.text().strip() or None,
+            gegenstand_3=self.gegenstand_3.text().strip() or None,
+            gegenstand_1_disziplin=_zuordnung_oder_none(self.gegenstand_1_disziplin),
+            gegenstand_2_disziplin=_zuordnung_oder_none(self.gegenstand_2_disziplin),
+            gegenstand_3_disziplin=_zuordnung_oder_none(self.gegenstand_3_disziplin),
+        )
+
     def ergebnis(self) -> NeuerTeilnehmer:
         return NeuerTeilnehmer(
             nachname=self.nachname.text().strip(),
@@ -780,12 +845,8 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             tollwutimpfung_bis=normalisiere_datum(self.tollwutimpfung_bis.text()),
             geburtsdatum=normalisiere_datum(self.geburtsdatum.text()),
             startnummer=None if self.startnummer_unbekannt.isChecked() else self.startnummer.value(),
-            gegenstand_1=self.gegenstand_1.text().strip() or None,
-            gegenstand_2=self.gegenstand_2.text().strip() or None,
-            gegenstand_3=self.gegenstand_3.text().strip() or None,
-            gegenstand_1_disziplin=_zuordnung_oder_none(self.gegenstand_1_disziplin),
-            gegenstand_2_disziplin=_zuordnung_oder_none(self.gegenstand_2_disziplin),
-            gegenstand_3_disziplin=_zuordnung_oder_none(self.gegenstand_3_disziplin),
+            # Bei ED nur Gegenstand 1, automatisch der ED-Disziplin zugeordnet (23.09.).
+            **self._gegenstaende_ergebnis(),
             bezahlt=self.bezahlt.isChecked(),
             verband=self.verband.text().strip() or None,
             mitgliedsnummer=self.mitgliedsnummer.text().strip() or None,
