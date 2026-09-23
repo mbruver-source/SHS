@@ -1627,4 +1627,5 @@ oben).
   - GUI (`test_app_gui.py`, `test_theme.py` via pytest-qt, nur temporär im
     Sitzungs-Scratchpad installiert): 102 bestanden, 1 bekannter xfail.
   - `py_compile` für alle Module fehlerfrei.
-- Push/Tag durch Marco; Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` noch nachziehen.
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.30 nachgezogen (8 Dateien,
+  Hash-Abgleich identisch). Push/Tag durch Marco.
