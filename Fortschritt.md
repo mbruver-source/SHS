@@ -1664,8 +1664,10 @@ oben).
      `max-width:100%`.
   3. Drucken:
      `msedge --headless=new --no-pdf-header-footer --print-to-pdf=docs\HANDBUCH.pdf <html>`.
-  - Das Generator-Skript lag nur im Sitzungs-Scratchpad. Bei Bedarf als
-    `tools/handbuch_pdf.py` ins Repo übernehmen.
+  - Das Skript liegt als `tools/handbuch_pdf.py` im Repo, auf Marcos Wunsch vom 23.09.
+    Aufruf: `python tools/handbuch_pdf.py`. Es findet Edge oder Chrome selbst, ein anderer
+    Browser lässt sich über `SHS_PDF_BROWSER` angeben. Reines Entwickler-Werkzeug, wird
+    nicht ausgeliefert. Auf Marcos Wunsch als eigener Commit, unabhängig vom Build.
 - **Hilfe im Programm `_HILFE_HTML` (`app.py`), Arbeitsstand, noch kein Build:**
   - Teilnehmer: Gegenstand-Regeln ED/DK (1.0.30), Spalte Anmerkungen, „Startnummer
     tauschen…“, „Aus anderem Termin importieren…“, „Bewertungsbogen (PDF)…“.
