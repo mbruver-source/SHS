@@ -1726,6 +1726,8 @@ erzeugen und vorher prüfen, ob das sinnvoll ist.
   - PR-Vorlage klar als Vorlage für Marcos eigene PRs gekennzeichnet
 - **Offen, mit Marco zu besprechen:** `CODE_SIGNING_POLICY.md` (Rolle Reviewer) sagt noch,
   ein PR eines Dritten würde geprüft und gemerged. Das widerspricht „nur Issues“. Die Datei
-  ist Grundlage der SignPath-Bewerbung und wurde deshalb nicht angefasst.
+  ist Grundlage der SignPath-Bewerbung und wurde deshalb zunächst nicht angefasst.
+  **Nachtrag:** Mit Marcos Go („ja“) ist der Satz jetzt angepasst. PRs von Dritten werden
+  nicht angenommen, externe Beiträge laufen über Issues und werden von Marco selbst umgesetzt.
 - Die Nennung des Finders in den Release-Notizen muss von Hand ergänzt werden. Der Workflow
   erzeugt die Notizen automatisch (`generate_release_notes`).

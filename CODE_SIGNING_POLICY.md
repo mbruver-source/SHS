@@ -20,7 +20,7 @@ Projektbeschreibung steht in [README.md](README.md) und
 | Rolle | Person(en) | Aufgabe |
 |---|---|---|
 | Author | Marco ([mbruver-source](https://github.com/mbruver-source)) | Schreibt und committet den Code. Aktuell der einzige aktive Entwickler des Projekts. |
-| Reviewer | Marco | Prüft Änderungen vor der Übernahme – bislang gibt es keine externen Mitwirkenden; ein eingehender Pull Request eines Dritten würde ebenfalls von Marco geprüft, bevor er gemerged wird. |
+| Reviewer | Marco | Prüft Änderungen vor der Übernahme – bislang gibt es keine externen Mitwirkenden. Pull Requests von Dritten werden nicht angenommen (siehe [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)); externe Beiträge laufen über Issues und werden von Marco selbst umgesetzt. |
 | Approver | Marco | Einzige Person, die Versions-Tags setzt und damit einen signierten Release-Build auslöst. |
 
 Sobald das Projekt weitere regelmäßige Mitwirkende hat, wird diese Tabelle um
