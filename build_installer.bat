@@ -44,7 +44,9 @@ echo.
 echo [2/4] Versionsnummer erhoehen ^(bump_version.py^)...
 rem Erhoeht automatisch die 3. Stelle der Versionsnummer (bis 99), danach die
 rem 2. Stelle (und setzt die 3. wieder auf 0) - siehe bump_version.py fuer die
-rem genaue Logik. Schreibt version.txt UND version_info.txt neu; die neue
+rem genaue Logik. Schreibt version.txt, version_info.txt und version.py neu
+rem und zieht die Stand-Zeile in docs\HANDBUCH.md nach (das PDF-Handbuch danach
+rem von Hand mit "python tools\handbuch_pdf.py" neu erzeugen); die neue
 rem Nummer wird unten sowohl fuer den Fenster-/Dateinamen als auch fuer Inno
 rem Setup (/DMyAppVersion) verwendet, damit ueberall dieselbe Nummer steht.
 set "VERSION="
@@ -54,6 +56,7 @@ if "%VERSION%"=="" (
     goto :fehler
 )
 echo   -^> Neue Version: %VERSION%
+echo   Hinweis: docs\HANDBUCH.pdf mit "python tools\handbuch_pdf.py" neu erzeugen.
 echo.
 
 echo [3/4] .exe bauen ^(PyInstaller, --onefile^)...

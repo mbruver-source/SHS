@@ -14,7 +14,9 @@ name: Installer bauen
 # erhöht die Versionsnummer also nicht selbst. Er baut mit der Nummer, die bereits
 # in version.txt eingecheckt ist. Ablauf für ein Release:
 #   1. Lokal einmal `python bump_version.py` laufen lassen
-#   2. Die dadurch geänderten version.txt/version_info.txt committen und pushen
+#   2. `python tools/handbuch_pdf.py` ausführen, dann die geänderten
+#      version.txt/version_info.txt/version.py und docs/HANDBUCH.md/.pdf
+#      committen und pushen
 #   3. Dann den Tag setzen: `git tag v1.2.0 && git push origin v1.2.0`
 # So bleibt version.txt die einzige, eindeutige Quelle der Versionsnummer - siehe
 # README_INSTALLER.md.

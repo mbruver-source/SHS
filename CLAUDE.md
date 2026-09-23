@@ -81,8 +81,10 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   `Fortschritt.md`, `Architektur.md`) sind davon ausgenommen und können direkt committet
   werden.
 - Wenn Marco einen Build anfordert: alle seit dem letzten Build gesammelten Änderungen
-  bündeln, Version per `bump_version.py` erhöhen, lokale Tests laufen lassen, committen
-  (Attribution-Footer aus dem System-Reminder anhängen, sofern vorhanden).
+  bündeln, Version per `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
+  `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu
+  erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer aus dem
+  System-Reminder anhängen, sofern vorhanden).
 - `git push`, `git tag`, `git push --tags` NIE selbst ausführen - das bleibt immer Marcos
   eigene Aktion. Ihm die genauen Befehle nennen, wenn nötig.
 

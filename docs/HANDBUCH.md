@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.30. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.32. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
@@ -35,7 +35,8 @@ Stand: Version 1.0.30. Alle Screenshots zeigen erfundene Testdaten.
 |---|---|---|
 | Wochen vorher | Termin anlegen, Veranstaltungsdaten eintragen | Startbildschirm, Reiter „Verwaltung“ |
 | Mit den Meldungen | Teilnehmer erfassen, Zahlungen abhaken | Reiter „Teilnehmer“, „Formular-Import“ |
-| Kurz vorher | Startnummern und Gegenstände prüfen, Zeitplan erstellen, Bewertungsbögen und Listen drucken | Reiter „Teilnehmer“, „Zeitplan“, „Export“ |
+| 8 Tage vorher | Zeitplan erstellen, Kontakt zu den Richtern aufnehmen und ihnen den Zeitplan übermitteln (PDF), bei späteren Änderungen erneut senden | Reiter „Zeitplan“ |
+| Kurz vorher | Startnummern und Gegenstände prüfen, Bewertungsbögen und Listen drucken | Reiter „Teilnehmer“, „Export“ |
 | Am Prüfungstag | Ergebnisse eintragen, regelmäßig speichern | Reiter „Ergebniserfassung“ (oder Web-Version) |
 | Danach | Rangliste, Ergebnisliste, Etiketten, Statistik | Reiter „Auswertung“, „Export“ |
 | Zum Schluss | Datensicherung erstellen; abgeschlossene Termine später löschen | Reiter „Datensicherung“, Startbildschirm |
@@ -258,6 +259,10 @@ automatisch gespeichert.
 Die Rangliste je Leistungsklasse mit Gesamtpunkten, Wertnote und Platzierung („1. von 2“) wird
 automatisch berechnet. **„Auswertung neu berechnen“** aktualisiert die Anzeige. Unten steht,
 wer noch kein vollständiges Ergebnis hat.
+
+**„Rangliste drucken (PDF)…“** speichert die Rangliste direkt als PDF. Ist im Filter eine
+Art/Leistungsklasse gewählt, enthält das PDF nur diese, sonst alle. Der Filter nach
+Startnummer wird dabei nicht berücksichtigt.
 
 | Wertnote | ED (max. 100) | DK (max. 300) |
 |---|---|---|

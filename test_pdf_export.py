@@ -399,6 +399,25 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Wartend, C", text)
         self.assertIn("Noch ohne vollständiges Ergebnis", text)
 
+    def test_ergebnisliste_nur_gewaehlte_leistungsklasse(self):
+        """Druck-Button im Auswertungs-Tab (Nutzerwunsch 23.09.) übergibt die im Filter
+        gewählte Leistungsklasse - nur diese erscheint dann in der PDF."""
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Flaeche", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Truemmer", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        eintragen_ergebnis(self.conn, a, "Flächensuche", suche=58, anzeige=38)
+        eintragen_ergebnis(self.conn, b, "Trümmerfeld", suche=55, anzeige=35)
+
+        pfad = self._pfad("ergebnisliste_lk.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, "ED LK 1 Flächensuche")
+        text = _text(pfad)
+        self.assertIn("Flaeche, A", text)
+        self.assertNotIn("Truemmer, B", text)
+        self.assertNotIn("Trümmerfeld", text)
+
     def test_etiketten_ergebnisliste_enthaelt_werte_ohne_seitentitel(self):
         a = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="Siegreich", vorname="A", rufname_hund="Bella", verein="VPS Schwanheim",

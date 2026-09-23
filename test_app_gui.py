@@ -21,6 +21,8 @@ das nicht zwingend, schadet aber auch nicht - hier der Einfachheit halber übera
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
@@ -63,6 +65,7 @@ from db import (
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
+    update_teilnehmer,
 )
 
 
@@ -148,6 +151,43 @@ def test_auswertung_zeigt_hund_zwischen_name_und_gesamtpunkte(qtbot, conn):
     assert tab.tabelle.item(0, 2).text() == "Holst, Max"
     assert tab.tabelle.item(0, 3).text() == "Freda"
     assert tab.tabelle.item(0, 4).text() == "96"
+
+
+@pytest.mark.parametrize("filter_wert, erwartete_lk, erwarteter_name", [
+    ("Alle", None, "Ergebnisliste.pdf"),
+    ("ED LK 1 Flächensuche", "ED LK 1 Flächensuche", "Ergebnisliste_ED_LK_1_Flächensuche.pdf"),
+])
+def test_auswertung_druck_button_uebernimmt_lk_filter(
+    qtbot, conn, monkeypatch, tmp_path, filter_wert, erwartete_lk, erwarteter_name
+):
+    """Nutzerwunsch 23.09.: Druck-Button im Auswertungs-Tab gibt die Rangliste als PDF aus,
+    mit dem gesetzten Art/LK-Filter (Start-Nr.-Filter bewusst nicht)."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche", startnummer=7)
+    eintragen_ergebnis(conn, tid, "Flächensuche", suche=58, anzeige=38)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.filter_combo.setCurrentText(filter_wert)
+    tab.filter_startnummer.setText("99")  # darf den Druck nicht beeinflussen
+
+    vorschlaege = []
+    ziel_pfad = tmp_path / "rangliste.pdf"
+
+    def dialog(_parent, _titel, vorschlag, _filter):
+        vorschlaege.append(os.path.basename(vorschlag))
+        return str(ziel_pfad), "PDF-Datei (*.pdf)"
+
+    aufrufe = []
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", dialog)
+    monkeypatch.setattr(
+        "app.pdf_export.erstelle_ergebnisliste_pdf",
+        lambda c, pfad, leistungsklasse=None: aufrufe.append((pfad, leistungsklasse)),
+    )
+
+    qtbot.mouseClick(tab.drucken_btn, Qt.MouseButton.LeftButton)
+
+    assert vorschlaege == [erwarteter_name]
+    assert aufrufe == [(str(ziel_pfad), erwartete_lk)]
+    assert str(ziel_pfad) in tab.status_label.text()
 
 
 # --- Übersicht Teilnehmer und LK -----------------------------------------------------
@@ -1299,6 +1339,56 @@ def test_ergebnis_zeigt_hund_und_sortiert_danach(qtbot, conn):
     tab.tabelle.horizontalHeader().sectionClicked.emit(2)
     assert tab.tabelle.item(0, 2).text() == "Zeus"
     assert tab.tabelle.item(1, 2).text() == "Bello"
+
+
+def _ed_zeile_hat_nur_eigene_eingabefelder(tab, row: int, ed_disziplin: str) -> None:
+    from PySide6.QtWidgets import QLineEdit
+
+    for disziplin, spalten in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.items():
+        for spalte in spalten:
+            if disziplin == ed_disziplin:
+                assert isinstance(tab.tabelle.cellWidget(row, spalte), QLineEdit)
+            else:
+                assert tab.tabelle.cellWidget(row, spalte) is None
+                assert tab.tabelle.item(row, spalte).text() == "–"
+
+
+def test_ergebnis_umstellung_dk_auf_ed_sperrt_fremde_disziplinen(qtbot, conn):
+    """Rückmeldung 23.09.: nach Umstellung eines DK-Teilnehmers auf ED blieben in der
+    laufenden Sitzung die alten Eingabefelder der nicht mehr zutreffenden Disziplinen
+    stehen (setItem() entfernt kein Cell-Widget), erst ein Neustart behob es."""
+    teilnehmer_id = _teilnehmer_anlegen(conn, art="DK", stufe=1, disziplin=None)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    update_teilnehmer(
+        conn,
+        teilnehmer_id,
+        NeuerTeilnehmer(
+            nachname="Muster", vorname="Max", rufname_hund="Bello",
+            art="ED", stufe=1, disziplin="Flächensuche", startnummer=1,
+        ),
+    )
+    tab.aktualisieren()
+
+    _ed_zeile_hat_nur_eigene_eingabefelder(tab, 0, "Flächensuche")
+
+
+def test_ergebnis_sortierung_laesst_keine_dk_eingabefelder_in_ed_zeile(qtbot, conn):
+    """Wie oben, aber über den Sortierpfad: rutscht eine ED-Zeile auf die Position einer
+    zuvor dort aufgebauten DK-Zeile, dürfen deren Eingabefelder nicht stehen bleiben."""
+    _teilnehmer_anlegen(conn, nachname="Zorn", art="DK", stufe=1, disziplin=None, startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Adler", disziplin="Flächensuche", startnummer=2)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    assert tab.tabelle.item(0, 1).text() == "Zorn, Max"
+
+    tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # Spalte 1 = Name
+
+    assert tab.tabelle.item(0, 1).text() == "Adler, Max"
+    _ed_zeile_hat_nur_eigene_eingabefelder(tab, 0, "Flächensuche")
 
 
 def test_ergebnis_sortierung_verliert_keine_ungespeicherte_eingabe(qtbot, conn):

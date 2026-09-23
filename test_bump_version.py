@@ -31,6 +31,8 @@ def test_main_schreibt_version_txt_und_version_info_txt(tmp_path, monkeypatch):
     monkeypatch.setattr(bump_version, "VERSION_DATEI", version_datei)
     monkeypatch.setattr(bump_version, "VERSION_INFO_DATEI", version_info_datei)
     monkeypatch.setattr(bump_version, "VERSION_PY_DATEI", version_py_datei)
+    # Nie das echte docs/HANDBUCH.md anfassen
+    monkeypatch.setattr(bump_version, "HANDBUCH_DATEI", tmp_path / "HANDBUCH.md")
 
     ergebnis = bump_version.main()
 
@@ -67,3 +69,66 @@ def test_version_lesen_mit_ungueltigem_inhalt_wirft_fehler(tmp_path, monkeypatch
         pass
     else:
         raise AssertionError("erwartete ValueError bei ungültiger Versionsnummer")
+
+
+def _handbuch_patchen(tmp_path, monkeypatch, inhalt: bytes):
+    handbuch = tmp_path / "HANDBUCH.md"
+    handbuch.write_bytes(inhalt)
+    monkeypatch.setattr(bump_version, "HANDBUCH_DATEI", handbuch)
+    return handbuch
+
+
+def test_main_zieht_handbuch_version_nach_und_laesst_rest_unveraendert(tmp_path, monkeypatch):
+    version_datei = tmp_path / "version.txt"
+    version_datei.write_text("1.0.31\n", encoding="utf-8")
+    monkeypatch.setattr(bump_version, "VERSION_DATEI", version_datei)
+    monkeypatch.setattr(bump_version, "VERSION_INFO_DATEI", tmp_path / "version_info.txt")
+    monkeypatch.setattr(bump_version, "VERSION_PY_DATEI", tmp_path / "version.py")
+    vorher = (
+        "# Benutzerhandbuch\r\n\r\n"
+        "Stand: Version 1.0.31. Alle Screenshots zeigen erfundene Testdaten.\r\n\r\n"
+        "Später im Text: Stand: Version 1.0.5. bleibt stehen.\r\n"
+    ).encode("utf-8")
+    handbuch = _handbuch_patchen(tmp_path, monkeypatch, vorher)
+
+    assert bump_version.main() == "1.0.32"
+
+    # Nur die erste Versionszeile ändert sich, CRLF-Zeilenenden bleiben erhalten
+    assert handbuch.read_bytes() == vorher.replace(
+        b"Stand: Version 1.0.31.", b"Stand: Version 1.0.32.", 1)
+
+
+def test_handbuch_version_schreiben_ohne_datei_ist_kein_fehler(tmp_path, monkeypatch):
+    monkeypatch.setattr(bump_version, "HANDBUCH_DATEI", tmp_path / "fehlt" / "HANDBUCH.md")
+    bump_version.handbuch_version_schreiben("1.2.3")
+    assert not (tmp_path / "fehlt").exists()
+
+
+def test_handbuch_version_schreiben_ohne_versionszeile_laesst_datei_unveraendert(tmp_path, monkeypatch):
+    vorher = "# Handbuch\n\nKeine Versionsangabe hier.\n".encode("utf-8")
+    handbuch = _handbuch_patchen(tmp_path, monkeypatch, vorher)
+    bump_version.handbuch_version_schreiben("1.2.3")
+    assert handbuch.read_bytes() == vorher
+
+
+def test_main_zaehlt_nicht_hoch_wenn_handbuch_nicht_lesbar_ist(tmp_path, monkeypatch):
+    # Handbuch-Pfad zeigt auf einen Ordner -> Öffnen scheitert (wie bei einer gesperrten Datei)
+    version_datei = tmp_path / "version.txt"
+    version_datei.write_text("1.0.31\n", encoding="utf-8")
+    monkeypatch.setattr(bump_version, "VERSION_DATEI", version_datei)
+    monkeypatch.setattr(bump_version, "VERSION_INFO_DATEI", tmp_path / "version_info.txt")
+    monkeypatch.setattr(bump_version, "VERSION_PY_DATEI", tmp_path / "version.py")
+    ordner = tmp_path / "HANDBUCH.md"
+    ordner.mkdir()
+    monkeypatch.setattr(bump_version, "HANDBUCH_DATEI", ordner)
+
+    try:
+        bump_version.main()
+    except OSError:
+        pass
+    else:
+        raise AssertionError("erwartete OSError beim nicht lesbaren Handbuch")
+
+    assert version_datei.read_text(encoding="utf-8") == "1.0.31\n"
+    assert not (tmp_path / "version_info.txt").exists()
+    assert not (tmp_path / "version.py").exists()

@@ -502,10 +502,15 @@ def erstelle_alle_bewertungsboegen_pdf(
 
 # --- Ergebnisliste -----------------------------------------------------------
 
-def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungsklasse: str | None = None) -> None:
     """Gerankte Ergebnisliste je Leistungsklasse (Platzierung, Startnummer, Name,
     Gesamtpunkte, Wertnote) - "nicht Bestanden"-Teilnehmer erscheinen ohne Platzzahl,
-    zählen aber weiterhin bei "von X Startern" mit (siehe shs_core.berechne_rangliste)."""
+    zählen aber weiterhin bei "von X Startern" mit (siehe shs_core.berechne_rangliste).
+
+    `leistungsklasse` (Label wie "ED LK 1 Flächensuche", siehe leistungsklasse_label)
+    beschränkt die Liste auf diese eine Leistungsklasse - genutzt vom Druck-Button im
+    Auswertungs-Tab, der den dort gesetzten Art/LK-Filter übernimmt (Nutzerwunsch 23.09.).
+    Die Platzierungen ändern sich dadurch nicht, sie gelten ohnehin je Leistungsklasse."""
     veranstaltung = get_veranstaltung(conn)
     fertig, ausstehend = berechne_auswertung(conn)
     startnummer_je_id = {str(t["id"]): t["startnummer"] for t in list_teilnehmer(conn)}
@@ -518,6 +523,8 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     story.append(Spacer(1, 2 * mm))
 
     leistungsklassen = sorted({t.leistungsklasse for t in fertig} | {leistungsklasse_label(t) for t in ausstehend})
+    if leistungsklasse is not None:
+        leistungsklassen = [lk for lk in leistungsklassen if lk == leistungsklasse]
     if not leistungsklassen:
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
 

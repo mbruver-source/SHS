@@ -12,6 +12,8 @@ Liest/schreibt die aktuelle Versionsnummer in version.txt (einzige
 version_info.txt (Windows-Versionsinfo, die PyInstaller in die .exe
 einbettet, siehe build.spec) sowie in version.py (von app.py importiert,
 für die Versionsanzeige in der GUI - siehe Version-Button neben "Hilfe").
+Außerdem wird die Zeile "Stand: Version X.Y.Z." in docs/HANDBUCH.md
+nachgezogen (docs/HANDBUCH.pdf danach mit tools/handbuch_pdf.py neu erzeugen).
 
 Wird von build_installer.bat VOR dem PyInstaller-Build aufgerufen und gibt
 die neue Versionsnummer (z.B. "1.0.1") auf stdout aus, damit das Batch-Skript
@@ -23,6 +25,7 @@ Von Hand ausführen (z.B. zum Nachsehen, ohne gleich zu bauen):
 from __future__ import annotations
 
 import pathlib
+import re
 
 HIER = pathlib.Path(__file__).resolve().parent
 VERSION_DATEI = HIER / "version.txt"
@@ -34,6 +37,9 @@ VERSION_INFO_DATEI = HIER / "version_info.txt"
 # erkennt und bündelt sie daher automatisch, genau wie db.py/shs_core.py (siehe
 # Kommentar in build.spec), ganz ohne zusätzlichen datas-Eintrag.
 VERSION_PY_DATEI = HIER / "version.py"
+# Benutzerhandbuch mit der Zeile "Stand: Version X.Y.Z." (siehe handbuch_version_schreiben)
+HANDBUCH_DATEI = HIER / "docs" / "HANDBUCH.md"
+_HANDBUCH_VERSIONSZEILE = re.compile(r"^(Stand: Version )\d+\.\d+\.\d+(\.)", re.MULTILINE)
 
 
 def version_lesen() -> tuple[int, int, int]:
@@ -126,10 +132,32 @@ def version_py_schreiben(version_text: str) -> None:
     VERSION_PY_DATEI.write_text(inhalt, encoding="utf-8")
 
 
+def handbuch_version_schreiben(version_text: str) -> None:
+    """Zieht die Zeile "Stand: Version X.Y.Z." im Handbuch auf die neue Version nach.
+
+    Fehlt die Datei oder die Zeile, passiert bewusst nichts (kein Fehler, keine
+    Ausgabe): build_installer.bat liest die Versionsnummer von stdout und darf
+    dadurch nicht gestört werden. Andere Fehler (Datei schreibgeschützt/gesperrt,
+    kein gültiges UTF-8) brechen dagegen laut ab - main() ruft diese Funktion
+    deshalb als Erstes auf, damit dann noch keine Versionsdatei verändert ist.
+    Zeilenenden bleiben erhalten (newline="")."""
+    try:
+        with HANDBUCH_DATEI.open(encoding="utf-8", newline="") as f:
+            inhalt = f.read()
+    except FileNotFoundError:
+        return
+    neu, anzahl = _HANDBUCH_VERSIONSZEILE.subn(rf"\g<1>{version_text}\g<2>", inhalt, count=1)
+    if anzahl:
+        with HANDBUCH_DATEI.open("w", encoding="utf-8", newline="") as f:
+            f.write(neu)
+
+
 def main() -> str:
     aktuell = version_lesen()
     neu = naechste_version(aktuell)
     neu_text = ".".join(str(n) for n in neu)
+    # Zuerst das Handbuch: scheitert das (z. B. Datei gesperrt), ist noch nichts hochgezählt
+    handbuch_version_schreiben(neu_text)
     VERSION_DATEI.write_text(neu_text + "\n", encoding="utf-8")
     version_info_schreiben(neu)
     version_py_schreiben(neu_text)

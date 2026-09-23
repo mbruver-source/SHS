@@ -1852,6 +1852,7 @@ Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unte
    - Nachstellen: Im Reiter Teilnehmer über „Bearbeiten…“ einen DK-Teilnehmer auf ED plus
      Disziplin umstellen (Marcos Weg), dann in die Ergebniserfassung wechseln. Dort lassen
      sich weiterhin alle drei Disziplinen mit Punkten füllen.
+   - **Erledigt am 23.09.2026 (siehe Abschnitt unten).**
    - Die Auswertung rechnet korrekt: Sie wertet nur die ED-Disziplin und ignoriert die
      übrigen Punkte. Es ist also ein Fehler in der Anzeige und Eingabe, nicht in der
      Berechnung.
@@ -1872,10 +1873,40 @@ Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unte
      gemeinsamen Ablageort `_Ablageort` (`app.py`), wie ihn der Export-Reiter nutzt.
    - Bei der Umsetzung klären: Soll der aktuell gesetzte Filter (Art/LK) berücksichtigt
      werden, also nur die gefilterte Leistungsklasse drucken, oder immer alles?
+   - **Erledigt am 23.09.2026 (siehe Abschnitt „Auswertung: Druck-Button“ unten).**
 3. **Ablauf bei späterer Umsetzung** (laut CLAUDE.md):
    - Explore-Subagent, umsetzen, testen, Verifikations-Subagent, `Fortschritt.md`
      aktualisieren.
    - Kein Commit und kein Build ohne Marcos Anforderung.
+
+## 23.09.2026: Fix Ergebniserfassung nach Umstellung DK → ED (offene Aufgabe 1)
+
+- **Marcos Ergänzung:** Nach einem Programm-Neustart war das Problem weg. Es tritt also nur
+  in der laufenden Sitzung auf.
+- **Ursache:** `ErgebnisTab._zeilen_aufbauen()` (`app.py`) setzt für nicht zutreffende
+  Disziplinen nur ein gesperrtes „–“-Item per `setItem()`. Das entfernt aber kein
+  Cell-Widget. Ein Punkte-Eingabefeld (`QLineEdit`) aus einem früheren Aufbau (als der
+  Teilnehmer noch DK war) blieb deshalb sichtbar und beschreibbar über der Zelle liegen.
+  Diese Felder standen nicht in `_boxen_je_zeile`, wurden also weder gespeichert noch
+  gewertet. Deshalb rechnete die Auswertung korrekt. Nach einem Neustart wird die Tabelle
+  frisch aufgebaut, dann ist der Fehler weg. Derselbe Effekt konnte auch beim Sortieren per
+  Spaltenklick auftreten (ED-Zeile rutscht auf die Position einer früheren DK-Zeile).
+- **Fix:** `self.tabelle.removeCellWidget(row, spalte)` vor dem Setzen der „–“-Zelle.
+- **Datenfrage geklärt (Marco):** Die Umstellung DK → ED erfolgt im realen Termin nur vor
+  der Punktevergabe. Deshalb gibt es keine Sonderbehandlung für schon gespeicherte
+  DK-Punkte, weder Löschen noch Rückfrage.
+- **Tests:** 2 neue GUI-Tests in `test_app_gui.py`
+  (`test_ergebnis_umstellung_dk_auf_ed_sperrt_fremde_disziplinen`,
+  `test_ergebnis_sortierung_laesst_keine_dk_eingabefelder_in_ed_zeile`). Beide schlagen
+  ohne Fix fehl und laufen mit Fix durch.
+  - PySide6 und pytest-qt sind im lokalen Anaconda installiert, die GUI-Tests laufen also
+    auch lokal: 105 bestanden, 1 bekannter xfail.
+  - Nicht-GUI-Lauf: 404 Tests, 0 fehlgeschlagen, 113 übersprungen.
+- **Verifikations-Subagent: OK, keine Funde.**
+  - Alle anderen Zellen und Pfade der Ergebniserfassung sind gegengeprüft: Sortieren,
+    Filter, Umfärben, Spaltenbreiten, weniger Zeilen als vorher.
+  - `removeCellWidget` hat keine Nebenwirkungen auf `_boxen_je_zeile` oder die Signale.
+- Noch kein Commit und kein Build, erst auf Marcos Anforderung.
 
 ## 23.09.2026: GitHub Page (Projekt-Website) in `docs/`
 
@@ -1943,3 +1974,82 @@ Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unte
   alten Stands: `C:\Users\mbruv\Documents\SHS-Git-Sicherung-2026-09-23\`.
 - Marco hat per Force-Push hochgeladen (`main` und alle Tags auf einmal, damit keine
   Installer-Builds ausgelöst werden). Alle Commit-IDs haben sich dadurch geändert.
+
+## 23.09.2026: Handbuch – Versionsstand automatisch, neuer Schritt „8 Tage vorher“
+
+- **Wunsch Marco:** „Handbuch aktualisieren bezüglich Version“ und „bei Ablauf eines
+  Prüfungstermins 8 Tage vorher Kontakt zum Richter aufnehmen und Zeitplan übermitteln“.
+- **Version (Entscheidung: automatisch beim Build):**
+  - `bump_version.py`: neue Funktion `handbuch_version_schreiben()`. Sie ersetzt die erste
+    Zeile `Stand: Version X.Y.Z.` in `docs/HANDBUCH.md` durch die neue Nummer, lässt den Rest
+    der Datei byte-gleich (Zeilenenden bleiben erhalten). Fehlt Datei oder Zeile, passiert
+    nichts, ohne Fehler und ohne Ausgabe, weil `build_installer.bat` die Nummer von stdout liest.
+  - Jetzt einmalig von Hand auf 1.0.31 gesetzt (stand noch auf 1.0.30).
+  - Das PDF kann `bump_version.py` nicht erzeugen (braucht Edge/Chrome). Der Schritt
+    `tools/handbuch_pdf.py` steht deshalb jetzt im Build-Ablauf in `CLAUDE.md` und
+    `README_INSTALLER.md`.
+- **Kapitel 1, Ablauf-Tabelle (Entscheidung: eigene Zeile):** neue Zeile „8 Tage vorher:
+  Zeitplan erstellen, Kontakt zu den Richtern aufnehmen und ihnen den Zeitplan übermitteln
+  (PDF) – Reiter „Zeitplan““. „Zeitplan erstellen“ ist dafür aus „Kurz vorher“ entfernt.
+- `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py` neu erzeugt (22 Seiten, zeigt 1.0.31 und
+  die neue Zeile). Die Website zeigt die Änderung automatisch, da sie `HANDBUCH.md` rendert.
+- **Tests:** `test_bump_version.py` – bestehender `main()`-Test biegt `HANDBUCH_DATEI` jetzt
+  auf `tmp_path` um (sonst hätte er das echte Handbuch verändert), 3 neue Tests
+  (Versionszeile ersetzt, CRLF erhalten, fehlende Datei, Datei ohne Versionszeile).
+- `bump_version.py`/`test_bump_version.py` bleiben bis zum nächsten Build im Arbeitsstand.
+- **Verifikations-Subagent: Code OK**, echte Versions-/Handbuch-Dateien bleiben bei den
+  Testläufen unverändert (Hash-Vergleich), stdout von `bump_version.py` weiterhin nur die
+  Nummer. Vier Funde, auf Marcos Go alle umgesetzt:
+  - F1: Ein gesperrtes oder schreibgeschütztes Handbuch ließ einen halb erhöhten Stand zurück
+    (`version.txt`/`version_info.txt`/`version.py` schon hochgezählt). `main()` schreibt das
+    Handbuch jetzt zuerst, der Docstring nennt den lauten Abbruch bei anderen Fehlern.
+    Neuer Test `test_main_zaehlt_nicht_hoch_wenn_handbuch_nicht_lesbar_ist` (jetzt 11 Tests).
+  - F2: Die Release-Befehlsfolgen in `README_INSTALLER.md`, `README_CONTAINER.md` und im
+    Kommentar von `.github/workflows/build-installer.yml` enthalten jetzt
+    `python tools/handbuch_pdf.py` und `docs/HANDBUCH.md docs/HANDBUCH.pdf` im `git add`.
+  - F3: Checkliste in `README_INSTALLER.md` um den PDF-Punkt ergänzt, „beiden Dateien“ →
+    „drei Dateien“, Kommentar und Hinweis-Ausgabe in `build_installer.bat`, `Architektur.md`
+    (Modultabelle `bump_version.py`).
+  - F4: Zeile „8 Tage vorher“ um „bei späteren Änderungen erneut senden“ ergänzt (der
+    Zeitplan ergibt sich immer aus der aktuellen Teilnehmerliste). PDF neu erzeugt.
+
+## 23.09.2026: Auswertung: Druck-Button (offene Aufgabe 2)
+
+- **Umsetzung:** Neuer Button **„Rangliste drucken (PDF)…“** im Reiter „Auswertung“
+  (`AuswertungTab._rangliste_drucken`, `app.py`). Er nutzt dieselben Helfer wie der
+  Export-Reiter (`_pdf_speicherort_waehlen`, `_export_dateiname`,
+  `_pdf_export_fehler_anzeigen`) und den gemeinsamen `_Ablageort`. `AuswertungTab` bekommt
+  dafür das `ablageort`-Objekt von `HauptFenster`.
+- **Filter (Marcos Entscheidung):** Der Art/LK-Filter wird übernommen, der Startnummer-Filter
+  bewusst nicht. `pdf_export.erstelle_ergebnisliste_pdf()` hat dafür den optionalen Parameter
+  `leistungsklasse`. Ohne ihn verhält sich der Export-Reiter unverändert. Die Platzierungen
+  gelten ohnehin je Leistungsklasse und ändern sich durch das Filtern nicht. Dateiname:
+  `Ergebnisliste_<LK>` bzw. `Ergebnisliste` bei „Alle“.
+- Hilfetext im Programm (`_HILFE_HTML`) und Handbuch (Kapitel 8, „Auswertung“) ergänzt.
+- **Tests:** `test_pdf_export.py::test_ergebnisliste_nur_gewaehlte_leistungsklasse`
+  (echte PDF-Textprüfung mit pypdf), `test_app_gui.py::test_auswertung_druck_button_uebernimmt_lk_filter`
+  (parametrisiert, prüft auch, dass der Startnummer-Filter ignoriert wird).
+- **Verifikations-Subagent: OK, keine blockierenden Funde.** GUI 107 bestanden, 1 xfail;
+  Standard-Suite 405 OK, 113 übersprungen. Kleinigkeit ohne Fix: Verschwindet eine LK
+  zwischen „neu berechnen“ und Druck, zeigt das PDF „Keine Teilnehmer erfasst.“.
+
+## Version 1.0.32 (23.09., Build auf Marcos Wunsch "alles jetzt comitten und wir bauen ein neues build")
+
+**Enthalten seit 1.0.31:**
+- Fix Ergebniserfassung nach Umstellung DK → ED (verwaiste Punkte-Eingabefelder, siehe oben).
+- Neuer Button „Rangliste drucken (PDF)…“ im Reiter „Auswertung“ (siehe oben).
+- `bump_version.py` zieht die Stand-Zeile in `docs/HANDBUCH.md` automatisch nach (erstmals
+  bei diesem Build: 1.0.31 → 1.0.32), Build-Anleitungen um `tools/handbuch_pdf.py` ergänzt.
+- Handbuch: neue Zeile „8 Tage vorher“ im Ablauf, Druck-Button in Kapitel 8.
+  `docs/HANDBUCH.pdf` neu erzeugt (22 Seiten, zeigt 1.0.32).
+- Seit 1.0.31 schon committet: GitHub Page in `docs/` (Commit `9bf34ac`), Bereinigung der
+  Git-Historie.
+
+**Build-Ablauf:**
+- Versionsdateien per `bump_version.py` auf 1.0.32 gesetzt (`version.txt`, `version.py`,
+  `version_info.txt`, `docs/HANDBUCH.md`).
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: 405 OK, 113 übersprungen.
+  - GUI, Theme und `bump_version` (pytest): 133 bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Push und Tag macht Marco.

@@ -35,8 +35,8 @@ die alleinige Quelle der aktuellen Version (z. B. `1.0.5`). Bei jedem Build
 erhöht `bump_version.py` automatisch die 3. Stelle (Patch) um 1 – erreicht
 sie 99, beginnt sie wieder bei 0 und die 2. Stelle (Minor) wird um 1 erhöht
 (und so weiter, sinngemäß auch für die 1. Stelle). `bump_version.py`
-schreibt die neue Nummer sowohl in `version.txt` als auch in
-`version_info.txt`; `build_installer.bat` liest sie danach aus und gibt sie
+schreibt die neue Nummer in `version.txt`, `version_info.txt` und
+`version.py`; `build_installer.bat` liest sie danach aus und gibt sie
 unverändert an Inno Setup weiter, sodass überall (Datei „Eigenschaften“ der
 .exe, Installer-Dateiname, Windows-Systemsteuerung) dieselbe Nummer steht.
 Manuell ausgeführt wird sie mit:
@@ -45,13 +45,22 @@ Manuell ausgeführt wird sie mit:
 python bump_version.py
 ```
 
-(gibt die neue Versionsnummer aus und schreibt die beiden Dateien).
+(gibt die neue Versionsnummer aus und schreibt die drei Dateien).
+
+Zusätzlich zieht `bump_version.py` die Zeile „Stand: Version X.Y.Z.“ in
+`docs/HANDBUCH.md` nach. Das PDF-Handbuch erzeugt es nicht selbst (dafür wird
+Edge oder Chrome gebraucht) – danach deshalb einmal ausführen:
+
+```
+python tools/handbuch_pdf.py
+```
 
 1. **Versionsnummer erhöhen** (siehe oben – bei `build_installer.bat`
-   automatisch Schritt 2/4):
+   automatisch Schritt 2/4), danach das PDF-Handbuch neu erzeugen:
 
    ```
    python bump_version.py
+   python tools/handbuch_pdf.py
    ```
 
 2. **Die .exe bauen** (PyInstaller, `--onefile`, siehe `build.spec`):
@@ -157,7 +166,9 @@ ist, oder um den Build-Schritt nicht mehr manuell erledigen zu müssen.
 
 1. Lokal einmal `python bump_version.py` ausführen (oder die Zahl von Hand in
    `version.txt` setzen).
-2. Die geänderten `version.txt`/`version_info.txt` committen und pushen.
+2. `python tools/handbuch_pdf.py` ausführen, dann die geänderten
+   `version.txt`/`version_info.txt`/`version.py` sowie `docs/HANDBUCH.md`/
+   `docs/HANDBUCH.pdf` committen und pushen.
 3. Einen Versions-Tag setzen und pushen:
 
    ```
@@ -201,7 +212,8 @@ Abbruch gar nicht erst zu provozieren:
 
 ```
 python bump_version.py
-git add version.txt version_info.txt version.py
+python tools/handbuch_pdf.py
+git add version.txt version_info.txt version.py docs/HANDBUCH.md docs/HANDBUCH.pdf
 git commit -m "Version X.Y.Z"
 git push
 git tag vX.Y.Z && git push origin vX.Y.Z
@@ -211,8 +223,10 @@ git tag vX.Y.Z && git push origin vX.Y.Z
 
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,
       oder von Hand) – neue Nummer steht in `version.txt`/`version_info.txt`
+- [ ] `tools/handbuch_pdf.py` gelaufen – `docs/HANDBUCH.md` und
+      `docs/HANDBUCH.pdf` zeigen die neue Nummer
 - [ ] Bei einem Release über GitHub Actions: die geänderte `version.txt`
-      (und `version_info.txt`/`version.py`) **committet UND gepusht**, bevor
+      (und `version_info.txt`/`version.py`/`docs/HANDBUCH.md`/`.pdf`) **committet UND gepusht**, bevor
       der Tag gesetzt wird – siehe Warnkasten oben
 - [ ] `pyinstaller build.spec` erfolgreich, `dist\SHS-Pruefungsprogramm.exe`
       kurz angetestet

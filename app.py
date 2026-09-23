@@ -172,7 +172,8 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
 
 class _Ablageort:
     """Gemeinsamer, veränderlicher Ablageort für alle PDF-Export-Buttons EINES Termins
-    (Tabs "Zeitplan" und "Export") - ein einzelnes, von beiden Tabs geteiltes Objekt statt
+    (Tabs "Zeitplan" und "Export", seit 23.09. auch der Druck-Button im Tab "Auswertung")
+    - ein einzelnes, von allen diesen Tabs geteiltes Objekt statt
     je ein eigener String pro Tab. Wählt der Nutzer beim Speichern bewusst einen anderen
     Ordner, gilt dieser dadurch sofort auch als neuer Standard-Speicherort im jeweils
     ANDEREN Tab, statt dass beide unabhängig voneinander ihren eigenen (dann ggf.
@@ -1795,7 +1796,12 @@ class ErgebnisTab(QWidget):
                 spalte_suche, spalte_anzeige = _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin]
                 if disziplin not in zutreffende_disziplinen:
                     # Disziplin gilt für diesen Teilnehmer nicht (ED) - Zellen leer/gesperrt lassen.
+                    # Rückmeldung 23.09.: setItem()/setRowCount() entfernen kein Cell-Widget
+                    # eines früheren Aufbaus - nach einer Umstellung DK -> ED (oder wenn beim
+                    # Sortieren eine ED-Zeile auf die Position einer DK-Zeile rutscht) blieb
+                    # sonst das alte Punkte-Eingabefeld über dem "–" stehen und beschreibbar.
                     for spalte in (spalte_suche, spalte_anzeige):
+                        self.tabelle.removeCellWidget(row, spalte)
                         leer = QTableWidgetItem("–")
                         leer.setFlags(leer.flags() & ~Qt.ItemIsEditable)
                         leer.setForeground(_farbe("gedaempft"))
@@ -2250,9 +2256,12 @@ class ErgebnisTab(QWidget):
 
 
 class AuswertungTab(QWidget):
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
         self.conn = conn
+        # Für den Druck-Button (Nutzerwunsch 23.09.) - dasselbe Objekt wie in den Tabs
+        # "Zeitplan"/"Export", wenn HauptFenster eines übergibt (siehe _Ablageort).
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
         self._fertig: list = []
         self._ausstehend: list[dict] = []
         self._startnummer_je_id: dict[str, int | None] = {}
@@ -2284,6 +2293,14 @@ class AuswertungTab(QWidget):
         aktualisieren_btn = QPushButton("Auswertung neu berechnen")
         aktualisieren_btn.clicked.connect(self.aktualisieren)
 
+        # Nutzerwunsch 23.09.: Rangliste direkt aus der Auswertung als PDF ausgeben (bisher
+        # nur über Export -> Ergebnisliste). Übernimmt den Art/LK-Filter, bewusst NICHT den
+        # Start-Nr.-Filter (Marcos Entscheidung).
+        self.drucken_btn = QPushButton("Rangliste drucken (PDF)…")
+        self.drucken_btn.clicked.connect(self._rangliste_drucken)
+
+        self.status_label = QLabel("")
+
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
         filter_zeile.addWidget(self.filter_combo)
@@ -2296,9 +2313,34 @@ class AuswertungTab(QWidget):
         layout.addLayout(filter_zeile)
         layout.addWidget(self.tabelle)
         layout.addWidget(self.ausstehend_label)
-        layout.addWidget(aktualisieren_btn)
+        button_zeile = QHBoxLayout()
+        button_zeile.addWidget(aktualisieren_btn)
+        button_zeile.addWidget(self.drucken_btn)
+        button_zeile.addStretch()
+        layout.addLayout(button_zeile)
+        layout.addWidget(self.status_label)
 
         self.aktualisieren()
+
+    def _gewaehlte_leistungsklasse(self) -> str | None:
+        """Label der im Art/LK-Filter gewählten Leistungsklasse, None bei "Alle"."""
+        filter_wert = self.filter_combo.currentText()
+        return None if filter_wert in ("Alle", "") else filter_wert
+
+    def _rangliste_drucken(self) -> None:
+        leistungsklasse = self._gewaehlte_leistungsklasse()
+        praefix = "Ergebnisliste" if leistungsklasse is None else f"Ergebnisliste_{leistungsklasse.replace(' ', '_')}"
+        pfad = _pdf_speicherort_waehlen(
+            self, self._ablageort, "Rangliste speichern", _export_dateiname(self.conn, praefix)
+        )
+        if not pfad:
+            return
+        try:
+            pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, leistungsklasse)
+        except Exception as exc:
+            _pdf_export_fehler_anzeigen(self, exc)
+            return
+        self.status_label.setText(f"Rangliste gespeichert: {pfad}")
 
     def aktualisieren(self) -> None:
         """Berechnet die Auswertung aus der Datenbank neu und aktualisiert den Filter."""
@@ -3679,7 +3721,9 @@ Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespe
 <p>Zeigt die berechnete Rangliste je Leistungsklasse mit Wertnote. Filter nach
 Art/Leistungsklasse und Startnummer. "Nicht bestanden" wird rot markiert und erhält keine
 Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualisiert die
-Anzeige.</p>
+Anzeige. "Rangliste drucken (PDF)…" speichert die Rangliste als PDF - ist im Filter eine
+Art/Leistungsklasse gewählt, nur diese, sonst alle (der Startnummer-Filter wird dabei nicht
+berücksichtigt).</p>
 
 <h3>Reiter "Übersicht"</h3>
 <p>Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen und die
@@ -4086,7 +4130,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.formular_import_tab = FormularImportTab(conn)
         self.zeitplan_tab = ZeitplanTab(conn, ablageort)
         self.ergebnis_tab = ErgebnisTab(conn)
-        self.auswertung_tab = AuswertungTab(conn)
+        self.auswertung_tab = AuswertungTab(conn, ablageort)
         self.teilnehmer_uebersicht_tab = TeilnehmerUebersichtTab(conn)
         self.verwaltung_tab = VerwaltungTab(conn)
         self.export_tab = ExportTab(conn, pfad, ablageort)
