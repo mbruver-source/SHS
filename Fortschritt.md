@@ -1876,3 +1876,70 @@ Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unte
    - Explore-Subagent, umsetzen, testen, Verifikations-Subagent, `Fortschritt.md`
      aktualisieren.
    - Kein Commit und kein Build ohne Marcos Anforderung.
+
+## 23.09.2026: GitHub Page (Projekt-Website) in `docs/`
+
+- **Wunsch Marco:** „Entwirf mir eine GitHub Page“. Geklärt: Startseite plus Handbuch und
+  Umstieg als Unterseiten, statisches HTML in `docs/` ohne Build-Schritt, zuerst eine private
+  Vorschau (claude.ai-Artifact), danach Übernahme ins Repo. Nachträglich gewünscht:
+  Impressum und Datenschutzerklärung.
+- **Adresse nach dem Einschalten:** `https://mbruver-source.github.io/SHS/`
+  (GitHub → Settings → Pages → „Deploy from a branch“, `main` / `/docs`, Marcos Aktion).
+- **Neue Dateien:**
+  - `docs/index.html`: Startseite mit Download-Button, Wertnoten-Leiste (echte ED-Grenzen
+    aus `shs_core.py`), Ablauf in 6 Schritten, 9 Funktionskacheln, Screenshots, Umstieg,
+    Datenschutz, Web-Version, Installation/Updates, Hilfe.
+  - `docs/handbuch.html`, `docs/umstieg.html`: rendern `HANDBUCH.md` bzw. `UMSTIEG.md` im
+    Browser (`docs/assets/anleitung.js` + `docs/assets/marked.min.js`, marked 15.0.12, MIT).
+    **Die .md-Dateien bleiben die einzige Quelle**, Änderungen daran erscheinen automatisch
+    auf der Website. Welche Datei geladen wird, steht fest im `data-quelle`-Attribut (keine
+    URL-Parameter). Überschriften bekommen Anker nach GitHub-Schema (Umlaute bleiben), die
+    vorhandenen Inhaltsverzeichnis-Links funktionieren daher weiter. `UMSTIEG.md`/
+    `HANDBUCH.md`-Links werden auf die Website-Seiten umgeschrieben, `../README_CONTAINER.md`
+    auf GitHub. Das „Inhalt“-Kapitel des Handbuchs wird durch eine Kapitelleiste ersetzt.
+  - `docs/impressum.html` (§ 5 DDG), `docs/datenschutz.html` (Hosting GitHub Pages,
+    Server-Logs, Betroffenenrechte, Aufsichtsbehörde Hessen). Beide mit `noindex`.
+    Die E-Mail-Adresse steht im Quelltext nur rückwärts/zerlegt und wird von
+    `docs/assets/kontakt.js` zusammengesetzt (Schutz vor einfachen Adress-Sammlern), ohne
+    JavaScript steht „m.bruver [at] gmail [punkt] com“. Name und Anschrift bewusst als
+    Klartext (Impressumspflicht, Barrierefreiheit).
+  - `docs/assets/site.css` (Hell/Dunkel, mobil), `docs/.nojekyll` (GitHub Pages liefert
+    `.md` roh aus statt Jekyll).
+- **Datenschutz:** keine externen Schriften, keine CDNs, keine Cookies, kein Tracking.
+- **Abweichung vom Plan:** zwei feste Seiten statt `anleitung.html?seite=…` (einfacher,
+  kein Nachladen beliebiger Dateien).
+- **Lokal geprüft** (Python-`http.server` + Chrome): alle Bilder laden, alle lokalen Links
+  und Anker vorhanden, keine Konsolenfehler, bei 375 px kein horizontales Scrollen.
+  Gefunden und behoben: Direktlinks mit Anker (z. B. `handbuch.html#8-auswertung-und-übersicht`)
+  landeten zu weit oben, weil nachladende Bilder das Ziel verschoben bzw. Chrome die alte
+  Scroll-Position wiederherstellte (Lazy-Loading entfernt, erneuter Sprung nach dem Laden
+  der Bilder, `history.scrollRestoration = "manual"`).
+- **Offen/Hinweis:** Die Gmail-Adresse steht weiterhin im Klartext in `.github/SECURITY.md`,
+  `.github/CODE_OF_CONDUCT.md` und `CODE_SIGNING_POLICY.md` (Marcos Entscheidung: bleibt).
+  Die Texte von Impressum/Datenschutz sind eine Vorlage, keine Rechtsberatung.
+- **Verifikations-Subagent: im Kern OK**, alle 17 Anker-Links in HANDBUCH.md/UMSTIEG.md
+  finden ihr Ziel, keine externen Ressourcen, Wertnoten-Grenzen stimmen. Drei Funde, auf
+  Marcos Go („beheb alle 3“) behoben:
+  - F1: Auf dem Handy (zweizeilige Kopfleiste) lag das Sprungziel unter der Kopfleiste.
+    `scroll-padding-top: 8.5rem` im 640px-Block von `site.css`. Nachgeprüft bei 360 px:
+    Kopfleiste endet bei 85 px, Ziel steht bei 136 px.
+  - F2: Ein kaputter Anker (`handbuch.html#%E0`) warf in `decodeURIComponent` und ersetzte
+    das Handbuch durch die Fehlermeldung. Jetzt eigenes try/catch, nur der Sprung entfällt.
+  - F3: Ablauf-Text der Startseite war ungenau („jeder Reiter, in genau dieser
+    Reihenfolge“, Reiter „Drucken“ gibt es nicht). Jetzt „Der Weg zum Prüfungstag in sechs
+    Schritten“, Druckzeitpunkte wie in Handbuch Kapitel 1, letzter Schritt „Export / Drucken“.
+  - Nicht umgesetzt (Hinweis): Speicherdauer der GitHub-Server-Logs fehlt in der
+    Datenschutzerklärung.
+
+## 23.09.2026: Git-Historie von persönlichen E-Mail-Adressen bereinigt
+
+- **Anlass:** Die Commits trugen `marco.bruver@unibw.de` (90, aus der lokalen und globalen
+  Git-Konfiguration) bzw. `m.bruver@gmail.com` (3, im GitHub-Web erstellt).
+- Marco hat `user.email` global auf `329938784+mbruver-source@users.noreply.github.com`
+  umgestellt und den Eintrag in `.git/config` entfernt.
+- Historie mit `git filter-repo --mailmap` umgeschrieben (Autor, Committer und Tagger der
+  annotierten Tags `v1.0.11`/`v1.0.12`). Geprüft: 93 Commits, 31 Tags, Nachrichten und
+  Dateistand von `HEAD` unverändert, keine alte Adresse mehr in der Historie. Sicherung des
+  alten Stands: `C:\Users\mbruv\Documents\SHS-Git-Sicherung-2026-09-23\`.
+- Marco hat per Force-Push hochgeladen (`main` und alle Tags auf einmal, damit keine
+  Installer-Builds ausgelöst werden). Alle Commit-IDs haben sich dadurch geändert.

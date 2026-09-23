@@ -10,6 +10,8 @@ Es ersetzt die bisherige LibreOffice-Datei „SHS Prüfungsprogramm“ samt Seri
 Wertnoten und Rangliste werden nach denselben Regeln berechnet wie dort.
 **Du nutzt bisher die LibreOffice-Datei?** → [Umstiegsanleitung](docs/UMSTIEG.md)
 
+🌐 **Website mit Handbuch:** [mbruver-source.github.io/SHS](https://mbruver-source.github.io/SHS/)
+
 ![Ergebniserfassung: Punkte je Disziplin eintragen, ungespeicherte Zeilen sind gelb markiert](docs/bilder/ergebniserfassung.png)
 
 ## Download
