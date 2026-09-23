@@ -1841,3 +1841,38 @@ Marco hat die Farben aller vier Designs anhand der Screenshots freigegeben („p
   Byte-Abgleich identisch. Darunter auch README und CODE_SIGNING_POLICY aus den
   Community-Doku-Commits. Die `.github/`-Dateien (Community-Dokumente, Issue-Vorlagen) führt
   der Spiegel wie bisher nicht; von dort sind nur die Workflows flach enthalten.
+
+## 23.09.2026: Offene Aufgaben aus Marcos Rückmeldung (noch nicht geplant/umgesetzt)
+
+Marco hat zwei Punkte gemeldet. Sie sind hier nur als zu erledigen festgehalten, Planung und
+Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unten).
+
+1. **Ergebniserfassung: Teilnehmer von DK auf ED umgestellt, alle drei Disziplinen bleiben
+   beschreibbar.**
+   - Nachstellen: Im Reiter Teilnehmer über „Bearbeiten…“ einen DK-Teilnehmer auf ED plus
+     Disziplin umstellen (Marcos Weg), dann in die Ergebniserfassung wechseln. Dort lassen
+     sich weiterhin alle drei Disziplinen mit Punkten füllen.
+   - Die Auswertung rechnet korrekt: Sie wertet nur die ED-Disziplin und ignoriert die
+     übrigen Punkte. Es ist also ein Fehler in der Anzeige und Eingabe, nicht in der
+     Berechnung.
+   - Ansatzpunkt aus der ersten Code-Sichtung: `ErgebnisTab.aktualisieren()` (`app.py`)
+     sperrt die nicht zutreffenden Disziplinen korrekt über
+     `zutreffende_disziplinen = ALLE_DISZIPLINEN if t["art"] == "DK" else [t["disziplin"]]`.
+     Vermutung: Die Ergebniserfassung wird nach dem Bearbeiten eines Teilnehmers nicht neu
+     aufgebaut. Möglich ist auch, dass das Neuaufbauen wegen ungespeicherter Eingaben
+     unterbleibt (siehe `_tab_gewechselt`). Das ist zu prüfen.
+   - Vor der Umsetzung mit Marco klären: Was passiert mit bereits gespeicherten DK-Punkten
+     der jetzt nicht mehr gültigen Disziplinen in der Datenbank? Verwerfen mit Rückfrage oder
+     stehen lassen?
+2. **Auswertung: neuer Druck-Button.** Marco hat bestätigt, dass ein neuer Button gemeint ist
+   und kein fehlerhafter vorhandener.
+   - Im Reiter Auswertung soll es einen Button geben, der die angezeigte Rangliste direkt als
+     PDF ausgibt. Heute geht das nur über Export → Ergebnisliste.
+   - Wiederverwenden: die vorhandene Ergebnisliste-Erzeugung in `pdf_export.py` und den
+     gemeinsamen Ablageort `_Ablageort` (`app.py`), wie ihn der Export-Reiter nutzt.
+   - Bei der Umsetzung klären: Soll der aktuell gesetzte Filter (Art/LK) berücksichtigt
+     werden, also nur die gefilterte Leistungsklasse drucken, oder immer alles?
+3. **Ablauf bei späterer Umsetzung** (laut CLAUDE.md):
+   - Explore-Subagent, umsetzen, testen, Verifikations-Subagent, `Fortschritt.md`
+     aktualisieren.
+   - Kein Commit und kein Build ohne Marcos Anforderung.
