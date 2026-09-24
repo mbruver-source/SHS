@@ -2146,3 +2146,5 @@ mit den Vorlagen ist noch nicht im Git. Ob er eingecheckt werden soll, entscheid
   - GUI, Theme und `bump_version` (pytest): 133 bestanden, 1 bekannter xfail.
   - `py_compile` für alle Module fehlerfrei.
 - Push und Tag macht Marco.
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.33 nachgezogen: 8 Dateien,
+  Byte-Abgleich identisch. `pdf/` ist wie im Git-Repo nicht enthalten.
