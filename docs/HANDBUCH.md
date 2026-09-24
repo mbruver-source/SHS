@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.32. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.33. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
@@ -313,6 +313,14 @@ gewählter Ordner) und erzeugt ein PDF. **„Ablageort öffnen“** zeigt diesen
 
 Den Bewertungsbogen eines **einzelnen** Teilnehmers erzeugst du schneller im Reiter
 „Teilnehmer“ mit **„Bewertungsbogen (PDF)…“**.
+
+Ein ED-Bogen hat immer **eine** Seite, ein DK-Bogen immer **zwei** Seiten: Seite 1 mit
+Trümmerfeld, Seite 2 mit Fläche, Behältnisstrecke und Gesamtergebnis. DK-Bögen kannst du
+deshalb beidseitig drucken. ED-Bögen druckst du am besten einseitig, sonst steht auf der
+Rückseite das nächste Team.
+Zum Einzeichnen des Verstecks gibt es je Disziplin eine eigene Skizze: ein Quadrat beim
+Trümmerfeld, ein Feld mit Mittelstreifen bei der Flächensuche und nummerierte Behälter bei der
+Behältnisstrecke.
 
 ## 10. Datensicherung
 

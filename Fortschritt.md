@@ -2053,3 +2053,96 @@ Umsetzung folgen später. Die Klärungsfragen sind schon beantwortet (siehe unte
   - GUI, Theme und `bump_version` (pytest): 133 bestanden, 1 bekannter xfail.
   - `py_compile` für alle Module fehlerfrei.
 - Push und Tag macht Marco.
+
+## 24.09.2026: Bewertungsbögen an neue Vorlagen (`pdf/`) angeglichen (Arbeitsstand, noch kein Build)
+
+Marco hat 12 neue Vorlagen in `pdf/` abgelegt: DK LK1–3 und ED LK1–3 für Trümmerfeld, Fläche
+und Behältnisstrecke. Der Auftrag war, sie auf Übernahme zu prüfen und die Umsetzung vorher
+zu zeigen. Vergleich mit `pdf_export.py` und Marcos Entscheidungen:
+
+| Unterschied Vorlage ↔ Programm | Entscheidung Marco |
+|---|---|
+| Noten U (69–36 %) und M (35–0 %) statt „n.B. = 69–0 %“ (Suche 41–22/21–0, Anzeige 27–14/13–0, 300 P 209–110/109–0) | **Nicht übernommen**, die Noten bleiben wie bisher. Nicht erneut als Befund melden. |
+| ANZEIGE V „40 – 38“, SG „37 – 36“ | **40 – 39 / 38 – 36 bleibt** (Entscheidung vom 22.09., G10). Nicht erneut melden. |
+| Positions-Skizzen: Trümmer Quadrat, Fläche Rechteck mit grauem Mittelstreifen, Behältnis gezeichnete Behälter | **Übernommen** |
+| DK auf 2 festen Seiten, Kopfzeile „LK x HF/Hund“ auf Seite 2, Wertungsnoten-Tabelle 2× statt 3× | **Übernommen** |
+| Rüde/Hündin als Ankreuz-Kästchen; „(optional)“ bei DK-Gegenstand 2/3 (LK1) bzw. 3 (LK2) | **Nicht übernommen** (bewusst) |
+| Verleitungs-Hinweise ab LK2 (nur im Programm, nicht in den Vorlagen) | **Alle behalten**, nachdem Marco die Tabelle aller Varianten gesehen hat |
+
+Alles andere war schon deckungsgleich: Stammdaten, Start-Nr., Gegenstände mit Disziplin, 6/8/10
+Behälter, Kammer-Nr., GESAMT- und Prädikat-Tabelle, austragender Verein und Datum.
+
+**Umsetzung (`pdf_export.py`):**
+- Neue Helfer `_skizze_truemmerfeld()` (34×34 mm), `_skizze_flaeche()` (70×24 mm mit grauem
+  Streifen) und `_skizze_behaeltnisse(n)` (nummerierte Zylinder, 9 mm je Behälter). Sie sind
+  mit `reportlab.graphics.shapes` gezeichnet und stehen in der linken Fußzelle von
+  `_bewertungsabschnitt()`.
+  - Sie ersetzen den Text „[1] [2] …“ und den Hinweis „(Freifläche oben zum Einzeichnen)“.
+  - Die 30-mm-Notizfelder für Suche/Anzeige mit Trennstrich (Wunsch vom 21.09.) bleiben.
+- `_bewertungsabschnitt(..., mit_wertungsnoten=True)` und die neue `_dk_folgeseiten_kopf(t)`.
+- `_bewertungsbogen_story()` für DK:
+  - Seite 1: Trümmerfeld und Fußzeile, dann ein fester `PageBreak`.
+  - Seite 2: Kopfzeile, Fläche ohne Punkte-Band-Tabelle, Behältnis, dann GESAMT und Prädikat
+    (als `KeepTogether`).
+  - ED ändert sich nicht und bleibt einseitig.
+- Die Flächen-Skizze ist 24 statt anfangs 30 mm hoch. Mit 30 mm lief DK-Seite 2 bei LK2/3
+  (mit Verleitungs-Hinweisen und langen Namen) um eine Tabellenzeile auf eine 3. Seite über.
+- Nebeneffekt: DK hat immer genau 2 Seiten, dadurch lässt sich das Sammel-PDF für DK
+  beidseitig drucken. Im Handbuch (Kapitel 9, Export) steht ein kurzer Absatz dazu.
+
+**Tests (`test_pdf_export.py`):**
+- Neue Klasse `TestPositionsSkizzen`, die ohne pypdf läuft: Behälter-Nummern je LK und die
+  Breite der Skizzen.
+- Neu: `test_bewertungsbogen_dk_hat_immer_genau_zwei_seiten` (LK1–3, lange Namen,
+  Seiteninhalte, „von 100 P“ genau 2×), `test_bewertungsbogen_ed_alle_varianten_einseitig`
+  (9 Varianten mit DISQ-Zeile) und `test_sammel_pdf_seitenzahl_dk_zwei_ed_eine`.
+- Geändert: Die Behälter-Prüfungen `[10]`/`[8]` laufen jetzt über den Text mit normalisierten
+  Leerzeichen. Der DK-DISQ-Test prüft zusätzlich die 2 Seiten.
+- Lokal: 410 Tests OK, 113 übersprungen.
+
+**Verifikations-Subagent – ein bestätigter Befund, direkt behoben (noch nicht freigegebener Arbeitsstand):**
+- **Befund:** DK-Seite 2 hatte bei LK2/3 fast keine Reserve. Schon realistische Eingaben
+  schoben die GESAMT-/Prädikat-Tabelle auf eine 3. Seite, z. B. der Flächen-Gegenstand
+  „Futterbeutel mit Reißverschluss, blau“ oder die umbrechende HF-Kopfzeile
+  „Schmidt-Leutheusser-Schnarrenberger, Sabine“. Damit stimmte die Aussage „DK immer 2 Seiten“
+  nicht.
+- **Fix, strukturell statt nur Abstände zu verkleinern:**
+  - „Zu suchender Gegenstand“ steht bei Trümmerfeld und Fläche jetzt rechts über dem
+    Gesamtpunktzahl-Feld, wie in der Vorlage. Neben der Skizze ist dort Platz frei, ein
+    langer Gegenstand macht den Block also nicht höher.
+  - Die Kopfzeile auf Seite 2 zeigt HF und Hund zweizeilig über 145 mm, in der Höhe des großen
+    „LK x“.
+- **Ergebnis:** Grenztest DK LK3 mit Gegenstand, Nachname und Zwingername bis je 190 Zeichen:
+  weiterhin 2 Seiten. Der Test `test_bewertungsbogen_dk_hat_immer_genau_zwei_seiten` nutzt
+  jetzt genau die Grenzfälle aus der Verifikation. Drei bestehende Textprüfungen normalisieren
+  Leerzeichen, weil der Gegenstand in der schmaleren Spalte umbrechen darf.
+- **Sonst ohne Befund:** DQ/Abbruch (M3), Escaping der neuen Kopfzeile,
+  `gegenstand_fuer_disziplin`, Sammel-PDF ohne Leerseiten; `test_app_gui.py` ist nicht
+  betroffen. Suite danach: 410 OK, 113 übersprungen.
+
+Nicht betroffen sind `shs_core.py`, `db.py`, die Web-Oberfläche und `app.py`. Der Ordner `pdf/`
+mit den Vorlagen ist noch nicht im Git. Ob er eingecheckt werden soll, entscheidet Marco.
+
+## Version 1.0.33 (24.09., Build auf Marcos Wunsch "jetzt neuen Build erzeugen")
+
+**Enthalten seit 1.0.32:**
+- Bewertungsbögen an die neuen Vorlagen angeglichen (siehe Eintrag oben):
+  - Positions-Skizzen je Disziplin.
+  - „Zu suchender Gegenstand“ rechts neben der Skizze.
+  - DK immer auf genau 2 Seiten mit Kopfzeile „LK x / HF / Hund“ auf Seite 2.
+  - Noten, ANZEIGE 40–39 und Verleitungs-Hinweise bewusst unverändert.
+- Handbuch Kapitel 9: Absatz zu Seitenzahl und Skizzen der Bewertungsbögen.
+- Marcos Vorab-Sichtung: ein Muster-PDF mit allen 12 Varianten (15 Seiten) unter
+  `Documents\SHS_Bewertungsboegen_alle_Varianten.pdf`, außerhalb des Repos.
+- **Entscheidung Marco:** Der Vorlagen-Ordner `pdf/` wird NICHT eingecheckt und bleibt
+  untracked.
+
+**Build-Ablauf:**
+- Versionsdateien per `bump_version.py` auf 1.0.33 gesetzt (`version.txt`, `version.py`,
+  `version_info.txt`, `docs/HANDBUCH.md`).
+- `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py` neu erzeugt.
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: 410 OK, 113 übersprungen.
+  - GUI, Theme und `bump_version` (pytest): 133 bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Push und Tag macht Marco.

@@ -12,6 +12,9 @@ lässt sich rückstandslos mit PyInstaller in eine einzelne .exe packen und - wi
 sich hier in der Arbeitsumgebung tatsächlich installieren und testen (anders als PySide6).
 Der Aufbau der Bewertungsbögen ist 1:1 aus den 12 hochgeladenen .odt-Serienbrief-Vorlagen
 übernommen (Layout, Punktebänder, "Verleitungen"-Hinweise je Leistungsklasse/Disziplin).
+Am 24.09.2026 an Marcos neue Vorlagen in pdf/ angeglichen: Positions-Skizzen je Disziplin
+und feste DK-Seitenaufteilung (2 Seiten). Noten und Verleitungs-Hinweise blieben bewusst
+unverändert (Details in Fortschritt.md).
 
 Alle Funktionen erwarten eine bereits offene `sqlite3.Connection` (siehe db.py) und einen
 Zielpfad, unter dem die PDF-Datei geschrieben wird.
@@ -23,6 +26,7 @@ import math
 import sqlite3
 from xml.sax.saxutils import escape as _xml_escape
 
+from reportlab.graphics.shapes import Drawing, Ellipse, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -262,10 +266,49 @@ def _stammdaten_tabelle(t: dict) -> Table:
     return tabelle
 
 
-def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige: int | None, gegenstand: str | None) -> list:
+# Positions-Skizzen zum Einzeichnen des Verstecks - nachgebaut nach den neuen Vorlagen in
+# pdf/ (Nutzerwunsch 24.09.): Trümmerfeld = Quadrat, Flächensuche = Rechteck mit grauem
+# Mittelstreifen, Behältnisstrecke = gezeichnete, nummerierte Behälter (6/8/10 je LK).
+
+def _skizze_truemmerfeld() -> Drawing:
+    seite = 34 * mm
+    zeichnung = Drawing(seite + 2, seite + 2)
+    zeichnung.add(Rect(1, 1, seite, seite, strokeWidth=1, fillColor=None))
+    return zeichnung
+
+
+def _skizze_flaeche() -> Drawing:
+    # 24 mm hoch: damit passt DK-Seite 2 (Fläche + Behältnis + Gesamt) auch bei LK 2/3 mit
+    # Verleitungs-Hinweisen noch auf eine A4-Seite.
+    breite, hoehe, streifen = 70 * mm, 24 * mm, 3 * mm
+    zeichnung = Drawing(breite + 2, hoehe + 2)
+    zeichnung.add(Rect(1, 1, breite, hoehe, strokeWidth=1, fillColor=None))
+    zeichnung.add(Rect(1, 1 + (hoehe - streifen) / 2, breite, streifen, strokeWidth=0, fillColor=colors.grey))
+    return zeichnung
+
+
+def _skizze_behaeltnisse(anzahl: int) -> Drawing:
+    """Zeichnet `anzahl` stilisierte Zylinder (Rechteck + Ellipse als Deckel) mit fetter
+    Nummer - Ersatz für die frühere Textdarstellung "[1] [2] ...". 9 mm je Behälter,
+    damit auch die 10 Behälter von LK 3 in die 100-mm-Spalte passen."""
+    breite, hoehe, abstand, deckel = 8 * mm, 11 * mm, 1 * mm, 1.2 * mm
+    zeichnung = Drawing(anzahl * (breite + abstand), hoehe + deckel + 2)
+    for i in range(anzahl):
+        x = i * (breite + abstand) + 1
+        zeichnung.add(Rect(x, 1, breite, hoehe, rx=1.5 * mm, ry=1.5 * mm, strokeWidth=0.8, fillColor=colors.white))
+        zeichnung.add(Ellipse(x + breite / 2, 1 + hoehe, breite / 2, deckel, strokeWidth=0.8, fillColor=colors.white))
+        zeichnung.add(String(x + breite / 2, 1 + hoehe / 2 - 4, str(i + 1),
+                             fontName="Helvetica-Bold", fontSize=11, textAnchor="middle"))
+    return zeichnung
+
+
+def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige: int | None, gegenstand: str | None,
+                         mit_wertungsnoten: bool = True) -> list:
     """Baut den kompletten "Bewertung <Disziplin>"-Block: Überschrift, ggf. Verleitungs-
     Hinweis, die beiden Bewertungsfelder (Suche/Anzeige) und die Positions-/Gesamtpunktzahl-
-    Zeile (bei Behältnisstrecke mit den Positions-Kästchen 1..N statt einer Freifläche)."""
+    Zeile mit der Positions-Skizze der Disziplin. `mit_wertungsnoten=False` lässt die
+    Punkte-Band-Tabelle am Ende weg (DK-Seite 2: nur einmal unter der Behältnisstrecke,
+    wie in der Vorlage)."""
     elemente: list = [Paragraph(f"Bewertung {disziplin}", _ABSCHNITT)]
     hinweis = _VERLEITUNGEN[(disziplin, stufe)]
     if hinweis:
@@ -315,32 +358,61 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     }[disziplin]
 
     if disziplin == "Behältnisstrecke":
-        anzahl = _BEHAELTNIS_POSITIONEN[stufe]
-        positionen = " ".join(f"[{i}]" for i in range(1, anzahl + 1))
-        links = Paragraph(
-            f"<b>Position Gegenstand im Behältnis-Nr.:</b><br/>{positionen}<br/>"
-            f"Gegenstand: ..................... Kammer-Nr.: .......",
-            _TEXT,
-        )
+        links = [
+            Paragraph("<b>Position Gegenstand im Behältnis-Nr.:</b>", _TEXT),
+            Spacer(1, 1.5 * mm),
+            _skizze_behaeltnisse(_BEHAELTNIS_POSITIONEN[stufe]),
+            Spacer(1, 2 * mm),
+            Paragraph("Gegenstand: ..................... Kammer-Nr.: .......", _TEXT),
+        ]
     else:
-        links = Paragraph(
-            "<b>Position Gegenstand:</b> (Freifläche oben zum Einzeichnen)<br/>"
-            f"Zu suchender Gegenstand: {_p_wert(gegenstand) or '.....................'}",
-            _TEXT,
-        )
-    rechts = Table(
+        skizze = _skizze_truemmerfeld() if disziplin == "Trümmerfeld" else _skizze_flaeche()
+        links = [Paragraph("<b>Position Gegenstand:</b>", _TEXT), Spacer(1, 1.5 * mm), skizze]
+    gesamt_feld = Table(
         [[Paragraph(f"<b>Gesamtpunktzahl<br/>{gesamt_label}</b>", _TEXT), Paragraph(_p_wert(gesamt), _TEXT_FETT)]],
         colWidths=[45 * mm, 25 * mm],
     )
-    rechts.setStyle(TableStyle([("GRID", (1, 0), (1, 0), 0.8, colors.black), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    gesamt_feld.setStyle(TableStyle([("GRID", (1, 0), (1, 0), 0.8, colors.black), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    if disziplin == "Behältnisstrecke":
+        rechts = gesamt_feld
+    else:
+        # "Zu suchender Gegenstand" rechts neben der Skizze (wie in der Vorlage): dort ist
+        # neben der hohen Skizze Platz frei, ein langer, umbrechender Gegenstand macht den
+        # Block dadurch nicht höher - wichtig, damit DK-Seite 2 nicht überläuft
+        # (Verifikation 24.09.).
+        rechts = [
+            Paragraph(f"Zu suchender Gegenstand: {_p_wert(gegenstand) or '.....................'}", _TEXT),
+            Spacer(1, 3 * mm),
+            gesamt_feld,
+        ]
 
     fuss = Table([[links, rechts]], colWidths=[100 * mm, 70 * mm])
     fuss.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 3 * mm)]))
     elemente.append(fuss)
-    elemente.append(Spacer(1, 2 * mm))
-    elemente.append(_wertungsnoten_tabelle_ed())
+    if mit_wertungsnoten:
+        elemente.append(Spacer(1, 2 * mm))
+        elemente.append(_wertungsnoten_tabelle_ed())
 
     return elemente
+
+
+def _dk_folgeseiten_kopf(t: dict) -> Table:
+    """Kopfzeile der DK-Seite 2 ("LK x  HF: ...  Hund: ..."), wie in der Vorlage - damit
+    die zweite Seite auch lose eindeutig einem Team zugeordnet werden kann."""
+    hund = _p_wert(t["zwingername"])
+    rufname = _p_wert(t["rufname_hund"])
+    hund_text = f"{hund}, Rufname: „{rufname}“" if hund else f"Rufname: „{rufname}“"
+    # HF und Hund untereinander über die volle Breite: beide Zeilen passen in die Höhe des
+    # großen "LK x", lange Namen brechen so praktisch nie um und schieben Seite 2 nicht
+    # auf eine dritte Seite (Verifikation 24.09.).
+    kopf = Table(
+        [[Paragraph(f"LK {t['stufe']}", _LK_TITEL),
+          [Paragraph(f"<b>HF:</b> {_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TEXT),
+           Paragraph(f"<b>Hund:</b> {hund_text}", _TEXT)]]],
+        colWidths=[25 * mm, 145 * mm],
+    )
+    kopf.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    return kopf
 
 
 def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict | None) -> list:
@@ -390,16 +462,39 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     einzelpunkte: dict[str, tuple[int | None, int | None]] = {}
     for disziplin in disziplinen:
         s_spalte, a_spalte = DISZIPLIN_SPALTEN[disziplin]
-        suche = ergebnis[s_spalte] if ergebnis else None
-        anzeige = ergebnis[a_spalte] if ergebnis else None
-        einzelpunkte[disziplin] = (suche, anzeige)
+        einzelpunkte[disziplin] = (
+            ergebnis[s_spalte] if ergebnis else None,
+            ergebnis[a_spalte] if ergebnis else None,
+        )
+
+    def abschnitt(disziplin: str, mit_wertungsnoten: bool = True) -> KeepTogether:
         # Zu dieser Disziplin gehört nur der Gegenstand, der ihr auch tatsächlich
         # zugeordnet ist (siehe gegenstand_fuer_disziplin) - gilt einheitlich für ED und DK.
-        gegenstand = gegenstand_fuer_disziplin(t, disziplin)
-        story.append(KeepTogether(_bewertungsabschnitt(disziplin, t["stufe"], suche, anzeige, gegenstand)))
+        suche, anzeige = einzelpunkte[disziplin]
+        return KeepTogether(_bewertungsabschnitt(
+            disziplin, t["stufe"], suche, anzeige, gegenstand_fuer_disziplin(t, disziplin), mit_wertungsnoten,
+        ))
+
+    verein = veranstaltung["verein"] if veranstaltung else ""
+    datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
+    fusszeile = [
+        Spacer(1, 4 * mm),
+        Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_p_wert(datum)}", _TEXT),
+    ]
 
     status_abk = _status_abkuerzung(ergebnis)
     if t["art"] == "DK":
+        # Feste Seitenaufteilung wie in der Vorlage (Nutzerwunsch 24.09.): Seite 1 =
+        # Stammdaten + Trümmerfeld + Fußzeile, Seite 2 = Kopfzeile "LK x HF/Hund" +
+        # Flächensuche + Behältnisstrecke + Gesamt. Ein DK-Bogen hat damit immer genau
+        # 2 Seiten - beim beidseitigen Druck des Sammel-PDFs steht so nie ein anderes Team
+        # auf der Rückseite.
+        story.append(abschnitt("Trümmerfeld"))
+        story.extend(fusszeile)
+        story.append(PageBreak())
+        story.append(_dk_folgeseiten_kopf(t))
+        story.append(abschnitt("Flächensuche", mit_wertungsnoten=False))
+        story.append(abschnitt("Behältnisstrecke"))
         story.append(Spacer(1, 3 * mm))
         vollstaendig = all(einzelpunkte[d][0] is not None and einzelpunkte[d][1] is not None for d in ALLE_DISZIPLINEN)
         gesamt_zeile = ["Pkt. Trümmer", "Pkt. Fläche", "Pkt. Behältnis", "GESAMT"]
@@ -427,10 +522,11 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ]))
-        story.append(gesamt_tabelle)
-        story.append(Spacer(1, 2 * mm))
-        story.append(_wertungsnoten_tabelle_dk())
-    elif status_abk is not None:
+        story.append(KeepTogether([gesamt_tabelle, Spacer(1, 2 * mm), _wertungsnoten_tabelle_dk()]))
+        return story
+
+    story.append(abschnitt(t["disziplin"]))
+    if status_abk is not None:
         # ED bei Disqualifiziert/Abbruch (Marcos Entscheidung 22.09., Nachtrag zu M3): die
         # Gesamtpunktzahl der Disziplin oben bleibt wie beim DK-Bogen als Dokumentation
         # stehen, darunter derselbe Status wie im DK-GESAMT-Feld - sonst sähe der Bogen
@@ -449,11 +545,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         ]))
         story.append(status_tabelle)
 
-    story.append(Spacer(1, 4 * mm))
-    verein = veranstaltung["verein"] if veranstaltung else ""
-    datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
-    story.append(Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_p_wert(datum)}", _TEXT))
-
+    story.extend(fusszeile)
     return story
 
 

@@ -157,6 +157,28 @@ def test_etikett_masse_entsprechen_der_physischen_etikettengroesse():
     assert math.isclose(sum(pdf_export._ETIKETT_ZEILEN), pdf_export.ETIKETT_HOEHE_MM * mm)
 
 
+class TestPositionsSkizzen(unittest.TestCase):
+    """Positions-Skizzen nach den neuen Vorlagen (pdf/, 24.09.) - direkt an den
+    reportlab-Zeichnungen geprüft, läuft daher auch ohne pypdf."""
+
+    def test_behaeltnis_skizze_hat_je_lk_die_richtige_anzahl_nummern(self):
+        from reportlab.graphics.shapes import String
+
+        for stufe, anzahl in pdf_export._BEHAELTNIS_POSITIONEN.items():
+            with self.subTest(stufe=stufe):
+                zeichnung = pdf_export._skizze_behaeltnisse(anzahl)
+                nummern = [e.text for e in zeichnung.contents if isinstance(e, String)]
+                self.assertEqual(nummern, [str(i) for i in range(1, anzahl + 1)])
+        self.assertEqual(pdf_export._BEHAELTNIS_POSITIONEN, {1: 6, 2: 8, 3: 10})
+
+    def test_skizzen_passen_in_die_linke_spalte(self):
+        from reportlab.lib.units import mm
+
+        for zeichnung in (pdf_export._skizze_truemmerfeld(), pdf_export._skizze_flaeche(),
+                          pdf_export._skizze_behaeltnisse(10)):
+            self.assertLessEqual(zeichnung.width, 100 * mm)
+
+
 @unittest.skipIf(PdfReader is None, "pypdf nicht installiert - PDF-Inhaltsprüfung wird übersprungen")
 class TestPdfExport(unittest.TestCase):
     def setUp(self):
@@ -224,7 +246,7 @@ class TestPdfExport(unittest.TestCase):
         text = _text(pfad)
         self.assertIn("Muster & Sohn", text)
         self.assertIn("vom Wald <i>Sued", text)
-        self.assertIn("Schlüssel <b>bund", text)
+        self.assertIn("Schlüssel <b>bund", " ".join(text.split()))  # Gegenstand steht in schmaler Spalte, darf umbrechen
         self.assertNotIn("&amp;", text)
         self.assertNotIn("&lt;", text)
 
@@ -290,8 +312,8 @@ class TestPdfExport(unittest.TestCase):
         # Kein Disziplin-Zusatz für den freien Gegenstand 3
         self.assertNotIn("Kunststoffdose (", text)
         # "Lederhandschuh" erscheint als Zu-suchender-Gegenstand auf der Trümmerfeld-Seite
-        self.assertIn("Zu suchender Gegenstand: Lederhandschuh", text)
-        self.assertIn("Zu suchender Gegenstand: Holzklotz", text)
+        self.assertIn("Zu suchender Gegenstand: Lederhandschuh", " ".join(text.split()))
+        self.assertIn("Zu suchender Gegenstand: Holzklotz", " ".join(text.split()))
 
     def test_bewertungsbogen_dk_lk3_verleitungen_und_behaeltnis_positionen(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -312,8 +334,8 @@ class TestPdfExport(unittest.TestCase):
         # LK3-spezifische Verleitungs-Hinweise aus den Original-Vorlagen
         self.assertIn("5 Futterverleitungen", text)
         self.assertIn("1 Material-/baugleicher Gegenstand", text)
-        # LK3 Behältnisstrecke hat 10 Positionen (LK1: 6, LK2: 8, LK3: 10)
-        self.assertIn("[10]", text)
+        # LK3 Behältnisstrecke hat 10 gezeichnete, nummerierte Behälter (LK1: 6, LK2: 8, LK3: 10)
+        self.assertIn("1 2 3 4 5 6 7 8 9 10", " ".join(text.split()))
         # Gesamtpunktzahl (90+85+82=257) und Prädikat "G" (240-269 -> Gut)
         self.assertIn("257", text)
         self.assertIn("(G)", text)
@@ -345,8 +367,74 @@ class TestPdfExport(unittest.TestCase):
         self.assertTrue(os.path.exists(pfad))
         text = _text(pfad)
         self.assertIn("Muster, Jonas", text)
-        # LK2 Behältnisstrecke hat 8 Positionen
-        self.assertIn("[8]", text)
+        # LK2 Behältnisstrecke hat 8 gezeichnete Behälter
+        self.assertIn("1 2 3 4 5 6 7 8 Gegenstand:", " ".join(text.split()))
+
+    # Neue Vorlagen (pdf/, 24.09.): lange Namen reizen den Platz aus - die festen
+    # Seitenumfänge müssen auch dann halten. Die Werte sind die realistischen Grenzfälle,
+    # mit denen die Verifikation (24.09.) DK-Seite 2 vor dem Fix auf eine 3. Seite schob.
+    _LANGE_NAMEN = dict(
+        nachname="Schmidt-Leutheusser-Schnarrenberger", vorname="Sabine-Charlotte", rufname_hund="Freda",
+        zwingername="Crazy Cooper of the Silver Highland Moor",
+        verein="Hundesportverein Musterstadt-Nord e.V.",
+    )
+
+    def test_bewertungsbogen_dk_hat_immer_genau_zwei_seiten(self):
+        # Seitenaufteilung wie in der Vorlage: Seite 1 = Stammdaten + Trümmerfeld +
+        # Fußzeile, Seite 2 = Kopfzeile "LK x HF/Hund" + Fläche + Behältnis + Gesamt.
+        for stufe in (1, 2, 3):
+            with self.subTest(stufe=stufe):
+                tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+                    **self._LANGE_NAMEN, art="DK", stufe=stufe, startnummer=stufe,
+                    gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Trümmerfeld",
+                    gegenstand_2="Futterbeutel mit Reißverschluss, blau gestreift",
+                    gegenstand_2_disziplin="Flächensuche",
+                    gegenstand_3="Dose", gegenstand_3_disziplin="Behältnisstrecke",
+                ))
+                for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+                    eintragen_ergebnis(self.conn, tid, disziplin, suche=55, anzeige=36)
+                pfad = self._pfad(f"bogen_dk_seiten_{stufe}.pdf")
+                pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+                seiten = [s.extract_text() for s in PdfReader(pfad).pages]
+
+                self.assertEqual(len(seiten), 2)
+                self.assertIn("Bewertung Trümmerfeld", seiten[0])
+                self.assertIn("austragender Verein", seiten[0])
+                self.assertNotIn("Bewertung Flächensuche", seiten[0])
+                self.assertIn(f"LK {stufe}", seiten[1])
+                self.assertIn("Schmidt-Leutheusser-Schnarrenberger", seiten[1])
+                self.assertIn("Bewertung Flächensuche", seiten[1])
+                self.assertIn("Bewertung Behältnisstrecke", seiten[1])
+                self.assertIn("von 300 P", seiten[1])
+                # Punkte-Band-Tabelle nur noch 2x (unter Trümmerfeld und Behältnis)
+                self.assertEqual("".join(seiten).count("von 100 P"), 2)
+
+    def test_bewertungsbogen_ed_alle_varianten_einseitig(self):
+        startnummer = 0
+        for stufe in (1, 2, 3):
+            for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+                with self.subTest(stufe=stufe, disziplin=disziplin):
+                    startnummer += 1
+                    tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+                        **self._LANGE_NAMEN, art="ED", stufe=stufe, disziplin=disziplin,
+                        startnummer=startnummer,
+                    ))
+                    eintragen_ergebnis(self.conn, tid, disziplin, suche=55, anzeige=36)
+                    setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False)
+                    pfad = self._pfad(f"bogen_ed_{startnummer}.pdf")
+                    pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+                    self.assertEqual(len(PdfReader(pfad).pages), 1)
+
+    def test_sammel_pdf_seitenzahl_dk_zwei_ed_eine(self):
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Dk", vorname="X", rufname_hund="H", art="DK", stufe=3, startnummer=1))
+        for i, disziplin in enumerate(("Trümmerfeld", "Behältnisstrecke"), start=2):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"Ed{i}", vorname="X", rufname_hund="H", art="ED", stufe=3,
+                disziplin=disziplin, startnummer=i))
+        pfad = self._pfad("sammel_seiten.pdf")
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad), 3)
+        self.assertEqual(len(PdfReader(pfad).pages), 4)
 
     def test_sammel_pdf_enthaelt_alle_teilnehmer(self):
         for i in range(3):
@@ -612,6 +700,7 @@ class TestPdfExport(unittest.TestCase):
         self.assertNotIn("(SG)", text)
         self.assertNotIn("280", text)
         self.assertIn("100", text)  # Einzelpunkte Trümmer/Fläche bleiben sichtbar
+        self.assertEqual(len(PdfReader(pfad).pages), 2)
 
     def test_bewertungsbogen_ed_abbruch_zeigt_punkte_und_status(self):
         # Nachtrag zu M3 (Marcos Entscheidung 22.09.): wie beim DK-Bogen bleiben die
