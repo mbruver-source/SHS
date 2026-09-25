@@ -2273,3 +2273,5 @@ Dazu 4 neue Tests in `test_db.py`.
   - GUI, Theme und `bump_version` (pytest): 134 bestanden, 1 bekannter xfail.
   - `py_compile` für alle Module fehlerfrei.
 - Push und Tag macht Marco.
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.34 nachgezogen: 10 Dateien,
+  Byte-Abgleich identisch.
