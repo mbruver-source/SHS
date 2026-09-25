@@ -2348,4 +2348,5 @@ und ohne separates Behältnis für die Verleitung.
   - Aufgenommen offscreen mit Segoe UI und Standard-Design, 1400×820, mit denselben
     8 Test-Teilnehmern wie das alte Bild.
   - `docs/HANDBUCH.pdf` danach neu erzeugt.
-  - Beides auch in den Quellcode-Spiegel übernommen. Die Version bleibt 1.0.35.
+  - Beides auch in den Quellcode-Spiegel übernommen. Kam erst nach dem Tag `v1.0.35`
+    (1fad826), ist also nicht in 1.0.35 enthalten, sondern ab dem nächsten Build.
