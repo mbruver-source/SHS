@@ -2341,3 +2341,5 @@ und ohne separates Behältnis für die Verleitung.
   - GUI (pytest, offscreen): 108 bestanden, 1 bekannter xfail.
   - `py_compile` fehlerfrei.
 - Push und Tag macht Marco.
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.35 nachgezogen: 12 Dateien,
+  Byte-Abgleich identisch.
