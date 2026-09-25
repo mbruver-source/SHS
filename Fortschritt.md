@@ -2343,3 +2343,9 @@ und ohne separates Behältnis für die Verleitung.
 - Push und Tag macht Marco.
 - Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.35 nachgezogen: 12 Dateien,
   Byte-Abgleich identisch.
+- Nachtrag (Marco: „ja, Handbuch-Screenshot erneuern“): `docs/bilder/handbuch_uebersicht.png`
+  zeigt jetzt die Behältnis-Tabelle.
+  - Aufgenommen offscreen mit Segoe UI und Standard-Design, 1400×820, mit denselben
+    8 Test-Teilnehmern wie das alte Bild.
+  - `docs/HANDBUCH.pdf` danach neu erzeugt.
+  - Beides auch in den Quellcode-Spiegel übernommen. Die Version bleibt 1.0.35.
