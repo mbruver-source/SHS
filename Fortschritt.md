@@ -2253,3 +2253,23 @@ Dazu 4 neue Tests in `test_db.py`.
   LU-Nr. 10001/10002.
 - Handbuch und dieser Eintrag enthielten keine Musterdaten.
 - Grundsatz: Echte Daten aus Beispieldateien kommen nicht ins Repo, auch nicht in Tests.
+
+## Version 1.0.34 (25.09., Build auf Marcos Wunsch "ja neues Build")
+
+**Enthalten seit 1.0.33:**
+- OMA-Export importieren (siehe Eintrag „25.09.2026: Import des OMA-Exports“ oben):
+  - neuer Button „OMA-Export importieren…“ im Reiter „Formular-Import“
+  - Spaltenzuordnung mit Marco abgestimmt, bereits vorhandene Meldungen werden übersprungen
+  - robust gegen defekte Dateien; der Formular-CSV-Import fängt `csv.Error` jetzt ebenfalls ab
+  - Tests mit erfundenen Testdaten
+- Handbuch Kapitel 5: neuer Unterabschnitt „Meldungen aus der OMA übernehmen“.
+
+**Build-Ablauf:**
+- Versionsdateien per `bump_version.py` auf 1.0.34 gesetzt (`version.txt`, `version.py`,
+  `version_info.txt`, `docs/HANDBUCH.md`).
+- `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py` neu erzeugt.
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: 432 OK, 124 übersprungen.
+  - GUI, Theme und `bump_version` (pytest): 134 bestanden, 1 bekannter xfail.
+  - `py_compile` für alle Module fehlerfrei.
+- Push und Tag macht Marco.
