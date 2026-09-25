@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.34. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.35. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)

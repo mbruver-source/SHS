@@ -2324,3 +2324,20 @@ und ohne separates Behältnis für die Verleitung.
   - Die Kopfzeile ist zu eng: Sie hat jetzt 8,5 pt statt 9,5 pt. Damit passen alle Spaltenköpfe
     mit Innenabstand in ihre Spalte.
   - `test_pdf_export` läuft grün.
+
+## Version 1.0.35 (25.09., Build auf Marcos Wunsch "commit und neues build")
+
+**Enthalten seit 1.0.34:**
+- Behältnis-Bedarf im Reiter „Übersicht“ und in der Richter-Bedarf-PDF (siehe Eintrag
+  „25.09.2026: Behältnis-Bedarf im Reiter „Übersicht““ oben).
+
+**Build-Ablauf:**
+- Versionsdateien per `bump_version.py` auf 1.0.35 gesetzt (`version.txt`, `version.py`,
+  `version_info.txt`, `docs/HANDBUCH.md`).
+- `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py` neu erzeugt. Der Screenshot
+  `docs/bilder/handbuch_uebersicht.png` ist noch der alte, ohne die neue Tabelle.
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: 439 OK, 127 übersprungen.
+  - GUI (pytest, offscreen): 108 bestanden, 1 bekannter xfail.
+  - `py_compile` fehlerfrei.
+- Push und Tag macht Marco.
