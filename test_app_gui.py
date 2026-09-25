@@ -817,6 +817,41 @@ def test_formular_import_tab_csv_import_legt_teilnehmer_an_und_zeigt_zusammenfas
     assert "1 Zeile(n) übersprungen" in meldung["text"]
 
 
+def test_formular_import_tab_oma_import_legt_teilnehmer_an_und_meldet_dubletten(qtbot, conn, tmp_path, monkeypatch):
+    # Nutzerwunsch 25.09.2026: OMA-Export direkt übernehmen (verkürzter Aufbau der
+    # Musterdatei - Metazeile, Tabulator, Windows-1252; fehlende Spalten gelten als leer).
+    pfad = tmp_path / "oma.csv"
+    kopf = "UeID\tStarter_Vorname\tStarter_Nachname\tHund_Rufname\tHund_Geschlecht\tSHS_Disziplinen"
+    pfad.write_bytes((
+        "[Spürhundesport,01.05.2027,Hundesportverein Musterstadt e.V. (BLV)]\r\n"
+        f"{kopf}\r\n"
+        "1\tMax\tMustermann\tBella\t0\tLK1 Trümmersuche\r\n"
+        "2\tMax\tMustermann\tBella\t0\tLK1 Trümmersuche\r\n"
+        "3\tJan\tMeier\tRex\t1\tLK9 Unbekannt\r\n"
+    ).encode("cp1252"))
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(pfad), ""))
+    meldung = {}
+    monkeypatch.setattr(
+        "app.QMessageBox.information",
+        lambda parent, titel, text: meldung.setdefault("text", text),
+    )
+
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "OMA-Export importieren…"),
+        Qt.MouseButton.LeftButton,
+    )
+
+    teilnehmer = list_teilnehmer(conn)
+    assert [(t["nachname"], t["rufname_hund"], t["geschlecht"]) for t in teilnehmer] == [("Mustermann", "Bella", "Hündin")]
+    assert "1 Teilnehmer importiert" in meldung["text"]
+    assert "1 Meldung(en) bereits vorhanden" in meldung["text"]
+    assert "1 Zeile(n) übersprungen" in meldung["text"]
+
+
 # --- Hilfe-Button ---------------------------------------------------------------
 
 

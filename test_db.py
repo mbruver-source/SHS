@@ -37,6 +37,7 @@ from db import (
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
     importiere_teilnehmer_aus_csv,
+    importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
     init_db,
     init_db_postgres,
@@ -1015,6 +1016,191 @@ class TestDatenbank(unittest.TestCase):
             self.assertEqual(len(namen), ergebnis.importiert)
         finally:
             os.remove(pfad)
+
+    # OMA-Export (Nutzerwunsch 25.09.2026): Aufbau wie die Musterdatei
+    # "OMA-ExportGeneric_Spürhundesport_MUSTER.csv" - Metazeile, Tabulator, Windows-1252,
+    # mehrfach "RESERVE", "-" als Leerwert.
+    OMA_KOPF = [
+        "UeID", "Starter_Anrede", "Starter_Vorname", "Starter_Nachname", "Starter_Geburtstag",
+        "Starter_EMail", "Starter_Verein", "Starter_Verband", "Starter_MitglNr", "Starter_Land",
+    ] + ["RESERVE"] * 5 + [
+        "Hund_Rufname", "Hund_Zwingername", "Hund_Rasse", "Hund_Geschlecht", "Hund_Wurftag",
+        "Hund_ZBRegNr", "Hund_Chipnummer", "Hund_LBVerband", "Hund_LBNummer",
+    ] + ["RESERVE"] * 5 + [
+        "Meldung_Status", "Meldung_Mannschaft", "Meldung_Bezahlt", "Meldung_Startgeld",
+        "Meldung_Kommentar",
+    ] + ["RESERVE"] * 7 + ["SHS_Disziplinen"] + ["RESERVE"] * 5
+
+    def _oma_zeile(self, **werte):
+        standard = {
+            "UeID": "100001", "Starter_Anrede": "0", "Starter_Vorname": "Max",
+            "Starter_Nachname": "Mustermann", "Starter_Geburtstag": "15.06.1980",
+            "Starter_EMail": "max@example.org", "Starter_Verein": "Hundesportverein Musterstadt e.V.",
+            "Starter_Verband": "BLV", "Starter_MitglNr": "0000 1 234 5678", "Starter_Land": "DEU",
+            "Hund_Rufname": "Bella", "Hund_Zwingername": "-", "Hund_Rasse": "Mix",
+            "Hund_Geschlecht": "0", "Hund_Wurftag": "10.04.2021", "Hund_ZBRegNr": "-",
+            "Hund_Chipnummer": "276000000000001", "Hund_LBVerband": "BLV", "Hund_LBNummer": "10001",
+            "Meldung_Status": "1", "Meldung_Mannschaft": "", "Meldung_Bezahlt": "1",
+            "Meldung_Startgeld": "15", "Meldung_Kommentar": "", "SHS_Disziplinen": "LK1 Trümmersuche",
+        }
+        standard.update(werte)
+        return "\t".join(standard.get(spalte, "-") if spalte != "RESERVE" else "-" for spalte in self.OMA_KOPF)
+
+    def _oma_datei(self, zeilen, kodierung="cp1252", kopf=None, zeilenende="\r\n", nach_metazeile=""):
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        inhalt = "[Spürhundesport,01.05.2027,Hundesportverein Musterstadt e.V. (BLV)]" + zeilenende + nach_metazeile
+        inhalt += "\t".join(kopf or self.OMA_KOPF) + zeilenende
+        inhalt += "".join(zeile + zeilenende for zeile in zeilen)
+        with open(pfad, "wb") as f:
+            f.write(inhalt.encode(kodierung))
+        self.addCleanup(os.remove, pfad)
+        return pfad
+
+    def test_importiere_teilnehmer_aus_oma_uebernimmt_abgestimmte_felder(self):
+        pfad = self._oma_datei([
+            self._oma_zeile(),
+            self._oma_zeile(UeID="100002", Hund_Rufname="Bruno", Hund_Zwingername="",
+                            Hund_Rasse="Deutscher Schäferhund", Hund_Geschlecht="1",
+                            Hund_Wurftag="20.08.2019", Hund_Chipnummer="276000000000002",
+                            Hund_LBNummer="10002", SHS_Disziplinen="LK1 Flächensuche"),
+        ])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler, ergebnis.uebersprungen), (2, [], []))
+        teilnehmer = {t["rufname_hund"]: t for t in list_teilnehmer(self.conn)}
+        bella, bruno = teilnehmer["Bella"], teilnehmer["Bruno"]
+        self.assertEqual(bella["vorname"], "Max")
+        self.assertEqual(bella["nachname"], "Mustermann")
+        self.assertEqual(bella["geburtsdatum"], "1980-06-15")
+        self.assertEqual(bella["email"], "max@example.org")
+        self.assertEqual(bella["verein"], "Hundesportverein Musterstadt e.V.")
+        self.assertEqual(bella["verband"], "BLV")
+        self.assertEqual(bella["mitgliedsnummer"], "0000 1 234 5678")
+        self.assertIsNone(bella["zwingername"])  # "-" gilt als leer
+        self.assertEqual(bella["rasse"], "Mix")
+        self.assertEqual(bella["geschlecht"], "Hündin")
+        self.assertEqual(bella["wurftag"], "2021-04-10")
+        self.assertEqual(bella["chip_nr"], "276000000000001")
+        self.assertEqual(bella["halter_lu_nr"], "10001")
+        self.assertEqual((bella["art"], bella["stufe"], bella["disziplin"]), ("ED", 1, "Trümmerfeld"))
+        self.assertEqual(bella["bezahlt"], 0)  # Meldung_Bezahlt wird bewusst ignoriert
+        self.assertEqual(bruno["rasse"], "Deutscher Schäferhund")
+        self.assertEqual(bruno["geschlecht"], "Rüde")
+        self.assertEqual((bruno["art"], bruno["stufe"], bruno["disziplin"]), ("ED", 1, "Flächensuche"))
+
+    def test_importiere_teilnehmer_aus_oma_ordnet_alle_disziplinen_zu(self):
+        pfad = self._oma_datei([
+            self._oma_zeile(Hund_Rufname="A", SHS_Disziplinen="LK2 Behältnissuche"),
+            self._oma_zeile(Hund_Rufname="B", SHS_Disziplinen="LK3 Dreikampf"),
+            self._oma_zeile(Hund_Rufname="C", SHS_Disziplinen="LK1 Mantrailing"),
+            self._oma_zeile(Hund_Rufname="D", SHS_Disziplinen="LK4 Dreikampf"),
+        ])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 2)
+        self.assertEqual(len(ergebnis.fehler), 2)
+        self.assertIn("Zeile 5", ergebnis.fehler[0])
+        self.assertIn("Disziplin", ergebnis.fehler[0])
+        self.assertIn("Zeile 6", ergebnis.fehler[1])
+        teilnehmer = {t["rufname_hund"]: t for t in list_teilnehmer(self.conn)}
+        self.assertEqual((teilnehmer["A"]["art"], teilnehmer["A"]["stufe"], teilnehmer["A"]["disziplin"]),
+                         ("ED", 2, "Behältnisstrecke"))
+        self.assertEqual((teilnehmer["B"]["art"], teilnehmer["B"]["stufe"], teilnehmer["B"]["disziplin"]),
+                         ("DK", 3, None))
+
+    def test_importiere_teilnehmer_aus_oma_ungueltiges_geschlecht_ueberspringt_zeile(self):
+        pfad = self._oma_datei([
+            self._oma_zeile(Hund_Rufname="A", Hund_Geschlecht="2"),
+            self._oma_zeile(Hund_Rufname="B", Hund_Geschlecht=""),
+        ])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertIn("Zeile 3", ergebnis.fehler[0])
+        self.assertIn("Geschlecht", ergebnis.fehler[0])
+        self.assertIsNone(list_teilnehmer(self.conn)[0]["geschlecht"])
+
+    def test_importiere_teilnehmer_aus_oma_verband_nur_ersatzweise_aus_leistungsheft(self):
+        pfad = self._oma_datei([
+            self._oma_zeile(Hund_Rufname="A", Starter_Verband="DVG", Hund_LBVerband="BLV"),
+            self._oma_zeile(Hund_Rufname="B", Starter_Verband="-", Hund_LBVerband="BLV"),
+        ])
+        importiere_teilnehmer_aus_oma(self.conn, pfad)
+        teilnehmer = {t["rufname_hund"]: t for t in list_teilnehmer(self.conn)}
+        self.assertEqual(teilnehmer["A"]["verband"], "DVG")
+        self.assertEqual(teilnehmer["B"]["verband"], "BLV")
+
+    def test_importiere_teilnehmer_aus_oma_ueberspringt_bereits_vorhandene_meldungen(self):
+        pfad = self._oma_datei([self._oma_zeile(), self._oma_zeile(Starter_Vorname=" max ")])
+        erster = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(erster.importiert, 1)  # zweite Zeile ist Dublette innerhalb der Datei
+        self.assertEqual(len(erster.uebersprungen), 1)
+        self.assertIn("Zeile 4", erster.uebersprungen[0])
+        # Nachmeldung: gleicher Hund in anderer Disziplin ist eine neue Meldung.
+        pfad2 = self._oma_datei([self._oma_zeile(), self._oma_zeile(SHS_Disziplinen="LK2 Trümmersuche")])
+        zweiter = importiere_teilnehmer_aus_oma(self.conn, pfad2)
+        self.assertEqual(zweiter.importiert, 1)
+        self.assertEqual(len(zweiter.uebersprungen), 1)
+        self.assertEqual(len(list_teilnehmer(self.conn)), 2)
+
+    def test_importiere_teilnehmer_aus_oma_liest_auch_utf8(self):
+        pfad = self._oma_datei([self._oma_zeile(Hund_Rasse="Deutscher Schäferhund")], kodierung="utf-8-sig")
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(list_teilnehmer(self.conn)[0]["rasse"], "Deutscher Schäferhund")
+
+    def test_importiere_teilnehmer_aus_oma_lehnt_andere_datei_ab(self):
+        pfad = self._oma_datei(["Holst,Katrin,Freda"], kopf=["nachname,vorname,rufname_hund"])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertIn("kein OMA-Export", ergebnis.fehler[0])
+        self.assertEqual(list_teilnehmer(self.conn), [])
+
+    # Randfälle aus der Verifikation vom 25.09.2026 (auf Marcos Wunsch behoben):
+
+    def test_importiere_teilnehmer_aus_oma_riesiges_feld_bricht_nicht_ab(self):
+        # Vorher: csv.Error "field larger than field limit" als unbehandelte Exception.
+        pfad = self._oma_datei([self._oma_zeile(Meldung_Kommentar="x" * 200_000)])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler), (1, []))
+
+    def test_importiere_teilnehmer_aus_oma_nur_cr_und_leerzeile_nach_metazeile(self):
+        # Vorher: irreführende Meldung "kein OMA-Export".
+        for zeilenende, nach_metazeile in (("\r", ""), ("\n", ""), ("\r\n", "\r\n"), ("\r", "\r\r")):
+            with self.subTest(zeilenende=repr(zeilenende), nach_metazeile=repr(nach_metazeile)):
+                for t in list_teilnehmer(self.conn):
+                    delete_teilnehmer(self.conn, t["id"])
+                pfad = self._oma_datei([self._oma_zeile()], zeilenende=zeilenende, nach_metazeile=nach_metazeile)
+                ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+                self.assertEqual((ergebnis.importiert, ergebnis.fehler), (1, []))
+
+    def test_importiere_teilnehmer_aus_oma_meldet_abgeschnittene_zeile_verstaendlich(self):
+        # Vorher: "unbekannte Disziplin ''" statt eines Hinweises auf die zu kurze Zeile.
+        vollstaendig = self._oma_zeile(Hund_Rufname="A")
+        abgeschnitten = "\t".join(self._oma_zeile(Hund_Rufname="B").split("\t")[:20])
+        pfad = self._oma_datei([abgeschnitten, vollstaendig])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertIn("Zeile 3", ergebnis.fehler[0])
+        self.assertIn("unvollständig", ergebnis.fehler[0])
+        self.assertNotIn("Disziplin", ergebnis.fehler[0])
+
+    def test_importiere_teilnehmer_aus_csv_riesiges_feld_bricht_sauber_ab(self):
+        # Gleicher Randfall im bestehenden Formular-CSV-Import: sauberer Abbruch statt
+        # unbehandelter csv.Error.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        self.addCleanup(os.remove, pfad)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+                "Gut,Erster,Hund1,DK,1,\n"
+                f"Gross,Zweiter,{'x' * 200_000},DK,1,\n"
+            )
+        ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertIn("abgebrochen", ergebnis.fehler[0])
 
     def test_teilnehmer_loeschen_entfernt_auch_ergebnis(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(

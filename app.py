@@ -104,6 +104,7 @@ from db import (
     eintragen_ergebnis,
     get_veranstaltung,
     importiere_teilnehmer_aus_csv,
+    importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
     init_db,
     leistungsklasse_label,
@@ -1524,7 +1525,10 @@ class FormularImportTab(QWidget):
             "(PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben (z. B. Claude "
             "oder ChatGPT).\n"
             "2. Die dabei erzeugte CSV-Datei hier importieren - neue Teilnehmer erscheinen "
-            "danach im Reiter „Teilnehmer“."
+            "danach im Reiter „Teilnehmer“.\n"
+            "Meldungen aus der OMA (Online-Meldeannahme) lassen sich ohne KI direkt mit "
+            "„OMA-Export importieren…“ übernehmen - bereits vorhandene Meldungen werden dabei "
+            "übersprungen."
         )
         anleitung.setWordWrap(True)
 
@@ -1540,10 +1544,14 @@ class FormularImportTab(QWidget):
         import_btn.setObjectName("primaerButton")
         import_btn.clicked.connect(self._csv_importieren)
 
+        oma_btn = QPushButton("OMA-Export importieren…")
+        oma_btn.clicked.connect(self._oma_importieren)
+
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(kopieren_btn)
         button_zeile.addWidget(self.status_label)
         button_zeile.addStretch()
+        button_zeile.addWidget(oma_btn)
         button_zeile.addWidget(import_btn)
 
         layout = QVBoxLayout(self)
@@ -1565,6 +1573,29 @@ class FormularImportTab(QWidget):
             QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
             return
         text = f"{ergebnis.importiert} Teilnehmer importiert."
+        if ergebnis.fehler:
+            text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
+        QMessageBox.information(self, "Import abgeschlossen", text)
+
+    def _oma_importieren(self) -> None:
+        """Übernimmt Meldungen aus einem OMA-Export (siehe importiere_teilnehmer_aus_oma in
+        db.py) - ohne Umweg über den KI-Prompt."""
+        pfad, _ = QFileDialog.getOpenFileName(
+            self, "OMA-Export importieren", "", "OMA-Export (*.csv *.txt);;Alle Dateien (*)"
+        )
+        if not pfad:
+            return
+        try:
+            ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        except OSError as exc:
+            QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+            return
+        text = f"{ergebnis.importiert} Teilnehmer importiert."
+        if ergebnis.uebersprungen:
+            text += (
+                f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
+                + "\n".join(ergebnis.uebersprungen)
+            )
         if ergebnis.fehler:
             text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
         QMessageBox.information(self, "Import abgeschlossen", text)

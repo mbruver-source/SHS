@@ -203,6 +203,25 @@ muss UTF-8-kodiert sein.
 > **Datenschutz:** Beim Formular-Import gehen die Meldeformulare an den gewählten KI-Anbieter.
 > Kläre vorher, ob das für deinen Verein in Ordnung ist. Das Programm selbst sendet nichts.
 
+### Meldungen aus der OMA übernehmen
+
+Den Meldungs-Export der OMA (Online-Meldeannahme, Datei „OMA-ExportGeneric_Spürhundesport…“)
+liest du ohne KI direkt mit **„OMA-Export importieren…“** ein. Jede Zeile wird ein Teilnehmer.
+
+- **Übernommen:** Vorname, Nachname, Geburtsdatum, E-Mail, Verein, Verband, Mitgliedsnummer
+  des Hundeführers. Dazu Rufname, Zwingername, Rasse, Geschlecht, Wurftag, Chipnummer und
+  LU-Nr. des Hundes sowie Leistungsklasse und Disziplin. Aus „LK2 Behältnissuche“ wird z. B.
+  ED, LK2, Behältnisstrecke, aus „LK1 Dreikampf“ wird DK, LK1.
+- Ist beim Hundeführer kein Verband angegeben, wird der Verband des Leistungshefts genommen.
+- **Nicht übernommen:** Anrede, Land, Zuchtbuchnummer und die Meldungsangaben (Status,
+  Mannschaft, Bezahlt, Startgeld, Kommentar). Startnummer, Gegenstände und Bezahlt-Status
+  trägst du wie gewohnt im Reiter „Teilnehmer“ nach.
+- **Erneuter Import:** Eine Meldung mit gleichem Namen, Hund, Art, Leistungsklasse und Disziplin
+  wird nicht noch einmal angelegt. Du kannst also einen späteren Export mit Nachmeldungen
+  einfach erneut einlesen.
+- Da die LU-Nr. im Halter-Block gespeichert wird, ist im Teilnehmer-Dialog bei importierten
+  Meldungen „Halter weicht ab“ angehakt. Das ist kein Fehler.
+
 ## 6. Zeitplan
 
 ![Reiter „Zeitplan“ mit zwei Richtern](bilder/handbuch_zeitplan.png)

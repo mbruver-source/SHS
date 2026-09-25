@@ -841,6 +841,9 @@ class CsvImportErgebnis:
     komplett ab, sondern importiert die übrigen trotzdem (siehe FormularImportTab)."""
     importiert: int
     fehler: list[str]
+    # Nur beim OMA-Import (importiere_teilnehmer_aus_oma) befüllt: Zeilen, die als bereits
+    # vorhandene Meldung erkannt und deshalb bewusst nicht erneut angelegt wurden.
+    uebersprungen: list[str] = field(default_factory=list)
 
 
 def _csv_wert(zeile: dict, spalte: str) -> str | None:
@@ -956,6 +959,16 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
                     "erhalten."
                 )
                 break
+            except csv.Error as exc:
+                # z. B. "field larger than field limit" (> 131072 Zeichen in einem Feld) bei
+                # einer defekten Datei - vorher eine unbehandelte Exception im GUI-Slot
+                # (Verifikation 25.09.). Sauberer Abbruch wie bei der falschen Kodierung.
+                fehler.append(
+                    f"Import nach Zeile {letzte_zeile} abgebrochen - die Datei ist beschädigt "
+                    f"oder keine gültige CSV-Datei ({exc}); bereits importierte Zeilen bleiben "
+                    "erhalten."
+                )
+                break
             letzte_zeile = zeilennummer
             try:
                 teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
@@ -965,6 +978,157 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 continue
             importiert += 1
     return CsvImportErgebnis(importiert=importiert, fehler=fehler)
+
+
+# Nutzerwunsch 25.09.2026: Meldungen aus der OMA (Online-Meldeannahme) direkt übernehmen.
+# Der OMA-Export ("OMA-ExportGeneric_Spürhundesport") ist tabulatorgetrennt, Windows-1252-
+# kodiert, hat vor der Kopfzeile eine Metazeile "[Sportart,Datum,Veranstalter]" und
+# mehrfach die Spalte "RESERVE". Die Zuordnung wurde mit Marco Spalte für Spalte
+# abgestimmt (siehe Fortschritt.md) - nicht aufgeführte Spalten (UeID, Anrede, Land,
+# ZBRegNr, Meldung_*) werden bewusst ignoriert, ebenso die Metazeile.
+OMA_SPALTEN = {
+    "Starter_Nachname": "nachname", "Starter_Vorname": "vorname",
+    "Starter_Geburtstag": "geburtsdatum", "Starter_EMail": "email",
+    "Starter_Verein": "verein", "Starter_Verband": "verband",
+    "Starter_MitglNr": "mitgliedsnummer",
+    "Hund_Rufname": "rufname_hund", "Hund_Zwingername": "zwingername",
+    "Hund_Rasse": "rasse", "Hund_Wurftag": "wurftag", "Hund_Chipnummer": "chip_nr",
+    "Hund_LBNummer": "halter_lu_nr",
+}
+OMA_PFLICHTSPALTEN = ["Starter_Nachname", "Starter_Vorname", "Hund_Rufname", "SHS_Disziplinen"]
+OMA_DISZIPLINEN = {
+    "Trümmersuche": ("ED", "Trümmerfeld"),
+    "Flächensuche": ("ED", "Flächensuche"),
+    "Behältnissuche": ("ED", "Behältnisstrecke"),
+    "Dreikampf": ("DK", None),
+}
+OMA_GESCHLECHT = {"0": "Hündin", "1": "Rüde"}
+_OMA_DISZIPLIN_MUSTER = re.compile(r"LK\s*([1-3])\s+(.+)")
+
+
+def _oma_wert(werte: list[str], kopf_index: dict[str, int], spalte: str) -> str:
+    """Wert einer OMA-Spalte; "-" (OMA-Platzhalter für leer) und fehlende Spalten/Zellen
+    gelten als leer."""
+    index = kopf_index.get(spalte)
+    if index is None or index >= len(werte):
+        return ""
+    wert = werte[index].strip()
+    return "" if wert == "-" else wert
+
+
+def _oma_zeile_zu_csv_zeile(werte: list[str], kopf_index: dict[str, int]) -> dict:
+    """Setzt eine OMA-Zeile in eine Zeile mit den Schlüsseln aus CSV_IMPORT_SPALTEN um, damit
+    sie anschließend dieselbe Prüfung wie der Formular-Import durchläuft
+    (_csv_zeile_zu_teilnehmer). ValueError bei unbekanntem Geschlecht/Disziplin."""
+    zeile = {ziel: _oma_wert(werte, kopf_index, spalte) for spalte, ziel in OMA_SPALTEN.items()}
+    # Verband: Starter_Verband hat Vorrang, Hund_LBVerband nur als Ersatz (Marcos Entscheidung).
+    if not zeile["verband"]:
+        zeile["verband"] = _oma_wert(werte, kopf_index, "Hund_LBVerband")
+
+    geschlecht = _oma_wert(werte, kopf_index, "Hund_Geschlecht")
+    if geschlecht:
+        if geschlecht not in OMA_GESCHLECHT:
+            raise ValueError(f"unbekanntes Geschlecht {geschlecht!r} (erwartet 0 = Hündin oder 1 = Rüde)")
+        zeile["geschlecht"] = OMA_GESCHLECHT[geschlecht]
+
+    disziplin_text = _oma_wert(werte, kopf_index, "SHS_Disziplinen")
+    treffer = _OMA_DISZIPLIN_MUSTER.fullmatch(disziplin_text)
+    zuordnung = OMA_DISZIPLINEN.get(treffer.group(2).strip()) if treffer else None
+    if zuordnung is None:
+        raise ValueError(
+            f"unbekannte Disziplin {disziplin_text!r} (erwartet z. B. 'LK1 Trümmersuche', "
+            "'LK2 Flächensuche', 'LK3 Behältnissuche' oder 'LK1 Dreikampf')"
+        )
+    zeile["art"], zeile["disziplin"] = zuordnung
+    zeile["stufe"] = treffer.group(1)
+    return zeile
+
+
+def _meldungs_schluessel(nachname, vorname, rufname_hund, art, stufe, disziplin) -> tuple:
+    """Vergleichsschlüssel für die Dublettenerkennung beim OMA-Import."""
+    def norm(text):
+        return (text or "").strip().casefold()
+    return (norm(nachname), norm(vorname), norm(rufname_hund), art, int(stufe), disziplin)
+
+
+def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImportErgebnis:
+    """Liest einen OMA-Export (siehe OMA_SPALTEN) und legt daraus Teilnehmer an - eine
+    OMA-Zeile = eine Meldung = ein Teilnehmer. Wie importiere_teilnehmer_aus_csv() wird
+    eine fehlerhafte Zeile übersprungen und gemeldet, der Rest trotzdem importiert.
+    Zusätzlich wird eine Meldung übersprungen, die im Termin (oder weiter oben in derselben
+    Datei) bereits mit gleichem Namen, Hund, Art, LK und Disziplin existiert - so lässt sich
+    ein späterer Export mit Nachmeldungen gefahrlos erneut importieren.
+
+    Kodierung: die OMA liefert Windows-1252; UTF-8 (auch mit BOM) wird ebenfalls erkannt.
+    Zeilennummern in den Meldungen beziehen sich auf die Datei (inkl. Metazeile/Kopf)."""
+    with open(pfad, "rb") as datei:
+        rohdaten = datei.read()
+    try:
+        text = rohdaten.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = rohdaten.decode("cp1252", errors="replace")
+
+    # Bewusst zeilenweise mit split("\t") statt csv.reader (Verifikation 25.09.): der
+    # OMA-Export kennt keine Anführungszeichen, und so gibt es weder das Feldgrößen-Limit
+    # von csv.reader (csv.Error bei > 131072 Zeichen) noch Probleme mit reinen
+    # CR-Zeilenenden. (nummer, zeile) mit Dateizeilennummer ab 1; Leerzeilen - auch
+    # zwischen Metazeile und Kopf - werden übersprungen.
+    zeilen = [
+        (nummer, zeile) for nummer, zeile in enumerate(re.split(r"\r\n|\r|\n", text), start=1)
+        if zeile.strip()
+    ]
+    if zeilen and zeilen[0][1].lstrip().startswith("["):
+        # Metazeile "[Spürhundesport,Datum,Veranstalter]" - wird ignoriert.
+        zeilen = zeilen[1:]
+
+    kopf = [spalte.strip() for spalte in zeilen[0][1].split("\t")] if zeilen else []
+    kopf_index: dict[str, int] = {}
+    for index, spalte in enumerate(kopf):
+        kopf_index.setdefault(spalte, index)
+    fehlend = [spalte for spalte in OMA_PFLICHTSPALTEN if spalte not in kopf_index]
+    if fehlend:
+        return CsvImportErgebnis(importiert=0, fehler=[
+            "Die Datei ist kein OMA-Export (fehlende Spalte(n): " + ", ".join(fehlend) + "). "
+            "Es wurde nichts importiert."
+        ])
+
+    vorhandene = {
+        _meldungs_schluessel(t["nachname"], t["vorname"], t["rufname_hund"], t["art"], t["stufe"], t["disziplin"])
+        for t in list_teilnehmer(conn)
+    }
+    fehler: list[str] = []
+    uebersprungen: list[str] = []
+    importiert = 0
+    pflicht_bis = max(kopf_index[spalte] for spalte in OMA_PFLICHTSPALTEN)
+    for zeilennummer, zeile in zeilen[1:]:
+        werte = zeile.split("\t")
+        if len(werte) <= pflicht_bis:
+            # Abgeschnittene Zeile: sonst käme die irreführende Meldung "unbekannte
+            # Disziplin ''", weil SHS_Disziplinen fehlt.
+            fehler.append(
+                f"Zeile {zeilennummer}: Zeile ist unvollständig (nur {len(werte)} von "
+                f"{len(kopf)} Spalten) - Datei evtl. abgeschnitten oder beschädigt"
+            )
+            continue
+        try:
+            teilnehmer = _csv_zeile_zu_teilnehmer(_oma_zeile_zu_csv_zeile(werte, kopf_index))
+            schluessel = _meldungs_schluessel(
+                teilnehmer.nachname, teilnehmer.vorname, teilnehmer.rufname_hund,
+                teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
+            )
+            if schluessel in vorhandene:
+                uebersprungen.append(
+                    f"Zeile {zeilennummer}: {teilnehmer.vorname} {teilnehmer.nachname} mit "
+                    f"{teilnehmer.rufname_hund} ist bereits gemeldet"
+                )
+                continue
+            add_teilnehmer(conn, teilnehmer)
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            fehler.append(f"Zeile {zeilennummer}: {exc}")
+            continue
+        vorhandene.add(schluessel)
+        importiert += 1
+    return CsvImportErgebnis(importiert=importiert, fehler=fehler, uebersprungen=uebersprungen)
 
 
 def importiere_teilnehmer_stammdaten(

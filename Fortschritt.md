@@ -2148,3 +2148,108 @@ mit den Vorlagen ist noch nicht im Git. Ob er eingecheckt werden soll, entscheid
 - Push und Tag macht Marco.
 - Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.33 nachgezogen: 8 Dateien,
   Byte-Abgleich identisch. `pdf/` ist wie im Git-Repo nicht enthalten.
+
+## 25.09.2026: Import des OMA-Exports (Arbeitsstand, noch kein Build)
+
+Marco hat einen Muster-Export aus der OMA (Online-Meldeannahme) vorgelegt:
+`Documents\OMA-ExportGeneric_Spürhundesport_MUSTER.csv`, außerhalb des Repos. Frage: Lässt er
+sich importieren?
+
+**Befund:** Mit dem bisherigen Formular-CSV-Import ging das nicht. Die Unterschiede:
+- Die Datei ist in Windows-1252 kodiert, deshalb brach der Import sofort mit „nicht UTF-8“ ab.
+- Die Spalten sind durch Tabulatoren getrennt.
+- Vor der Kopfzeile steht eine Metazeile `[Spürhundesport,Datum,Veranstalter]`.
+- Die Spaltennamen sind andere, und `RESERVE` kommt mehrfach vor.
+- Klasse und Disziplin stehen zusammen in einer Spalte.
+- Das Geschlecht ist als 0 oder 1 kodiert.
+
+Inhaltlich passt eine OMA-Zeile genau auf eine `teilnehmer`-Zeile. Deshalb reicht ein eigener
+Import, die Datenbank muss nicht geändert werden.
+
+**Zuordnung, mit Marco Spalte für Spalte abgestimmt:**
+
+| OMA-Spalte (Nr.) | → Feld / Regel |
+|---|---|
+| Starter_Vorname (3), Starter_Nachname (4) | vorname, nachname |
+| Starter_Geburtstag (5) | geburtsdatum |
+| Starter_EMail (6), Starter_Verein (7) | email, verein |
+| Starter_Verband (8) | verband, hat Vorrang |
+| Starter_MitglNr (9) | mitgliedsnummer |
+| Hund_Rufname (16), Hund_Zwingername (17), Hund_Rasse (18) | rufname_hund, zwingername, rasse |
+| Hund_Geschlecht (19) | 0 = Hündin, 1 = Rüde, sonst Fehlerzeile |
+| Hund_Wurftag (20), Hund_Chipnummer (22) | wurftag, chip_nr |
+| Hund_LBVerband (23) | verband, nur wenn Nr. 8 leer ist |
+| Hund_LBNummer (24) | halter_lu_nr (LU-Nr.) |
+| SHS_Disziplinen (42) | „LK1–3 Trümmersuche / Flächensuche / Behältnissuche“ → ED mit Trümmerfeld / Flächensuche / Behältnisstrecke. „LK1–3 Dreikampf“ → DK. Genau eine Disziplin pro Zeile. Unbekannte Werte ergeben eine Fehlerzeile. |
+
+- **Ignoriert:**
+  - UeID (1), Anrede (2), Land (10), ZBRegNr (21)
+  - alle `RESERVE`-Spalten
+  - Meldung_Status, Mannschaft, Bezahlt, Startgeld und Kommentar (30–34). Bezahlt bleibt also
+    0, und es wird nicht nach Status gefiltert.
+  - die Metazeile
+- Der Wert `-` gilt überall als leer.
+- **Dubletten, Entscheidung Marco:** Eine Zeile wird übersprungen und gemeldet, wenn im Termin
+  oder weiter oben in derselben Datei schon eine Meldung mit gleichem Nachnamen, Vornamen,
+  Hund, Art, LK und Disziplin existiert. Groß-/Kleinschreibung zählt dabei nicht. So lässt
+  sich ein späterer Export mit Nachmeldungen erneut einlesen.
+- **Bekannter Nebeneffekt:** Die LU-Nr. liegt im Halter-Block. Deshalb ist bei importierten
+  Meldungen im Teilnehmer-Dialog „Halter weicht ab“ angehakt. PDFs sind nicht betroffen.
+
+**Umsetzung:**
+- `db.py`: neue Funktion `importiere_teilnehmer_aus_oma()` mit `OMA_SPALTEN`,
+  `OMA_DISZIPLINEN` und `OMA_GESCHLECHT`.
+  - Sie setzt jede Zeile in das Format von `CSV_IMPORT_SPALTEN` um und nutzt dann
+    `_csv_zeile_zu_teilnehmer()`. Validierung und Datumsnormalisierung sind damit identisch
+    zum Formular-Import.
+  - Kodierung: UTF-8 wird zuerst versucht, sonst Windows-1252.
+  - Die Spalten werden über den Namen gefunden, nicht über die Position.
+  - Ist die Datei kein OMA-Export (Pflichtspalten fehlen), wird mit einer klaren Meldung
+    abgebrochen.
+  - `CsvImportErgebnis` hat ein neues Feld `uebersprungen` mit leerem Standardwert. Der
+    bestehende Import ist davon nicht betroffen.
+- `app.py`, Reiter „Formular-Import“: neuer Button „OMA-Export importieren…“ und ein Satz im
+  Anleitungstext. Die Ergebnismeldung nennt Importierte, bereits Vorhandene und
+  Fehlerzeilen.
+- Tests:
+  - `test_db.py`: 7 neue Tests zu Feldzuordnung, allen Disziplinen, Geschlecht,
+    Verband-Vorrang, Dubletten, UTF-8 und Fremddatei.
+  - `test_app_gui.py`: 1 neuer Test für den Button.
+- Handbuch Kapitel 5: neuer Unterabschnitt „Meldungen aus der OMA übernehmen“.
+- Mit der Musterdatei geprüft: 2 Teilnehmer importiert, Umlaute korrekt. Beim zweiten Import
+  0 importiert und 2 als „bereits gemeldet“ übersprungen.
+- Lokal mit Anaconda-Python:
+  - Standard-Suite: 424 OK, 120 übersprungen.
+  - GUI-Suite (pytest): 108 bestanden, 1 bekannter xfail.
+
+**Nachbesserung, gleicher Tag (Marco: „gehe die 3 Fälle an“):** Der Verifikations-Subagent hatte
+keinen blockierenden Befund. Er meldete aber drei Randfälle mit niedrigem Schweregrad, alle
+drei sind jetzt behoben:
+1. **Riesenfeld (> 131.072 Zeichen):**
+   - Vorher führte das zu einer unbehandelten `csv.Error` im GUI-Slot.
+   - Der OMA-Import liest die Zeilen jetzt selbst ein und teilt sie mit `split("\t")` auf,
+     statt `csv.reader` zu verwenden. Der OMA-Export nutzt keine Anführungszeichen, deshalb
+     gibt es dort kein Feldlimit mehr.
+   - Der bestehende Formular-CSV-Import hatte dasselbe Problem. Er fängt `csv.Error` jetzt ab
+     und bricht sauber ab, so wie bei falscher Kodierung. Bereits importierte Zeilen bleiben
+     erhalten.
+2. **Nur CR als Zeilenende oder Leerzeile zwischen Metazeile und Kopf:** Vorher kam die
+   irreführende Meldung „kein OMA-Export“. Jetzt werden CR, LF und CRLF erkannt, und
+   Leerzeilen werden überall übersprungen.
+3. **Abgeschnittene Zeile:** Vorher lautete die Meldung „unbekannte Disziplin ''“. Jetzt heißt
+   es „Zeile ist unvollständig (nur N von M Spalten) - Datei evtl. abgeschnitten oder
+   beschädigt“.
+
+Dazu 4 neue Tests in `test_db.py`.
+- Standard-Suite: 432 OK, 124 übersprungen.
+- GUI-Suite: 108 bestanden, 1 xfail.
+
+**Testdaten anonymisiert (Marco: „Tausche die Musterdaten gegen Testdaten“):**
+- Die OMA-Tests in `test_db.py` und `test_app_gui.py` enthielten zunächst die Personen- und
+  Hundedaten aus Marcos Musterdatei 1:1: Name, Geburtsdatum, E-Mail, Mitglieds-, Chip- und
+  LU-Nummern, Verein.
+- Sie sind jetzt durch erfundene Werte ersetzt: Max Mustermann, max@example.org,
+  „Hundesportverein Musterstadt e.V.“, Hunde Bella und Bruno, Chipnummern 276000000000001/-002,
+  LU-Nr. 10001/10002.
+- Handbuch und dieser Eintrag enthielten keine Musterdaten.
+- Grundsatz: Echte Daten aus Beispieldateien kommen nicht ins Repo, auch nicht in Tests.
