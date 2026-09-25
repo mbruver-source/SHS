@@ -984,6 +984,34 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Keine Teilnehmer erfasst.", text)
         self.assertIn("Gesamteinheiten: 0", text)
         self.assertIn("aufgerundet): 0", text)
+        # Behältnis-Tabelle erscheint auch ohne Teilnehmer, dann mit Nullen.
+        zeilen = " ".join(text.split())
+        self.assertIn("Behältnisse Behältnisstrecke", zeilen)
+        self.assertIn("LK 3 mit separatem Behältnis 0 0 0 0 0", zeilen)
+
+    def test_leistungsrichter_bedarf_zeigt_behaeltnis_bedarf(self):
+        # Abgenommenes Beispiel vom 25.09.: LK1 2, LK2 3, LK3 4 Teilnehmer mit
+        # Behältnisstrecke (ED Behältnis + DK), ED Trümmerfeld zählt nicht mit.
+        startnummer = 1
+        for stufe, art, disziplin in [
+            (1, "ED", "Behältnisstrecke"), (1, "DK", None),
+            (2, "ED", "Behältnisstrecke"), (2, "ED", "Behältnisstrecke"), (2, "DK", None),
+            (3, "ED", "Behältnisstrecke"), (3, "ED", "Behältnisstrecke"), (3, "DK", None), (3, "DK", None),
+            (3, "ED", "Trümmerfeld"),
+        ]:
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"T{startnummer}", vorname="X", rufname_hund="H", art=art, stufe=stufe,
+                disziplin=disziplin, startnummer=startnummer))
+            startnummer += 1
+        pfad = self._pfad("leistungsrichter_behaeltnisse.pdf")
+        pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, pfad)
+        zeilen = " ".join(_text(pfad).split())
+        self.assertIn("Material-Verleitung", zeilen)
+        self.assertIn("LK 1 2 5 2 – 7", zeilen)
+        self.assertIn("LK 2 3 7 3 – 10", zeilen)
+        self.assertIn("LK 3 ohne separates Behältnis 4 9 4 – 13", zeilen)
+        self.assertIn("LK 3 mit separatem Behältnis 4 9 4 4 17", zeilen)
+        self.assertIn("Positionen: LK1 6, LK2 8, LK3 10.", zeilen)
 
     def test_zeitplan_pdf_zeigt_seite_je_richter_mit_start_und_endzeiten(self):
         set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2026-09-19", zeitplan_start="09:00")

@@ -1366,6 +1366,81 @@ def berechne_teilnehmer_lk_uebersicht(conn) -> dict:
     }
 
 
+# Anzahl Behältnis-Positionen der Behältnisstrecke je Leistungsklasse - 1:1 aus den
+# Original-Vorlagen der Bewertungsbögen. Zentral hier: gemeinsame Grundlage für die
+# Behältnis-Skizze in pdf_export.py und berechne_behaeltnis_bedarf() unten.
+BEHAELTNIS_POSITIONEN = {1: 6, 2: 8, 3: 10}
+
+# Überschrift, Spaltenköpfe und Hinweis der Behältnis-Tabelle - gemeinsam für GUI-Reiter
+# und Richter-Bedarf-PDF, damit beide gleich beschriftet bleiben.
+BEHAELTNIS_BEDARF_TITEL = "Behältnisse Behältnisstrecke (ED Behältnisstrecke + DK)"
+BEHAELTNIS_BEDARF_SPALTEN = ["LK", "Teilnehmer", "leer", "mit Gegenstand", "Material-Verleitung", "gesamt"]
+BEHAELTNIS_BEDARF_HINWEIS = (
+    "Leere Behältnisse einmal je LK, Behältnis mit Gegenstand und ggf. Material-Verleitung "
+    "je Teilnehmer. Positionen: "
+    + ", ".join(f"LK{stufe} {anzahl}" for stufe, anzahl in BEHAELTNIS_POSITIONEN.items())
+    + "."
+)
+
+
+def behaeltnis_bedarf_zeilentexte(zeile: dict) -> list[str]:
+    """Eine Zeile aus berechne_behaeltnis_bedarf() als Anzeigetexte in der Reihenfolge von
+    BEHAELTNIS_BEDARF_SPALTEN ("–" für eine nicht vorhandene Material-Verleitung)."""
+    verleitung = zeile["material_verleitung"]
+    return [
+        zeile["bezeichnung"],
+        str(zeile["teilnehmer"]),
+        str(zeile["leer"]),
+        str(zeile["mit_gegenstand"]),
+        "–" if verleitung is None else str(verleitung),
+        str(zeile["gesamt"]),
+    ]
+
+
+def berechne_behaeltnis_bedarf(conn) -> list[dict]:
+    """Benötigte Behältnisse für die Behältnisstrecke je Leistungsklasse (mit Marco am
+    25.09. abgestimmt, siehe Fortschritt.md). Grundlage für den GUI-Reiter "Übersicht"
+    (app.py) und die Richter-Bedarf-PDF (pdf_export.py).
+
+    Mitgezählt werden alle Teilnehmer, die die Behältnisstrecke laufen: ED mit Disziplin
+    Behältnisstrecke und alle DK. Bei n > 0 Teilnehmern einer LK:
+    - leer = Positionen - 1, einmal je LK (die Strecke wird für alle Hunde genutzt),
+    - mit Gegenstand = n (jeder Teilnehmer bringt seinen eigenen Gegenstand mit),
+    - Material-Verleitung = n, nur in LK3 und nur in der Variante mit separatem
+      Behältnis (ohne separates Behältnis liegt sie in einem der leeren).
+    Bei n == 0 ist alles 0. LK3 erscheint daher zweimal (ohne/mit separatem Behältnis).
+
+    Rückgabe: 4 Zeilen (LK1, LK2, LK3 ohne, LK3 mit) mit den Schlüsseln "bezeichnung",
+    "stufe", "teilnehmer", "leer", "mit_gegenstand", "material_verleitung" (None = gibt
+    es in dieser Zeile nicht) und "gesamt"."""
+    anzahl = {stufe: 0 for stufe in BEHAELTNIS_POSITIONEN}
+    for t in list_teilnehmer(conn):
+        if t["art"] == "DK" or t["disziplin"] == "Behältnisstrecke":
+            anzahl[t["stufe"]] += 1
+
+    varianten = [
+        (1, "LK 1", False),
+        (2, "LK 2", False),
+        (3, "LK 3 ohne separates Behältnis", False),
+        (3, "LK 3 mit separatem Behältnis", True),
+    ]
+    zeilen = []
+    for stufe, bezeichnung, separat in varianten:
+        n = anzahl[stufe]
+        leer = BEHAELTNIS_POSITIONEN[stufe] - 1 if n else 0
+        material_verleitung = n if separat else None
+        zeilen.append({
+            "bezeichnung": bezeichnung,
+            "stufe": stufe,
+            "teilnehmer": n,
+            "leer": leer,
+            "mit_gegenstand": n,
+            "material_verleitung": material_verleitung,
+            "gesamt": leer + n + (material_verleitung or 0),
+        })
+    return zeilen
+
+
 _GEGENSTAND_FELDER = ("gegenstand_1", "gegenstand_2", "gegenstand_3")
 
 

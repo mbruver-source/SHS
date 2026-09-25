@@ -46,10 +46,16 @@ from reportlab.platypus import (
 from db import (
     _GEGENSTAND_FELDER,
     ALLE_DISZIPLINEN,
+    BEHAELTNIS_BEDARF_HINWEIS,
+    BEHAELTNIS_BEDARF_SPALTEN,
+    BEHAELTNIS_BEDARF_TITEL,
+    BEHAELTNIS_POSITIONEN,
     DISZIPLIN_SPALTEN,
     LR_EINHEITEN_JE_ART,
     LR_EINHEITEN_PRO_RICHTER,
     berechne_auswertung,
+    behaeltnis_bedarf_zeilentexte,
+    berechne_behaeltnis_bedarf,
     berechne_zeitplan,
     datum_anzeige,
     datum_oder_none,
@@ -158,7 +164,7 @@ _VERLEITUNGEN = {
     ("Behältnisstrecke", 2): "(Eigengeruchsverleitung, 2 Spielzeugverleitungen)",
     ("Behältnisstrecke", 3): "(Eigengeruchsverleitung, 2 Spielzeugverleitungen, 2 Futterverleitungen, 1 Material-/baugleicher Gegenstand)",
 }
-_BEHAELTNIS_POSITIONEN = {1: 6, 2: 8, 3: 10}
+_BEHAELTNIS_POSITIONEN = BEHAELTNIS_POSITIONEN  # zentral in db.py
 _SUCHGEGENSTAENDE_TEXT = {1: "ein Suchgegenstand", 2: "zwei Suchgegenstände", 3: "drei Suchgegenstände"}
 
 
@@ -1270,7 +1276,8 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     Leistungsklasse die Teilnehmerzahl und die daraus resultierenden Einheiten
     (1 ED = 1 Einheit, 1 DK = 3 Einheiten), sowie darunter die Gesamteinheiten und die
     (aufgerundete) Anzahl benötigter Richter bei höchstens 36 Einheiten je
-    Richter."""
+    Richter. Darunter der Behältnis-Bedarf der Behältnisstrecke je LK (siehe
+    db.berechne_behaeltnis_bedarf)."""
     veranstaltung = get_veranstaltung(conn)
     teilnehmer = list_teilnehmer(conn)
 
@@ -1320,6 +1327,33 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
         f"aufgerundet): {richter_benoetigt}",
         _TEXT_FETT,
     ))
+
+    # Behältnis-Bedarf (Nutzerwunsch 25.09.) - dieselbe Tabelle wie im Reiter "Übersicht",
+    # auch ohne Teilnehmer (dann mit Nullen).
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph(BEHAELTNIS_BEDARF_TITEL, _TEXT_FETT))
+    story.append(Spacer(1, 2 * mm))
+    behaeltnis_daten = [BEHAELTNIS_BEDARF_SPALTEN] + [
+        behaeltnis_bedarf_zeilentexte(zeile) for zeile in berechne_behaeltnis_bedarf(conn)
+    ]
+    behaeltnis_tabelle = Table(
+        behaeltnis_daten, colWidths=[58 * mm, 22 * mm, 14 * mm, 28 * mm, 34 * mm, 18 * mm]
+    )
+    behaeltnis_tabelle.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+        # Kopfzeile etwas kleiner, damit "mit Gegenstand"/"Material-Verleitung" mit
+        # Innenabstand in ihre Spalten passen (Nutzerwunsch 25.09.).
+        ("FONTSIZE", (0, 0), (-1, 0), 8.5),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+    ]))
+    story.append(behaeltnis_tabelle)
+    story.append(Spacer(1, 2 * mm))
+    story.append(Paragraph(BEHAELTNIS_BEDARF_HINWEIS, _HINWEIS))
 
     SimpleDocTemplate(
         pfad, pagesize=A4,

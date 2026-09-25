@@ -2275,3 +2275,52 @@ Dazu 4 neue Tests in `test_db.py`.
 - Push und Tag macht Marco.
 - Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.34 nachgezogen: 10 Dateien,
   Byte-Abgleich identisch.
+
+## 25.09.2026: Behältnis-Bedarf im Reiter „Übersicht“ (shs-grill, noch ohne Build)
+
+**Wunsch Marco:** Unter der bestehenden Tabelle im Reiter „Übersicht“ eine neue Tabelle mit der
+Anzahl der Behältnisse: leere Behältnisse + Behältnis mit Gegenstand, dazu je eine Anzeige mit
+und ohne separates Behältnis für die Verleitung.
+
+**Ergebnis der Befragung (Grill):**
+- Mitgezählt werden alle Teilnehmer, die die Behältnisstrecke laufen: ED Behältnisstrecke + DK.
+  DISQ/ABBR zählen mit, weil es um Planung geht.
+- Positionen je LK 6/8/10 (wie auf den Bewertungsbögen). Bei n > 0 Teilnehmern:
+  - leer = Positionen − 1, einmal je LK
+  - mit Gegenstand = n
+  - Material-Verleitung = n, nur LK3 in der Variante „mit separatem Behältnis“
+  - gesamt = Summe der Zeile
+- Zuerst hieß es „ab LK2“. Geklärt: Nur die Material-/baugleiche Verleitung bekommt ein eigenes
+  Behältnis, und die gibt es laut Bewertungsbogen erst ab LK3. Deshalb hat nur LK3 zwei Zeilen.
+- Keine Gesamtzeile über alle LK, weil die Behältnisse je LK unterschiedlich sind.
+- LK ohne Teilnehmer: alles 0, die Zeile bleibt sichtbar.
+- Begriff überall „Behältnis“ (nicht „Behälter“).
+- Zusätzlich in der PDF „Richter-Bedarf“, nicht im Web (dort gibt es den Reiter nicht).
+- Abgenommenes Beispiel (LK1 2, LK2 3, LK3 4 Teilnehmer): 7 / 10 / 13 (LK3 ohne) / 17 (LK3 mit).
+
+**Umsetzung:**
+- `db.py`:
+  - `BEHAELTNIS_POSITIONEN` ist jetzt die zentrale Quelle (`pdf_export._BEHAELTNIS_POSITIONEN`
+    bleibt als Verweis darauf).
+  - neu `berechne_behaeltnis_bedarf()` und `behaeltnis_bedarf_zeilentexte()`
+  - gemeinsame Texte `BEHAELTNIS_BEDARF_TITEL/_SPALTEN/_HINWEIS`
+- `app.py` `TeilnehmerUebersichtTab`: zweite Tabelle mit Überschrift und Hinweistext; der
+  In-App-Hilfetext ist ergänzt.
+- `pdf_export.erstelle_leistungsrichter_bedarf_pdf`: dieselbe Tabelle unter „Benötigte Richter“,
+  auch ohne Teilnehmer (dann mit Nullen).
+- `docs/HANDBUCH.md`: Abschnitt „Übersicht“ und die Zeile zur Richter-Bedarf-PDF ergänzt. Der
+  Screenshot `docs/bilder/handbuch_uebersicht.png` zeigt die neue Tabelle noch nicht.
+- Tests:
+  - `test_db.py`: 3 neue Tests (leer, Beispiel, nur LK2 belegt)
+  - `test_pdf_export.py`: 1 neuer Test, 1 erweiterter Test
+  - `test_app_gui.py`: Übersicht-Test erweitert
+- Lokaler Testlauf:
+  - Standard-Suite: 439 OK, 127 übersprungen
+  - GUI (pytest, offscreen): 108 bestanden, 1 bekannter xfail
+- Kein Versionsbump, kein Commit, bis Marco einen Build anfordert.
+- Nachtrag nach dem Verifikations-Subagent. Seine zwei optischen Anmerkungen zur Richter-Bedarf-PDF
+  hat Marco so entschieden:
+  - Die Tabelle ragt ca. 2 mm in den Seitenrand: bleibt so.
+  - Die Kopfzeile ist zu eng: Sie hat jetzt 8,5 pt statt 9,5 pt. Damit passen alle Spaltenköpfe
+    mit Innenabstand in ihre Spalte.
+  - `test_pdf_export` läuft grün.

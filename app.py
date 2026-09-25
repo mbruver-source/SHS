@@ -83,6 +83,9 @@ from PySide6.QtWidgets import (
 
 from db import (
     ALLE_DISZIPLINEN,
+    BEHAELTNIS_BEDARF_HINWEIS,
+    BEHAELTNIS_BEDARF_SPALTEN,
+    BEHAELTNIS_BEDARF_TITEL,
     CSV_IMPORT_SPALTEN,
     DISZIPLIN_SPALTEN,
     NeuerTeilnehmer,
@@ -93,7 +96,9 @@ from db import (
     aktualisiere_zeitplan_eintrag,
     alle_leistungsklassen,
     automatische_zeitplan_verteilung,
+    behaeltnis_bedarf_zeilentexte,
     berechne_auswertung,
+    berechne_behaeltnis_bedarf,
     berechne_teilnehmer_lk_uebersicht,
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
@@ -2469,7 +2474,9 @@ class TeilnehmerUebersichtTab(QWidget):
     "Übersicht Teilnehmer" aus der ursprünglichen Excel-Vorlage (siehe Grobkonzept.md), hier
     mit "SH-R" durch den in diesem Programm sonst verwendeten Begriff "Richter"
     ersetzt. Datenquelle ist db.berechne_teilnehmer_lk_uebersicht() - wie bei AuswertungTab
-    kein Zwischenspeicher, baut sich bei jedem Tabwechsel neu aus der DB auf."""
+    kein Zwischenspeicher, baut sich bei jedem Tabwechsel neu aus der DB auf. Darunter
+    eine zweite Tabelle mit dem Behältnis-Bedarf der Behältnisstrecke je LK
+    (db.berechne_behaeltnis_bedarf(), Nutzerwunsch 25.09.)."""
 
     _ZEILEN = [
         ("ed", 1, "ED LK 1"),
@@ -2499,12 +2506,24 @@ class TeilnehmerUebersichtTab(QWidget):
         self.richter_label = QLabel()
         self.richter_label.setStyleSheet("font-weight: bold;")
 
+        self.behaeltnis_tabelle = QTableWidget(4, len(BEHAELTNIS_BEDARF_SPALTEN))
+        self.behaeltnis_tabelle.setHorizontalHeaderLabels(BEHAELTNIS_BEDARF_SPALTEN)
+        self.behaeltnis_tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.behaeltnis_tabelle.horizontalHeader().setStretchLastSection(True)
+        self.behaeltnis_tabelle.verticalHeader().setVisible(False)
+        behaeltnis_hinweis = QLabel(BEHAELTNIS_BEDARF_HINWEIS)
+        behaeltnis_hinweis.setWordWrap(True)
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Übersicht Teilnehmer und LK"))
         layout.addWidget(self.tabelle)
         layout.addWidget(self.teilnehmer_label)
         layout.addWidget(self.abteilungen_label)
         layout.addWidget(self.richter_label)
+        layout.addSpacing(12)
+        layout.addWidget(QLabel(BEHAELTNIS_BEDARF_TITEL))
+        layout.addWidget(self.behaeltnis_tabelle)
+        layout.addWidget(behaeltnis_hinweis)
 
         self.aktualisieren()
 
@@ -2541,6 +2560,11 @@ class TeilnehmerUebersichtTab(QWidget):
         self.teilnehmer_label.setText(f"Teilnehmer gesamt: {daten['teilnehmer_gesamt']}")
         self.abteilungen_label.setText(f"Abteilungen gesamt: {daten['abteilungen_gesamt']}")
         self.richter_label.setText(f"Anzahl benötigter Richter: {daten['leistungsrichter_benoetigt']}")
+
+        for row, zeile in enumerate(berechne_behaeltnis_bedarf(self.conn)):
+            for col, wert in enumerate(behaeltnis_bedarf_zeilentexte(zeile)):
+                self.behaeltnis_tabelle.setItem(row, col, QTableWidgetItem(wert))
+        self.behaeltnis_tabelle.resizeColumnsToContents()
 
 
 class PruefungsblockDialog(ResponsiveSchriftMixin, QDialog):
@@ -3759,7 +3783,10 @@ berücksichtigt).</p>
 <h3>Reiter "Übersicht"</h3>
 <p>Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen und die
 Anzahl benötigter Richter (1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je
-Richter).</p>
+Richter). Darunter die benötigten Behältnisse der Behältnisstrecke je LK (ED Behältnisstrecke
++ DK): leere einmal je LK, eines mit Gegenstand je Teilnehmer, in LK3 wahlweise zusätzlich ein
+separates Behältnis für die Material-Verleitung je Teilnehmer. Die gleiche Tabelle steht auch
+in der Richter-Bedarf-PDF.</p>
 
 <h3>Reiter "Verwaltung"</h3>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,

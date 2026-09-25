@@ -232,6 +232,17 @@ def test_uebersicht_zeigt_teilnehmerzahlen_und_leistungsrichter_bedarf(qtbot, co
     assert tab.tabelle.item(4, 1).text() == "2"
     assert tab.tabelle.item(4, 5).text() == "6"
 
+    # Behältnis-Tabelle: nur DK laufen hier die Behältnisstrecke (ED ist Trümmerfeld).
+    # LK1: 5 leer + 2 = 7, LK2: 7 leer + 2 = 9, LK3 unbelegt = 0.
+    assert tab.behaeltnis_tabelle.item(0, 0).text() == "LK 1"
+    assert tab.behaeltnis_tabelle.item(0, 1).text() == "2"
+    assert tab.behaeltnis_tabelle.item(0, 4).text() == "–"
+    assert tab.behaeltnis_tabelle.item(0, 5).text() == "7"
+    assert tab.behaeltnis_tabelle.item(1, 5).text() == "9"
+    assert tab.behaeltnis_tabelle.item(3, 0).text() == "LK 3 mit separatem Behältnis"
+    assert tab.behaeltnis_tabelle.item(3, 4).text() == "0"
+    assert tab.behaeltnis_tabelle.item(3, 5).text() == "0"
+
 
 # --- Zeitplan: Seitenleiste "Offene Starts" ------------------------------------------
 

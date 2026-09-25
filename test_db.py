@@ -21,6 +21,8 @@ from db import (
     benutzer_anlegen,
     benutzer_loeschen,
     berechne_auswertung,
+    behaeltnis_bedarf_zeilentexte,
+    berechne_behaeltnis_bedarf,
     berechne_teilnehmer_lk_uebersicht,
     berechne_zeitplan,
     berechne_zeitplan_bloecke,
@@ -312,6 +314,48 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(ergebnis["teilnehmer_gesamt"], 17)
         self.assertEqual(ergebnis["abteilungen_gesamt"], 25)
         self.assertEqual(ergebnis["leistungsrichter_benoetigt"], 1)
+
+    def _behaeltnis_teilnehmer(self, eintraege):
+        for startnummer, (stufe, art, disziplin) in enumerate(eintraege, start=1):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"T{startnummer}", vorname="X", rufname_hund="H",
+                art=art, stufe=stufe, disziplin=disziplin, startnummer=startnummer,
+            ))
+
+    def test_behaeltnis_bedarf_ohne_teilnehmer(self):
+        zeilen = berechne_behaeltnis_bedarf(self.conn)
+        self.assertEqual(
+            [z["bezeichnung"] for z in zeilen],
+            ["LK 1", "LK 2", "LK 3 ohne separates Behältnis", "LK 3 mit separatem Behältnis"],
+        )
+        for z in zeilen:
+            self.assertEqual((z["teilnehmer"], z["leer"], z["mit_gegenstand"], z["gesamt"]), (0, 0, 0, 0))
+        self.assertEqual([z["material_verleitung"] for z in zeilen], [None, None, None, 0])
+
+    def test_behaeltnis_bedarf_beispiel(self):
+        # Abgenommenes Beispiel vom 25.09.: LK1 2, LK2 3, LK3 4 Teilnehmer mit
+        # Behältnisstrecke. ED Trümmerfeld/Flächensuche zählen nicht mit, DK schon.
+        self._behaeltnis_teilnehmer([
+            (1, "ED", "Behältnisstrecke"), (1, "DK", None), (1, "ED", "Flächensuche"),
+            (2, "ED", "Behältnisstrecke"), (2, "ED", "Behältnisstrecke"), (2, "DK", None),
+            (3, "ED", "Behältnisstrecke"), (3, "ED", "Behältnisstrecke"), (3, "DK", None), (3, "DK", None),
+            (3, "ED", "Trümmerfeld"),
+        ])
+        zeilen = berechne_behaeltnis_bedarf(self.conn)
+        self.assertEqual(
+            [(z["teilnehmer"], z["leer"], z["mit_gegenstand"], z["material_verleitung"], z["gesamt"]) for z in zeilen],
+            [(2, 5, 2, None, 7), (3, 7, 3, None, 10), (4, 9, 4, None, 13), (4, 9, 4, 4, 17)],
+        )
+        self.assertEqual(behaeltnis_bedarf_zeilentexte(zeilen[3]),
+                         ["LK 3 mit separatem Behältnis", "4", "9", "4", "4", "17"])
+        self.assertEqual(behaeltnis_bedarf_zeilentexte(zeilen[0])[4], "–")
+
+    def test_behaeltnis_bedarf_nur_lk2_belegt(self):
+        # Unbelegte LK zeigen überall 0 (auch keine leeren Behältnisse).
+        self._behaeltnis_teilnehmer([(2, "DK", None)])
+        zeilen = berechne_behaeltnis_bedarf(self.conn)
+        self.assertEqual([z["gesamt"] for z in zeilen], [0, 8, 0, 0])
+        self.assertEqual(zeilen[1]["leer"], 7)
 
     def test_migration_ergaenzt_zusatzfelder_in_alter_termin_datei(self):
         # Simuliert eine Termin-Datei/-Datenbank, die vor Einführung der Zusatzfelder

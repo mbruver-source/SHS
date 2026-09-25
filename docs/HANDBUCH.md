@@ -304,6 +304,20 @@ Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen 
 **Anzahl benötigter Richter** (1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je
 Richter).
 
+Darunter zeigt die Tabelle **„Behältnisse Behältnisstrecke“**, wie viele Behältnisse je
+Leistungsklasse bereitliegen müssen. Mitgezählt werden alle Teilnehmer, die die
+Behältnisstrecke laufen: ED Behältnisstrecke und alle DK.
+
+- **leer:** Positionen − 1, einmal je LK (Positionen: LK1 6, LK2 8, LK3 10)
+- **mit Gegenstand:** eines je Teilnehmer
+- **Material-Verleitung:** nur LK3. Die Zeile „mit separatem Behältnis“ rechnet ein eigenes
+  Behältnis je Teilnehmer dazu. In der Zeile „ohne separates Behältnis“ liegt die Verleitung
+  in einem der leeren Behältnisse.
+- **gesamt:** Summe der Zeile
+
+Eine LK ohne Teilnehmer zeigt überall 0. Eine Gesamtsumme über alle LK gibt es bewusst nicht,
+weil die Behältnisse je LK unterschiedlich sind.
+
 ## 9. Verwaltung und Export
 
 ### Verwaltung
@@ -326,7 +340,7 @@ gewählter Ordner) und erzeugt ein PDF. **„Ablageort öffnen“** zeigt diesen
 | **Statistik (PDF)…** | Prädikat-Übersicht je Art/LK inkl. Jugendliche (unter 18); im Kopf Vereins-Nr., Prüfungsnummer, Richter, Prüfungsleiter |
 | **Übersicht für Prüfungsleitung (PDF)…** | Stammdaten, Gebühr, bezahlt?, Impfpass gültig bis (rot bei fehlendem oder abgelaufenem Datum) |
 | **Chipnummernliste (PDF)…** | Start-Nr., Name, Hund, Chip-Nr. – z. B. für den Chip-Abgleich |
-| **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter |
+| **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
 | **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. |
 
