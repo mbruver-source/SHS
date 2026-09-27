@@ -91,7 +91,16 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   - `Architektur.md`, `README*.md` und `Fortschritt.md`.
   Erst danach kommen Versionsbump, `docs/HANDBUCH.pdf` und Build. Kann ein Screenshot nicht
   erstellt werden, vor dem Build bei Marco nachfragen statt ohne ihn zu bauen.
-- Wenn Marco einen Build anfordert: zuerst Dokumente und Screenshots wie oben aktualisieren,
+- **Offene Punkte VOR dem Build klären (Marcos Vorgabe, 27.09.2026):** Liefern die Verifikation
+  oder die Vorbereitung eines Builds noch Punkte, Befunde oder Auffälligkeiten, gilt das auch
+  für optionale Kleinigkeiten wie veraltete Kommentare oder Test-Robustheit. Dann wird NICHT
+  gebaut, sondern zuerst Marco gefragt und der Umgang damit geklärt: umsetzen, bewusst
+  zurückstellen oder verwerfen. Erst danach folgt der Build, mit allem, was dazugehören soll.
+  Anlass: 1.0.37 wurde gebaut, obwohl die Verifikation noch zwei kleine Punkte gemeldet hatte.
+  Die kamen danach als Nachtrag-Commit dazu, sodass zwei Build-Durchläufe entstanden, wo einer
+  gereicht hätte.
+- Wenn Marco einen Build anfordert: zuerst offene Punkte wie oben klären, dann Dokumente und
+  Screenshots wie oben aktualisieren,
   dann alle seit dem letzten Build gesammelten Änderungen bündeln, Version per
   `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
   `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu

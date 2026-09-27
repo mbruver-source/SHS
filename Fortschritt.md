@@ -2675,3 +2675,10 @@ Punkte um“, Arbeitsstand, noch kein Build)
 - Auf Marcos Wunsch („sie sollen in aktuelle build“) zu 1.0.37 committet. `v1.0.37` war noch
   nicht getaggt, der Tag kommt jetzt auf diesen Commit. Die Versionsnummer bleibt 1.0.37.
   Quellcode-Spiegel nachgezogen.
+
+**Neue allgemeine Vorgabe (Marco, 27.09.2026):** Liefern Verifikation oder Build-Vorbereitung
+noch Punkte, Befunde oder Auffälligkeiten, auch optionale, dann wird zuerst nachgefragt und der
+Umgang geklärt, erst danach gebaut.
+- Anlass: Bei 1.0.37 wurde gebaut, obwohl die Verifikation zwei kleine Punkte gemeldet hatte.
+  Die kamen als Nachtrag-Commit `c1b7474` dazu.
+- Die Regel steht in `CLAUDE.md` unter „Build-/Versionsdisziplin“.
