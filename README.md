@@ -29,6 +29,10 @@ musst du nicht installieren. Administratorrechte sind nicht nötig.
 **Updates:** Im Programm über **Version → „Nach Updates suchen“**. Die neue Version einfach
 über die alte installieren – deine Termine bleiben erhalten.
 
+**Ausprobieren:** Mit der [Beispiel-CSV mit 20 erfundenen Teilnehmern](docs/beispiel_teilnehmer.csv)
+lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
+[„Ausprobieren mit Beispieldaten“](docs/HANDBUCH.md#ausprobieren-mit-beispieldaten).
+
 ## Was das Programm kann
 
 | Bereich | Was du damit machst |

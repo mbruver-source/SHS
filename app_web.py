@@ -754,11 +754,11 @@ def _pruefe_und_parse_formular(
     Die Wertebereiche (0-60 Suchleistung, 0-40 Anzeigeleistung) werden hier bewusst
     VOR dem Speichern geprüft, nicht erst über die CHECK-Constraints der Datenbank
     abgefangen - eine fehlgeschlagene Anweisung würde bei PostgreSQL sonst die laufende
-    Transaktion in einen Fehlerzustand versetzen (erst durch ROLLBACK wieder nutzbar,
-    das der schlanke _PostgresConnection-Wrapper in db.py nicht anbietet - siehe dort).
+    Transaktion in einen Fehlerzustand versetzen (erst durch ROLLBACK wieder nutzbar).
     Da hier ohnehin für jede Anfrage eine frische Verbindung verwendet wird (siehe
-    _postgres_verbindung), wäre das zwar unkritisch, sauberer und mit besserer
-    Fehlermeldung für die Richter ist aber, das erst gar nicht so weit kommen zu lassen."""
+    _postgres_verbindung) und der _PostgresConnection-Wrapper in db.py rollback()
+    anbietet, wäre das zwar unkritisch, sauberer und mit besserer Fehlermeldung für die
+    Richter ist aber, das erst gar nicht so weit kommen zu lassen."""
     werte: dict[str, tuple[int | None, int | None]] = {}
     for disziplin in disziplinen:
         suche_text, anzeige_text = _disziplin_text_werte(formular, disziplin)

@@ -32,7 +32,6 @@ from app import (
     VERSION,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
-    _erzeuge_qss,
     _wiederherstellungsziele_planen,
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
@@ -50,7 +49,6 @@ from app import (
     ZeitplanTab,
 )
 from db import (
-    CSV_IMPORT_SPALTEN,
     NeuerTeilnehmer,
     TerminInfo,
     add_teilnehmer,
@@ -67,6 +65,10 @@ from db import (
     setze_ergebnis_status,
     update_teilnehmer,
 )
+from db_import import (
+    CSV_IMPORT_SPALTEN,
+)
+from desktop_darstellung import _erzeuge_qss
 
 
 @pytest.fixture
@@ -2018,7 +2020,7 @@ def test_termin_import_dialog_listet_teilnehmer_und_importiert_auswahl(qtbot, tm
         pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
         ort="Testort", datum="2026-01-01", anzahl_teilnehmer=2, lesbar=True,
     )
-    monkeypatch.setattr("app.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -2043,7 +2045,7 @@ def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypa
         pfad="anderer.sqlite", dateiname="anderer.sqlite", verein="Anderer", vereins_nr=None,
         ort="Y", datum="2026-01-02", anzahl_teilnehmer=1, lesbar=True,
     )
-    monkeypatch.setattr("app.liste_termine", lambda: [eigener, anderer])
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [eigener, anderer])
 
     dialog = TerminImportDialog(None, aktueller_pfad="eigen.sqlite")
     qtbot.addWidget(dialog)
@@ -2053,7 +2055,7 @@ def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypa
 
 
 def test_termin_import_dialog_ohne_anderen_termin_deaktiviert_ok(qtbot, monkeypatch):
-    monkeypatch.setattr("app.liste_termine", lambda: [])
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -2406,8 +2408,11 @@ def darstellung_speicher(monkeypatch):
     """Ersetzt die QSettings-Zugriffe durch einen Speicher im Arbeitsspeicher (keine
     Schreibzugriffe in Registry/~/.config) und stellt danach den Zustand der
     QApplication (Stil, Palette, Stylesheet) sowie die Modul-Zustände von app.py wieder
-    her, damit nachfolgende Tests nicht im dunklen Design laufen."""
+    her, damit nachfolgende Tests nicht im dunklen Design laufen. Die Einstellungs-
+    Funktionen werden in BEIDEN Modulen ersetzt: HauptFenster (app.py) ruft sie direkt
+    auf, _darstellung_anwenden() in desktop_darstellung.py ebenfalls."""
     import app as app_modul
+    import desktop_darstellung as darstellung
 
     qapp = QApplication.instance()
     vorher_stylesheet = qapp.styleSheet()
@@ -2416,13 +2421,14 @@ def darstellung_speicher(monkeypatch):
     qapp.setStyleSheet(vorher_stylesheet)
     vorher_palette = QPalette(qapp.palette())
     for name in ("_aktives_design", "_ursprung_stil", "_ursprung_palette", "_aktueller_stil"):
-        monkeypatch.setattr(app_modul, name, getattr(app_modul, name))
+        monkeypatch.setattr(darstellung, name, getattr(darstellung, name))
 
     speicher = {"theme": "blau", "design": "hell"}
-    monkeypatch.setattr(app_modul, "_gespeichertes_theme_lesen", lambda: speicher["theme"])
-    monkeypatch.setattr(app_modul, "_gespeichertes_design_lesen", lambda: speicher["design"])
-    monkeypatch.setattr(app_modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
-    monkeypatch.setattr(app_modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
+    for modul in (app_modul, darstellung):
+        monkeypatch.setattr(modul, "_gespeichertes_theme_lesen", lambda: speicher["theme"])
+        monkeypatch.setattr(modul, "_gespeichertes_design_lesen", lambda: speicher["design"])
+        monkeypatch.setattr(modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
+        monkeypatch.setattr(modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
     yield speicher
     qapp.setStyle(vorher_stil)
     qapp.setPalette(vorher_palette)
@@ -2441,7 +2447,7 @@ def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellun
 
 
 def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung_speicher):
-    import app as app_modul
+    import desktop_darstellung as darstellung
 
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
@@ -2451,8 +2457,8 @@ def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung
     fenster._design_actions["dunkel"].trigger()
     assert darstellung_speicher["design"] == "dunkel"
     assert qapp.styleSheet() == _erzeuge_qss("blau", "dunkel")
-    assert app_modul._aktueller_stil.lower() == "fusion"
-    assert app_modul._aktives_design == "dunkel"
+    assert darstellung._aktueller_stil.lower() == "fusion"
+    assert darstellung._aktives_design == "dunkel"
 
     fenster._theme_actions["gruen"].trigger()
     assert darstellung_speicher["theme"] == "gruen"
@@ -2460,14 +2466,14 @@ def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung
 
     fenster._design_actions["hell"].trigger()
     assert qapp.styleSheet() == _erzeuge_qss("gruen", "hell")
-    assert app_modul._aktives_design == "hell"
-    assert app_modul._aktueller_stil == app_modul._ursprung_stil
+    assert darstellung._aktives_design == "hell"
+    assert darstellung._aktueller_stil == darstellung._ursprung_stil
 
 
 def test_designwechsel_behaelt_ungespeicherte_ergebnisse(qtbot, termin, darstellung_speicher):
     """Die Ergebniserfassung wird beim Designwechsel nur umgefärbt, nicht neu geladen -
     eine noch nicht gespeicherte Eingabe bleibt erhalten und bekommt die neue Farbe."""
-    import app as app_modul
+    import desktop_darstellung as darstellung
 
     conn, pfad = termin
     _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
@@ -2486,7 +2492,7 @@ def test_designwechsel_behaelt_ungespeicherte_ergebnisse(qtbot, termin, darstell
     assert suche_feld.text() == "58"
     assert anzeige_feld.text() == "38"
     assert tab._zeile_ist_ungespeichert(0)
-    dunkel_gelb = app_modul._DESIGNS["dunkel"]["ungespeichert_bg"].lower()
+    dunkel_gelb = darstellung._DESIGNS["dunkel"]["ungespeichert_bg"].lower()
     assert dunkel_gelb in suche_feld.styleSheet().lower()
 
 
@@ -2494,19 +2500,19 @@ def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_sp
     """Unter offscreen ist der Ursprungsstil ohnehin "fusion" - damit der Rückweg
     Dunkel -> Hell wirklich einen Stilwechsel prüft, wird hier "windows" als
     Ursprungsstil vorgegeben (auf allen Plattformen verfügbar)."""
-    import app as app_modul
+    import desktop_darstellung as darstellung
 
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     qapp = QApplication.instance()
-    app_modul._darstellung_anwenden(qapp)  # Ursprung erfassen
-    monkeypatch.setattr(app_modul, "_ursprung_stil", "windows")
+    darstellung._darstellung_anwenden(qapp)  # Ursprung erfassen
+    monkeypatch.setattr(darstellung, "_ursprung_stil", "windows")
 
     fenster._design_actions["dunkel"].trigger()
-    assert app_modul._aktueller_stil == "fusion"
+    assert darstellung._aktueller_stil == "fusion"
     fenster._design_actions["hell"].trigger()
-    assert app_modul._aktueller_stil == "windows"
+    assert darstellung._aktueller_stil == "windows"
     qapp.setStyleSheet("")
     assert qapp.style().name().lower() == "windows"
 
@@ -2514,14 +2520,14 @@ def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_sp
 def test_design_ohne_beschreibbaren_tempordner_startet_trotzdem(darstellung_speicher, monkeypatch, tmp_path):
     """Kann das Häkchen-Bild nicht geschrieben werden, darf das weder den Start noch den
     Designwechsel abbrechen."""
-    import app as app_modul
+    import desktop_darstellung as darstellung
 
     unmoeglich = tmp_path / "datei_statt_ordner"
     unmoeglich.write_text("x")
-    monkeypatch.setattr(app_modul, "_haken_pfad", lambda: str(unmoeglich / "unter" / "haken.png"))
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(unmoeglich / "unter" / "haken.png"))
     darstellung_speicher["design"] = "dunkel"
 
-    app_modul._darstellung_anwenden(QApplication.instance())
+    darstellung._darstellung_anwenden(QApplication.instance())
 
-    assert app_modul._aktives_design == "dunkel"
+    assert darstellung._aktives_design == "dunkel"
     assert QApplication.instance().styleSheet() == _erzeuge_qss("blau", "dunkel")

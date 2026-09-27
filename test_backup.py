@@ -1,5 +1,5 @@
-"""Tests für die Datensicherung (Export/Import als ZIP, siehe db.py, Abschnitt
-"Datensicherung"). Reine Logik-/Dateisystem-Tests ohne Qt, im selben Stil wie test_db.py
+"""Tests für die Datensicherung (Export/Import als ZIP, siehe
+db_sicherung.py). Reine Logik-/Dateisystem-Tests ohne Qt, im selben Stil wie test_db.py
 (unittest, tempfile.TemporaryDirectory) - decken sowohl den unverschlüsselten Weg
 (Standard-`zipfile`) als auch den AES-256-verschlüsselten Weg (`pyzipper`) ab."""
 
@@ -13,12 +13,14 @@ import pyzipper
 
 from db import (
     NeuerTeilnehmer,
-    PasswortFalschError,
-    _ist_sicherer_dateiname,
     add_teilnehmer,
-    eindeutigen_dateinamen_finden,
     init_db,
     set_veranstaltung,
+)
+from db_sicherung import (
+    PasswortFalschError,
+    _ist_sicherer_dateiname,
+    eindeutigen_dateinamen_finden,
     sicherung_erstellen,
     sicherung_inhalt,
     sicherung_wiederherstellen,
@@ -281,7 +283,7 @@ class TestSicherungWiederherstellen(unittest.TestCase):
         sicherung_erstellen(self.zip_pfad, ordner=self.quell_ordner)
         (self.ziel_ordner / "a.sqlite").write_text("alter Inhalt - darf nicht verloren gehen")
 
-        with patch("db.os.replace", side_effect=OSError("simulierter Schreibfehler")):
+        with patch("db_sicherung.os.replace", side_effect=OSError("simulierter Schreibfehler")):
             with self.assertRaises(OSError):
                 sicherung_wiederherstellen(self.zip_pfad, {"a.sqlite": "a.sqlite"}, ordner=self.ziel_ordner)
 
@@ -334,7 +336,7 @@ class TestEindeutigenDateinamenFinden(unittest.TestCase):
 
 class TestIstSichererDateiname(unittest.TestCase):
     """QS-Fund (19./20.09., Path Traversal beim Backup-Import) - siehe Docstring von
-    _ist_sicherer_dateiname() in db.py."""
+    _ist_sicherer_dateiname() in db_sicherung.py."""
 
     def test_normale_dateinamen_sind_sicher(self):
         self.assertTrue(_ist_sicherer_dateiname("a.sqlite"))

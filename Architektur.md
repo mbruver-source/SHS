@@ -1,6 +1,6 @@
 # Architekturüberblick: SHS-Prüfungsprogramm
 
-Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026). Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
+Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026, Modulaufteilung 27.09.2026). Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
 aktuellen, tatsächlich umgesetzten Stand inkl. der später hinzugekommenen Web/PostgreSQL-Variante.
 Gedacht als schneller Einstieg für neue Sitzungen/Subagents, die den Code noch nicht kennen -
 Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.md`.
@@ -9,7 +9,7 @@ Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.m
 
 Das Programm existiert in zwei parallelen Frontends, die auf denselben Fachfunktionen aufsetzen:
 
-- **Desktop-App** (`app.py`, PySide6) - läuft lokal bei der Prüfungsleitung, eine Person,
+- **Desktop-App** (`app.py` + `desktop_*.py`, PySide6) - läuft lokal bei der Prüfungsleitung, eine Person,
   eine SQLite-Datei je Termin (`termine_ordner()`), volle Funktionalität (Termin anlegen,
   Teilnehmer, Ergebnisse, Zeitplan, PDF-Ausgabe, Datensicherung).
 - **Web-Backend** (`app_web.py`, Flask) - läuft im Container am Prüfungstag, mehrere Richter
@@ -23,7 +23,12 @@ SQLite und PostgreSQL.
 ```mermaid
 flowchart TB
     subgraph Desktop["Desktop-App (PySide6)"]
-        AppPy["app.py (größtes Modul)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung"]
+        AppPy["app.py (größtes Modul)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung,<br/>Hauptfenster, Start- und Versionsdialog"]
+        DeskDialoge["desktop_dialoge.py<br/>Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
+        DeskGemeinsam["desktop_gemeinsam.py<br/>gemeinsame GUI-Hilfen<br/>(Ablageorte, PDF-Speichern, Fehlermeldungen)"]
+        DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Akzentfarben"]
+        DbImport["db_import.py<br/>CSV-/OMA-/Stammdaten-Import"]
+        DbSicherung["db_sicherung.py<br/>Datensicherung (ZIP/pyzipper)"]
     end
 
     subgraph WebBackend["Web-Backend (Flask, im Container)"]
@@ -32,7 +37,7 @@ flowchart TB
     end
 
     subgraph Shared["Gemeinsame Schicht"]
-        DbPy["db.py (zweitgrößtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Zeitplan-Berechnung, Sicherung (ZIP/pyzipper)"]
+        DbPy["db.py (zweitgrößtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Ergebnisse, Zeitplan-Berechnung"]
         ShsCore["shs_core.py (klein)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
         PdfExport["pdf_export.py<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan"]
     end
@@ -45,6 +50,16 @@ flowchart TB
     Sync["Brücke SQLite &lt;-&gt; PostgreSQL:<br/>sync_termin.py (CLI)<br/>+ app_web.py /admin/termine<br/>(Veröffentlichen/Zurückholen per Upload/Download)"]
 
     AppPy --> DbPy
+    AppPy --> DeskDialoge
+    AppPy --> DeskGemeinsam
+    AppPy --> DeskDarstellung
+    AppPy --> DbImport
+    AppPy --> DbSicherung
+    DeskDialoge --> DeskGemeinsam
+    DeskDialoge --> DbPy
+    DeskGemeinsam --> DbPy
+    DbImport --> DbPy
+    DbSicherung --> DbPy
     AppPy --> ShsCore
     AppPy --> PdfExport
     AppWeb --> DbPy
@@ -72,9 +87,14 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs/Dialoge, `closeEvent`-Handling, Auto-Save, Darstellung (Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`) | `test_app_gui.py`, `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht ebenfalls PySide6) |
+| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save), `StartDialog`, `VersionDialog` + Update-Prüfung | `test_app_gui.py` |
+| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung); von `app.py` per `from … import` eingebunden | `test_app_gui.py` |
+| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/PDF-Speicherdialog, Fehlermeldungen, responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle | `test_app_gui.py` |
+| `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
 | `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
-| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Backup/Restore (ZIP, optional `pyzipper`-verschlüsselt) | `test_db.py`, `test_db_postgres_wrapper.py`, `test_backup.py` (Datensicherung ZIP/pyzipper) |
+| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
+| `db_import.py` | Teilnehmer-Import (Desktop): CSV aus dem Formular-Import, OMA-Meldeliste, Stammdaten aus einem anderen Termin; baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
+| `db_sicherung.py` | Backup/Restore aller Termin-Dateien (ZIP, optional `pyzipper`-verschlüsselt); baut auf `db.py` auf | `test_backup.py` |
 | `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung | `test_shs_core.py` |
 | `pdf_export.py` | PDF-Erzeugung (reportlab): Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Zeitplan, Richter-Bedarf | `test_pdf_export.py` |
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
@@ -102,19 +122,30 @@ flowchart TB
 
 ## 4. Test-Suite-Struktur
 
-Mindestens ein Testmodul je Kern-Modul (Zuordnung in der Tabelle oben - nicht 1:1: `db.py`
-hat drei Testmodule, `app.py` zwei, `sync_termin.py` und `templates/` keine eigenen), plus
-Besonderheiten:
+Mindestens ein Testmodul je Kern-Modul (Zuordnung in der Tabelle oben - nicht 1:1: die
+Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py` mitgeprüft,
+`sync_termin.py` und `templates/` haben keine eigenen), plus Besonderheiten:
 
-- **PostgreSQL-Tests** (`Test*Postgres`-Klassen in `test_db.py`, `TestCsrfSchutz`-unabhängige
-  Postgres-Fälle) brauchen `SHS_TEST_POSTGRES_DSN` + `psycopg2` - laufen nur in der CI
-  (Service-Container in `tests.yml`), werden lokal übersprungen (`skipTest`).
+- **PostgreSQL-Tests** (`Test*Postgres`-Klassen in `test_db.py` sowie `TestAppWebPostgres` in
+  `test_app_web.py`: Login, Terminwahl, Ergebniserfassung und Rückimport per HTTP gegen einen
+  echten Server, ohne Mocks) brauchen `SHS_TEST_POSTGRES_DSN` + `psycopg2` - laufen in der CI
+  (Service-Container in `tests.yml`), werden sonst übersprungen (`skipTest`). Lokal geht es
+  mit einem Wegwerf-Container (`podman run --rm -p 55432:5432 -e POSTGRES_USER=shs_test
+  -e POSTGRES_PASSWORD=shs_test -e POSTGRES_DB=shs_test docker.io/library/postgres:16`);
+  dabei jedes Mal einen FRISCHEN Container nehmen - zwei `test_check_constraint_*`-Tests
+  schlagen beim zweiten Lauf gegen dieselbe Datenbank fehl (siehe `Fortschritt.md`).
 - **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt` - ebenfalls nur in der CI;
-  `test_theme.py` braucht PySide6 (importiert `app`).
+  `test_theme.py` braucht PySide6 (importiert `desktop_darstellung`).
 - **PDF-Inhaltstests** (`test_pdf_export.py`) brauchen `pypdf` - ohne pypdf wird der Großteil
   übersprungen. Test-/Dev-Abhängigkeiten stehen in `requirements-dev.txt`.
-- **`test_app_web.py`** mockt die PostgreSQL-Klebefunktionen und läuft stattdessen echt gegen
-  eine temporäre SQLite-Datei - dadurch überall lauffähig, ohne PostgreSQL zu brauchen.
+- **`test_app_web.py`** mockt (bis auf `TestAppWebPostgres`) die PostgreSQL-Klebefunktionen und
+  läuft stattdessen echt gegen eine temporäre SQLite-Datei - dadurch überall lauffähig, ohne
+  PostgreSQL zu brauchen.
+- **Patch-Ziele bei Modulaufteilungen**: Tests ersetzen Namen per `patch("db.X")`/
+  `monkeypatch.setattr("app.X")`. Das wirkt nur, solange der Aufrufer den Namen im selben
+  Modul nachschlägt - deshalb sind bisher nur aufgerufene Bausteine (Dialoge, Hilfen,
+  Darstellung, Import, Sicherung) ausgelagert, die aufrufenden Tabs und die intern
+  gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) noch nicht.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
   test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version
   test_shs_core` deckt alles außer GUI- und echten Postgres-Tests ab.
@@ -136,8 +167,8 @@ gelesen):
    mit Abstand größten Module, mehrere tausend Zeilen) komplett zu lesen, zuerst einen schnellen Such-Subagent die relevante
    Stelle lokalisieren lassen.
 2. **Bereichs-Subagents bei bereichsübergreifenden Änderungen** - betrifft eine Änderung
-   mehrere der drei Bereiche Desktop (`app.py`), Web (`app_web.py`+`templates/`) und Daten
-   (`db.py`), parallele Subagents je Bereich statt sequenziell.
+   mehrere der drei Bereiche Desktop (`app.py`+`desktop_*.py`), Web (`app_web.py`+`templates/`)
+   und Daten (`db.py`+`db_import.py`/`db_sicherung.py`), parallele Subagents je Bereich statt sequenziell.
 3. **Differenzierte QS-Rollen statt identischer Aufträge** - die monatliche QS-Prüfung
    (Scheduled Task) gibt den 3 Subagents jetzt unterschiedliche Schwerpunkte: Sicherheit /
    Korrektheit & Edge-Cases / Wartbarkeit & Stil - statt 3x denselben allgemeinen Auftrag.

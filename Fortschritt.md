@@ -2350,3 +2350,243 @@ und ohne separates Behältnis für die Verleitung.
   - `docs/HANDBUCH.pdf` danach neu erzeugt.
   - Beides auch in den Quellcode-Spiegel übernommen. Kam erst nach dem Tag `v1.0.35`
     (1fad826), ist also nicht in 1.0.35 enthalten, sondern ab dem nächsten Build.
+
+## 27.09.2026: Architektur-Umbau nach Codex-Prüfung (Arbeitsstand, noch kein Build)
+
+**Anlass:** Marco hat Codex (OpenAI, per Claude-Code-Plugin) die Architektur prüfen lassen.
+Von den sechs Vorschlägen hat er 1, 2, 3, 4 und 6 zur Umsetzung freigegeben. Vorschlag 5
+(Typ-`Protocol` für die Verbindung) ist nicht dabei. Bedingung: Für die Nutzer ändert sich
+nichts an Oberfläche, Layout, Themes, Texten, PDFs oder Bedienung. Alles hier sind interne
+Umbauten.
+
+**Vorschlag 6: veraltete Kommentare**
+- `app_web.py`: Der Docstring von `_pruefe_und_parse_formular` behauptete, der
+  PostgreSQL-Wrapper biete kein ROLLBACK an. Er hat aber `rollback()`. Das ist jetzt
+  korrigiert.
+- `db.py`: Im Klassendocstring von `_PostgresConnection` ist `rollback()` ergänzt.
+
+**Vorschlag 1: kein direktes SQL mehr in der Oberfläche**
+- Neue Funktion `db.ergebnisse_je_teilnehmer(conn) -> {teilnehmer_id: Zeile}`.
+- Sie ersetzt das identische `SELECT * FROM ergebnisse` an zwei Stellen: in
+  `ErgebnisTab._zeilen_aufbauen` (`app.py`) und in `db.berechne_auswertung`.
+- Neuer Test in `TestDatenbank`. Er läuft über `TestDatenbankPostgres` auch gegen
+  PostgreSQL.
+
+**Vorschlag 2: Web-Tests gegen echtes PostgreSQL**
+- Neue Klasse `TestAppWebPostgres` in `test_app_web.py`. Sie kommt ohne `db.*`-Mocks aus.
+  Getestet werden:
+  - Ersteinrichtung, Abmelden und erneutes Anmelden;
+  - Terminwahl zwischen zwei veröffentlichten Terminen;
+  - Ergebnis per HTTP speichern und direkt in PostgreSQL prüfen;
+  - Rückimport über `/admin/termine` inklusive Download. Die heruntergeladene Datei enthält
+    das im Web erfasste Ergebnis.
+- Die Klasse wird wie die übrigen PostgreSQL-Tests ohne `SHS_TEST_POSTGRES_DSN`
+  übersprungen und läuft in der CI.
+- Beim ersten echten Lauf aufgefallen: `verbinde_postgres_server()` führt bei JEDER neuen
+  Verbindung ein `ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS …` aus. Hält
+  eine andere Verbindung noch eine offene Transaktion auf der Tabelle, wartet dieses ALTER
+  unbegrenzt.
+  - Im Test war das die eigene Prüfverbindung; sie schließt ihre Transaktionen jetzt mit
+    `commit()` ab.
+  - Im Betrieb sind die Web-Anfragen kurz, deshalb ist es dort bisher unkritisch.
+  - Als Beobachtung für Marco notiert, nicht geändert.
+
+**Vorschlag 3: `db.py` aufteilen, erste Stufe**
+- Neu `db_import.py`: CSV-, OMA- und Stammdaten-Import.
+- Neu `db_sicherung.py`: ZIP-Datensicherung (pyzipper).
+- Beide importieren aus `db`, `db` importiert sie nicht. So entsteht kein Ringimport.
+- Aufrufer auf die neuen Module umgestellt: `app.py`, `test_db.py`, `test_backup.py`
+  (Patch-Ziel jetzt `db_sicherung.os.replace`) und `test_app_gui.py`.
+- `app_web.py` und `sync_termin.py` nutzen nichts davon, deshalb bleibt das `Containerfile`
+  unverändert. In `build.spec` wurde nur der Kommentar angepasst; PyInstaller findet die
+  Module über die Importe.
+- Bewusst noch NICHT ausgelagert: Konten, PostgreSQL-Terminverwaltung und Sync.
+  - Die Tests ersetzen dort Funktionen, die andere `db`-Funktionen intern aufrufen, etwa
+    `db._setze_termin_suchpfad` oder `db.eintragen_ergebnis`.
+  - Nach einer Verschiebung würden diese Patches still wirkungslos.
+  - Das wäre eine eigene Stufe mit angepassten Patch-Zielen.
+
+**Vorschlag 4: `app.py` aufteilen, erste Stufe**
+- Neu:
+  - `desktop_darstellung.py`: Stylesheet, Designs, Akzentfarben, QSettings, `_farbe`,
+    `_darstellung_anwenden`;
+  - `desktop_gemeinsam.py`: Ablageorte, PDF-Speichern, Fehlermeldungen, responsive
+    Schrift, Tabellen-Hilfen, Spaltenkonstanten;
+  - `desktop_dialoge.py`: Teilnehmer-, Startnummern-, Termin-Import-, Prüfungsblock-,
+    Pausen-, Bewertungsbogen-, Sicherungs-, Hilfe- und Veranstaltungsdialog.
+- Der Code wurde unverändert verschoben (per Syntaxbaum, Kommentare wandern mit). `app.py`
+  bindet die Namen per `from … import` ein.
+- In `app.py` bleiben die Tabs, `HauptFenster`, `StartDialog` und `VersionDialog`. Die Tests
+  ersetzen dort Namen wie `app.VeranstaltungsDialog` oder `app.liste_termine`, und diese
+  Patches wirken weiter.
+- Größen: `app.py` hat jetzt rund 3200 statt 5100 Zeilen, `db.py` rund 2500 statt 3000.
+- Angepasste Tests:
+  - Die Fixture `darstellung_speicher` ersetzt die Einstellungsfunktionen jetzt in `app`
+    UND `desktop_darstellung`, sonst würde `HauptFenster` echte QSettings schreiben.
+  - Die Darstellungstests lesen die Zustände aus `desktop_darstellung`.
+  - Die drei `TerminImportDialog`-Tests patchen `desktop_dialoge.liste_termine`.
+  - `test_theme.py` importiert `desktop_darstellung`.
+
+**Doku:** `Architektur.md` (Diagramm, Modultabelle, Teststruktur, Hinweis zu Patch-Zielen)
+und `CLAUDE.md` (Zeilenzahlen, Bereichszuordnung) sind aktualisiert.
+
+**Tests:**
+- Lokal mit Anaconda-Python:
+  - Standard-Suite: OK, 132 übersprungen.
+  - Komplette pytest-Suite inklusive GUI (offscreen) und PostgreSQL gegen einen
+    Wegwerf-Container `postgres:16` über Podman: 580 bestanden, 2 übersprungen, 1 bekannter
+    xfail.
+
+**Nebenbefund (bestand schon vorher, nicht geändert):**
+- `TestDatenbankPostgres.test_check_constraint_ed_braucht_disziplin` und
+  `…_dk_darf_keine_disziplin_haben` schlagen fehl, wenn die Suite ein ZWEITES Mal gegen
+  dieselbe PostgreSQL-Datenbank läuft. Gegen eine frische Datenbank laufen sie durch.
+- Mit einem Worktree auf dem unveränderten Stand eb4ca58 nachgestellt. Vermutlich hinterlassen
+  die Migrationstests eine `teilnehmer`-Tabelle ohne CHECK-Constraints.
+- In der CI ohne Auswirkung, weil der Service-Container dort immer frisch ist.
+- Zur Besprechung mit Marco.
+
+**Noch offen:**
+- Marco klickt vor dem nächsten Build einmal selbst durch die Desktop-App: alle Reiter, beide
+  Designs und Akzentfarben, einen Teilnehmer-Dialog, eine Datensicherung und einen
+  CSV-/OMA-Import.
+- Commit und Build erst auf Anforderung. Die neuen Dateien `db_import.py`, `db_sicherung.py`
+  und `desktop_*.py` müssen dabei mit ins Repo und in den Quellcode-Spiegel.
+
+**Neue allgemeine Vorgabe (Marco, 27.09.2026):** Vor jedem neuen Build werden alle Dokumente
+und Screenshots aktualisiert: Handbuch, `docs/bilder/`, `Architektur.md`, READMEs und
+`Fortschritt.md`. Erst danach folgen Versionsbump, Handbuch-PDF und Build.
+- Anlass: Bei 1.0.35 wurde der Screenshot erst nach dem Build erneuert.
+- Die Regel steht jetzt in `CLAUDE.md` unter „Build-/Versionsdisziplin“.
+- Für den nächsten Build: Der Architektur-Umbau oben ändert die Oberfläche nicht, braucht
+  also keine neuen Screenshots.
+- Der bereits erneuerte Screenshot `handbuch_uebersicht.png` samt neu erzeugter
+  `HANDBUCH.pdf` kommt mit dem nächsten Build.
+
+**Nachtrag 27.09.2026: Kleinigkeiten aus der Verifikation umgesetzt** (Marco: „setze Befund 3 um“)
+- `pyzipper` ist aus `requirements-web.txt` gestrichen.
+  - `db.py` importiert es seit der Auslagerung nach `db_sicherung.py` nicht mehr, der
+    Web-Container braucht es also nicht.
+  - Geprüft: `db`, `app_web` und `sync_termin` lassen sich ohne `pyzipper` importieren.
+  - Die Desktop-Version und die CI bekommen es weiterhin über `requirements.txt`.
+  - Der veraltete Hinweis im Docstring von `db.init_db_postgres` ist angepasst.
+- `TestAppWebPostgres` räumt jetzt per `addCleanup` auf statt per `tearDown`. Verbindung,
+  Datenbank, temporäre Dateien und App-Config werden damit auch dann zurückgesetzt, wenn
+  `setUp` mittendrin scheitert.
+- Tests gegen einen frischen `postgres:16`-Container:
+  - komplette pytest-Suite: 580 bestanden;
+  - `test_app_web` ein zweites Mal gegen dieselbe Datenbank: OK;
+  - Standard-Suite ohne PostgreSQL: OK.
+- Befund 1 (wartendes `ALTER TABLE` in `verbinde_postgres_server`) und Befund 2 (zwei
+  `test_check_constraint_*`-Tests beim zweiten Lauf gegen dieselbe Datenbank) bleiben
+  offen; Marco hat sie nicht zur Umsetzung freigegeben.
+
+**Demo für Marcos Klick-Test (27.09.2026):** Die Demo liegt außerhalb des Repos unter
+`C:\Users\mbruv\Documents\SHS-Demo-vor-Build\`. Sie enthält:
+- `Demo_starten.bat`: startet die App aus dem Arbeitsstand mit Anaconda-Python.
+- `Checkliste.md`: die Punkte zum Durchklicken.
+- `demo_erzeugen.py` und `Demo_zuruecksetzen.bat`: legen zwei DEMO-Termine im normalen
+  Termine-Ordner an bzw. setzen sie zurück.
+- Beispieldateien `demo_formular_import.csv` (mit einer absichtlichen Fehlerzeile) und
+  `demo_oma_export.txt` (cp1252).
+
+Rauchtest: Das Hauptfenster lädt den Demo-Termin offscreen, alle 9 Reiter laufen ohne Fehler.
+Die Importe sind vorab gegen eine Kopie geprüft: CSV 2 importiert und 1 Fehler, OMA 3
+importiert.
+
+**Klick-Test erledigt (27.09.2026):** Marco hat die Desktop-App mit der Demo und der Checkliste
+durchgeklickt: „Test ist durch, alles okay“. Damit ist der offene Punkt „Marco klickt vor dem
+nächsten Build einmal selbst durch“ erledigt.
+
+Noch offen:
+- Befund 1 (wartendes `ALTER TABLE`) und Befund 2 (Wiederholungslauf der
+  `test_check_constraint_*`-Tests), beide nicht freigegeben.
+- Commit und Build auf Anforderung.
+
+## 27.09.2026: Beispiel-CSV mit 20 Testteilnehmern (Arbeitsstand, noch kein Build)
+
+**Wunsch Marco:** Nutzer sollen die Anwendung vorher mit Testdaten ausprobieren können. Dafür
+kommt eine CSV-Datei ins Git, mit Hinweisen auf der Webseite und im Handbuch.
+
+Entscheidungen:
+- Nur eine CSV, kein fertiger Demo-Termin. Der Import übernimmt keine Startnummern,
+  Gegenstände und keinen Bezahlt-Status; das Handbuch erklärt, dass diese danach vergeben
+  werden.
+- Der Hinweis steht zusätzlich in der App-Hilfe.
+
+**Umgesetzt:**
+- **`docs/beispiel_teilnehmer.csv`:**
+  - Format: komma-getrennt, UTF-8, Kopfzeile genau `CSV_IMPORT_SPALTEN`.
+  - 20 frei erfundene Teilnehmer:
+    - 14 ED, jede Kombination aus Leistungsklasse (1–3) und Disziplin mindestens einmal;
+    - 6 DK: LK 1 ×3, LK 2 ×2, LK 3 ×1;
+    - 2 Jugendliche (Dorn, Iske) mit Halter-Angaben.
+  - Erkennbar erfundene Angaben:
+    - Vereine „Beispielverein Musterstadt“ und „Hundesport Musterdorf“;
+    - Adresse „Musterstraße“;
+    - E-Mails `@example.org`;
+    - Chipnummern `999000000000xxx`; die Kennung 999 ist nach ISO 11784 für Testchips
+      vorgesehen. Zuerst war `276…` geplant, das ist der Ländercode Deutschland.
+  - Über GitHub Pages erreichbar unter
+    https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (erst nach dem Push).
+- **Webseite `docs/index.html`:** Download-Link mit `download`-Attribut in der Karte
+  „Formular-Import“ und neuer Punkt in der Liste „Hilfe“, mit Sprung ins Handbuch.
+- **Handbuch `docs/HANDBUCH.md`:**
+  - neuer Unterabschnitt „Ausprobieren mit Beispieldaten“ in Kapitel 5, nach dem
+    Datenschutz-Hinweis und vor dem OMA-Abschnitt;
+  - Verweis in der Einleitungsliste;
+  - Link als absolute Pages-URL, damit er auch im PDF funktioniert;
+  - `docs/HANDBUCH.pdf` neu erzeugt, gemäß der Vorgabe „Dokumente vor dem Build“. Der
+    Abschnitt steht auf Seite 10, der Link ist anklickbar.
+- **App-Hilfe (`desktop_dialoge.py`, `_HILFE_HTML`):** ein Absatz mit der URL als reinem
+  Text. Der Hilfe-Dialog öffnet bewusst keine externen Links (`setOpenExternalLinks(False)`).
+- **`README.md`:** ein Satz „Ausprobieren“ im Download-Abschnitt.
+- **`test_db.py`:** neuer Regressionstest. Die Beispiel-CSV muss vollständig fehlerfrei
+  importieren (20 Teilnehmer, 6 DK, 9 ED-Kombinationen), auch wenn sich
+  `CSV_IMPORT_SPALTEN` oder die Prüfregeln ändern.
+
+**Tests:**
+- Standard-Suite: OK, 133 übersprungen.
+- GUI: 123 bestanden, 1 xfail.
+- Import-Probe: 20 importiert, 0 Fehler.
+- Webseite lokal per `http.server`: CSV wird ausgeliefert, Links und Handbuch-Anker sind da.
+
+**Screenshots:** Im Handbuch zeigt kein Screenshot den Hilfe-Dialog. Das Bild zum Reiter
+„Formular-Import“ bleibt gültig, dort hat sich nichts geändert. Neue Screenshots sind also
+nicht nötig.
+- Nachtrag nach der Verifikation (Marco: „setze beides um“):
+  - Die Chipnummern in der Beispiel-CSV sind von `276…` auf das Testchip-Muster `999…`
+    umgestellt, damit sie keinem echten Tier gehören können.
+  - Das Handbuch erklärt jetzt, dass sich ein geöffneter Test-Termin erst löschen lässt,
+    wenn vorher ein anderer Termin geöffnet oder das Programm neu gestartet wurde.
+  - `HANDBUCH.pdf` ist neu erzeugt, `test_db` ist grün.
+
+## Version 1.0.36 (27.09., Build auf Marcos Wunsch "jetzt neuen Build erzeugen")
+
+**Enthalten seit 1.0.35:**
+- Architektur-Umbau nach der Codex-Prüfung (siehe Eintrag „27.09.2026: Architektur-Umbau“
+  oben): neue Module `db_import.py`, `db_sicherung.py`, `desktop_darstellung.py`,
+  `desktop_gemeinsam.py` und `desktop_dialoge.py`, dazu `db.ergebnisse_je_teilnehmer()` und
+  die Web-Tests gegen echtes PostgreSQL (`TestAppWebPostgres`).
+  - Aufräumen aus der Verifikation: `pyzipper` ist aus `requirements-web.txt` gestrichen,
+    `addCleanup` ergänzt.
+  - Oberfläche und Bedienung sind unverändert. Marcos Klick-Test mit der Demo: „alles okay“.
+- Beispiel-CSV mit 20 Testteilnehmern (`docs/beispiel_teilnehmer.csv`) samt Hinweisen auf der
+  Webseite, im Handbuch, in der App-Hilfe und in der README.
+- Der erneuerte Handbuch-Screenshot `handbuch_uebersicht.png` aus dem Nachtrag zu 1.0.35.
+- Neue Build-Vorgabe „Dokumente und Screenshots vor dem Build“ in `CLAUDE.md`.
+
+**Build-Ablauf:**
+- Dokumente und Screenshots vor dem Build geprüft (neue Vorgabe):
+  - Handbuch, Webseite, README, `Architektur.md` und `CLAUDE.md` sind aktuell.
+  - Neue Screenshots sind nicht nötig, weil sich keine abgebildete Oberfläche geändert hat.
+- Versionsdateien per `bump_version.py` auf 1.0.36 gesetzt; `docs/HANDBUCH.pdf` neu erzeugt.
+- Lokaler Testlauf mit Anaconda-Python:
+  - Standard-Suite: OK, 133 übersprungen.
+  - GUI (offscreen): 123 bestanden, 1 xfail.
+  - Komplette pytest-Suite gegen einen frischen `postgres:16`-Container: 582 bestanden.
+  - `py_compile`: fehlerfrei.
+- Push und Tag macht Marco. Die Beispiel-CSV ist auf der Projektseite erst nach dem Push
+  erreichbar.
+- Offen bleiben Befund 1 (wartendes `ALTER TABLE`) und Befund 2 (Wiederholungslauf der
+  `test_check_constraint_*`-Tests).

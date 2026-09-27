@@ -5,11 +5,13 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.35. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.36. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
 - Kurzhilfe im Programm: Button **„❓ Hilfe“** oben rechts
+- Programm vorher ausprobieren: Beispiel-CSV mit 20 erfundenen Teilnehmern, siehe
+  [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
 
 ## Inhalt
 
@@ -202,6 +204,24 @@ muss UTF-8-kodiert sein.
 
 > **Datenschutz:** Beim Formular-Import gehen die Meldeformulare an den gewählten KI-Anbieter.
 > Kläre vorher, ob das für deinen Verein in Ordnung ist. Das Programm selbst sendet nichts.
+
+### Ausprobieren mit Beispieldaten
+
+Um das Programm vor dem ersten echten Termin gefahrlos zu testen, gibt es eine Beispieldatei
+mit 20 frei erfundenen Teilnehmern (Einzeldisziplin in allen Leistungsklassen und Disziplinen
+sowie Dreikampf):
+[beispiel_teilnehmer.csv](https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv)
+(im Browser ggf. mit Rechtsklick → „Ziel speichern unter…“ herunterladen).
+
+1. Einen neuen Test-Termin anlegen (siehe [Kapitel 3](#3-termine)).
+2. Im Reiter „Formular-Import“ mit **„CSV importieren…“** die Beispieldatei einlesen – alle 20
+   Teilnehmer werden übernommen.
+3. Im Reiter „Teilnehmer“ über **„Bearbeiten…“** die Startnummern (und bei Bedarf Gegenstände)
+   vergeben – die CSV enthält diese Angaben nicht.
+4. Danach lassen sich Zeitplan, Ergebniserfassung, Auswertung und PDF-Ausgaben ausprobieren.
+
+Den Test-Termin danach im Startbildschirm wieder löschen. Solange er geöffnet ist, lässt er
+sich nicht löschen – vorher einen anderen Termin öffnen oder das Programm neu starten.
 
 ### Meldungen aus der OMA übernehmen
 

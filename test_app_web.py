@@ -1199,5 +1199,195 @@ class TestCsrfSchutz(_AppWebTestBasis):
         self.assertEqual(self.client.get("/").status_code, 200)
 
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+_POSTGRES_TEST_DSN = os.environ.get("SHS_TEST_POSTGRES_DSN")
+
+
+class TestAppWebPostgres(unittest.TestCase):
+    """Wenige HTTP-Abläufe end-zu-Ende gegen einen ECHTEN PostgreSQL-Server (Codex-
+    Architekturprüfung 27.09.2026): anders als TestAppWeb oben ohne jeden db.*-Patch -
+    Login, Terminwahl, Ergebniserfassung und Rückimport laufen also genau wie im
+    Container über db.verbinde_postgres_server()/search_path je Termin-Schema. Dasselbe
+    Skip-Verhalten wie die PostgreSQL-Tests in test_db.py (lokal ohne
+    SHS_TEST_POSTGRES_DSN/psycopg2 übersprungen, läuft in der CI)."""
+
+    _anmelden = _AppWebTestBasis._anmelden
+
+    def setUp(self):
+        if not _POSTGRES_TEST_DSN:
+            self.skipTest(
+                "SHS_TEST_POSTGRES_DSN nicht gesetzt - PostgreSQL-Tests übersprungen "
+                "(z. B. lokal ohne laufenden Postgres-Server; läuft in der CI)"
+            )
+        if psycopg2 is None:
+            self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
+        # Aufräumen über addCleanup statt tearDown: läuft auch dann, wenn setUp nach dem
+        # Verbindungsaufbau scheitert (tearDown würde unittest in dem Fall überspringen).
+        # Reihenfolge rückwärts: Config zurück, Datenbank leeren, Dateien löschen,
+        # Verbindung schließen.
+        self.pg = db.verbinde_postgres_server(_POSTGRES_TEST_DSN)
+        self.addCleanup(self.pg.close)
+        self._temp_dateien = []
+        self.addCleanup(self._temp_dateien_loeschen)
+        self._postgres_leeren()
+        self.addCleanup(self._postgres_leeren)
+
+        alte_config = {
+            k: app_web.app.config.get(k) for k in ("SHS_POSTGRES_DSN", "SHS_ADMIN_SETUP_CODE")
+        }
+        self.addCleanup(app_web.app.config.update, alte_config)
+        app_web.app.config.update(
+            TESTING=True, SHS_POSTGRES_DSN=_POSTGRES_TEST_DSN, SHS_ADMIN_SETUP_CODE=_EINRICHTUNGS_CODE,
+        )
+        app_web.app.test_client_class = _CsrfTestClient
+        self.client = app_web.app.test_client()
+
+    def _temp_dateien_loeschen(self):
+        for pfad in self._temp_dateien:
+            if os.path.exists(pfad):
+                os.remove(pfad)
+
+    def _postgres_leeren(self):
+        """Entfernt Termin-Schemas, Registry-Einträge und Web-Konten eines evtl. vorigen
+        Testlaufs - wie TestTerminverwaltungPostgres/TestBenutzerkontenPostgres in
+        test_db.py (rollback() zuerst, "public." nicht weglassen, siehe dort)."""
+        self.pg.rollback()
+        zeilen = self.pg.execute("SELECT schema_name FROM public.termin_registry").fetchall()
+        for zeile in zeilen:
+            self.pg.execute(f"DROP SCHEMA IF EXISTS {zeile['schema_name']} CASCADE")
+        self.pg.execute("DELETE FROM public.termin_registry")
+        self.pg.execute("DELETE FROM public.web_benutzer")
+        self.pg.commit()
+
+    # Wichtig: jede Hilfsfunktion, die über self.pg liest oder schreibt, schließt ihre
+    # Transaktion mit commit() ab. Sonst hält self.pg Sperren auf den Tabellen, und das
+    # ALTER TABLE ... ADD COLUMN IF NOT EXISTS, das verbinde_postgres_server() bei jeder
+    # neuen Verbindung der App ausführt, wartet unbegrenzt darauf (beim ersten lokalen
+    # Lauf gegen einen echten Server so aufgetreten).
+
+    def _termin_datei(self, verein: str) -> str:
+        """Legt eine echte SQLite-Termin-Datei mit einem ED-Teilnehmer (Startnummer 1)
+        an und liefert ihren Pfad."""
+        fd, pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(pfad)
+        self._temp_dateien.append(pfad)
+        conn = db.init_db(pfad)
+        try:
+            db.set_veranstaltung(conn, verein=verein, datum="2026-09-27")
+            db.add_teilnehmer(conn, db.NeuerTeilnehmer(
+                nachname=f"Muster{verein}", vorname="Anna", rufname_hund="Rex", art="ED",
+                stufe=1, disziplin="Trümmerfeld", startnummer=1,
+            ))
+        finally:
+            conn.close()
+        return pfad
+
+    def _veroeffentlichen(self, pfad: str) -> db.TerminInfoPostgres:
+        conn = db.init_db(pfad)
+        try:
+            return db.exportiere_termin_nach_postgres(conn, self.pg)
+        finally:
+            conn.close()
+            self.pg.commit()
+
+    def _pg_teilnehmer(self, schema_name: str) -> dict:
+        db.oeffne_termin_postgres(self.pg, schema_name)
+        teilnehmer = db.list_teilnehmer(self.pg)[0]
+        self.pg.commit()
+        return teilnehmer
+
+    def test_ersteinrichtung_abmelden_und_erneut_anmelden(self):
+        self._veroeffentlichen(self._termin_datei("VereinA"))
+        antwort = self._anmelden()
+        self.assertIn(b"MusterVereinA", antwort.data)
+        admin_vorhanden = db.gibt_es_admin(self.pg)
+        self.pg.commit()
+        self.assertTrue(admin_vorhanden)
+
+        self.client.get("/logout")
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 302)
+        antwort = self.client.post(
+            "/", data={"benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT}, follow_redirects=True,
+        )
+        self.assertIn(b"MusterVereinA", antwort.data)
+
+    def test_terminwahl_zeigt_daten_des_gewaehlten_termins(self):
+        self._veroeffentlichen(self._termin_datei("VereinA"))
+        termin_b = self._veroeffentlichen(self._termin_datei("VereinB"))
+        antwort = self._anmelden()
+        self.assertIn(b"VereinA", antwort.data)
+        self.assertIn(b"VereinB", antwort.data)
+
+        antwort = self.client.post(
+            "/termin-waehlen", data={"schema_name": termin_b.schema_name}, follow_redirects=True,
+        )
+        self.assertIn(b"MusterVereinB", antwort.data)
+        self.assertNotIn(b"MusterVereinA", antwort.data)
+
+    def test_ergebnis_speichern_landet_in_postgres(self):
+        termin = self._veroeffentlichen(self._termin_datei("VereinA"))
+        teilnehmer_id = self._pg_teilnehmer(termin.schema_name)["id"]
+        self._anmelden()
+
+        antwort = self.client.post(
+            f"/teilnehmer/{teilnehmer_id}",
+            data={"suche_Trümmerfeld": "45", "anzeige_Trümmerfeld": "25"},
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+
+        db.oeffne_termin_postgres(self.pg, termin.schema_name)
+        ergebnis = db.get_ergebnis(self.pg, teilnehmer_id)
+        self.pg.commit()
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 45)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 25)
+
+    def test_rueckimport_ueber_admin_termine_mit_download(self):
+        pfad = self._termin_datei("VereinA")
+        termin = self._veroeffentlichen(pfad)
+        teilnehmer_id = self._pg_teilnehmer(termin.schema_name)["id"]
+        self._anmelden()
+        self.client.post(
+            f"/teilnehmer/{teilnehmer_id}",
+            data={"suche_Trümmerfeld": "48", "anzeige_Trümmerfeld": "28"},
+        )
+
+        with open(pfad, "rb") as f:
+            inhalt = f.read()
+        antwort = self.client.post(
+            f"/admin/termine/{termin.schema_name}/zurueckholen",
+            data={"sqlite_datei": (io.BytesIO(inhalt), "termin_verein.sqlite")},
+            content_type="multipart/form-data",
+            follow_redirects=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.data.decode()
+        self.assertIn("1 Teilnehmer", text)
+
+        treffer = re.search(r'href="(/admin/termine/download/[^"]+)"', text)
+        self.assertIsNotNone(treffer)
+        download = self.client.get(treffer.group(1))
+        self.assertEqual(download.status_code, 200)
+
+        # Die heruntergeladene Termin-Datei enthält das im Web erfasste Ergebnis.
+        fd, zurueck_pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        self._temp_dateien.append(zurueck_pfad)
+        with open(zurueck_pfad, "wb") as f:
+            f.write(download.data)
+        conn = db.init_db(zurueck_pfad)
+        try:
+            ergebnis = db.get_ergebnis(conn, db.list_teilnehmer(conn)[0]["id"])
+        finally:
+            conn.close()
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 48)
+        self.assertEqual(ergebnis["anzeige_truemmerfeld"], 28)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

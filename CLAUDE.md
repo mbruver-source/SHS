@@ -3,8 +3,9 @@
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: rund 4500 Zeilen, `db.py`: rund 2700 Zeilen,
-  Stand 22.09.2026) durcharbeitest.
+  selbst durch die großen Module (`app.py`: rund 3200 Zeilen, `db.py`: rund 2500 Zeilen,
+  Stand 27.09.2026 nach Auslagerung von `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
+  durcharbeitest.
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.
@@ -16,8 +17,9 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    komplett selbst zu lesen, zuerst einen schnellen Such-Subagent die relevante Stelle
    lokalisieren lassen.
 2. **Bereichs-Subagents bei bereichsübergreifenden Änderungen.** Betrifft eine Änderung
-   mehrere der drei Bereiche Desktop (`app.py`, `test_app_gui.py`), Web (`app_web.py`,
-   `templates/`, `test_app_web.py`) und Daten (`db.py`, `shs_core.py`, `test_db.py`,
+   mehrere der drei Bereiche Desktop (`app.py`, `desktop_*.py`, `test_app_gui.py`,
+   `test_theme.py`), Web (`app_web.py`, `templates/`, `test_app_web.py`) und Daten (`db.py`,
+   `db_import.py`, `db_sicherung.py`, `shs_core.py`, `test_db.py`, `test_backup.py`,
    `test_db_postgres_wrapper.py`), parallele Subagents je Bereich statt sequenziell
    nacheinander.
 3. **QS-Prüfungen mit differenzierten Rollen statt identischer Aufträge.** Bei einer
@@ -80,8 +82,18 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   ("jetzt neuen Build erzeugen" o. ä.). Reine Dokumentationsänderungen (z. B. an dieser Datei,
   `Fortschritt.md`, `Architektur.md`) sind davon ausgenommen und können direkt committet
   werden.
-- Wenn Marco einen Build anfordert: alle seit dem letzten Build gesammelten Änderungen
-  bündeln, Version per `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
+- **Dokumente und Screenshots VOR dem Build (Marcos Vorgabe, 27.09.2026):** Bevor die Version
+  erhöht und gebaut wird, müssen alle Dokumente zum Stand der gebündelten Änderungen passen.
+  Anlass: Bei 1.0.35 wurde der Handbuch-Screenshot erst nach dem Build erneuert und musste
+  deshalb auf den nächsten Build warten. Konkret vor jedem Build prüfen und nachziehen:
+  - `docs/HANDBUCH.md` inhaltlich (neue/geänderte Funktionen, Bedienung);
+  - Screenshots in `docs/bilder/` für jede sichtbar geänderte Oberfläche neu aufnehmen;
+  - `Architektur.md`, `README*.md` und `Fortschritt.md`.
+  Erst danach kommen Versionsbump, `docs/HANDBUCH.pdf` und Build. Kann ein Screenshot nicht
+  erstellt werden, vor dem Build bei Marco nachfragen statt ohne ihn zu bauen.
+- Wenn Marco einen Build anfordert: zuerst Dokumente und Screenshots wie oben aktualisieren,
+  dann alle seit dem letzten Build gesammelten Änderungen bündeln, Version per
+  `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
   `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu
   erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer aus dem
   System-Reminder anhängen, sofern vorhanden).

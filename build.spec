@@ -26,12 +26,13 @@ a = Analysis(
     ["app.py"],
     pathex=[],
     binaries=[],
-    # db.py/shs_core.py/pdf_export.py sowie version.py (siehe bump_version.py und der
-    # Version-Button neben "Hilfe" in app.py) werden von app.py per "import" eingebunden
+    # db.py/db_import.py/db_sicherung.py/shs_core.py/pdf_export.py sowie version.py
+    # (siehe bump_version.py und der Version-Button neben "Hilfe" in app.py) werden
+    # von app.py per "import" eingebunden
     # und daher von PyInstaller automatisch mit erkannt und eingepackt - keine weiteren
     # Einträge hier nötig.
     datas=[],
-    # pyzipper (Datensicherung, siehe db.py) importiert pycryptodomex für die
+    # pyzipper (Datensicherung, siehe db_sicherung.py) importiert pycryptodomex für die
     # AES-Verschlüsselung - PyInstaller bringt dafür über pyinstaller-hooks-contrib
     # normalerweise einen eigenen Hook mit und erkennt es automatisch wie reportlab;
     # falls ein Build dennoch mit einem ModuleNotFoundError für Cryptodome/pyzipper

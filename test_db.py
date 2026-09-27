@@ -29,6 +29,7 @@ from db import (
     dateiname_vorschlagen,
     delete_teilnehmer,
     eintragen_ergebnis,
+    ergebnisse_je_teilnehmer,
     erstelle_termin_postgres,
     exportiere_termin_nach_postgres,
     gegenstand_fuer_disziplin,
@@ -38,9 +39,6 @@ from db import (
     gibt_es_admin,
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
-    importiere_teilnehmer_aus_csv,
-    importiere_teilnehmer_aus_oma,
-    importiere_teilnehmer_stammdaten,
     init_db,
     init_db_postgres,
     ist_jugendlicher,
@@ -75,6 +73,11 @@ from db import (
     verschiebe_zeitplan_richter,
     zeitplan_gruppen,
     zeitplan_gruppen_status,
+)
+from db_import import (
+    importiere_teilnehmer_aus_csv,
+    importiere_teilnehmer_aus_oma,
+    importiere_teilnehmer_stammdaten,
 )
 from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT
 
@@ -606,6 +609,24 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(ergebnis["disqualifiziert"], 0)
         self.assertEqual(ergebnis["abbruch"], 0)
 
+    def test_ergebnisse_je_teilnehmer_liefert_alle_zeilen_nach_id(self):
+        self.assertEqual(ergebnisse_je_teilnehmer(self.conn), {})
+        tid_mit = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="M", vorname="M", rufname_hund="Hund M", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=61))
+        tid_ohne = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="O", vorname="O", rufname_hund="Hund O", art="DK", stufe=1,
+            startnummer=62))
+        eintragen_ergebnis(self.conn, tid_mit, "Trümmerfeld", 50, 30)
+
+        alle = ergebnisse_je_teilnehmer(self.conn)
+        self.assertEqual(set(alle), {tid_mit, tid_ohne})
+        # Dieselben Zeilen wie beim Einzelabruf über get_ergebnis().
+        self.assertEqual(alle[tid_mit], get_ergebnis(self.conn, tid_mit))
+        self.assertEqual(alle[tid_ohne], get_ergebnis(self.conn, tid_ohne))
+        self.assertEqual(alle[tid_mit]["suche_truemmerfeld"], 50)
+        self.assertIsNone(alle[tid_ohne]["suche_truemmerfeld"])
+
     def test_check_constraint_ed_braucht_disziplin(self):
         with self.assertRaises(self.IntegrityErrorTyp):
             add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -941,6 +962,19 @@ class TestDatenbank(unittest.TestCase):
             self.assertEqual(jung["tollwutimpfung_bis"], "2027-05-01")
         finally:
             os.remove(pfad)
+
+    def test_beispiel_csv_auf_der_projektseite_importiert_fehlerfrei(self):
+        # docs/beispiel_teilnehmer.csv wird auf der Projektseite, im Handbuch und in der
+        # App-Hilfe zum Ausprobieren angeboten (27.09.2026) - sie muss zu CSV_IMPORT_SPALTEN
+        # und den Prüfregeln passen, auch wenn sich diese später ändern.
+        pfad = pathlib.Path(__file__).resolve().parent / "docs" / "beispiel_teilnehmer.csv"
+        ergebnis = importiere_teilnehmer_aus_csv(self.conn, str(pfad))
+        self.assertEqual(ergebnis.fehler, [])
+        self.assertEqual(ergebnis.importiert, 20)
+        teilnehmer = list_teilnehmer(self.conn)
+        self.assertEqual(sum(t["art"] == "DK" for t in teilnehmer), 6)
+        ed_kombinationen = {(t["stufe"], t["disziplin"]) for t in teilnehmer if t["art"] == "ED"}
+        self.assertEqual(len(ed_kombinationen), 9)  # jede LK mit jeder Disziplin
 
     def test_importiere_teilnehmer_aus_csv_legt_teilnehmer_an(self):
         # Nutzerwunsch (20.09.): Meldeformulare per KI-System in eine CSV umwandeln lassen
