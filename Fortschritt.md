@@ -2593,3 +2593,67 @@ nicht nötig.
 - Commit `1691106`. Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.36
   nachgezogen: 26 Dateien einschließlich der 5 neuen Module und der Beispiel-CSV,
   Byte-Abgleich identisch.
+
+## 27.09.2026: Befunde 1 und 2 umgesetzt (Marco: „setze beide Punkte um“, Arbeitsstand, noch kein Build)
+
+**Befund 1: Verbindungsaufbau wartete auf fremde Transaktionen (`db.verbinde_postgres_server`)**
+- Ursache: Bei JEDER Verbindung, also bei jeder Web-Anfrage, liefen `CREATE TABLE`,
+  `ALTER TABLE … ADD COLUMN IF NOT EXISTS` und `CREATE INDEX IF NOT EXISTS`.
+  - Das ALTER braucht auch dann eine exklusive Sperre auf `termin_registry`, wenn die
+    Spalte längst existiert.
+  - Das CREATE INDEX braucht eine Sperre, die mit laufenden Schreibzugriffen auf
+    `web_benutzer` kollidiert.
+- Folge: Der Verbindungsaufbau wartete unbegrenzt, solange eine andere Transaktion offen war.
+- Lösung: Zuerst eine Katalogabfrage (`to_regclass`, `information_schema.columns`). Sie
+  braucht keine Tabellensperren. Die Einrichtung läuft nur noch für das, was wirklich fehlt,
+  praktisch also nur beim allerersten Start gegen eine neue Datenbank.
+- Neuer Test `TestTerminverwaltungPostgres.test_verbindungsaufbau_wartet_nicht_auf_offene_fremde_transaktion`:
+  - Eine Verbindung hält Sperren wie eine laufende Web-Anfrage. Die zweite Verbindung
+    bekommt `lock_timeout` = 2 s.
+  - Gegenprobe mit dem alten Code (Worktree auf HEAD): scheitert mit `LockNotAvailable`.
+    Mit dem neuen Code: grün.
+- Außerdem von Hand geprüft: Bei einer alten Registry ohne `zugangscode` und ohne
+  `web_benutzer` werden Spalte, Tabelle und Index weiterhin nachgerüstet.
+
+**Befund 2: CHECK-Tests schlugen beim Wiederholungslauf fehl (`test_db.py`)**
+- Ursache: Die `test_migration_*`-Tests ersetzen `teilnehmer`/`ergebnisse` durch alte
+  Fassungen OHNE CHECK-Constraints. Das Zurücksetzen per `TRUNCATE` ließ diese Fassungen in
+  der gemeinsamen Test-Datenbank stehen.
+- Lösung: `_postgres_frische_termin_tabellen()` ersetzt `_postgres_testdaten_leeren()`. Die
+  Termin-Tabellen werden vor jedem Test verworfen und von `init_db_postgres()` neu angelegt.
+- `Architektur.md`: Der Hinweis „jedes Mal einen frischen Container nehmen“ ist entfernt.
+
+**Tests:**
+- Komplette pytest-Suite zweimal hintereinander gegen DIESELBE PostgreSQL-Datenbank: jeweils
+  583 bestanden. Vorher schlugen im zweiten Lauf 2 Tests fehl.
+- Standard-Suite: OK.
+
+## Version 1.0.37 (27.09., Build auf Marcos Wunsch "ja neues build")
+
+**Enthalten seit 1.0.36:**
+- Befund 1: `verbinde_postgres_server` führt die Einrichtung nur noch aus, wenn im Katalog
+  etwas fehlt. Damit gibt es beim Verbindungsaufbau keine Tabellensperren mehr.
+- Befund 2: Die PostgreSQL-Tests lassen sich gegen dieselbe Datenbank wiederholen.
+- Beides steht im Eintrag „Befunde 1 und 2 umgesetzt“ oben.
+- Unabhängige Verifikation: freigabefähig, kein blockierender Befund.
+  - Sonderfälle von der Verifikation per Skript gegen `postgres:16` geprüft: frische DB,
+    alte Registry, fehlender Index, DSN in key=value-Form.
+  - Gleichzeitige Erstverbindungen verhalten sich wie vorher.
+
+**Zwei optionale Kleinigkeiten aus der Verifikation** (noch nicht umgesetzt, mit Marco zu
+besprechen):
+- Der Kommentar in `test_app_web.py` (`TestAppWebPostgres`, ca. Z. 1266) sagt noch, dass
+  `verbinde_postgres_server()` bei jeder Verbindung ein ALTER TABLE ausführt.
+- Der neue Sperr-Test hängt `?options=…` an die DSN. Das klappt nur bei URI-DSNs, und die
+  nutzt die CI. `PGOPTIONS` wäre robuster.
+
+**Build-Ablauf:**
+- Dokumente vor dem Build geprüft: `Architektur.md` und `Fortschritt.md` sind aktuell.
+  Handbuch, Webseite und Oberfläche sind nicht betroffen, daher keine neuen Screenshots.
+- `bump_version.py` hat die Version auf 1.0.37 gesetzt; `docs/HANDBUCH.pdf` neu erzeugt.
+- Tests:
+  - Standard-Suite: OK, 134 übersprungen.
+  - GUI: 123 bestanden, 1 xfail.
+  - Komplette pytest-Suite gegen einen frischen `postgres:16`-Container: 583 bestanden.
+  - `py_compile`: fehlerfrei.
+- Push und Tag macht Marco.

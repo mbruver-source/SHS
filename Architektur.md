@@ -132,8 +132,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   (Service-Container in `tests.yml`), werden sonst übersprungen (`skipTest`). Lokal geht es
   mit einem Wegwerf-Container (`podman run --rm -p 55432:5432 -e POSTGRES_USER=shs_test
   -e POSTGRES_PASSWORD=shs_test -e POSTGRES_DB=shs_test docker.io/library/postgres:16`);
-  dabei jedes Mal einen FRISCHEN Container nehmen - zwei `test_check_constraint_*`-Tests
-  schlagen beim zweiten Lauf gegen dieselbe Datenbank fehl (siehe `Fortschritt.md`).
+  die Tests setzen die Datenbank selbst zurück und lassen sich beliebig oft wiederholen.
 - **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt` - ebenfalls nur in der CI;
   `test_theme.py` braucht PySide6 (importiert `desktop_darstellung`).
 - **PDF-Inhaltstests** (`test_pdf_export.py`) brauchen `pypdf` - ohne pypdf wird der Großteil

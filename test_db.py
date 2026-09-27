@@ -2530,17 +2530,28 @@ except ImportError:
 _POSTGRES_TEST_DSN = os.environ.get("SHS_TEST_POSTGRES_DSN")
 
 
-def _postgres_testdaten_leeren(conn) -> None:
-    """Setzt die PostgreSQL-Testdatenbank vor jedem Test zurück. Anders als bei SQLite,
-    wo jeder Test automatisch eine frische, temporäre Datei bekommt (siehe
-    TestDatenbank.setUp), ist die Postgres-Testdatenbank eine dauerhafte, über alle Tests
-    hinweg gemeinsam genutzte Datenbank. RESTART IDENTITY sorgt zusätzlich dafür, dass
-    neu vergebene IDs - wie bei einer frischen SQLite-Datei - wieder bei 1 anfangen."""
+def _postgres_frische_termin_tabellen(dsn: str):
+    """Liefert eine Verbindung mit FRISCH angelegten Termin-Tabellen - das Pendant zur
+    neuen, temporären SQLite-Datei in TestDatenbank.setUp, denn die Postgres-
+    Testdatenbank ist eine dauerhafte, über alle Tests (und Testläufe) hinweg gemeinsam
+    genutzte Datenbank. Die Tabellen werden dafür verworfen und von init_db_postgres()
+    neu angelegt (IDs beginnen damit auch wieder bei 1).
+
+    Früher wurden sie nur per TRUNCATE geleert. Die test_migration_*-Tests ersetzen
+    "teilnehmer"/"ergebnisse" aber durch ältere Fassungen OHNE die CHECK-Constraints -
+    die blieben dann in der Datenbank stehen, sodass die test_check_constraint_*-Tests
+    bei einem ZWEITEN Lauf gegen dieselbe Datenbank fehlschlugen (im ersten Lauf laufen
+    sie alphabetisch vor den Migrationstests; Befund vom 27.09.2026, siehe
+    Fortschritt.md). In der CI fiel das nie auf, weil der Service-Container dort immer
+    frisch ist."""
+    conn = init_db_postgres(dsn)
     conn.execute(
-        "TRUNCATE TABLE ergebnisse, teilnehmer, veranstaltung, zeitplan_eintrag, "
-        "zeitplan_richter RESTART IDENTITY CASCADE"
+        "DROP TABLE IF EXISTS ergebnisse, teilnehmer, veranstaltung, zeitplan_eintrag, "
+        "zeitplan_richter CASCADE"
     )
     conn.commit()
+    conn.close()
+    return init_db_postgres(dsn)
 
 
 class _PostgresBackendMixin:
@@ -2571,8 +2582,7 @@ class _PostgresBackendMixin:
             )
         if psycopg2 is None:
             self.skipTest("psycopg2 nicht installiert - PostgreSQL-Tests übersprungen")
-        self.conn = init_db_postgres(_POSTGRES_TEST_DSN)
-        _postgres_testdaten_leeren(self.conn)
+        self.conn = _postgres_frische_termin_tabellen(_POSTGRES_TEST_DSN)
 
     def tearDown(self):
         if getattr(self, "conn", None) is not None:
@@ -2636,6 +2646,24 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
         # Fortschritt.md).
         self.conn.execute("DELETE FROM public.termin_registry")
         self.conn.commit()
+
+    def test_verbindungsaufbau_wartet_nicht_auf_offene_fremde_transaktion(self):
+        """Befund vom 27.09.2026: verbinde_postgres_server() führte bei JEDER Verbindung
+        ALTER TABLE/CREATE INDEX aus und wartete dadurch unbegrenzt, solange eine andere
+        Transaktion Sperren auf termin_registry/web_benutzer hielt. Hier hält self.conn
+        genau solche Sperren (wie eine laufende Web-Anfrage); die zweite Verbindung
+        bekommt ein lock_timeout von 2 s und würde mit LockNotAvailable scheitern, falls
+        sie doch wieder eine Tabellensperre bräuchte."""
+        self.conn.execute("LOCK TABLE public.termin_registry IN ACCESS SHARE MODE")
+        self.conn.execute("LOCK TABLE public.web_benutzer IN ROW EXCLUSIVE MODE")
+        trenner = "&" if "?" in _POSTGRES_TEST_DSN else "?"
+        try:
+            zweite = verbinde_postgres_server(
+                _POSTGRES_TEST_DSN + trenner + "options=-c%20lock_timeout%3D2000"
+            )
+            zweite.close()
+        finally:
+            self.conn.rollback()
 
     def test_zwei_termine_sind_voneinander_isoliert(self):
         a = erstelle_termin_postgres(self.conn)

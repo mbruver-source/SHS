@@ -2064,21 +2064,40 @@ def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
 
     roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
     conn = _PostgresConnection(roh_verbindung)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS public.termin_registry ("
-        "id INTEGER PRIMARY KEY, schema_name TEXT NOT NULL UNIQUE, "
-        "zugangscode TEXT, "
-        "erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now())"
-    )
-    # Bereits vor der Zugangscode-Einführung angelegte Registry-Tabellen bekommen die
-    # Spalte hier nachgerüstet (ADD COLUMN IF NOT EXISTS ist in PostgreSQL ein No-Op,
-    # wenn die Spalte - z. B. durch das CREATE TABLE oben bei einer neuen Datenbank -
-    # schon vorhanden ist) - dasselbe Prinzip wie _migriere_veranstaltung_spalten() für
-    # einzelne Termine, hier aber genügt eine einzelne feste ALTER-Anweisung, da es nur
-    # um eine einzige, unabhängige Spalte ohne Constraints geht.
-    conn.execute("ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS zugangscode TEXT")
-    conn.execute(_WEB_BENUTZER_SCHEMA)
-    conn.execute(_WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
+    # Die Einrichtung (Registry-Tabelle, nachgerüstete Spalte, Benutzertabelle samt Index)
+    # läuft nur noch, wenn im Systemkatalog tatsächlich etwas fehlt - also praktisch nur
+    # beim allerersten Start gegen eine neue Datenbank. Vorher lief sie bei JEDER
+    # Verbindung (= jeder Web-Anfrage): "ALTER TABLE ... ADD COLUMN IF NOT EXISTS" braucht
+    # aber auch dann eine exklusive Sperre auf termin_registry, wenn die Spalte längst
+    # existiert, und "CREATE INDEX IF NOT EXISTS" eine Sperre, die mit laufenden
+    # Schreibzugriffen auf web_benutzer kollidiert - eine andere, noch offene Transaktion
+    # ließ den Verbindungsaufbau dadurch unbegrenzt warten (Befund aus der Codex-
+    # Architekturprüfung vom 27.09.2026, siehe Fortschritt.md). Die reine Katalogabfrage
+    # braucht keine Tabellensperren.
+    stand = conn.execute(
+        "SELECT to_regclass('public.termin_registry') IS NOT NULL AS registry, "
+        "EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+        "AND table_name = 'termin_registry' AND column_name = 'zugangscode') AS zugangscode, "
+        "to_regclass('public.web_benutzer') IS NOT NULL AS benutzer, "
+        "to_regclass('public.ix_web_benutzer_benutzername_lower') IS NOT NULL AS benutzer_index"
+    ).fetchone()
+    if not stand["registry"]:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS public.termin_registry ("
+            "id INTEGER PRIMARY KEY, schema_name TEXT NOT NULL UNIQUE, "
+            "zugangscode TEXT, "
+            "erstellt_am TIMESTAMPTZ NOT NULL DEFAULT now())"
+        )
+    elif not stand["zugangscode"]:
+        # Bereits vor der Zugangscode-Einführung angelegte Registry-Tabellen bekommen die
+        # Spalte hier nachgerüstet - dasselbe Prinzip wie _migriere_veranstaltung_spalten()
+        # für einzelne Termine, hier aber genügt eine einzelne feste ALTER-Anweisung, da es
+        # nur um eine einzige, unabhängige Spalte ohne Constraints geht.
+        conn.execute("ALTER TABLE public.termin_registry ADD COLUMN IF NOT EXISTS zugangscode TEXT")
+    if not stand["benutzer"]:
+        conn.execute(_WEB_BENUTZER_SCHEMA)
+    if not stand["benutzer_index"]:
+        conn.execute(_WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
     conn.commit()
     return conn
 
