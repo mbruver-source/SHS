@@ -2659,3 +2659,19 @@ besprechen):
 - Push und Tag macht Marco.
 - Commit `42c75ad`. Quellcode-Spiegel auf 1.0.37 nachgezogen: 9 Dateien, Byte-Abgleich
   identisch.
+
+**Nachtrag 27.09.2026: die zwei optionalen Kleinigkeiten umgesetzt** (Marco: „setze beide
+Punkte um“, Arbeitsstand, noch kein Build)
+- `test_app_web.py` (`TestAppWebPostgres`): Der Kommentar zu den `commit()`-Aufrufen
+  beschreibt jetzt den Stand seit 1.0.37. Die Einrichtung läuft nur noch, wenn im Katalog
+  etwas fehlt; die Commits bleiben als Sperr-Hygiene.
+- `test_db.py`: Der Sperr-Test setzt das `lock_timeout` jetzt über die libpq-Umgebungsvariable
+  `PGOPTIONS` (`patch.dict(os.environ, …)`), nicht mehr über einen Anhang an die DSN.
+- Geprüft:
+  - Der Test ist grün mit URI-DSN und mit key=value-DSN.
+  - Gegenprobe gegen `db.py` aus 1.0.36: scheitert weiterhin mit `LockNotAvailable`.
+  - Komplette pytest-Suite gegen `postgres:16`: 583 bestanden.
+  - Standard-Suite: OK.
+- Auf Marcos Wunsch („sie sollen in aktuelle build“) zu 1.0.37 committet. `v1.0.37` war noch
+  nicht getaggt, der Tag kommt jetzt auf diesen Commit. Die Versionsnummer bleibt 1.0.37.
+  Quellcode-Spiegel nachgezogen.

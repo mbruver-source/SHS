@@ -2653,14 +2653,14 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
         Transaktion Sperren auf termin_registry/web_benutzer hielt. Hier hält self.conn
         genau solche Sperren (wie eine laufende Web-Anfrage); die zweite Verbindung
         bekommt ein lock_timeout von 2 s und würde mit LockNotAvailable scheitern, falls
-        sie doch wieder eine Tabellensperre bräuchte."""
+        sie doch wieder eine Tabellensperre bräuchte. Das Timeout kommt über die
+        libpq-Umgebungsvariable PGOPTIONS statt über die DSN - so funktioniert es mit
+        URI- wie mit key=value-DSNs gleichermaßen."""
         self.conn.execute("LOCK TABLE public.termin_registry IN ACCESS SHARE MODE")
         self.conn.execute("LOCK TABLE public.web_benutzer IN ROW EXCLUSIVE MODE")
-        trenner = "&" if "?" in _POSTGRES_TEST_DSN else "?"
         try:
-            zweite = verbinde_postgres_server(
-                _POSTGRES_TEST_DSN + trenner + "options=-c%20lock_timeout%3D2000"
-            )
+            with patch.dict(os.environ, {"PGOPTIONS": "-c lock_timeout=2000"}):
+                zweite = verbinde_postgres_server(_POSTGRES_TEST_DSN)
             zweite.close()
         finally:
             self.conn.rollback()

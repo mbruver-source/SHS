@@ -1264,10 +1264,12 @@ class TestAppWebPostgres(unittest.TestCase):
         self.pg.commit()
 
     # Wichtig: jede Hilfsfunktion, die über self.pg liest oder schreibt, schließt ihre
-    # Transaktion mit commit() ab. Sonst hält self.pg Sperren auf den Tabellen, und das
-    # ALTER TABLE ... ADD COLUMN IF NOT EXISTS, das verbinde_postgres_server() bei jeder
-    # neuen Verbindung der App ausführt, wartet unbegrenzt darauf (beim ersten lokalen
-    # Lauf gegen einen echten Server so aufgetreten).
+    # Transaktion mit commit() ab, damit self.pg keine Tabellensperren offen hält, während
+    # die App über eigene Verbindungen arbeitet. Beim ersten lokalen Lauf gegen einen
+    # echten Server hat genau das den Verbindungsaufbau der App hängen lassen: Damals
+    # führte verbinde_postgres_server() bei JEDER Verbindung ein ALTER TABLE aus. Seit
+    # 1.0.37 läuft die Einrichtung nur noch, wenn im Katalog etwas fehlt (siehe
+    # test_db.TestTerminverwaltungPostgres.test_verbindungsaufbau_wartet_nicht_auf_offene_fremde_transaktion).
 
     def _termin_datei(self, verein: str) -> str:
         """Legt eine echte SQLite-Termin-Datei mit einem ED-Teilnehmer (Startnummer 1)
