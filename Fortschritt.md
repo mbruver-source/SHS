@@ -2657,3 +2657,5 @@ besprechen):
   - Komplette pytest-Suite gegen einen frischen `postgres:16`-Container: 583 bestanden.
   - `py_compile`: fehlerfrei.
 - Push und Tag macht Marco.
+- Commit `42c75ad`. Quellcode-Spiegel auf 1.0.37 nachgezogen: 9 Dateien, Byte-Abgleich
+  identisch.
