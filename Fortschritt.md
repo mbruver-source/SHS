@@ -2590,3 +2590,6 @@ nicht nötig.
   erreichbar.
 - Offen bleiben Befund 1 (wartendes `ALTER TABLE`) und Befund 2 (Wiederholungslauf der
   `test_check_constraint_*`-Tests).
+- Commit `1691106`. Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.36
+  nachgezogen: 26 Dateien einschließlich der 5 neuen Module und der Beispiel-CSV,
+  Byte-Abgleich identisch.
