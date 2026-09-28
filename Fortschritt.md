@@ -2908,3 +2908,6 @@ Formulare, samt allen Befund-Korrekturen aus drei Verifikationsrunden (siehe Abs
     1 xfail.
   - `py_compile`: fehlerfrei.
 - Push und Tag macht Marco.
+- Commit `9a09cba`. Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.38
+  nachgezogen: 25 Dateien, darunter das neue `docs/bilder/handbuch_anmeldeformular.png`.
+  Byte-Abgleich identisch.
