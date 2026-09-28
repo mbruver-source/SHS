@@ -54,6 +54,11 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
         "pruefungsgebuehr_ed": aktuell.get("pruefungsgebuehr_ed"),
         "pruefungsgebuehr_dk": aktuell.get("pruefungsgebuehr_dk"),
         "zeitplan_start": aktuell.get("zeitplan_start"),
+        # Nutzerwunsch 28.09.2026 (Anmeldeformular) - sonst gingen diese Felder bei jeder
+        # Änderung aus einem anderen Tab (z. B. Zeitplan-Start) verloren.
+        "verband": aktuell.get("verband"),
+        "meldestelle": aktuell.get("meldestelle"),
+        "angebotene_pruefungen": aktuell.get("angebotene_pruefungen"),
     }
     werte.update(overrides)
     set_veranstaltung(conn, **werte)

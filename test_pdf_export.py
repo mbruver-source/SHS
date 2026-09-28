@@ -2,6 +2,7 @@
 erzeugten PDF-Text wieder ein und kontrolliert die wichtigsten Inhalte (Werte, die
 "nicht Bestanden"-Regel, die LK-abhängigen Verleitungs-Hinweise/Behältnis-Positionen)."""
 
+import logging
 import math
 import os
 import tempfile
@@ -13,13 +14,26 @@ except ImportError:  # pragma: no cover
     PdfReader = None
 
 from db import (
+    ALLE_PRUEFUNGEN,
+    ANMELDEFORMULAR_HUENDIN,
+    ANMELDEFORMULAR_KENNZEICHNUNG_CHIP,
+    ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+    ANMELDEFORMULAR_PRUEFUNG_PRAEFIX,
+    ANMELDEFORMULAR_RUEDE,
+    ANMELDEFORMULAR_TEXTFELDER,
+    ANMELDEFORMULAR_UNTERSCHRIFT_DATUM,
+    ANMELDEFORMULAR_VOLLJAEHRIG_JA,
+    ANMELDEFORMULAR_VOLLJAEHRIG_NEIN,
     NeuerTeilnehmer,
     add_teilnehmer,
     add_zeitplan_pause,
     add_zeitplan_pruefungsblock,
     add_zeitplan_richter,
     eintragen_ergebnis,
+    anmeldeformular_gegenstand_feld,
     init_db,
+    list_teilnehmer,
+    pruefungen_als_text,
     set_veranstaltung,
     setze_ergebnis_status,
 )
@@ -1086,6 +1100,194 @@ class TestPdfExport(unittest.TestCase):
         text = _text(pfad)
         self.assertIn("ED LK 1", text)
         self.assertIn("noch keine Teilnehmer gemeldet", text)
+
+
+# --- Ausfüllbares Anmeldeformular (Nutzerwunsch 28.09.2026) ------------------------
+
+
+@unittest.skipIf(PdfReader is None, "pypdf nicht installiert - PDF-Inhaltsprüfung wird übersprungen")
+class TestAnmeldeformular(unittest.TestCase):
+    ANGEBOTEN = ["DK1", "DK2", "ED1-Trümmerfeld", "ED3-Trümmerfeld", "ED2-Behältnisstrecke", "ED1-Flächensuche"]
+    MELDESTELLE = "Erika Mustermann\nMusterweg 12, 12345 Musterstadt\nmeldung@hsv-musterstadt.de"
+
+    def setUp(self):
+        self.conn = init_db(":memory:")
+        self.tmpdir = tempfile.mkdtemp()
+        self._veranstaltung(self.ANGEBOTEN)
+        # Zweite Verifikation 28.09.2026, N4: pypdf meldet beim absichtlichen Befüllen mit
+        # auto_regenerate=False bzw. beim Lesen einer Nicht-PDF Warnungen über logging -
+        # erwartetes Verhalten dieser Tests, nur Rauschen im Testlauf.
+        self._pypdf_logger = logging.getLogger("pypdf")
+        self._pypdf_level = self._pypdf_logger.level
+        self._pypdf_logger.setLevel(logging.ERROR)
+
+    def tearDown(self):
+        self._pypdf_logger.setLevel(self._pypdf_level)
+        self.conn.close()
+
+    def _veranstaltung(self, kuerzel: list[str], meldestelle: str | None = None) -> None:
+        set_veranstaltung(
+            self.conn, verein="HSV Musterstadt e.V.", datum="2026-11-14", verband="Testverband",
+            meldestelle=meldestelle or self.MELDESTELLE, angebotene_pruefungen=pruefungen_als_text(kuerzel),
+        )
+
+    def _erzeugen(self, name: str = "anmeldeformular.pdf") -> str:
+        pfad = os.path.join(self.tmpdir, name)
+        pdf_export.erstelle_anmeldeformular_pdf(self.conn, pfad)
+        return pfad
+
+    def test_eine_seite_mit_allen_festen_feldern(self):
+        pfad = self._erzeugen()
+        reader = PdfReader(pfad)
+        self.assertEqual(len(reader.pages), 1)
+        felder = set(reader.get_fields())
+        erwartet = set(ANMELDEFORMULAR_TEXTFELDER) | {
+            ANMELDEFORMULAR_KENNZEICHNUNG_CHIP, ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+            ANMELDEFORMULAR_HUENDIN, ANMELDEFORMULAR_RUEDE,
+            ANMELDEFORMULAR_VOLLJAEHRIG_JA, ANMELDEFORMULAR_VOLLJAEHRIG_NEIN,
+            ANMELDEFORMULAR_UNTERSCHRIFT_DATUM,
+        }
+        self.assertLessEqual(erwartet, felder)
+
+    def test_nur_angebotene_pruefungen_und_passende_gegenstandsfelder(self):
+        felder = set(PdfReader(self._erzeugen()).get_fields())
+        pruefungen = {f for f in felder if f.startswith(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX)}
+        self.assertEqual(pruefungen, {ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + k for k in self.ANGEBOTEN})
+        # Angeboten sind LK 1, 2 und 3 -> 1 + 2 + 3 Gegenstandsfelder.
+        gegenstaende = {f for f in felder if f.startswith("gegenstand_")}
+        self.assertEqual(gegenstaende, {
+            anmeldeformular_gegenstand_feld(stufe, n) for stufe in (1, 2, 3) for n in range(1, stufe + 1)
+        })
+
+        # Nur LK 1 angeboten -> nur ein Gegenstandsfeld, keine LK-2/3-Kästchen.
+        self._veranstaltung(["DK1", "ED1-Flächensuche"])
+        felder = set(PdfReader(self._erzeugen("nur_lk1.pdf")).get_fields())
+        self.assertEqual({f for f in felder if f.startswith("gegenstand_")}, {anmeldeformular_gegenstand_feld(1, 1)})
+        self.assertEqual(
+            {f for f in felder if f.startswith(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX)},
+            {ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1", ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED1-Flächensuche"},
+        )
+
+    def test_kopfdaten_im_text_ohne_fremde_logos(self):
+        text = _text(self._erzeugen())
+        self.assertIn("Anmeldeformular SHS-Wettkampf", text)
+        self.assertIn("HSV Musterstadt e.V.", text)
+        self.assertIn("Testverband", text)
+        self.assertIn("meldung@hsv-musterstadt.de", text)
+        self.assertIn("Musterweg 12, 12345 Musterstadt", text)
+        self.assertIn("14.11.2026", text)
+        self.assertIn("Trümmer LK 3", text)
+        self.assertNotIn("Fläche LK 2", text)
+        self.assertIn("Tierschutz-Hundeverordnung", text)
+        self.assertNotIn("dhv", text.lower())
+        self.assertNotIn("HSVRM", text)
+
+    def test_ohne_angebotene_pruefungen_valueerror(self):
+        set_veranstaltung(self.conn, verein="HSV Musterstadt e.V.", datum="2026-11-14")
+        pfad = os.path.join(self.tmpdir, "leer.pdf")
+        with self.assertRaises(ValueError) as kontext:
+            pdf_export.erstelle_anmeldeformular_pdf(self.conn, pfad)
+        self.assertIn("angebotenen Prüfungen", str(kontext.exception))
+        self.assertFalse(os.path.exists(pfad))
+
+    def test_alles_angeboten_und_lange_meldestelle_bleibt_auf_einer_seite(self):
+        self._veranstaltung(
+            [p.kuerzel for p in ALLE_PRUEFUNGEN],
+            meldestelle="\n".join(f"Zeile {i} der Meldestelle" for i in range(1, 7)),
+        )
+        reader = PdfReader(self._erzeugen("voll.pdf"))
+        self.assertEqual(len(reader.pages), 1)
+        breite, hoehe = float(reader.pages[0].mediabox.width), float(reader.pages[0].mediabox.height)
+        for annot in reader.pages[0]["/Annots"]:
+            x1, y1, x2, y2 = (float(v) for v in annot.get_object()["/Rect"])
+            # Unterer Rand mindestens 10 mm (28 pt), damit nichts im nicht bedruckbaren Bereich landet.
+            self.assertTrue(0 < x1 < x2 <= breite and 28 < y1 < y2 <= hoehe, annot.get_object()["/T"])
+
+    def test_sehr_lange_meldestelle_wird_gekuerzt_statt_winzig(self):
+        # Verifikation 28.09.2026, Befund 7b: höchstens 7 Zeilen, danach "…".
+        self._veranstaltung(
+            ["DK1"], meldestelle="\n".join(f"Zeile {i} der Meldestelle" for i in range(1, 41)),
+        )
+        reader = PdfReader(self._erzeugen("lang.pdf"))
+        self.assertEqual(len(reader.pages), 1)
+        text = reader.pages[0].extract_text()
+        self.assertIn("Zeile 7 der Meldestelle …", text)
+        self.assertNotIn("Zeile 8 der Meldestelle", text)
+
+    def test_langes_wort_in_meldestelle_wird_hart_umbrochen(self):
+        # Zweite Verifikation 28.09.2026, N2: simpleSplit trennt nur an Leerzeichen.
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        wort = "meldung.fuer.den.spuerhundesport@" + "x" * 80 + ".example.org"
+        zeilen = pdf_export._af_hart_umbrechen([wort], 150)
+        self.assertGreater(len(zeilen), 1)
+        self.assertEqual("".join(zeilen), wort)
+        for zeile in zeilen:
+            self.assertLessEqual(stringWidth(zeile, "Helvetica", pdf_export._AF_SCHRIFT), 150)
+        self._veranstaltung(["DK1"], meldestelle=f"Erika Muster\n{wort}")
+        reader = PdfReader(self._erzeugen("langes_wort.pdf"))
+        self.assertEqual(len(reader.pages), 1)
+
+    def test_gekuerzte_letzte_zeile_passt_mit_auslassung(self):
+        # Zweite Verifikation 28.09.2026, N3: " …" darf die volle 7. Zeile nicht verlängern.
+        voll = "Sehr lange Zeile der Meldestelle mit vielen Angaben " * 3
+        self._veranstaltung(["DK1"], meldestelle="\n".join(voll.strip() for _ in range(10)))
+        text = PdfReader(self._erzeugen("voll_gekuerzt.pdf")).pages[0].extract_text()
+        self.assertIn(" …", text)
+
+    def test_rundlauf_generator_ausfuellen_import(self):
+        # Verifikation 28.09.2026, Befund 5: die ganze Kette mit dem echten Generator -
+        # fällt auf, wenn sich Feldnamen oder Exportwerte der Kreuze im Formular ändern.
+        from pypdf import PdfWriter
+
+        from db_import import importiere_anmeldeformular_pdf
+
+        writer = PdfWriter(clone_from=PdfReader(self._erzeugen()))
+        writer.update_page_form_field_values(writer.pages[0], {
+            "vorname": "Jörg", "nachname": "Müller", "rufname_hund": "Bello",
+            "strasse": "Hauptstraße", "hausnummer": "5", "plz": "12345", "ort": "Musterstadt",
+            "wurftag": "01.02.2020", "schulterhoehe_cm": "45 cm", "kennzeichnung_nr": "276000",
+            anmeldeformular_gegenstand_feld(1, 1): "Schlüsselbund",
+            ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED1-Trümmerfeld": "/Yes",
+            ANMELDEFORMULAR_RUEDE: "/Yes", ANMELDEFORMULAR_KENNZEICHNUNG_CHIP: "/Yes",
+        }, auto_regenerate=False)
+        ausgefuellt = os.path.join(self.tmpdir, "rundlauf.pdf")
+        with open(ausgefuellt, "wb") as datei:
+            writer.write(datei)
+
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [ausgefuellt])
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler, ergebnis.uebersprungen), (1, [], []))
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["vorname"], t["nachname"], t["rufname_hund"]), ("Jörg", "Müller", "Bello"))
+        self.assertEqual((t["art"], t["stufe"], t["disziplin"]), ("ED", 1, "Trümmerfeld"))
+        self.assertEqual((t["geschlecht"], t["chip_nr"], t["schulterhoehe_cm"]), ("Rüde", "276000", 45))
+        self.assertEqual((t["strasse"], t["hausnummer"], t["plz"], t["ort"]),
+                         ("Hauptstraße", "5", "12345", "Musterstadt"))
+        self.assertEqual((t["wurftag"], t["gegenstand_1"]), ("2020-02-01", "Schlüsselbund"))
+
+    def test_ausgefuellt_zuruecklesen_inklusive_umlaut_feldname(self):
+        from pypdf import PdfWriter
+
+        reader = PdfReader(self._erzeugen())
+        writer = PdfWriter(clone_from=reader)
+        truemmer = ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED1-Trümmerfeld"
+        writer.update_page_form_field_values(writer.pages[0], {
+            "vorname": "Jörg", "nachname": "Müller", "rufname_hund": "Bello",
+            anmeldeformular_gegenstand_feld(1, 1): "Schlüsselbund",
+            truemmer: "/Yes", ANMELDEFORMULAR_RUEDE: "/Yes",
+        }, auto_regenerate=False)
+        ausgefuellt = os.path.join(self.tmpdir, "ausgefuellt.pdf")
+        with open(ausgefuellt, "wb") as datei:
+            writer.write(datei)
+
+        felder = PdfReader(ausgefuellt).get_fields()
+        self.assertEqual(felder["vorname"].get("/V"), "Jörg")
+        self.assertEqual(felder["nachname"].get("/V"), "Müller")
+        self.assertEqual(felder[anmeldeformular_gegenstand_feld(1, 1)].get("/V"), "Schlüsselbund")
+        self.assertEqual(felder[truemmer].get("/V"), "/Yes")
+        self.assertEqual(felder[ANMELDEFORMULAR_RUEDE].get("/V"), "/Yes")
+        self.assertEqual(felder[ANMELDEFORMULAR_HUENDIN].get("/V"), "/Off")
+        self.assertEqual(felder[ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1"].get("/V"), "/Off")
 
 
 if __name__ == "__main__":

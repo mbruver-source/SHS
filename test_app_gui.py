@@ -36,6 +36,7 @@ from app import (
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
     ErgebnisTab,
+    ExportTab,
     FormularImportTab,
     HauptFenster,
     HilfeDialog,
@@ -46,9 +47,11 @@ from app import (
     TerminImportDialog,
     VeranstaltungsDialog,
     VersionDialog,
+    VerwaltungTab,
     ZeitplanTab,
 )
 from db import (
+    ALLE_PRUEFUNGEN,
     NeuerTeilnehmer,
     TerminInfo,
     add_teilnehmer,
@@ -56,6 +59,7 @@ from db import (
     add_zeitplan_richter,
     eintragen_ergebnis,
     get_ergebnis,
+    get_veranstaltung,
     init_db,
     leistungsklasse_label,
     list_teilnehmer,
@@ -67,8 +71,10 @@ from db import (
 )
 from db_import import (
     CSV_IMPORT_SPALTEN,
+    CsvImportErgebnis,
 )
 from desktop_darstellung import _erzeuge_qss
+from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
 
 
 @pytest.fixture
@@ -865,6 +871,129 @@ def test_formular_import_tab_oma_import_legt_teilnehmer_an_und_meldet_dubletten(
     assert "1 Zeile(n) übersprungen" in meldung["text"]
 
 
+# --- Ausfüllbares Anmeldeformular (Nutzerwunsch 28.09.2026) -------------------------
+# Veranstaltungsdialog: Verband, Meldestelle, angebotene Prüfungen; Export-Button im
+# Reiter "Export"; Import-Button im Reiter "Formular-Import".
+
+
+def test_veranstaltungsdialog_anmeldeformular_felder_vorbelegt_und_auslesbar(qtbot):
+    dialog = VeranstaltungsDialog(vorbelegung={
+        "verein": "SGV", "datum": "2026-11-14", "verband": "HSVRM",
+        "meldestelle": "Erika Muster\nmeldung@example.org",
+        "angebotene_pruefungen": "DK1,ED2-Trümmerfeld",
+    }, bearbeiten=True)
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.verband.text() == "HSVRM"
+    assert dialog.meldestelle.toPlainText() == "Erika Muster\nmeldung@example.org"
+    assert set(dialog.pruefung_checkboxen) == {p.kuerzel for p in ALLE_PRUEFUNGEN}
+    angehakt = {k for k, cb in dialog.pruefung_checkboxen.items() if cb.isChecked()}
+    assert angehakt == {"DK1", "ED2-Trümmerfeld"}
+    assert dialog.pruefung_checkboxen["ED3-Flächensuche"].text() == "Fläche LK 3"
+
+    dialog.pruefung_checkboxen["DK1"].setChecked(False)
+    dialog.pruefung_checkboxen["ED3-Behältnisstrecke"].setChecked(True)
+    assert dialog.angebotene_pruefungen_text() == "ED2-Trümmerfeld,ED3-Behältnisstrecke"
+    dialog.meldestelle.setPlainText("  \n ")
+    assert dialog.meldestelle_text() is None
+
+
+def test_veranstaltung_bearbeiten_speichert_anmeldeformular_felder(qtbot, conn, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", zeitplan_start="09:00")
+
+    def _exec_mit_eingaben(dialog):
+        dialog.verband.setText("HSVRM")
+        dialog.meldestelle.setPlainText("Erika Muster\nmeldung@example.org")
+        dialog.pruefung_checkboxen["DK2"].setChecked(True)
+        dialog.pruefung_checkboxen["ED1-Flächensuche"].setChecked(True)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec_mit_eingaben)
+    tab = VerwaltungTab(conn)
+    qtbot.addWidget(tab)
+    tab._veranstaltung_bearbeiten()
+
+    gespeichert = get_veranstaltung(conn)
+    assert gespeichert["verband"] == "HSVRM"
+    assert gespeichert["meldestelle"] == "Erika Muster\nmeldung@example.org"
+    assert gespeichert["angebotene_pruefungen"] == "DK2,ED1-Flächensuche"
+    assert gespeichert["zeitplan_start"] == "09:00"
+
+    # Eine Änderung aus einem anderen Tab (hier: Zeitplan-Start) darf die neuen Felder
+    # nicht wieder leeren.
+    _aktualisiere_veranstaltung_feld(conn, zeitplan_start="10:00")
+    gespeichert = get_veranstaltung(conn)
+    assert gespeichert["zeitplan_start"] == "10:00"
+    assert gespeichert["verband"] == "HSVRM"
+    assert gespeichert["meldestelle"] == "Erika Muster\nmeldung@example.org"
+    assert gespeichert["angebotene_pruefungen"] == "DK2,ED1-Flächensuche"
+
+
+def test_export_tab_anmeldeformular_ohne_angebotene_pruefungen_zeigt_hinweis(qtbot, conn, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14")
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: hinweise.append(text))
+    monkeypatch.setattr(
+        "desktop_gemeinsam.QFileDialog.getSaveFileName",
+        lambda *a, **k: pytest.fail("Speichern-Dialog darf ohne angebotene Prüfungen nicht erscheinen"),
+    )
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Anmeldeformular (PDF)…"),
+        Qt.MouseButton.LeftButton,
+    )
+    assert len(hinweise) == 1
+    assert "angebotenen Prüfungen" in hinweise[0]
+
+
+def test_export_tab_anmeldeformular_erzeugt_pdf(qtbot, conn, tmp_path, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1")
+    ziel = tmp_path / "Anmeldeformular.pdf"
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Anmeldeformular (PDF)…"),
+        Qt.MouseButton.LeftButton,
+    )
+    assert ziel.exists()
+    assert tab.status_label.text().startswith("Anmeldeformular gespeichert")
+
+
+def test_formular_import_tab_anmeldeformulare_importieren_zeigt_zusammenfassung(qtbot, conn, monkeypatch):
+    pfade = ["a.pdf", "b.pdf", "c.pdf"]
+    monkeypatch.setattr("app.QFileDialog.getOpenFileNames", lambda *a, **k: (pfade, ""))
+    aufrufe = []
+
+    def _import_stub(connection, uebergebene_pfade):
+        aufrufe.append(uebergebene_pfade)
+        return CsvImportErgebnis(importiert=1, fehler=["c.pdf: kein Anmeldeformular"], uebersprungen=["b.pdf: Muster"])
+
+    monkeypatch.setattr("app.importiere_anmeldeformular_pdf", _import_stub)
+    meldung = {}
+    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: meldung.setdefault("text", text))
+
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    qtbot.mouseClick(
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Anmeldeformulare (PDF) importieren…"),
+        Qt.MouseButton.LeftButton,
+    )
+
+    assert aufrufe == [pfade]
+    assert "1 Teilnehmer importiert" in meldung["text"]
+    assert "1 Meldung(en) bereits vorhanden" in meldung["text"]
+    assert "1 Datei(en) nicht importiert" in meldung["text"]
+    assert "c.pdf: kein Anmeldeformular" in meldung["text"]
+
+
 # --- Hilfe-Button ---------------------------------------------------------------
 
 
@@ -1608,6 +1737,7 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
     letzter = TerminInfo(
         pfad="egal.sqlite", dateiname="egal.sqlite", verein="SGV Köppern e.V.",
         vereins_nr="123", ort="Köppern", datum="2026-09-19", anzahl_teilnehmer=5, lesbar=True,
+        verband="HSVRM",
     )
     monkeypatch.setattr("app.liste_termine", lambda: [letzter])
 
@@ -1633,6 +1763,8 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
         "verein": "SGV Köppern e.V.",
         "vereins_nr": "123",
         "ort": "Köppern",
+        # Marco, 28.09.2026: Verband wird übernommen, Meldestelle bewusst nicht.
+        "verband": "HSVRM",
     }
 
 

@@ -1,5 +1,5 @@
-"""Teilnehmer-Import für die Desktop-Version: CSV aus dem Formular-Import, OMA-Meldeliste
-und Stammdaten aus einem anderen Termin.
+"""Teilnehmer-Import für die Desktop-Version: CSV aus dem Formular-Import, OMA-Meldeliste,
+ausgefüllte Anmeldeformular-PDFs und Stammdaten aus einem anderen Termin.
 
 Aus db.py ausgelagert (Codex-Architekturprüfung 27.09.2026). Baut auf db auf (Teilnehmer
 anlegen, Datumsfelder, Disziplinen); db selbst importiert dieses Modul nicht, damit kein
@@ -9,17 +9,28 @@ Ringimport entsteht.
 from __future__ import annotations
 
 import csv
+import os
 import re
 import sqlite3
 from dataclasses import dataclass, field
 
 from db import (
     ALLE_DISZIPLINEN,
+    ANMELDEFORMULAR_HUENDIN,
+    ANMELDEFORMULAR_KENNZEICHNUNG_CHIP,
+    ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+    ANMELDEFORMULAR_PRUEFUNG_PRAEFIX,
+    ANMELDEFORMULAR_RUEDE,
+    ANMELDEFORMULAR_TEXTFELDER,
     NeuerTeilnehmer,
     add_teilnehmer,
+    anmeldeformular_gegenstand_feld,
+    angebotene_pruefungen,
     get_teilnehmer,
+    get_veranstaltung,
     list_teilnehmer,
     normalisiere_datum,
+    pruefung_nach_kuerzel,
 )
 
 # Nutzerwunsch (20.09., Anmerkung zum Programm, Abschnitt "Teilnehmer"): Meldeformulare
@@ -51,7 +62,8 @@ class CsvImportErgebnis:
     komplett ab, sondern importiert die übrigen trotzdem (siehe FormularImportTab)."""
     importiert: int
     fehler: list[str]
-    # Nur beim OMA-Import (importiere_teilnehmer_aus_oma) befüllt: Zeilen, die als bereits
+    # Nur beim OMA- und Anmeldeformular-Import (importiere_teilnehmer_aus_oma,
+    # importiere_anmeldeformular_pdf) befüllt: Zeilen bzw. Dateien, die als bereits
     # vorhandene Meldung erkannt und deshalb bewusst nicht erneut angelegt wurden.
     uebersprungen: list[str] = field(default_factory=list)
 
@@ -335,6 +347,218 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
             add_teilnehmer(conn, teilnehmer)
         except (ValueError, sqlite3.IntegrityError) as exc:
             fehler.append(f"Zeile {zeilennummer}: {exc}")
+            continue
+        vorhandene.add(schluessel)
+        importiert += 1
+    return CsvImportErgebnis(importiert=importiert, fehler=fehler, uebersprungen=uebersprungen)
+
+
+# Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular (PDF) je Termin, das die Teilnehmer
+# am Rechner ausfüllen und zurückschicken - hier werden die ausgefüllten PDFs wieder als
+# Teilnehmer eingelesen. Die Feldnamen stammen ausschließlich aus db.py
+# (ANMELDEFORMULAR_*), dieselbe Quelle nutzt pdf_export.erstelle_anmeldeformular_pdf().
+# Marcos Entscheidungen: genau EINE Prüfung je Formular (keine oder mehrere angekreuzt ->
+# Datei wird mit Hinweis abgelehnt), die eingetragenen Gegenstände gelten für die
+# angekreuzte LK und werden als "frei" (gegenstand_N_disziplin = None) gespeichert,
+# Dubletten werden wie beim OMA-Import übersprungen.
+_PDF_HAKEN_AUS = (None, "", "/Off", "Off")
+
+
+def _pdf_feldwerte(pfad: str) -> dict[str, object]:
+    """Formularfelder einer PDF-Datei als {Feldname: Wert} (leer, wenn die PDF keine
+    Formularfelder hat). pypdf wird erst hier importiert: db_import ist nur Teil der
+    Desktop-Anwendung, und so bleibt ein fehlendes pypdf auf die Anmeldeformular-Funktion
+    beschränkt statt den Programmstart zu verhindern.
+
+    Feldnamen mit Umlauten (z. B. "pruefung_ED2-Trümmerfeld") schreibt reportlab in
+    PDFDocEncoding, pypdf liest sie korrekt als "ü" zurück (Rundlauf am 28.09.2026 geprüft).
+    Die NFC-Normalisierung (Feldnamen UND Textwerte) fängt zusätzlich PDF-Programme ab, die
+    Umlaute beim Speichern zerlegt (NFD) ablegen - sonst würde z. B. die Dublettenprüfung
+    ein zerlegtes "Müller" nicht als vorhandenes "Müller" erkennen (Verifikation 28.09.2026,
+    Befund 2).
+
+    Kreuze (Checkboxen): Maßgeblich ist der Feldwert /V. Manche PDF-Programme setzen beim
+    Ankreuzen aber nur den Darstellungszustand /AS des Widgets - ist /V "aus", gilt das
+    Feld deshalb auch dann als angekreuzt, wenn ein Widget gleichen Namens einen
+    "An"-Zustand in /AS trägt (Verifikation 28.09.2026, Befund 3)."""
+    import unicodedata
+
+    from pypdf import PdfReader
+
+    def nfc(wert):
+        return unicodedata.normalize("NFC", str(wert)) if isinstance(wert, str) else wert
+
+    reader = PdfReader(pfad)
+    felder = reader.get_fields() or {}
+    werte = {
+        nfc(str(name)): nfc(feld.get("/V") if hasattr(feld, "get") else None)
+        for name, feld in felder.items()
+    }
+    for seite in reader.pages:
+        annots = seite.get("/Annots")
+        annots = annots.get_object() if annots is not None else None
+        if not isinstance(annots, list):  # fehlt, null oder kaputt
+            continue
+        for annot in annots:
+            # Der /AS-Rückfallweg ist nur eine Ergänzung zu get_fields(): eine unsauber
+            # aufgebaute Annotation (null-Einträge, /Parent null, ...) wird übersprungen und
+            # darf die sonst lesbare Datei nie zum Scheitern bringen (zweite Verifikation
+            # 28.09.2026, Befund L1).
+            try:
+                _kreuz_aus_darstellung_ergaenzen(annot.get_object(), werte, nfc)
+            except Exception:  # noqa: BLE001
+                continue
+    return werte
+
+
+def _kreuz_aus_darstellung_ergaenzen(widget, werte: dict, nfc) -> None:
+    """Siehe _pdf_feldwerte: übernimmt einen "An"-Zustand aus /AS, wenn /V "aus" ist."""
+    if not isinstance(widget, dict):
+        return
+    zustand = widget.get("/AS")
+    name = widget.get("/T")
+    if name is None:
+        eltern = widget.get("/Parent")
+        eltern = eltern.get_object() if eltern is not None else None
+        name = eltern.get("/T") if isinstance(eltern, dict) else None
+    if name is None or zustand is None or str(zustand) in _PDF_HAKEN_AUS:
+        return
+    name = nfc(str(name))
+    if name in werte and not _pdf_angekreuzt(werte, name):
+        werte[name] = str(zustand)
+
+
+def _pdf_text(werte: dict, feldname: str) -> str:
+    wert = werte.get(feldname)
+    return "" if wert is None else str(wert).strip()
+
+
+def _pdf_angekreuzt(werte: dict, feldname: str) -> bool:
+    """Checkbox gilt als angekreuzt, wenn ihr Wert nicht "aus" ist - der Exportwert
+    ("/Yes", "/On", ...) unterscheidet sich je nach Programm, deshalb nur die Gegenprüfung."""
+    wert = werte.get(feldname)
+    return (None if wert is None else str(wert).strip()) not in _PDF_HAKEN_AUS
+
+
+def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> NeuerTeilnehmer:
+    """Setzt die Feldwerte eines ausgefüllten Anmeldeformulars in einen NeuerTeilnehmer um.
+    `angebotene` sind die Kürzel der im geöffneten Termin angebotenen Prüfungen. Wirft
+    ValueError mit einer für den Nutzer verständlichen Begründung."""
+    if not any(feld in werte for feld in ANMELDEFORMULAR_TEXTFELDER):
+        raise ValueError("die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)")
+
+    angekreuzt = [
+        name[len(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX):] for name in werte
+        if name.startswith(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX) and _pdf_angekreuzt(werte, name)
+    ]
+    if not angekreuzt:
+        raise ValueError("keine Prüfung angekreuzt")
+    if len(angekreuzt) > 1:
+        bezeichnungen = [
+            p.bezeichnung if (p := pruefung_nach_kuerzel(k)) else k for k in angekreuzt
+        ]
+        raise ValueError(
+            f"mehrere Prüfungen angekreuzt ({', '.join(bezeichnungen)}) - je Formular ist "
+            "nur eine Prüfung möglich"
+        )
+    pruefung = pruefung_nach_kuerzel(angekreuzt[0])
+    if pruefung is None:
+        raise ValueError(f"unbekannte Prüfung {angekreuzt[0]!r} angekreuzt")
+    # Verifikation 28.09.2026, Befund 1 (Marco: umsetzen): ein Formular eines anderen
+    # Termins (z. B. vom Vorjahr) oder der Import in die falsche Termin-Datei fällt so auf,
+    # statt eine hier gar nicht angebotene Prüfung stillschweigend zu übernehmen.
+    if not angebotene:
+        # Zweite Verifikation 28.09.2026, N1: eigene Meldung statt der Vermutung "Formular
+        # eines anderen Termins?", wenn im Termin noch gar nichts hinterlegt ist.
+        raise ValueError(
+            "in diesem Termin sind noch keine angebotenen Prüfungen hinterlegt (Reiter "
+            "„Verwaltung“ → „Veranstaltungsdaten bearbeiten…“)"
+        )
+    if pruefung.kuerzel not in angebotene:
+        raise ValueError(
+            f"{pruefung.bezeichnung} wird in diesem Termin nicht angeboten - Formular eines "
+            "anderen Termins? (angebotene Prüfungen: Reiter „Verwaltung“ → "
+            "„Veranstaltungsdaten bearbeiten…“)"
+        )
+
+    zeile = {spalte: _pdf_text(werte, feld) for feld, spalte in ANMELDEFORMULAR_TEXTFELDER.items()}
+    zeile["art"], zeile["stufe"], zeile["disziplin"] = pruefung.art, str(pruefung.stufe), pruefung.disziplin or ""
+
+    # Schulterhöhe: Teilnehmer schreiben erfahrungsgemäß oft "45 cm" - die Einheit wird
+    # toleriert, alles andere (Kommazahlen usw.) prüft _csv_zeile_zu_teilnehmer() wie beim
+    # CSV-Import.
+    zeile["schulterhoehe_cm"] = re.sub(r"\s*cm\s*$", "", zeile["schulterhoehe_cm"], flags=re.IGNORECASE)
+
+    huendin = _pdf_angekreuzt(werte, ANMELDEFORMULAR_HUENDIN)
+    ruede = _pdf_angekreuzt(werte, ANMELDEFORMULAR_RUEDE)
+    if huendin and ruede:
+        raise ValueError("Hündin und Rüde sind beide angekreuzt")
+    zeile["geschlecht"] = "Hündin" if huendin else ("Rüde" if ruede else "")
+
+    # Kennzeichnung: es gibt nur die eine Spalte chip_nr - eine Tätowiernummer wird mit
+    # Präfix "Täto " abgelegt, damit sie in den Listen erkennbar bleibt.
+    if (
+        zeile["chip_nr"]
+        and _pdf_angekreuzt(werte, ANMELDEFORMULAR_KENNZEICHNUNG_TAETO)
+        and not _pdf_angekreuzt(werte, ANMELDEFORMULAR_KENNZEICHNUNG_CHIP)
+    ):
+        zeile["chip_nr"] = f"Täto {zeile['chip_nr']}"
+
+    teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
+    # Gegenstände nur aus dem Block der angekreuzten LK (LK n = n Gegenstände), als "frei".
+    for nummer in range(1, pruefung.stufe + 1):
+        gegenstand = _pdf_text(werte, anmeldeformular_gegenstand_feld(pruefung.stufe, nummer)) or None
+        setattr(teilnehmer, f"gegenstand_{nummer}", gegenstand)
+        setattr(teilnehmer, f"gegenstand_{nummer}_disziplin", None)
+    return teilnehmer
+
+
+def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -> CsvImportErgebnis:
+    """Liest ausgefüllte Anmeldeformular-PDFs (siehe Kommentar oben) ein - eine Datei = eine
+    Meldung = ein Teilnehmer. Wie beim CSV-/OMA-Import bricht eine fehlerhafte Datei den
+    Import nicht ab: sie wird mit "<Dateiname>: <Grund>" in `fehler` gemeldet, die übrigen
+    werden trotzdem importiert. Bereits vorhandene Meldungen (gleicher Name, Hund, Art, LK
+    und Disziplin - auch aus einer früheren Datei desselben Aufrufs) landen in
+    `uebersprungen`, so lässt sich ein Ordner mit Nachzüglern gefahrlos erneut einlesen."""
+    vorhandene = {
+        _meldungs_schluessel(t["nachname"], t["vorname"], t["rufname_hund"], t["art"], t["stufe"], t["disziplin"])
+        for t in list_teilnehmer(conn)
+    }
+    angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
+    fehler: list[str] = []
+    uebersprungen: list[str] = []
+    importiert = 0
+    for pfad in pfade:
+        name = os.path.basename(pfad)
+        try:
+            werte = _pdf_feldwerte(pfad)
+        except ImportError:
+            fehler.append(f"{name}: das Einlesen von PDF-Formularen ist nicht verfügbar (pypdf fehlt)")
+            continue
+        except Exception as exc:  # noqa: BLE001
+            # Bewusst breit: pypdf wirft bei beschädigten/fremden Dateien je nach Defekt
+            # PdfReadError, aber auch ValueError/KeyError/TypeError u. a. - eine einzelne
+            # kaputte Datei darf den Import der übrigen nie verhindern.
+            fehler.append(f"{name}: Datei ist keine lesbare PDF-Datei ({exc})")
+            continue
+        if not werte:
+            fehler.append(f"{name}: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)")
+            continue
+        try:
+            teilnehmer = _anmeldeformular_zu_teilnehmer(werte, angebotene)
+            schluessel = _meldungs_schluessel(
+                teilnehmer.nachname, teilnehmer.vorname, teilnehmer.rufname_hund,
+                teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
+            )
+            if schluessel in vorhandene:
+                uebersprungen.append(
+                    f"{name}: {teilnehmer.vorname} {teilnehmer.nachname} mit "
+                    f"{teilnehmer.rufname_hund} ist bereits gemeldet"
+                )
+                continue
+            add_teilnehmer(conn, teilnehmer)
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            fehler.append(f"{name}: {exc}")
             continue
         vorhandene.add(schluessel)
         importiert += 1

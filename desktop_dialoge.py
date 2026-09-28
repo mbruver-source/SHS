@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -36,7 +38,9 @@ from PySide6.QtWidgets import (
 
 from db import (
     ALLE_DISZIPLINEN,
+    ALLE_PRUEFUNGEN,
     NeuerTeilnehmer,
+    angebotene_pruefungen,
     dateiname_vorschlagen,
     datum_anzeige,
     init_db,
@@ -44,6 +48,7 @@ from db import (
     liste_termine,
     list_teilnehmer,
     normalisiere_datum,
+    pruefungen_als_text,
     termine_ordner,
 )
 from db_sicherung import (
@@ -955,7 +960,16 @@ Bogen nur für den markierten Teilnehmer. Die Filter Art/LK, Start-Nr. und Bezah
 Zeilen nur aus.</p>
 
 <h3>Reiter "Formular-Import"</h3>
-<p>Liest Meldeformulare (PDF, Word, Foto) mit Hilfe eines KI-Assistenten ein: "Prompt
+<p><b>Ausfüllbares Anmeldeformular (empfohlen):</b> Importieren lässt sich nur das
+Anmeldeformular, das dieses Programm selbst erzeugt (Reiter "Export" → "Anmeldeformular
+(PDF)…"), und zwar aus demselben Termin. Die Teilnehmer füllen es am Rechner aus, kreuzen
+genau eine Prüfung an und speichern es (nicht "Drucken → Als PDF", dabei gehen die Felder
+verloren). "Anmeldeformulare (PDF) importieren…" liest die zurückgeschickten Dateien ein,
+mehrere auf einmal; bereits vorhandene Meldungen werden übersprungen, abgelehnte Dateien mit
+Grund aufgelistet (z. B. mehrere Prüfungen angekreuzt oder eine im Termin nicht angebotene
+Prüfung).</p>
+<p>"OMA-Export importieren…" übernimmt den Meldungs-Export der Online-Meldeannahme direkt.</p>
+<p><b>Andere Meldeformulare</b> (Word, Foto/Scan, handschriftlich) mit Hilfe eines KI-Assistenten: "Prompt
 kopieren", Prompt und Formulare an den KI-Assistenten geben, die erzeugte CSV-Datei mit
 "CSV importieren…" einlesen. Jede Zeile wird ein neuer Teilnehmer (ohne Startnummer,
 Gegenstände und Bezahlt-Status); fehlerhafte Zeilen werden mit Grund aufgelistet und
@@ -1012,10 +1026,13 @@ in der Richter-Bedarf-PDF.</p>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
 Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
-Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").</p>
+Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").
+Verband, Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des
+Anmeldeformulars.</p>
 
 <h3>Reiter "Export"</h3>
-<p>Alle PDF-Ausgaben an einer Stelle: Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
+<p>Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
+"Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
 Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
 Zeitplan sowie
 alle Bewertungsbögen gesammelt. "Ablageort öffnen" zeigt den Ordner der zuletzt gespeicherten
@@ -1093,7 +1110,10 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     Prüfungstag fest, daher lassen sie sich jederzeit nachträglich ergänzen/ändern. Die
     Prüfungsgebühr ED/DK wird für die "Übersicht für Prüfungsleitung"-PDF gebraucht
     (siehe pdf_export.erstelle_pruefungsleitung_uebersicht_pdf) und ist mit einem
-    Standardwert vorbelegt, der sich pro Termin überschreiben lässt."""
+    Standardwert vorbelegt, der sich pro Termin überschreiben lässt.
+    Nutzerwunsch 28.09.2026: Verband, Meldestelle und die angebotenen Prüfungen erscheinen
+    im ausfüllbaren Anmeldeformular (siehe pdf_export.erstelle_anmeldeformular_pdf) - nur
+    die hier angehakten Prüfungen sind dort ankreuzbar."""
 
     def __init__(self, parent=None, vorbelegung: dict | None = None, bearbeiten: bool = False):
         super().__init__(parent)
@@ -1121,6 +1141,23 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self.pruefungsleiter = feld("pruefungsleiter")
         self.pruefungsgebuehr_ed = geld_feld("pruefungsgebuehr_ed")
         self.pruefungsgebuehr_dk = geld_feld("pruefungsgebuehr_dk")
+        self.verband = feld("verband")
+        self.meldestelle = QPlainTextEdit(vorbelegung.get("meldestelle") or "")
+        self.meldestelle.setPlaceholderText("z. B. Name, Anschrift, E-Mail-Adresse")
+        self.meldestelle.setTabChangesFocus(True)
+        self.meldestelle.setFixedHeight(self.meldestelle.fontMetrics().lineSpacing() * 4 + 12)
+
+        # Ankreuzbare Prüfungen des Anmeldeformulars, angeordnet wie dort: je Art/Disziplin
+        # eine Zeile (DK, Trümmer, Behältnisse, Fläche), je Leistungsklasse eine Spalte.
+        vorher_angeboten = {p.kuerzel for p in angebotene_pruefungen(vorbelegung)}
+        self.pruefung_checkboxen: dict[str, QCheckBox] = {}
+        self.gruppe_pruefungen = QGroupBox("Angebotene Prüfungen (für das Anmeldeformular)")
+        pruefungen_raster = QGridLayout(self.gruppe_pruefungen)
+        for i, pruefung in enumerate(ALLE_PRUEFUNGEN):
+            checkbox = QCheckBox(pruefung.bezeichnung)
+            checkbox.setChecked(pruefung.kuerzel in vorher_angeboten)
+            self.pruefung_checkboxen[pruefung.kuerzel] = checkbox
+            pruefungen_raster.addWidget(checkbox, i // 3, i % 3)
 
         form = QFormLayout()
         # Eingabefelder wachsen mit der Dialogbreite mit, statt bei einer
@@ -1139,6 +1176,9 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Richter 5", self.wertungsrichter_5)
         form.addRow("Prüfungsgebühr ED (€)", self.pruefungsgebuehr_ed)
         form.addRow("Prüfungsgebühr DK (€)", self.pruefungsgebuehr_dk)
+        form.addRow("Verband", self.verband)
+        form.addRow("Meldestelle", self.meldestelle)
+        form.addRow(self.gruppe_pruefungen)
 
         if not bearbeiten:
             self.pfad_feld = QLineEdit()
@@ -1159,10 +1199,32 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)
 
+        # Mit Meldestelle und Prüfungsauswahl (28.09.2026) wurde der Dialog für kleinere
+        # Bildschirme zu hoch - Inhalt deshalb wie im TeilnehmerDialog in einem
+        # QScrollArea, OK/Abbrechen bleiben fest am unteren Rand erreichbar.
+        inhalt_layout = QVBoxLayout()
+        inhalt_layout.addLayout(form)
+        inhalt_layout.addStretch()  # überschüssige Höhe nicht auf die Prüfungsauswahl verteilen
+        inhalt_container = QWidget()
+        inhalt_container.setLayout(inhalt_layout)
+        inhalt_scroll = QScrollArea()
+        inhalt_scroll.setWidget(inhalt_container)
+        inhalt_scroll.setWidgetResizable(True)
+
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
+        layout.addWidget(inhalt_scroll, 1)
         layout.addWidget(buttons)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
+        self.resize(620, 700)
         self._schriftgroesse_anwenden()
+
+    def meldestelle_text(self) -> str | None:
+        """Meldestelle (mehrzeilig) in Speicherform; None, wenn leer."""
+        return self.meldestelle.toPlainText().strip() or None
+
+    def angebotene_pruefungen_text(self) -> str | None:
+        """Angehakte Prüfungen in Speicherform (siehe db.pruefungen_als_text)."""
+        return pruefungen_als_text([k for k, cb in self.pruefung_checkboxen.items() if cb.isChecked()])
 
     def datum_iso(self) -> str:
         """Eingegebenes Datum in Speicherform JJJJ-MM-TT (bereits in

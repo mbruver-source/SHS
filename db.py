@@ -65,7 +65,14 @@ CREATE TABLE IF NOT EXISTS veranstaltung (
     wertungsrichter_3 TEXT,
     wertungsrichter_4 TEXT,
     wertungsrichter_5 TEXT,
-    pruefungsleiter TEXT
+    pruefungsleiter TEXT,
+    -- Nutzerwunsch (28.09.2026): Kopfangaben für das ausfüllbare Anmeldeformular
+    -- (pdf_export.erstelle_anmeldeformular_pdf). Veranstalter ist dort "verein" oben.
+    -- angebotene_pruefungen: kommagetrennte Kürzel aus ALLE_PRUEFUNGEN (z.B.
+    -- "DK1,ED2-Trümmerfeld"), steuert, welche Prüfungen im Formular ankreuzbar sind.
+    verband TEXT,
+    meldestelle TEXT,
+    angebotene_pruefungen TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teilnehmer (
@@ -302,7 +309,91 @@ _VERANSTALTUNG_NEUE_SPALTEN = [
     "pruefungsgebuehr_ed", "pruefungsgebuehr_dk", "zeitplan_start",
     # Nutzerwunsch (20.09.): Wertungsrichter 3-5, siehe Kommentar bei SCHEMA oben.
     "wertungsrichter_3", "wertungsrichter_4", "wertungsrichter_5",
+    # Nutzerwunsch (28.09.2026): Anmeldeformular, siehe Kommentar bei SCHEMA oben.
+    "verband", "meldestelle", "angebotene_pruefungen",
 ]
+
+
+@dataclass(frozen=True)
+class Pruefungsangebot:
+    """Eine im Anmeldeformular ankreuzbare Prüfung (Art + Leistungsklasse + ggf.
+    Disziplin). `kuerzel` ist die Speicherform in veranstaltung.angebotene_pruefungen und
+    zugleich Teil des PDF-Feldnamens ("pruefung_<kuerzel>")."""
+    kuerzel: str
+    art: str
+    stufe: int
+    disziplin: str | None
+    bezeichnung: str
+
+
+# Reihenfolge wie im bisherigen Word-Anmeldeformular: DK, Trümmer, Behältnisse, Fläche,
+# jeweils LK 1-3.
+ALLE_PRUEFUNGEN: list[Pruefungsangebot] = [
+    Pruefungsangebot(f"DK{stufe}", "DK", stufe, None, f"DK-LK {stufe}") for stufe in (1, 2, 3)
+] + [
+    Pruefungsangebot(f"ED{stufe}-{disziplin}", "ED", stufe, disziplin, f"{kurz} LK {stufe}")
+    for disziplin, kurz in (("Trümmerfeld", "Trümmer"), ("Behältnisstrecke", "Behältnisse"), ("Flächensuche", "Fläche"))
+    for stufe in (1, 2, 3)
+]
+_PRUEFUNG_NACH_KUERZEL = {p.kuerzel: p for p in ALLE_PRUEFUNGEN}
+
+
+def pruefungen_als_text(kuerzel: list[str]) -> str | None:
+    """Speicherform für veranstaltung.angebotene_pruefungen (None bei leerer Auswahl).
+    Unbekannte Kürzel werfen ValueError; die Reihenfolge folgt ALLE_PRUEFUNGEN."""
+    unbekannt = [k for k in kuerzel if k not in _PRUEFUNG_NACH_KUERZEL]
+    if unbekannt:
+        raise ValueError(f"unbekannte Prüfung(en): {', '.join(unbekannt)}")
+    gewaehlt = set(kuerzel)
+    return ",".join(p.kuerzel for p in ALLE_PRUEFUNGEN if p.kuerzel in gewaehlt) or None
+
+
+def angebotene_pruefungen(veranstaltung: dict | None) -> list[Pruefungsangebot]:
+    """Die für den Termin angebotenen Prüfungen in Formularreihenfolge (leer, wenn noch
+    keine hinterlegt sind). Unbekannte Kürzel in der Datenbank werden ignoriert."""
+    text = (veranstaltung or {}).get("angebotene_pruefungen") or ""
+    gewaehlt = {k.strip() for k in text.split(",") if k.strip()}
+    return [p for p in ALLE_PRUEFUNGEN if p.kuerzel in gewaehlt]
+
+
+def pruefung_nach_kuerzel(kuerzel: str) -> Pruefungsangebot | None:
+    return _PRUEFUNG_NACH_KUERZEL.get(kuerzel)
+
+
+# Feste Feldnamen des ausfüllbaren Anmeldeformulars (pdf_export.erstelle_anmeldeformular_pdf)
+# -> Spaltenname wie in db_import.CSV_IMPORT_SPALTEN. Einzige Quelle der Wahrheit für
+# Erzeugung UND Import (db_import.importiere_anmeldeformular_pdf), damit beide nie
+# auseinanderlaufen. Nicht in der Datenbank abgebildete Angaben (18 Jahre ja/nein) haben
+# eigene Feldnamen unten, ebenso Prüfungs-Kreuze, Gegenstände, Chip/Täto und Geschlecht.
+ANMELDEFORMULAR_TEXTFELDER: dict[str, str] = {
+    "vorname": "vorname", "nachname": "nachname",
+    "strasse": "strasse", "hausnummer": "hausnummer", "plz": "plz", "ort": "ort",
+    "mitgliedsnummer": "mitgliedsnummer", "telefon": "telefon", "email": "email",
+    "verein": "verein", "verband": "verband",
+    "halter_vorname": "halter_vorname", "halter_nachname": "halter_nachname",
+    "halter_strasse": "halter_strasse", "halter_hausnummer": "halter_hausnummer",
+    "halter_plz": "halter_plz", "halter_ort": "halter_ort",
+    "halter_mitgliedsnummer": "halter_mitgliedsnummer",
+    "halter_mitgliedsverein": "halter_mitgliedsverein", "halter_lu_nr": "halter_lu_nr",
+    "zwingername": "zwingername", "rufname_hund": "rufname_hund", "rasse": "rasse",
+    "wurftag": "wurftag", "schulterhoehe_cm": "schulterhoehe_cm",
+    "tollwutimpfung_bis": "tollwutimpfung_bis",
+    # Nummer aus dem Chip-/Täto-Feld; landet in chip_nr (bei Täto mit Präfix "Täto ").
+    "kennzeichnung_nr": "chip_nr",
+}
+ANMELDEFORMULAR_PRUEFUNG_PRAEFIX = "pruefung_"      # Checkbox je Pruefungsangebot.kuerzel
+ANMELDEFORMULAR_KENNZEICHNUNG_CHIP = "kennzeichnung_chip"   # Checkbox
+ANMELDEFORMULAR_KENNZEICHNUNG_TAETO = "kennzeichnung_taeto"  # Checkbox
+ANMELDEFORMULAR_HUENDIN = "geschlecht_huendin"      # Checkbox
+ANMELDEFORMULAR_RUEDE = "geschlecht_ruede"          # Checkbox
+ANMELDEFORMULAR_VOLLJAEHRIG_JA = "volljaehrig_ja"   # Checkbox, wird nicht gespeichert
+ANMELDEFORMULAR_VOLLJAEHRIG_NEIN = "volljaehrig_nein"  # Checkbox, wird nicht gespeichert
+ANMELDEFORMULAR_UNTERSCHRIFT_DATUM = "unterschrift_datum"  # Textfeld, wird nicht gespeichert
+
+
+def anmeldeformular_gegenstand_feld(stufe: int, nummer: int) -> str:
+    """Feldname des n-ten Gegenstands (1..stufe) für Leistungsklasse `stufe`."""
+    return f"gegenstand_lk{stufe}_{nummer}"
 
 
 def _vorhandene_spalten(conn, tabelle: str) -> set[str]:
@@ -514,14 +605,18 @@ def set_veranstaltung(
     pruefungsgebuehr_ed: str | None = None,
     pruefungsgebuehr_dk: str | None = None,
     zeitplan_start: str | None = None,
+    verband: str | None = None,
+    meldestelle: str | None = None,
+    angebotene_pruefungen: str | None = None,
 ) -> None:
     conn.execute(
         """
         INSERT INTO veranstaltung (
             id, verein, ort, datum, vereins_nr, pruefungsnummer,
             wertungsrichter_1, wertungsrichter_2, wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
-            pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
+            verband, meldestelle, angebotene_pruefungen
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             verein=excluded.verein, ort=excluded.ort, datum=excluded.datum,
             vereins_nr=excluded.vereins_nr, pruefungsnummer=excluded.pruefungsnummer,
@@ -530,12 +625,15 @@ def set_veranstaltung(
             wertungsrichter_5=excluded.wertungsrichter_5,
             pruefungsleiter=excluded.pruefungsleiter,
             pruefungsgebuehr_ed=excluded.pruefungsgebuehr_ed, pruefungsgebuehr_dk=excluded.pruefungsgebuehr_dk,
-            zeitplan_start=excluded.zeitplan_start
+            zeitplan_start=excluded.zeitplan_start,
+            verband=excluded.verband, meldestelle=excluded.meldestelle,
+            angebotene_pruefungen=excluded.angebotene_pruefungen
         """,
         (
             verein, ort, datum, vereins_nr, pruefungsnummer, wertungsrichter_1, wertungsrichter_2,
             wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
+            verband, meldestelle, angebotene_pruefungen,
         ),
     )
     conn.commit()
@@ -1677,6 +1775,10 @@ class TerminInfo:
     datum: str | None
     anzahl_teilnehmer: int
     lesbar: bool  # False = Datei vorhanden, aber nicht als Termin-Datenbank lesbar
+    # Marco, 28.09.2026 (Befund 7c): der Verband wird beim neuen Termin ebenfalls
+    # vorgeschlagen, die Meldestelle bewusst nicht. None bei alten Termin-Dateien, die die
+    # Spalte noch nicht haben (liste_termine öffnet nur lesend, ohne Migration).
+    verband: str | None = None
 
 
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
@@ -1700,6 +1802,7 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
                 datum=v["datum"] if v else None,
                 anzahl_teilnehmer=anzahl,
                 lesbar=True,
+                verband=v["verband"] if v and "verband" in v.keys() else None,
             ))
         except sqlite3.DatabaseError:
             ergebnisse.append(TerminInfo(
@@ -2246,6 +2349,9 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             pruefungsgebuehr_ed=veranstaltung.get("pruefungsgebuehr_ed"),
             pruefungsgebuehr_dk=veranstaltung.get("pruefungsgebuehr_dk"),
             zeitplan_start=veranstaltung.get("zeitplan_start"),
+            verband=veranstaltung.get("verband"),
+            meldestelle=veranstaltung.get("meldestelle"),
+            angebotene_pruefungen=veranstaltung.get("angebotene_pruefungen"),
         )
 
     id_zuordnung: dict[int, int] = {}

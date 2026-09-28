@@ -39,7 +39,8 @@ lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
 |---|---|
 | **Termine** | Jeder Prüfungstermin ist eine eigene Datei. Anlegen, öffnen, zwischen Terminen wechseln, abgeschlossene Termine vollständig löschen. |
 | **Teilnehmer** | Hundeführer, Hund, Art (ED/DK), Leistungsklasse, Disziplin und bis zu drei Suchgegenstände erfassen. Startnummern werden vorgeschlagen, der Zahlungsstatus ist mit einem Klick gesetzt. Stammdaten lassen sich aus einem früheren Termin übernehmen. |
-| **Formular-Import** | Ausgefüllte Meldeformulare (PDF, Word oder Foto) per KI-Assistent in eine CSV umwandeln und mit einem Klick importieren. Das Programm liefert den passenden Prompt gleich mit. |
+| **Anmeldeformular** | Ausfüllbares Anmeldeformular (PDF) je Termin mit eingedruckten Termindaten und nur den angebotenen Prüfungen. Zurückgeschickte Formulare liest das Programm direkt ein – ohne Abtippen. |
+| **Formular-Import** | Andere Meldeformulare (Word, Foto, Scan) per KI-Assistent in eine CSV umwandeln und importieren; der passende Prompt ist dabei. Außerdem Import des OMA-Meldungs-Exports. |
 | **Zeitplan** | Tagesablauf je Leistungsrichter mit Prüfungsblöcken und Pausen. Automatischer Verteilungsvorschlag oder Planung von Hand, Zeiten werden mitgerechnet. |
 | **Ergebniserfassung** | Such- und Anzeigeleistung je Disziplin eintragen, auch Disqualifikation und Abbruch. Ungespeicherte Zeilen sind markiert. |
 | **Auswertung** | Wertnote und Rangliste je Leistungsklasse, automatisch berechnet, inklusive „nicht bestanden“ (unter 70 Punkten in einer Disziplin). |

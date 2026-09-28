@@ -2682,3 +2682,229 @@ Umgang geklärt, erst danach gebaut.
 - Anlass: Bei 1.0.37 wurde gebaut, obwohl die Verifikation zwei kleine Punkte gemeldet hatte.
   Die kamen als Nachtrag-Commit `c1b7474` dazu.
 - Die Regel steht in `CLAUDE.md` unter „Build-/Versionsdisziplin“.
+
+## 28.09.2026: Ausfüllbares Anmeldeformular (PDF) und PDF-Import (Arbeitsstand, noch kein Build)
+
+**Anlass:** Marco möchte das Word-Anmeldeformular („Anmeldeformular_SHS-Wettkampf.docx“, ActiveX-
+Felder, Kopf mit dhv- und HSVRM-Logo) als PDF ohne Logos, mit vorbelegten Termindaten. Seine
+Frage: Lassen sich die eingegebenen Daten automatisch als CSV oder QR-Code ins PDF einbetten?
+
+**Geklärt mit Marco (28.09.2026):**
+- Wird eine Funktion im Programm (Desktop), keine einmalige Datei.
+- **Kein QR/CSV im PDF.** Ein QR, der sich beim Ausfüllen aktualisiert, ginge nur per
+  JavaScript und damit praktisch nur im Acrobat Reader. Stattdessen hat das PDF feste
+  Feldnamen, und ein neuer Import liest die Formularfelder direkt aus.
+- Kopf nur mit Titel, keine Logos.
+- Ankreuzblock nur mit den für den Termin angebotenen Prüfungen.
+- Gegenstände trägt der Teilnehmer ein (LK1: 1, LK2: 2, LK3: 3 Felder).
+- Getrennte Felder für Straße/Nr. und PLZ/Wohnort (weicht bewusst leicht von der Vorlage ab).
+- Je Formular genau **eine** Prüfung. Mehrere oder keine Kreuze → das Formular wird abgelehnt.
+
+**Umsetzung:**
+- `db.py`:
+  - Neue Spalten `verband`, `meldestelle` und `angebotene_pruefungen` in `veranstaltung`
+    (SCHEMA + Migration, `set_veranstaltung`, `kopiere_termin_daten`).
+  - `Pruefungsangebot`, `ALLE_PRUEFUNGEN` (12, Formularreihenfolge), `pruefungen_als_text`,
+    `angebotene_pruefungen` und `pruefung_nach_kuerzel`.
+  - Feldnamen als gemeinsame Konstanten `ANMELDEFORMULAR_*` und
+    `anmeldeformular_gegenstand_feld()`, von Erzeugung und Import gemeinsam genutzt.
+- `pdf_export.erstelle_anmeldeformular_pdf(conn, pfad)`:
+  - Aufbau mit reportlab-Canvas + AcroForm, weil platypus keine Formularfelder kennt.
+  - Eine A4-Seite; der Kopf mit Veranstalter (= Verein), Verband, Meldestelle und Datum wird
+    als Text eingedruckt.
+  - Sind keine Prüfungen angeboten, gibt es einen ValueError mit Hinweis.
+- `db_import.importiere_anmeldeformular_pdf(conn, pfade)`:
+  - Liest je Datei die Felder per `pypdf` und nutzt `_csv_zeile_zu_teilnehmer` zur Prüfung.
+  - Übernimmt die Gegenstände der angekreuzten LK mit Disziplin „frei“.
+  - Bei Täto steht in `chip_nr` der Präfix „Täto “.
+  - Erkennt Duplikate über `_meldungs_schluessel`, gegen die Datenbank und innerhalb des Stapels.
+  - Fehler werden je Datei gemeldet, der Import bricht dabei nicht ab.
+  - Nicht gespeichert werden „18 Jahre ja/nein“ und das Unterschriftsdatum.
+- `pypdf` ist neue Laufzeitabhängigkeit in `requirements.txt`, bisher nur Test-Abhängigkeit.
+- Desktop-Oberfläche:
+  - `VeranstaltungsDialog` hat die Felder Verband und Meldestelle sowie 12 Haken „Angebotene
+    Prüfungen“; der Dialog lässt sich jetzt scrollen.
+  - Beide Aufrufer und `_aktualisiere_veranstaltung_feld` reichen die neuen Felder weiter.
+  - Export-Reiter: Button „Anmeldeformular (PDF)…“.
+  - Formular-Import-Reiter: Button „Anmeldeformulare (PDF) importieren…“ mit Mehrfachauswahl.
+- Tests:
+  - `test_db.py`: `TestPruefungsangebote` und `TestAnmeldeformularImport` (9 Tests), dazu
+    Migration und Termin-Kopie erweitert.
+  - `test_pdf_export.py`: `TestAnmeldeformular` (6 Tests).
+  - `test_app_gui.py`: 5 Tests.
+- Doku: `docs/HANDBUCH.md` (Ablauf, Neuer Termin, Kapitel 5, Verwaltung, Export) und
+  `Architektur.md`. Screenshots werden erst beim Build neu aufgenommen.
+- Arbeitsweise: Die Datenschnittstelle in `db.py` stand vorab fest. Danach arbeiteten zwei
+  Bereichs-Subagents (Daten, Desktop) parallel, anschließend prüfte ein unabhängiger
+  Verifikations-Subagent.
+
+**Tests:**
+- Standard-Suite: 465 OK, 134 übersprungen.
+- GUI: 113 bestanden, 1 xfail.
+- Rundlauf Erzeugen → Ausfüllen → Import geprüft; Feldnamen mit Umlauten funktionieren.
+
+**Demo (Marco: „update danach die Demo Version und schaue mir das Ergebnis vor dem Build an“):**
+- `C:\Users\mbruv\Documents\SHS-Demo-vor-Build\` ist erweitert.
+- `demo_erzeugen.py`:
+  - trägt im Haupt-Demo-Termin Verband, Meldestelle und 8 angebotene Prüfungen ein;
+  - erzeugt `demo_anmeldeformular_leer.pdf`;
+  - erzeugt drei ausgefüllte Beispiele: `demo_anmeldung_Neumann.pdf` und
+    `demo_anmeldung_Otto.pdf` (gültig) sowie `demo_anmeldung_zwei_Kreuze.pdf` (absichtlich
+    fehlerhaft).
+- `Checkliste.md` hat einen neuen Abschnitt „Neu: Anmeldeformular“; die übrigen Punkte bleiben
+  als Gegenprobe.
+- Geprüft wurde auf einer Kopie des Demo-Termins: 2 importiert, 1 Fehler, erneuter Import
+  „bereits gemeldet“.
+- Das Hauptfenster lädt offscreen alle Reiter ohne Fehler.
+- Offen: Marcos Klick-Test, auch das Ausfüllen im echten Acrobat Reader bzw. Browser.
+
+**Befunde der Verifikation (offen, mit Marco zu klären):**
+1. Der Import prüft nicht, ob die angekreuzte Prüfung im geöffneten Termin angeboten wird.
+   Ein altes Formular oder der falsche Termin wird deshalb ohne Warnung übernommen.
+2. Nur die Feldnamen werden NFC-normalisiert, die Werte nicht. Speichert ein Programm „Müller“
+   zerlegt (NFD), greift die Duplikatprüfung nicht.
+3. Kreuze werden nur aus `/V` gelesen, nicht aus `/AS`. Setzt ein Programm nur `/AS`, gehen
+   Hündin/Rüde und Chip/Täto still verloren. Das ist nur simuliert, nicht in einem echten
+   Programm gesehen.
+4. Die Untergrenze `pypdf>=4.0` ist zu niedrig; ältere Versionen haben bekannte DoS-Fixes.
+   Vorschlag: `>=6.10`.
+5. Es fehlt ein automatischer Test über die ganze Kette, vom echten Generator bis zum Import.
+6. Ein einziges falsch formatiertes optionales Feld, z. B. Tollwut „05/2027“, lehnt das ganze
+   Formular ab. Das ist konsistent zum CSV-Import und wird gemeldet.
+7. Kosmetik:
+   - totes `except OSError` in `app.py` `_anmeldeformulare_importieren`;
+   - eine sehr lange Meldestelle verkleinert die Schrift ohne Untergrenze;
+   - beim neuen Termin werden Verband und Meldestelle nicht vom letzten Termin übernommen.
+
+**Befunde umgesetzt (Marco, 28.09.2026: „setze 1 bis 7b um, 7c Verband übernehmen
+Meldestelle nicht übernehmen“, Arbeitsstand, noch kein Build):**
+1. Ist die angekreuzte Prüfung im geöffneten Termin nicht angeboten, lehnt der Import das
+   Formular ab: „… wird in diesem Termin nicht angeboten - Formular eines anderen Termins?“
+   (`_anmeldeformular_zu_teilnehmer(werte, angebotene)`).
+2. `_pdf_feldwerte` normalisiert jetzt auch die Textwerte auf NFC.
+3. Rückfallweg für Kreuze: Ist `/V` „aus“, trägt aber ein Widget gleichen Namens einen
+   „An“-Zustand in `/AS`, gilt das Feld als angekreuzt.
+4. `pypdf>=6.10,<7` in `requirements.txt` und `requirements-dev.txt`.
+5. Neuer Test `test_rundlauf_generator_ausfuellen_import` in `test_pdf_export.py`: echter
+   Generator → Ausfüllen per pypdf → Import.
+6. Hinweis im Handbuch (Kapitel 5): Datum als TT.MM.JJJJ, Größe als ganze Zahl, sonst wird das
+   ganze Formular abgelehnt. Dazu Hinweise zu 1 und 7c.
+7. Kleinere Punkte:
+   - 7a: Das tote `except OSError` in `_anmeldeformulare_importieren` ist entfernt.
+   - 7b: Die Meldestelle hat höchstens 7 Zeilen (`_AF_MELDESTELLE_MAX_ZEILEN`), die letzte
+     endet dann mit „…“.
+   - 7c: Beim neuen Termin wird der Verband vom neuesten Termin übernommen, die Meldestelle
+     bewusst nicht. Dafür gibt es `TerminInfo.verband`; `liste_termine` liest ihn nur, wenn
+     die Spalte existiert, denn alte Dateien werden nur lesend und ohne Migration geöffnet.
+- Neue Tests:
+  - Nicht angebotene Prüfung, NFD-Werte samt Dublette und Kreuz nur in `/AS`. Die beiden
+    letzten schlagen ohne die jeweilige Korrektur nachweislich fehl.
+  - Lange Meldestelle und Rundlauf.
+  - `liste_termine` mit Verband und mit einer alten Datei ohne Spalte.
+  - Vorbelegung im GUI-Test.
+- Ergebnis: Standard-Suite 471 OK (134 übersprungen), GUI 113 bestanden (1 xfail).
+- Demo: `demo_anmeldung_anderer_Termin.pdf` ist neu. Es stammt aus dem Termin „DEMO
+  Stammdatenquelle“ mit ED3 Trümmer und wird im Haupt-Demo-Termin abgelehnt. Die
+  Checkliste ist ergänzt (4 Dateien → 2 importiert, 2 Fehler; Verband-Vorbelegung; lange
+  Meldestelle).
+- `pdf_export.py` war im Arbeitsstand komplett auf CRLF umgestellt; zurück auf LF wie die
+  übrigen Dateien. Inhaltlich ändert sich nichts, Git normalisiert ohnehin (`autocrlf`).
+- Zweite Verifikation nach der Umsetzung:
+  - Alle 9 Punkte sind korrekt umgesetzt. Die Tests laufen, der Demo-Import liefert das
+    erwartete Ergebnis, alle Dateien im Diff haben LF.
+  - Offen und mit Marco zu klären:
+    - **L1 (niedrig):** Der `/AS`-Rückfallweg (Punkt 3) geht von einer sauberen
+      Annotationsstruktur aus. Ist `/Annots` oder `/Parent` `null`, gibt es eine Exception.
+      Sie wird abgefangen, die Datei gilt dann aber als „keine lesbare PDF-Datei“, obwohl sie
+      ohne den Rückfallweg importiert worden wäre.
+      Vorschlag: den `/AS`-Durchlauf so absichern, dass er nie eine Datei ablehnt.
+    - **N1:** Hat der Termin gar keine angebotenen Prüfungen hinterlegt, eine eigene Meldung
+      statt „Formular eines anderen Termins?“.
+    - **N2:** Ein sehr langes Wort ohne Leerzeichen in der Meldestelle (z. B. eine lange
+      E-Mail-Adresse) läuft über den Kopfkasten hinaus.
+    - **N3:** Das angehängte „…“ in Zeile 7 der Meldestelle kann minimal überstehen.
+    - **N4:** pypdf-Warnungen „Text string … not supported by font encoding“ im Testlauf,
+      nur Rauschen.
+
+**Befunde der zweiten Verifikation umgesetzt (Marco, 28.09.2026: „setze L1 und N1 bis N4
+um“, Arbeitsstand, noch kein Build):**
+- **L1:** Der `/AS`-Rückfallweg steckt jetzt in `_kreuz_aus_darstellung_ergaenzen`, mit
+  Typprüfungen und `try/except` je Annotation. Ein fehlendes oder `null`-`/Annots` wird
+  übersprungen. Eine unsauber aufgebaute PDF wird deshalb nicht mehr abgelehnt; die
+  Negativprobe ohne Absicherung scheitert.
+- **N1:** Hat der Termin keine angebotenen Prüfungen, lautet die Meldung „in diesem Termin
+  sind noch keine angebotenen Prüfungen hinterlegt (…)“.
+- **N2:** `pdf_export._af_hart_umbrechen` bricht ein zu langes Wort in der Meldestelle
+  zeichenweise um.
+- **N3:** Die gekürzte 7. Zeile wird so weit gekürzt, dass „ …“ noch in die Breite passt.
+- **N4:** In `TestAnmeldeformularImport` und `TestAnmeldeformular` steht der pypdf-Logger
+  während der Tests auf ERROR. Die Testausgabe ist damit ruhig.
+- Tests: 4 neue. Standard-Suite 475 OK (134 übersprungen), GUI 113 bestanden (1 xfail).
+- Demo nicht neu erzeugt: Der Demo-Termin war gerade in der App geöffnet (Marcos Klick-Test).
+  Die Demo-PDFs sind von diesen Punkten nicht betroffen, sie brauchen keine Neuerzeugung.
+- Dritte Verifikation (nach L1 bis N4): Die Korrekturen sind korrekt, nichts blockiert.
+  **Marco, 28.09.2026: P1 bis P3 als Restrisiko akzeptiert, keine Änderung.** Bei künftigen
+  Prüfungen nicht erneut melden:
+  - **P1 (niedrig):** `_af_hart_umbrechen` wird bei sehr langen Wörtern ohne Leerzeichen
+    quadratisch langsam. Gemessen: 2000 Zeichen etwa 1 s, 5000 Zeichen etwa 15 s, in dieser
+    Zeit hängt die Oberfläche.
+    Vorschlag: vorwärts oder binär suchen und nach 7 Zeilen aufhören.
+  - **P2 (optional):** `/AS` wird nicht auf den Typ geprüft. Das ist nur theoretisch relevant,
+    etwa bei `/AS 5` in einer kaputten PDF.
+  - **P3 (optional):** Der N3-Test prüft nur, dass „ …“ vorkommt, nicht die Breite.
+    Er bestünde also auch ohne die Korrektur.
+
+**Klick-Test und Build-Vorbereitung (28.09.2026):**
+- Marco: „Demo passt.“ Danach: „Bitte im Handbuch beim Import der PDF die Erzeugung der
+  Anmeldeformular PDF mit einbeziehen, damit klar ist welche PDF importiert werden kann.
+  Erzeuge die Screenshots, update alle Dokumentationen und erzeug zum Schluss ein neues Build.“
+- `docs/HANDBUCH.md`, Kapitel 5 „Ausfüllbares Anmeldeformular (PDF)“ neu gegliedert:
+  - Importierbar ist nur das vom Programm selbst erzeugte Formular aus demselben Termin.
+  - Nicht importierbar sind das alte Word-Formular, Scans und Fotos, handschriftlich
+    ausgefüllte Formulare und „Drucken → Als PDF“.
+  - Danach folgen die Schritte 1–4: Termin vorbereiten, erzeugen, ausfüllen lassen, einlesen.
+  - Neues Bild `docs/bilder/handbuch_anmeldeformular.png`: Ausschnitt des erzeugten Formulars,
+    aus dem PDF per LibreOffice gerendert.
+- Neu aufgenommene Screenshots: `handbuch_termin_anlegen.png`, `handbuch_export.png` und
+  `handbuch_formular_import.png`.
+  - Aufgenommen wie bisher: offscreen, Segoe UI, Standard-Design, temporäres Profil.
+  - Die Versionsanzeige steht auf 1.0.38, der kommenden Version.
+  - Die bisherigen Bilder zeigten noch 1.0.30, und beim Formular-Import fehlte der OMA-Button.
+- Weitere Doku:
+  - Programmhilfe `_HILFE_HTML`: Formular-Import (PDF-Weg, OMA, KI), Verwaltung und Export.
+  - `README.md`: Funktionstabelle mit neuer Zeile „Anmeldeformular“.
+  - `docs/index.html`: Funktionskarte und Ablauf-Schritt.
+  - `docs/UMSTIEG.md`.
+- PostgreSQL: Die komplette pytest-Suite lief gegen einen Wegwerf-Container `postgres:16`
+  über Podman. Ergebnis: 615 bestanden, 2 übersprungen, 1 xfail.
+- Doku-Verifikation vor dem Build: nichts Blockierendes. Marco hat alle 5 Punkte zur
+  Umsetzung gewählt:
+  1. Hinweistext im Reiter „Verwaltung“ um Verband, Meldestelle und angebotene Prüfungen
+     ergänzt.
+  2. Datenschutz-Box auf „Beim Import per KI …“ präzisiert.
+  3. Weitere Ablehnungsgründe im Handbuch: Vorname, Name oder Rufname fehlt, Hündin und Rüde
+     beide angekreuzt.
+  4. Täto-Regel präzisiert.
+  5. `UMSTIEG.md`, Schritt 4, um das Anmeldeformular ergänzt.
+
+## Version 1.0.38 (28.09., Build auf Marcos Wunsch „erzeug zum Schluss ein neues Build“)
+
+**Enthalten:** ausfüllbares Anmeldeformular (PDF) je Termin mit Import der ausgefüllten
+Formulare, samt allen Befund-Korrekturen aus drei Verifikationsrunden (siehe Abschnitt
+„28.09.2026: Ausfüllbares Anmeldeformular“ oben). Neue Laufzeitabhängigkeit ist `pypdf>=6.10,<7`.
+
+**Build-Ablauf:**
+- Offene Punkte vor dem Build geklärt:
+  - P1 bis P3 hat Marco als Restrisiko akzeptiert.
+  - Die 5 Punkte der Doku-Verifikation sind umgesetzt.
+- Dokumente und Screenshots vor dem Build aktualisiert: Handbuch, 3 neue Aufnahmen und
+  1 neues Bild, Programmhilfe, README, Webseite, UMSTIEG, Architektur, Fortschritt.
+- `bump_version.py` hat die Version auf 1.0.38 gesetzt, einschließlich „Stand: Version“ im
+  Handbuch. `docs/HANDBUCH.pdf` ist neu erzeugt (26 Seiten).
+- Tests:
+  - Standard-Suite: 475 OK, 134 übersprungen.
+  - GUI: 113 bestanden, 1 xfail.
+  - Komplette pytest-Suite gegen `postgres:16` (Podman): 615 bestanden, 2 übersprungen,
+    1 xfail.
+  - `py_compile`: fehlerfrei.
+- Push und Tag macht Marco.

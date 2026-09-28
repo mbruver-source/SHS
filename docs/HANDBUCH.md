@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.37. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.38. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
@@ -35,7 +35,7 @@ Stand: Version 1.0.37. Alle Screenshots zeigen erfundene Testdaten.
 
 | Wann | Was | Wo |
 |---|---|---|
-| Wochen vorher | Termin anlegen, Veranstaltungsdaten eintragen | Startbildschirm, Reiter „Verwaltung“ |
+| Wochen vorher | Termin anlegen, Veranstaltungsdaten und angebotene Prüfungen eintragen, Anmeldeformular (PDF) erzeugen und mit der Ausschreibung verschicken | Startbildschirm, Reiter „Verwaltung“, „Export“ |
 | Mit den Meldungen | Teilnehmer erfassen, Zahlungen abhaken | Reiter „Teilnehmer“, „Formular-Import“ |
 | 8 Tage vorher | Zeitplan erstellen, Kontakt zu den Richtern aufnehmen und ihnen den Zeitplan übermitteln (PDF), bei späteren Änderungen erneut senden | Reiter „Zeitplan“ |
 | Kurz vorher | Startnummern und Gegenstände prüfen, Bewertungsbögen und Listen drucken | Reiter „Teilnehmer“, „Export“ |
@@ -82,7 +82,7 @@ steht oben.
 
 | Button | Wirkung |
 |---|---|
-| **„Neuen Termin anlegen…“** | Öffnet die Eingabe der Veranstaltungsdaten (siehe unten). Verein, Vereins-Nr. und Ort werden vom neuesten Termin übernommen. |
+| **„Neuen Termin anlegen…“** | Öffnet die Eingabe der Veranstaltungsdaten (siehe unten). Verein, Vereins-Nr., Ort und Verband werden vom neuesten Termin übernommen. |
 | **„Öffnen“** (oder Doppelklick) | Öffnet den markierten Termin. |
 | **„Löschen…“** | Löscht den markierten Termin nach Rückfrage **unwiderruflich**, mit allen Teilnehmer- und Ergebnisdaten. Der gerade geöffnete Termin lässt sich nicht löschen. |
 | **„Andere Termin-Datei öffnen…“** | Öffnet eine Termin-Datei (`*.sqlite`) von einem anderen Ort, z. B. einem USB-Stick. |
@@ -97,6 +97,11 @@ Pflicht sind **Austragender Verein\*** und **Datum\*** (TT.MM.JJJJ). Alle weiter
 Vereins-Nr., Ort, Prüfungsnummer, Prüfungsleiter, Richter 1–5, Prüfungsgebühr ED/DK – kannst
 du auch später im Reiter „Verwaltung“ nachtragen. Sie erscheinen im Kopf der Statistik und in
 der Übersicht für die Prüfungsleitung.
+
+**Verband**, **Meldestelle** (mehrzeilig, z. B. Name, Anschrift, E-Mail) und **Angebotene
+Prüfungen** (12 Haken: DK, Trümmer, Behältnisse und Fläche, jeweils LK 1–3) brauchst du für das
+ausfüllbare Anmeldeformular (siehe [Kapitel 5](#5-formular-import)). Der Dialog lässt sich
+scrollen und vergrößern.
 
 Der **Speicherort\*** wird automatisch als `JJJJ-MM-TT_Verein.sqlite` vorgeschlagen. Behalte
 den Vorschlag möglichst bei: Nur Termine im Standardordner erscheinen im Startbildschirm und
@@ -189,6 +194,56 @@ steht, wird bei erneutem Import ein zweites Mal angelegt.
 
 ![Reiter „Formular-Import“](bilder/handbuch_formular_import.png)
 
+### Ausfüllbares Anmeldeformular (PDF) – empfohlen
+
+Importieren lässt sich **nur das Anmeldeformular, das dieses Programm selbst erzeugt** (Reiter
+„Export“ → „Anmeldeformular (PDF)…“), und zwar aus **demselben Termin**, in den du importierst.
+Nur dieses PDF enthält die Formularfelder, die der Import ausliest. So sieht es aus – Kopf mit
+den Termindaten, ohne Vereins- oder Verbandslogos, ankreuzbar nur die angebotenen Prüfungen:
+
+![Vom Programm erzeugtes Anmeldeformular (Ausschnitt)](bilder/handbuch_anmeldeformular.png)
+
+**Nicht** importieren lassen sich: das frühere Word-Anmeldeformular (auch nicht als PDF
+gespeichert), Scans und Fotos, ausgedruckte und von Hand ausgefüllte Formulare sowie ein
+Formular, das über „Drucken → Als PDF speichern“ weitergegeben wurde – dabei gehen die
+Formularfelder verloren. Für diese Fälle gibt es den Weg [per KI](#per-ki-foto-scan-word) weiter
+unten.
+
+**Schritt für Schritt:**
+
+1. **Termin vorbereiten:** Im Reiter „Verwaltung“ unter „Veranstaltungsdaten bearbeiten…“
+   Verband, Meldestelle und die **angebotenen Prüfungen** eintragen.
+2. **Formular erzeugen:** Im Reiter „Export“ mit **„Anmeldeformular (PDF)…“** das PDF
+   speichern und mit der Ausschreibung an die Teilnehmer verschicken. Veranstalter, Verband,
+   Meldestelle und Datum sind eingedruckt.
+3. **Ausfüllen lassen:** Die Teilnehmer füllen das PDF am Rechner aus (Adobe Acrobat Reader,
+   Browser wie Edge/Chrome/Firefox o. Ä.), kreuzen **genau eine** Prüfung an, **speichern** es
+   (nicht „Drucken → Als PDF“) und schicken die Datei zurück.
+4. **Einlesen:** Hier im Reiter „Formular-Import“ mit **„Anmeldeformulare (PDF)
+   importieren…“** die zurückgeschickten Dateien auswählen – mehrere auf einmal sind möglich.
+   Danach erscheint eine Übersicht: importiert, bereits vorhanden, nicht importiert (mit Grund).
+
+- **Je Formular genau eine Prüfung.** Sind mehrere oder keine angekreuzt, wird das Formular
+  nicht übernommen und im Ergebnis mit Grund aufgeführt.
+- **Nur Prüfungen dieses Termins.** Ist eine Prüfung angekreuzt, die der geöffnete Termin nicht
+  anbietet (z. B. ein Formular vom Vorjahr oder der falsche Termin geöffnet), wird das Formular
+  abgelehnt.
+- **Datumsangaben** (Wurfdatum, Tollwutimpfung) müssen als TT.MM.JJJJ, die Größe als ganze Zahl
+  (z. B. „45“ oder „45 cm“) eingetragen sein. Sonst wird das ganze Formular mit Grund abgelehnt –
+  dann den Teilnehmer um Korrektur bitten oder ihn im Reiter „Teilnehmer“ von Hand anlegen.
+  Ebenso abgelehnt wird ein Formular, bei dem Vorname, Name oder Rufname des Hundes fehlt oder
+  Hündin und Rüde beide angekreuzt sind.
+- **Übernommen:** alle Angaben zu Teilnehmer, abweichendem Hundeeigentümer und Hund sowie die
+  Gegenstände der angekreuzten Leistungsklasse (ohne Zuordnung zu einer Disziplin). Die
+  Nummer landet in der Chip-Nr.; ist Täto-Nr. und nicht zugleich Chip-Nr. angekreuzt, steht
+  dort „Täto …“.
+- **Nicht übernommen:** die Angabe „18. Lebensjahr vollendet“ und das Datum neben der
+  Unterschrift. Startnummer und Bezahlt-Status trägst du wie gewohnt im Reiter „Teilnehmer“ nach.
+- **Erneuter Import:** Eine Meldung mit gleichem Namen, Hund, Art, Leistungsklasse und Disziplin
+  wird nicht noch einmal angelegt.
+
+### Per KI (Foto, Scan, Word)
+
 Ausgefüllte Meldeformulare (PDF, Word oder Foto/Scan) lassen sich mit einem KI-Assistenten
 (z. B. Claude oder ChatGPT) in eine CSV-Datei umwandeln:
 
@@ -202,7 +257,7 @@ dem Import mit Zeilennummer und Grund aufgelistet, z. B. fehlende Pflichtangaben
 ED/DK, Leistungsklasse nicht 1–3, ED ohne gültige Disziplin oder ein ungültiges Datum. Die Datei
 muss UTF-8-kodiert sein.
 
-> **Datenschutz:** Beim Formular-Import gehen die Meldeformulare an den gewählten KI-Anbieter.
+> **Datenschutz:** Beim Import per KI gehen die Meldeformulare an den gewählten KI-Anbieter.
 > Kläre vorher, ob das für deinen Verein in Ordnung ist. Das Programm selbst sendet nichts.
 
 ### Ausprobieren mit Beispieldaten
@@ -343,7 +398,8 @@ weil die Behältnisse je LK unterschiedlich sind.
 ### Verwaltung
 
 **„Veranstaltungsdaten bearbeiten…“** ändert Verein, Ort, Datum, Vereins-Nr., Prüfungsnummer,
-Prüfungsleiter, Richter 1–5 und die Prüfungsgebühren nachträglich.
+Prüfungsleiter, Richter 1–5, die Prüfungsgebühren sowie Verband, Meldestelle und angebotene
+Prüfungen (für das Anmeldeformular) nachträglich.
 
 ### Export
 
@@ -354,6 +410,7 @@ gewählter Ordner) und erzeugt ein PDF. **„Ablageort öffnen“** zeigt diesen
 
 | Button | Inhalt |
 |---|---|
+| **Anmeldeformular (PDF)…** | Ausfüllbares Anmeldeformular mit den Termindaten und den angebotenen Prüfungen, siehe [Kapitel 5](#5-formular-import) |
 | **Ergebnisliste (PDF)…** | Rangliste mit Wertnoten je Leistungsklasse |
 | **Ergebnisliste zum Ausfüllen (PDF, leer)…** | Formular mit Start-Nr./Name/Verein, Platz/Punkte/Wertnote leer – z. B. für Papier am Prüfungstag |
 | **Etiketten (PDF)…** | Ergebnis-Etiketten zum Aufkleben (2 Zeilen je Teilnehmer); unvollständige Ergebnisse mit leeren Punktfeldern, Feld „SH-R“ zum Abstempeln |

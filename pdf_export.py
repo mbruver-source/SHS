@@ -1,5 +1,6 @@
 """
-PDF-Ausgabe für das SHS-Prüfungsprogramm: Bewertungsbögen, Ergebnislisten, Statistik.
+PDF-Ausgabe für das SHS-Prüfungsprogramm: Bewertungsbögen, Ergebnislisten, Statistik,
+ausfüllbares Anmeldeformular.
 
 Bewusste Entscheidung: reportlab statt weasyprint/xhtml2pdf.
 Der ursprüngliche Plan (siehe Grobkonzept) war eine HTML/CSS-Vorlage über weasyprint.
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
+from typing import NamedTuple
 from xml.sax.saxutils import escape as _xml_escape
 
 from reportlab.graphics.shapes import Drawing, Ellipse, Rect, String
@@ -31,7 +33,9 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
     HRFlowable,
     KeepTogether,
@@ -46,6 +50,16 @@ from reportlab.platypus import (
 from db import (
     _GEGENSTAND_FELDER,
     ALLE_DISZIPLINEN,
+    ANMELDEFORMULAR_HUENDIN,
+    ANMELDEFORMULAR_KENNZEICHNUNG_CHIP,
+    ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+    ANMELDEFORMULAR_PRUEFUNG_PRAEFIX,
+    ANMELDEFORMULAR_RUEDE,
+    ANMELDEFORMULAR_UNTERSCHRIFT_DATUM,
+    ANMELDEFORMULAR_VOLLJAEHRIG_JA,
+    ANMELDEFORMULAR_VOLLJAEHRIG_NEIN,
+    angebotene_pruefungen,
+    anmeldeformular_gegenstand_feld,
     BEHAELTNIS_BEDARF_HINWEIS,
     BEHAELTNIS_BEDARF_SPALTEN,
     BEHAELTNIS_BEDARF_TITEL,
@@ -1479,3 +1493,396 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
         pfad, pagesize=A4,
         topMargin=14 * mm, bottomMargin=14 * mm, leftMargin=16 * mm, rightMargin=16 * mm,
     ).build(story)
+
+
+# --- Anmeldeformular (ausfüllbares PDF) --------------------------------------
+# Nutzerwunsch 28.09.2026: Das bisherige Word-Anmeldeformular wird durch ein vom Programm je
+# Termin erzeugtes, ausfüllbares PDF ersetzt. Der Kopf (Veranstalter, Verband, Meldestelle,
+# Datum) ist fest eingedruckt, ankreuzbar sind nur die für den Termin angebotenen Prüfungen
+# (Veranstaltungsdaten im Reiter "Verwaltung"). Die Teilnehmer füllen es z. B. in Acrobat
+# Reader oder im Browser aus; das zurückgeschickte PDF liest der Reiter "Formular-Import"
+# direkt ein (db_import.importiere_anmeldeformular_pdf).
+# Bewusst mit reportlab.pdfgen.canvas statt wie die übrigen Berichte mit platypus: platypus
+# kennt keine Formularfelder, canvas.acroForm setzt Textfelder und Kästchen an feste
+# Koordinaten - und das Formular ist ohnehin ein festes Einseiten-Layout ohne Umbruch.
+# Die Feldnamen stammen ausschließlich aus db.py (ANMELDEFORMULAR_*), damit Erzeugung und
+# Import nie auseinanderlaufen.
+
+_AF_RAND = 16 * mm
+_AF_BREITE = A4[0] - 2 * _AF_RAND
+_AF_SPALTEN_ABSTAND = 8 * mm
+_AF_SPALTE = (_AF_BREITE - _AF_SPALTEN_ABSTAND) / 2
+_AF_FELD_HOEHE = 14
+_AF_ZEILE = 18      # Abstand zweier Eingabezeilen
+_AF_KREUZ = 10      # Kantenlänge der Ankreuzkästchen
+_AF_LUECKE = 6      # Abstand zwischen zwei Feldern/Kästchen derselben Zeile
+_AF_SCHRIFT = 9     # ganzzahlig, reportlab schreibt die Feld-Schriftgröße als %d
+_AF_MELDESTELLE_MAX_ZEILEN = 7  # darüber wird gekürzt (Schrift bliebe sonst unter ~6,5 pt)
+_AF_FELD_HINTERGRUND = colors.HexColor("#eef3fb")
+_AF_FELD_RAHMEN = colors.HexColor("#7f8fa9")
+
+_AF_ERKLAERUNG = [
+    "Mir ist bekannt, dass die Teilnahme ohne gültige Tollwutschutzimpfung des Hundes nicht "
+    "erlaubt ist und die Teilnahme auf eigene Rechnung und Gefahr erfolgt.",
+    "Der Hund ist haftpflichtversichert und – soweit von einer Landeshundeordnung betroffen – "
+    "liegt eine Haltererlaubnis vor.",
+    "Ich akzeptiere das derzeit gültige Spürhundesport Regelwerk des VDH.",
+    "Ich verpflichte mich, nach Eingang einer Meldebestätigung das in der Ausschreibung "
+    "genannte Startgeld zu zahlen.",
+    "Ich erkläre mich einverstanden, dass meine hier aufgeführten persönlichen Daten im Rahmen "
+    "der Prüfung verwendet werden (Kommunikation des Ausrichters, Erfassung in "
+    "Auswertesoftware, Übergabe der Prüfungsunterlagen an die Statistik führende Stelle bzw. "
+    "den Wertungsrichter und übergeordnete Verbände).",
+]
+_AF_ERKLAERUNG_FETT = (
+    "Mit meiner Unterschrift bestätige ich, dass ich Kenntnis von der "
+    "Tierschutz-Hundeverordnung habe und diese beachte."
+)
+_AF_ERKLAERUNG_STIL = ParagraphStyle(
+    "SHSAnmeldeErklaerung", parent=_STYLES["Normal"], fontName="Helvetica", fontSize=8, leading=9.8,
+)
+
+
+class _Feld(NamedTuple):
+    """Beschriftetes Textfeld einer Formularzeile; `breite` None = restliche Spaltenbreite."""
+    label: str
+    name: str
+    breite: float | None = None
+    hinweis: str | None = None  # Tooltip, v. a. für Felder ohne eigene Beschriftung
+
+
+class _Kreuz(NamedTuple):
+    """Beschriftung mit dahinterliegendem Ankreuzkästchen."""
+    label: str
+    name: str
+
+
+class _Text(NamedTuple):
+    """Reiner Text innerhalb einer Formularzeile (z. B. die Einheit "cm")."""
+    text: str
+
+
+def _af_textbreite(text: str, fett: bool = False) -> float:
+    return stringWidth(text, "Helvetica-Bold" if fett else "Helvetica", _AF_SCHRIFT)
+
+
+def _af_hart_umbrechen(zeilen: list[str], max_breite_pt: float) -> list[str]:
+    """Bricht Zeilen zusätzlich zeichenweise um, die auch nach simpleSplit noch zu breit
+    sind - simpleSplit trennt nur an Leerzeichen, ein einzelnes sehr langes Wort (lange
+    E-Mail-Adresse, URL) liefe sonst über den Kopfkasten des Anmeldeformulars hinaus
+    (zweite Verifikation 28.09.2026, N2)."""
+    ergebnis: list[str] = []
+    for zeile in zeilen:
+        while stringWidth(zeile, "Helvetica", _AF_SCHRIFT) > max_breite_pt and len(zeile) > 1:
+            laenge = len(zeile) - 1
+            while laenge > 1 and stringWidth(zeile[:laenge], "Helvetica", _AF_SCHRIFT) > max_breite_pt:
+                laenge -= 1
+            ergebnis.append(zeile[:laenge])
+            zeile = zeile[laenge:]
+        ergebnis.append(zeile)
+    return ergebnis
+
+
+def _af_label_breite(label: str) -> float:
+    return _af_textbreite(label) + 6 if label else 0
+
+
+def _af_platzbedarf(segment) -> float:
+    """Mindestbreite eines Zeilensegments (für die Restbreite eines `_Feld` ohne Breite)."""
+    if isinstance(segment, _Text):
+        return _af_textbreite(segment.text)
+    if isinstance(segment, _Kreuz):
+        return _af_label_breite(segment.label) + _AF_KREUZ
+    return _af_label_breite(segment.label) + (segment.breite or 0)
+
+
+class _AnmeldeformularZeichner:
+    """Zeichnet das Anmeldeformular von oben nach unten auf eine A4-Seite; `self.y` ist
+    jeweils die Oberkante der nächsten Zeile."""
+
+    def __init__(self, c: rl_canvas.Canvas):
+        self.c = c
+        self.y = A4[1] - 10 * mm
+
+    # -- Grundbausteine --
+
+    def text(self, x: float, y: float, text: str, groesse: float = _AF_SCHRIFT, fett: bool = False) -> None:
+        self.c.setFont("Helvetica-Bold" if fett else "Helvetica", groesse)
+        self.c.drawString(x, y, text)
+
+    def textfeld(self, name: str, x: float, y_unten: float, breite: float, hinweis: str) -> None:
+        self.c.acroForm.textfield(
+            name=name, tooltip=hinweis, x=x, y=y_unten, width=breite, height=_AF_FELD_HOEHE,
+            fontName="Helvetica", fontSize=_AF_SCHRIFT, textColor=colors.black,
+            fillColor=_AF_FELD_HINTERGRUND, borderColor=_AF_FELD_RAHMEN, borderWidth=0.5,
+            fieldFlags="", maxlen=None,
+        )
+
+    def kreuz(self, name: str, x: float, y_unten: float, hinweis: str) -> None:
+        # fieldFlags="" statt reportlab-Standard "required": sonst markieren manche
+        # Viewer jedes nicht angekreuzte Kästchen als Pflichtfeld.
+        self.c.acroForm.checkbox(
+            name=name, tooltip=hinweis, x=x, y=y_unten, size=_AF_KREUZ, buttonStyle="cross",
+            textColor=colors.black, fillColor=_AF_FELD_HINTERGRUND, borderColor=_AF_FELD_RAHMEN,
+            borderWidth=0.5, fieldFlags="",
+        )
+
+    def ueberschrift(self, titel: str, abstand_oben: float = 7) -> None:
+        self.y -= abstand_oben
+        self.text(_AF_RAND, self.y - 10, titel, groesse=10, fett=True)
+        self.c.setStrokeColor(colors.grey)
+        self.c.setLineWidth(0.4)
+        self.c.line(_AF_RAND, self.y - 13.5, _AF_RAND + _AF_BREITE, self.y - 13.5)
+        self.c.setStrokeColor(colors.black)
+        self.y -= 18
+
+    # -- Formularzeilen --
+
+    def _spalte(self, x: float, breite: float, segmente: list, label_breite: float) -> None:
+        """Eine Spalte der aktuellen Zeile. `label_breite` ist die Breite der Beschriftung
+        des ersten Felds, damit die Felder eines Abschnitts bündig untereinander stehen."""
+        y_feld = self.y - _AF_FELD_HOEHE
+        y_text = y_feld + 4  # Grundlinie der Beschriftung, mittig zur Feldhöhe
+        cursor = x
+        for i, segment in enumerate(segmente):
+            if isinstance(segment, _Text):
+                self.text(cursor, y_text, segment.text)
+                cursor += _af_textbreite(segment.text) + _AF_LUECKE
+                continue
+            if segment.label:
+                self.text(cursor, y_text, segment.label)
+            label_breite_hier = _af_label_breite(segment.label)
+            if i == 0 and isinstance(segment, _Feld):
+                label_breite_hier = max(label_breite_hier, label_breite)
+            cursor += label_breite_hier
+            hinweis = segment.label.rstrip(": ")
+            if isinstance(segment, _Kreuz):
+                self.kreuz(segment.name, cursor, y_feld + (_AF_FELD_HOEHE - _AF_KREUZ) / 2, hinweis)
+                cursor += _AF_KREUZ + 2 * _AF_LUECKE
+                continue
+            feld_breite = segment.breite
+            if feld_breite is None:
+                rest = sum(_af_platzbedarf(s) + _AF_LUECKE for s in segmente[i + 1:])
+                feld_breite = x + breite - cursor - rest
+            self.textfeld(segment.name, cursor, y_feld, feld_breite, segment.hinweis or hinweis)
+            cursor += feld_breite + _AF_LUECKE
+
+    def abschnitt(self, titel: str, zeilen: list[tuple]) -> None:
+        """Abschnitt mit Überschrift und Eingabezeilen. Jede Zeile ist (links, rechts) für
+        zwei Spalten (rechts darf leer sein) oder (ganze_breite,) für eine durchgehende Zeile."""
+        self.ueberschrift(titel)
+
+        def label_spalte(index: int) -> float:
+            breiten = [
+                _af_label_breite(z[index][0].label) for z in zeilen
+                if len(z) == 2 and z[index] and isinstance(z[index][0], _Feld)
+            ]
+            return max(breiten, default=0)
+
+        label_links, label_rechts = label_spalte(0), label_spalte(1)
+        for zeile in zeilen:
+            if len(zeile) == 1:
+                self._spalte(_AF_RAND, _AF_BREITE, zeile[0], 0)
+            else:
+                links, rechts = zeile
+                self._spalte(_AF_RAND, _AF_SPALTE, links, label_links)
+                self._spalte(_AF_RAND + _AF_SPALTE + _AF_SPALTEN_ABSTAND, _AF_SPALTE, rechts, label_rechts)
+            self.y -= _AF_ZEILE
+
+    # -- Feste Formularteile --
+
+    def titel_und_kopf(self, veranstaltung: dict) -> None:
+        titel = "Anmeldeformular SHS-Wettkampf"
+        self.text(_AF_RAND, self.y - 16, titel, groesse=17, fett=True)
+        self.c.setLineWidth(1)
+        self.c.line(_AF_RAND, self.y - 19, _AF_RAND + stringWidth(titel, "Helvetica-Bold", 17), self.y - 19)
+        self.y -= 30
+
+        # Kopfkasten: links Veranstalter/Meldestelle, rechts Verband/Datum - nur Text,
+        # keine Felder (kommt aus den Veranstaltungsdaten).
+        innen = 5
+        x_rechts = _AF_RAND + _AF_BREITE * 0.62
+        label_links = _af_textbreite("Meldestelle:", fett=True) + 6
+        label_rechts = _af_textbreite("Verband:", fett=True) + 6
+        wert_x_links = _AF_RAND + innen + label_links
+        wert_breite_links = x_rechts - innen - wert_x_links
+        wert_x_rechts = x_rechts + innen + label_rechts
+        wert_breite_rechts = _AF_RAND + _AF_BREITE - innen - wert_x_rechts
+
+        meldestelle: list[str] = []
+        for absatz in (veranstaltung.get("meldestelle") or "").strip().splitlines():
+            meldestelle += _af_hart_umbrechen(
+                simpleSplit(absatz.strip(), "Helvetica", _AF_SCHRIFT, wert_breite_links) or [""],
+                wert_breite_links,
+            )
+        # Bis 5 Zeilen in normaler Größe; eine noch längere Meldestelle wird enger und
+        # kleiner gesetzt, damit das Formular sicher auf EINE Seite passt. Höchstens
+        # _AF_MELDESTELLE_MAX_ZEILEN Zeilen (danach "…"), sonst würde die Schrift ohne
+        # Untergrenze unleserlich klein (Verifikation 28.09.2026, Befund 7b).
+        if len(meldestelle) > _AF_MELDESTELLE_MAX_ZEILEN:
+            meldestelle = meldestelle[:_AF_MELDESTELLE_MAX_ZEILEN]
+            # Zweite Verifikation 28.09.2026, N3: so weit kürzen, dass " …" noch in die
+            # Breite passt, statt über den Kasten hinauszuragen.
+            letzte = meldestelle[-1].rstrip()
+            while letzte and stringWidth(letzte + " …", "Helvetica", _AF_SCHRIFT) > wert_breite_links:
+                letzte = letzte[:-1].rstrip()
+            meldestelle[-1] = letzte + " …"
+        zeilenabstand = min(11, 5 * 11 / max(len(meldestelle), 1))
+        meldestelle_groesse = min(_AF_SCHRIFT, zeilenabstand * 0.82)
+        hoehe_oben = 18
+        hoehe_unten = max(18, len(meldestelle) * zeilenabstand + 7)
+        oben = self.y
+        unten = oben - hoehe_oben - hoehe_unten
+
+        self.c.setLineWidth(0.7)
+        self.c.rect(_AF_RAND, unten, _AF_BREITE, hoehe_oben + hoehe_unten)
+        self.c.line(_AF_RAND, oben - hoehe_oben, _AF_RAND + _AF_BREITE, oben - hoehe_oben)
+        self.c.line(x_rechts, unten, x_rechts, oben)
+
+        def wert(x: float, y: float, text: str, max_breite: float) -> None:
+            groesse = _schriftgroesse_fuer_breite(text, max_breite, _AF_SCHRIFT + 1, 7)
+            self.text(x, y, text, groesse=groesse)
+
+        y1 = oben - 12.5
+        self.text(_AF_RAND + innen, y1, "Veranstalter:", fett=True)
+        wert(wert_x_links, y1, veranstaltung.get("verein") or "", wert_breite_links)
+        self.text(x_rechts + innen, y1, "Verband:", fett=True)
+        wert(wert_x_rechts, y1, veranstaltung.get("verband") or "", wert_breite_rechts)
+
+        y2 = oben - hoehe_oben - 12.5
+        self.text(_AF_RAND + innen, y2, "Meldestelle:", fett=True)
+        for i, zeile in enumerate(meldestelle):
+            self.text(wert_x_links, y2 - i * zeilenabstand, zeile, groesse=meldestelle_groesse)
+        self.text(x_rechts + innen, y2, "Datum:", fett=True)
+        wert(wert_x_rechts, y2, datum_anzeige(veranstaltung.get("datum")), wert_breite_rechts)
+        self.y = unten
+
+    def pruefungen(self, angebot: list) -> None:
+        """"Bitte ankreuzen!"-Kasten: je Art/Disziplin eine Reihe, je Leistungsklasse eine
+        Spalte (wie im bisherigen Word-Formular), nicht angebotene Prüfungen fehlen."""
+        self.y -= 12
+        self.text(_AF_RAND, self.y - 9, "Bitte ankreuzen!", fett=True)
+        self.y -= 13
+        reihen: list[tuple] = []
+        for p in angebot:
+            if (p.art, p.disziplin) not in reihen:
+                reihen.append((p.art, p.disziplin))
+        innen = 6
+        reihen_abstand = 17
+        spalten_breite = (_AF_BREITE - 2 * innen) / 3
+        label_breite = max(_af_textbreite(f"{p.bezeichnung}:") for p in angebot) + 8
+        hoehe = len(reihen) * reihen_abstand + 5
+        self.c.setLineWidth(0.7)
+        self.c.rect(_AF_RAND, self.y - hoehe, _AF_BREITE, hoehe)
+        for r, reihe in enumerate(reihen):
+            y_kreuz = self.y - (r + 1) * reihen_abstand
+            for p in angebot:
+                if (p.art, p.disziplin) != reihe:
+                    continue
+                x = _AF_RAND + innen + (p.stufe - 1) * spalten_breite
+                self.text(x, y_kreuz + 2, f"{p.bezeichnung}:")
+                self.kreuz(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + p.kuerzel, x + label_breite, y_kreuz, p.bezeichnung)
+        self.y -= hoehe
+
+    def gegenstaende(self, stufen: list[int]) -> None:
+        """Je angebotener Leistungsklasse so viele Gegenstands-Felder, wie die LK
+        Gegenstände hat (LK 1: eins, LK 2: zwei, LK 3: drei)."""
+        self.ueberschrift("Gegenstände")
+        label_breite = _af_label_breite("LK 3:") + 4
+        feld_breite = (_AF_BREITE - label_breite - 2 * _AF_LUECKE) / 3
+        for stufe in stufen:
+            segmente = [
+                _Feld(f"LK {stufe}:" if n == 1 else "", anmeldeformular_gegenstand_feld(stufe, n), feld_breite,
+                      f"Gegenstand {n} für LK {stufe}")
+                for n in range(1, stufe + 1)
+            ]
+            self._spalte(_AF_RAND, _AF_BREITE, segmente, label_breite)
+            self.y -= _AF_ZEILE
+
+    def erklaerung_und_unterschrift(self) -> None:
+        self.y -= 6
+        titel = "Erklärung des Teilnehmers:"
+        self.text(_AF_RAND, self.y - 9, titel, fett=True)
+        self.c.setLineWidth(0.6)
+        self.c.line(_AF_RAND, self.y - 11, _AF_RAND + _af_textbreite(titel, fett=True), self.y - 11)
+        self.y -= 13
+        text = "<br/>".join(_xml_escape(s) for s in _AF_ERKLAERUNG)
+        text += f"<br/><b>{_xml_escape(_AF_ERKLAERUNG_FETT)}</b>"
+        absatz = Paragraph(text, _AF_ERKLAERUNG_STIL)
+        _, hoehe = absatz.wrapOn(self.c, _AF_BREITE, A4[1])
+        absatz.drawOn(self.c, _AF_RAND, self.y - hoehe)
+        self.y -= hoehe + 18
+
+        y_linie = self.y - _AF_FELD_HOEHE
+        self.text(_AF_RAND, y_linie + 4, "Datum:")
+        self.textfeld(ANMELDEFORMULAR_UNTERSCHRIFT_DATUM, _AF_RAND + _af_label_breite("Datum:"), y_linie, 32 * mm, "Datum")
+        x_unterschrift = _AF_RAND + _AF_BREITE * 0.48
+        self.c.setLineWidth(0.6)
+        self.c.line(x_unterschrift, y_linie, _AF_RAND + _AF_BREITE, y_linie)
+        self.text(x_unterschrift, y_linie - 9, "Unterschrift des Teilnehmers /", groesse=7.5)
+        self.text(x_unterschrift, y_linie - 18, "bei Minderjährigen Unterschrift eines Erziehungsberechtigten", groesse=7.5)
+        self.y = y_linie - 18
+
+
+def erstelle_anmeldeformular_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+    """Ausfüllbares Anmeldeformular (eine A4-Seite) für den geöffneten Termin, siehe
+    Kommentar oben. Ohne hinterlegte angebotene Prüfungen gibt es nichts anzukreuzen -
+    dann ValueError mit einem für den Nutzer verständlichen Hinweis."""
+    veranstaltung = get_veranstaltung(conn) or {}
+    angebot = angebotene_pruefungen(veranstaltung)
+    if not angebot:
+        raise ValueError("Bitte zuerst in den Veranstaltungsdaten die angebotenen Prüfungen auswählen.")
+
+    c = rl_canvas.Canvas(pfad, pagesize=A4)
+    c.setTitle("Anmeldeformular SHS-Wettkampf")
+    if veranstaltung.get("verein"):
+        c.setAuthor(veranstaltung["verein"])
+    z = _AnmeldeformularZeichner(c)
+    z.titel_und_kopf(veranstaltung)
+    z.pruefungen(angebot)
+    z.gegenstaende(sorted({p.stufe for p in angebot}))
+
+    def adresse(praefix: str) -> tuple:
+        return (
+            [_Feld("Straße / Nr.:", f"{praefix}strasse"), _Feld("", f"{praefix}hausnummer", 14 * mm, "Hausnummer")],
+            [_Feld("PLZ / Wohnort:", f"{praefix}plz", 16 * mm, "PLZ"), _Feld("", f"{praefix}ort", None, "Wohnort")],
+        )
+
+    z.abschnitt("Wettkampfteilnehmer", [
+        ([_Feld("Vorname:", "vorname")], [_Feld("Name:", "nachname")]),
+        adresse(""),
+        ([_Feld("Mitgl.-Nr.:", "mitgliedsnummer")], [_Feld("Telefonnummer:", "telefon")]),
+        ([_Feld("E-Mail:", "email")], [_Feld("Mitgliedsverein:", "verein")]),
+        ([_Feld("Verband:", "verband")], []),
+        ([
+            _Text("Am Prüfungstag habe ich das 18. Lebensjahr vollendet:"),
+            _Kreuz("Ja", ANMELDEFORMULAR_VOLLJAEHRIG_JA),
+            _Kreuz("Nein", ANMELDEFORMULAR_VOLLJAEHRIG_NEIN),
+        ],),
+    ])
+    z.abschnitt("Falls abweichend von Teilnehmer – Angaben des Hundeeigentümers", [
+        ([_Feld("Vorname:", "halter_vorname")], [_Feld("Name:", "halter_nachname")]),
+        adresse("halter_"),
+        ([_Feld("Mitgl.-Nr.:", "halter_mitgliedsnummer")], [_Feld("Mitgliedsverein:", "halter_mitgliedsverein")]),
+        ([_Feld("LU-Nr.:", "halter_lu_nr")], []),
+    ])
+    z.abschnitt("Angaben zum Hund", [
+        ([_Feld("Zuchtbuchname:", "zwingername")], [_Feld("Rufname des Hundes:", "rufname_hund")]),
+        ([_Feld("Rasse:", "rasse")], [_Feld("Wurfdatum:", "wurftag", hinweis="Wurfdatum (TT.MM.JJJJ)")]),
+        (
+            [_Feld("Größe in cm:", "schulterhoehe_cm", 18 * mm, "Größe in cm"), _Text("cm")],
+            [_Feld("Tollwutimpfung gültig bis:", "tollwutimpfung_bis",
+                   hinweis="Tollwutimpfung gültig bis (TT.MM.JJJJ)")],
+        ),
+        (
+            [
+                _Kreuz("Chip-Nr.:", ANMELDEFORMULAR_KENNZEICHNUNG_CHIP),
+                _Kreuz("Täto-Nr.:", ANMELDEFORMULAR_KENNZEICHNUNG_TAETO),
+                _Feld("", "kennzeichnung_nr", None, "Chip- bzw. Täto-Nummer"),
+            ],
+            [_Kreuz("Hündin:", ANMELDEFORMULAR_HUENDIN), _Kreuz("Rüde:", ANMELDEFORMULAR_RUEDE)],
+        ),
+    ])
+    z.erklaerung_und_unterschrift()
+    c.showPage()
+    c.save()

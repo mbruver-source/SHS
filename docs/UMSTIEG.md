@@ -51,7 +51,9 @@ So sieht ein Bewertungsbogen aus, den das Programm direkt erzeugt, ohne Serienbr
 
 - Teilnehmer aus einem früheren Termin übernehmen (Reiter „Teilnehmer“ → „Aus anderem
   Termin importieren…“). Wer regelmäßig startet, muss nicht jedes Mal neu erfasst werden.
-- Meldeformulare mit Hilfe einer KI einlesen (Reiter „Formular-Import“).
+- Ausfüllbares Anmeldeformular (PDF) je Termin erzeugen und die zurückgeschickten Formulare
+  direkt einlesen (Reiter „Export“ und „Formular-Import“).
+- Andere Meldeformulare mit Hilfe einer KI einlesen (Reiter „Formular-Import“).
 - Disqualifikation und Abbruch werden in der Ergebniserfassung eigens erfasst.
 - Ergebniseingabe durch mehrere Richter gleichzeitig im Browser (optional, siehe
   [README_CONTAINER.md](../README_CONTAINER.md)).
@@ -84,8 +86,9 @@ sollen nicht ungeprüft mitwandern.
 3. **Druck testen:** Einen Bewertungsbogen und die Etiketten auf echtem Papier bzw.
    Klebeetiketten ausdrucken und prüfen, ob alles passt, bevor es am Prüfungstag darauf
    ankommt.
-4. **Ersten echten Termin anlegen:** Veranstaltungsdaten eintragen, Teilnehmer erfassen,
-   Zeitplan erstellen, Bewertungsbögen drucken.
+4. **Ersten echten Termin anlegen:** Veranstaltungsdaten und angebotene Prüfungen eintragen,
+   Anmeldeformular (PDF) verschicken und die zurückgeschickten Formulare einlesen oder
+   Teilnehmer von Hand erfassen, Zeitplan erstellen, Bewertungsbögen drucken.
 5. **Am Prüfungstag:** Ergebnisse im Reiter „Ergebniserfassung“ eintragen und regelmäßig auf
    „Alle Ergebnisse speichern“ klicken. Danach Ergebnisliste, Etiketten und Statistik im
    Reiter „Export“ erzeugen. Zum Schluss eine **Datensicherung** erstellen.

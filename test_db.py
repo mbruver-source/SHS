@@ -4,11 +4,24 @@ import os
 import pathlib
 import sqlite3
 import tempfile
+import logging
 import unittest
+from contextlib import closing
 from unittest.mock import MagicMock, patch
 
 from db import (
+    ALLE_PRUEFUNGEN,
+    ANMELDEFORMULAR_HUENDIN,
+    ANMELDEFORMULAR_KENNZEICHNUNG_CHIP,
+    ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+    ANMELDEFORMULAR_PRUEFUNG_PRAEFIX,
+    ANMELDEFORMULAR_RUEDE,
+    ANMELDEFORMULAR_TEXTFELDER,
     NeuerTeilnehmer,
+    anmeldeformular_gegenstand_feld,
+    angebotene_pruefungen,
+    pruefung_nach_kuerzel,
+    pruefungen_als_text,
     TerminInfoPostgres,
     add_teilnehmer,
     add_zeitplan_pause,
@@ -75,6 +88,7 @@ from db import (
     zeitplan_gruppen_status,
 )
 from db_import import (
+    importiere_anmeldeformular_pdf,
     importiere_teilnehmer_aus_csv,
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
@@ -384,9 +398,17 @@ class TestDatenbank(unittest.TestCase):
         self.assertIsNone(v["pruefungsgebuehr_ed"])
         self.assertIsNone(v["pruefungsgebuehr_dk"])
         self.assertIsNone(v["wertungsrichter_5"])
+        # Anmeldeformular-Angaben (Nutzerwunsch 28.09.2026) werden ebenso nachgerüstet.
+        self.assertIsNone(v["verband"])
+        self.assertIsNone(v["meldestelle"])
+        self.assertIsNone(v["angebotene_pruefungen"])
         # set_veranstaltung funktioniert danach ganz normal weiter.
-        set_veranstaltung(conn, verein="Alt-Verein", datum="2025-01-01", pruefungsnummer="P-1")
-        self.assertEqual(get_veranstaltung(conn)["pruefungsnummer"], "P-1")
+        set_veranstaltung(conn, verein="Alt-Verein", datum="2025-01-01", pruefungsnummer="P-1",
+                          verband="BLV", meldestelle="Meldestelle X", angebotene_pruefungen="DK1")
+        v = get_veranstaltung(conn)
+        self.assertEqual(v["pruefungsnummer"], "P-1")
+        self.assertEqual((v["verband"], v["meldestelle"], v["angebotene_pruefungen"]),
+                         ("BLV", "Meldestelle X", "DK1"))
 
     def test_ed_teilnehmer_vollstaendiger_ablauf(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
@@ -1984,7 +2006,8 @@ class TestTerminuebersicht(unittest.TestCase):
         pfad = self.ordner / "2026-09-19_test.sqlite"
         conn = init_db(str(pfad))
         set_veranstaltung(
-            conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern", vereins_nr="123"
+            conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern", vereins_nr="123",
+            verband="HSVRM",
         )
         add_teilnehmer(conn, NeuerTeilnehmer(
             nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld"))
@@ -1997,9 +2020,24 @@ class TestTerminuebersicht(unittest.TestCase):
         # beim Anlegen eines neuen Termins Verein/Vereins-Nr./Ort vorschlagen lassen
         # (siehe StartDialog._neuer_termin in app.py).
         self.assertEqual(termine[0].vereins_nr, "123")
+        # Marco, 28.09.2026: auch der Verband wird für den neuen Termin vorgeschlagen.
+        self.assertEqual(termine[0].verband, "HSVRM")
         self.assertEqual(termine[0].datum, "2026-09-19")
         self.assertEqual(termine[0].anzahl_teilnehmer, 1)
         self.assertTrue(termine[0].lesbar)
+
+    def test_liste_termine_alte_datei_ohne_verband_spalte(self):
+        # liste_termine öffnet nur lesend, ohne Migration - eine Termin-Datei von vor dem
+        # 28.09.2026 hat die Spalte "verband" noch nicht.
+        pfad = self.ordner / "2025-05-01_alt.sqlite"
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.executescript(
+                "CREATE TABLE veranstaltung (id INTEGER PRIMARY KEY, verein TEXT, ort TEXT, datum TEXT, vereins_nr TEXT);"
+                "INSERT INTO veranstaltung VALUES (1, 'Alt-Verein', 'Ort', '2025-05-01', '9');"
+                "CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY);"
+            )
+        termine = liste_termine(self.ordner)
+        self.assertEqual((termine[0].verein, termine[0].verband, termine[0].lesbar), ("Alt-Verein", None, True))
 
     def test_liste_termine_neueste_zuerst(self):
         for datum in ("2026-01-01", "2026-12-31", "2026-06-15"):
@@ -2083,6 +2121,7 @@ class TestTerminSync(unittest.TestCase):
         set_veranstaltung(
             self.quelle, verein="Testverein", ort="Testort", datum="2026-09-19",
             wertungsrichter_1="Richter A", wertungsrichter_5="Richter E",
+            verband="BLV", meldestelle="Meldestelle X", angebotene_pruefungen="DK1,ED2-Trümmerfeld",
         )
         add_teilnehmer(self.quelle, NeuerTeilnehmer(
             nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
@@ -2095,6 +2134,9 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(veranstaltung["verein"], "Testverein")
         self.assertEqual(veranstaltung["wertungsrichter_1"], "Richter A")
         self.assertEqual(veranstaltung["wertungsrichter_5"], "Richter E")
+        self.assertEqual(veranstaltung["verband"], "BLV")
+        self.assertEqual(veranstaltung["meldestelle"], "Meldestelle X")
+        self.assertEqual(veranstaltung["angebotene_pruefungen"], "DK1,ED2-Trümmerfeld")
 
         ziel_teilnehmer = list_teilnehmer(self.ziel)
         self.assertEqual(len(ziel_teilnehmer), 1)
@@ -2528,6 +2570,338 @@ except ImportError:
     psycopg2 = None
 
 _POSTGRES_TEST_DSN = os.environ.get("SHS_TEST_POSTGRES_DSN")
+
+
+try:
+    from pypdf import PdfReader as _PdfReader  # nur als Verfügbarkeitsprüfung
+    from reportlab.pdfgen import canvas as _pdf_canvas
+except ImportError:  # pragma: no cover - lokal ohne pypdf/reportlab
+    _PdfReader = None
+    _pdf_canvas = None
+
+
+class TestPruefungsangebote(unittest.TestCase):
+    """Nutzerwunsch 28.09.2026: Liste der im Anmeldeformular ankreuzbaren Prüfungen und
+    deren Speicherform in veranstaltung.angebotene_pruefungen."""
+
+    def test_alle_pruefungen_reihenfolge_und_kuerzel_eindeutig(self):
+        self.assertEqual(len(ALLE_PRUEFUNGEN), 12)
+        self.assertEqual([p.kuerzel for p in ALLE_PRUEFUNGEN[:4]], ["DK1", "DK2", "DK3", "ED1-Trümmerfeld"])
+        self.assertEqual(len({p.kuerzel for p in ALLE_PRUEFUNGEN}), 12)
+        dk2 = pruefung_nach_kuerzel("DK2")
+        self.assertEqual((dk2.art, dk2.stufe, dk2.disziplin), ("DK", 2, None))
+        flaeche3 = pruefung_nach_kuerzel("ED3-Flächensuche")
+        self.assertEqual((flaeche3.art, flaeche3.stufe, flaeche3.disziplin), ("ED", 3, "Flächensuche"))
+        self.assertIsNone(pruefung_nach_kuerzel("XY1"))
+
+    def test_pruefungen_als_text_und_zurueck(self):
+        # Reihenfolge folgt ALLE_PRUEFUNGEN, nicht der Eingabe; leere Auswahl -> None.
+        text = pruefungen_als_text(["ED2-Trümmerfeld", "DK1"])
+        self.assertEqual(text, "DK1,ED2-Trümmerfeld")
+        self.assertIsNone(pruefungen_als_text([]))
+        with self.assertRaises(ValueError):
+            pruefungen_als_text(["DK1", "XY1"])
+        self.assertEqual(
+            [p.kuerzel for p in angebotene_pruefungen({"angebotene_pruefungen": text})],
+            ["DK1", "ED2-Trümmerfeld"],
+        )
+        # Unbekannte Kürzel in der Datenbank werden ignoriert, fehlende Angabe -> leer.
+        self.assertEqual(
+            [p.kuerzel for p in angebotene_pruefungen({"angebotene_pruefungen": " XY1 , DK3 "})], ["DK3"]
+        )
+        self.assertEqual(angebotene_pruefungen({"angebotene_pruefungen": None}), [])
+        self.assertEqual(angebotene_pruefungen(None), [])
+
+
+@unittest.skipIf(_PdfReader is None or _pdf_canvas is None,
+                 "pypdf/reportlab nicht installiert - Anmeldeformular-Import wird übersprungen")
+class TestAnmeldeformularImport(unittest.TestCase):
+    """Nutzerwunsch 28.09.2026: ausgefüllte Anmeldeformular-PDFs als Teilnehmer einlesen
+    (db_import.importiere_anmeldeformular_pdf). Die Test-PDFs werden hier bewusst selbst mit
+    reportlab (canvas.acroForm) und den Feldnamen aus db.py gebaut statt über
+    pdf_export.erstelle_anmeldeformular_pdf() - so prüft der Test den Import unabhängig vom
+    Formular-Layout, und der Rundlauf der Umlaut-Feldnamen (z. B. "pruefung_ED2-Trümmerfeld")
+    durch reportlab + pypdf ist mit abgedeckt."""
+
+    STANDARD_TEXTE = {
+        "vorname": "Anna", "nachname": "Muster", "strasse": "Hauptstraße", "hausnummer": "5",
+        "plz": "12345", "ort": "Musterstadt", "mitgliedsnummer": "M-1", "telefon": "0123 456",
+        "email": "anna@example.org", "verein": "HSV Musterstadt", "verband": "BLV",
+        "halter_vorname": "Bernd", "halter_nachname": "Halter", "halter_strasse": "Nebenweg",
+        "halter_hausnummer": "7a", "halter_plz": "54321", "halter_ort": "Halterdorf",
+        "halter_mitgliedsnummer": "H-2", "halter_mitgliedsverein": "SV Halterdorf",
+        "halter_lu_nr": "LU-3", "zwingername": "vom Testhof", "rufname_hund": "Rex",
+        "rasse": "Mischling", "wurftag": "01.02.2020", "schulterhoehe_cm": "45 cm",
+        "tollwutimpfung_bis": "31.12.2027", "kennzeichnung_nr": "12345",
+    }
+
+    def setUp(self):
+        fd, self.db_pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(self.db_pfad)
+        self.conn = init_db(self.db_pfad)
+        # Alle 12 Prüfungen angeboten - der Import lehnt nicht angebotene ab (Verifikation
+        # 28.09.2026, Befund 1), siehe test_nicht_angebotene_pruefung_wird_abgelehnt.
+        set_veranstaltung(
+            self.conn, verein="HSV Musterstadt", datum="2026-11-14",
+            angebotene_pruefungen=pruefungen_als_text([p.kuerzel for p in ALLE_PRUEFUNGEN]),
+        )
+        self.ordner = tempfile.mkdtemp()
+        # Zweite Verifikation 28.09.2026, N4: pypdf meldet beim absichtlichen Befüllen mit
+        # auto_regenerate=False bzw. beim Lesen einer Nicht-PDF Warnungen über logging -
+        # erwartetes Verhalten dieser Tests, nur Rauschen im Testlauf.
+        self._pypdf_logger = logging.getLogger("pypdf")
+        self._pypdf_level = self._pypdf_logger.level
+        self._pypdf_logger.setLevel(logging.ERROR)
+
+    def tearDown(self):
+        self._pypdf_logger.setLevel(self._pypdf_level)
+        self.conn.close()
+        os.remove(self.db_pfad)
+        for name in os.listdir(self.ordner):
+            os.remove(os.path.join(self.ordner, name))
+        os.rmdir(self.ordner)
+
+    def _pdf(self, dateiname, texte=None, haken=(), ohne_felder=False):
+        """Baut ein ausfüllbares PDF: alle Textfelder aus ANMELDEFORMULAR_TEXTFELDER (plus
+        Gegenstandsfelder LK 1-3), alle Prüfungs-/Kennzeichnungs-/Geschlechts-Checkboxen;
+        `haken` = Feldnamen der angekreuzten Checkboxen."""
+        pfad = os.path.join(self.ordner, dateiname)
+        c = _pdf_canvas.Canvas(pfad)
+        if ohne_felder:
+            c.drawString(50, 750, "Kein Formular")
+        else:
+            form = c.acroForm
+            werte = self.STANDARD_TEXTE if texte is None else texte
+            textfelder = list(ANMELDEFORMULAR_TEXTFELDER) + [
+                anmeldeformular_gegenstand_feld(stufe, n) for stufe in (1, 2, 3) for n in range(1, stufe + 1)
+            ]
+            for i, feld in enumerate(textfelder):
+                form.textfield(name=feld, value=werte.get(feld, ""), x=20 + (i % 4) * 140,
+                               y=780 - (i // 4) * 25, width=130, height=18)
+            checkboxen = [ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + p.kuerzel for p in ALLE_PRUEFUNGEN] + [
+                ANMELDEFORMULAR_KENNZEICHNUNG_CHIP, ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+                ANMELDEFORMULAR_HUENDIN, ANMELDEFORMULAR_RUEDE,
+            ]
+            for i, feld in enumerate(checkboxen):
+                form.checkbox(name=feld, checked=feld in haken, x=20 + (i % 8) * 60,
+                              y=300 - (i // 8) * 30, size=14)
+        c.showPage()
+        c.save()
+        return pfad
+
+    def test_vollstaendiges_formular_wird_uebernommen(self):
+        texte = dict(self.STANDARD_TEXTE, **{
+            anmeldeformular_gegenstand_feld(2, 1): "Handschuh",
+            anmeldeformular_gegenstand_feld(2, 2): " Schlüssel ",
+            # Gegenstand in einem anderen LK-Block wird ignoriert.
+            anmeldeformular_gegenstand_feld(3, 3): "Socke",
+        })
+        pfad = self._pdf("anna.pdf", texte, haken=(
+            ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED2-Trümmerfeld",
+            ANMELDEFORMULAR_HUENDIN, ANMELDEFORMULAR_KENNZEICHNUNG_TAETO,
+        ))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler, ergebnis.uebersprungen), (1, [], []))
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["art"], t["stufe"], t["disziplin"]), ("ED", 2, "Trümmerfeld"))
+        self.assertEqual((t["vorname"], t["nachname"], t["rufname_hund"]), ("Anna", "Muster", "Rex"))
+        self.assertEqual(t["geschlecht"], "Hündin")
+        self.assertEqual(t["chip_nr"], "Täto 12345")
+        self.assertEqual(t["schulterhoehe_cm"], 45)
+        self.assertEqual(t["wurftag"], "2020-02-01")
+        self.assertEqual(t["tollwutimpfung_bis"], "2027-12-31")
+        self.assertEqual((t["strasse"], t["email"], t["verband"]), ("Hauptstraße", "anna@example.org", "BLV"))
+        for spalte in ("halter_vorname", "halter_nachname", "halter_strasse", "halter_hausnummer",
+                       "halter_plz", "halter_ort", "halter_mitgliedsnummer", "halter_mitgliedsverein",
+                       "halter_lu_nr"):
+            self.assertEqual(t[spalte], self.STANDARD_TEXTE[spalte], spalte)
+        self.assertEqual((t["gegenstand_1"], t["gegenstand_2"], t["gegenstand_3"]), ("Handschuh", "Schlüssel", None))
+        self.assertEqual((t["gegenstand_1_disziplin"], t["gegenstand_2_disziplin"]), (None, None))
+
+    def test_nicht_angebotene_pruefung_wird_abgelehnt(self):
+        # Verifikation 28.09.2026, Befund 1: Formular eines anderen Termins / falscher Termin.
+        set_veranstaltung(self.conn, verein="HSV Musterstadt", datum="2026-11-14",
+                          angebotene_pruefungen=pruefungen_als_text(["DK1"]))
+        pfad = self._pdf("alt.pdf", haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED2-Trümmerfeld",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertIn("alt.pdf: Trümmer LK 2 wird in diesem Termin nicht angeboten", ergebnis.fehler[0])
+        self.assertEqual(list_teilnehmer(self.conn), [])
+
+    def test_zerlegte_umlaute_werden_normalisiert_und_als_dublette_erkannt(self):
+        # Verifikation 28.09.2026, Befund 2: "Mu" + kombinierendes Trema (NFD) statt "Mü".
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Müller", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1))
+        from pypdf import PdfWriter
+
+        def nfd_pdf(dateiname, pruefung):
+            # reportlab kann den kombinierenden Umlaut nicht darstellen - der zerlegte Wert
+            # wird deshalb wie von einem PDF-Programm nachträglich per pypdf gesetzt.
+            pfad = self._pdf(dateiname, haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + pruefung,))
+            writer = PdfWriter(clone_from=pfad)
+            writer.update_page_form_field_values(
+                writer.pages[0], {"nachname": "Müller", "ort": "München"},
+                auto_regenerate=False,
+            )
+            with open(pfad, "wb") as datei:
+                writer.write(datei)
+            return pfad
+
+        pfad_dk = nfd_pdf("nfd_dk.pdf", "DK1")
+        pfad_ed = nfd_pdf("nfd_ed.pdf", "ED1-Flächensuche")
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad_dk, pfad_ed])
+        self.assertEqual(ergebnis.fehler, [])
+        self.assertEqual(len(ergebnis.uebersprungen), 1)
+        self.assertIn("nfd_dk.pdf", ergebnis.uebersprungen[0])
+        neu = [t for t in list_teilnehmer(self.conn) if t["art"] == "ED"][0]
+        self.assertEqual((neu["nachname"], neu["ort"]), ("Müller", "München"))
+
+    def test_kreuz_nur_im_darstellungszustand_wird_erkannt(self):
+        # Verifikation 28.09.2026, Befund 3: manche PDF-Programme setzen beim Ankreuzen nur
+        # /AS des Widgets und lassen /V auf /Off.
+        from pypdf import PdfWriter
+        from pypdf.generic import NameObject
+
+        pfad = self._pdf("as.pdf", haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",))
+        writer = PdfWriter(clone_from=pfad)
+        for annot in writer.pages[0]["/Annots"]:
+            widget = annot.get_object()
+            if widget.get("/T") in (ANMELDEFORMULAR_HUENDIN, ANMELDEFORMULAR_KENNZEICHNUNG_TAETO):
+                an = [k for k in widget["/AP"]["/N"] if k != "/Off"][0]
+                widget[NameObject("/AS")] = NameObject(an)
+                self.assertEqual(widget.get("/V"), "/Off")
+        with open(pfad, "wb") as datei:
+            writer.write(datei)
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.fehler, [])
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["geschlecht"], t["chip_nr"]), ("Hündin", "Täto 12345"))
+
+    def test_termin_ohne_angebotene_pruefungen_eigene_meldung(self):
+        # Zweite Verifikation 28.09.2026, N1.
+        set_veranstaltung(self.conn, verein="HSV Musterstadt", datum="2026-11-14")
+        pfad = self._pdf("anna.pdf", haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertIn("noch keine angebotenen Prüfungen hinterlegt", ergebnis.fehler[0])
+        self.assertNotIn("anderen Termins", ergebnis.fehler[0])
+
+    def test_unsaubere_annotationen_verhindern_den_import_nicht(self):
+        # Zweite Verifikation 28.09.2026, L1: /Annots null bzw. null-Einträge und /Parent
+        # null dürfen den /AS-Rückfallweg nicht zum Scheitern der ganzen Datei bringen.
+        from pypdf import PdfWriter
+        from pypdf.generic import DictionaryObject, NameObject, NullObject
+
+        haken = (ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1", ANMELDEFORMULAR_RUEDE)
+        pfad_kaputt = self._pdf("kaputt.pdf", haken=haken)
+        writer = PdfWriter(clone_from=pfad_kaputt)
+        annots = writer.pages[0]["/Annots"]
+        annots.append(NullObject())
+        annots.append(DictionaryObject({NameObject("/AS"): NameObject("/Yes"), NameObject("/Parent"): NullObject()}))
+        with open(pfad_kaputt, "wb") as datei:
+            writer.write(datei)
+
+        pfad_ohne = self._pdf("ohne_annots.pdf", texte=dict(self.STANDARD_TEXTE, rufname_hund="Rex2"), haken=haken)
+        writer = PdfWriter(clone_from=pfad_ohne)
+        writer.pages[0][NameObject("/Annots")] = NullObject()
+        with open(pfad_ohne, "wb") as datei:
+            writer.write(datei)
+
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad_kaputt, pfad_ohne])
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler), (2, []))
+        self.assertEqual({t["geschlecht"] for t in list_teilnehmer(self.conn)}, {"Rüde"})
+
+    def test_chip_und_ruede_ohne_praefix_dk(self):
+        pfad = self._pdf("bruno.pdf", haken=(
+            ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1", ANMELDEFORMULAR_RUEDE, ANMELDEFORMULAR_KENNZEICHNUNG_CHIP,
+        ))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.fehler, [])
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["art"], t["stufe"], t["disziplin"]), ("DK", 1, None))
+        self.assertEqual((t["geschlecht"], t["chip_nr"], t["gegenstand_1"]), ("Rüde", "12345", None))
+
+    def test_keine_pruefung_angekreuzt(self):
+        pfad = self._pdf("leer.pdf", haken=(ANMELDEFORMULAR_HUENDIN,))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertEqual(ergebnis.fehler, ["leer.pdf: keine Prüfung angekreuzt"])
+
+    def test_mehrere_pruefungen_angekreuzt(self):
+        pfad = self._pdf("zwei.pdf", haken=(
+            ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1", ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED3-Flächensuche",
+        ))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertTrue(ergebnis.fehler[0].startswith("zwei.pdf: mehrere Prüfungen angekreuzt"), ergebnis.fehler)
+        self.assertIn("DK-LK 1", ergebnis.fehler[0])
+        self.assertIn("Fläche LK 3", ergebnis.fehler[0])
+
+    def test_huendin_und_ruede_angekreuzt(self):
+        pfad = self._pdf("beide.pdf", haken=(
+            ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1", ANMELDEFORMULAR_HUENDIN, ANMELDEFORMULAR_RUEDE,
+        ))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.fehler, ["beide.pdf: Hündin und Rüde sind beide angekreuzt"])
+        self.assertEqual(list_teilnehmer(self.conn), [])
+
+    def test_ungueltiges_datum_wird_gemeldet(self):
+        pfad = self._pdf("datum.pdf", dict(self.STANDARD_TEXTE, wurftag="32.13.2020"),
+                         haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.importiert, 0)
+        self.assertTrue(ergebnis.fehler[0].startswith("datum.pdf: Wurftag:"), ergebnis.fehler)
+
+    def test_dubletten_in_datenbank_und_im_selben_aufruf_werden_uebersprungen(self):
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="muster", vorname="ANNA", rufname_hund="rex", art="DK", stufe=1, disziplin=None,
+        ))
+        haken_dk1 = (ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",)
+        haken_ed = (ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED1-Behältnisstrecke",)
+        pfade = [
+            self._pdf("schon_da.pdf", haken=haken_dk1),
+            self._pdf("neu.pdf", haken=haken_ed),
+            self._pdf("neu_nochmal.pdf", haken=haken_ed),
+        ]
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(ergebnis.fehler, [])
+        self.assertEqual(ergebnis.uebersprungen, [
+            "schon_da.pdf: Anna Muster mit Rex ist bereits gemeldet",
+            "neu_nochmal.pdf: Anna Muster mit Rex ist bereits gemeldet",
+        ])
+        self.assertEqual(len(list_teilnehmer(self.conn)), 2)
+
+    def test_pdf_ohne_formularfelder_und_keine_pdf_werden_gemeldet_rest_importiert(self):
+        ohne = self._pdf("ohne.pdf", ohne_felder=True)
+        kaputt = os.path.join(self.ordner, "kaputt.pdf")
+        with open(kaputt, "w", encoding="utf-8") as datei:
+            datei.write("das ist keine PDF-Datei")
+        fehlt = os.path.join(self.ordner, "gibt_es_nicht.pdf")
+        gut = self._pdf("gut.pdf", haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK3",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [ohne, kaputt, fehlt, gut])
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.fehler), 3)
+        self.assertEqual(
+            ergebnis.fehler[0],
+            "ohne.pdf: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)",
+        )
+        self.assertTrue(ergebnis.fehler[1].startswith("kaputt.pdf: Datei ist keine lesbare PDF-Datei"))
+        self.assertTrue(ergebnis.fehler[2].startswith("gibt_es_nicht.pdf: Datei ist keine lesbare PDF-Datei"))
+
+    def test_fremdes_formular_wird_abgelehnt(self):
+        pfad = os.path.join(self.ordner, "fremd.pdf")
+        c = _pdf_canvas.Canvas(pfad)
+        c.acroForm.textfield(name="irgendwas", value="x", x=50, y=700, width=100, height=18)
+        c.showPage()
+        c.save()
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(
+            ergebnis.fehler, ["fremd.pdf: die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)"]
+        )
 
 
 def _postgres_frische_termin_tabellen(dsn: str):

@@ -83,6 +83,7 @@ from db import (
     add_zeitplan_richter,
     aktualisiere_zeitplan_eintrag,
     alle_leistungsklassen,
+    angebotene_pruefungen,
     automatische_zeitplan_verteilung,
     behaeltnis_bedarf_zeilentexte,
     berechne_auswertung,
@@ -120,6 +121,7 @@ from db import (
 )
 from db_import import (
     CSV_IMPORT_SPALTEN,
+    importiere_anmeldeformular_pdf,
     importiere_teilnehmer_aus_csv,
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
@@ -654,13 +656,22 @@ class FormularImportTab(QWidget):
     KI-System übergeben, das daraus eine CSV-Datei mit den hier erwarteten Spalten
     erzeugt - diese CSV lässt sich anschließend direkt importieren. Läuft bewusst über
     einen Kopier-Prompt statt einer eingebauten KI-Anbindung, da die Desktop-Anwendung
-    offline arbeitet und keinen eigenen KI-Zugriff hat."""
+    offline arbeitet und keinen eigenen KI-Zugriff hat.
+    Nutzerwunsch 28.09.2026: Das vom Programm erzeugte, ausfüllbare Anmeldeformular (Reiter
+    "Export") lässt sich ausgefüllt direkt einlesen - ganz ohne KI (siehe
+    _anmeldeformulare_importieren)."""
 
     def __init__(self, conn, parent=None):
         super().__init__(parent)
         self.conn = conn
 
         anleitung = QLabel(
+            "Ausfüllbares Anmeldeformular (empfohlen): im Reiter „Export“ mit "
+            "„Anmeldeformular (PDF)…“ erzeugen und an die Teilnehmer verteilen. Die "
+            "ausgefüllt zurückgeschickten PDF-Dateien hier mit „Anmeldeformulare (PDF) "
+            "importieren…“ einlesen (mehrere Dateien auf einmal möglich) - ohne KI, bereits "
+            "vorhandene Meldungen werden dabei übersprungen.\n\n"
+            "Andere Meldeformulare (z. B. Word-Dokument oder Foto/Scan) über ein KI-System:\n"
             "1. Prompt unten kopieren und zusammen mit dem ausgefüllten Meldeformular "
             "(PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben (z. B. Claude "
             "oder ChatGPT).\n"
@@ -687,10 +698,14 @@ class FormularImportTab(QWidget):
         oma_btn = QPushButton("OMA-Export importieren…")
         oma_btn.clicked.connect(self._oma_importieren)
 
+        anmeldeformular_btn = QPushButton("Anmeldeformulare (PDF) importieren…")
+        anmeldeformular_btn.clicked.connect(self._anmeldeformulare_importieren)
+
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(kopieren_btn)
         button_zeile.addWidget(self.status_label)
         button_zeile.addStretch()
+        button_zeile.addWidget(anmeldeformular_btn)
         button_zeile.addWidget(oma_btn)
         button_zeile.addWidget(import_btn)
 
@@ -738,6 +753,28 @@ class FormularImportTab(QWidget):
             )
         if ergebnis.fehler:
             text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
+        QMessageBox.information(self, "Import abgeschlossen", text)
+
+    def _anmeldeformulare_importieren(self) -> None:
+        """Liest ausgefüllte Anmeldeformulare (siehe pdf_export.erstelle_anmeldeformular_pdf)
+        über db_import.importiere_anmeldeformular_pdf ein - eine Datei je Meldung, mehrere
+        Dateien auf einmal wählbar (Nutzerwunsch 28.09.2026)."""
+        pfade, _ = QFileDialog.getOpenFileNames(
+            self, "Anmeldeformulare importieren", "", "Anmeldeformular (*.pdf)"
+        )
+        if not pfade:
+            return
+        # Kein try/except nötig: der Import fängt Lesefehler je Datei selbst ab und meldet
+        # sie in ergebnis.fehler (Verifikation 28.09.2026, Befund 7a).
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
+        text = f"{ergebnis.importiert} Teilnehmer importiert."
+        if ergebnis.uebersprungen:
+            text += (
+                f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
+                + "\n".join(ergebnis.uebersprungen)
+            )
+        if ergebnis.fehler:
+            text += f"\n\n{len(ergebnis.fehler)} Datei(en) nicht importiert:\n" + "\n".join(ergebnis.fehler)
         QMessageBox.information(self, "Import abgeschlossen", text)
 
 
@@ -2121,6 +2158,11 @@ class ExportTab(QWidget):
             os.path.dirname(termin_pfad) if termin_pfad else str(termine_ordner())
         )
 
+        # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
+        # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
+        anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
+        anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
+
         ergebnisliste_btn = QPushButton("Ergebnisliste (PDF)…")
         ergebnisliste_btn.clicked.connect(self._ergebnisliste_exportieren)
 
@@ -2156,6 +2198,11 @@ class ExportTab(QWidget):
         ablageort_btn.clicked.connect(self._ablageort_oeffnen)
 
         hinweis = QLabel(
+            "Das \"Anmeldeformular\" ist ein ausfüllbares PDF zum Verteilen an die "
+            "Teilnehmer: Veranstalter, Verband, Meldestelle, Datum und die ankreuzbaren "
+            "Prüfungen kommen aus den Veranstaltungsdaten im Reiter \"Verwaltung\" (dort "
+            "zuerst die angebotenen Prüfungen anhaken). Ausgefüllt zurückgeschickte "
+            "Formulare lassen sich im Reiter \"Formular-Import\" direkt einlesen. "
             "Die Bewertungsbögen entsprechen den bisherigen Serienbrief-Vorlagen (Layout, "
             "Verleitungs-Hinweise und Punktebänder je Leistungsklasse/Disziplin). Bereits "
             "eingetragene Ergebnisse werden vorausgefüllt; noch offene Felder bleiben zum "
@@ -2204,6 +2251,7 @@ class ExportTab(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("PDF-Ausgabe"))
+        layout.addWidget(anmeldeformular_btn)
         layout.addWidget(ergebnisliste_btn)
         layout.addWidget(leere_ergebnisliste_btn)
         layout.addWidget(etiketten_btn)
@@ -2257,6 +2305,23 @@ class ExportTab(QWidget):
             return
         text = status_text(ergebnis) if callable(status_text) else status_text
         self.status_label.setText(f"{text}: {pfad}")
+
+    def _anmeldeformular_exportieren(self) -> None:
+        # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf
+        # wirft dann ValueError) - Hinweis deshalb schon VOR dem Speichern-Dialog statt
+        # danach als irreführende "Export fehlgeschlagen (Zielpfad ...)"-Meldung.
+        if not angebotene_pruefungen(get_veranstaltung(self.conn)):
+            QMessageBox.information(
+                self, "Keine Prüfungen ausgewählt",
+                "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“, Button "
+                "„Veranstaltungsdaten bearbeiten…“) die angebotenen Prüfungen auswählen.",
+            )
+            return
+        self._pdf_export_ausfuehren(
+            "Anmeldeformular speichern", "Anmeldeformular",
+            lambda pfad: pdf_export.erstelle_anmeldeformular_pdf(self.conn, pfad),
+            "Anmeldeformular gespeichert",
+        )
 
     def _ergebnisliste_exportieren(self) -> None:
         self._pdf_export_ausfuehren(
@@ -2345,7 +2410,9 @@ class VerwaltungTab(QWidget):
             "sowie Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
-            "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest."
+            "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
+            "Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des "
+            "Anmeldeformulars (Reiter \"Export\")."
         )
         hinweis.setWordWrap(True)
 
@@ -2385,6 +2452,9 @@ class VerwaltungTab(QWidget):
             pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
             pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
             pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
+            verband=dialog.verband.text().strip() or None,
+            meldestelle=dialog.meldestelle_text(),
+            angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
         )
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
@@ -3063,6 +3133,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 "verein": letzter.verein,
                 "vereins_nr": letzter.vereins_nr,
                 "ort": letzter.ort,
+                # Marco, 28.09.2026: Verband ebenfalls übernehmen, Meldestelle NICHT
+                # (die wechselt je Termin).
+                "verband": letzter.verband,
             }
         dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung)
         if dialog.exec() != QDialog.Accepted:
@@ -3097,6 +3170,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
             pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
             pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
+            verband=dialog.verband.text().strip() or None,
+            meldestelle=dialog.meldestelle_text(),
+            angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
         )
         conn.close()
         self.pfad = pfad

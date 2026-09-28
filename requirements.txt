@@ -7,3 +7,10 @@
 PySide6>=6.7,<7
 reportlab>=4.0,<6
 pyzipper>=0.4.0,<1
+# pypdf (seit 28.09.2026, Stand 6.19.x): liest die ausgefüllten Anmeldeformular-PDFs wieder
+# ein (db_import.importiere_anmeldeformular_pdf). Reines Python, nur Desktop - das
+# Web-Backend importiert db_import nicht und braucht es daher nicht.
+# Untergrenze 6.10 (Verifikation 28.09.2026, Befund 4): ältere Versionen haben bekannte
+# DoS-Fixes (Dekompressionsbomben, Endlosschleifen bei defekten PDFs) - die Formulare kommen
+# von Teilnehmern per E-Mail, also nicht aus vertrauenswürdiger Quelle.
+pypdf>=6.10,<7
