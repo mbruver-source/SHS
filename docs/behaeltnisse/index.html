@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Behältnisse in 3D · SHS-Prüfungsprogramm</title>
+<style>
+  :root {
+    --bg: #D9DDE0; --bg-deep: #C4CACF; --ink: #1E2A33; --muted: #55636E;
+    --signal: #E8B500; --panel: rgba(255,255,255,0.86); --line: rgba(30,42,51,0.18); --field: #FFFFFF;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #26303A; --bg-deep: #161C21; --ink: #E6EAED; --muted: #9AA7B1;
+      --signal: #F2C230; --panel: rgba(29,37,43,0.9); --line: rgba(230,234,237,0.16); --field: #1D252B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #26303A; --bg-deep: #161C21; --ink: #E6EAED; --muted: #9AA7B1;
+    --signal: #F2C230; --panel: rgba(29,37,43,0.9); --line: rgba(230,234,237,0.16); --field: #1D252B;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { height: 100%; margin: 0; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    background: radial-gradient(ellipse at 40% 40%, var(--bg) 0%, var(--bg-deep) 100%);
+    color: var(--ink); font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; overflow: hidden;
+  }
+  .app { position: relative; height: 100%; display: flex; flex-direction: column; }
+  header { padding: 1.25rem 1.5rem 0; position: relative; z-index: 2; pointer-events: none; }
+  .kopf-links { display: flex; flex-wrap: wrap; column-gap: 0.4em; margin-bottom: 0.35rem; }
+  .zurueck + .zurueck::before { content: "·"; display: inline-block; margin-right: 0.4em; }
+  .zurueck { pointer-events: auto; display: inline-block; font-size: 0.85rem; font-weight: 600; color: var(--muted); text-decoration: none; }
+  .zurueck:hover { color: var(--ink); text-decoration: underline; }
+  .zurueck:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  h1 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; margin: 0; font-weight: 800; font-size: clamp(1.5rem, 4.5vw, 2.5rem); letter-spacing: -0.02em; line-height: 1.05; }
+  header p { margin: 0.4rem 0 0; color: var(--muted); font-size: 0.95rem; max-width: 44ch; line-height: 1.45; }
+  #stage { flex: 1; min-height: 0; position: relative; touch-action: none; }
+  #stage canvas { display: block; width: 100% !important; height: 100% !important; outline: none; }
+
+  .panel {
+    position: absolute; top: 0.5rem; right: 0.75rem; z-index: 3;
+    width: min(360px, calc(100% - 1.5rem)); max-height: calc(100% - 1rem); overflow: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    touch-action: auto;
+  }
+  .panel summary { cursor: pointer; padding: 0.8rem 1rem; font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+  .panel summary::-webkit-details-marker { display: none; }
+  .panel summary::after { content: "+"; font-weight: 400; font-size: 1.3rem; color: var(--muted); }
+  .panel[open] summary::after { content: "−"; }
+  .panel summary:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 1rem; }
+  .rows { padding: 0 1rem 0.5rem; }
+  .row { padding: 0.75rem 0; border-top: 1px solid var(--line); }
+  .row-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.55rem; }
+  .badge { flex: none; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 800; font-size: 0.9rem; }
+  .row-title { flex: 1; font-weight: 600; font-size: 0.95rem; }
+  .row-title small { display: block; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  .row-head button {
+    font: inherit; font-size: 0.82rem; font-weight: 600; color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.4rem 0.75rem; cursor: pointer; min-height: 36px; box-sizing: border-box;
+  }
+  .row-head button[aria-pressed="true"] { background: var(--signal); border-color: var(--signal); color: #1E2A33; }
+  .fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
+  .fields label { min-width: 0; font-size: 0.75rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.2rem; }
+  .fields .wide { grid-column: 1 / -1; }
+  .fields .note { font-size: 0.78rem; line-height: 1.4; }
+  .fields select {
+    font: inherit; font-size: 0.88rem; color: var(--ink); background: var(--field);
+    border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.4rem 0.45rem; min-height: 36px; width: 100%; min-width: 0; box-sizing: border-box;
+  }
+  .fields select:focus-visible, .row-head button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .row input[type="range"] { width: 100%; accent-color: var(--signal); margin: 0.2rem 0 0.4rem; min-height: 32px; }
+  .stats { margin: 0; font-size: 0.85rem; line-height: 1.45; }
+  .summary-list { margin: 0; padding: 0.75rem 1rem 1rem; border-top: 1px solid var(--line); font-size: 0.85rem; line-height: 1.55; }
+  .summary-list h2 { font-size: 0.85rem; margin: 0 0 0.3rem; font-weight: 700; }
+  .summary-list ul { margin: 0 0 0.5rem; padding-left: 1.1rem; color: var(--muted); }
+
+  .toolbar {
+    position: relative; z-index: 2; margin: 0 auto 1rem; padding: 0.4rem;
+    display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 1.6rem;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); max-width: calc(100% - 1.5rem);
+  }
+  .toolbar button {
+    font: inherit; font-weight: 600; font-size: 0.93rem; color: var(--ink); background: transparent;
+    border: 0; padding: 0.55rem 1rem; border-radius: 999px; cursor: pointer; min-height: 44px;
+  }
+  .toolbar button[aria-pressed="true"] { background: var(--signal); color: #1E2A33; }
+  .toolbar button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .toolbar .sep { width: 1px; background: var(--line); margin: 0.3rem 0.15rem; }
+  .error { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 2rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <nav class="kopf-links" aria-label="Website"><a class="zurueck" href="../">← SHS-Prüfungsprogramm</a><a class="zurueck" href="../impressum.html">Impressum</a><a class="zurueck" href="../datenschutz.html">Datenschutz</a></nav>
+    <h1 id="title">SHS-Wettkampfeimer</h1>
+    <p><span id="subtitle">Weißer 5-Liter-Eimer, 8-mm-Öffnungen auf unterschiedlichen Höhen.</span> Ziehen zum Drehen, zwei Finger oder Mausrad zum Zoomen, Glas antippen zum Entnehmen.</p>
+  </header>
+  <div id="stage">
+    <details class="panel" id="panel">
+      <summary>Gläser und Abdichtung</summary>
+      <div class="rows" id="rows"></div>
+      <div class="summary-list" id="summary"></div>
+    </details>
+    <div class="error" id="err">Die 3D-Ansicht konnte nicht geladen werden. Bitte Seite neu laden oder einen aktuellen Browser verwenden.</div>
+  </div>
+  <nav class="toolbar" aria-label="Ansicht steuern">
+    <button type="button" data-lk="1" aria-pressed="true">LK 1</button>
+    <button type="button" data-lk="2" aria-pressed="false">LK 2</button>
+    <button type="button" data-lk="3" aria-pressed="false">LK 3</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" id="xray" aria-pressed="false">Innenansicht</button>
+    <button type="button" id="lid" aria-pressed="false">Deckel öffnen</button>
+    <button type="button" id="below">Von unten</button>
+    <button type="button" id="reset">Zurücksetzen</button>
+  </nav>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+(function () {
+  const stage = document.getElementById('stage');
+  if (!window.THREE || !THREE.OrbitControls) { document.getElementById('err').style.display = 'grid'; return; }
+  if (window.matchMedia('(min-width: 700px)').matches) document.getElementById('panel').open = true;
+
+  // Maßstab: 1 Einheit = 10 cm. Eimer ca. 19 cm hoch, oben Ø 22 cm, unten Ø 19 cm.
+  const H = 1.9, R0 = 0.95, R1 = 1.10, WALL = 0.025, FLOOR = 0.07, BASE = 0.04;
+  const LEVEL = 1.30, JAR_R = 0.28, JAR_D = 0.62, HOLE_R = 0.04, LIFT_TO = 2.3;
+  const rOut = y => R0 + (R1 - R0) * y / H;
+  const rIn = y => rOut(y) - WALL;
+  const deg = d => d * Math.PI / 180;
+
+  // Abdichtung: dichtet die Verbindung Glas/Wand ab und soll möglichst keinen Geruch aufnehmen
+  const SEALANTS = {
+    'MS-Polymer (Hybrid)': { color: 0xDCDFE1, opacity: 1, rough: 0.5, note: 'Geruchsneutral, dauerelastisch, haftet auf Glas, Holz und vielen Kunststoffen.' },
+    '2K-Epoxidharz': { color: 0xD9A441, opacity: 0.85, rough: 0.2, note: 'Nimmt kaum Geruch an, sehr dicht, aber hart und nicht elastisch.' },
+    'Silikon, neutralvernetzend': { color: 0xEEF4F6, opacity: 0.75, rough: 0.35, note: 'Glatt und dicht, geruchsarm ausgehärtet. Haftet schlecht auf PE/PP.' },
+    'Acryl': { color: 0xF7F7F4, opacity: 1, rough: 0.8, note: 'Wasserbasiert und günstig, aber leicht porös und wenig elastisch.' },
+    'Montagekleber': { color: 0xD6CBB0, opacity: 1, rough: 0.7, note: 'Hält fest. Lösemittelfreie Sorte wählen, sonst Eigengeruch.' }
+  };
+
+  const CONFIG = {
+    1: [ { a: 60,  h: 1.00, y: 0.45, lid: 0xC9A43A, seal: 'MS-Polymer (Hybrid)' },
+         { a: 180, h: 0.90, y: 0.80, lid: 0xE9E9E6, seal: 'Silikon, neutralvernetzend' },
+         { a: 300, h: 1.05, y: 1.10, lid: 0x3B6EA5, seal: 'Acryl' } ],
+    2: [ { a: 45,  h: 1.00, y: 0.40, lid: 0xC9A43A, seal: '2K-Epoxidharz' },
+         { a: 135, h: 0.95, y: 0.70, lid: 0xB33A3A, seal: 'MS-Polymer (Hybrid)' },
+         { a: 225, h: 1.05, y: 0.95, lid: 0xE9E9E6, seal: 'Acryl' },
+         { a: 315, h: 0.90, y: 1.15, lid: 0x3B6EA5, seal: 'Silikon, neutralvernetzend' } ]
+  };
+  // LK 3: Holzkiste, innen 38 x 26 x 28 cm (ca. 28 l), Gläser liegend an den Innenwänden
+  CONFIG[3] = [
+    { wall: 'front', u: -1.0, y: 0.50, len: 0.65, dia: 8, lid: 0xC9A43A, seal: 'MS-Polymer (Hybrid)', mount: 'Geschraubt' },
+    { wall: 'front', u: 0.9,  y: 1.60, len: 0.60, dia: 6, lid: 0xE9E9E6, seal: 'Silikon, neutralvernetzend', mount: 'Genietet' },
+    { wall: 'right', u: -0.3, y: 1.00, len: 0.70, dia: 7, lid: 0x3B6EA5, seal: 'Acryl', mount: 'Geschraubt' },
+    { wall: 'back',  u: -0.3, y: 2.10, len: 0.65, dia: 8, lid: 0xB33A3A, seal: '2K-Epoxidharz', mount: 'Geklebt' },
+    { wall: 'left',  u: -0.6, y: 1.40, len: 0.60, dia: 6, lid: 0x4E7A4A, seal: 'Montagekleber', mount: 'Genietet' }
+  ];
+  const DENSITY = 2.3; // kg je Liter Beton
+  const LEVEL_MIN = FLOOR + 0.1;
+  const defaultLevel = n => {
+    const list = CONFIG[n], avg = list.reduce((s, j) => s + (LEVEL - j.h) + j.h / 3, 0) / list.length;
+    return Math.round(avg * 20) / 20;
+  };
+  const concreteLevel = {};
+  const WALL_NAMES = { front: 'Vorderwand', back: 'Rückwand', left: 'linke Seite', right: 'rechte Seite' };
+  const DIAS = { '6 mm': 6, '7 mm': 7, '8 mm': 8 };
+  const MOUNTS = { 'Geschraubt': 1, 'Genietet': 1, 'Geklebt': 1 };
+  const DEFAULTS = JSON.stringify(CONFIG);
+  function resetConfig() {
+    const d = JSON.parse(DEFAULTS);
+    Object.keys(CONFIG).forEach(k => { CONFIG[k] = d[k]; CONFIG[k].forEach(j => { j.removed = false; j.lift = 0; }); });
+    concreteLevel[1] = defaultLevel(1); concreteLevel[2] = defaultLevel(2);
+  }
+  resetConfig();
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 100);
+  const HOME = new THREE.Vector3(3.6, 3.3, 5.0);
+  const HOME_TARGET = new THREE.Vector3(0, 1.1, 0);
+  camera.position.copy(HOME);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.copy(HOME_TARGET);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minDistance = 1.2; controls.maxDistance = 12;
+  controls.maxPolarAngle = Math.PI;
+  controls.autoRotate = !reduceMotion; controls.autoRotateSpeed = 1.1;
+  controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9299, 0.8));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+  sun.position.set(4, 7, 3); sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -4.5, right: 4.5, top: 5, bottom: -4.5 });
+  sun.shadow.mapSize.set(2048, 2048);
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.3); fill.position.set(-4, 2, -3); scene.add(fill);
+  const under = new THREE.DirectionalLight(0xffffff, 0.45); under.position.set(1, -6, 2); scene.add(under);
+
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(5.5, 64), new THREE.ShadowMaterial({ opacity: 0.22 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+  const std = (color, rough, metal) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal || 0 });
+  const cast = m => { m.castShadow = true; m.receiveShadow = true; return m; };
+
+  const bucketStart = scene.children.length;
+  // ---------- Eimerkörper ----------
+  const plastic = std(0xF5F6F3, 0.42); plastic.side = THREE.DoubleSide;
+  const prof = [
+    new THREE.Vector2(0, BASE), new THREE.Vector2(0.86, BASE), new THREE.Vector2(0.885, 0), new THREE.Vector2(R0 - 0.02, 0), new THREE.Vector2(R0, 0.02),
+    new THREE.Vector2(rOut(1.76), 1.76), new THREE.Vector2(1.16, 1.78), new THREE.Vector2(1.17, 1.84),
+    new THREE.Vector2(1.14, H), new THREE.Vector2(rIn(H), H), new THREE.Vector2(rIn(FLOOR), FLOOR), new THREE.Vector2(0, FLOOR)
+  ];
+  const bucket = cast(new THREE.Mesh(new THREE.LatheGeometry(prof, 96), plastic));
+  scene.add(bucket);
+  const blockers = [bucket];
+  [1.62, 1.70].forEach(y => {
+    const rib = cast(new THREE.Mesh(new THREE.TorusGeometry(rOut(y) + 0.004, 0.012, 8, 96), plastic));
+    rib.rotation.x = Math.PI / 2; rib.position.y = y; scene.add(rib);
+  });
+
+  // ---------- Henkel ----------
+  const EAR_Y = 1.58;
+  [-1, 1].forEach(s => {
+    const ear = cast(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.14), plastic));
+    ear.position.set(s * (rOut(EAR_Y) + 0.02), EAR_Y, 0); scene.add(ear);
+  });
+  const handle = new THREE.Group(); handle.position.set(0, EAR_Y, 0);
+  const hr = rOut(EAR_Y) + 0.06, tilt = deg(100), hp = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = Math.PI * i / 40;
+    hp.push(new THREE.Vector3(hr * Math.cos(t), hr * Math.sin(t) * Math.cos(tilt), hr * Math.sin(t) * Math.sin(tilt)));
+  }
+  const wire = std(0x8C9399, 0.35, 0.9);
+  handle.add(cast(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hp), 80, 0.016, 8, false), wire)));
+  const grip = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.5, 20), plastic));
+  grip.rotation.z = Math.PI / 2; grip.position.set(0, hr * Math.cos(tilt), hr * Math.sin(tilt));
+  handle.add(grip); scene.add(handle);
+
+  // ---------- Deckel ----------
+  const LID_R = 1.19;
+  const lid = new THREE.Group(); lid.position.set(0, H, -LID_R);
+  const lidTop = cast(new THREE.Mesh(new THREE.CylinderGeometry(LID_R, LID_R, 0.05, 96), plastic));
+  lidTop.position.set(0, 0.035, LID_R); lid.add(lidTop);
+  const skirt = cast(new THREE.Mesh(new THREE.CylinderGeometry(LID_R, LID_R + 0.01, 0.15, 96, 1, true), plastic));
+  skirt.position.set(0, -0.05, LID_R); lid.add(skirt);
+  const lidRing = cast(new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.02, 8, 96), plastic));
+  lidRing.rotation.x = Math.PI / 2; lidRing.position.set(0, 0.062, LID_R); lid.add(lidRing);
+  const tab = cast(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.05), plastic));
+  tab.position.set(0, -0.06, 2 * LID_R + 0.02); lid.add(tab);
+  scene.add(lid);
+  blockers.push(lidTop, skirt);
+  const bucketGroup = new THREE.Group();
+  scene.children.slice(bucketStart).forEach(o => bucketGroup.add(o));
+  scene.add(bucketGroup);
+
+  // ---------- Holzkiste (LK 3) ----------
+  const CW = 0.18, IX = 1.9, IZ = 1.3, FT = 0.18, IH = 2.8, TOP = FT + IH;
+  const woodCanvas = document.createElement('canvas'); woodCanvas.width = 512; woodCanvas.height = 128;
+  (function () {
+    const c = woodCanvas.getContext('2d');
+    c.fillStyle = '#CFA06A'; c.fillRect(0, 0, 512, 128);
+    for (let i = 0; i < 70; i++) {
+      const y = Math.random() * 128, amp = 0.5 + Math.random() * 1.2, ph = Math.random() * 6;
+      c.strokeStyle = 'rgba(' + (110 + Math.random() * 40 | 0) + ',70,35,' + (0.12 + Math.random() * 0.25).toFixed(2) + ')';
+      c.lineWidth = 0.5 + Math.random() * 1.5; c.beginPath();
+      for (let x = 0; x <= 512; x += 8) c.lineTo(x, y + Math.sin(x / 90 + ph) * amp);
+      c.stroke();
+    }
+  })();
+  const woodTex = new THREE.CanvasTexture(woodCanvas); woodTex.encoding = THREE.sRGBEncoding;
+  const crateMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, map: woodTex, roughness: 0.8 });
+  const crateDark = new THREE.MeshStandardMaterial({ color: 0xB08A5C, map: woodTex, roughness: 0.85 });
+  const iron = std(0x5B6166, 0.45, 0.8);
+  const crateGroup = new THREE.Group(); crateGroup.visible = false; scene.add(crateGroup);
+  const crateBlockers = [];
+  const cbox = (w, h, d, x, y, z, m, parent) => {
+    const b = cast(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m || crateMat));
+    b.position.set(x, y, z); (parent || crateGroup).add(b); crateBlockers.push(b); return b;
+  };
+  const OX = IX + CW, OZ = IZ + CW;
+  cbox(2 * OX, FT, 2 * OZ, 0, FT / 2, 0);
+  cbox(2 * OX, IH, CW, 0, FT + IH / 2, IZ + CW / 2);
+  cbox(2 * OX, IH, CW, 0, FT + IH / 2, -IZ - CW / 2);
+  cbox(CW, IH, 2 * IZ, IX + CW / 2, FT + IH / 2, 0);
+  cbox(CW, IH, 2 * IZ, -IX - CW / 2, FT + IH / 2, 0);
+  [-1, 1].forEach(s => {
+    const bar = cast(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.8), iron));
+    bar.position.set(s * (OX + 0.12), TOP - 0.45, 0); crateGroup.add(bar);
+    [-0.4, 0.4].forEach(z => { const post = cast(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.05), iron)); post.position.set(s * (OX + 0.06), TOP - 0.45, z); crateGroup.add(post); });
+  });
+  const crateLid = new THREE.Group(); crateLid.position.set(0, TOP, -OZ);
+  cbox(2 * OX + 0.04, 0.16, 2 * OZ + 0.04, 0, 0.08, OZ, crateMat, crateLid);
+  [-1.4, 0, 1.4].forEach(x => cbox(0.22, 0.06, 2 * OZ, x, 0.19, OZ, crateDark, crateLid));
+  crateGroup.add(crateLid);
+  [-1.3, 1.3].forEach(x => { const h = cast(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.04), iron)); h.position.set(x, TOP, -OZ - 0.02); crateGroup.add(h); });
+  const WALLS = {
+    front: { n: [0, 0, 1],  p: (u, y) => [u, y, IZ] },
+    back:  { n: [0, 0, -1], p: (u, y) => [u, y, -IZ] },
+    right: { n: [1, 0, 0],  p: (u, y) => [IX, y, u] },
+    left:  { n: [-1, 0, 0], p: (u, y) => [-IX, y, u] }
+  };
+
+  // ---------- Innenleben ----------
+  const noise = document.createElement('canvas'); noise.width = noise.height = 256;
+  (function () {
+    const c = noise.getContext('2d'), img = c.createImageData(256, 256);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 150 + Math.random() * 60 - (Math.random() < 0.04 ? 70 : 0);
+      img.data[i] = v; img.data[i + 1] = v + 2; img.data[i + 2] = v + 4; img.data[i + 3] = 255;
+    }
+    c.putImageData(img, 0, 0);
+  })();
+  const concreteTex = new THREE.CanvasTexture(noise);
+  concreteTex.wrapS = concreteTex.wrapT = THREE.RepeatWrapping; concreteTex.repeat.set(2, 2);
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0xB4B8BA, map: concreteTex, roughness: 0.97 });
+  const cavityWallMat = new THREE.MeshStandardMaterial({ color: 0x9A9EA1, map: concreteTex, roughness: 1, side: THREE.BackSide });
+  const pocketMat = new THREE.MeshStandardMaterial({ color: 0x8E9295, map: concreteTex, roughness: 1 });
+  const daylightMat = new THREE.MeshBasicMaterial({ color: 0xF4F6F7 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xCFE6EA, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.4 });
+  const woodMat = std(0xC49A64, 0.85);
+  const holeMat = new THREE.MeshBasicMaterial({ color: 0x1B1F22 });
+  const trash = [];
+  let interior = null, concreteParts = [], jarObjs = [];
+
+  function labelTexture(n) {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#1E2A33'; x.font = '800 112px "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 64, 70);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
+
+  function buildInterior(lk) {
+    const g = new THREE.Group();
+    jarObjs = [];
+    concreteParts = [];
+    const CR = JAR_R + 0.006, L = concreteLevel[lk];
+    const side = cast(new THREE.Mesh(new THREE.CylinderGeometry(rIn(L), rIn(FLOOR), L - FLOOR, 96, 1, true), concreteMat));
+    side.position.y = FLOOR + (L - FLOOR) / 2; g.add(side);
+    const shape = new THREE.Shape(); shape.absarc(0, 0, rIn(L), 0, Math.PI * 2, false);
+    CONFIG[lk].forEach(j => {
+      if (LEVEL - j.h >= L) return;
+      const a = deg(j.a), hole = new THREE.Path();
+      hole.absarc(Math.sin(a) * JAR_D, -Math.cos(a) * JAR_D, CR, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    });
+    const top = cast(new THREE.Mesh(new THREE.ShapeGeometry(shape, 48), concreteMat));
+    top.rotation.x = -Math.PI / 2; top.position.y = L; g.add(top);
+    concreteParts.push(side, top);
+
+    // 3 Schrauben durch den Eimerboden, damit sich der Beton nicht dreht
+    const bolt = std(0x9AA1A7, 0.3, 0.9), boltDark = std(0x5E656B, 0.4, 0.85);
+    const shaft = Math.min(0.35, L - FLOOR - 0.03);
+    [0, 120, 240].forEach(d => {
+      const a = deg(d), x = Math.sin(a) * 0.32, z = Math.cos(a) * 0.32;
+      const head = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.012, 24), bolt));
+      head.position.set(x, BASE - 0.012, z); g.add(head);
+      const washer = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.006, 32), bolt));
+      washer.position.set(x, BASE - 0.003, z); g.add(washer);
+      [0, Math.PI / 2].forEach(r => {
+        const slot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.006, 0.008), holeMat);
+        slot.position.set(x, BASE - 0.0185, z); slot.rotation.y = r; g.add(slot);
+      });
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, shaft + (FLOOR - BASE), 12), boltDark);
+      rod.position.set(x, BASE + (shaft + FLOOR - BASE) / 2, z); g.add(rod);
+      const iw = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.006, 24), boltDark);
+      iw.position.set(x, FLOOR + shaft - 0.02, z); g.add(iw);
+      const nut = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 6), boltDark);
+      nut.position.set(x, FLOOR + shaft - 0.002, z); g.add(nut);
+    });
+
+    CONFIG[lk].forEach((j, idx) => {
+      const a = deg(j.a), bottom = LEVEL - j.h;
+      const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+
+      // Lochnummer außen
+      const lt = labelTexture(idx + 1);
+      const lm = new THREE.MeshBasicMaterial({ map: lt, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+      trash.push(lt, lm);
+      const lY0 = j.y + 0.07, lY1 = j.y + 0.21, lW = 0.14 / rOut(j.y);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(rOut(lY1) + 0.004, rOut(lY0) + 0.004, lY1 - lY0, 8, 1, true, a - lW / 2, lW), lm);
+      label.position.y = (lY0 + lY1) / 2; label.renderOrder = 5; g.add(label);
+
+      // Öffnung außen (8 mm)
+      const n = new THREE.Vector3(Math.sin(a), -(R1 - R0) / H, Math.cos(a)).normalize();
+      const p = dir.clone().multiplyScalar(rOut(j.y) + 0.002).setY(j.y);
+      const hole = new THREE.Mesh(new THREE.CircleGeometry(HOLE_R, 24), holeMat);
+      hole.position.copy(p); hole.lookAt(p.clone().add(n)); g.add(hole);
+      const rim = new THREE.Mesh(new THREE.RingGeometry(HOLE_R, HOLE_R + 0.012, 24), std(0xDADCD8, 0.5));
+      rim.position.copy(p).addScaledVector(n, 0.001); rim.lookAt(p.clone().add(n)); g.add(rim);
+
+      // Holzklötzchen unter dem Glas
+      const bh = bottom - FLOOR;
+      if (bh > 0.02) {
+        const block = cast(new THREE.Mesh(new THREE.BoxGeometry(0.4, bh, 0.4), woodMat));
+        block.position.set(dir.x * JAR_D, FLOOR + bh / 2, dir.z * JAR_D); block.rotation.y = a; g.add(block);
+      }
+
+      // Vertiefung im Beton mit Tasche zur Austrittsöffnung (sichtbar, wenn das Glas entnommen ist)
+      const slot = new THREE.Group();
+      slot.position.set(dir.x * JAR_D, 0, dir.z * JAR_D); slot.rotation.y = a;
+      const gapW = rIn(j.y) - JAR_D - JAR_R, PH = 0.1, pa = Math.asin(PH / CR);
+      const wallPart = (y0, y1, ts, tl) => {
+        if (y1 - y0 < 0.002) return;
+        const m = cast(new THREE.Mesh(new THREE.CylinderGeometry(CR, CR, y1 - y0, 48, 1, true, ts, tl), cavityWallMat));
+        m.position.y = (y0 + y1) / 2; slot.add(m); concreteParts.push(m);
+      };
+      const inConcrete = L > bottom;
+      if (inConcrete) {
+        wallPart(bottom, Math.min(j.y - PH, L), 0, Math.PI * 2);
+        wallPart(j.y + PH, L, 0, Math.PI * 2);
+        wallPart(j.y - PH, Math.min(j.y + PH, L), pa, Math.PI * 2 - 2 * pa);
+      }
+      const z0 = CR * Math.cos(pa), z1 = JAR_R + gapW + 0.012, dz = z1 - z0, zc = (z0 + z1) / 2;
+      const pl = (w, h, x, y, z, rx, ry) => {
+        const m = cast(new THREE.Mesh(new THREE.PlaneGeometry(w, h), pocketMat));
+        m.position.set(x, y, z); m.rotation.set(rx, ry, 0); slot.add(m); concreteParts.push(m);
+      };
+      if (inConcrete && j.y - PH < L) {
+        const pTop = Math.min(j.y + PH, L), pH = pTop - (j.y - PH), pY = (pTop + j.y - PH) / 2;
+        if (j.y + PH < L) pl(2 * PH, dz, 0, j.y + PH, zc, Math.PI / 2, 0);
+        pl(2 * PH, dz, 0, j.y - PH, zc, -Math.PI / 2, 0);
+        pl(dz, pH, PH, pY, zc, 0, -Math.PI / 2);
+        pl(dz, pH, -PH, pY, zc, 0, Math.PI / 2);
+      }
+      const light = new THREE.Mesh(new THREE.CircleGeometry(HOLE_R, 24), daylightMat);
+      light.position.set(0, j.y, JAR_R + gapW - 0.004); light.rotation.y = Math.PI; slot.add(light);
+      const floorDisc = new THREE.Mesh(new THREE.CircleGeometry(CR, 40), bh > 0.02 ? woodMat : pocketMat);
+      floorDisc.rotation.x = -Math.PI / 2; floorDisc.position.y = bottom + 0.002; floorDisc.receiveShadow = true;
+      floorDisc.visible = inConcrete;
+      slot.add(floorDisc); concreteParts.push(floorDisc);
+      g.add(slot);
+      const cavity = light;
+
+      // Glas mit Abdichtung (wird gemeinsam entnommen)
+      const jar = new THREE.Group();
+      jar.position.set(dir.x * JAR_D, bottom, dir.z * JAR_D);
+      jar.rotation.y = a;
+      jar.userData = { idx, bottom };
+      const bodyH = j.h - 0.1;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(JAR_R, JAR_R, bodyH, 40), glassMat);
+      body.position.y = bodyH / 2; jar.add(body);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(JAR_R - 0.04, JAR_R, 0.1, 40), glassMat);
+      neck.position.y = bodyH + 0.05; jar.add(neck);
+      [0.02, 0.05].forEach(dy => {
+        const th = new THREE.Mesh(new THREE.TorusGeometry(JAR_R - 0.035, 0.008, 6, 40), glassMat);
+        th.rotation.x = Math.PI / 2; th.position.y = j.h - dy; jar.add(th);
+      });
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(JAR_R - 0.01, JAR_R - 0.03, 0.03, 40), glassMat);
+      base.position.y = 0.015; jar.add(base);
+      const capMat = std(j.lid, 0.35, 0.6); trash.push(capMat);
+      const cap = cast(new THREE.Mesh(new THREE.CylinderGeometry(JAR_R - 0.03, JAR_R - 0.03, 0.07, 40), capMat));
+      cap.position.y = j.h + 0.035; jar.add(cap);
+      const hit = new THREE.Mesh(new THREE.CylinderGeometry(JAR_R + 0.02, JAR_R + 0.02, j.h + 0.08, 16), new THREE.MeshBasicMaterial({ visible: false }));
+      hit.position.y = (j.h + 0.08) / 2; jar.add(hit);
+
+      const ly = j.y - bottom, gap = rIn(j.y) - JAR_D - JAR_R;
+      const sm = SEALANTS[j.seal], fixMat = new THREE.MeshStandardMaterial({ color: sm.color, roughness: sm.rough, transparent: sm.opacity < 1, opacity: sm.opacity });
+      trash.push(fixMat);
+      // Abdichtung füllt die Fuge zwischen Glas und Eimerwand
+      const plug = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, gap, 32), fixMat));
+      plug.rotation.x = Math.PI / 2; plug.position.set(0, ly, JAR_R + gap / 2); jar.add(plug);
+      // Lochumrandung innen an der Eimerwand
+      const edge = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.014, 8, 32), fixMat);
+      edge.position.set(0, ly, JAR_R + gap - 0.006); jar.add(edge);
+      const channel = new THREE.Mesh(new THREE.CylinderGeometry(HOLE_R, HOLE_R, gap + 0.03, 16), holeMat);
+      channel.rotation.x = Math.PI / 2; channel.position.set(0, ly, JAR_R + gap / 2); jar.add(channel);
+
+      jar.position.y = bottom + j.lift;
+      g.add(jar);
+      jarObjs.push({ jar, hit, cfg: j, target: () => j.removed ? liftFor(j) : 0,
+        apply: l => { jar.position.y = bottom + l; cavity.visible = l > 0.2; } });
+    });
+    g.traverse(o => { if (o.geometry) trash.push(o.geometry); });
+    return g;
+  }
+
+  function buildCrateInterior() {
+    const g = new THREE.Group();
+    jarObjs = []; concreteParts = [];
+    CONFIG[3].forEach((j, idx) => {
+      const W = WALLS[j.wall], hr = j.dia / 200;
+      const mount = new THREE.Group();
+      mount.position.set.apply(mount.position, W.p(j.u, j.y));
+      mount.rotation.y = Math.atan2(W.n[0], W.n[2]); // lokales +z zeigt nach außen
+
+      // Öffnung außen, Kanal durch das Holz, Nummer
+      const outer = new THREE.Mesh(new THREE.CircleGeometry(hr, 24), holeMat); outer.position.z = CW + 0.002; mount.add(outer);
+      const chan = new THREE.Mesh(new THREE.CylinderGeometry(hr, hr, CW, 16), holeMat); chan.rotation.x = Math.PI / 2; chan.position.z = CW / 2; mount.add(chan);
+      const lt = labelTexture(idx + 1), lm = new THREE.MeshBasicMaterial({ map: lt, transparent: true, depthWrite: false });
+      trash.push(lt, lm);
+      const label = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.24), lm); label.position.set(0, 0.2, CW + 0.003); mount.add(label);
+
+      // Abdichtung an der Wand, Glasdeckel mit Loch
+      const sm = SEALANTS[j.seal], fixMat = new THREE.MeshStandardMaterial({ color: sm.color, roughness: sm.rough, transparent: sm.opacity < 1, opacity: sm.opacity });
+      const capMat = std(j.lid, 0.35, 0.6); trash.push(fixMat, capMat);
+      const bed = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.026, 40), fixMat));
+      bed.rotation.x = Math.PI / 2; bed.position.z = -0.013; mount.add(bed);
+      const capLen = 0.07, capZ = -0.026 - capLen / 2, capFace = -0.026 - capLen;
+      const cap = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, capLen, 40), capMat)); cap.rotation.x = Math.PI / 2; cap.position.z = capZ; mount.add(cap);
+      const edge = new THREE.Mesh(new THREE.TorusGeometry(0.262, 0.014, 8, 40), fixMat);
+      edge.position.z = -0.03; mount.add(edge);
+      const lidHole = new THREE.Mesh(new THREE.CircleGeometry(hr, 24), holeMat); lidHole.position.z = capFace - 0.002; lidHole.rotation.y = Math.PI; mount.add(lidHole);
+      const day = new THREE.Mesh(new THREE.CircleGeometry(hr * 0.8, 24), daylightMat); day.position.z = capFace - 0.003; day.rotation.y = Math.PI; mount.add(day);
+      [0, 2.094, 4.189].forEach(t => {
+        const x = Math.cos(t) * 0.17, y = Math.sin(t) * 0.17, z = capFace - 0.004;
+        if (j.mount === 'Genietet') {
+          const r = cast(new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), std(0xD4D8DB, 0.3, 0.9)));
+          r.rotation.x = -Math.PI / 2; r.position.set(x, y, z + 0.003); mount.add(r);
+        } else if (j.mount === 'Geschraubt') {
+          const h = cast(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 16), std(0x7C8288, 0.35, 0.85)));
+          h.rotation.x = Math.PI / 2; h.position.set(x, y, z); mount.add(h);
+          const slot = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.008, 0.004), holeMat); slot.rotation.z = t; slot.position.set(x, y, z - 0.007); mount.add(slot);
+        }
+      });
+
+      // Glas liegend, mit dem Hals im Deckel verschraubt
+      const jar = new THREE.Group(); jar.userData = { idx };
+      const cyl = (rt, rb, len, zc, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, 40), mat); m.rotation.x = Math.PI / 2; m.position.z = zc; jar.add(m); return m; };
+      cyl(0.235, 0.235, 0.1, -0.09, glassMat);
+      cyl(0.235, JAR_R, 0.08, -0.18, glassMat);
+      cyl(JAR_R, JAR_R, j.len, -0.22 - j.len / 2, glassMat);
+      cyl(JAR_R - 0.03, JAR_R - 0.01, 0.03, -0.22 - j.len + 0.015, glassMat);
+      const hit = cyl(0.3, 0.3, j.len + 0.25, -0.12 - j.len / 2, new THREE.MeshBasicMaterial({ visible: false }));
+      mount.add(jar);
+      g.add(mount);
+      jarObjs.push({ jar, hit, cfg: j, target: () => j.removed ? 1 : 0,
+        apply: l => {
+          const p1 = Math.min(l * 2, 1), p2 = Math.max(l * 2 - 1, 0);
+          jar.position.set(0, p2 * (TOP + 1.0 - j.y), -0.45 * p1);
+          day.visible = l > 0.15;
+        } });
+      jarObjs[jarObjs.length - 1].apply(j.lift);
+    });
+    g.traverse(o => { if (o.geometry) trash.push(o.geometry); });
+    return g;
+  }
+
+  function concreteStats(n) {
+    const L = concreteLevel[n], h = L - FLOOR, r1 = rIn(FLOOR), r2 = rIn(L);
+    let v = Math.PI * h / 3 * (r1 * r1 + r1 * r2 + r2 * r2);
+    CONFIG[n].forEach(j => {
+      const bottom = LEVEL - j.h, bh = Math.max(0, bottom - FLOOR);
+      if (L > bottom) v -= Math.PI * (JAR_R + 0.006) ** 2 * (L - bottom);
+      v -= 0.16 * Math.min(bh, h);
+    });
+    const kg = v * DENSITY, total = kg + 0.35 + 0.15 * CONFIG[n].length;
+    return { liters: v, kg, total, cm: h * 10 };
+  }
+  const fmt = (x, d) => x.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  // ---------- Panel ----------
+  const rowsEl = document.getElementById('rows'), sumEl = document.getElementById('summary');
+  const opts = (obj, sel) => Object.keys(obj).map(k => '<option' + (k === sel ? ' selected' : '') + '>' + k + '</option>').join('');
+
+  function statsText() {
+    const st = concreteStats(lk);
+    return 'Beton ca. ' + fmt(st.liters, 1) + ' l, ca. ' + fmt(st.kg, 1) + ' kg. Eimer gesamt ca. ' + fmt(st.total, 1) + ' kg.';
+  }
+  function renderPanel() {
+    const list = CONFIG[lk];
+    const concreteRow = lk === 3 ? '' :
+      '<div class="row"><div class="row-head"><span class="row-title">Betonhöhe <span id="cHeight">' + fmt(concreteStats(lk).cm, 1) + ' cm</span>' +
+      '<small>über dem Innenboden, Standard: untere Gläser zu etwa einem Drittel bedeckt</small></span></div>' +
+      '<input type="range" id="cLevel" min="' + LEVEL_MIN + '" max="' + LEVEL + '" step="0.05" value="' + concreteLevel[lk] + '" aria-label="Betonhöhe">' +
+      '<p class="stats" id="cStats">' + statsText() + '</p></div>';
+    rowsEl.innerHTML = concreteRow + list.map((j, i) =>
+      '<div class="row"><div class="row-head"><span class="badge">' + (i + 1) + '</span>' +
+      '<span class="row-title">Loch ' + (i + 1) + '<small>' + (lk === 3 ? WALL_NAMES[j.wall] + ', ' + Math.round(j.y * 10) + ' cm Höhe' : Math.round(j.y * 10) + ' cm Höhe, 8 mm') + '</small></span>' +
+      '<button type="button" data-remove="' + i + '" aria-pressed="' + j.removed + '">' + (j.removed ? 'Glas einsetzen' : 'Glas entnehmen') + '</button></div>' +
+      '<div class="fields"><label class="wide">Abdichtung<select data-seal="' + i + '">' + opts(SEALANTS, j.seal) + '</select>' +
+      '<span class="note">' + SEALANTS[j.seal].note + '</span></label>' +
+      (lk === 3 ? '<label>Lochgröße<select data-dia="' + i + '">' + opts(DIAS, j.dia + ' mm') + '</select></label>' +
+                  '<label>Glasdeckel<select data-mount="' + i + '">' + opts(MOUNTS, j.mount) + '</select></label>' : '') +
+      '</div></div>'
+    ).join('');
+    renderSummary();
+  }
+
+  function renderSummary() {
+    const list = CONFIG[lk], count = key => list.reduce((m, j) => (m[j[key]] = (m[j[key]] || 0) + 1, m), {});
+    const li = m => Object.entries(m).map(([k, v]) => '<li>' + k + ' (' + v + '×)</li>').join('');
+    const inside = list.filter(j => !j.removed).length;
+    const diaCount = list.reduce((m, j) => (m[j.dia + ' mm'] = (m[j.dia + ' mm'] || 0) + 1, m), {});
+    sumEl.innerHTML = '<h2>Verbaut in LK ' + lk + '</h2><ul>' +
+      (lk === 3 ? '<li>Holzkiste, innen 38 × 26 × 28 cm (rund 28 Liter)</li>'
+                : '<li>Kunststoffeimer 5 Liter, weiß, 3 Schrauben durch den Boden</li><li>Beton ' + fmt(concreteStats(lk).cm, 1) + ' cm hoch, ca. ' + fmt(concreteStats(lk).kg, 1) + ' kg</li>') +
+      '<li>' + list.length + ' Geruchskammern, ' + inside + ' Gläser eingesetzt</li></ul>' +
+      (lk === 3 ? '<h2>Lochgröße</h2><ul>' + li(diaCount) + '</ul><h2>Glasdeckel befestigt</h2><ul>' + li(count('mount')) + '</ul>' : '') +
+      '<h2>Abdichtung</h2><ul>' + li(count('seal')) + '</ul>';
+  }
+
+  rowsEl.addEventListener('change', e => {
+    const t = e.target, list = CONFIG[lk];
+    if (t.id === 'cLevel') return;
+    if (t.dataset.seal) { list[+t.dataset.seal].seal = t.value; t.parentNode.querySelector('.note').textContent = SEALANTS[t.value].note; }
+    if (t.dataset.dia) list[+t.dataset.dia].dia = DIAS[t.value];
+    if (t.dataset.mount) list[+t.dataset.mount].mount = t.value;
+    rebuild(); renderSummary();
+  });
+  let levelPending = false;
+  rowsEl.addEventListener('input', e => {
+    if (e.target.id !== 'cLevel') return;
+    concreteLevel[lk] = +e.target.value;
+    document.getElementById('cHeight').textContent = fmt(concreteStats(lk).cm, 1) + ' cm';
+    document.getElementById('cStats').textContent = statsText();
+    if (!levelPending) { levelPending = true; requestAnimationFrame(() => { levelPending = false; rebuild(); renderSummary(); }); }
+  });
+  rowsEl.addEventListener('click', e => {
+    const b = e.target.closest('[data-remove]'); if (b) toggleJar(+b.dataset.remove);
+  });
+
+  function toggleJar(i) {
+    const j = CONFIG[lk][i];
+    j.removed = !j.removed;
+    if (j.removed && !openTarget) toggleLid();
+    if (reduceMotion) { j.lift = jarObjs[i].target(); }
+    renderPanel();
+  }
+  const liftFor = j => LIFT_TO - (LEVEL - j.h);
+
+  // ---------- Aufbau und Wechsel ----------
+  let lk = 1;
+  function rebuild() {
+    if (interior) { scene.remove(interior); trash.splice(0).forEach(o => o.dispose()); }
+    interior = lk === 3 ? buildCrateInterior() : buildInterior(lk); scene.add(interior); applyXray();
+  }
+  function showLK(n) {
+    const wasCrate = lk === 3; lk = n;
+    const crate = n === 3;
+    bucketGroup.visible = !crate; crateGroup.visible = crate;
+    document.getElementById('title').textContent = crate ? 'SHS-Behältnis LK 3' : 'SHS-Wettkampfeimer';
+    document.getElementById('subtitle').textContent = crate
+      ? 'Holzkiste, innen 38 × 26 × 28 cm (rund 28 Liter), 5 Gläser mit 6- bis 8-mm-Öffnungen.'
+      : 'Weißer 5-Liter-Eimer, 8-mm-Öffnungen auf unterschiedlichen Höhen.';
+    if (wasCrate !== crate) resetView();
+    rebuild(); renderPanel();
+    document.querySelectorAll('[data-lk]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.lk === n)));
+  }
+  document.querySelectorAll('[data-lk]').forEach(b => b.addEventListener('click', () => showLK(+b.dataset.lk)));
+
+  // ---------- Innenansicht ----------
+  let xray = false;
+  function applyXray() {
+    plastic.transparent = xray; plastic.opacity = xray ? 0.16 : 1; plastic.depthWrite = !xray; plastic.needsUpdate = true;
+    [crateMat, crateDark].forEach(m => { m.transparent = xray; m.opacity = xray ? 0.18 : 1; m.depthWrite = !xray; m.needsUpdate = true; });
+    [concreteMat, cavityWallMat, pocketMat].forEach(m => { m.transparent = xray; m.opacity = xray ? 0.28 : 1; m.depthWrite = !xray; m.needsUpdate = true; });
+  }
+  const xrayBtn = document.getElementById('xray');
+  xrayBtn.addEventListener('click', () => { xray = !xray; xrayBtn.setAttribute('aria-pressed', String(xray)); applyXray(); });
+
+  // ---------- Deckel ----------
+  let openTarget = 0, openNow = 0;
+  const setLid = a => { lid.rotation.x = -a * 1.85; crateLid.rotation.x = -a * 1.85; };
+  const lidBtn = document.getElementById('lid');
+  function toggleLid() {
+    openTarget = openTarget ? 0 : 1;
+    lidBtn.setAttribute('aria-pressed', String(!!openTarget));
+    lidBtn.textContent = openTarget ? 'Deckel schließen' : 'Deckel öffnen';
+    if (reduceMotion) { openNow = openTarget; setLid(openNow); }
+  }
+  lidBtn.addEventListener('click', toggleLid);
+
+  // ---------- Glas antippen ----------
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) { down = null; return; }
+    down = null;
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const targets = jarObjs.map(o => o.hit).concat(xray ? [] : (lk === 3 ? crateBlockers : blockers.concat(concreteParts)));
+    const first = ray.intersectObjects(targets, false)[0];
+    if (!first) return;
+    const o = jarObjs.find(o => o.hit === first.object);
+    if (o) toggleJar(o.jar.userData.idx);
+  });
+
+  function resetView() {
+    if (lk === 3) { camera.position.set(6.6, 5.6, 8.2); controls.target.set(0, 1.5, 0); controls.maxDistance = 20; }
+    else { camera.position.copy(HOME); controls.target.copy(HOME_TARGET); controls.maxDistance = 12; }
+    controls.update();
+  }
+  document.getElementById('below').addEventListener('click', () => {
+    controls.autoRotate = false;
+    if (lk === 3) { camera.position.set(0.6, -6.5, 2.2); controls.target.set(0, 0.6, 0); }
+    else { camera.position.set(0.3, -3.8, 1.2); controls.target.set(0, 0.5, 0); }
+    controls.update();
+  });
+  document.getElementById('reset').addEventListener('click', () => {
+    resetConfig();
+    if (openTarget) toggleLid();
+    if (xray) { xray = false; xrayBtn.setAttribute('aria-pressed', 'false'); }
+    resetView(); showLK(lk);
+  });
+  renderer.domElement.addEventListener('dblclick', resetView);
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(h, 1); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  showLK(1);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(rebuild);
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (Math.abs(openTarget - openNow) > 0.001) { openNow += (openTarget - openNow) * 0.12; setLid(openNow); }
+    jarObjs.forEach(o => {
+      const target = o.target(), c = o.cfg;
+      if (Math.abs(target - c.lift) > 0.001) c.lift += (target - c.lift) * 0.1; else c.lift = target;
+      o.apply(c.lift);
+    });
+    controls.update();
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+</body>
+</html>

@@ -242,8 +242,8 @@ p { margin: 0; }
   .inhalt-navi-mobil ol { margin: 0; padding: 0 1rem 1rem 2.2rem; display: grid; gap: 0.35rem; }
 }
 @media (max-width: 640px) {
-  /* Kopfleiste ist hier zweizeilig (~124 px) - Sprungziele sonst darunter verdeckt */
-  html { scroll-padding-top: 8.5rem; }
+  /* Kopfleiste ist hier mehrzeilig (Marke + zweizeilige Navigation, ~124 px) - Sprungziele sonst darunter verdeckt */
+  html { scroll-padding-top: 10.5rem; }
   .huelle { padding-inline: 16px; }
   .navi { margin-left: 0; width: 100%; padding-bottom: 0.6rem; gap: 0.9rem; }
   .start { padding-block: 2rem 2rem; }

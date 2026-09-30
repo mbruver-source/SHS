@@ -2911,3 +2911,47 @@ Formulare, samt allen Befund-Korrekturen aus drei Verifikationsrunden (siehe Abs
 - Commit `9a09cba`. Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` auf 1.0.38
   nachgezogen: 25 Dateien, darunter das neue `docs/bilder/handbuch_anmeldeformular.png`.
   Byte-Abgleich identisch.
+
+## 30.09.2026: 3D-Behältnisse auf der GitHub Page (Website, kein Build nötig)
+
+- **Wunsch Marco:** 3D-Modell „wie sehen Behältnisse aus bzw. wie sind sie aufgebaut“ auf der
+  GitHub Page, Menüpunkt oben rechts neben „Umstieg“ und „Quellcode“. Das Modell in
+  `docs/behaeltnisse/` (nach der BLV-Anleitung zum Bau von SHS-Behältnissen: LK 1/2
+  Wettkampfeimer mit 3 bzw. 4 Gläsern, LK 3 Holzkiste mit 5 Gläsern) lag schon fertig vor,
+  war aber noch nicht eingecheckt. Marcos Vorgabe: inhaltlich so übernehmen. Vorab hat er sich
+  die 3D-Seite und die Website lokal angesehen („ok passt so alles“).
+- **Umgesetzt:**
+  - Menüpunkt „Behältnisse“ (`behaeltnisse/`) in der Kopf-Navigation aller fünf Seiten
+    (`index`, `handbuch`, `umstieg`, `impressum`, `datenschutz`), zwischen „Umstieg“ und
+    „Quellcode“. In den Fußzeilen steht er nicht.
+  - `docs/behaeltnisse/index.html`: Google Fonts („Archivo“) entfernt, stattdessen die
+    Systemschrift-Stacks der Website (Segoe UI …). Die Website lädt damit weiterhin keine
+    externen Schriften und keine CDNs, wie es die Datenschutzerklärung sagt. three.js r128
+    (MIT) liegt lokal in `vendor/`.
+  - Rücklink „← SHS-Prüfungsprogramm“ oben auf der 3D-Seite (`../`).
+  - `docs/behaeltnisse/README.md`: Schrift-Hinweis angepasst, GitHub-Page-Adresse ergänzt.
+- **Lokal geprüft** (Python-`http.server` + Chrome):
+  - Menüpunkt und Rücklink funktionieren.
+  - 3D-Szene: LK 1 bis 3 und Innenansicht laufen, keine Konsolenfehler.
+  - Die Seite lädt nur lokale Dateien.
+  - Bei 320 bis 375 px gibt es kein horizontales Scrollen.
+  - **Hinweis:** Auf dem Handy bricht die Navigation jetzt in zwei Zeilen um. Die Kopfleiste
+    endet dort bei 124 px statt 85 px. Anker-Sprungziele im Handbuch stehen bei 136 px
+    (`scroll-padding-top: 8.5rem`), sind also noch sichtbar, aber mit nur rund 12 px Abstand.
+- **Verifikations-Subagent: im Kern OK.**
+  - Keine externen Referenzen, Datenschutzerklärung passt, three.js-Lizenz liegt bei.
+  - Der Rücklink funktioniert auch bei `…/behaeltnisse` ohne Schrägstrich, weil GitHub Pages
+    umleitet.
+  - Die Funde hat Marco einzeln entschieden:
+    - F1 (mittel), **umgesetzt**: Der 3D-Seite fehlten Links zu Impressum und Datenschutz
+      (§ 5 DDG). Jetzt steht oben „← SHS-Prüfungsprogramm · Impressum · Datenschutz“
+      (`.kopf-links`). Die Trennpunkte kommen per CSS und bleiben beim Umbruch am Link.
+    - F2 (klein), **bewusst so gelassen**: Direkt als Datei geöffnet (`file://`), zeigen
+      `behaeltnisse/` und `../` nur eine Ordneransicht. Online und mit Server ist alles
+      richtig, und die Adresse bleibt kurz.
+    - F3 (klein), **umgesetzt**: Der Titel folgt jetzt dem Schema der Website:
+      „Behältnisse in 3D · SHS-Prüfungsprogramm“.
+    - F4 (klein), **verworfen**: Keine `meta description`, wie bei den übrigen Unterseiten.
+    - Handy-Sprungabstand, **umgesetzt**: `scroll-padding-top` im 640px-Block von `site.css`
+      von 8.5rem auf 10.5rem. Nachgeprüft bei 320 und 360 px: Die Kopfleiste endet bei
+      124 px, das Ziel steht bei 168 px.
