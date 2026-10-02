@@ -2955,3 +2955,158 @@ Formulare, samt allen Befund-Korrekturen aus drei Verifikationsrunden (siehe Abs
     - Handy-Sprungabstand, **umgesetzt**: `scroll-padding-top` im 640px-Block von `site.css`
       von 8.5rem auf 10.5rem. Nachgeprüft bei 320 und 360 px: Die Kopfleiste endet bei
       124 px, das Ziel steht bei 168 px.
+
+## 02.10.2026: Teilnehmer-Status „keine Teilnahme“ (Arbeitsstand, noch kein Build)
+
+- **Anforderung Marco:** „Teilnehmer erscheint nicht, Button für Teilnehmer im Reiter
+  Teilnehmer ‚keine Teilnahme‘, sichtbar im Teilnehmerübersicht und Teilnehmer ausgegraut.
+  Alle nachfolgenden Prozesse und Wertungen ist der Teilnehmer nicht mehr eingebunden.“
+- **Rückfragen, von Marco beantwortet:**
+  - Umschaltbar: Der Button wechselt zwischen „Keine Teilnahme“ und „Teilnahme
+    wiederherstellen“.
+  - Bereits erfasste Ergebnisse: Es gibt eine Rückfrage, die Daten bleiben gespeichert, werden
+    aber ignoriert und sind nach dem Wiederherstellen wieder wirksam.
+  - Einzige Ausnahme: Die „Übersicht für Prüfungsleitung“ führt den Teilnehmer weiter, mit
+    dem Vermerk „keine Teilnahme“, weil die Gebühr trotzdem fällig sein kann.
+  - Web: Der Teilnehmer wird beim Veröffentlichen gar nicht übertragen.
+- **Ohne Rückfrage festgelegt:**
+  - Die Startnummer bleibt reserviert.
+  - Das Flag wird bei keinem Import übernommen.
+  - Die Teilnehmerzahl in der Terminliste zählt weiter alle Gemeldeten.
+- **Umsetzung:**
+  - `db.py`:
+    - Neue Spalte `teilnehmer.keine_teilnahme` (0/1), per `_TEILNEHMER_NEUE_SPALTEN`
+      migriert.
+    - `list_teilnehmer(conn, nur_teilnehmende=False)` bekommt einen optionalen Filter.
+    - Neu: `setze_keine_teilnahme()` und `hat_erfasste_ergebnisse()`.
+    - Gefiltert wird in `berechne_auswertung`, `berechne_teilnehmer_lk_uebersicht`,
+      `berechne_behaeltnis_bedarf`, `alle_leistungsklassen`, `zeitplan_gruppen`,
+      `berechne_zeitplan(_bloecke)` und `kopiere_termin_daten` (Web-Export).
+    - `update_teilnehmer` fasst die Spalte nicht an, Bearbeiten setzt sie also nicht zurück.
+  - `pdf_export.py`:
+    - Gefiltert wird bei Sammel-Bewertungsbögen, Etiketten, leerer Ergebnisliste,
+      Chipnummernliste und Leistungsrichter-Bedarf. Ergebnisliste und Statistik sind über
+      `berechne_auswertung` abgedeckt.
+    - Die Prüfungsleitungs-Übersicht vermerkt „keine Teilnahme“ in der LK-Zelle.
+  - `app.py`, Reiter Teilnehmer:
+    - Neuer Button `teilnahme_btn` mit Rückfrage bei erfassten Ergebnissen.
+    - Die Zeile ist grau (`_farbe("gedaempft")`) und kursiv, „Anmerkungen“ beginnt mit
+      „keine Teilnahme“.
+    - „Bewertungsbogen (PDF)…“ ist für markierte Teilnehmer gesperrt.
+    - Den LK-Filter des Reiters bildet jetzt die eigene, ungefilterte Liste.
+  - `app.py`, übrige Reiter: Der Reiter Ergebniserfassung lädt nur teilnehmende Teilnehmer.
+  - `app_web.py`, zur Absicherung: Die Teilnehmerliste ist gefiltert, und
+    `/teilnehmer/<id>` liefert für markierte Teilnehmer 404.
+  - Tests in `test_db.py`, `test_pdf_export.py`, `test_app_web.py` und `test_app_gui.py`.
+  - Handbuch: neuer Abschnitt „Nicht erschienene Teilnehmer“ in Kapitel 4.
+- **Screenshot** `docs/bilder/handbuch_teilnehmer.png`: beim Build neu aufgenommen, siehe
+  Abschnitt „Version 1.0.39“ unten.
+- **Demo (Marco: „danach update die Demo“):**
+  - `C:\Users\mbruv\Documents\SHS-Demo-vor-Build\demo_erzeugen.py` legt den 11. Teilnehmer
+    „Krüger“ (ED LK 1 Trümmerfeld) mit 98 Punkten an. Er ist bereits als „keine Teilnahme“
+    markiert, wäre sonst also Platz 1.
+  - `Checkliste.md` hat einen neuen Abschnitt „Neu: Keine Teilnahme“.
+  - Die Demo-Termine sind neu erzeugt.
+  - Kontrolliert:
+    - ED LK 1 Trümmerfeld: Albers ist Platz 1 von 3.
+    - Insgesamt 11 Teilnehmer, davon 10 teilnehmend.
+    - Im Teilnehmer-Reiter (offscreen) ist Krüger kursiv, „Anmerkungen“ beginnt mit
+      „keine Teilnahme“.
+- **Verifikations-Subagent:** keine Fehler. Alle `list_teilnehmer`-Aufrufer sind richtig
+  eingeordnet, Migration und Hin- und Rückweg Web funktionieren. Marco hat die vier Hinweise
+  einzeln entschieden:
+  1. **Umgesetzt:** Wer nach dem Veröffentlichen markiert, muss neu veröffentlichen, denn das
+     Flag selbst wird nie übertragen.
+     - Handbuch-Satz ergänzt.
+     - Testkommentar in `test_app_web.py` korrigiert: Der Web-Filter ist nur eine zusätzliche
+       Absicherung.
+  2. **Umgesetzt:** Wechselt man mit abgelehntem Speichern zurück in die Ergebniserfassung,
+     lud der Reiter bisher gar nicht neu.
+     - Jetzt ruft `_tab_gewechselt` `ErgebnisTab.aktualisieren_eingaben_erhalten()` auf. Das lädt
+       die Liste neu und behält ungespeicherte Eingaben über den vorhandenen
+       Override-Mechanismus von `_zeilen_aufbauen` (neuer Helfer `_eingaben_je_id`, auch von
+       `_sortieren_und_neu_aufbauen` genutzt).
+     - Eingaben zu inzwischen markierten Teilnehmern entfallen dabei.
+     - Neuer GUI-Test.
+  3. **Bewusst zurückgestellt:** In der Liste „Aus anderem Termin importieren“ fehlt ein
+     Vermerk für nicht erschienene Teilnehmer der Quelle.
+  4. **Umgesetzt:**
+     - `_teilnahme_umschalten` nutzt `get_teilnehmer` statt `next(...)` und fängt einen
+       zwischenzeitlich gelöschten Teilnehmer ab.
+     - Der GUI-Test prüft den Button-Text jetzt direkt nach dem Klick.
+     - Neue Tests: Zurückholen aus dem Web lässt den nicht erschienenen Teilnehmer und sein
+       Desktop-Ergebnis unberührt; `hat_erfasste_ergebnisse` mit nur Disqualifiziert.
+  - Danach liefen 494 Unittests (141 übersprungen) und 132 GUI-Tests (1 xfail) grün.
+- **Nachprüfung der Nachträge, Befund zu Punkt 2 (echter Fehler, von Marco: „Beheben“):**
+  - Fehler: `_eingaben_je_id` übernahm beim Neuladen die angezeigten Werte ALLER Zeilen.
+  - Folge: Eine unberührte Zeile, deren Ergebnis sich inzwischen in der DB geändert hatte
+    (z. B. Web-Ergebnisse im Reiter „Verwaltung“ zurückgeholt), galt danach als
+    „ungespeichert“. Beim nächsten Speichern, auch beim automatischen Speichern beim
+    Schließen, wäre das neue Ergebnis überschrieben bzw. gelöscht worden.
+  - Behebung: Übernommen werden nur noch tatsächlich abweichende Werte, Punkte je Disziplin
+    und DQ/Abbruch getrennt. Bei gesetztem DQ/Abbruch werden keine Punkte übernommen.
+  - Damit ist auch das gleiche, kleinere Risiko beim Sortieren behoben.
+  - Ebenfalls auf Marcos Wunsch:
+    - Neuer gemeinsamer Kern `ErgebnisTab._neu_laden()` für „Liste aktualisieren“ und das
+      Neuladen mit erhaltenen Eingaben.
+    - Dadurch werden jetzt auch der Art/LK-Filter neu befüllt und die Statuszeile geleert.
+  - Neuer GUI-Test `test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht`.
+  - Danach liefen 494 Unittests und 133 GUI-Tests (1 xfail) grün.
+- **Restpunkte aus der Nachprüfung, von Marco entschieden:**
+  - **Umgesetzt (1):** Gibt es für einen Teilnehmer ungespeicherte Punkte, und er wurde
+    inzwischen anderswo auf DQ oder Abbruch gesetzt, werden die Punkte beim Neuaufbau
+    verworfen. Das passiert nicht mehr stillschweigend.
+    - `_zeilen_aufbauen` merkt sich die betroffenen Teilnehmer.
+    - `_verworfene_melden()` zeigt ein Hinweisfenster. Das gilt beim Tabwechsel und beim
+      Sortieren.
+  - **Umgesetzt (4):** Code-Kommentar von `_zeilen_aufbauen` an die neuen Abläufe angepasst.
+  - **Umgesetzt (5):** neuer GUI-Test, der das Überschreiben beim Sortieren ausschließt, und
+    ein Test für den Hinweis.
+  - **Bewusst zurückgestellt (2/3):** Überschneidungen beim Speichern werden nicht feldweise
+    aufgelöst, sondern je Disziplin bzw. je DQ/Abbruch-Paar. Die Sortierreihenfolge kann
+    kurz nicht passen, wenn sich die DB genau zwischen Sortieren und Anzeige ändert.
+  - Danach liefen 494 Unittests (141 übersprungen) und 135 GUI-Tests (1 xfail) grün.
+
+## Version 1.0.39 (02.10., Build auf Marcos Wunsch „Demo passt, Screenshot erzeugen, Handbuch anpassen sofern nötig, committen und neues Build erzeugen“)
+
+**Enthalten:** Teilnehmer-Status „keine Teilnahme“, samt allen Befund-Korrekturen aus den
+Verifikationsrunden (siehe Abschnitt „02.10.2026: Teilnehmer-Status „keine Teilnahme““ oben).
+Dazu gehört auch das Neuladen der Ergebniserfassung, bei dem ungespeicherte Eingaben
+erhalten bleiben. Marco: „Demo passt.“
+
+**Build-Ablauf:**
+- **Dokumente und Screenshot vor dem Build:**
+  - `docs/bilder/handbuch_teilnehmer.png` neu aufgenommen:
+    - Aufnahme wie bisher offscreen, Segoe UI, temporäre Termin-Datei, Version 1.0.39.
+    - Die Standard-Darstellung wird erzwungen, weil die App sonst Marcos gespeicherte
+      Auswahl aus der Registry liest. Nur gelesen, nichts geschrieben.
+    - Zu sehen ist neu Teilnehmer 9, ausgegraut mit „keine Teilnahme“, und der neue Button.
+  - Handbuch: Abschnitt „Nicht erschienene Teilnehmer“, Bild-Beschriftung.
+  - Programmhilfe `_HILFE_HTML`, `README.md`-Funktionstabelle, Funktionskarte in
+    `docs/index.html`, `docs/UMSTIEG.md` („Neu hinzugekommen“).
+  - `Architektur.md` braucht keine Änderung, weil Module und Aufbau gleich bleiben.
+- **Vor-Build-Prüfung (Verifikations-Subagent):** keine echten Code-Fehler. Marco hat die
+  Punkte einzeln entschieden.
+  - Umgesetzt:
+    - B1: Anrede im neuen Handbuch-Abschnitt „du“ statt „Sie“.
+    - B2: dieser Fortschritt-Eintrag.
+    - B3: „keine Teilnahme“ in der Anmerkungen-Tabelle des Handbuchs.
+    - Code 1: Die Liste verworfener Eingaben ist jetzt ein Rückgabewert von
+      `_zeilen_aufbauen`/`_sortieren_und_neu_aufbauen` statt Zustand im Objekt. Gemeldet
+      wird zentral in `_neu_laden` bzw. `_spalte_geklickt`.
+    - Code 2: Neutralerer Hinweistext („Änderungen an ihren Punkten“).
+    - Code 3: Startnummer im Hinweis („Nr. 7 – Name, Vorname“).
+    - Code 4/5: Der Sortier-Test fängt `QMessageBox.information` ab und kann nicht mehr
+      hängen. Neue Tests: Hinweis beim Sortieren, kein Hinweis bei selbst gesetztem DQ.
+  - Bewusst so belassen („akzeptiert“):
+    - B4: Vermerk in der Export-Tabelle bei der Prüfungsleitungs-Übersicht.
+    - B5: Hinweise in Kapitel 7 Ergebniserfassung.
+- **Version und PDF:** `bump_version.py` setzt 1.0.39, einschließlich „Stand: Version“ im
+  Handbuch. `docs/HANDBUCH.pdf` ist neu erzeugt (27 Seiten).
+- **Tests:**
+  - Standard-Suite: 494 OK, 141 übersprungen.
+  - GUI: 137 bestanden, 1 xfail.
+  - Komplette pytest-Suite gegen `postgres:16` (Podman): 643 bestanden, 2 übersprungen,
+    1 xfail.
+  - `py_compile`: fehlerfrei.
+- Push und Tag macht Marco.

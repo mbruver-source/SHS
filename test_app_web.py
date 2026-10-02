@@ -588,6 +588,28 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIn("status-offen", text)
         self.assertIn("status-fertig", text)
 
+    def test_keine_teilnahme_fehlt_in_liste_und_erfassung_liefert_404(self):
+        # Nutzerwunsch 02.10.2026: "keine Teilnahme" wird beim Veröffentlichen gar nicht
+        # erst übertragen. Wer NACH dem Veröffentlichen markiert, muss neu veröffentlichen
+        # (das Flag selbst wird nie übertragen) - dieser Filter ist nur eine zusätzliche
+        # Absicherung für eine Web-Datenbank, die das Flag doch enthält.
+        db.set_veranstaltung(self.conn, verein="Testverein", datum="2026-09-19")
+        db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Da", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        fehlt_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Fehlt", vorname="B", rufname_hund="Bello", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2,
+        ))
+        db.setze_keine_teilnahme(self.conn, fehlt_id, True)
+
+        self._anmelden()
+        text = self.client.get("/teilnehmer").data.decode()
+        self.assertIn("Da, A", text)
+        self.assertNotIn("Fehlt, B", text)
+        self.assertEqual(self.client.get(f"/teilnehmer/{fehlt_id}").status_code, 404)
+
     # --- Ergebnis erfassen -------------------------------------------------------
 
     @staticmethod

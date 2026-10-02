@@ -95,7 +95,9 @@ from db import (
     delete_teilnehmer,
     eintragen_ergebnis,
     ergebnisse_je_teilnehmer,
+    get_teilnehmer,
     get_veranstaltung,
+    hat_erfasste_ergebnisse,
     init_db,
     leistungsklasse_label,
     liste_termine,
@@ -108,6 +110,7 @@ from db import (
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
+    setze_keine_teilnahme,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
     teilnehmer_gegenstand_hinweis,
@@ -264,6 +267,14 @@ class TeilnehmerTab(QWidget):
         self.bezahlt_btn.clicked.connect(self._bezahlt_umschalten)
         self.bezahlt_btn.setEnabled(False)
 
+        # Nutzerwunsch (02.10.2026): nicht erschienene Teilnehmer als "keine Teilnahme"
+        # markieren - bleiben hier ausgegraut sichtbar, fallen aber aus allen
+        # nachgelagerten Prozessen/Wertungen heraus (siehe db.list_teilnehmer). Der Text
+        # wechselt je nach Auswahl auf "Teilnahme wiederherstellen" (_auswahl_geaendert).
+        self.teilnahme_btn = QPushButton("Keine Teilnahme")
+        self.teilnahme_btn.clicked.connect(self._teilnahme_umschalten)
+        self.teilnahme_btn.setEnabled(False)
+
         # Nutzerwunsch (20.09.): Startnummern zweier Teilnehmer direkt tauschen können,
         # statt eine gewünschte, bereits vergebene Nummer erst manuell an anderer Stelle
         # "freimachen" zu müssen.
@@ -291,6 +302,7 @@ class TeilnehmerTab(QWidget):
         button_zeile.addWidget(self.bearbeiten_btn)
         button_zeile.addWidget(self.loeschen_btn)
         button_zeile.addWidget(self.bezahlt_btn)
+        button_zeile.addWidget(self.teilnahme_btn)
         button_zeile.addWidget(self.tauschen_btn)
         button_zeile.addWidget(import_btn)
         button_zeile.addWidget(self.bewertungsbogen_btn)
@@ -361,7 +373,12 @@ class TeilnehmerTab(QWidget):
         self.loeschen_btn.setEnabled(hat_auswahl)
         self.bezahlt_btn.setEnabled(hat_auswahl)
         self.tauschen_btn.setEnabled(hat_auswahl and len(self._teilnehmer_je_zeile) > 1)
-        self.bewertungsbogen_btn.setEnabled(hat_auswahl)
+        ausgewaehlt = self._teilnehmer_je_id.get(self._ausgewaehlte_id()) if hat_auswahl else None
+        keine_teilnahme = bool(ausgewaehlt and ausgewaehlt.get("keine_teilnahme"))
+        self.teilnahme_btn.setEnabled(hat_auswahl)
+        self.teilnahme_btn.setText("Teilnahme wiederherstellen" if keine_teilnahme else "Keine Teilnahme")
+        # Für nicht erschienene Teilnehmer gibt es keinen Bewertungsbogen mehr.
+        self.bewertungsbogen_btn.setEnabled(hat_auswahl and not keine_teilnahme)
 
     def _namen_je_startnummer(self, ausser_teilnehmer_id: int | None = None) -> dict[int, str]:
         """Für die Warnmeldung bei doppelt vergebener Startnummer im TeilnehmerDialog -
@@ -502,6 +519,33 @@ class TeilnehmerTab(QWidget):
             return
         self.aktualisieren()
 
+    def _teilnahme_umschalten(self) -> None:
+        teilnehmer_id = self._ausgewaehlte_id()
+        if teilnehmer_id is None:
+            return
+        aktuell = get_teilnehmer(self.conn, teilnehmer_id)
+        if aktuell is None:  # zwischenzeitlich gelöscht - nur die Liste auffrischen
+            self.aktualisieren()
+            return
+        neu_keine_teilnahme = not aktuell.get("keine_teilnahme")
+        if neu_keine_teilnahme and hat_erfasste_ergebnisse(self.conn, teilnehmer_id):
+            name = f"{aktuell['nachname']}, {aktuell['vorname']}"
+            antwort = QMessageBox.question(
+                self,
+                "Keine Teilnahme",
+                f"Für „{name}“ sind bereits Ergebnisse erfasst. Sie bleiben gespeichert, "
+                "werden aber nicht mehr gewertet, solange der Teilnehmer als "
+                "„keine Teilnahme“ markiert ist.\n\nTrotzdem markieren?",
+            )
+            if antwort != QMessageBox.Yes:
+                return
+        try:
+            setze_keine_teilnahme(self.conn, teilnehmer_id, neu_keine_teilnahme)
+        except sqlite3.IntegrityError as exc:
+            _fehler_anzeigen(self, exc)
+            return
+        self.aktualisieren()
+
     def aktualisieren(self) -> None:
         teilnehmer = list_teilnehmer(self.conn)
         self._teilnehmer_ids = [t["id"] for t in teilnehmer]
@@ -578,6 +622,19 @@ class TeilnehmerTab(QWidget):
                     schrift.setPointSize(max(schrift.pointSize() - 1, 1))
                     vollstaendig_item.setFont(schrift)
             self.tabelle.setItem(row, 7, vollstaendig_item)
+            if t.get("keine_teilnahme"):
+                # Nutzerwunsch (02.10.2026): nicht erschienene Teilnehmer ausgegraut und mit
+                # Vermerk - überschreibt bewusst die Bezahlt-/Warnfarben dieser Zeile.
+                vollstaendig_item.setText(
+                    "keine Teilnahme" + (f"; {vollstaendig_item.text()}" if vollstaendig_item.text() else "")
+                )
+                for col in range(self.tabelle.columnCount()):
+                    zelle = self.tabelle.item(row, col)
+                    if zelle is not None:
+                        zelle.setForeground(_farbe("gedaempft"))
+                        schrift = zelle.font()
+                        schrift.setItalic(True)
+                        zelle.setFont(schrift)
         # Zuletzt per Spaltenklick gewählte Sortierung erneut anwenden (statt nach jeder
         # Änderung - Speichern, Bezahlt umschalten, ... - stillschweigend auf die
         # Standard-Sortierung nach Start-Nr. zurückzuspringen), bevor die interaktive
@@ -596,7 +653,10 @@ class TeilnehmerTab(QWidget):
         self.filter_combo.blockSignals(True)
         self.filter_combo.clear()
         self.filter_combo.addItem("Alle")
-        self.filter_combo.addItems(alle_leistungsklassen(self.conn))
+        # Bewusst aus der eigenen (ungefilterten) Liste statt alle_leistungsklassen(), das
+        # nur teilnehmende Teilnehmer berücksichtigt - hier sollen auch Leistungsklassen
+        # filterbar bleiben, in denen nur noch "keine Teilnahme"-Teilnehmer stehen.
+        self.filter_combo.addItems(sorted({leistungsklasse_label(t) for t in teilnehmer}))
         index = self.filter_combo.findText(bisherige_auswahl)
         self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
         self.filter_combo.blockSignals(False)
@@ -897,17 +957,23 @@ class ErgebnisTab(QWidget):
         gespeicherte Änderungen!) und aktualisiert den Filter. Wird beim ersten Öffnen
         sowie über "Liste aktualisieren" aufgerufen. Die zuletzt per Spaltenklick
         gewählte Sortierung bleibt dabei erhalten (siehe _zeilen_aufbauen)."""
-        self._teilnehmer_je_zeile = list_teilnehmer(self.conn)
-        self._zeilen_aufbauen()
+        self._neu_laden()
+
+    def _neu_laden(self, werte_override: dict | None = None, status_override: dict | None = None) -> None:
+        """Gemeinsamer Kern von aktualisieren() (ohne Overrides) und
+        aktualisieren_eingaben_erhalten() (mit den noch ungespeicherten Eingaben)."""
+        self._teilnehmer_je_zeile = list_teilnehmer(self.conn, nur_teilnehmende=True)
+        verworfen = self._zeilen_aufbauen(werte_override, status_override)
         # Codeprüfung 22.09., G9: list_teilnehmer() liefert immer die DB-Reihenfolge -
         # ohne erneutes Anwenden ging die per Spaltenklick gewählte Sortierung hier
         # verloren, während _sortierspalte/_sortieraufsteigend stehen blieben, sodass der
         # nächste Klick auf dieselbe Spalte die Richtung "umkehrte", obwohl die Tabelle gar
         # nicht (mehr) danach sortiert war. Erst nach dem Aufbau sortieren, weil einige
         # Sortierschlüssel (Punkte, DQ/Abbruch, Status) aus den Zeilen-Widgets gelesen
-        # werden; die Werte stammen hier frisch aus der DB, es geht also nichts verloren.
+        # werden; die Werte stammen hier frisch aus der DB (bzw. aus den Overrides), es geht
+        # also nichts verloren.
         if self._sortierspalte is not None:
-            self._sortieren_und_neu_aufbauen()
+            verworfen += self._sortieren_und_neu_aufbauen()
 
         # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
         # "Alle" zurückzuspringen.
@@ -922,20 +988,26 @@ class ErgebnisTab(QWidget):
 
         self.status_label.setText("")
         self._filter_anwenden()
+        self._verworfene_melden(verworfen)
 
     def _zeilen_aufbauen(
         self,
         werte_override: dict[int, dict[str, tuple[int | None, int | None]]] | None = None,
         status_override: dict[int, tuple[bool, bool]] | None = None,
-    ) -> None:
+    ) -> list[str]:
         """Baut die Tabellenzeilen aus `self._teilnehmer_je_zeile` (in dessen aktueller
-        Reihenfolge) komplett neu auf - gemeinsam genutzt von aktualisieren() (frisch aus
-        der DB, keine Overrides) und _sortieren_und_neu_aufbauen() (Overrides = die vor
-        dem Sortieren gesicherten, ggf. noch nicht gespeicherten Eingaben je Teilnehmer-
-        ID). `werte_override`/`status_override` überschreiben dabei nur die ANGEZEIGTEN
+        Reihenfolge) komplett neu auf - gemeinsam genutzt von _neu_laden() (also
+        aktualisieren() ohne Overrides und aktualisieren_eingaben_erhalten()) und
+        _sortieren_und_neu_aufbauen(). Overrides sind nur die echten, noch nicht
+        gespeicherten Abweichungen je Teilnehmer-ID (siehe _eingaben_je_id); alles andere
+        kommt frisch aus der DB. `werte_override`/`status_override` überschreiben dabei nur die ANGEZEIGTEN
         Werte - `_geladen_je_zeile`/`_status_geladen_je_zeile` bleiben trotzdem auf dem
         zuletzt aus der DB gelesenen (= gespeicherten) Stand, damit der
-        "ungespeichert"-Vergleich (siehe _zeile_ist_ungespeichert) korrekt bleibt."""
+        "ungespeichert"-Vergleich (siehe _zeile_ist_ungespeichert) korrekt bleibt.
+
+        Rückgabe: Teilnehmer, deren ungespeicherte Punkte verworfen wurden, weil inzwischen
+        Disqualifiziert/Abbruch gespeichert ist (für _verworfene_melden)."""
+        verworfen: list[str] = []
         ergebnis_rows = ergebnisse_je_teilnehmer(self.conn)
         werte_override = werte_override or {}
         status_override = status_override or {}
@@ -1040,12 +1112,18 @@ class ErgebnisTab(QWidget):
 
             # Punkteeingabe sperren/leeren, wenn Disqualifiziert/Abbruch bereits gesetzt
             # ist (auch direkt nach dem Aufbau, nicht erst bei der nächsten Umschaltung).
+            if punkte_override and (angezeigt_dq or angezeigt_abbruch):
+                # Ungespeicherte Punkte, aber inzwischen DQ/Abbruch in der DB - die Eingabe
+                # wird verworfen; der Aufrufer meldet das (Marco, 02.10.2026).
+                nummer = f"Nr. {t['startnummer']} – " if t["startnummer"] is not None else ""
+                verworfen.append(f"{nummer}{t['nachname']}, {t['vorname']}")
             self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
 
         # Spaltenbreiten (und Schriftgröße) an den tatsächlichen Inhalt UND die verfügbare
         # Fensterbreite anpassen - siehe _spaltenbreiten_anpassen().
         self._spaltenbreiten_anpassen()
+        return verworfen
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -1156,7 +1234,7 @@ class ErgebnisTab(QWidget):
         else:
             self._sortierspalte = spalte
             self._sortieraufsteigend = True
-        self._sortieren_und_neu_aufbauen()
+        self._verworfene_melden(self._sortieren_und_neu_aufbauen())
 
     def _sortierschluessel_fuer_zeile(self, row: int, spalte: int):
         """Sortierschlüssel für Zeile `row` bezogen auf die VOR dem Sortieren gültige
@@ -1190,22 +1268,12 @@ class ErgebnisTab(QWidget):
             return wert if wert is not None else -1
         return ""
 
-    def _sortieren_und_neu_aufbauen(self) -> None:
+    def _sortieren_und_neu_aufbauen(self) -> list[str]:
         """Sortiert self._teilnehmer_je_zeile nach der zuletzt gewählten Spalte/Richtung
         und baut die Tabelle neu auf - sichert VORHER die aktuellen (ggf. noch nicht
         gespeicherten) Eingaben je Teilnehmer-ID, damit beim Neuaufbau keine ungespeicherte
         Eingabe verloren geht (siehe Klassen-/Konstruktor-Docstring)."""
-        werte_je_id = {
-            t["id"]: {
-                disziplin: (self._feldwert(suche_feld), self._feldwert(anzeige_feld))
-                for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items()
-            }
-            for row, t in enumerate(self._teilnehmer_je_zeile)
-        }
-        status_je_id = {
-            t["id"]: (dq_box.isChecked(), abbruch_box.isChecked())
-            for t, (dq_box, abbruch_box) in zip(self._teilnehmer_je_zeile, self._status_boxen_je_zeile)
-        }
+        werte_je_id, status_je_id = self._eingaben_je_id()
 
         reihenfolge = sorted(
             range(len(self._teilnehmer_je_zeile)),
@@ -1214,8 +1282,58 @@ class ErgebnisTab(QWidget):
         )
         self._teilnehmer_je_zeile = [self._teilnehmer_je_zeile[i] for i in reihenfolge]
 
-        self._zeilen_aufbauen(werte_je_id, status_je_id)
+        verworfen = self._zeilen_aufbauen(werte_je_id, status_je_id)
         self._filter_anwenden()
+        return verworfen
+
+    def _eingaben_je_id(self) -> tuple[dict, dict]:
+        """Nur die tatsächlich noch NICHT gespeicherten Eingaben (Punkte je Disziplin,
+        DQ/Abbruch-Häkchen) je Teilnehmer-ID - als Overrides für _zeilen_aufbauen().
+        Bewusst nicht einfach alle angezeigten Werte: _zeilen_aufbauen() liest die
+        gespeicherten Werte frisch aus der DB, ein unveränderter, aber veralteter
+        Anzeigewert würde sonst als "ungespeichert" gelten und beim nächsten Speichern
+        einen inzwischen anders gespeicherten Wert (z. B. aus dem Web zurückgeholte
+        Ergebnisse) überschreiben oder löschen (Befund Nachprüfung 02.10.2026)."""
+        werte_je_id: dict = {}
+        status_je_id: dict = {}
+        for row, t in enumerate(self._teilnehmer_je_zeile):
+            dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+            status = (dq_box.isChecked(), abbruch_box.isChecked())
+            if status != self._status_geladen_je_zeile[row]:
+                status_je_id[t["id"]] = status
+            if status[0] or status[1]:
+                continue  # Punktefelder sind gesperrt/geleert - nichts zu übernehmen
+            geladen = self._geladen_je_zeile[row]
+            for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
+                angezeigt = (self._feldwert(suche_feld), self._feldwert(anzeige_feld))
+                if angezeigt != geladen[disziplin]:
+                    werte_je_id.setdefault(t["id"], {})[disziplin] = angezeigt
+        return werte_je_id, status_je_id
+
+    def aktualisieren_eingaben_erhalten(self) -> None:
+        """Lädt die Teilnehmerliste neu aus der Datenbank, behält dabei aber noch nicht
+        gespeicherte Eingaben bei (Befund aus der Verifikation "keine Teilnahme",
+        02.10.2026): Wurde beim Tabwechsel das Speichern abgelehnt, lud der Reiter vorher
+        gar nicht neu - ein inzwischen als "keine Teilnahme" markierter (oder neu
+        angelegter) Teilnehmer blieb bis "Liste aktualisieren" fälschlich drin bzw.
+        fehlte. Eingaben zu Teilnehmern, die nicht mehr in der Liste stehen, entfallen."""
+        self._neu_laden(*self._eingaben_je_id())
+
+    def _verworfene_melden(self, verworfen: list[str]) -> None:
+        """Hinweis, wenn beim Neuaufbau ungespeicherte Punkte verworfen wurden, weil für
+        den Teilnehmer inzwischen Disqualifiziert/Abbruch gespeichert ist. Die Liste kommt
+        als Rückgabewert aus _zeilen_aufbauen (kein Zwischenzustand im Objekt)."""
+        if not verworfen:
+            return
+        namen = "\n".join(dict.fromkeys(verworfen))
+        QMessageBox.information(
+            self,
+            "Eingaben verworfen",
+            "Für folgende Teilnehmer ist inzwischen „Disqualifiziert“ oder „Abbruch“ "
+            "gespeichert. Die noch nicht gespeicherten Änderungen an ihren Punkten wurden "
+            "deshalb verworfen:\n\n"
+            + namen,
+        )
 
     def _aktualisieren_mit_rueckfrage(self) -> None:
         """Reagiert auf den "Liste aktualisieren"-Button: warnt vorher, falls dabei
@@ -3029,8 +3147,10 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._vorheriger_tab_index = index
         widget = self._tabs.widget(index)
         if widget is self.ergebnis_tab and self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-            # Speichern wurde bewusst abgelehnt - keinen automatischen Reload auslösen,
-            # der diese Eingaben sonst sofort wieder verwerfen würde.
+            # Speichern wurde bewusst abgelehnt - neu laden, ohne diese Eingaben zu
+            # verwerfen (z. B. damit ein inzwischen als "keine Teilnahme" markierter
+            # Teilnehmer verschwindet).
+            self.ergebnis_tab.aktualisieren_eingaben_erhalten()
             return
         if hasattr(widget, "aktualisieren"):
             widget.aktualisieren()

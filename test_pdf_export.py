@@ -36,6 +36,7 @@ from db import (
     pruefungen_als_text,
     set_veranstaltung,
     setze_ergebnis_status,
+    setze_keine_teilnahme,
 )
 import pdf_export
 
@@ -211,6 +212,48 @@ class TestPdfExport(unittest.TestCase):
 
     def _pfad(self, name: str) -> str:
         return os.path.join(self.tmpdir, name)
+
+    def _anwesend_und_fehlend(self):
+        """Nutzerwunsch 02.10.2026: ein anwesender und ein als "keine Teilnahme"
+        markierter Teilnehmer, beide mit Ergebnis."""
+        da = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Anwesendmann", vorname="Anna", rufname_hund="Rex", chip_nr="111",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1,
+        ))
+        fehlt = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fehltmann", vorname="Bernd", rufname_hund="Bello", chip_nr="222",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=2,
+        ))
+        eintragen_ergebnis(self.conn, da, "Trümmerfeld", suche=50, anzeige=35)
+        eintragen_ergebnis(self.conn, fehlt, "Trümmerfeld", suche=55, anzeige=38)
+        setze_keine_teilnahme(self.conn, fehlt, True)
+
+    def test_keine_teilnahme_fehlt_in_nachgelagerten_pdfs(self):
+        self._anwesend_und_fehlend()
+        exporte = {
+            "ergebnisliste": pdf_export.erstelle_ergebnisliste_pdf,
+            "etiketten": pdf_export.erstelle_ergebnisliste_etiketten_pdf,
+            "leere_ergebnisliste": pdf_export.erstelle_leere_ergebnisliste_pdf,
+            "chipliste": pdf_export.erstelle_chipnummernliste_pdf,
+            "bewertungsboegen": pdf_export.erstelle_alle_bewertungsboegen_pdf,
+        }
+        for name, funktion in exporte.items():
+            with self.subTest(name):
+                pfad = self._pfad(f"{name}.pdf")
+                funktion(self.conn, pfad)
+                text = _text(pfad)
+                self.assertIn("Anwesendmann", text)
+                self.assertNotIn("Fehltmann", text)
+        self.assertIn("von 1", _text(self._pfad("ergebnisliste.pdf")))
+
+    def test_keine_teilnahme_bleibt_in_pruefungsleitung_uebersicht_mit_vermerk(self):
+        self._anwesend_und_fehlend()
+        pfad = self._pfad("uebersicht.pdf")
+        pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, pfad)
+        text = _text(pfad)
+        self.assertIn("Anwesendmann", text)
+        self.assertIn("Fehltmann", text)
+        self.assertEqual(text.count("keine Teilnahme"), 1)
 
     def test_bewertungsbogen_ed_enthaelt_stammdaten_und_punktzahl(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(

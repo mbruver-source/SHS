@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.38. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.39. Alle Screenshots zeigen erfundene Testdaten.
 
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
@@ -109,7 +109,7 @@ werden von der Datensicherung erfasst.
 
 ## 4. Teilnehmer
 
-![Reiter „Teilnehmer“ mit Anmerkungen](bilder/handbuch_teilnehmer.png)
+![Reiter „Teilnehmer“ mit Anmerkungen und einem ausgegrauten Teilnehmer „keine Teilnahme“](bilder/handbuch_teilnehmer.png)
 
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
@@ -121,9 +121,29 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer. |
 | **„Löschen“** | Löscht den markierten Teilnehmer nach Rückfrage, inklusive Ergebnis. |
 | **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. |
+| **„Keine Teilnahme“** | Markiert einen nicht erschienenen Teilnehmer (siehe unten). Ist er markiert, heißt der Button **„Teilnahme wiederherstellen“**. |
 | **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt. |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
 | **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
+
+### Nicht erschienene Teilnehmer („Keine Teilnahme“)
+
+Erscheint ein Teilnehmer nicht, markierst du ihn und klickst auf **„Keine Teilnahme“**.
+Er bleibt in der Teilnehmerliste, wird aber grau und kursiv dargestellt, und unter
+„Anmerkungen“ steht „keine Teilnahme“. Seine Startnummer bleibt vergeben.
+
+In allen weiteren Schritten kommt er nicht mehr vor: Zeitplan, Ergebniserfassung,
+Auswertung (er zählt auch nicht bei „von X Startern“), Übersicht und Behältnis-Bedarf,
+Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Chipnummernliste und
+Leistungsrichter-Bedarf. Beim Veröffentlichen im Web wird er nicht übertragen. Markierst
+du ihn erst, nachdem der Termin schon veröffentlicht ist, sehen die Richter ihn im Browser
+weiter: Veröffentliche den Termin dann erneut.
+Nur die **„Übersicht für Prüfungsleitung“** führt ihn weiter, mit dem Vermerk
+„keine Teilnahme“, denn die Prüfungsgebühr kann trotzdem fällig sein.
+
+Sind für den Teilnehmer schon Ergebnisse erfasst, fragt das Programm vorher nach. Die
+Ergebnisse bleiben gespeichert und zählen wieder, sobald du
+**„Teilnahme wiederherstellen“** klickst.
 
 ### Die Erfassungsmaske
 
@@ -181,6 +201,7 @@ solltest du vor dem Prüfungstag beheben; **Hinweise** (klein) sind nur Erinneru
 | Gegenstände den Suchdisziplinen nicht vollständig zugeordnet | Hinweis | DK: Die Zuordnung ist begonnen, deckt aber nicht alle drei Disziplinen ab. |
 | Gegenstand der Suchdisziplin nicht zugeordnet | Hinweis | ED (ältere Daten): Gegenstand ohne Zuordnung. Einmal öffnen und speichern behebt das. |
 | Bei ED ist nur ein Gegenstand vorgesehen | Hinweis | ED (ältere Daten) mit mehreren Gegenständen. |
+| keine Teilnahme | Vermerk | Teilnehmer ist als nicht erschienen markiert, die ganze Zeile ist grau (siehe oben). Weitere Meldungen stehen dahinter. |
 
 ### Teilnehmer aus einem früheren Termin übernehmen
 

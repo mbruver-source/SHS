@@ -105,6 +105,11 @@ CREATE TABLE IF NOT EXISTS teilnehmer (
     -- Teilnehmerliste, ohne den kompletten Bearbeiten-Dialog öffnen zu müssen - siehe
     -- setze_bezahlt(). Fließt auch in die "Übersicht für Prüfungsleitung"-PDF ein.
     bezahlt INTEGER NOT NULL DEFAULT 0 CHECK (bezahlt IN (0, 1)),
+    -- Nutzerwunsch 02.10.2026: Teilnehmer ist nicht erschienen ("keine Teilnahme"). Bleibt
+    -- in der Teilnehmerliste (ausgegraut) und in der Prüfungsleitungs-Übersicht, fällt aber
+    -- aus allen nachgelagerten Prozessen/Wertungen heraus - siehe setze_keine_teilnahme()
+    -- und list_teilnehmer(nur_teilnehmende=True).
+    keine_teilnahme INTEGER NOT NULL DEFAULT 0 CHECK (keine_teilnahme IN (0, 1)),
     -- Verwaltungs-/Kontaktdaten (alle optional, siehe TeilnehmerDialog) - "verband" meint
     -- den übergeordneten Dachverband (z.B. VDH), nicht den lokalen "verein" oben.
     verband TEXT,
@@ -486,6 +491,7 @@ _TEILNEHMER_NEUE_SPALTEN = [
     ("halter_mitgliedsverein", "TEXT"),
     ("halter_mitgliedsnummer", "TEXT"),
     ("halter_lu_nr", "TEXT"),
+    ("keine_teilnahme", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 
@@ -745,8 +751,17 @@ def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
     return teilnehmer_id
 
 
-def list_teilnehmer(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("SELECT * FROM teilnehmer ORDER BY startnummer, nachname").fetchall()
+def list_teilnehmer(conn: sqlite3.Connection, nur_teilnehmende: bool = False) -> list[dict]:
+    """Alle Teilnehmer des Termins. Mit `nur_teilnehmende=True` ohne die als "keine
+    Teilnahme" markierten (Nutzerwunsch 02.10.2026) - so laden alle nachgelagerten
+    Prozesse (Ergebniserfassung, Auswertung, Zeitplan, Bedarf, PDFs, Web-Export), damit
+    nicht erschienene Teilnehmer dort nirgends mehr auftauchen. Ohne Filter bleibt es für
+    die Teilnehmerliste selbst, Startnummern, Dubletten-Prüfungen und die
+    Prüfungsleitungs-Übersicht (Gebühren)."""
+    query = "SELECT * FROM teilnehmer"
+    if nur_teilnehmende:
+        query += " WHERE COALESCE(keine_teilnahme, 0) = 0"
+    rows = conn.execute(query + " ORDER BY startnummer, nachname").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -837,6 +852,16 @@ def setze_bezahlt(conn: sqlite3.Connection, teilnehmer_id: int, bezahlt: bool) -
     conn.commit()
 
 
+def setze_keine_teilnahme(conn: sqlite3.Connection, teilnehmer_id: int, keine_teilnahme: bool) -> None:
+    """Markiert einen Teilnehmer als nicht erschienen bzw. nimmt die Markierung zurück
+    (Nutzerwunsch 02.10.2026). Bereits erfasste Ergebnisse bleiben bewusst unangetastet:
+    sie werden nur nicht mehr gewertet und sind nach dem Zurücknehmen wieder wirksam."""
+    conn.execute(
+        "UPDATE teilnehmer SET keine_teilnahme = ? WHERE id = ?", (int(keine_teilnahme), teilnehmer_id)
+    )
+    conn.commit()
+
+
 def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
     conn.execute("DELETE FROM teilnehmer WHERE id = ?", (teilnehmer_id,))
     conn.commit()
@@ -915,6 +940,21 @@ def get_ergebnis(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
     Ergebniszeile, siehe dort)."""
     row = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
     return dict(row) if row else None
+
+
+def hat_erfasste_ergebnisse(conn: sqlite3.Connection, teilnehmer_id: int) -> bool:
+    """True, sobald für den Teilnehmer irgendein Punktwert oder Disqualifiziert/Abbruch
+    eingetragen ist - für die Rückfrage vor "keine Teilnahme" (Nutzerwunsch 02.10.2026)."""
+    ergebnis = get_ergebnis(conn, teilnehmer_id)
+    if ergebnis is None:
+        return False
+    if ergebnis.get("disqualifiziert") or ergebnis.get("abbruch"):
+        return True
+    return any(
+        ergebnis.get(spalte) is not None
+        for spalten in DISZIPLIN_SPALTEN.values()
+        for spalte in spalten
+    )
 
 
 def ergebnisse_je_teilnehmer(conn: sqlite3.Connection) -> dict[int, dict]:
@@ -1057,7 +1097,7 @@ def berechne_teilnehmer_lk_uebersicht(conn) -> dict:
     0 wenn abteilungen_gesamt == 0 (kein aufgerundetes ceil(0/36) das fälschlich 0 ergäbe
     - math.ceil(0/36) ist ohnehin 0, aber explizit behandeln macht die Absicht klarer,
     analog zum bestehenden Muster in pdf_export.erstelle_leistungsrichter_bedarf_pdf())."""
-    teilnehmer = list_teilnehmer(conn)
+    teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
 
     ed = {
         stufe: {
@@ -1147,7 +1187,7 @@ def berechne_behaeltnis_bedarf(conn) -> list[dict]:
     "stufe", "teilnehmer", "leer", "mit_gegenstand", "material_verleitung" (None = gibt
     es in dieser Zeile nicht) und "gesamt"."""
     anzahl = {stufe: 0 for stufe in BEHAELTNIS_POSITIONEN}
-    for t in list_teilnehmer(conn):
+    for t in list_teilnehmer(conn, nur_teilnehmende=True):
         if t["art"] == "DK" or t["disziplin"] == "Behältnisstrecke":
             anzahl[t["stufe"]] += 1
 
@@ -1313,7 +1353,7 @@ def teilnehmer_gegenstand_hinweis(teilnehmer: dict) -> str | None:
 def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
     """Sortierte Liste aller in diesem Termin tatsächlich vorkommenden Art/LK-Label -
     zum Befüllen eines Filters in der Oberfläche."""
-    labels = {leistungsklasse_label(t) for t in list_teilnehmer(conn)}
+    labels = {leistungsklasse_label(t) for t in list_teilnehmer(conn, nur_teilnehmende=True)}
     return sorted(labels)
 
 
@@ -1343,7 +1383,7 @@ def ist_jugendlicher(geburtsdatum: str | None, stichtag: str | None) -> bool:
 
 def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebnis], list[dict]]:
     """Liefert (gerankte Teilnehmer mit Ergebnis, Teilnehmer ohne vollständiges Ergebnis)."""
-    teilnehmer_rows = list_teilnehmer(conn)
+    teilnehmer_rows = list_teilnehmer(conn, nur_teilnehmende=True)
     ergebnis_rows = ergebnisse_je_teilnehmer(conn)
 
     fertig: list[Teilnehmerergebnis] = []
@@ -1544,7 +1584,7 @@ def zeitplan_gruppen(conn: sqlite3.Connection) -> list[dict]:
     Prüfungsblock im Zeitplan sinnvoll ist: bei ED eine Gruppe je (Art, Stufe, Disziplin),
     bei DK eine Gruppe je Stufe UND Disziplin (da DK-Teilnehmer nacheinander in allen drei
     Disziplinen geprüft werden, taucht ein DK-Teilnehmer in bis zu drei Gruppen auf)."""
-    teilnehmer = list_teilnehmer(conn)
+    teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     gruppen: dict[tuple, list] = {}
     for t in teilnehmer:
         if t["art"] == "ED":
@@ -1629,7 +1669,7 @@ def berechne_zeitplan(conn: sqlite3.Connection) -> list[dict]:
     berechne_zeitplan_bloecke."""
     veranstaltung = get_veranstaltung(conn)
     uhrzeit_start = _zeitplan_startzeit(veranstaltung)
-    alle_teilnehmer = list_teilnehmer(conn)
+    alle_teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     ergebnis = []
     for richter in list_zeitplan_richter(conn):
         aktuelle_zeit = uhrzeit_start
@@ -1669,7 +1709,7 @@ def berechne_zeitplan_bloecke(conn: sqlite3.Connection) -> list[dict]:
     Jeder zurückgegebene Eintrag wird um start/ende/teilnehmer_anzahl ergänzt."""
     veranstaltung = get_veranstaltung(conn)
     uhrzeit_start = _zeitplan_startzeit(veranstaltung)
-    alle_teilnehmer = list_teilnehmer(conn)
+    alle_teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     ergebnis = []
     for richter in list_zeitplan_richter(conn):
         aktuelle_zeit = uhrzeit_start
@@ -2355,7 +2395,7 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
         )
 
     id_zuordnung: dict[int, int] = {}
-    for alt in list_teilnehmer(quelle_conn):
+    for alt in list_teilnehmer(quelle_conn, nur_teilnehmende=True):
         neu = NeuerTeilnehmer(
             nachname=alt["nachname"], vorname=alt["vorname"], rufname_hund=alt["rufname_hund"],
             art=alt["art"], stufe=alt["stufe"], disziplin=alt["disziplin"],

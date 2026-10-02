@@ -700,7 +700,9 @@ def admin_termin_loeschen(schema_name):
 @_termin_erforderlich
 def teilnehmerliste(conn):
     veranstaltung = db.get_veranstaltung(conn)
-    alle_teilnehmer = db.list_teilnehmer(conn)
+    # "keine Teilnahme"-Teilnehmer (Nutzerwunsch 02.10.2026) werden schon beim
+    # Veröffentlichen nicht übertragen - der Filter hier ist nur die Absicherung dafür.
+    alle_teilnehmer = db.list_teilnehmer(conn, nur_teilnehmende=True)
     _, ausstehend = db.berechne_auswertung(conn)
     offene_ids = {t["id"] for t in ausstehend}
     zeilen = [
@@ -874,7 +876,7 @@ def ergebnis_erfassen(conn, teilnehmer_id):
     damit eine zwischenzeitliche fremde Änderung nicht überschrieben wird. Wenn nein
     (Richter hat diese Disziplin tatsächlich bearbeitet), wird wie bisher gespeichert."""
     teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
-    if teilnehmer is None:
+    if teilnehmer is None or teilnehmer.get("keine_teilnahme"):
         abort(404)
     disziplinen = [teilnehmer["disziplin"]] if teilnehmer["art"] == "ED" else db.ALLE_DISZIPLINEN
 

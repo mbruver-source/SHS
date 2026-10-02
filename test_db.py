@@ -50,6 +50,7 @@ from db import (
     get_teilnehmer,
     get_veranstaltung,
     gibt_es_admin,
+    hat_erfasste_ergebnisse,
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
     init_db,
@@ -74,6 +75,7 @@ from db import (
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
+    setze_keine_teilnahme,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
     teilnehmer_gegenstand_hinweis,
@@ -747,6 +749,89 @@ class TestDatenbank(unittest.TestCase):
 
         setze_bezahlt(self.conn, tid, False)
         self.assertEqual(get_teilnehmer(self.conn, tid)["bezahlt"], 0)
+
+    # --- "keine Teilnahme" (Nutzerwunsch 02.10.2026) ---------------------------
+
+    def _zwei_ed1_teilnehmer(self):
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Anwesend", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fehlt", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        return a, b
+
+    def test_setze_keine_teilnahme_filtert_nur_bei_nur_teilnehmende(self):
+        a, b = self._zwei_ed1_teilnehmer()
+        self.assertEqual(get_teilnehmer(self.conn, b)["keine_teilnahme"], 0)
+        setze_keine_teilnahme(self.conn, b, True)
+        self.assertEqual(get_teilnehmer(self.conn, b)["keine_teilnahme"], 1)
+        self.assertEqual([t["id"] for t in list_teilnehmer(self.conn)], [a, b])
+        self.assertEqual([t["id"] for t in list_teilnehmer(self.conn, nur_teilnehmende=True)], [a])
+        # Startnummer bleibt reserviert.
+        self.assertIn(2, vergebene_startnummern(self.conn))
+        setze_keine_teilnahme(self.conn, b, False)
+        self.assertEqual([t["id"] for t in list_teilnehmer(self.conn, nur_teilnehmende=True)], [a, b])
+
+    def test_bearbeiten_setzt_keine_teilnahme_nicht_zurueck(self):
+        _, b = self._zwei_ed1_teilnehmer()
+        setze_keine_teilnahme(self.conn, b, True)
+        update_teilnehmer(self.conn, b, NeuerTeilnehmer(
+            nachname="Fehlt", vorname="Neu", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        self.assertEqual(get_teilnehmer(self.conn, b)["keine_teilnahme"], 1)
+
+    def test_hat_erfasste_ergebnisse(self):
+        a, b = self._zwei_ed1_teilnehmer()
+        self.assertFalse(hat_erfasste_ergebnisse(self.conn, a))
+        eintragen_ergebnis(self.conn, a, "Trümmerfeld", 50, 35)
+        self.assertTrue(hat_erfasste_ergebnisse(self.conn, a))
+        setze_ergebnis_status(self.conn, b, disqualifiziert=False, abbruch=True)
+        self.assertTrue(hat_erfasste_ergebnisse(self.conn, b))
+        setze_ergebnis_status(self.conn, b, disqualifiziert=True, abbruch=False)
+        self.assertTrue(hat_erfasste_ergebnisse(self.conn, b))
+
+    def test_keine_teilnahme_faellt_aus_auswertung_und_zaehlt_nicht_als_starter(self):
+        a, b = self._zwei_ed1_teilnehmer()
+        eintragen_ergebnis(self.conn, a, "Trümmerfeld", 50, 35)
+        eintragen_ergebnis(self.conn, b, "Trümmerfeld", 55, 38)
+        fertig, _ = berechne_auswertung(self.conn)
+        self.assertEqual(fertig[0].von_startern, 2)
+
+        setze_keine_teilnahme(self.conn, b, True)
+        fertig, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual([t.id for t in fertig], [str(a)])
+        self.assertEqual(fertig[0].von_startern, 1)
+        self.assertEqual(ausstehend, [])
+
+        # Zurücknehmen: das gespeicherte Ergebnis ist wieder wirksam.
+        setze_keine_teilnahme(self.conn, b, False)
+        fertig, _ = berechne_auswertung(self.conn)
+        self.assertEqual({t.id for t in fertig}, {str(a), str(b)})
+
+    def test_keine_teilnahme_nicht_in_ausstehend_und_lk_uebersicht(self):
+        a, b = self._zwei_ed1_teilnehmer()
+        setze_keine_teilnahme(self.conn, b, True)
+        _, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual([t["id"] for t in ausstehend], [a])
+        self.assertEqual(berechne_teilnehmer_lk_uebersicht(self.conn)["ed"][1]["Trümmerfeld"], 1)
+        setze_keine_teilnahme(self.conn, a, True)
+        self.assertEqual(alle_leistungsklassen(self.conn), [])
+
+    def test_migration_ergaenzt_keine_teilnahme_spalte_in_alter_termin_datei(self):
+        self._lege_alte_teilnehmer_tabelle_an()
+        self.conn.execute(
+            "INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin, startnummer) "
+            "VALUES ('Alt', 'Vorname', 'Hund', 'ED', 1, 'Trümmerfeld', 1)"
+        )
+        self.conn.commit()
+
+        conn = self._neu_verbinden()
+        alt = list_teilnehmer(conn)[0]
+        self.assertEqual(alt["keine_teilnahme"], 0)
+        self.assertEqual(len(list_teilnehmer(conn, nur_teilnehmende=True)), 1)
+        setze_keine_teilnahme(conn, alt["id"], True)
+        self.assertEqual(list_teilnehmer(conn, nur_teilnehmende=True), [])
 
     def test_migration_ergaenzt_bezahlt_und_gegenstand_zuordnung_spalten_in_alter_termin_datei(self):
         # Simuliert eine Termin-Datei, die vor Einführung der Bezahlt-Markierung UND der
@@ -1660,6 +1745,17 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual(richter[1]["name"], "Richter 2")
         self.assertEqual([r["reihenfolge"] for r in richter], [0, 1])
 
+    def test_zeitplan_gruppen_ohne_keine_teilnahme(self):
+        # Nutzerwunsch 02.10.2026: nicht erschienene Teilnehmer fallen aus dem Zeitplan.
+        a = self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=1)
+        b = self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=2)
+        dk = self._teilnehmer("DK", 1, startnummer=3)
+        setze_keine_teilnahme(self.conn, b, True)
+        setze_keine_teilnahme(self.conn, dk, True)
+        gruppen = zeitplan_gruppen(self.conn)
+        self.assertEqual(len(gruppen), 1)
+        self.assertEqual([t["id"] for t in gruppen[0]["teilnehmer"]], [a])
+
     def test_richter_eigener_name(self):
         add_zeitplan_richter(self.conn, name="Frau Muster")
         self.assertEqual(list_zeitplan_richter(self.conn)[0]["name"], "Frau Muster")
@@ -2116,6 +2212,42 @@ class TestTerminSync(unittest.TestCase):
         os.close(fd)
         os.remove(pfad)  # init_db soll die Datei selbst neu anlegen
         return pfad
+
+    def test_keine_teilnahme_wird_nicht_kopiert(self):
+        # Nutzerwunsch 02.10.2026: nicht erschienene Teilnehmer gar nicht ins Web übertragen.
+        add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Da", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        fehlt = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Fehlt", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        setze_keine_teilnahme(self.quelle, fehlt, True)
+
+        kopiere_termin_daten(self.quelle, self.ziel)
+
+        self.assertEqual([t["nachname"] for t in list_teilnehmer(self.ziel)], ["Da"])
+
+    def test_rueckholen_laesst_keine_teilnahme_unberuehrt(self):
+        # Hin- und Rückweg: der nicht übertragene Teilnehmer behält sein Desktop-Ergebnis,
+        # der übertragene bekommt die Web-Ergebnisse.
+        da = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Da", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        fehlt = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Fehlt", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        eintragen_ergebnis(self.quelle, fehlt, "Trümmerfeld", 40, 20)
+        setze_keine_teilnahme(self.quelle, fehlt, True)
+        kopiere_termin_daten(self.quelle, self.ziel)
+        web_da = list_teilnehmer(self.ziel)[0]["id"]
+        eintragen_ergebnis(self.ziel, web_da, "Trümmerfeld", 55, 35)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.ziel, self.quelle)
+
+        self.assertEqual(bericht.nicht_gefunden, [])
+        self.assertEqual(get_ergebnis(self.quelle, da)["suche_truemmerfeld"], 55)
+        self.assertEqual(get_ergebnis(self.quelle, fehlt)["suche_truemmerfeld"], 40)
+        self.assertEqual(get_teilnehmer(self.quelle, fehlt)["keine_teilnahme"], 1)
 
     def test_kopiert_veranstaltung_und_teilnehmer(self):
         set_veranstaltung(

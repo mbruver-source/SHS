@@ -953,7 +953,11 @@ stehen, jede Disziplin aber nur einmal vorkommen).</p>
 "Gegenstände unvollständig (Dreikampf)") solltest du vor dem Prüfungstag beheben; kleine
 Hinweise ohne ⚠ sind nur Erinnerungen.</p>
 <p>"Bezahlt umschalten" setzt den Zahlungsstatus des markierten Teilnehmers, ohne den ganzen
-Dialog zu öffnen. "Startnummer tauschen…" tauscht die Nummern zweier Teilnehmer.
+Dialog zu öffnen. "Keine Teilnahme" markiert einen nicht erschienenen Teilnehmer: Er bleibt
+grau in der Liste, fällt aber aus Zeitplan, Ergebniserfassung, Auswertung und allen
+Ausdrucken außer der Übersicht für die Prüfungsleitung heraus (erfasste Ergebnisse bleiben
+gespeichert; "Teilnahme wiederherstellen" macht es rückgängig). "Startnummer tauschen…"
+tauscht die Nummern zweier Teilnehmer.
 "Aus anderem Termin importieren…" übernimmt Stammdaten aus einem früheren Termin (ohne
 Startnummer, Gegenstände, Bezahlt-Status und Ergebnis). "Bewertungsbogen (PDF)…" erzeugt den
 Bogen nur für den markierten Teilnehmer. Die Filter Art/LK, Start-Nr. und Bezahlt blenden

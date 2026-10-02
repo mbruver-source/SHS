@@ -67,6 +67,7 @@ from db import (
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
+    setze_keine_teilnahme,
     update_teilnehmer,
 )
 from db_import import (
@@ -310,6 +311,249 @@ def test_bezahlt_umschalten_per_klick_aendert_datenbank_und_tabelle(qtbot, conn)
 
     assert list_teilnehmer(conn)[0]["bezahlt"] == 1
     assert "bezahlt" in tab.tabelle.item(0, 6).text()
+
+
+# --- Keine Teilnahme (Nutzerwunsch 02.10.2026) -----------------------------------
+
+
+def test_keine_teilnahme_button_schaltet_um_und_graut_zeile_aus(qtbot, conn):
+    _teilnehmer_anlegen(conn)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    assert not tab.teilnahme_btn.isEnabled()
+    tab.tabelle.selectRow(0)
+    assert tab.teilnahme_btn.isEnabled()
+    assert tab.teilnahme_btn.text() == "Keine Teilnahme"
+    normale_farbe = tab.tabelle.item(0, 1).foreground().color()
+
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+
+    assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 1
+    # Bleibt in der Liste, ausgegraut und mit Vermerk.
+    assert tab.tabelle.rowCount() == 1
+    assert tab.tabelle.item(0, 7).text().startswith("keine Teilnahme")
+    assert tab.tabelle.item(0, 1).font().italic()
+    assert tab.tabelle.item(0, 1).foreground().color() != normale_farbe
+    # Ohne erneute Auswahl: aktualisieren() frischt Text/Sperren direkt nach dem Klick auf.
+    assert tab.teilnahme_btn.text() == "Teilnahme wiederherstellen"
+    assert not tab.bewertungsbogen_btn.isEnabled()
+
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+
+    assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 0
+    assert tab.teilnahme_btn.text() == "Keine Teilnahme"
+    assert tab.bewertungsbogen_btn.isEnabled()
+
+
+def test_keine_teilnahme_fragt_bei_erfassten_ergebnissen_nach(qtbot, conn, monkeypatch):
+    tid = _teilnehmer_anlegen(conn)
+    eintragen_ergebnis(conn, tid, "Flächensuche", 50, 35)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.selectRow(0)
+
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.No)
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+    assert len(fragen) == 1
+    assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 0
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+    assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 1
+    # Das Ergebnis bleibt gespeichert.
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
+
+
+def test_keine_teilnahme_fehlt_in_ergebnis_tab(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fehlt = _teilnehmer_anlegen(conn, nachname="Fehlt", startnummer=2)
+    setze_keine_teilnahme(conn, fehlt, True)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+
+    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Da"]
+
+
+def test_ergebnis_tab_laedt_nach_abgelehntem_speichern_neu_und_behaelt_eingaben(qtbot, termin, monkeypatch):
+    # Befund aus der Verifikation (02.10.2026): beim Zurückwechseln mit abgelehntem
+    # Speichern blieb ein inzwischen als "keine Teilnahme" markierter Teilnehmer stehen.
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fehlt = _teilnehmer_anlegen(conn, nachname="Fehlt", startnummer=2)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    ergebnis_tab = fenster.ergebnis_tab
+    zeile_da = next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == "Da")
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile_da]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    assert ergebnis_tab.hat_ungespeicherte_aenderungen()
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    setze_keine_teilnahme(conn, fehlt, True)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    assert [t["nachname"] for t in ergebnis_tab._teilnehmer_je_zeile] == ["Da"]
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("50", "30")
+    assert ergebnis_tab.hat_ungespeicherte_aenderungen()
+
+
+def test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(qtbot, termin, monkeypatch):
+    # Befund Nachprüfung (02.10.2026): beim Neuladen mit erhaltenen Eingaben dürfen nur
+    # wirklich geänderte Werte übernommen werden - sonst würde ein unberührter, veralteter
+    # Anzeigewert ein inzwischen gespeichertes Ergebnis (z. B. aus dem Web zurückgeholt)
+    # beim nächsten Speichern löschen.
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    _teilnehmer_anlegen(conn, nachname="Bearbeitet", startnummer=1)
+    unberuehrt = _teilnehmer_anlegen(conn, nachname="Unberuehrt", startnummer=2)
+    dq = _teilnehmer_anlegen(conn, nachname="Dq", startnummer=3)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    ergebnis_tab = fenster.ergebnis_tab
+
+    def zeile(nachname):
+        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    ergebnis_tab._status_boxen_je_zeile[zeile("Dq")][0].setChecked(True)
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    # Inzwischen kommt für den unberührten Teilnehmer ein Ergebnis in die DB.
+    eintragen_ergebnis(conn, unberuehrt, "Flächensuche", 55, 35)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Unberuehrt")]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
+    assert not ergebnis_tab._zeile_ist_ungespeichert(zeile("Unberuehrt"))
+    assert ergebnis_tab._zeile_ist_ungespeichert(zeile("Bearbeitet"))
+    assert ergebnis_tab._status_boxen_je_zeile[zeile("Dq")][0].isChecked()
+
+    ergebnis_tab.alle_speichern()
+    assert get_ergebnis(conn, unberuehrt)["suche_flaechensuche"] == 55
+    assert get_ergebnis(conn, dq)["disqualifiziert"] == 1
+
+
+def test_ergebnis_tab_sortieren_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(qtbot, conn, monkeypatch):
+    # Wie oben, aber über den Sortier-Pfad (Spaltenklick) statt über den Tabwechsel.
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    _teilnehmer_anlegen(conn, nachname="Bearbeitet", startnummer=1)
+    unberuehrt = _teilnehmer_anlegen(conn, nachname="Unberuehrt", startnummer=2)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    def zeile(nachname):
+        return next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    eintragen_ergebnis(conn, unberuehrt, "Flächensuche", 55, 35)
+
+    tab._spalte_geklickt(1)
+
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Unberuehrt")]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
+    assert not tab._zeile_ist_ungespeichert(zeile("Unberuehrt"))
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("50", "30")
+
+    tab.alle_speichern()
+    assert get_ergebnis(conn, unberuehrt)["suche_flaechensuche"] == 55
+    assert hinweise == []
+
+
+def test_ergebnis_tab_meldet_verworfene_eingabe_auch_beim_sortieren(qtbot, conn, monkeypatch):
+    tid = _teilnehmer_anlegen(conn, nachname="Getippt", startnummer=7)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    setze_ergebnis_status(conn, tid, disqualifiziert=False, abbruch=True)
+
+    tab._spalte_geklickt(1)
+
+    assert len(hinweise) == 1
+    assert "Nr. 7 – Getippt, Max" in hinweise[0]
+    assert tab._status_boxen_je_zeile[0][1].isChecked()
+
+
+def test_ergebnis_tab_kein_hinweis_bei_selbst_gesetztem_dq(qtbot, termin, monkeypatch):
+    # Selbst (ungespeichert) angehakte DQ: keine Meldung, das Häkchen bleibt erhalten.
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    tid = _teilnehmer_anlegen(conn, nachname="Selbst", startnummer=1)
+    eintragen_ergebnis(conn, tid, "Flächensuche", 50, 30)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    ergebnis_tab = fenster.ergebnis_tab
+    ergebnis_tab._status_boxen_je_zeile[0][0].setChecked(True)
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    assert hinweise == []
+    assert ergebnis_tab._status_boxen_je_zeile[0][0].isChecked()
+    assert ergebnis_tab.hat_ungespeicherte_aenderungen()
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
+
+
+def test_ergebnis_tab_meldet_verworfene_eingabe_bei_zwischenzeitlichem_dq(qtbot, termin, monkeypatch):
+    # Marco (02.10.2026): ungespeicherte Punkte, die wegen eines inzwischen gespeicherten
+    # DQ/Abbruch verworfen werden, nicht stillschweigend verschwinden lassen.
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    tid = _teilnehmer_anlegen(conn, nachname="Getippt", startnummer=1)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    ergebnis_tab = fenster.ergebnis_tab
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    assert len(hinweise) == 1
+    assert "Getippt, Max" in hinweise[0]
+    assert ergebnis_tab._status_boxen_je_zeile[0][0].isChecked()
+    assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] is None
 
 
 def test_filter_bezahlt_blendet_zeilen_nach_status_aus(qtbot, conn):

@@ -55,6 +55,8 @@ So sieht ein Bewertungsbogen aus, den das Programm direkt erzeugt, ohne Serienbr
   direkt einlesen (Reiter „Export“ und „Formular-Import“).
 - Andere Meldeformulare mit Hilfe einer KI einlesen (Reiter „Formular-Import“).
 - Disqualifikation und Abbruch werden in der Ergebniserfassung eigens erfasst.
+- Nicht erschienene Teilnehmer per „Keine Teilnahme“ markieren (Reiter „Teilnehmer“). Sie
+  fallen dann aus Zeitplan, Wertung und Ausdrucken heraus, ohne gelöscht zu werden.
 - Ergebniseingabe durch mehrere Richter gleichzeitig im Browser (optional, siehe
   [README_CONTAINER.md](../README_CONTAINER.md)).
 

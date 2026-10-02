@@ -594,7 +594,7 @@ def erstelle_alle_bewertungsboegen_pdf(
     Trümmerfeld" - siehe BewertungsbogenAuswahlDialog in app.py). None (Standard, auch bei
     einem leeren Set gälte sonst 'nichts auswählen') bedeutet weiterhin ALLE Teilnehmer,
     identisch zum bisherigen Verhalten."""
-    teilnehmer = list_teilnehmer(conn)
+    teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     if erlaubte_labels is not None:
         teilnehmer = [t for t in teilnehmer if leistungsklasse_label(t) in erlaubte_labels]
     veranstaltung = get_veranstaltung(conn)
@@ -767,7 +767,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     fertig, _ausstehend = berechne_auswertung(conn)
     fertig_je_id = {erg.id: erg for erg in fertig}
     ergebnis_je_id = {str(r["teilnehmer_id"]): dict(r) for r in conn.execute("SELECT * FROM ergebnisse").fetchall()}
-    alle_teilnehmer = list_teilnehmer(conn)
+    alle_teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
 
     def sortier_schluessel(t):
         erg = fertig_je_id.get(str(t["id"]))
@@ -851,7 +851,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
     die bereits ein digitales Ergebnis haben, denn der Sinn dieses Formulars ist gerade
     die papierbasierte Erfassung unabhängig vom aktuellen Datenbankstand."""
     veranstaltung = get_veranstaltung(conn)
-    teilnehmer = list_teilnehmer(conn)
+    teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
 
     story: list = []
     titel = "Ergebnisliste – Formular zum Ausfüllen"
@@ -1180,6 +1180,11 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
         for t in teilnehmer:
             gebuehr = _euro_text(pruefungsgebuehr_fuer_art(veranstaltung, t["art"]))
             impfung_iso = t["tollwutimpfung_bis"]
+            lk_text = leistungsklasse_label(t)
+            if t.get("keine_teilnahme"):
+                # Nutzerwunsch 02.10.2026: nicht erschienene Teilnehmer bleiben hier (die
+                # Gebühr kann trotzdem fällig sein), aber mit sichtbarem Vermerk.
+                lk_text += "<br/><i>keine Teilnahme</i>"
             impfung_stil = (
                 _UEBERSICHT_ZELLE_ROT if _impfung_hervorheben(impfung_iso, pruefungsdatum) else _UEBERSICHT_ZELLE
             )
@@ -1189,7 +1194,7 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
                 Paragraph(_p_wert(t["verein"]), _UEBERSICHT_ZELLE),
                 Paragraph(_p_wert(t["rufname_hund"]), _UEBERSICHT_ZELLE),
                 Paragraph(_p_wert(t["chip_nr"]), _UEBERSICHT_ZELLE),
-                Paragraph(leistungsklasse_label(t), _UEBERSICHT_ZELLE),
+                Paragraph(lk_text, _UEBERSICHT_ZELLE),
                 Paragraph(gebuehr, _UEBERSICHT_ZELLE),
                 Paragraph("Ja" if t["bezahlt"] else "", _UEBERSICHT_ZELLE),
                 Paragraph(_datum_kurz(impfung_iso) or "–", impfung_stil),
@@ -1235,7 +1240,7 @@ def erstelle_chipnummernliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     siehe Modulkommentar oben."""
     veranstaltung = get_veranstaltung(conn)
     teilnehmer = sorted(
-        list_teilnehmer(conn), key=lambda t: (t["startnummer"] is None, t["startnummer"])
+        list_teilnehmer(conn, nur_teilnehmende=True), key=lambda t: (t["startnummer"] is None, t["startnummer"])
     )
 
     story: list = []
@@ -1293,7 +1298,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     Richter. Darunter der Behältnis-Bedarf der Behältnisstrecke je LK (siehe
     db.berechne_behaeltnis_bedarf)."""
     veranstaltung = get_veranstaltung(conn)
-    teilnehmer = list_teilnehmer(conn)
+    teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
 
     story: list = []
     titel = "Richter-Bedarf"
