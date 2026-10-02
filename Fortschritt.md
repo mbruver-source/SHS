@@ -3210,18 +3210,18 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | geplant | Siehe „U12 – Plan“ unter der Tabelle |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | geplant | Siehe „U13 – Plan“ unter der Tabelle |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
-| K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | offen | |
-| K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | offen | |
-| K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | offen | |
-| K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | offen | |
-| K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | offen | |
-| K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | offen | |
-| K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | offen | |
-| K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | offen | |
-| K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | offen | |
-| K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | offen | |
-| K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | offen | |
-| K12 | GitHub-Release-Seite ohne Release-Notes | offen | |
+| K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
+| K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | geplant | Siehe „K1–K12 – Plan“ |
+| K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | geplant | Siehe „K1–K12 – Plan“ |
+| K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | geplant | Siehe „K1–K12 – Plan“ |
+| K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | geplant | Siehe „K1–K12 – Plan“ |
+| K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | geplant | Siehe „K1–K12 – Plan“ |
+| K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | geplant | Siehe „K1–K12 – Plan“ |
+| K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | geplant | Siehe „K1–K12 – Plan“ |
+| K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
+| K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
+| K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | geplant | Siehe „K1–K12 – Plan“ |
+| K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | offen | |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | offen | |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | offen | |
@@ -3406,3 +3406,36 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   ergänzen. Optional kommt „Große Schrift“ unter „Ansicht“ dazu.
 - **Standard-Design kontrastreicher:** Reiternamen und Spaltenköpfe werden dunkler bzw.
   größer. Die Theme-Tests (`test_theme.py`) beachten.
+
+### K1–K12 – Plan (02.10.2026, alle zur Umsetzung freigegeben)
+- **K1 Ergebniserfassung:**
+  - Leere Zeilen zeigen „noch kein Ergebnis“ statt „✓ gespeichert“.
+  - Statusspalte und Zahlen in den Zellen werden nicht mehr abgeschnitten.
+- **K2 Namenslisten:** „Greta Graf; Ina Iske …“ statt „Graf, Greta, Iske, Ina …“, in der
+  Auswertung und im Ergebnisliste-PDF.
+- **K3 Ergebnisliste-PDF:**
+  - Bei Disqualifikation steht in der Platz-Spalte „Disq.“ statt „nB“.
+  - Eine Prüfungsüberschrift steht nie allein am Seitenende.
+- **K4:** „(bisheriges Verhalten)“ in der Bewertungsbögen-Auswahl streichen.
+- **K5 Etiketten:** kein „, ,“ bei leerem Verein; nB/Disq. auf dem Etikett kennzeichnen.
+- **K6 Termin anlegen:**
+  - Bleiben Verband oder Meldestelle leer, kommt ein Hinweis, dass sie dann auf dem
+    Anmeldeformular fehlen. Speichern bleibt trotzdem möglich.
+  - Der Ort kommt aufs Anmeldeformular.
+- **K7 Teilnehmerliste:**
+  - Bei Mehrfachmarkierung wirken „Bezahlt umschalten“ und „Keine Teilnahme“ auf alle
+    markierten Teilnehmer.
+  - Nach dem Speichern bleibt die Markierung beim selben Teilnehmer.
+  - Bei „Keine Teilnahme“ entfällt „⚠ Gegenstand fehlt“.
+- **K8 Ablehnungshinweis „nicht angeboten“** (PDF-, CSV- und OMA-Import): Der Hinweis wird so
+  formuliert, dass er nicht zum bloßen Freischalten verleitet, z. B. „bitte mit dem
+  Teilnehmer klären; falls die Prüfung doch angeboten wird: Reiter Verwaltung …“.
+- **K9 Rangliste:** Klar machen, dass „von x“ nur Gewertete zählt, z. B. „1. von 2 gewerteten
+  (5 gemeldet)“ oder per Tooltip. Die Form bei der Umsetzung kurz bestätigen.
+- **K10 Sicherungs-Dateiname:** mit Prüfungsdatum und Verein statt nur dem Tagesdatum, z. B.
+  `SHS-Sicherung_2026-11-14_Testhausen_erstellt-2026-10-02.zip`.
+- **K11:** Strg+S löst in der Ergebniserfassung „Alle Ergebnisse speichern“ aus.
+- **K12 Release-Notes:**
+  - Beim Build wird eine kurze deutsche Beschreibung „Was ist neu“ für das GitHub-Release
+    erzeugt, z. B. als Datei oder Text für `build-installer.yml` bzw. die Release-Seite.
+  - Veröffentlichen bleibt Marcos Aktion.
