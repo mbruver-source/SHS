@@ -3196,7 +3196,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 
 | ID | Punkt (Details im Bericht) | Status | Entscheidung / Plan |
 |---|---|---|---|
-| U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | offen | |
+| U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | offen | |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | offen | |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | offen | |
@@ -3225,3 +3225,41 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | offen | |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | offen | |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | offen | |
+
+### U1 – Plan (mit Marco geklärt am 02.10.2026)
+
+**Sammelvergabe:**
+- Neuer Knopf **„Fehlende Startnummern vergeben…“** im Reiter „Teilnehmer“.
+- Er vergibt nur an Teilnehmer **ohne** Startnummer. Bereits vergebene Nummern werden nie
+  überschrieben.
+- Teilnehmer mit Status „Keine Teilnahme“ bleiben außen vor (Annahme, bei der Umsetzung
+  bestätigen).
+- Reihenfolge: nach Prüfung (Art + LK + Disziplin), innerhalb der Prüfung nach Name.
+
+**Nummernbereiche:**
+- Je Prüfung (Art + LK + Disziplin, also die 12 Prüfungen aus „Angebotene Prüfungen“) lässt
+  sich ein Bereich von–bis vorgeben, z. B. DK LK 1: 1–20.
+- Gespeichert wird je Termin in den Veranstaltungsdaten (Reiter „Verwaltung“ →
+  „Veranstaltungsdaten bearbeiten…“ bzw. beim Anlegen).
+- Ein neuer Termin übernimmt die Bereiche vom letzten Termin, wie heute Verein/Ort.
+- Überlappende Bereiche werden beim Speichern abgelehnt (Annahme, bei der Umsetzung
+  bestätigen).
+- **Ein Bereich ist Pflicht:** Für Prüfungen ohne Bereich vergibt die Sammelvergabe keine
+  Nummern. Ist ein Bereich voll, bleiben die übrigen Teilnehmer ohne Nummer. In beiden
+  Fällen nennt die Abschlussmeldung die betroffenen Teilnehmer bzw. Prüfungen.
+
+**Kein Vorschlag bei Anlage:**
+- Ein neuer Teilnehmer startet mit gesetztem Haken „Startnummer steht noch nicht fest“ und
+  ohne Nummer.
+- Erst wenn man den Haken entfernt, wird die **kleinste freie Nummer** eingetragen: im
+  Bereich seiner Prüfung, falls vorgegeben, sonst die kleinste freie insgesamt.
+
+**Weitere Verbesserungen:**
+- **Doppelklick** auf eine Teilnehmerzeile öffnet „Bearbeiten…“.
+- **Hinweis nach Import** (CSV/OMA/PDF): „X Teilnehmer noch ohne Startnummer – jetzt
+  vergeben?“. Bei „Ja“ startet die Sammelvergabe.
+- **„Startnummer tauschen“ zwischen zwei Teilnehmern ohne Nummer** gibt eine verständliche
+  Meldung aus, statt stillschweigend nichts zu tun.
+
+**Handbuch:** Kap. 4 (Startnummern, Bereiche, Sammelvergabe) und den Abschnitt
+„Ausprobieren“ anpassen. Gehört zu U13.
