@@ -3177,3 +3177,51 @@ Inbetriebnahme und ein komplettes Turnier. Je Gruppe zwei Subagents.
   - „Keine Teilnahme“, Startnummer tauschen;
   - Ergebniserfassung, Auswertung, alle PDFs;
   - Datensicherung, Neustart ohne Datenverlust.
+
+## Rubrik ux_test_2026_10 – Aufgabenliste (angelegt 02.10.2026)
+
+Alle Punkte aus dem UX-Test (`UX-Test-2026-10/Bericht.md`), dazu Marcos neue Anforderung
+N1. **Arbeitsweise (Marco, 02.10.2026):**
+1. Zuerst werden **alle** Punkte nacheinander geplant, jeder einzeln mit Marco: umsetzen,
+   zurückstellen oder verwerfen, und falls umsetzen, wie genau.
+2. Erst danach wird umgesetzt, und zwar **immer nur ein Punkt**: umsetzen, testen,
+   verifizieren, abschließen. Erst dann folgt der nächste.
+3. Wird ein Agent durch das Nutzungslimit unterbrochen, wird er fortgesetzt, sobald wieder
+   Tokens verfügbar sind. Er wird nicht neu gestartet.
+4. Es gelten die üblichen Regeln: kein Build, kein Versionsbump, kein Push ohne Marcos
+   Anforderung.
+
+Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `umgesetzt` /
+`zurückgestellt` / `verworfen`.
+
+| ID | Punkt (Details im Bericht) | Status | Entscheidung / Plan |
+|---|---|---|---|
+| U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | offen | |
+| U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | offen | |
+| U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | offen | |
+| U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | offen | |
+| U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | offen | |
+| U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | offen | |
+| U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | offen | |
+| U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | offen | |
+| U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | offen | |
+| U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | offen | |
+| U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | offen | |
+| U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | offen | |
+| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | offen | |
+| U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | offen | |
+| K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | offen | |
+| K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | offen | |
+| K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | offen | |
+| K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | offen | |
+| K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | offen | |
+| K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | offen | |
+| K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | offen | |
+| K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | offen | |
+| K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | offen | |
+| K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | offen | |
+| K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | offen | |
+| K12 | GitHub-Release-Seite ohne Release-Notes | offen | |
+| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | offen | |
+| P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | offen | |
+| N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | offen | |
