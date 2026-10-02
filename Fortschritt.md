@@ -3222,9 +3222,9 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | geplant | Siehe „K1–K12 – Plan“ |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
-| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | offen | |
-| P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | offen | |
-| N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | offen | |
+| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | geplant | Siehe „P1, P2, N1 – Plan“ |
+| P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | geplant | Siehe „P1, P2, N1 – Plan“ |
+| N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | geplant | Siehe „P1, P2, N1 – Plan“ |
 
 ### U1 – Plan (mit Marco geklärt am 02.10.2026)
 
@@ -3439,3 +3439,40 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   - Beim Build wird eine kurze deutsche Beschreibung „Was ist neu“ für das GitHub-Release
     erzeugt, z. B. als Datei oder Text für `build-installer.yml` bzw. die Release-Seite.
   - Veröffentlichen bleibt Marcos Aktion.
+
+### P1, P2, N1 – Plan (02.10.2026)
+- **P1/P2: Marco prüft selbst in der echten App.**
+  - Vier Anmelde-PDFs auf einmal importieren, danach direkt Ergebnisliste und Etiketten
+    speichern.
+  - Ungespeicherte Ergebnisse eingeben, den Reiter wechseln und „Nein“ wählen.
+  - Nur wenn dabei ein Fehler auftritt, wird daraus ein eigener Punkt.
+- **Zusätzlich ein Absturzprotokoll:**
+  - Unbehandelte Ausnahmen (`sys.excepthook`) und harte Abstürze (`faulthandler`) werden in
+    eine Logdatei geschrieben, z. B. im Ordner `SHS-Pruefungsprogramm`.
+  - Damit sind künftige stille Programmenden nachvollziehbar.
+  - Die Datei enthält keine personenbezogenen Daten außer dem, was in Tracebacks steht. Ob
+    das kritisch ist, bei der Umsetzung prüfen.
+- **N1 Teilnehmer als CSV exportieren:**
+  - Neuer Knopf „Teilnehmerliste (CSV)…“ im Reiter **Export**. Er exportiert immer **alle**
+    Teilnehmer.
+  - Inhalt: **alle Stammdaten** mit denselben Spalten wie beim CSV-Import, dazu Startnummer,
+    Bezahlt und Status „Keine Teilnahme“.
+  - Format: **Excel-freundlich**, also Semikolon-getrennt und UTF-8 mit BOM. Die Datei öffnet
+    sich so per Doppelklick korrekt im deutschen Excel.
+  - **Abhängigkeit:** Damit die Datei wieder importierbar ist, muss der CSV-Import Semikolon
+    und BOM tolerieren. Das trifft sich mit der Excel-Vorlage aus U10. Beides zusammen
+    umsetzen bzw. testen (Export → Import ergibt dieselben Daten).
+
+### Umsetzungsreihenfolge (Vorschlag, von Marco zu bestätigen)
+Es wird immer nur ein Punkt umgesetzt und abgeschlossen: Explore, Umsetzung + Tests,
+Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
+
+1. **Schnelle, risikoarme Punkte:** U6, U13 (Widerspruch Kap. 6, Update-Weg), K4, K11, P1
+   (Absturzprotokoll).
+2. **Mittel:** U5, U4 + K8, U3, U12, U7, U8, U1.
+3. **Groß, mit Datenmodell:** U2 (DK-Rotation), danach U9.
+4. **Weitere Punkte:**
+   - U10 zusammen mit N1 (CSV-Format) und U11;
+   - U14 und K1–K3, K5–K7, K9, K10;
+   - U13 (Einsteiger-Kapitel, Glossar) am Schluss, weil es auf allem aufbaut;
+   - K12 beim nächsten Build.
