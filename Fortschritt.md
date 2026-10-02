@@ -3112,3 +3112,68 @@ erhalten bleiben. Marco: „Demo passt.“
 - Push und Tag macht Marco.
 - Commit `66c08c8`. Den Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` habe ich auf
   1.0.39 nachgezogen: 19 Dateien, Byte-Abgleich identisch.
+
+## 02.10.2026: UX-Test mit sechs Personas (nur Dokumentation, kein Code geändert)
+
+Marcos Wunsch: Wie kommen Erfahrene, normale Nutzer und Laien mit dem Programm zurecht?
+Getestet werden sollte nicht die Funktion, sondern die Bedienung: Installation, erste
+Inbetriebnahme und ein komplettes Turnier. Je Gruppe zwei Subagents.
+
+- **Rahmen (mit Marco abgestimmt):**
+  - Die Desktop-App 1.0.39 wird echt bedient, unsichtbar über ein Steuerwerkzeug (nur
+    temporär im Scratchpad, nicht im Repo), in einer abgeschotteten Sandbox je Persona.
+  - Die Installation wird nur gedanklich durchgespielt.
+  - Nur Desktop.
+  - Je Gruppe eine Persona mit Handbuch (A) und eine ohne (B).
+  - Ergebnis: ein Bericht, keine Code-Änderungen.
+- **Ablauf:**
+  - Die sechs Personas liefen zunächst parallel. Nach einem API-Limit liefen sie auf Marcos
+    Wunsch nacheinander weiter.
+  - Danach habe ich zusammengeführt und die Hauptfunde gegen den Code abgeglichen.
+  - Ein Verifikations-Subagent hat geprüft, ob alle Funde belegt sind und ob schon
+    entschiedene Punkte als neu gemeldet wurden. Seine Korrekturen sind eingearbeitet:
+    Zählungen, „Ablageort öffnen“ existiert, Verweise auf frühere Entscheidungen, ein
+    falsches Bild entfernt, ein Pfad mit Benutzernamen anonymisiert.
+- **Abschottung geprüft:** Echte Termine und die Registry-Darstellung blieben unverändert,
+  im Repo wurde während des Tests nichts geändert.
+- **Ablage:** `UX-Test-2026-10/` mit `Bericht.md`, `personas/` (6 Einzelberichte) und
+  `bilder/` (10 Screenshots). Bewusst nicht unter `docs/`, weil das die Quelle der
+  öffentlichen Website ist.
+- **Noten gesamt:** Erfahrene 3+ / 3+, Normale 3+ / 3, Laien 4 / 3–4.
+  - Den Prüfungstag selbst schaffen alle.
+  - Die Vorbereitung schaffen Laien ohne Hilfe nicht.
+- **Funde – offen, jeden einzeln mit Marco besprechen, nichts umgesetzt:**
+  - U1 Startnummern nur einzeln vergebbar (Vorschlag „1“ trotz Vergabe, kein Doppelklick) – 6/6
+  - U2 „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, ohne
+    Warnung – 6/6
+  - U3 Teilnehmer-Maske 780×640 zu schmal („uster“) – 6/6. Wiederauftreten trotz Fix vom
+    21.09., Gegenprobe in der echten App nötig.
+  - U4 CSV-/OMA-Import prüft die angebotenen Prüfungen nicht (anders als der PDF-Import) – 6/6
+  - U5 „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs – 6/6
+  - U6 Englische Yes/No/Cancel-Knöpfe – 6/6. Bereits offener Punkt seit 22./23.09.
+  - U7 Keine sichtbare Rückmeldung nach dem PDF-Speichern, Speicherort im Termine-Ordner – 6/6
+  - U8 Richter aus den Veranstaltungsdaten werden im Zeitplan nicht übernommen
+  - U9 Zeitplan-Bedienung: Pause landet am Ende, Hoch/Runter springt blockweise,
+    Warnung ohne vorhandenen Plan. „Pause für alle Richter“ würde die Entscheidung vom
+    14.09. neu öffnen.
+  - U10 Mitgliederliste per CSV für Laien nicht auffindbar
+  - U11 ED-LK-2-Formular mit zwei Gegenständen führt zur Yes/No-Rückfrage, die einen
+    Gegenstand verwirft
+  - U12 Fenstergrößen (Hauptfenster wächst über die Bildschirmbreite, nur 600 px hoch)
+  - U13 Handbuch: Kap. 6 („einfach löschen“) widerspricht „Keine Teilnahme“; die
+    Startnummern-Vergabe nach Import und der Mitgliederlisten-Import fehlen; der
+    Update-Weg ist in README und Handbuch unterschiedlich beschrieben
+  - U14 Laien-Verständlichkeit (Fachwörter, viele ⚠, „Hoher Kontrast“ nicht gefunden)
+  - Kosmetik-Liste im Bericht, Abschnitt 3
+- **P1, Gegenprobe empfohlen:** Bei 5 von 6 Personas beendete sich das Programm still,
+  jeweils direkt nach einer Dateiauswahl (PDF-Import mit 4 Dateien, Etiketten speichern).
+  - Windows hat einen Heap-Fehler im Python-Prozess der Testumgebung protokolliert.
+  - Im Isolationstest des Ersatz-Dateifensters kam es zu keinem Absturz.
+  - Die Ursache ist offen. Marco sollte in der echten App einmal 4 Anmelde-PDFs auf einmal
+    importieren und danach direkt nacheinander Ergebnisliste und Etiketten speichern.
+- **Positiv bestätigt:**
+  - Erststart und Termin anlegen;
+  - Ablehnungsgründe beim PDF-Import;
+  - „Keine Teilnahme“, Startnummer tauschen;
+  - Ergebniserfassung, Auswertung, alle PDFs;
+  - Datensicherung, Neustart ohne Datenverlust.
