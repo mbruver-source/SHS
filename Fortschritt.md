@@ -3201,10 +3201,10 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | geplant | Siehe „U4 – Plan“ unter der Tabelle |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | geplant | Siehe „U5 – Plan“ unter der Tabelle |
-| U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | offen | |
-| U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | offen | |
-| U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | offen | |
-| U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | offen | |
+| U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | geplant | Siehe „U6 – Plan“ unter der Tabelle |
+| U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
+| U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
+| U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | offen | |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | offen | |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | offen | |
@@ -3311,3 +3311,41 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   kommt vor das Speichern, wie in der Web-Version (app_web.py prüft serverseitig).
 - **Komma-Hinweis:** Bei „45,5“ erscheint der Hinweis „nur ganze Punkte“, statt den Wert
   stillschweigend auf 45 zu kürzen.
+
+### U6 – Plan (02.10.2026)
+- Beim Start die **deutsche Qt-Übersetzung laden** (`QTranslator` mit `qtbase_de` aus
+  PySide6), damit überall Ja/Nein/Abbrechen erscheint.
+- Die Übersetzungsdatei muss im PyInstaller-Build (`build.spec`) bzw. im Installer
+  mitgeliefert werden. Am fertigen Build prüfen.
+- Damit ist auch der offene Punkt vom 22./23.09. („OK/Cancel-Buttons englisch“) erledigt.
+
+### U7 – Plan (02.10.2026)
+- **Meldung nach jedem PDF-Speichern:** „PDF gespeichert unter …“ mit [PDF öffnen]
+  [Ordner zeigen] [OK].
+- **Unterordner „Ausdrucke“ je Termin:** Der Vorschlag für PDFs ist ein Unterordner je Termin
+  (Name vom Termin-Dateinamen abgeleitet), nicht mehr der Termine-Ordner zwischen den
+  .sqlite-Dateien. „Ablageort öffnen“ zeigt auf diesen Ordner.
+- **Importe** (CSV/PDF/OMA) starten im Ordner „Downloads“ bzw. im zuletzt genutzten
+  Import-Ordner.
+- **Statuszeile im Reiter Export:** Sie überlappt den Erklärtext nicht mehr, der Pfad steht
+  in Windows-Schreibweise (`\`).
+- Zur Datensicherung siehe K10 (Dateiname). Deren Erfolgsmeldung bekommt dieselbe Art von
+  Meldungsfenster (Annahme, bei der Umsetzung bestätigen).
+
+### U8 – Plan (02.10.2026)
+- Ist der Zeitplan eines Termins noch **leer** (keine Richter-Spalten), werden die in den
+  Veranstaltungsdaten eingetragenen Richter 1–5 beim Öffnen des Reiters automatisch als
+  Spalten mit ihren Namen angelegt.
+- Ein bestehender Zeitplan wird nie verändert.
+
+### U9 – Plan (02.10.2026)
+- **Pause nach der Markierung:** „Pause hinzufügen…“ fügt die Pause nach der markierten Zeile
+  ein, nicht mehr am Ende.
+- **Warnung nur mit Plan:** „Automatisch verteilen“ warnt vor Verlust nur, wenn bereits
+  Einträge existieren.
+- **Pause für alle Richter:**
+  - Neu ist die Option „Gleiche Pause bei allen Richtern um HH:MM“.
+  - **Marco öffnet damit bewusst die Entscheidung vom 14.09.** („Pausen je Richter
+    unabhängig“). Einzelpausen je Richter bleiben möglich, die Option kommt zusätzlich.
+- **Größere Listen:** Die Richterlisten bekommen mehr Höhe, die Knöpfe werden kompakter.
+- Noch zu klären: „Hoch/Runter“ springt blockweise (siehe nächste Rückfrage).
