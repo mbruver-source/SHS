@@ -3205,9 +3205,9 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
-| U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | offen | |
-| U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | offen | |
-| U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | offen | |
+| U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
+| U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
+| U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | geplant | Siehe „U12 – Plan“ unter der Tabelle |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | offen | |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | offen | |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | offen | |
@@ -3348,4 +3348,33 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   - **Marco öffnet damit bewusst die Entscheidung vom 14.09.** („Pausen je Richter
     unabhängig“). Einzelpausen je Richter bleiben möglich, die Option kommt zusätzlich.
 - **Größere Listen:** Die Richterlisten bekommen mehr Höhe, die Knöpfe werden kompakter.
-- Noch zu klären: „Hoch/Runter“ springt blockweise (siehe nächste Rückfrage).
+- **Blöcke sichtbar machen:** Die Richterlisten zeigen Blockgrenzen deutlich, z. B. als Kopfzeile je Prüfungsblock mit eingerückten Teilnehmerzeilen. So ist klar, dass „Hoch/Runter“ den ganzen Block bewegt.
+
+### U10 – Plan (02.10.2026)
+- **Knopf im Reiter „Teilnehmer“:** „Teilnehmerliste aus Excel/CSV übernehmen…“ nutzt den
+  bestehenden CSV-Import, einschließlich der Ablehnung nicht angebotener Prüfungen aus U4.
+- **Reiter „Formular-Import“ aufräumen:**
+  - Oben stehen die drei Import-Wege als große Knöpfe mit je einer kurzen Erklärung in
+    Alltagssprache: Anmeldeformulare (PDF), Teilnehmerliste (Excel/CSV), OMA.
+  - Der KI-Weg mit dem Prompt-Text ist einklappbar und standardmäßig eingeklappt.
+- **Excel-Vorlage:** Ein Knopf „Leere Vorlage (CSV) speichern…“ speichert eine Datei mit der
+  richtigen Kopfzeile, die z. B. der Schriftführer in Excel ausfüllt.
+  - Bei der Umsetzung prüfen, ob Excel die Datei mit Umlauten und Semikolon/Komma korrekt
+    öffnet und wieder speichert; ggf. das Trennzeichen beim Import tolerieren.
+- **Handbuch:** Ein eigener Abschnitt „Teilnehmerliste aus Excel übernehmen“ (gehört zu U13).
+
+### U11 – Plan (02.10.2026)
+- **Formular korrigieren:**
+  - Das statische PDF kann die Gegenstandsfelder nicht von der angekreuzten Prüfung abhängig
+    machen. Deshalb kommt ein klarer Hinweistext dazu: „Bei ED (Trümmer/Fläche/Behältnisse)
+    nur einen Gegenstand angeben – mehrere Gegenstände nur bei DK“. Die genaue Gestaltung
+    wird bei der Umsetzung festgelegt.
+  - Der Import übernimmt bei ED nur den ersten Gegenstand und nennt verworfene Gegenstände im
+    Import-Ergebnis. Die Yes/No-Rückfrage beim späteren „Bearbeiten“ entfällt damit.
+- **Handbuch:** Den Hinweis „Bei ED ist nur ein Gegenstand vorgesehen“ nicht mehr nur mit
+  „älteren Daten“ erklären (gehört zu U13).
+
+### U12 – Plan (02.10.2026)
+- Das Hauptfenster **startet maximiert**.
+- Lange Hinweistexte (z. B. in den Reitern Zeitplan, Verwaltung, Export) brechen um, damit das
+  Fenster nicht über die Bildschirmbreite wächst.
