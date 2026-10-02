@@ -3110,3 +3110,5 @@ erhalten bleiben. Marco: „Demo passt.“
     1 xfail.
   - `py_compile`: fehlerfrei.
 - Push und Tag macht Marco.
+- Commit `66c08c8`. Den Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` habe ich auf
+  1.0.39 nachgezogen: 19 Dateien, Byte-Abgleich identisch.
