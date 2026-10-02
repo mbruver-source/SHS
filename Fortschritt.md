@@ -3208,8 +3208,8 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | geplant | Siehe „U12 – Plan“ unter der Tabelle |
-| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | offen | |
-| U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | offen | |
+| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | geplant | Siehe „U13 – Plan“ unter der Tabelle |
+| U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | offen | |
 | K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | offen | |
 | K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | offen | |
@@ -3378,3 +3378,31 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 - Das Hauptfenster **startet maximiert**.
 - Lange Hinweistexte (z. B. in den Reitern Zeitplan, Verwaltung, Export) brechen um, damit das
   Fenster nicht über die Bildschirmbreite wächst.
+
+### U13 – Plan (02.10.2026)
+- **Widerspruch in Kap. 6** (`docs/HANDBUCH.md:343-344`): Statt „einfach im Reiter
+  ‚Teilnehmer‘ löschen“ wird auf „Keine Teilnahme“ verwiesen.
+- **Update-Weg vereinheitlichen:** README (Zeile 29) an das Handbuch angleichen
+  („ℹ️ Version …“-Knopf oben rechts → „Nach Updates suchen“).
+- **Neues Einsteiger-Kapitel** „Die erste Prüfung Schritt für Schritt“ in Alltagssprache, mit
+  Klickfolgen und Bildern, für Laien. Es baut auf der Ablauftabelle in Kap. 1 auf.
+- **Fachwörter erklären:** ein kleines Glossar (CSV, ZIP/Sicherungsdatei, Verschlüsselung,
+  Prompt/KI, OMA, SH-R, LK, DK/ED …). Wo möglich werden Fachwörter im Text vermieden.
+- Die Abschnitte aus U1 (Startnummern), U10 (Excel-Liste) und U11 (Gegenstand bei ED) kommen
+  jeweils mit dem betreffenden Punkt. U13 umfasst nur die Punkte oben.
+- Handbuch-PDF und Screenshots werden wie üblich vor dem nächsten Build nachgezogen.
+
+### U14 – Plan (02.10.2026)
+- **Begriffe vereinfachen:** Sichtbare Texte kommen in Alltagssprache, z. B. „ZIP-Datei,
+  AES-256“ → „Sicherungsdatei, mit Passwort geschützt“. Die Datumsmeldung bekommt ein Beispiel
+  („z. B. 14.11.2026“). Weitere Stellen werden bei der Umsetzung gesammelt.
+- **⚠ entschärfen:**
+  - „Gegenstand fehlt“ erscheint nicht mehr als orange Warnung, sondern als dezenter Hinweis
+    mit dem Tooltip „kann bis zum Prüfungstag nachgetragen werden“.
+  - Echte Probleme (z. B. Chip fehlt, Gegenstände unvollständig beim Dreikampf?) bleiben
+    auffällig. Welche Hinweise wie stark erscheinen, wird bei der Umsetzung mit Marco
+    abgestimmt.
+- **„Hoher Kontrast“ auffindbar machen:** einen Hinweis in Hilfe und Startbildschirm
+  ergänzen. Optional kommt „Große Schrift“ unter „Ansicht“ dazu.
+- **Standard-Design kontrastreicher:** Reiternamen und Spaltenköpfe werden dunkler bzw.
+  größer. Die Theme-Tests (`test_theme.py`) beachten.
