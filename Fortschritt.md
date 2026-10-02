@@ -3197,7 +3197,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | ID | Punkt (Details im Bericht) | Status | Entscheidung / Plan |
 |---|---|---|---|
 | U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
-| U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | offen | |
+| U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | offen | |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | offen | |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | offen | |
@@ -3263,3 +3263,25 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 
 **Handbuch:** Kap. 4 (Startnummern, Bereiche, Sammelvergabe) und den Abschnitt
 „Ausprobieren“ anpassen. Gehört zu U13.
+
+### U2 – Plan (mit Marco geklärt am 02.10.2026)
+
+- **„Automatisch verteilen“ rotiert DK-Teams:**
+  - Die drei DK-Blöcke einer LK (Trümmer/Fläche/Behältnis) werden versetzt geplant. Team 1
+    beginnt bei Richter A, Team 2 bei Richter B und so weiter.
+  - Kein Team steht zur selben Zeit an zwei Stellen.
+  - **Fachlich bestätigt (Marco):** Gleichzeitige Starts eines Teams sind nie gewollt.
+- **Mindestabstand zwischen zwei Disziplinen desselben DK-Teams:**
+  - Einstellbar im Reiter „Zeitplan“ in Minuten, z. B. Vorgabe 10 Min.
+  - Gespeichert je Termin, Vorgabe bei der Umsetzung festlegen.
+  - Die Rotation hält ihn ein.
+- **Überschneidungsprüfung**, auch nach Handbearbeitung: gleiche Startnummer zur gleichen Zeit
+  oder Mindestabstand unterschritten.
+  - Betroffene Zeilen in den Richterspalten **rot**, ein Tooltip nennt die Überschneidung.
+  - Die Seitenleiste „Offene Starts“ bekommt einen eigenen Warnbereich **„⚠ Überschneidungen“**.
+  - Bei „Zeitplan (PDF)…“ kommt eine **Rückfrage**, wenn Überschneidungen bestehen.
+- **Technischer Hinweis für die Umsetzung:** Blöcke speichern heute nur Art/LK/Disziplin.
+  Die Reihenfolge der Teilnehmer in einem Block ergibt sich aus der Teilnehmerliste. Für die
+  Rotation braucht ein Block deshalb eine Startreihenfolge bzw. einen Versatz. Das
+  Datenmodell wird vor der Umsetzung entworfen (Explore- und Daten-Subagent), Migration
+  bestehender Termine eingeschlossen.
