@@ -3198,9 +3198,9 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 |---|---|---|---|
 | U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
-| U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | offen | |
-| U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | offen | |
-| U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | offen | |
+| U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
+| U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | geplant | Siehe „U4 – Plan“ unter der Tabelle |
+| U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | geplant | Siehe „U5 – Plan“ unter der Tabelle |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | offen | |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | offen | |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | offen | |
@@ -3285,3 +3285,29 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   Rotation braucht ein Block deshalb eine Startreihenfolge bzw. einen Versatz. Das
   Datenmodell wird vor der Umsetzung entworfen (Explore- und Daten-Subagent), Migration
   bestehender Termine eingeschlossen.
+
+### U3 – Plan (02.10.2026)
+- **Ohne vorherige Gegenprobe direkt größer öffnen.** Startgröße etwa 1000×720, begrenzt auf
+  die verfügbare Bildschirmfläche.
+- Mindestbreite für die Textfelder der linken Spalte, damit „Muster“ nie abgeschnitten
+  erscheint.
+- Die Scrollfläche, der Maximieren-Knopf und die 50/50-Aufteilung vom 21.09. bleiben.
+- Den Handbuch-Screenshot `handbuch_teilnehmer_dialog_*.png` bei Bedarf erneuern.
+
+### U4 – Plan (02.10.2026)
+- **CSV- und OMA-Import lehnen Zeilen in nicht angebotenen Prüfungen ab, genau wie der
+  PDF-Import.**
+  - Diese Zeilen werden nicht übernommen und in der Abschlussmeldung mit Grund aufgelistet.
+  - Den Meldungstext vom PDF-Import wiederverwenden, aber den Hinweis zum Freischalten
+    entschärfen (siehe K8).
+- Sind im Termin noch gar keine Prüfungen angeboten, gilt dieselbe eigene Meldung wie beim
+  PDF-Import (db_import.py, Befund N1 vom 28.09.).
+
+### U5 – Plan (02.10.2026)
+- **Feld sofort rot:** Ein ungültiger Wert (z. B. 65 bei höchstens 60) wird beim Tippen bzw.
+  Verlassen rot markiert, der Tooltip lautet „höchstens 60 Punkte“.
+- **Klartext beim Speichern:** Statt „CHECK constraint failed …“ erscheint z. B. „Klein,
+  Klaus – Trümmerfeld Suche: höchstens 60 Punkte (eingegeben: 65)“. Die Bereichsprüfung
+  kommt vor das Speichern, wie in der Web-Version (app_web.py prüft serverseitig).
+- **Komma-Hinweis:** Bei „45,5“ erscheint der Hinweis „nur ganze Punkte“, statt den Wert
+  stillschweigend auf 45 zu kürzen.
