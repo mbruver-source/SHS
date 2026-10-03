@@ -4596,3 +4596,15 @@ Inno-Setup-Version 6.7.1 per choco und Selbsttest (T1).
   - Selbsttest der gebauten und der installierten EXE;
   - die Tag-Formatprüfung.
 - Push und Tag macht Marco selbst.
+
+**Nachtrag 03.10.2026: 1.0.41 ausgeliefert.** Marco hat gepusht und `v1.0.41` getaggt. Alle
+CI-Jobs sind erfolgreich gelaufen:
+- Tests;
+- Container mit Smoke-Test und Veröffentlichung;
+- Installer mit Selbsttest der EXE, Installer-Test und getrenntem Release-Job.
+
+Die neuen Workflow-Einstellungen aus S-3/S-9 und T1 sind damit in der CI bestätigt:
+- Actions-Hashes;
+- feste Versionen von PyInstaller und Inno Setup;
+- Rechte je Job;
+- Tag-Prüfung.
