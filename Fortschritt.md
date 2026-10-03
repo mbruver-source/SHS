@@ -4186,3 +4186,92 @@ Funde N1–N7 aus dem UX-Nachtest. Marcos Klick-Test P1/P2 war ok.
   Marco 03.10.: CI grün, Push und Tag durch („grün und alles durch“). Offen bleibt nur die
   Kontrolle bei der Testinstallation, ob die Rückfrage-Knöpfe deutsch sind (Qt-Sprachdatei,
   siehe oben).
+
+## 03.10.2026: Ergänzende Testarten T1–T3 vorgemerkt (nur Dokumentation, kein Code geändert)
+
+**Anlass:** Marco fragte, welche in der Softwareentwicklung üblichen Testarten noch fehlen.
+Die Bestandsaufnahme ergab rund 590 automatisierte Tests: Daten, Web, PDF, Backup,
+Versionierung, Theme und GUI über pytest-qt. Dazu kommen PostgreSQL in der CI, der
+Container-Smoke-Test, Migrationstests mit nachgebauten alten Tabellen, CSRF-Tests, die
+Codeprüfungen, der wöchentliche `pip-audit` und der UX-Test mit Nachtest. Vorgeschlagen
+wurden neun Ergänzungen. Marco hat **1–3** ausgewählt; sie sind hier als T1–T3 vorgemerkt.
+Die übrigen Vorschläge sind vorerst nicht beauftragt: Windows-Testlauf in der CI,
+gleichzeitige Web-Eingaben, Abdeckungsmessung, bandit/ZAP/XSS-Tests, Generalprobe für den
+Prüfungstag und Barrierefreiheit.
+
+Es gelten die üblichen Regeln: Vor der Umsetzung werden die offenen Fragen je Punkt mit Marco
+geklärt. Umgesetzt wird immer nur ein Punkt, mit Verifikations-Subagent. Kein Build, kein
+Versionsbump, kein Push ohne Marcos Anforderung.
+
+| ID | Punkt | Status | Plan |
+|---|---|---|---|
+| T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | vorgemerkt (Marco 03.10.) | Siehe „T1 – Plan“ |
+| T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | vorgemerkt (Marco 03.10.) | Siehe „T2 – Plan“ |
+| T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | vorgemerkt (Marco 03.10.) | Siehe „T3 – Plan“ |
+
+### T1 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+- **Lücke:** `build-installer.yml` baut `dist/SHS-Pruefungsprogramm.exe` und den
+  Inno-Setup-Installer, startet die EXE aber nie. Fehlt in `build.spec` ein verstecktes
+  Modul oder eine Datendatei (Schriften, Vorlagen, Qt-Plugins, pypdf, pycryptodomex), sind
+  alle Python-Tests grün, die ausgelieferte EXE scheitert aber erst beim Nutzer.
+- **Idee:** Ein Schalter `--selbsttest` in `app.py`, der ohne Fenster (Qt `offscreen`) in
+  einem temporären Ordner:
+  - einen Termin anlegt und einen Teilnehmer mit Ergebnis speichert,
+  - die Ergebnisliste und einen Bewertungsbogen als PDF erzeugt,
+  - eine verschlüsselte Sicherung schreibt und wieder einliest,
+  - mit Exit-Code 0 bzw. ≠ 0 und einer kurzen Protokollzeile endet.
+- **CI:** In `build-installer.yml` nach dem PyInstaller-Schritt
+  `dist\SHS-Pruefungsprogramm.exe --selbsttest` ausführen. Schlägt er fehl, scheitert der
+  Build, bevor ein Installer oder Release entsteht.
+- **Offene Fragen an Marco:**
+  - Soll der Schalter in der ausgelieferten EXE bleiben (auch für Fehlersuche beim Nutzer
+    nutzbar) oder nur im CI-Build aktiv sein?
+  - Soll zusätzlich der fertige Installer still installiert (`/VERYSILENT`) und die
+    installierte EXE getestet werden? Das ist gründlicher, macht die CI aber langsamer.
+
+### T2 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+- **Lücke:** Die Bewertung (`shs_core.py`: `berechne_wertnote_ed`, `berechne_wertnote_dk`,
+  `berechne_rangliste`, Disqualifikation/Abbruch) ist der fachliche Kern, hat aber nur
+  14 Tests in `test_shs_core.py`. Grenzwerte jeder Variante sind nicht systematisch
+  abgedeckt.
+- **Idee, Teil A – Referenztabelle:** Für jede Variante aus
+  `SHS_Bewertungsboegen_alle_Varianten.pdf` bzw. `Grobkonzept.md` eine Tabelle mit
+  Testfällen: Eingabepunkte → erwartete Wertnote, bestanden ja/nein. Dabei jede Notengrenze
+  genau auf, unter und über der Schwelle sowie Minimum und Maximum. Dazu Ranglisten-Fälle:
+  Punktgleichheit, nicht bewertet, Disqualifikation, Abbruch, „Keine Teilnahme“.
+- **Idee, Teil B – Eigenschaftstests** (Bibliothek `hypothesis`, nur in
+  `requirements-dev.txt`): Regeln, die für alle Eingaben gelten müssen. Beispiele:
+  - mehr Punkte ergeben nie eine schlechtere Wertnote;
+  - Disqualifikation oder Abbruch ergibt nie „bestanden“;
+  - die Rangliste enthält jeden Teilnehmer genau einmal, und ihre Reihenfolge passt zu den
+    Punkten.
+- **Offene Fragen an Marco:**
+  - Die erwarteten Werte der Referenztabelle müssen fachlich stimmen. Erstellt Claude sie
+    aus den Bewertungsbögen und Marco prüft sie gegen, oder gibt Marco die Fälle (z. B. aus
+    echten früheren Prüfungen) selbst vor?
+  - Ist `hypothesis` als zusätzliche Test-Abhängigkeit in Ordnung?
+  - Falls ein Referenzfall eine Abweichung zum heutigen Code zeigt: Erst melden und mit
+    Marco entscheiden, nicht direkt korrigieren.
+
+### T3 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+- **Lücke:** Die Migrationstests in `test_db.py` bauen alte Tabellen von Hand nach. Echte
+  Dateien älterer Versionen (Spaltenreihenfolge, Standardwerte, Indizes, `user_version`,
+  Sicherungs-ZIP-Format) werden nicht geprüft.
+- **Idee:** Ein Ordner `tests/altdaten/` (Name noch offen) mit echten, eingecheckten
+  Testdateien aus mehreren älteren Versionen, z. B. 1.0.0, 1.0.10, 1.0.25, 1.0.35 und
+  1.0.40. Je Version:
+  - eine Termin-Datei (`.sqlite`) mit Testteilnehmern, Ergebnissen, Disqualifikation,
+    „Keine Teilnahme“ und Zeitplan;
+  - ein Sicherungs-ZIP, einmal mit und einmal ohne Passwort, soweit die Version das kann.
+
+  Die Tests öffnen jede Datei mit dem aktuellen Code, prüfen Auswertung, Rangliste und den
+  PDF-Export und stellen jede Sicherung wieder her.
+- **Erzeugung:** Die Dateien werden je Version mit dem Code des jeweiligen Git-Tags
+  (`git worktree` auf `v1.0.x`) über ein Skript erzeugt (z. B. `tools/altdaten_erzeugen.py`).
+  Sie enthalten nur erfundene Testdaten, keine echten Teilnehmer. Bei jedem künftigen Build
+  kommt eine Datei der neuen Version dazu (Ergänzung der Build-Checkliste).
+- **Offene Fragen an Marco:**
+  - Welche Altversionen sind beim Verein real im Umlauf gewesen und damit wichtig?
+  - Hat Marco echte alte Termin-Dateien, die anonymisiert zusätzlich hinein sollen?
+  - Ist es in Ordnung, die Build-Checkliste in CLAUDE.md um „Altdatei der neuen Version
+    erzeugen“ zu ergänzen?
