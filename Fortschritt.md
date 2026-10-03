@@ -4081,6 +4081,14 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     beschreibt.
 - **P1/P2-Gegenprobe (03.10., Marco):** mit der Demo-Checkliste ok, kein Absturz und keine
   doppelte Rückfrage.
+- **UX-Nachtest (03.10., Marco: gezielt mit 2 Personas):** L-B2 (Laie, ohne Handbuch) und N-A2
+  (normal, mit Handbuch/Kap. 14), Bericht `UX-Test-2026-10/Nachtest.md`.
+  - Noten: Werner 3–4 → 2–3, Julia 3+ → 2. Julia kommt mit Kap. 14 allein klar.
+  - Abgleich: keiner der damaligen Funde ist „nicht behoben“.
+  - Effekte der Testumgebung (geprüft): PDF-Fehler durch Pfadlänge > 260 nur in der Sandbox;
+    Abbrüche beim Speicher-Aufräumen wie P1, laut Absturzprotokoll in der Harness.
+  - Neue Funde N1–N7 (siehe Bericht) werden einzeln mit Marco geklärt.
 - **Offen bis zum Build:**
+  - Klärung der Nachtest-Funde N1–N7;
   - K12 Release-Notes;
   - Versionsbump 1.0.40 und `docs/HANDBUCH.pdf` neu erzeugen (beides erst beim Build).
