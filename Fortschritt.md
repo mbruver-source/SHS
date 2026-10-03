@@ -4145,4 +4145,9 @@ Funde N1–N7 aus dem UX-Nachtest. Marcos Klick-Test P1/P2 war ok.
     deutsch; bei der Testinstallation von 1.0.40 prüfen, ob die Knöpfe deutsch sind.
   - Die fremden, unversionierten `AGENTS.md` und `pdf/` bleiben bewusst außerhalb des
     Commits.
+- **Commit `d2458c6`.**
+- **Quellcode-Spiegel** `SHS-Pruefungsprogramm-Quellcode` auf 1.0.40 nachgezogen: 47 Dateien,
+  darunter `RELEASE_NOTES.md` und der Workflow (dort im Wurzelordner). Byte-Abgleich
+  identisch. Ältere, bisher nicht gespiegelte Website-Dateien unter `docs/` sind dabei
+  mit aktualisiert.
 - **Push/Tag:** Marcos Aktion (`git push`, `git tag v1.0.40`, `git push origin v1.0.40`).
