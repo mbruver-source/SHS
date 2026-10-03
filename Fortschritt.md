@@ -3264,6 +3264,13 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 **Handbuch:** Kap. 4 (Startnummern, Bereiche, Sammelvergabe) und den Abschnitt
 „Ausprobieren“ anpassen. Gehört zu U13.
 
+**Bestätigt von Marco (03.10.2026):**
+- Teilnehmer mit „Keine Teilnahme“ werden bei der Sammelvergabe übersprungen.
+- Überlappende Bereiche werden beim Speichern der Veranstaltungsdaten abgelehnt. Die
+  Meldung nennt beide Prüfungen.
+- Bereichsfelder gibt es nur für angebotene Prüfungen. Sind keine Angebote hinterlegt,
+  erscheinen alle 12 Felder.
+
 ### U2 – Plan (mit Marco geklärt am 02.10.2026)
 
 - **„Automatisch verteilen“ rotiert DK-Teams:**
