@@ -3205,7 +3205,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | umgesetzt (Arbeitsstand 03.10.) | Siehe „U7 – umgesetzt“ |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | umgesetzt (Arbeitsstand 03.10.) | Siehe „U8 – umgesetzt“ |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U9 – umgesetzt“ |
-| U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
+| U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
@@ -3224,7 +3224,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | Absturzprotokoll umgesetzt (Arbeitsstand 03.10.); Gegenprobe durch Marco offen | Siehe „P1 – Absturzprotokoll umgesetzt“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | geplant | Siehe „P1, P2, N1 – Plan“ |
-| N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | geplant | Siehe „P1, P2, N1 – Plan“ |
+| N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
 
 ### U1 – Plan (mit Marco geklärt am 02.10.2026)
 
@@ -3820,3 +3820,48 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **Tests:** neu in `test_db` (Pause nach Eintrag / bei allen) und im GUI-Test (Blockköpfe,
   Warnung nur mit Plan); der U2b-Test prüft zusätzlich die roten Blockköpfe. Alle Tests
   grün.
+
+### U10 + N1 – umgesetzt (03.10.2026, Arbeitsstand)
+- **N1 Teilnehmer als CSV exportieren:**
+  - Neuer Knopf „Teilnehmerliste (CSV, für Excel)…“ im Reiter Export. Neue Funktion
+    `db_import.exportiere_teilnehmer_csv`.
+  - Inhalt: alle Teilnehmer mit den Import-Spalten plus Startnummer, Bezahlt und
+    „Keine Teilnahme“.
+  - Format: Semikolon, UTF-8 mit BOM, Datum TT.MM.JJJJ. Danach erscheint das Meldungsfenster
+    mit „In Excel öffnen“.
+  - **Sicherheitsbefund der Verifikation (CSV-Injection, Marco 03.10.: absichern):**
+    - Werte, die mit `=`, `@` oder Tab/CR beginnen bzw. mit `+`/`-` ohne Zahl- oder
+      Telefonmuster, bekommen beim Export ein „'“ vorangestellt. Führende Leerzeichen
+      zählen dabei nicht.
+    - Der Import entfernt das „'“ wieder, symmetrisch auch für echte Werte, die mit „'=“
+      beginnen.
+    - Telefonnummern wie „+49 …“ bleiben unverändert. Export → Import ist verlustfrei.
+- **U10 Teilnehmerliste aus Excel:**
+  - **Import:** Er erkennt Komma bzw. Semikolon an der Kopfzeile und liest UTF-8 (mit oder
+    ohne BOM), sonst Windows-1252 wie bei Excel „CSV (Trennzeichen-getrennt)“.
+    - Vorher brach er bei Excel-Dateien mit „nicht UTF-8-kodiert“ ab. Der bisherige
+      Kodierungs-Test ist entsprechend umgeschrieben.
+    - Führende Leerzeilen werden übersprungen, die Zeilennummern bleiben die der Datei.
+    - Eine leere Datei ergibt einen Hinweis. Beide Punkte stammen aus der Verifikation,
+      Marco hat zugestimmt.
+  - **Vorlage:** Neue Funktion `schreibe_csv_vorlage` mit dem Knopf „Leere Vorlage (CSV)
+    speichern…“.
+  - **Reiter Formular-Import neu gegliedert:**
+    - 1. Anmeldeformulare (PDF), empfohlen;
+    - 2. Teilnehmerliste aus Excel (CSV importieren, Vorlage);
+    - 3. OMA;
+    - der KI-Weg mit dem Prompt ist eingeklappt.
+  - **Reiter Teilnehmer:** neuer Knopf „Teilnehmerliste (Excel/CSV)…“ über die gemeinsame
+    Funktion `_teilnehmerliste_importieren`.
+- **Handbuch:**
+  - Kap. 5: Übersicht der Wege, neuer Abschnitt „Teilnehmerliste aus Excel übernehmen“, die
+    Kodierungs- und Trennzeichen-Regel, der KI-Weg.
+  - Kap. 4 und Kap. 9 (Export): je eine neue Tabellenzeile.
+  - Die Hilfetexte zu Formular-Import und Export sind angepasst.
+- **Tests:**
+  - `test_db`: Windows-Kodierung, Semikolon, Export + Re-Import, Vorlage, Formel-Absicherung,
+    leere Datei und Leerzeilen.
+  - GUI: KI-Bereich und Vorlage; Export und Einlesen über den Teilnehmer-Knopf.
+  - Alle Tests grün. Verifikation inkl. Sicherheits-Nachprüfung: keine offenen Befunde.
+- **Vor dem Build:** Screenshots `handbuch_formular_import.png`, `handbuch_export.png` und
+  `handbuch_teilnehmer.png` neu aufnehmen.
