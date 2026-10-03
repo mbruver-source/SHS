@@ -101,4 +101,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: Output\SHS-Pruefungsprogramm-Setup-*.exe
+          # Kurze deutsche Beschreibung "Was ist neu" (wird vor jedem Build neu geschrieben),
+          # darunter die automatisch erzeugte Commit-Liste.
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true

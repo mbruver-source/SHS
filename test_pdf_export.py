@@ -541,8 +541,18 @@ class TestPdfExport(unittest.TestCase):
         pfad = self._pfad("ergebnisliste_offen.pdf")
         pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
         text = _text(pfad)
-        self.assertIn("Wartend, C", text)
+        self.assertIn("C Wartend", text)  # UX-Test K2: "Vorname Nachname"
         self.assertIn("Noch ohne vollständiges Ergebnis", text)
+        # K9: ohne gewertete Starter keine "von x"-Erklärung.
+        self.assertNotIn("in der Platz-Spalte", text)
+
+        fertig = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fertig", vorname="F", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        eintragen_ergebnis(self.conn, fertig, "Trümmerfeld", suche=60, anzeige=40)
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertIn("„von 1“ in der Platz-Spalte zählt nur Starter mit vollständigem Ergebnis – 1 noch offen.", text)
 
     def test_ergebnisliste_nur_gewaehlte_leistungsklasse(self):
         """Druck-Button im Auswertungs-Tab (Nutzerwunsch 23.09.) übergibt die im Filter
@@ -819,6 +829,37 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Abbruch (ABBR)", zeilen)
         self.assertIn("–", zeilen)
         self.assertNotIn("0", zeilen)
+        # UX-Test K3: Platz-Spalte "Abbr." statt "nB".
+        self.assertIn("Abbr.", zeilen)
+        self.assertNotIn("nB", zeilen)
+
+    def test_etiketten_ohne_verein_ohne_doppelkomma_und_nb_gekennzeichnet(self):
+        # UX-Test 02.10.2026, K5.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ohneverein", vorname="O", rufname_hund="Bello", art="DK", stufe=1, startnummer=1))
+        for disziplin in ("Trümmerfeld", "Flächensuche"):
+            eintragen_ergebnis(self.conn, tid, disziplin, suche=60, anzeige=40)
+        eintragen_ergebnis(self.conn, tid, "Behältnisstrecke", suche=35, anzeige=34)  # nicht bestanden
+        pfad = self._pfad("etiketten_k5.pdf")
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
+        text = _text(pfad)
+        self.assertIn("Ohneverein, O, Bello", text)
+        self.assertNotIn(", ,", text)
+        self.assertIn("Gesamt: 269 nB", text)
+
+    def test_ergebnisliste_platz_spalte_disq_statt_nb(self):
+        # UX-Test 02.10.2026, K3.
+        tid = self._dk_mit_vollen_punkten("Disqualifiziert", 1)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False)
+        pfad = self._pfad("ergebnisliste_disq.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        zeilen = [z.strip() for z in _text(pfad).splitlines()]
+        self.assertIn("Disq.", zeilen)
+        self.assertNotIn("nB", zeilen)
+
+    def test_ergebnisliste_ueberschrift_bleibt_bei_tabelle(self):
+        # UX-Test 02.10.2026, K3: Prüfungsüberschrift nie allein am Seitenende.
+        self.assertTrue(pdf_export._ABSCHNITT_MIT_FOLGE.keepWithNext)
 
     def test_statistik_zaehlt_jugendliche_getrennt(self):
         # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): Teilnehmer, die zum
@@ -1224,6 +1265,20 @@ class TestAnmeldeformular(unittest.TestCase):
         self.assertIn("Tierschutz-Hundeverordnung", text)
         self.assertNotIn("dhv", text.lower())
         self.assertNotIn("HSVRM", text)
+
+    def test_ort_steht_im_kopf_und_formular_bleibt_einseitig(self):
+        # UX-Test 02.10.2026, K6.
+        self.assertNotIn("Ort:", _text(self._erzeugen("ohne_ort.pdf")))
+        set_veranstaltung(
+            self.conn, verein="HSV Musterstadt e.V.", datum="2026-11-14", ort="Testhausen",
+            verband="Testverband", meldestelle=self.MELDESTELLE,
+            angebotene_pruefungen=pruefungen_als_text([p.kuerzel for p in ALLE_PRUEFUNGEN]),
+        )
+        pfad = self._erzeugen("mit_ort.pdf")
+        text = _text(pfad)
+        self.assertIn("Ort:", text)
+        self.assertIn("Testhausen", text)
+        self.assertEqual(len(PdfReader(pfad).pages), 1)
 
     def test_ohne_angebotene_pruefungen_valueerror(self):
         set_veranstaltung(self.conn, verein="HSV Musterstadt e.V.", datum="2026-11-14")

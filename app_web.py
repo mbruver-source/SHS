@@ -769,10 +769,10 @@ def _pruefe_und_parse_formular(
             anzeige = int(anzeige_text) if anzeige_text else None
         except ValueError:
             return {}, f"Bitte bei {disziplin} nur Zahlen eintragen."
-        if suche is not None and not (0 <= suche <= 60):
-            return {}, f"Suchleistung {disziplin}: nur Werte von 0 bis 60 möglich."
-        if anzeige is not None and not (0 <= anzeige <= 40):
-            return {}, f"Anzeigeleistung {disziplin}: nur Werte von 0 bis 40 möglich."
+        if suche is not None and not (0 <= suche <= db.SUCHE_MAX):
+            return {}, f"Suchleistung {disziplin}: nur Werte von 0 bis {db.SUCHE_MAX} möglich."
+        if anzeige is not None and not (0 <= anzeige <= db.ANZEIGE_MAX):
+            return {}, f"Anzeigeleistung {disziplin}: nur Werte von 0 bis {db.ANZEIGE_MAX} möglich."
         if geladene_werte is None or not _disziplin_unveraendert(formular, disziplin, geladene_werte):
             unvollstaendig = db.pruefe_ergebnis_eingabe(suche, anzeige)
             if unvollstaendig is not None:
@@ -904,6 +904,8 @@ def ergebnis_erfassen(conn, teilnehmer_id):
         label=db.leistungsklasse_label(teilnehmer),
         zeilen=zeilen,
         fehler=fehler,
+        suche_max=db.SUCHE_MAX,
+        anzeige_max=db.ANZEIGE_MAX,
     )
 
 

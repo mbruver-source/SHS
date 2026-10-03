@@ -23,13 +23,13 @@
          ANDERE Disziplin desselben Teilnehmers geändert hat. #}
       <input type="hidden" name="geladen_suche_{{ zeile.disziplin }}" value="{{ zeile.geladen_suche }}">
       <input type="hidden" name="geladen_anzeige_{{ zeile.disziplin }}" value="{{ zeile.geladen_anzeige }}">
-      <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–60)</label>
+      <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–{{ suche_max }})</label>
       <input type="number" id="suche_{{ zeile.disziplin }}" name="suche_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="60"
+             inputmode="numeric" min="0" max="{{ suche_max }}"
              value="{{ zeile.suche }}">
-      <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–40)</label>
+      <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–{{ anzeige_max }})</label>
       <input type="number" id="anzeige_{{ zeile.disziplin }}" name="anzeige_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="40"
+             inputmode="numeric" min="0" max="{{ anzeige_max }}"
              value="{{ zeile.anzeige }}">
     {% endfor %}
     <p><button type="submit">Speichern</button></p>

@@ -9,6 +9,7 @@ Ringimport entsteht.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import re
 import sqlite3
@@ -31,6 +32,7 @@ from db import (
     list_teilnehmer,
     normalisiere_datum,
     pruefung_nach_kuerzel,
+    datum_anzeige,
 )
 
 # Nutzerwunsch (20.09., Anmerkung zum Programm, Abschnitt "Teilnehmer"): Meldeformulare
@@ -66,10 +68,78 @@ class CsvImportErgebnis:
     # importiere_anmeldeformular_pdf) befüllt: Zeilen bzw. Dateien, die als bereits
     # vorhandene Meldung erkannt und deshalb bewusst nicht erneut angelegt wurden.
     uebersprungen: list[str] = field(default_factory=list)
+    # Allgemeine Hinweise zum Import (nicht an eine Zeile gebunden), z. B. dass mangels
+    # hinterlegter angebotener Prüfungen nicht geprüft werden konnte (UX-Test U4).
+    hinweise: list[str] = field(default_factory=list)
+
+
+# UX-Test 02.10.2026, U4/K8: CSV- und OMA-Import lehnen wie der PDF-Import Meldungen für
+# Prüfungen ab, die im Termin nicht angeboten werden. Der Hinweis verweist zuerst auf die
+# Rücksprache mit dem Teilnehmer - der Weg zum Freischalten steht bewusst nur als Nachsatz
+# da, damit er nicht zum bloßen Freischalten verleitet.
+_KEINE_ANGEBOTE_HINWEIS = (
+    "In diesem Termin sind keine angebotenen Prüfungen hinterlegt - es wurde daher nicht "
+    "geprüft, ob die importierten Prüfungen angeboten werden (Reiter „Verwaltung“ → "
+    "„Veranstaltungsdaten bearbeiten…“)."
+)
+
+
+def _nicht_angeboten_text(bezeichnung: str, formular: bool = False) -> str:
+    vermutung = " - Formular eines anderen Termins?" if formular else "."
+    # UX-Nachtest 03.10.2026, N5: der Hinweis zum Freischalten steht nur noch EINMAL am Ende
+    # der Meldung (_NICHT_ANGEBOTEN_HINWEIS), statt in jeder abgelehnten Zeile.
+    return f"{bezeichnung} wird in diesem Termin nicht angeboten{vermutung} Bitte mit dem Teilnehmer klären."
+
+
+_NICHT_ANGEBOTEN_HINWEIS = (
+    "Nur falls eine Prüfung doch angeboten werden soll: Reiter „Verwaltung“ → "
+    "„Veranstaltungsdaten bearbeiten…“."
+)
+
+
+def _hinweise_ergaenzen(fehler: list[str], hinweise: list[str]) -> list[str]:
+    """Hängt den Freischalt-Hinweis einmal an, wenn mindestens eine Zeile/Datei wegen einer
+    nicht angebotenen Prüfung abgelehnt wurde (N5)."""
+    if any("nicht angeboten" in f for f in fehler):
+        hinweise.append(_NICHT_ANGEBOTEN_HINWEIS)
+    return hinweise
+
+
+def _zeilen_bezeichnung(zeilennummer: int, vorname: str | None, nachname: str | None) -> str:
+    """"Zeile 8 (Mia Meyer)" statt nur "Zeile 8" (UX-Nachtest 03.10.2026, N5)."""
+    name = " ".join(t for t in (vorname, nachname) if t)
+    return f"Zeile {zeilennummer} ({name})" if name else f"Zeile {zeilennummer}"
+
+
+def _csv_feld_fehler(feld: str, wert: str | None, erlaubt: str, fehlt_zusatz: str = "") -> str:
+    """Verständliche Begründung für eine abgelehnte CSV-Zeile, z. B. "Disziplin fehlt (bei
+    Einzeldisziplin ED nötig) – bitte Trümmerfeld, Flächensuche oder Behältnisstrecke
+    eintragen" bzw. "Art „EDX“ ist ungültig – bitte ED (…) oder DK (…) eintragen"."""
+    if wert is None:
+        return f"{feld} fehlt{fehlt_zusatz} – bitte {erlaubt} eintragen"
+    return f"{feld} „{wert}“ ist ungültig – bitte {erlaubt} eintragen"
+
+
+def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
+    """Wirft ValueError, wenn die Prüfung des Teilnehmers nicht unter `angebotene`
+    (Kürzel, siehe db.ALLE_PRUEFUNGEN) ist. Leeres `angebotene` = nicht prüfen."""
+    if not angebotene:
+        return
+    kuerzel = f"DK{teilnehmer.stufe}" if teilnehmer.art == "DK" else f"ED{teilnehmer.stufe}-{teilnehmer.disziplin}"
+    if kuerzel not in angebotene:
+        pruefung = pruefung_nach_kuerzel(kuerzel)
+        bezeichnung = pruefung.bezeichnung if pruefung else f"{teilnehmer.art} LK {teilnehmer.stufe}"
+        raise ValueError(_nicht_angeboten_text(bezeichnung))
 
 
 def _csv_wert(zeile: dict, spalte: str) -> str | None:
     wert = (zeile.get(spalte) or "").strip()
+    # Gegenstück zu _csv_zelle_absichern (Export): das vorangestellte "'" vor einem
+    # Formelzeichen wieder entfernen, damit Export -> Import verlustfrei bleibt.
+    if len(wert) > 1 and wert[0] == "'":
+        kern = wert[1:].lstrip()
+        if kern[:1] in _FORMEL_ZEICHEN or (kern[:1] == "'" and kern[1:2] in _FORMEL_ZEICHEN):
+            wert = wert[1:].strip()
     return wert or None
 
 
@@ -84,9 +154,11 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     if not nachname or not vorname or not rufname_hund:
         raise ValueError("Nachname/Vorname/Rufname des Hundes fehlt")
 
+    # Vor-Build-Klärung 03.10.2026: Meldungen in Alltagssprache statt "ungültige Disziplin
+    # None für ED (muss eine von ['Trümmerfeld', …] sein)" - fehlend und falsch getrennt.
     art = _csv_wert(zeile, "art")
     if art not in ("ED", "DK"):
-        raise ValueError(f"ungültige Art {art!r} (muss ED oder DK sein)")
+        raise ValueError(_csv_feld_fehler("Art", art, "ED (Einzeldisziplin) oder DK (Dreikampf)"))
 
     stufe_text = _csv_wert(zeile, "stufe")
     try:
@@ -94,12 +166,15 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     except ValueError:
         stufe = None
     if stufe not in (1, 2, 3):
-        raise ValueError(f"ungültige Leistungsklasse {stufe_text!r} (muss 1, 2 oder 3 sein)")
+        raise ValueError(_csv_feld_fehler("Leistungsklasse", stufe_text, "1, 2 oder 3"))
 
     disziplin = _csv_wert(zeile, "disziplin")
     if art == "ED":
         if disziplin not in ALLE_DISZIPLINEN:
-            raise ValueError(f"ungültige Disziplin {disziplin!r} für ED (muss eine von {ALLE_DISZIPLINEN} sein)")
+            raise ValueError(_csv_feld_fehler(
+                "Disziplin", disziplin, ", ".join(ALLE_DISZIPLINEN[:-1]) + " oder " + ALLE_DISZIPLINEN[-1],
+                fehlt_zusatz=" (bei Einzeldisziplin ED nötig)",
+            ))
     else:
         disziplin = None
 
@@ -109,11 +184,11 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
         try:
             schulterhoehe_cm = int(schulterhoehe_text)
         except ValueError:
-            raise ValueError(f"ungültige Schulterhöhe {schulterhoehe_text!r} (muss eine Zahl sein)")
+            raise ValueError(_csv_feld_fehler("Schulterhöhe", schulterhoehe_text, "eine ganze Zahl in cm, z. B. 45"))
 
     geschlecht = _csv_wert(zeile, "geschlecht")
     if geschlecht is not None and geschlecht not in ("Hündin", "Rüde"):
-        raise ValueError(f"ungültiges Geschlecht {geschlecht!r} (muss Hündin oder Rüde sein)")
+        raise ValueError(_csv_feld_fehler("Geschlecht", geschlecht, "Hündin oder Rüde"))
 
     # Datumsfelder: TT.MM.JJJJ wird akzeptiert und umgewandelt, ein ungültiges Datum
     # überspringt die Zeile wie die übrigen Plausibilitätsfehler (Codeprüfung 22.09., M5,
@@ -156,50 +231,78 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
     gespeichertes BOM am Dateianfang nicht versehentlich Teil des ersten Spaltennamens
     wird (sonst würde 'nachname' der ersten Spalte nicht erkannt).
 
-    Eine mit einer anderen Kodierung (z.B. Windows-ANSI statt UTF-8) gespeicherte Datei
-    löst beim Weiterlesen einen UnicodeDecodeError aus - der tritt außerhalb der
-    zeilenweisen try/except-Behandlung auf (beim Vorrücken des Datei-Iterators selbst),
-    wird daher separat abgefangen: der Import bricht an der betroffenen Stelle sauber ab
-    statt mit einer unbehandelten Exception, bereits importierte Zeilen bleiben erhalten
-    (add_teilnehmer() committet pro Zeile einzeln)."""
+    Kodierung und Trennzeichen (UX-Test 02.10.2026, U10/N1): UTF-8 (mit/ohne BOM), sonst
+    Windows-1252 wie bei Excel "CSV (Trennzeichen-getrennt)"; Komma oder Semikolon wird an
+    der Kopfzeile erkannt. add_teilnehmer() committet pro Zeile einzeln."""
     fehler: list[str] = []
+    uebersprungen: list[str] = []
     importiert = 0
     letzte_zeile = 1  # Zeile 1 = Kopfzeile
-    with open(pfad, newline="", encoding="utf-8-sig") as datei:
-        reader = csv.DictReader(datei)
-        iterator = enumerate(reader, start=2)
-        while True:
-            try:
-                zeilennummer, zeile = next(iterator)
-            except StopIteration:
-                break
-            except UnicodeDecodeError as exc:
-                fehler.append(
-                    f"Import nach Zeile {letzte_zeile} abgebrochen - Datei ist nicht "
-                    f"UTF-8-kodiert ({exc}). Bitte die CSV-Datei mit UTF-8-Kodierung "
-                    "speichern und erneut importieren; bereits importierte Zeilen bleiben "
-                    "erhalten."
-                )
-                break
-            except csv.Error as exc:
-                # z. B. "field larger than field limit" (> 131072 Zeichen in einem Feld) bei
-                # einer defekten Datei - vorher eine unbehandelte Exception im GUI-Slot
-                # (Verifikation 25.09.). Sauberer Abbruch wie bei der falschen Kodierung.
-                fehler.append(
-                    f"Import nach Zeile {letzte_zeile} abgebrochen - die Datei ist beschädigt "
-                    f"oder keine gültige CSV-Datei ({exc}); bereits importierte Zeilen bleiben "
-                    "erhalten."
-                )
-                break
-            letzte_zeile = zeilennummer
-            try:
-                teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
-                add_teilnehmer(conn, teilnehmer)
-            except (ValueError, sqlite3.IntegrityError) as exc:
-                fehler.append(f"Zeile {zeilennummer}: {exc}")
+    angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
+    # UX-Nachtest 03.10.2026, N1: wie beim PDF-/OMA-Import werden bereits vorhandene
+    # Meldungen übersprungen - vorher ergab ein zweiter Import derselben Datei alle doppelt.
+    vorhandene = {
+        _meldungs_schluessel(t["nachname"], t["vorname"], t["rufname_hund"], t["art"], t["stufe"], t["disziplin"])
+        for t in list_teilnehmer(conn)
+    }
+    # UX-Test 02.10.2026, U10/N1: Excel speichert auf deutschem Windows mit Semikolon und
+    # (bei "CSV (Trennzeichen-getrennt)") in Windows-1252 - beides wird jetzt erkannt,
+    # statt mit "nicht UTF-8-kodiert" abzubrechen (wie beim OMA-Import).
+    with open(pfad, "rb") as datei:
+        rohdaten = datei.read()
+    try:
+        text = rohdaten.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = rohdaten.decode("cp1252", errors="replace")
+    # Leerzeilen vor der Kopfzeile überspringen (Zeilennummern in Meldungen bleiben die der Datei).
+    rest = text.lstrip("\r\n")
+    fuehrende_leerzeilen = len(re.findall(r"\r\n|\r|\n", text[: len(text) - len(rest)]))
+    text = rest
+    kopfzeile = text.splitlines()[0] if text else ""
+    trennzeichen = ";" if kopfzeile.count(";") > kopfzeile.count(",") else ","
+    reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=trennzeichen)
+    iterator = enumerate(reader, start=2 + fuehrende_leerzeilen)
+    letzte_zeile += fuehrende_leerzeilen
+    while True:
+        try:
+            zeilennummer, zeile = next(iterator)
+        except StopIteration:
+            break
+        except csv.Error as exc:
+            # z. B. "field larger than field limit" (> 131072 Zeichen in einem Feld) bei
+            # einer defekten Datei - vorher eine unbehandelte Exception im GUI-Slot
+            # (Verifikation 25.09.). Sauberer Abbruch statt Absturz.
+            fehler.append(
+                f"Import nach Zeile {letzte_zeile} abgebrochen - die Datei ist beschädigt "
+                f"oder keine gültige CSV-Datei ({exc}); bereits importierte Zeilen bleiben "
+                "erhalten."
+            )
+            break
+        letzte_zeile = zeilennummer
+        bezeichnung = _zeilen_bezeichnung(zeilennummer, _csv_wert(zeile, "vorname"), _csv_wert(zeile, "nachname"))
+        try:
+            teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
+            schluessel = _meldungs_schluessel(
+                teilnehmer.nachname, teilnehmer.vorname, teilnehmer.rufname_hund,
+                teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
+            )
+            if schluessel in vorhandene:
+                uebersprungen.append(f"{bezeichnung} mit {teilnehmer.rufname_hund} ist bereits gemeldet")
                 continue
-            importiert += 1
-    return CsvImportErgebnis(importiert=importiert, fehler=fehler)
+            _angebot_pruefen(teilnehmer, angebotene)
+            add_teilnehmer(conn, teilnehmer)
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            fehler.append(f"{bezeichnung}: {exc}")
+            continue
+        vorhandene.add(schluessel)
+        importiert += 1
+    hinweise = [_KEINE_ANGEBOTE_HINWEIS] if not angebotene and (importiert or fehler) else []
+    if not importiert and not fehler and not uebersprungen:
+        hinweise.append("Die Datei enthält keine Teilnehmerzeilen - es wurde nichts importiert.")
+    return CsvImportErgebnis(
+        importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
+        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+    )
 
 
 # Nutzerwunsch 25.09.2026: Meldungen aus der OMA (Online-Meldeannahme) direkt übernehmen.
@@ -318,6 +421,7 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
         _meldungs_schluessel(t["nachname"], t["vorname"], t["rufname_hund"], t["art"], t["stufe"], t["disziplin"])
         for t in list_teilnehmer(conn)
     }
+    angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
     fehler: list[str] = []
     uebersprungen: list[str] = []
     importiert = 0
@@ -332,6 +436,10 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 f"{len(kopf)} Spalten) - Datei evtl. abgeschnitten oder beschädigt"
             )
             continue
+        bezeichnung = _zeilen_bezeichnung(
+            zeilennummer, _oma_wert(werte, kopf_index, "Starter_Vorname"),
+            _oma_wert(werte, kopf_index, "Starter_Nachname"),
+        )
         try:
             teilnehmer = _csv_zeile_zu_teilnehmer(_oma_zeile_zu_csv_zeile(werte, kopf_index))
             schluessel = _meldungs_schluessel(
@@ -339,18 +447,20 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
             )
             if schluessel in vorhandene:
-                uebersprungen.append(
-                    f"Zeile {zeilennummer}: {teilnehmer.vorname} {teilnehmer.nachname} mit "
-                    f"{teilnehmer.rufname_hund} ist bereits gemeldet"
-                )
+                uebersprungen.append(f"{bezeichnung} mit {teilnehmer.rufname_hund} ist bereits gemeldet")
                 continue
+            _angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
         except (ValueError, sqlite3.IntegrityError) as exc:
-            fehler.append(f"Zeile {zeilennummer}: {exc}")
+            fehler.append(f"{bezeichnung}: {exc}")
             continue
         vorhandene.add(schluessel)
         importiert += 1
-    return CsvImportErgebnis(importiert=importiert, fehler=fehler, uebersprungen=uebersprungen)
+    hinweise = [_KEINE_ANGEBOTE_HINWEIS] if not angebotene and (importiert or fehler) else []
+    return CsvImportErgebnis(
+        importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
+        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+    )
 
 
 # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular (PDF) je Termin, das die Teilnehmer
@@ -440,10 +550,11 @@ def _pdf_angekreuzt(werte: dict, feldname: str) -> bool:
     return (None if wert is None else str(wert).strip()) not in _PDF_HAKEN_AUS
 
 
-def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> NeuerTeilnehmer:
+def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> tuple[NeuerTeilnehmer, list[str]]:
     """Setzt die Feldwerte eines ausgefüllten Anmeldeformulars in einen NeuerTeilnehmer um.
     `angebotene` sind die Kürzel der im geöffneten Termin angebotenen Prüfungen. Wirft
-    ValueError mit einer für den Nutzer verständlichen Begründung."""
+    ValueError mit einer für den Nutzer verständlichen Begründung. Liefert zusätzlich die
+    bei ED nicht übernommenen Gegenstände (UX-Test U11)."""
     if not any(feld in werte for feld in ANMELDEFORMULAR_TEXTFELDER):
         raise ValueError("die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)")
 
@@ -475,11 +586,7 @@ def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> NeuerTe
             "„Verwaltung“ → „Veranstaltungsdaten bearbeiten…“)"
         )
     if pruefung.kuerzel not in angebotene:
-        raise ValueError(
-            f"{pruefung.bezeichnung} wird in diesem Termin nicht angeboten - Formular eines "
-            "anderen Termins? (angebotene Prüfungen: Reiter „Verwaltung“ → "
-            "„Veranstaltungsdaten bearbeiten…“)"
-        )
+        raise ValueError(_nicht_angeboten_text(pruefung.bezeichnung, formular=True))
 
     zeile = {spalte: _pdf_text(werte, feld) for feld, spalte in ANMELDEFORMULAR_TEXTFELDER.items()}
     zeile["art"], zeile["stufe"], zeile["disziplin"] = pruefung.art, str(pruefung.stufe), pruefung.disziplin or ""
@@ -506,11 +613,23 @@ def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> NeuerTe
 
     teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
     # Gegenstände nur aus dem Block der angekreuzten LK (LK n = n Gegenstände), als "frei".
-    for nummer in range(1, pruefung.stufe + 1):
-        gegenstand = _pdf_text(werte, anmeldeformular_gegenstand_feld(pruefung.stufe, nummer)) or None
+    gegenstaende = [
+        _pdf_text(werte, anmeldeformular_gegenstand_feld(pruefung.stufe, nummer)) or None
+        for nummer in range(1, pruefung.stufe + 1)
+    ]
+    verworfen: list[str] = []
+    if pruefung.art == "ED":
+        # UX-Test 02.10.2026, U11: bei Einzeldisziplin gibt es genau einen Gegenstand - das
+        # Formular hat für LK 2/3 aber mehrere Felder. Nur den ersten ausgefüllten
+        # übernehmen und die übrigen im Import-Ergebnis nennen (statt später beim
+        # Bearbeiten eine Rückfrage auszulösen, die sie stillschweigend verwirft).
+        ausgefuellt = [g for g in gegenstaende if g]
+        verworfen = ausgefuellt[1:]
+        gegenstaende = ausgefuellt[:1]
+    for nummer, gegenstand in enumerate(gegenstaende, start=1):
         setattr(teilnehmer, f"gegenstand_{nummer}", gegenstand)
         setattr(teilnehmer, f"gegenstand_{nummer}_disziplin", None)
-    return teilnehmer
+    return teilnehmer, verworfen
 
 
 def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -> CsvImportErgebnis:
@@ -527,6 +646,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
     angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
     fehler: list[str] = []
     uebersprungen: list[str] = []
+    hinweise: list[str] = []
     importiert = 0
     for pfad in pfade:
         name = os.path.basename(pfad)
@@ -545,7 +665,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             fehler.append(f"{name}: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)")
             continue
         try:
-            teilnehmer = _anmeldeformular_zu_teilnehmer(werte, angebotene)
+            teilnehmer, verworfen = _anmeldeformular_zu_teilnehmer(werte, angebotene)
             schluessel = _meldungs_schluessel(
                 teilnehmer.nachname, teilnehmer.vorname, teilnehmer.rufname_hund,
                 teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
@@ -562,7 +682,15 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             continue
         vorhandene.add(schluessel)
         importiert += 1
-    return CsvImportErgebnis(importiert=importiert, fehler=fehler, uebersprungen=uebersprungen)
+        if verworfen:
+            hinweise.append(
+                f"{name}: bei Einzeldisziplin nur ein Gegenstand – übernommen „{teilnehmer.gegenstand_1}“, "
+                "nicht übernommen " + ", ".join(f"„{g}“" for g in verworfen)
+            )
+    return CsvImportErgebnis(
+        importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
+        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+    )
 
 
 def importiere_teilnehmer_stammdaten(
@@ -614,3 +742,65 @@ def importiere_teilnehmer_stammdaten(
         add_teilnehmer(ziel_conn, neu)
         importiert += 1
     return importiert
+
+
+
+# Nutzerwunsch 02.10.2026 (UX-Test, N1): Teilnehmer als CSV exportieren - Excel-freundlich
+# (Semikolon, UTF-8 mit BOM, Datum TT.MM.JJJJ) und mit denselben Spalten wie der Import,
+# sodass die Datei auch wieder eingelesen werden kann (Startnummer/Bezahlt/Status kommen
+# zusätzlich dazu und werden beim Import ignoriert).
+CSV_EXPORT_SPALTEN = ["startnummer", *CSV_IMPORT_SPALTEN, "bezahlt", "keine_teilnahme"]
+
+# Sicherheitsbefund der Verifikation (Marco 03.10.2026: absichern): Teilnehmerdaten stammen
+# von Dritten (Anmelde-PDFs). Ein Wert wie "=HYPERLINK(...)" würde in Excel als Formel
+# ausgeführt (CSV-Injection). Solche Werte bekommen ein "'" vorangestellt - Excel zeigt sie
+# dann als Text; der Import entfernt es wieder (siehe _csv_wert). "+"/"-" nur, wenn der
+# Wert keine Telefonnummer/Zahl ist ("+49 170 …" bleibt unverändert).
+_FORMEL_ZEICHEN = ("=", "@", "+", "-", "\t", "\r")
+_ZAHL_ODER_TELEFON = re.compile(r"[+-]?[\d\s()/.-]+")
+
+
+def _csv_zelle_absichern(wert: str) -> str:
+    kern = wert.lstrip()  # führende Leerzeichen ändern nichts an der Formel-Erkennung
+    if not kern:
+        return wert
+    if kern[0] == "'" and len(kern) > 1 and kern[1] in _FORMEL_ZEICHEN:
+        # Echter Wert, der schon mit "'=" beginnt: ebenfalls schützen, sonst würde der
+        # Import das "'" für das eigene Schutzzeichen halten (Verifikation N1).
+        return "'" + wert
+    if kern[0] not in _FORMEL_ZEICHEN:
+        return wert
+    if kern[0] in "+-" and _ZAHL_ODER_TELEFON.fullmatch(kern):
+        return wert
+    return "'" + wert
+
+
+_CSV_DATUMSSPALTEN = {"tollwutimpfung_bis", "geburtsdatum", "wurftag"}
+
+
+def exportiere_teilnehmer_csv(conn: sqlite3.Connection, pfad: str) -> int:
+    """Schreibt alle Teilnehmer (auch "keine Teilnahme") nach Startnummer sortiert in eine
+    CSV-Datei. Liefert die Anzahl der Zeilen."""
+    teilnehmer = list_teilnehmer(conn)
+    with open(pfad, "w", newline="", encoding="utf-8-sig") as datei:
+        schreiber = csv.writer(datei, delimiter=";")
+        schreiber.writerow(CSV_EXPORT_SPALTEN)
+        for t in teilnehmer:
+            zeile = []
+            for spalte in CSV_EXPORT_SPALTEN:
+                wert = t.get(spalte)
+                if spalte in ("bezahlt", "keine_teilnahme"):
+                    wert = "ja" if wert else ""
+                elif spalte in _CSV_DATUMSSPALTEN:
+                    wert = datum_anzeige(wert)
+                zeile.append("" if wert is None else _csv_zelle_absichern(str(wert)))
+            schreiber.writerow(zeile)
+    return len(teilnehmer)
+
+
+def schreibe_csv_vorlage(pfad: str) -> None:
+    """UX-Test 02.10.2026, U10: leere Vorlage (nur Kopfzeile, Excel-freundlich) für eine
+    Teilnehmerliste, die z. B. der Schriftführer ausfüllt und die dann über "CSV
+    importieren…" eingelesen wird."""
+    with open(pfad, "w", newline="", encoding="utf-8-sig") as datei:
+        csv.writer(datei, delimiter=";").writerow(CSV_IMPORT_SPALTEN)

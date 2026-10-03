@@ -1,6 +1,6 @@
 # Architekturüberblick: SHS-Prüfungsprogramm
 
-Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026, Modulaufteilung 27.09.2026, Anmeldeformular 28.09.2026). Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
+Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026, Modulaufteilung 27.09.2026, Anmeldeformular 28.09.2026, UX-Test-Umsetzung 03.10.2026). Ergänzt `Grobkonzept.md` (ursprünglicher Migrationsplan, Stand 10.09.) um den
 aktuellen, tatsächlich umgesetzten Stand inkl. der später hinzugekommenen Web/PostgreSQL-Variante.
 Gedacht als schneller Einstieg für neue Sitzungen/Subagents, die den Code noch nicht kennen -
 Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.md`.
@@ -87,15 +87,15 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save), `StartDialog`, `VersionDialog` + Update-Prüfung | `test_app_gui.py` |
+| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save), `StartDialog`, `VersionDialog` + Update-Prüfung; `main()` lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein | `test_app_gui.py` |
 | `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung); von `app.py` per `from … import` eingebunden | `test_app_gui.py` |
-| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/PDF-Speicherdialog, Fehlermeldungen, responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle | `test_app_gui.py` |
+| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/PDF-Speicherdialog (Ordner `Termine\Ausdrucke\<Termin>`, Meldung „gespeichert“ mit „PDF öffnen“/„Ordner zeigen“), Startordner der Importe, Fehlermeldungen, responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle, deutsche Qt-Texte (`deutsche_qt_texte_laden`), Absturzprotokoll (`absturzprotokoll_einrichten`: `sys.excepthook` + `faulthandler` → `absturzprotokoll.txt`) | `test_app_gui.py` |
 | `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
 | `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
-| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung, Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
-| `db_import.py` | Teilnehmer-Import (Desktop): CSV aus dem Formular-Import, OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
+| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Startnummern-Bereiche je Prüfung (`veranstaltung.startnummer_bereiche`, `fehlende_startnummern_vergeben`), Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung (automatische Verteilung mit DK-Mindestabstand, Überschneidungsprüfung `zeitplan_ueberschneidungen`, Pausen an Position bzw. bei allen Richtern, Richter aus den Veranstaltungsdaten), Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
+| `db_import.py` | Teilnehmer-Import und -Export (Desktop): CSV (Excel-Liste oder KI; UTF-8/Windows-Kodierung, `;`/`,` erkannt, leere Vorlage), OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; alle Wege prüfen die angebotenen Prüfungen (`_angebot_pruefen`); Teilnehmerliste als CSV-Export (`exportiere_teilnehmer_csv`, mit Schutz vor CSV-Formeln); baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
 | `db_sicherung.py` | Backup/Restore aller Termin-Dateien (ZIP, optional `pyzipper`-verschlüsselt); baut auf `db.py` auf | `test_backup.py` |
-| `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung | `test_shs_core.py` |
+| `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung, Punktgrenzen `SUCHE_MAX`/`ANZEIGE_MAX` (gemeinsam für Desktop und Web) | `test_shs_core.py` |
 | `pdf_export.py` | PDF-Erzeugung (reportlab): Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Zeitplan, Richter-Bedarf, ausfüllbares Anmeldeformular (Canvas + AcroForm; Feldnamen als Konstanten `ANMELDEFORMULAR_*` in `db.py`, gemeinsam mit dem Import) | `test_pdf_export.py` |
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
 | `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`) für Releases hochzählen | `test_bump_version.py` |

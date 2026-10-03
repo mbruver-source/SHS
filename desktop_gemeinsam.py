@@ -11,8 +11,10 @@ pdf_export); keines dieser Module importiert app.
 from __future__ import annotations
 
 import os
+import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -30,6 +32,7 @@ from db import (
     ALLE_DISZIPLINEN,
     get_veranstaltung,
     set_veranstaltung,
+    zeitplan_ueberschneidungen,
 )
 import pdf_export
 
@@ -59,6 +62,8 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
         "verband": aktuell.get("verband"),
         "meldestelle": aktuell.get("meldestelle"),
         "angebotene_pruefungen": aktuell.get("angebotene_pruefungen"),
+        "startnummer_bereiche": aktuell.get("startnummer_bereiche"),  # UX-Test U1
+        "dk_mindestabstand": aktuell.get("dk_mindestabstand"),  # UX-Test U2
     }
     werte.update(overrides)
     set_veranstaltung(conn, **werte)
@@ -83,7 +88,73 @@ def _export_dateiname(conn, praefix: str) -> str:
     return f"{praefix}_{datum}.pdf" if datum else f"{praefix}.pdf"
 
 
+# UX-Test 02.10.2026, U7 (Rubrik ux_test_2026_10): PDFs landeten zwischen den
+# Termin-Dateien, nach dem Speichern gab es nur eine kleine Statuszeile ("Wo ist das jetzt
+# hin?"), und Importe starteten nicht dort, wo heruntergeladene Dateien liegen.
+def _ausdrucke_ordner(termin_pfad: str) -> str:
+    """Standard-Ablageort für PDFs eines Termins: Unterordner "Ausdrucke/<Termin>" neben
+    der Termin-Datei (Marcos Entscheidung 03.10.2026). Wird erst beim Speichern angelegt."""
+    ordner, dateiname = os.path.split(os.path.abspath(termin_pfad))
+    return os.path.join(ordner, "Ausdrucke", os.path.splitext(dateiname)[0])
+
+
+def _pfad_anzeige(pfad: str) -> str:
+    """Pfad in Windows-Schreibweise (Qt-Dialoge liefern "/" als Trenner)."""
+    return os.path.normpath(pfad)
+
+
+def _ordner_zeigen(pfad: str) -> None:
+    """Öffnet den Explorer mit markierter Datei (Windows) bzw. den Ordner."""
+    if sys.platform == "win32" and os.path.isfile(pfad):
+        import subprocess
+
+        subprocess.Popen(["explorer", "/select,", _pfad_anzeige(pfad)])
+    else:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(pfad) if os.path.isfile(pfad) else pfad))
+
+
+def _datei_gespeichert_melden(parent, pfad: str, titel: str, datei_oeffnen_text: str | None = "PDF öffnen") -> None:
+    """Meldung nach dem Speichern mit den nächsten Schritten [PDF öffnen] [Ordner zeigen]
+    [OK] - statt nur einer leicht übersehenen Statuszeile."""
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Information)
+    box.setWindowTitle(titel)
+    box.setText(f"Gespeichert unter:\n{_pfad_anzeige(pfad)}")
+    oeffnen_btn = box.addButton(datei_oeffnen_text, QMessageBox.ActionRole) if datei_oeffnen_text else None
+    ordner_btn = box.addButton("Ordner zeigen", QMessageBox.ActionRole)
+    box.setDefaultButton(box.addButton(QMessageBox.Ok))
+    box.exec()
+    if oeffnen_btn is not None and box.clickedButton() is oeffnen_btn:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(pfad))
+    elif box.clickedButton() is ordner_btn:
+        _ordner_zeigen(pfad)
+
+
+# Startordner der Import-Dialoge: zuerst "Downloads" (dort landen per E-Mail empfangene
+# Anmeldungen/Listen), danach der zuletzt für einen Import benutzte Ordner.
+_letzter_import_ordner: str | None = None
+
+
+def _import_startordner() -> str:
+    if _letzter_import_ordner and os.path.isdir(_letzter_import_ordner):
+        return _letzter_import_ordner
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    return downloads if os.path.isdir(downloads) else os.path.expanduser("~")
+
+
+def _import_ordner_merken(pfad: str) -> None:
+    global _letzter_import_ordner
+    if pfad:
+        _letzter_import_ordner = os.path.dirname(pfad)
+
+
 def _pdf_speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschlag_dateiname: str) -> str | None:
+    try:
+        # Der Ausdrucke-Ordner (siehe _ausdrucke_ordner) entsteht erst hier - sonst würde
+        # der Dialog bei einem fehlenden Ordner an einer anderen Stelle starten.
+        os.makedirs(ablageort.pfad, exist_ok=True)
+    except OSError:
+        pass
     vorschlag_pfad = os.path.join(ablageort.pfad, vorschlag_dateiname)
     pfad, _ = QFileDialog.getSaveFileName(parent, titel, vorschlag_pfad, "PDF-Datei (*.pdf)")
     if not pfad:
@@ -106,6 +177,18 @@ def _pdf_export_fehler_anzeigen(parent, exc: Exception) -> None:
 def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
     """Gemeinsame Umsetzung für den Zeitplan-PDF-Export - vorher wortgleich in
     ZeitplanTab._pdf_exportieren und ExportTab._zeitplan_exportieren dupliziert."""
+    # UX-Test 02.10.2026, U2: nicht unbemerkt einen Plan mit doppelt eingeplanten Teams
+    # verschicken.
+    konflikte = zeitplan_ueberschneidungen(conn)
+    if konflikte:
+        antwort = QMessageBox.question(
+            parent, "Überschneidungen im Zeitplan",
+            f"Im Zeitplan gibt es {len(konflikte)} Überschneidung(en): Teams stehen gleichzeitig "
+            "bzw. ohne Mindestabstand an zwei Stellen (im Reiter „Zeitplan“ rot markiert).\n\n"
+            "Trotzdem als PDF speichern?",
+        )
+        if antwort != QMessageBox.Yes:
+            return
     pfad = _pdf_speicherort_waehlen(parent, ablageort, "Zeitplan speichern", _export_dateiname(conn, "Zeitplan"))
     if not pfad:
         return
@@ -114,7 +197,8 @@ def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_labe
     except Exception as exc:
         _pdf_export_fehler_anzeigen(parent, exc)
         return
-    status_label.setText(f"Zeitplan gespeichert: {pfad}")
+    status_label.setText(f"Zeitplan gespeichert: {_pfad_anzeige(pfad)}")
+    _datei_gespeichert_melden(parent, pfad, "Zeitplan gespeichert")
 
 
 def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900, pt_schmal: float = 8.0, pt_breit: float = 10.0) -> float:
@@ -361,3 +445,132 @@ _ERGEBNIS_SPALTEN_JE_DISZIPLIN = {
 _DQ_SPALTE = 4 + 2 * len(ALLE_DISZIPLINEN)
 _ABBRUCH_SPALTE = _DQ_SPALTE + 1
 _STATUS_SPALTE = _ABBRUCH_SPALTE + 1
+
+
+# UX-Test 02.10.2026, Punkt U6 (Rubrik ux_test_2026_10): Standardknöpfe wie Yes/No/Cancel
+# erschienen englisch, weil keine Qt-Übersetzung geladen war. Zweistufig gelöst:
+# 1. die deutsche Qt-Übersetzung (qtbase_de.qm) laden, falls sie mitgeliefert ist (pip-
+#    PySide6 und damit der PyInstaller-Build bringen sie üblicherweise mit; das lokale
+#    Anaconda-PySide6 dagegen nicht);
+# 2. unabhängig davon ein kleiner eingebauter Übersetzer für die Standardknöpfe und das
+#    Kontextmenü der Eingabefelder - greift auch dann, wenn die .qm-Datei fehlt.
+_DEUTSCHE_QT_TEXTE = {
+    "QPlatformTheme": {
+        "OK": "OK", "Save": "Speichern", "Save All": "Alle speichern", "Open": "Öffnen",
+        "&Yes": "&Ja", "Yes to &All": "Ja, &alle", "&No": "&Nein", "N&o to All": "N&ein, keine",
+        "Abort": "Abbrechen", "Retry": "Wiederholen", "Ignore": "Ignorieren",
+        "Close": "Schließen", "Cancel": "Abbrechen", "Discard": "Verwerfen",
+        "Don't Save": "Nicht speichern", "Help": "Hilfe", "Apply": "Anwenden",
+        "Reset": "Zurücksetzen", "Restore Defaults": "Standardwerte",
+    },
+    "QMessageBox": {
+        "Show Details...": "Details einblenden …", "Hide Details...": "Details ausblenden …",
+    },
+}
+_KONTEXTMENUE_TEXTE = {
+    "&Undo": "&Rückgängig", "&Redo": "Wieder&herstellen", "Cu&t": "&Ausschneiden",
+    "&Copy": "&Kopieren", "&Paste": "Einf&ügen", "Delete": "Löschen",
+    "Select All": "Alles auswählen",
+}
+_DEUTSCHE_QT_TEXTE["QLineEdit"] = _KONTEXTMENUE_TEXTE
+_DEUTSCHE_QT_TEXTE["QWidgetTextControl"] = _KONTEXTMENUE_TEXTE
+
+
+class _DeutscheStandardtexte(QTranslator):
+    """Übersetzt nur die Texte aus _DEUTSCHE_QT_TEXTE. Für alles andere wird None
+    zurückgegeben - Qt fragt dann den nächsten Übersetzer bzw. nimmt den Originaltext
+    (ein leerer String würde dagegen als "Übersetzung" gelten und Texte verschwinden lassen)."""
+
+    def translate(self, context, source_text, disambiguation=None, n=-1):  # noqa: D102
+        return _DEUTSCHE_QT_TEXTE.get(context, {}).get(source_text)
+
+
+# Referenzen festhalten: QApplication übernimmt installierte Übersetzer nicht in Besitz,
+# ohne Referenz würde Python sie wieder einsammeln.
+_installierte_uebersetzer: list[QTranslator] = []
+
+
+def _qt_uebersetzungs_ordner() -> list[str]:
+    """Mögliche Orte von qtbase_de.qm: Qt-Standardpfad, PySide6-Paket, PyInstaller-Bundle."""
+    import PySide6
+
+    ordner = [QLibraryInfo.path(QLibraryInfo.TranslationsPath),
+              os.path.join(os.path.dirname(PySide6.__file__), "translations")]
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        ordner.append(os.path.join(bundle, "PySide6", "translations"))
+    return ordner
+
+
+def deutsche_qt_texte_laden(app) -> bool:
+    """Installiert die deutschen Qt-Texte in `app`. Liefert True, wenn zusätzlich die
+    vollständige Qt-Übersetzung (qtbase_de.qm) gefunden wurde."""
+    datei_gefunden = False
+    for ordner in _qt_uebersetzungs_ordner():
+        uebersetzer = QTranslator(app)
+        if uebersetzer.load(QLocale(QLocale.German, QLocale.Germany), "qtbase", "_", ordner):
+            app.installTranslator(uebersetzer)
+            _installierte_uebersetzer.append(uebersetzer)
+            datei_gefunden = True
+            break
+    # Zuletzt installierte Übersetzer werden zuerst gefragt - der eingebaute hat damit für
+    # die Standardknöpfe Vorrang und sorgt für einheitliche Texte, egal ob die .qm da ist.
+    standard = _DeutscheStandardtexte(app)
+    app.installTranslator(standard)
+    _installierte_uebersetzer.append(standard)
+    return datei_gefunden
+
+
+# UX-Test 02.10.2026, Punkt P1 (Rubrik ux_test_2026_10): Bei mehreren Test-Personas beendete
+# sich das Programm direkt nach einer Dateiauswahl ohne jede Meldung; im installierten
+# Programm (PyInstaller, ohne Konsole) gingen solche Fehler bisher spurlos verloren. Deshalb
+# schreibt das Programm jetzt ein Absturzprotokoll: unbehandelte Python-Fehler über
+# sys.excepthook, harte Abstürze (z. B. Speicherfehler in Qt) über faulthandler. Bei jedem
+# Start eine kurze Startzeile, damit sich ein späterer Absturz zeitlich zuordnen lässt.
+ABSTURZPROTOKOLL_DATEINAME = "absturzprotokoll.txt"
+_ABSTURZPROTOKOLL_MAX_BYTES = 1_000_000
+# faulthandler schreibt im Absturzfall direkt in diese (offen gehaltene) Datei.
+_absturzprotokoll_datei = None
+
+
+def absturzprotokoll_einrichten(version: str, ordner=None):
+    """Richtet das Absturzprotokoll ein und liefert den Pfad der Datei (oder None, wenn sie
+    nicht geschrieben werden kann - das Programm startet dann trotzdem normal). `ordner`
+    ist standardmäßig der Programmordner im Benutzerprofil (neben "Termine")."""
+    global _absturzprotokoll_datei
+    import datetime
+    import faulthandler
+    import traceback
+    from pathlib import Path
+
+    from db import termine_ordner
+
+    try:
+        pfad = Path(ordner if ordner is not None else termine_ordner().parent) / ABSTURZPROTOKOLL_DATEINAME
+        # Größe begrenzen: wird die Datei zu groß, beginnt sie von vorn.
+        modus = "w" if pfad.exists() and pfad.stat().st_size > _ABSTURZPROTOKOLL_MAX_BYTES else "a"
+        datei = open(pfad, modus, encoding="utf-8")
+        datei.write(f"--- Start {datetime.datetime.now():%Y-%m-%d %H:%M:%S}, Version {version} ---\n")
+        datei.flush()
+    except OSError:
+        return None
+
+    _absturzprotokoll_datei = datei
+    faulthandler.enable(file=datei, all_threads=True)
+
+    bisheriger_hook = sys.excepthook
+
+    def _protokollieren(typ, wert, tb):
+        try:
+            datei.write(f"Unbehandelter Fehler {datetime.datetime.now():%Y-%m-%d %H:%M:%S}:\n")
+            datei.write("".join(traceback.format_exception(typ, wert, tb)))
+            datei.flush()
+        except (OSError, ValueError):
+            pass
+        try:
+            bisheriger_hook(typ, wert, tb)
+        except Exception:  # noqa: BLE001 - ohne Konsole (sys.stderr None) darf das nicht stören
+            pass
+
+    sys.excepthook = _protokollieren
+    return pfad

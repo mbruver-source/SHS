@@ -39,14 +39,14 @@ lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
 | Bereich | Was du damit machst |
 |---|---|
 | **Termine** | Jeder Prüfungstermin ist eine eigene Datei. Anlegen, öffnen, zwischen Terminen wechseln, abgeschlossene Termine vollständig löschen. |
-| **Teilnehmer** | Hundeführer, Hund, Art (ED/DK), Leistungsklasse, Disziplin und bis zu drei Suchgegenstände erfassen. Startnummern werden vorgeschlagen, der Zahlungsstatus ist mit einem Klick gesetzt. Nicht erschienene Teilnehmer lassen sich als „keine Teilnahme“ markieren und fallen dann aus Zeitplan, Wertung und Ausdrucken heraus. Stammdaten lassen sich aus einem früheren Termin übernehmen. |
+| **Teilnehmer** | Hundeführer, Hund, Art (ED/DK), Leistungsklasse, Disziplin und bis zu drei Suchgegenstände erfassen. Startnummern kommen aus festen Bereichen je Prüfung und lassen sich gesammelt vergeben; Zahlungsstatus und „keine Teilnahme“ setzt ein Klick, auch für mehrere markierte Teilnehmer. Nicht erschienene Teilnehmer fallen damit aus Zeitplan, Wertung und Ausdrucken heraus. Stammdaten lassen sich aus einem früheren Termin übernehmen. |
 | **Anmeldeformular** | Ausfüllbares Anmeldeformular (PDF) je Termin mit eingedruckten Termindaten und nur den angebotenen Prüfungen. Zurückgeschickte Formulare liest das Programm direkt ein – ohne Abtippen. |
-| **Formular-Import** | Andere Meldeformulare (Word, Foto, Scan) per KI-Assistent in eine CSV umwandeln und importieren; der passende Prompt ist dabei. Außerdem Import des OMA-Meldungs-Exports. |
-| **Zeitplan** | Tagesablauf je Leistungsrichter mit Prüfungsblöcken und Pausen. Automatischer Verteilungsvorschlag oder Planung von Hand, Zeiten werden mitgerechnet. |
+| **Formular-Import** | Andere Meldeformulare (Word, Foto, Scan) per KI-Assistent in eine CSV umwandeln und importieren; der passende Prompt ist dabei. Außerdem Import einer Excel-Teilnehmerliste (CSV, mit leerer Vorlage) und des OMA-Meldungs-Exports. |
+| **Zeitplan** | Tagesablauf je Leistungsrichter mit Prüfungsblöcken und Pausen. Automatischer Verteilungsvorschlag oder Planung von Hand, Zeiten werden mitgerechnet. Dreikampf-Teams stehen nie gleichzeitig bei zwei Richtern; Überschneidungen werden rot markiert. Eine Pause lässt sich bei allen Richtern auf einmal einfügen. |
 | **Ergebniserfassung** | Such- und Anzeigeleistung je Disziplin eintragen, auch Disqualifikation und Abbruch. Ungespeicherte Zeilen sind markiert. |
 | **Auswertung** | Wertnote und Rangliste je Leistungsklasse, automatisch berechnet, inklusive „nicht bestanden“ (unter 70 Punkten in einer Disziplin). |
 | **Übersicht** | Teilnehmerzahlen je Art/Leistungsklasse und die Zahl der benötigten Leistungsrichter. |
-| **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. |
+| **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. Teilnehmerliste als CSV für Excel. |
 | **Datensicherung** | Alle Termine in einer Sicherungsdatei (ZIP) sichern und wiederherstellen, auf Wunsch mit Passwort verschlüsselt (AES-256). |
 
 <table>

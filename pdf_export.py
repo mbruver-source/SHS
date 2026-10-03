@@ -86,6 +86,7 @@ from shs_core import (
     ABBRUCH_TEXT,
     DISQUALIFIZIERT_ABK,
     DISQUALIFIZIERT_TEXT,
+    NICHT_BESTANDEN_ABK,
     berechne_wertnote_dk,
 )
 
@@ -95,6 +96,8 @@ _STYLES = getSampleStyleSheet()
 _TITEL = ParagraphStyle("SHSTitel", parent=_STYLES["Heading1"], fontSize=14, spaceAfter=2 * mm)
 _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20, spaceAfter=0)
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
+# UX-Test 02.10.2026, K3: Überschrift einer Prüfung nie allein am Seitenende.
+_ABSCHNITT_MIT_FOLGE = ParagraphStyle("SHSAbschnittMitFolge", parent=_ABSCHNITT, keepWithNext=1)
 _HINWEIS = ParagraphStyle("SHSHinweis", parent=_STYLES["Normal"], fontSize=8, alignment=1, spaceAfter=2 * mm)
 _TEXT = ParagraphStyle("SHSText", parent=_STYLES["Normal"], fontSize=9.5)
 _TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold")
@@ -188,6 +191,7 @@ def _wert(v) -> str:
 
 # Disqualifiziert/Abbruch: Abkürzung -> Anzeigetext (Codeprüfung 22.09., M3).
 _STATUS_TEXT = {DISQUALIFIZIERT_ABK: DISQUALIFIZIERT_TEXT, ABBRUCH_ABK: ABBRUCH_TEXT}
+_PLATZ_OHNE_RANG = {DISQUALIFIZIERT_ABK: "Disq.", ABBRUCH_ABK: "Abbr."}
 
 
 def _status_abkuerzung(ergebnis: dict | None) -> str | None:
@@ -641,14 +645,18 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
 
     for lk in leistungsklassen:
-        story.append(Paragraph(lk, _ABSCHNITT))
+        story.append(Paragraph(lk, _ABSCHNITT_MIT_FOLGE))
         gruppe = sorted(
             (t for t in fertig if t.leistungsklasse == lk),
             key=lambda t: (t.platzierung is None, t.platzierung or 0),
         )
         daten = [["Platz", "Start-Nr.", "Name", "Gesamtpunkte", "Wertnote"]]
         for t in gruppe:
-            platz = "nB" if t.platzierung is None else f"{t.platzierung}. von {t.von_startern}"
+            if t.platzierung is not None:
+                platz = f"{t.platzierung}. von {t.von_startern}"
+            else:
+                # UX-Test 02.10.2026, K3: "nB" nur bei echtem Nichtbestehen.
+                platz = _PLATZ_OHNE_RANG.get(t.wertnote.abkuerzung, NICHT_BESTANDEN_ABK)
             # Bei Disqualifiziert/Abbruch "–" statt einer irreführenden "0" (wie im
             # Auswertungs-Tab der Desktop-App).
             punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
@@ -664,9 +672,16 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
             story.append(tabelle)
         offene = [t for t in ausstehend if leistungsklasse_label(t) == lk]
         if offene:
-            namen = ", ".join(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}" for t in offene)
+            # UX-Test 02.10.2026, K2: "Vorname Nachname; …" (siehe AuswertungTab).
+            namen = "; ".join(f"{_p_wert(t['vorname'])} {_p_wert(t['nachname'])}" for t in offene)
             story.append(Spacer(1, 1 * mm))
             story.append(Paragraph(f"<i>Noch ohne vollständiges Ergebnis: {namen}</i>", _HINWEIS))
+            if gruppe:
+                # UX-Test 02.10.2026, K9: "von x" erklären, solange noch jemand offen ist.
+                story.append(Paragraph(
+                    f"<i>„von {len(gruppe)}“ in der Platz-Spalte zählt nur Starter mit vollständigem "
+                    f"Ergebnis – {len(offene)} noch offen.</i>", _HINWEIS,
+                ))
         story.append(Spacer(1, 3 * mm))
 
     SimpleDocTemplate(pfad, pagesize=A4, topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm).build(story)
@@ -781,9 +796,10 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
         erg = fertig_je_id.get(str(t["id"]))
         ergebnis = ergebnis_je_id.get(str(t["id"]), {})
 
-        name_info = f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}, {_p_wert(t['verein'])}"
-        if t["rufname_hund"]:
-            name_info += f", {_p_wert(t['rufname_hund'])}"
+        # UX-Test 02.10.2026, K5: leere Angaben (z. B. Verein) weglassen statt ", ,".
+        name_info = ", ".join(
+            _p_wert(t[feld]) for feld in ("nachname", "vorname", "verein", "rufname_hund") if t[feld]
+        )
 
         gesamt_stil = _ETIKETT_FELD
         if erg is not None and erg.wertnote.abkuerzung in _STATUS_TEXT:
@@ -799,6 +815,10 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
             flaeche_text = f"Fläche: {_disziplin_gesamt_text(ergebnis, 'Flächensuche')}"
             behaeltnis_text = f"Behältnis: {_disziplin_gesamt_text(ergebnis, 'Behältnisstrecke')}"
             gesamt_text = f"Gesamt: {erg.gesamtpunkte}"
+            if erg.platzierung is None:
+                # UX-Test 02.10.2026, K5: nicht bestanden auf dem Etikett kennzeichnen.
+                gesamt_text += f" {NICHT_BESTANDEN_ABK}"  # "(nB)" wäre zu breit fürs Feld
+                gesamt_stil = _ETIKETT_FELD_STATUS
         else:
             # Noch kein vollständiges Ergebnis - Felder bleiben leer zum Nachtragen.
             truemmer_text = "Trümmer:"
@@ -1735,7 +1755,9 @@ class _AnmeldeformularZeichner:
         zeilenabstand = min(11, 5 * 11 / max(len(meldestelle), 1))
         meldestelle_groesse = min(_AF_SCHRIFT, zeilenabstand * 0.82)
         hoehe_oben = 18
-        hoehe_unten = max(18, len(meldestelle) * zeilenabstand + 7)
+        # UX-Test 02.10.2026, K6: Ort unter dem Datum - braucht eine zweite Zeile rechts.
+        ort = (veranstaltung.get("ort") or "").strip()
+        hoehe_unten = max(29 if ort else 18, len(meldestelle) * zeilenabstand + 7)
         oben = self.y
         unten = oben - hoehe_oben - hoehe_unten
 
@@ -1760,6 +1782,9 @@ class _AnmeldeformularZeichner:
             self.text(wert_x_links, y2 - i * zeilenabstand, zeile, groesse=meldestelle_groesse)
         self.text(x_rechts + innen, y2, "Datum:", fett=True)
         wert(wert_x_rechts, y2, datum_anzeige(veranstaltung.get("datum")), wert_breite_rechts)
+        if ort:
+            self.text(x_rechts + innen, y2 - 11, "Ort:", fett=True)
+            wert(wert_x_rechts, y2 - 11, ort, wert_breite_rechts)
         self.y = unten
 
     def pruefungen(self, angebot: list) -> None:
@@ -1793,6 +1818,15 @@ class _AnmeldeformularZeichner:
         """Je angebotener Leistungsklasse so viele Gegenstands-Felder, wie die LK
         Gegenstände hat (LK 1: eins, LK 2: zwei, LK 3: drei)."""
         self.ueberschrift("Gegenstände")
+        if max(stufen, default=1) >= 2:
+            # UX-Test 02.10.2026, U11: bei Einzeldisziplin gibt es nur einen Gegenstand.
+            self.text(
+                _AF_RAND, self.y - 8,
+                "Bei Einzeldisziplin (Trümmer, Behältnisse, Fläche) nur den ersten Gegenstand angeben – "
+                "mehrere Gegenstände nur beim Dreikampf (DK).",
+                groesse=_AF_SCHRIFT - 1,
+            )
+            self.y -= 12
         label_breite = _af_label_breite("LK 3:") + 4
         feld_breite = (_AF_BREITE - label_breite - 2 * _AF_LUECKE) / 3
         for stufe in stufen:

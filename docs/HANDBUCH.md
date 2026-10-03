@@ -5,8 +5,11 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.39. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.40. Alle Screenshots zeigen erfundene Testdaten.
 
+- **Zum ersten Mal dabei?** Dann fang mit
+  [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
+  an. Unbekannte Wörter erklärt das [Glossar in Kapitel 15](#15-glossar-wörter-kurz-erklärt).
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
 - Kurzhilfe im Programm: Button **„❓ Hilfe“** oben rechts
@@ -28,6 +31,8 @@ Stand: Version 1.0.39. Alle Screenshots zeigen erfundene Testdaten.
 11. [Für Richter: Ergebnisse im Browser eintragen](#11-für-richter-ergebnisse-im-browser-eintragen)
 12. [Für die Prüfungsleitung: Termin im Web veröffentlichen](#12-für-die-prüfungsleitung-termin-im-web-veröffentlichen)
 13. [Häufige Fragen und Probleme](#13-häufige-fragen-und-probleme)
+14. [Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
+15. [Glossar: Wörter kurz erklärt](#15-glossar-wörter-kurz-erklärt)
 
 ---
 
@@ -42,6 +47,9 @@ Stand: Version 1.0.39. Alle Screenshots zeigen erfundene Testdaten.
 | Am Prüfungstag | Ergebnisse eintragen, regelmäßig speichern | Reiter „Ergebniserfassung“ (oder Web-Version) |
 | Danach | Rangliste, Ergebnisliste, Etiketten, Statistik | Reiter „Auswertung“, „Export“ |
 | Zum Schluss | Datensicherung erstellen; abgeschlossene Termine später löschen | Reiter „Datensicherung“, Startbildschirm |
+
+Eine ausführliche Anleitung mit jedem einzelnen Klick findest du in
+[Kapitel 14](#14-die-erste-prüfung-schritt-für-schritt).
 
 Das Programm arbeitet vollständig **offline**. Internet brauchst du nur für die Update-Suche,
 für den optionalen Formular-Import per KI und für die optionale Web-Version.
@@ -84,7 +92,7 @@ steht oben.
 |---|---|
 | **„Neuen Termin anlegen…“** | Öffnet die Eingabe der Veranstaltungsdaten (siehe unten). Verein, Vereins-Nr., Ort und Verband werden vom neuesten Termin übernommen. |
 | **„Öffnen“** (oder Doppelklick) | Öffnet den markierten Termin. |
-| **„Löschen…“** | Löscht den markierten Termin nach Rückfrage **unwiderruflich**, mit allen Teilnehmer- und Ergebnisdaten. Der gerade geöffnete Termin lässt sich nicht löschen. |
+| **„Löschen…“** | Löscht den markierten Termin nach Rückfrage **unwiderruflich**, mit allen Teilnehmer- und Ergebnisdaten. Der gerade geöffnete Termin lässt sich nicht löschen. Bereits erzeugte PDFs im Ordner `Ausdrucke` bleiben bewusst erhalten – bei Bedarf dort von Hand löschen. |
 | **„Andere Termin-Datei öffnen…“** | Öffnet eine Termin-Datei (`*.sqlite`) von einem anderen Ort, z. B. einem USB-Stick. |
 
 Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“** oben rechts.
@@ -100,8 +108,15 @@ der Übersicht für die Prüfungsleitung.
 
 **Verband**, **Meldestelle** (mehrzeilig, z. B. Name, Anschrift, E-Mail) und **Angebotene
 Prüfungen** (12 Haken: DK, Trümmer, Behältnisse und Fläche, jeweils LK 1–3) brauchst du für das
-ausfüllbare Anmeldeformular (siehe [Kapitel 5](#5-formular-import)). Der Dialog lässt sich
-scrollen und vergrößern.
+ausfüllbare Anmeldeformular (siehe [Kapitel 5](#5-formular-import)). Bleiben Verband oder
+Meldestelle beim Anlegen leer, weist das Programm darauf hin – du kannst trotzdem speichern
+und sie später nachtragen. Der Dialog lässt sich scrollen und vergrößern.
+
+Unter **Startnummern-Bereiche** trägst du je angebotener Prüfung einen Nummernbereich ein,
+z. B. DK-LK 1: 1 bis 20, Trümmer LK 1: 21 bis 40. Daraus vergibt „Fehlende Startnummern
+vergeben…“ (siehe [Kapitel 4](#4-teilnehmer)) die Nummern. Bereiche dürfen sich nicht
+überschneiden; eine Prüfung ohne Bereich bekommt keine automatische Nummer. Bei einem neuen
+Termin werden die Bereiche des letzten Termins vorgeschlagen.
 
 Der **Speicherort\*** wird automatisch als `JJJJ-MM-TT_Verein.sqlite` vorgeschlagen. Behalte
 den Vorschlag möglichst bei: Nur Termine im Standardordner erscheinen im Startbildschirm und
@@ -117,14 +132,32 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 
 | Button | Wirkung |
 |---|---|
-| **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die kleinste freie Startnummer wird vorgeschlagen. |
-| **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer. |
-| **„Löschen“** | Löscht den markierten Teilnehmer nach Rückfrage, inklusive Ergebnis. |
-| **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. |
-| **„Keine Teilnahme“** | Markiert einen nicht erschienenen Teilnehmer (siehe unten). Ist er markiert, heißt der Button **„Teilnahme wiederherstellen“**. |
-| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt. |
+| **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die Startnummer bleibt zunächst offen (siehe unten). |
+| **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer – ebenso ein Doppelklick auf die Zeile. |
+| **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. |
+| **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
+| **„Keine Teilnahme“** | Markiert nicht erschienene Teilnehmer (siehe unten), auch mehrere auf einmal. Sind alle markierten bereits so vermerkt, heißt der Button **„Teilnahme wiederherstellen“**. |
+| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen. |
+| **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung (siehe unten). |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
+| **„Teilnehmerliste (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
 | **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
+
+### Startnummern vergeben
+
+Am bequemsten vergibst du die Startnummern gesammelt, z. B. nach dem Einlesen der
+Anmeldungen:
+
+1. In den Veranstaltungsdaten (Reiter „Verwaltung“ → „Veranstaltungsdaten bearbeiten…“) je
+   Prüfung einen **Startnummern-Bereich** eintragen (siehe [Kapitel 3](#3-termine)).
+2. Im Reiter „Teilnehmer“ auf **„Fehlende Startnummern vergeben…“** klicken. Nach jedem
+   Import fragt das Programm auch von selbst danach.
+
+Vergeben wird nur an Teilnehmer **ohne** Nummer, sortiert nach Prüfung und darin nach Name.
+Bereits vergebene Nummern bleiben unverändert, Teilnehmer mit „Keine Teilnahme“ werden
+übersprungen. Wer keine Nummer bekommt (kein Bereich hinterlegt oder Bereich voll), steht in
+der Meldung danach. Einzelne Nummern änderst du über „Bearbeiten…“ oder „Startnummer
+tauschen…“.
 
 ### Nicht erschienene Teilnehmer („Keine Teilnahme“)
 
@@ -152,9 +185,10 @@ Pflichtfelder sind mit \* markiert: **Nachname\***, **Vorname\***, **Rufname Hun
 du zusätzlich die **Disziplin** (Trümmerfeld, Flächensuche oder Behältnisstrecke). Alle anderen
 Felder sind optional. Datumsfelder nehmen TT.MM.JJJJ an.
 
-- **Startnummer:** Steht sie noch nicht fest, setze das Häkchen
-  **„Startnummer steht noch nicht fest“**. Eine bereits vergebene Nummer lehnt das Programm ab und
-  nennt, wer sie hat.
+- **Startnummer:** Neue Teilnehmer starten mit dem Häkchen **„Startnummer steht noch nicht
+  fest“**. Entfernst du es, schlägt das Programm die kleinste freie Nummer im Bereich der
+  gewählten Prüfung vor. Eine bereits vergebene Nummer lehnt das Programm ab und nennt, wer sie
+  hat.
 - **Halter:** Weicht der Hundeeigentümer vom Hundeführer ab, das Häkchen
   **„Halter weicht vom Hundeführer ab“** setzen – dann erscheinen die Halter-Felder.
 - **Prüfungsgebühr bezahlt:** Häkchen in der Maske oder später „Bezahlt umschalten“.
@@ -195,12 +229,12 @@ solltest du vor dem Prüfungstag beheben; **Hinweise** (klein) sind nur Erinneru
 
 | Meldung | Art | Bedeutung |
 |---|---|---|
-| ⚠ Chip-Nr. fehlt | Warnung | Keine Chipnummer eingetragen. |
-| ⚠ Gegenstand fehlt | Warnung | ED ohne Gegenstand. |
-| ⚠ Gegenstände unvollständig (Dreikampf) | Warnung | DK mit weniger verschiedenen Gegenständen als die Mindestanzahl. |
+| ⚠ Chip-Nr. fehlt | Warnung (orange) | Keine Chipnummer eingetragen – wird am Prüfungstag zur Identifizierung gebraucht. |
+| Gegenstand noch offen | Hinweis (grau) | ED ohne Gegenstand. Kann bis zum Prüfungstag nachgetragen werden. |
+| Gegenstände noch offen | Hinweis (grau) | DK mit weniger verschiedenen Gegenständen als die Mindestanzahl. Kann bis zum Prüfungstag nachgetragen werden. |
 | Gegenstände den Suchdisziplinen nicht vollständig zugeordnet | Hinweis | DK: Die Zuordnung ist begonnen, deckt aber nicht alle drei Disziplinen ab. |
 | Gegenstand der Suchdisziplin nicht zugeordnet | Hinweis | ED (ältere Daten): Gegenstand ohne Zuordnung. Einmal öffnen und speichern behebt das. |
-| Bei ED ist nur ein Gegenstand vorgesehen | Hinweis | ED (ältere Daten) mit mehreren Gegenständen. |
+| Bei ED ist nur ein Gegenstand vorgesehen | Hinweis | ED mit mehreren Gegenständen, z. B. aus älteren Daten. Beim nächsten Speichern fragt das Programm nach, bevor es die überzähligen entfernt. |
 | keine Teilnahme | Vermerk | Teilnehmer ist als nicht erschienen markiert, die ganze Zeile ist grau (siehe oben). Weitere Meldungen stehen dahinter. |
 
 ### Teilnehmer aus einem früheren Termin übernehmen
@@ -214,6 +248,12 @@ steht, wird bei erneutem Import ein zweites Mal angelegt.
 ## 5. Formular-Import
 
 ![Reiter „Formular-Import“](bilder/handbuch_formular_import.png)
+
+Der Reiter zeigt drei Wege, Teilnehmer einzulesen – jeweils mit kurzer Erklärung:
+**1. Ausgefüllte Anmeldeformulare (PDF)**, **2. Teilnehmerliste aus Excel (CSV-Datei)** und
+**3. Meldungen aus der OMA**. Darunter lässt sich der Weg **über ein KI-System** (Foto, Scan,
+Word) aufklappen. Nach jedem Import fragt das Programm, ob es fehlende Startnummern gleich
+vergeben soll (siehe [Kapitel 4](#4-teilnehmer)).
 
 ### Ausfüllbares Anmeldeformular (PDF) – empfohlen
 
@@ -236,7 +276,7 @@ unten.
    Verband, Meldestelle und die **angebotenen Prüfungen** eintragen.
 2. **Formular erzeugen:** Im Reiter „Export“ mit **„Anmeldeformular (PDF)…“** das PDF
    speichern und mit der Ausschreibung an die Teilnehmer verschicken. Veranstalter, Verband,
-   Meldestelle und Datum sind eingedruckt.
+   Meldestelle, Datum und Ort sind eingedruckt.
 3. **Ausfüllen lassen:** Die Teilnehmer füllen das PDF am Rechner aus (Adobe Acrobat Reader,
    Browser wie Edge/Chrome/Firefox o. Ä.), kreuzen **genau eine** Prüfung an, **speichern** es
    (nicht „Drucken → Als PDF“) und schicken die Datei zurück.
@@ -248,35 +288,60 @@ unten.
   nicht übernommen und im Ergebnis mit Grund aufgeführt.
 - **Nur Prüfungen dieses Termins.** Ist eine Prüfung angekreuzt, die der geöffnete Termin nicht
   anbietet (z. B. ein Formular vom Vorjahr oder der falsche Termin geöffnet), wird das Formular
-  abgelehnt.
+  abgelehnt. Kläre das dann mit dem Teilnehmer – nur wenn die Prüfung tatsächlich angeboten
+  werden soll, ergänzt du sie im Reiter „Verwaltung“ → „Veranstaltungsdaten bearbeiten…“.
 - **Datumsangaben** (Wurfdatum, Tollwutimpfung) müssen als TT.MM.JJJJ, die Größe als ganze Zahl
   (z. B. „45“ oder „45 cm“) eingetragen sein. Sonst wird das ganze Formular mit Grund abgelehnt –
   dann den Teilnehmer um Korrektur bitten oder ihn im Reiter „Teilnehmer“ von Hand anlegen.
   Ebenso abgelehnt wird ein Formular, bei dem Vorname, Name oder Rufname des Hundes fehlt oder
   Hündin und Rüde beide angekreuzt sind.
 - **Übernommen:** alle Angaben zu Teilnehmer, abweichendem Hundeeigentümer und Hund sowie die
-  Gegenstände der angekreuzten Leistungsklasse (ohne Zuordnung zu einer Disziplin). Die
-  Nummer landet in der Chip-Nr.; ist Täto-Nr. und nicht zugleich Chip-Nr. angekreuzt, steht
-  dort „Täto …“.
+  Gegenstände der angekreuzten Leistungsklasse (ohne Zuordnung zu einer Disziplin). Bei einer
+  **Einzeldisziplin** gibt es nur einen Gegenstand: Übernommen wird der erste ausgefüllte,
+  weitere nennt die Übersicht nach dem Import als „nicht übernommen“. Das Formular weist
+  darauf auch selbst hin. Die Nummer landet in der Chip-Nr.; ist Täto-Nr. und nicht zugleich
+  Chip-Nr. angekreuzt, steht dort „Täto …“.
 - **Nicht übernommen:** die Angabe „18. Lebensjahr vollendet“ und das Datum neben der
   Unterschrift. Startnummer und Bezahlt-Status trägst du wie gewohnt im Reiter „Teilnehmer“ nach.
 - **Erneuter Import:** Eine Meldung mit gleichem Namen, Hund, Art, Leistungsklasse und Disziplin
   wird nicht noch einmal angelegt.
 
+### Teilnehmerliste aus Excel übernehmen
+
+Eine Liste mit einer Zeile je Teilnehmer – z. B. vom Schriftführer – liest du mit
+**„CSV importieren…“** ein (Abschnitt 2 im Reiter „Formular-Import“; derselbe Weg steckt im
+Reiter „Teilnehmer“ hinter **„Teilnehmerliste (Excel/CSV)…“**).
+
+1. **„Leere Vorlage (CSV) speichern…“** klicken – die Datei enthält die passenden
+   Spaltenüberschriften (nachname, vorname, rufname_hund, art, stufe, disziplin, …).
+2. Die Vorlage in Excel öffnen, je Teilnehmer eine Zeile ausfüllen und wieder **als CSV**
+   speichern („CSV UTF-8“ oder „CSV (Trennzeichen-getrennt)“ – beides wird erkannt).
+3. Mit **„CSV importieren…“** einlesen.
+
+Pflicht sind Nachname, Vorname, Rufname des Hundes, Art (ED oder DK), Leistungsklasse (1–3) und
+bei ED die Disziplin (Trümmerfeld, Flächensuche oder Behältnisstrecke). Eine mit
+**„Teilnehmerliste (CSV, für Excel)…“** (Reiter „Export“) gespeicherte Liste lässt sich ebenso
+wieder einlesen.
+
 ### Per KI (Foto, Scan, Word)
 
 Ausgefüllte Meldeformulare (PDF, Word oder Foto/Scan) lassen sich mit einem KI-Assistenten
-(z. B. Claude oder ChatGPT) in eine CSV-Datei umwandeln:
+(z. B. Claude oder ChatGPT) in eine CSV-Datei umwandeln. Dazu im Reiter „Formular-Import“ unten
+**„Andere Meldeformulare (Foto, Scan, Word) über ein KI-System einlesen“** aufklappen:
 
 1. **„Prompt kopieren“** klicken.
 2. Im KI-Assistenten den Prompt einfügen und die Meldeformulare anhängen.
-3. Die erzeugte CSV-Datei speichern und hier mit **„CSV importieren…“** einlesen.
+3. Die erzeugte CSV-Datei speichern und mit **„CSV importieren…“** einlesen.
 
-Jede Zeile wird ein neuer Teilnehmer – ohne Startnummer, Gegenstände und Bezahlt-Status (diese
-trägst du danach im Reiter „Teilnehmer“ nach). Fehlerhafte Zeilen werden übersprungen und nach
+Für beide CSV-Wege gilt: Jede Zeile wird ein neuer Teilnehmer – außer er ist schon gemeldet (gleicher Name, Hund,
+Art, Leistungsklasse und Disziplin; dann wird er übersprungen und genannt). Startnummer, Gegenstände und Bezahlt-Status
+sind nicht enthalten, diese trägst du danach im Reiter „Teilnehmer“ nach. Fehlerhafte Zeilen werden übersprungen und nach
 dem Import mit Zeilennummer und Grund aufgelistet, z. B. fehlende Pflichtangaben, Art nicht
-ED/DK, Leistungsklasse nicht 1–3, ED ohne gültige Disziplin oder ein ungültiges Datum. Die Datei
-muss UTF-8-kodiert sein.
+ED/DK, Leistungsklasse nicht 1–3, ED ohne gültige Disziplin oder ein ungültiges Datum. Wie beim
+PDF-Import werden auch Zeilen mit einer Prüfung abgelehnt, die der Termin nicht anbietet. Sind im
+Termin noch gar keine angebotenen Prüfungen hinterlegt, wird das nicht geprüft – darauf weist
+die Meldung nach dem Import hin. Komma oder Semikolon als Trennzeichen sowie UTF-8- und
+Windows-Kodierung (wie von Excel gespeichert) werden erkannt.
 
 > **Datenschutz:** Beim Import per KI gehen die Meldeformulare an den gewählten KI-Anbieter.
 > Kläre vorher, ob das für deinen Verein in Ordnung ist. Das Programm selbst sendet nichts.
@@ -289,11 +354,14 @@ sowie Dreikampf):
 [beispiel_teilnehmer.csv](https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv)
 (im Browser ggf. mit Rechtsklick → „Ziel speichern unter…“ herunterladen).
 
-1. Einen neuen Test-Termin anlegen (siehe [Kapitel 3](#3-termine)).
+1. Einen neuen Test-Termin anlegen (siehe [Kapitel 3](#3-termine)) und dabei alle
+   „Angebotenen Prüfungen“ ankreuzen (oder keine) – sonst werden Teilnehmer in nicht
+   angebotenen Prüfungen beim Einlesen abgelehnt.
 2. Im Reiter „Formular-Import“ mit **„CSV importieren…“** die Beispieldatei einlesen – alle 20
    Teilnehmer werden übernommen.
-3. Im Reiter „Teilnehmer“ über **„Bearbeiten…“** die Startnummern (und bei Bedarf Gegenstände)
-   vergeben – die CSV enthält diese Angaben nicht.
+3. Startnummern vergeben – die CSV enthält sie nicht: nach dem Import die Frage „Jetzt
+   vergeben?“ mit Ja beantworten (dafür vorher Startnummern-Bereiche eintragen, siehe oben)
+   oder einzeln über **„Bearbeiten…“**. Gegenstände bei Bedarf ebenfalls über „Bearbeiten…“.
 4. Danach lassen sich Zeitplan, Ergebniserfassung, Auswertung und PDF-Ausgaben ausprobieren.
 
 Den Test-Termin danach im Startbildschirm wieder löschen. Solange er geöffnet ist, lässt er
@@ -309,6 +377,8 @@ liest du ohne KI direkt mit **„OMA-Export importieren…“** ein. Jede Zeile 
   LU-Nr. des Hundes sowie Leistungsklasse und Disziplin. Aus „LK2 Behältnissuche“ wird z. B.
   ED, LK2, Behältnisstrecke, aus „LK1 Dreikampf“ wird DK, LK1.
 - Ist beim Hundeführer kein Verband angegeben, wird der Verband des Leistungshefts genommen.
+- Wie beim PDF- und CSV-Import werden Meldungen für Prüfungen, die der Termin nicht anbietet,
+  nicht übernommen und mit Grund aufgelistet.
 - **Nicht übernommen:** Anrede, Land, Zuchtbuchnummer und die Meldungsangaben (Status,
   Mannschaft, Bezahlt, Startgeld, Kommentar). Startnummer, Gegenstände und Bezahlt-Status
   trägst du wie gewohnt im Reiter „Teilnehmer“ nach.
@@ -325,18 +395,37 @@ liest du ohne KI direkt mit **„OMA-Export importieren…“** ein. Jede Zeile 
 Der Zeitplan hat eine Spalte je Richter.
 
 1. **„Zeitplan-Start (HH:MM)“** eintragen und **„Startzeit speichern“**.
-2. Mit **„Richter hinzufügen“** je Richter eine Spalte anlegen, mit **„Umbenennen…“** benennen,
+2. Die beim Termin eingetragenen Richter 1–5 erscheinen beim ersten Öffnen automatisch als
+   Spalten. Weitere Spalten mit **„Richter hinzufügen“** anlegen, mit **„Umbenennen…“** benennen,
    mit ◀ ▶ verschieben.
-3. Entweder **„Automatisch verteilen…“** für einen ausgewogenen Vorschlag – das **ersetzt** den
-   bisherigen Plan aller Richter, nach Rückfrage – oder von Hand je Richter
+3. Entweder **„Automatisch verteilen…“** für einen ausgewogenen Vorschlag – das **ersetzt** einen
+   bereits vorhandenen Plan aller Richter (dann nach Rückfrage) – oder von Hand je Richter
    **„Prüfungsblock hinzufügen…“** (Art, Leistungsklasse, Disziplin, Dauer je Teilnehmer) und
-   **„Pause hinzufügen…“**.
+   **„Pause hinzufügen…“**. Der Vorschlag setzt Dreikampf-Teams nie gleichzeitig bei zwei
+   Richtern an und hält zwischen ihren Disziplinen den **„Mindestabstand Team“** ein (Feld oben,
+   Vorgabe 10 Min.). Dazu beginnen die Dreikampf-Blöcke einer Leistungsklasse mit verschiedenen
+   Teams; nur wenn es nicht anders geht, fügt er eine Pause **„Wartezeit (DK)“** ein.
 4. Reihenfolge mit **„Hoch“** / **„Runter“** anpassen, Dauer mit **„Bearbeiten…“** ändern.
-   Start- und Endzeiten rechnet das Programm selbst.
+   Start- und Endzeiten rechnet das Programm selbst. Jeder Prüfungsblock hat in der Liste eine
+   fette Kopfzeile (Teilnehmerzahl und Zeitraum), die Teams stehen eingerückt darunter –
+   „Hoch“, „Runter“ und „Entfernen“ wirken immer auf den ganzen Block.
+   **„Pause hinzufügen…“** fügt die Pause nach der markierten Zeile ein (ohne Markierung am
+   Ende). Mit **„Bei allen Richtern einfügen, um …“** entsteht dieselbe Pause, z. B. die
+   Mittagspause, bei allen Richtern auf einmal – je Richter vor dem ersten Block ab dieser
+   Uhrzeit, ein gerade laufender Block wird nicht geteilt. Endet der Plan eines Richters vor
+   dieser Uhrzeit, steht die Pause an seinem Ende; das Programm nennt dann die tatsächlichen
+   Zeiten.
 5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block
 existiert (grün ✓) oder noch fehlt (rot ✗ „noch offen“).
+
+**Überschneidungen:** Steht ein Team gleichzeitig oder mit weniger als dem Mindestabstand an zwei
+Stellen – etwa nach dem Verschieben von Hand –, sind die betroffenen Zeilen rot mit ⚠ markiert
+(der Tooltip nennt die andere Stelle), und oben in der Seitenleiste steht
+**„⚠ Überschneidungen“** mit allen betroffenen Teams. Vor dem Zeitplan-PDF fragt das Programm
+dann nach. Beheben lässt sich das durch Verschieben der Blöcke, eine Pause oder erneutes
+„Automatisch verteilen…“.
 
 > **Wichtig zu „Entfernen“:** Ein Prüfungsblock merkt sich nur Art, Leistungsklasse, Disziplin
 > und Dauer. Wer darin geprüft wird, ergibt sich jedes Mal neu aus der Teilnehmerliste.
@@ -375,6 +464,12 @@ automatisch gespeichert.
 Die Rangliste je Leistungsklasse mit Gesamtpunkten, Wertnote und Platzierung („1. von 2“) wird
 automatisch berechnet. **„Auswertung neu berechnen“** aktualisiert die Anzeige. Unten steht,
 wer noch kein vollständiges Ergebnis hat.
+
+„von 2“ zählt nur Starter, deren Ergebnis schon **vollständig** eingetragen ist. Sind in einer
+Leistungsklasse noch Teilnehmer offen, steht unten ein Hinweis wie „Hinweis DK LK 1: „von 2“
+zählt nur Starter mit vollständigem Ergebnis – 3 noch offen.“ (auch als Tooltip auf der
+Platzierung und im Ergebnisliste-PDF). Sind alle eingetragen, stimmt die Zahl mit den
+Startern überein.
 
 **„Rangliste drucken (PDF)…“** speichert die Rangliste direkt als PDF. Ist im Filter eine
 Art/Leistungsklasse gewählt, enthält das PDF nur diese, sonst alle. Der Filter nach
@@ -427,8 +522,11 @@ Prüfungen (für das Anmeldeformular) nachträglich.
 
 ![Reiter „Export“](bilder/handbuch_export.png)
 
-Jeder Button fragt nach dem Speicherort (Vorschlag: Ordner der Termin-Datei bzw. zuletzt
-gewählter Ordner) und erzeugt ein PDF. **„Ablageort öffnen“** zeigt diesen Ordner im Explorer.
+Jeder Button fragt nach dem Speicherort und erzeugt ein PDF. Vorgeschlagen wird der Ordner
+`Ausdrucke\<Termin>` neben der Termin-Datei (z. B. `…\SHS-Pruefungsprogramm\Termine\Ausdrucke\2026-11-14_Verein`),
+nach einem bewusst anderen Ordner dieser. Nach dem Speichern zeigt ein Fenster, wo die Datei
+liegt, mit **„PDF öffnen“** und **„Ordner zeigen“** – praktisch, um sie z. B. an eine E-Mail
+anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Explorer.
 
 | Button | Inhalt |
 |---|---|
@@ -442,6 +540,7 @@ gewählter Ordner) und erzeugt ein PDF. **„Ablageort öffnen“** zeigt diesen
 | **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
 | **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. |
+| **Teilnehmerliste (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick in Excel und lässt sich auch wieder einlesen. |
 
 Den Bewertungsbogen eines **einzelnen** Teilnehmers erzeugst du schneller im Reiter
 „Teilnehmer“ mit **„Bewertungsbogen (PDF)…“**.
@@ -458,12 +557,16 @@ Behältnisstrecke.
 
 ![Reiter „Datensicherung“](bilder/handbuch_datensicherung.png)
 
-Gesichert werden immer **alle** Termine aus dem Termine-Ordner in einer ZIP-Datei.
+Gesichert werden immer **alle** Termine aus dem Termine-Ordner in einer einzigen
+Sicherungsdatei (Endung `.zip`). Die PDFs im
+Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erzeugen.
 
-- **„Sicherung erstellen (ZIP)…“:** Auf Wunsch **„Mit Passwort schützen“** (AES-256), danach
-  den Speicherort wählen, z. B. einen USB-Stick. **Ein vergessenes Passwort lässt sich nicht
+- **„Sicherung erstellen…“:** Auf Wunsch **„Mit Passwort schützen“** (die Sicherungsdatei wird dann verschlüsselt), danach
+  den Speicherort wählen, z. B. einen USB-Stick. Der vorgeschlagene Dateiname enthält Datum
+  und Verein des geöffneten Termins sowie den Tag der Sicherung, z. B.
+  `SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-2026-10-03.zip`. **Ein vergessenes Passwort lässt sich nicht
   wiederherstellen.** Bewahre es getrennt von der Sicherung auf.
-- **„Sicherung wiederherstellen (ZIP)…“:** Fragt bei Bedarf nach dem Passwort. Für jeden Termin,
+- **„Sicherung wiederherstellen…“:** Fragt bei Bedarf nach dem Passwort. Für jeden Termin,
   den es schon gibt, wählst du **„Überschreiben“**, **„Als Kopie importieren“** oder
   **„Überspringen“**. Den gerade geöffneten Termin kann man nicht überschreiben.
   Wiederhergestellte Termine erscheinen beim nächsten „Anderen Termin öffnen…“.
@@ -579,9 +682,174 @@ Wiederhergestellte Termine erscheinen erst beim nächsten „Anderen Termin öff
 Ja, über die Datensicherung (siehe [Kapitel 10](#10-datensicherung)). Gleichzeitig am selben
 Termin arbeiten geht mit dem Desktop-Programm nicht – dafür gibt es die Web-Version.
 
+**Das Programm hat sich plötzlich ohne Meldung beendet.**
+Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt in solchen Fällen ein
+Protokoll in die Datei `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem
+Benutzerprofil (neben dem Ordner `Termine`). Hänge sie bitte an eine Fehlermeldung an
+(siehe unten) – vorher kurz hineinschauen, ob echte Teilnehmerdaten darin stehen (auch dein
+Windows-Benutzername kann in Dateipfaden vorkommen).
+
 ### Fehler melden oder Wunsch äußern
 
 Bitte über die [Issues auf GitHub](https://github.com/mbruver-source/SHS/issues/new/choose) mit
 den Vorlagen **„Fehler melden“** bzw. **„Idee / Wunsch“**. Hilfreich sind die Programmversion
 (Button „Version“), die Schritte bis zum Fehler und ein Screenshot. **Bitte keine echten
 Teilnehmerdaten** in Meldungen oder Screenshots.
+
+## 14. Die erste Prüfung Schritt für Schritt
+
+Dieses Kapitel begleitet dich einmal durch eine ganze Prüfung – vom ersten Start bis zur
+Sicherung. Fett gedruckt ist immer genau das, was auf dem Bildschirm steht und was du
+anklickst. Ein **„Reiter“** ist eine der Registerkarten oben im Programmfenster
+(„Teilnehmer“, „Formular-Import“, „Zeitplan“ …) – ein Klick darauf zeigt die jeweilige Seite.
+
+> **Tipp für den Anfang:** Probiere alles einmal gefahrlos mit erfundenen Teilnehmern aus,
+> bevor es ernst wird (siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)).
+> Den Probe-Termin löschst du danach einfach wieder.
+
+### Schritt 1: Den Termin anlegen (einige Wochen vorher)
+
+1. Programm starten. Du siehst den Startbildschirm mit der Liste deiner Termine (beim ersten
+   Mal ist sie leer).
+2. Auf **„Neuen Termin anlegen…“** klicken.
+3. Eintragen:
+   - **Austragender Verein** und **Datum** (z. B. 14.11.2026) – diese beiden sind Pflicht.
+   - **Ort** – er steht später auf dem Anmeldeformular.
+   - Die Namen der Richter bei **Richter 1**, **Richter 2** … – daraus entstehen später die
+     Spalten im Zeitplan.
+   - **Verband** und **Meldestelle** (an wen die Anmeldungen gehen, z. B. Name und E-Mail).
+   - Bei **Angebotene Prüfungen** einen Haken bei jeder Prüfung setzen, die ihr anbietet.
+   - Bei **Startnummern-Bereiche** je Prüfung einen Nummernbereich, z. B. DK-LK 1:
+     1 bis 20. Damit verteilt das Programm später die Startnummern von selbst.
+4. Den vorgeschlagenen **Speicherort** nicht ändern und auf **„OK“** klicken. Der Termin
+   öffnet sich.
+
+Alles, was du jetzt noch nicht weißt, trägst du später im Reiter **„Verwaltung“** über
+**„Veranstaltungsdaten bearbeiten…“** nach.
+
+### Schritt 2: Das Anmeldeformular verschicken
+
+1. Reiter **„Export“** anklicken.
+2. Auf **„Anmeldeformular (PDF)…“** klicken und **„Speichern“** wählen.
+3. Es erscheint ein Fenster, wo die Datei liegt. Mit **„Ordner zeigen“** siehst du sie im
+   Explorer und kannst sie z. B. an eine E-Mail anhängen.
+4. Die Teilnehmer füllen das Formular am Computer aus, speichern es und schicken es zurück.
+
+### Schritt 3: Die Anmeldungen einlesen
+
+Die zurückgeschickten Formulare speicherst du in einem Ordner, z. B. auf dem Desktop. Dann:
+
+1. Reiter **„Formular-Import“** anklicken.
+2. Auf **„Anmeldeformulare (PDF) importieren…“** klicken, die Dateien auswählen (mehrere auf
+   einmal gehen mit gedrückter Strg-Taste) und **„Öffnen“** klicken.
+3. Das Programm zeigt, was übernommen wurde und was nicht – mit Grund. Bei „nicht
+   angeboten“ oder fehlenden Angaben am besten kurz beim Teilnehmer nachfragen.
+4. Danach fragt das Programm, ob es die Startnummern gleich vergeben soll: **„Ja“**. (Das
+   klappt, wenn du in Schritt 1 die Startnummern-Bereiche eingetragen hast.)
+
+Kommt eine Anmeldung per Telefon, auf Papier oder als Foto, legst du den Teilnehmer von Hand
+an: Reiter **„Teilnehmer“** → **„Teilnehmer hinzufügen…“** → Felder ausfüllen → **„OK“**.
+Eine Liste aus Excel liest du über **„Teilnehmerliste (Excel/CSV)…“** ein (siehe
+[Kapitel 5](#teilnehmerliste-aus-excel-übernehmen)). Auch danach fragt das Programm, ob es
+die Startnummern gleich vergeben soll. Wer schon in der Liste steht, wird beim erneuten
+Einlesen nicht doppelt angelegt.
+
+### Schritt 4: Startnummern und Zahlungen im Blick behalten
+
+Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
+
+- **Fehlt jemandem noch eine Startnummer,** auf **„Fehlende Startnummern vergeben…“** klicken.
+- **Ist die Prüfungsgebühr eingegangen,** den Teilnehmer anklicken und
+  **„Bezahlt umschalten“** wählen. Mehrere auf einmal markierst du mit gedrückter Strg-Taste.
+- **Etwas ändern:** Doppelklick auf den Teilnehmer, ändern, **„OK“**.
+- **Startnummern tauschen:** beide Teilnehmer mit gedrückter Strg-Taste markieren und
+  **„Startnummer tauschen…“** klicken.
+- In der Spalte **„Anmerkungen“** steht, was noch fehlt. Orange heißt: bitte vor dem
+  Prüfungstag erledigen (z. B. die Chipnummer). Graue Hinweise sind nur Erinnerungen.
+
+### Schritt 5: Den Zeitplan machen (etwa eine Woche vorher)
+
+1. Reiter **„Zeitplan“** anklicken. Die Richter aus Schritt 1 stehen schon als Spalten da
+   (sonst mit **„Richter hinzufügen“** anlegen).
+2. Oben bei **„Zeitplan-Start (HH:MM)“** die Uhrzeit eintragen, z. B. 08:30, und
+   **„Startzeit speichern“** klicken.
+3. Auf **„Automatisch verteilen…“** klicken. Das Programm verteilt alle Teilnehmer auf die
+   Richter.
+4. Ist eine Zeile **rot mit ⚠**, steht ein Team zur selben Zeit an zwei Stellen. Dann die
+   Blöcke mit **„Hoch“** / **„Runter“** verschieben.
+5. Mittagspause: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den Haken bei
+   **„Bei allen Richtern einfügen, um“** setzen, die Uhrzeit (z. B. 12:00) eintragen und
+   **„OK“** klicken. Endet der Plan eines Richters schon vorher, steht die Pause an seinem
+   Ende – das Programm sagt dir dann die tatsächliche Uhrzeit. Achtung: Ein erneutes
+   „Automatisch verteilen…“ ersetzt den ganzen Plan – die Pause musst du danach wieder
+   einfügen.
+6. Mit **„Zeitplan (PDF)…“** speichern und den Richtern schicken.
+
+### Schritt 6: Kurz vor der Prüfung
+
+1. Im Reiter **„Teilnehmer“** prüfen, ob die Spalte „Anmerkungen“ noch Orangenes zeigt.
+2. Im Reiter **„Export“** ausdrucken:
+   - **„Bewertungsbögen – alle Teilnehmer (PDF)…“** für die Richter,
+   - **„Übersicht für Prüfungsleitung (PDF)…“** (wer hat bezahlt, Impfungen),
+   - bei Bedarf **„Chipnummernliste (PDF)…“**.
+3. Einmal eine Sicherung machen (siehe Schritt 9) – sicher ist sicher.
+
+### Schritt 7: Am Prüfungstag
+
+- **Jemand ist nicht gekommen:** Reiter **„Teilnehmer“** → den Teilnehmer anklicken →
+  **„Keine Teilnahme“**. Bitte **nicht löschen** – so bleibt alles nachvollziehbar.
+- **Ergebnisse eintragen:** Reiter **„Ergebniserfassung“**. In der Zeile des Teilnehmers je
+  Disziplin bei **„Suche“** (0 bis 60) und **„Anzeige“** (0 bis 40) die Punkte eintippen.
+  Bei einer Disqualifikation den Haken **„Disqualifiziert“** setzen.
+- **Speichern:** Gelbe Zeilen sind noch nicht gespeichert. Klicke regelmäßig auf
+  **„Alle Ergebnisse speichern“** (oder drücke **Strg+S**).
+
+### Schritt 8: Nach der Prüfung
+
+1. Reiter **„Auswertung“**: Hier steht die Rangliste mit Punkten, Wertnote und Platz.
+2. Reiter **„Export“**: **„Ergebnisliste (PDF)…“**, **„Etiketten (PDF)…“** (zum Aufkleben in
+   die Leistungshefte) und **„Statistik (PDF)…“** speichern und drucken.
+
+### Schritt 9: Sichern
+
+1. Reiter **„Datensicherung“** → **„Sicherung erstellen…“**.
+2. Auf Wunsch **„Mit Passwort schützen“** ankreuzen und ein Passwort zweimal eingeben.
+   Schreib es dir auf und bewahre es **nicht** zusammen mit dem USB-Stick auf – ein
+   vergessenes Passwort kann niemand wiederherstellen.
+3. Als Speicherort z. B. den USB-Stick wählen und **„Speichern“** klicken.
+
+Geschafft! Wenn unterwegs etwas nicht klappt, hilft [Kapitel 13](#13-häufige-fragen-und-probleme)
+oder der Button **„❓ Hilfe“** oben rechts im Programm.
+
+## 15. Glossar: Wörter kurz erklärt
+
+| Wort | Bedeutung |
+|---|---|
+| **Abbruch (Abbr.)** | Die Prüfung wurde abgebrochen. Kein Platz und keine Punkte, das Team zählt aber bei „von x“ mit. |
+| **Ablageort / Ordner „Ausdrucke“** | Der Ordner, in dem das Programm deine PDFs vorschlägt: `Termine\Ausdrucke\<Termin>`. |
+| **Anmerkungen** | Spalte im Reiter „Teilnehmer“, die zeigt, was bei einem Teilnehmer noch fehlt. |
+| **Behältnisstrecke, Flächensuche, Trümmerfeld** | Die drei Suchdisziplinen. |
+| **Chip-Nr.** | Die Nummer des Mikrochips des Hundes, um ihn am Prüfungstag eindeutig zu erkennen. |
+| **CSV-Datei** | Eine einfache Tabellendatei. Excel kann sie öffnen und speichern („Speichern unter“ → „CSV“). |
+| **Disqualifiziert (Disq./DISQ)** | Das Team wurde von der Prüfung ausgeschlossen. Kein Platz und keine Punkte, das Team zählt aber bei „von x“ mit. |
+| **DK (Dreikampf)** | Der Hund wird in allen drei Disziplinen geprüft. |
+| **ED (Einzeldisziplin)** | Der Hund wird nur in einer Disziplin geprüft. |
+| **Gegenstand / „gesucht in“** | Der Gegenstand, den der Hund suchen soll, und die Disziplin, in der er versteckt wird. |
+| **KI / Prompt** | KI ist ein Programm wie ChatGPT oder Claude. Der „Prompt“ ist der Text, den du dort hineinkopierst, damit die KI Formulare in eine Liste umwandelt. Nur nötig, wenn du diesen Weg nutzt. |
+| **LK (Leistungsklasse)** | Die Schwierigkeitsstufe 1, 2 oder 3. |
+| **Markieren** | Eine Zeile anklicken. Mehrere Zeilen: mit gedrückter Strg-Taste nacheinander anklicken. |
+| **Meldestelle** | Wer die Anmeldungen entgegennimmt – steht auf dem Anmeldeformular. |
+| **nB (nicht bestanden)** | Mindestens eine Disziplin hat weniger als 70 Punkte. |
+| **OMA** | Online-Meldeannahme – die Internetseite, über die Teilnehmer sich auch melden können. Ihre Meldungsliste kann das Programm einlesen. |
+| **PDF** | Eine Datei zum Ansehen und Drucken, die überall gleich aussieht. |
+| **Prüfungsblock** | Im Zeitplan alle Teams einer Prüfung (z. B. „ED LK 1 Trümmerfeld“) bei einem Richter. |
+| **Reiter** | Die Registerkarten oben im Programmfenster („Teilnehmer“, „Zeitplan“ …). |
+| **SH-R** | Spürhundesport-Richter. Das Feld „SH-R“ auf den Etiketten ist für seinen Stempel. |
+| **Sicherungsdatei** | Eine Datei (Endung `.zip`), in der alle Termine stecken – zum Aufbewahren, z. B. auf einem USB-Stick. |
+| **Starter / „1. von 2“** | „von 2“ zählt die Teams einer Leistungsklasse, deren Ergebnis schon vollständig eingetragen ist. |
+| **Startnummern-Bereich** | Welche Startnummern zu welcher Prüfung gehören, z. B. 1 bis 20 für DK LK 1. |
+| **Termin / Termin-Datei** | Eine Prüfung mit allen Teilnehmern und Ergebnissen. Jede Prüfung ist eine eigene Datei. |
+| **Tooltip** | Ein kleiner Hilfetext, der erscheint, wenn du die Maus kurz über etwas hältst. |
+| **Verschlüsselt / Passwort** | Eine Sicherung mit Passwort kann nur öffnen, wer das Passwort kennt. |
+| **Web-Version** | Eine zusätzliche, freiwillige Möglichkeit, dass Richter Ergebnisse im Browser eintragen. Für eine normale Prüfung nicht nötig. |
+| **Wertnote** | Das Prädikat nach Punkten: Vorzüglich, Sehr Gut, Gut, Befriedigend. |

@@ -9,10 +9,13 @@ pdf_export); keines dieser Module importiert app.
 
 from __future__ import annotations
 
+import datetime
 import sqlite3
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -48,8 +51,12 @@ from db import (
     liste_termine,
     list_teilnehmer,
     normalisiere_datum,
+    pruefe_startnummer_bereiche,
     pruefungen_als_text,
+    startnummer_bereiche,
+    startnummer_bereiche_als_text,
     termine_ordner,
+    pruefungs_kuerzel,
 )
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
@@ -64,12 +71,19 @@ from desktop_gemeinsam import (
 )
 
 
+# UX-Test 02.10.2026, U3 (Rubrik ux_test_2026_10): Startgröße der Teilnehmer-Maske und
+# Mindestbreite ihrer Textfelder links.
+_TEILNEHMER_DIALOG_GROESSE = (1040, 720)
+_MINDESTBREITE_TEXTFELD = 170
+
+
 class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     """Formular zur Neuanlage eines Teilnehmers."""
 
     def __init__(
         self, parent=None, vorhandener: dict | None = None, vergebene_nummern: set[int] | None = None,
-        naechste_nummer: int = 1, namen_je_startnummer: dict[int, str] | None = None,
+        namen_je_startnummer: dict[int, str] | None = None,
+        bereiche: dict[str, tuple[int, int]] | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Teilnehmer bearbeiten" if vorhandener else "Teilnehmer erfassen")
@@ -79,8 +93,16 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Nur für die Warnmeldung bei doppelter Startnummer: wer hat sie schon (Name), damit
         # der Hinweis konkret wird statt nur "ist bereits vergeben" zu sagen.
         self._namen_je_startnummer = namen_je_startnummer or {}
+        # UX-Test 02.10.2026, U1: Startnummern-Bereiche je Prüfung (db.startnummer_bereiche)
+        # für den Vorschlag beim Entfernen des Hakens "steht noch nicht fest".
+        self._bereiche = bereiche or {}
+        # Vorschlag nur für Teilnehmer ohne eigene Nummer - eine vorhandene Nummer wird beim
+        # Hin- und Herschalten des Hakens nicht durch einen Vorschlag ersetzt.
+        self._ohne_eigene_nummer = vorhandener is None or vorhandener.get("startnummer") is None
+        self._vorschlag_aktiv = False  # erst nach dem Aufbau, siehe Ende von __init__
+        self._letzter_vorschlag: int | None = None
 
-        self._felder_erstellen(naechste_nummer)
+        self._felder_erstellen()
         self._layout_aufbauen()
 
         self._art_geaendert(self.art.currentText())
@@ -89,12 +111,21 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # Die Vorbelegung setzt auch die gespeicherte Zuordnung von Gegenstand 1 -
             # bei ED danach wieder fest auf die ED-Disziplin stellen.
             self._gegenstand_felder_aktualisieren()
+        else:
+            # UX-Test 02.10.2026, U1 (Marco): kein Startnummer-Vorschlag bei der Neuanlage -
+            # Nummern werden gesammelt ("Fehlende Startnummern vergeben…") oder bewusst
+            # einzeln vergeben.
+            self.startnummer_unbekannt.setChecked(True)
 
         self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
         self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
+        self._vorschlag_aktiv = True
+        # Ändert sich danach die Prüfung, den (noch unveränderten) Vorschlag mitziehen.
+        for auswahl in (self.art, self.stufe, self.disziplin):
+            auswahl.currentTextChanged.connect(self._vorschlag_nachfuehren)
         self._schriftgroesse_anwenden()
 
-    def _felder_erstellen(self, naechste_nummer: int) -> None:
+    def _felder_erstellen(self) -> None:
         """Legt alle Eingabe-Widgets als Attribute an (noch ohne Layout/Vorbelegung -
         siehe _layout_aufbauen/_vorbelegung_uebernehmen)."""
         self.nachname = QLineEdit()
@@ -132,7 +163,6 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.telefon = QLineEdit()
         self.startnummer = QSpinBox()
         self.startnummer.setRange(1, 999)
-        self.startnummer.setValue(naechste_nummer)  # Vorschlag bei Neuanlage; wird unten bei Bearbeiten überschrieben
         # Nutzerwunsch (20.09., Anmerkung zum Programm): "Vergabe der Startnummern als
         # Pflichtfeld finde ich hier noch nicht so gut, ich weiß ggf. nicht was alles an
         # Meldungen kommt" - die Startnummer kann jetzt offen gelassen werden (startnummer
@@ -243,6 +273,12 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Eingabefelder links liefen dadurch sichtbar ab ("uver" statt "Bruver"). Mit
         # gleichem Stretch-Faktor (1:1) bekommen beide Spalten unabhängig von ihrem
         # jeweiligen Inhalt die Hälfte der verfügbaren Breite.
+        # UX-Test 02.10.2026, U3: trotz 1:1-Aufteilung blieben die linken Felder bei der
+        # alten Startgröße nur ~45 px breit ("uster" statt "Muster"), weil die rechte
+        # Spalte ihren Mindestplatz zuerst bekommt. Mindestbreite für die Textfelder links -
+        # notfalls scrollt der Dialog waagerecht, statt Eingaben abzuschneiden.
+        for feld in gruppe_links.findChildren(QLineEdit):
+            feld.setMinimumWidth(_MINDESTBREITE_TEXTFELD)
         spalten_zeile = QHBoxLayout()
         spalten_zeile.addWidget(gruppe_links, 1)
         spalten_zeile.addWidget(gruppe_rechts, 1)
@@ -297,7 +333,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # einer Menge Felder/aufgeklapptem Halter-Block mehr Platz braucht als die
         # Startgröße bietet).
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
-        self.resize(780, 640)
+        # UX-Test 02.10.2026, U3: größere Startgröße (vorher 780x640), begrenzt auf den
+        # verfügbaren Bildschirm, damit OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben.
+        breite, hoehe = _TEILNEHMER_DIALOG_GROESSE
+        bildschirm = self.screen() or QApplication.primaryScreen()
+        if bildschirm is not None:
+            frei = bildschirm.availableGeometry()
+            breite = min(breite, int(frei.width() * 0.95))
+            hoehe = min(hoehe, int(frei.height() * 0.9))
+        self.resize(breite, hoehe)
 
     def _vorbelegung_uebernehmen(self, vorhandener: dict) -> None:
         """Übernimmt beim Bearbeiten eines vorhandenen Teilnehmers dessen Werte in die
@@ -366,6 +410,34 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
     def _startnummer_verfuegbarkeit_aktualisieren(self, unbekannt: bool) -> None:
         self.startnummer.setEnabled(not unbekannt)
+        if not unbekannt and self._vorschlag_aktiv and self._ohne_eigene_nummer:
+            self._letzter_vorschlag = self._startnummer_vorschlag()
+            self.startnummer.setValue(self._letzter_vorschlag)
+
+    def _vorschlag_nachfuehren(self, _text: str = "") -> None:
+        """Neue Prüfung gewählt: Steht im Feld noch der zuletzt vorgeschlagene Wert (also
+        nicht von Hand geändert), den Vorschlag für die neue Prüfung übernehmen."""
+        if (
+            not self.startnummer_unbekannt.isChecked() and self._ohne_eigene_nummer
+            and self._letzter_vorschlag is not None and self.startnummer.value() == self._letzter_vorschlag
+        ):
+            self._letzter_vorschlag = self._startnummer_vorschlag()
+            self.startnummer.setValue(self._letzter_vorschlag)
+
+    def _startnummer_vorschlag(self) -> int:
+        """Kleinste freie Nummer im Bereich der gewählten Prüfung (UX-Test U1, statt
+        immer "1"); ohne Bereich bzw. bei vollem Bereich die kleinste freie insgesamt."""
+        art = self.art.currentText()
+        kuerzel = pruefungs_kuerzel(art, int(self.stufe.currentText()), self.disziplin.currentText() if art == "ED" else None)
+        bereich = self._bereiche.get(kuerzel)
+        if bereich is not None:
+            frei = next((n for n in range(bereich[0], bereich[1] + 1) if n not in self._vergebene_nummern), None)
+            if frei is not None:
+                return frei
+        n = 1
+        while n in self._vergebene_nummern:
+            n += 1
+        return n
 
     def _art_geaendert(self, art: str) -> None:
         # Disziplin ist nur bei Einzeldisziplin (ED) relevant/erlaubt
@@ -733,7 +805,7 @@ class PruefungsblockDialog(ResponsiveSchriftMixin, QDialog):
 class PauseDialog(ResponsiveSchriftMixin, QDialog):
     """Formular zum Hinzufügen/Bearbeiten einer Pause in einer Richter-Spur."""
 
-    def __init__(self, parent=None, dauer_minuten: int = 15, bezeichnung: str = ""):
+    def __init__(self, parent=None, dauer_minuten: int = 15, bezeichnung: str = "", neu: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Pause")
 
@@ -750,14 +822,45 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Dauer*", self.dauer_minuten)
         form.addRow("Bezeichnung", self.bezeichnung)
 
+        # UX-Test 02.10.2026, U9: beim Hinzufügen wahlweise dieselbe Pause bei allen
+        # Richtern zu einer Uhrzeit (z. B. Mittagspause); sonst nach der markierten Zeile.
+        self.fuer_alle = QCheckBox("Bei allen Richtern einfügen, um")
+        self.uhrzeit = QLineEdit("12:00")
+        self.uhrzeit.setPlaceholderText("HH:MM")
+        self.uhrzeit.setMaximumWidth(70)
+        self.uhrzeit.setEnabled(False)
+        self.fuer_alle.toggled.connect(self.uhrzeit.setEnabled)
+        if neu:
+            alle_zeile = QHBoxLayout()
+            alle_zeile.addWidget(self.fuer_alle)
+            alle_zeile.addWidget(self.uhrzeit)
+            alle_zeile.addWidget(QLabel("Uhr"))
+            alle_zeile.addStretch()
+            form.addRow(alle_zeile)
+            hinweis = QLabel(
+                "Ohne Haken wird die Pause nach der in der Liste markierten Zeile eingefügt "
+                "(sonst am Ende). Mit Haken je Richter vor dem ersten Block ab dieser Uhrzeit."
+            )
+            hinweis.setWordWrap(True)
+            form.addRow(hinweis)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(buttons)
         self._schriftgroesse_anwenden()
+
+    def _pruefen_und_akzeptieren(self) -> None:
+        if self.fuer_alle.isChecked():
+            try:
+                datetime.datetime.strptime(self.uhrzeit.text().strip(), "%H:%M")
+            except ValueError:
+                QMessageBox.warning(self, "Ungültige Uhrzeit", "Bitte die Uhrzeit als HH:MM eingeben, z. B. 12:00.")
+                return
+        self.accept()
 
     def werte(self) -> dict:
         return {
@@ -805,7 +908,7 @@ class BewertungsbogenAuswahlDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(
             "Welche Art/Leistungsklasse(n) sollen in die Sammel-PDF aufgenommen werden? "
-            "Standardmäßig sind alle angehakt (bisheriges Verhalten)."
+            "Standardmäßig sind alle angehakt."
             if labels else "Keine Teilnehmer erfasst."
         ))
         layout.addLayout(auswahl_zeile)
@@ -852,10 +955,11 @@ class SicherungErstellenDialog(QDialog):
         formular.addRow("Passwort wiederholen:", self.passwort_wiederholen_feld)
 
         hinweis = QLabel(
-            "Sichert ALLE Termine aus dem gemeinsamen Termine-Ordner in eine einzige "
-            "ZIP-Datei (nicht nur den aktuell geöffneten Termin). Mit Passwort entsteht "
-            "eine AES-256-verschlüsselte ZIP-Datei - das Passwort wird nicht gespeichert "
-            "und lässt sich nachträglich nicht wiederherstellen, also gut aufbewahren."
+            "Sichert ALLE Termine in eine einzige Sicherungsdatei (nicht nur den gerade "
+            "geöffneten Termin) - z. B. auf einen USB-Stick. Mit Passwort wird die "
+            "Sicherungsdatei verschlüsselt, sodass niemand ohne Passwort die Teilnehmerdaten "
+            "lesen kann. Das Passwort wird nicht gespeichert und lässt sich nicht "
+            "wiederherstellen - bitte gut aufbewahren."
         )
         hinweis.setWordWrap(True)
 
@@ -927,6 +1031,8 @@ def _wiederherstellungsziele_planen(namen, vorhandene, ordner, aktion_fuer) -> t
 # Fließtext abheben.
 _HILFE_HTML = """
 <h2>Hilfe – SHS Prüfungsprogramm</h2>
+<p><b>Schrift zu blass oder zu klein?</b> Menü „Ansicht“ → „Hintergrund“ → „Hoher Kontrast“
+(schwarz auf weiß, größere Kontraste). Die Wahl bleibt gespeichert.</p>
 
 <h3>Erste Schritte</h3>
 <p>Beim Programmstart zeigt die Terminübersicht alle vorhandenen Termine mit Datum, Verein,
@@ -941,7 +1047,7 @@ jederzeit wechseln.</p>
 Stammdaten, Verband/Mitgliedsnummer, Anschrift (Straße/Hausnummer/PLZ/Ort) und Kontaktdaten
 (E-Mail/Telefon) sowie Wurftag des Hundes - alles optional, außer den mit * markierten
 Pflichtfeldern. Dazu Art (ED/DK), Leistungsklasse, bei ED die Disziplin und die
-Suchgegenstände. Die Startnummer wird automatisch vorgeschlagen.</p>
+Suchgegenstände. Startnummern vergibst du gesammelt mit „Fehlende Startnummern vergeben…“ (Bereiche je Prüfung in den Veranstaltungsdaten) oder einzeln über „Bearbeiten…“.</p>
 <p><b>Gegenstände:</b> Hinter jedem Gegenstand legst du bei "gesucht in" fest, für welche
 Disziplin er gilt – das steuert, wo er auf dem Bewertungsbogen erscheint. Bei ED gibt es in
 jeder Leistungsklasse genau einen Gegenstand: nur Gegenstand 1 ist eingabebereit, "gesucht in"
@@ -949,9 +1055,9 @@ folgt automatisch der ED-Disziplin. Bei DK sind mindestens 1 (LK1), 2 (LK2) bzw.
 verschiedene Gegenstände nötig. Alle auf "frei" zu lassen ist in Ordnung; ordnest du
 Disziplinen zu, sollten alle drei belegt sein (derselbe Gegenstand darf in mehreren Feldern
 stehen, jede Disziplin aber nur einmal vorkommen).</p>
-<p><b>Spalte "Anmerkungen":</b> Warnungen mit ⚠ (z. B. "Chip-Nr. fehlt", "Gegenstand fehlt",
-"Gegenstände unvollständig (Dreikampf)") solltest du vor dem Prüfungstag beheben; kleine
-Hinweise ohne ⚠ sind nur Erinnerungen.</p>
+<p><b>Spalte "Anmerkungen":</b> Die Warnung "⚠ Chip-Nr. fehlt" (orange) solltest du vor dem
+Prüfungstag beheben. Graue Hinweise wie "Gegenstand noch offen" sind nur Erinnerungen –
+Gegenstände können bis zum Prüfungstag nachgetragen werden.</p>
 <p>"Bezahlt umschalten" setzt den Zahlungsstatus des markierten Teilnehmers, ohne den ganzen
 Dialog zu öffnen. "Keine Teilnahme" markiert einen nicht erschienenen Teilnehmer: Er bleibt
 grau in der Liste, fällt aber aus Zeitplan, Ergebniserfassung, Auswertung und allen
@@ -972,10 +1078,14 @@ verloren). "Anmeldeformulare (PDF) importieren…" liest die zurückgeschickten 
 mehrere auf einmal; bereits vorhandene Meldungen werden übersprungen, abgelehnte Dateien mit
 Grund aufgelistet (z. B. mehrere Prüfungen angekreuzt oder eine im Termin nicht angebotene
 Prüfung).</p>
+<p><b>Teilnehmerliste aus Excel:</b> "Leere Vorlage (CSV) speichern…" liefert die passenden
+Spalten; in Excel ausfüllen, als CSV speichern und mit "CSV importieren…" einlesen (auch über
+"Teilnehmerliste (Excel/CSV)…" im Reiter "Teilnehmer"). Komma/Semikolon und die Excel-
+Kodierung werden erkannt.</p>
 <p>"OMA-Export importieren…" übernimmt den Meldungs-Export der Online-Meldeannahme direkt.</p>
-<p><b>Andere Meldeformulare</b> (Word, Foto/Scan, handschriftlich) mit Hilfe eines KI-Assistenten: "Prompt
-kopieren", Prompt und Formulare an den KI-Assistenten geben, die erzeugte CSV-Datei mit
-"CSV importieren…" einlesen. Jede Zeile wird ein neuer Teilnehmer (ohne Startnummer,
+<p><b>Andere Meldeformulare</b> (Word, Foto/Scan, handschriftlich) mit Hilfe eines KI-Assistenten
+(unten aufklappen): "Prompt kopieren", Prompt und Formulare an den KI-Assistenten geben, die
+erzeugte CSV-Datei mit "CSV importieren…" einlesen. Jede Zeile wird ein neuer Teilnehmer (ohne Startnummer,
 Gegenstände und Bezahlt-Status); fehlerhafte Zeilen werden mit Grund aufgelistet und
 übersprungen. Achtung Datenschutz: Die Formulare gehen dabei an den gewählten KI-Anbieter.</p>
 <p>Zum Ausprobieren gibt es eine Beispieldatei mit 20 erfundenen Teilnehmern auf der
@@ -984,21 +1094,26 @@ Projektseite: https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (dana
 
 <h3>Reiter "Zeitplan"</h3>
 <p>Plant den Tagesablauf je Richter. Startzeit oben festlegen, dann je Richter eine
-Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…". Reihenfolge mit
-"Hoch"/"Runter" anpassen. "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
+Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…" (nach der markierten Zeile;
+wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause). Reihenfolge mit
+"Hoch"/"Runter" anpassen – sie wirken auf den ganzen Block (fette Kopfzeile). "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
 (ersetzt den bisherigen Plan der gewählten Richter, mit Rückfrage) – danach frei von Hand
 änderbar. Start-/Endzeiten berechnen sich automatisch. Die Seitenleiste "Offene Starts"
 zeigt je Art/Leistungsklasse/Disziplin, ob dafür schon ein Prüfungsblock angelegt wurde
 (grün) oder noch fehlt (rot, "noch offen") – bleibt auch beim seitlichen Scrollen durch
-viele Richter-Spalten sichtbar. "Zeitplan (PDF)…" exportiert eine Seite je Richter.</p>
+viele Richter-Spalten sichtbar. Dreikampf-Teams setzt der Vorschlag nie gleichzeitig an und
+hält den "Mindestabstand Team" ein; steht ein Team doch doppelt (z. B. nach dem Verschieben),
+sind die Zeilen rot mit ⚠ markiert und oben in der Seitenleiste aufgeführt.
+"Zeitplan (PDF)…" exportiert eine Seite je Richter.</p>
 <p><b>Wichtig zu "Entfernen":</b> Ein Prüfungsblock speichert nur Art/Leistungsklasse/
 Disziplin und die Dauer je Teilnehmer – WER genau darin geprüft wird, wird bei jeder
 Anzeige automatisch aus den aktuellen Teilnehmerdaten ermittelt, nicht einzeln gespeichert.
 "Entfernen" löscht deshalb immer den GANZEN Block (alle darin zusammengefassten
 Teilnehmer), nicht nur einen einzelnen Teilnehmer. Fällt z. B. ein Teilnehmer kurzfristig
-aus (Krankmeldung), muss im Zeitplan nichts angefasst werden: einfach im Reiter
-"Teilnehmer" austragen – der Block bleibt bestehen und zeigt beim nächsten Öffnen des
-Zeitplans automatisch einen Teilnehmer (und entsprechend weniger Zeit) weniger.</p>
+aus (Krankmeldung), muss im Zeitplan nichts angefasst werden: im Reiter "Teilnehmer"
+mit "Keine Teilnahme" markieren (nicht löschen) – der Block bleibt bestehen und zeigt beim
+nächsten Öffnen des Zeitplans automatisch einen Teilnehmer (und entsprechend weniger Zeit)
+weniger.</p>
 
 <h3>Reiter "Ergebniserfassung"</h3>
 <p>Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Suchleistung (0–60)
@@ -1039,14 +1154,17 @@ Anmeldeformulars.</p>
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
 Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
 Zeitplan sowie
-alle Bewertungsbögen gesammelt. "Ablageort öffnen" zeigt den Ordner der zuletzt gespeicherten
-PDFs im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen sich denselben Speicherort.</p>
+alle Bewertungsbögen gesammelt. "Teilnehmerliste (CSV, für Excel)…" speichert alle Teilnehmer
+mit Stammdaten als Excel-Liste (lässt sich auch wieder einlesen). PDFs landen standardmäßig im
+Ordner "Ausdrucke" des Termins; nach dem Speichern zeigt ein Fenster, wo die Datei liegt.
+"Ablageort öffnen" zeigt den Ordner im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen
+sich denselben Speicherort.</p>
 
 <h3>Reiter "Datensicherung"</h3>
-<p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine ZIP-Datei
-– nicht nur den gerade geöffneten Termin. "Sicherung erstellen (ZIP)…" fragt zunächst,
-ob die Datei mit einem Passwort geschützt werden soll (dann AES-256-verschlüsselt),
-danach den Speicherort. "Sicherung wiederherstellen (ZIP)…" fragt bei Bedarf nach dem
+<p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine Sicherungsdatei
+– nicht nur den gerade geöffneten Termin. "Sicherung erstellen…" fragt zunächst,
+ob die Datei mit einem Passwort geschützt werden soll (dann wird sie verschlüsselt),
+danach den Speicherort. "Sicherung wiederherstellen…" fragt bei Bedarf nach dem
 Passwort und bei jedem bereits vorhandenen Termin, ob überschrieben, als Kopie
 importiert oder übersprungen werden soll. Ein vergessenes Passwort lässt sich nicht
 wiederherstellen – gut aufbewahren.</p>
@@ -1163,6 +1281,41 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             self.pruefung_checkboxen[pruefung.kuerzel] = checkbox
             pruefungen_raster.addWidget(checkbox, i // 3, i % 3)
 
+        # UX-Test 02.10.2026, U1: Startnummern-Bereich je Prüfung für "Fehlende
+        # Startnummern vergeben…". Nur für angebotene Prüfungen sichtbar (sind keine
+        # angehakt, für alle 12) - Marcos Entscheidung 03.10.2026.
+        vorher_bereiche = startnummer_bereiche(vorbelegung)
+        self.bereich_felder: dict[str, tuple[QLabel, QLineEdit, QLineEdit]] = {}
+        self.gruppe_bereiche = QGroupBox("Startnummern-Bereiche (für „Fehlende Startnummern vergeben…“)")
+        bereiche_raster = QGridLayout(self.gruppe_bereiche)
+        bereiche_raster.addWidget(QLabel("Prüfung"), 0, 0)
+        bereiche_raster.addWidget(QLabel("von"), 0, 1)
+        bereiche_raster.addWidget(QLabel("bis"), 0, 2)
+        for zeile, pruefung in enumerate(ALLE_PRUEFUNGEN, start=1):
+            beschriftung = QLabel(pruefung.bezeichnung)
+            von_feld, bis_feld = QLineEdit(), QLineEdit()
+            for nummer_feld in (von_feld, bis_feld):
+                nummer_feld.setValidator(QIntValidator(1, 999, nummer_feld))  # wie Startnummer-Feld
+                nummer_feld.setMaximumWidth(80)
+            if pruefung.kuerzel in vorher_bereiche:
+                von, bis = vorher_bereiche[pruefung.kuerzel]
+                von_feld.setText(str(von))
+                bis_feld.setText(str(bis))
+            bereiche_raster.addWidget(beschriftung, zeile, 0)
+            bereiche_raster.addWidget(von_feld, zeile, 1)
+            bereiche_raster.addWidget(bis_feld, zeile, 2)
+            self.bereich_felder[pruefung.kuerzel] = (beschriftung, von_feld, bis_feld)
+        bereiche_raster.setColumnStretch(3, 1)
+        bereiche_hinweis = QLabel(
+            "Nur für die oben angehakten Prüfungen (ohne Haken: alle). Bereiche abgewählter "
+            "Prüfungen werden beim Speichern entfernt. Leer lassen = keine automatische Vergabe."
+        )
+        bereiche_hinweis.setWordWrap(True)
+        bereiche_raster.addWidget(bereiche_hinweis, len(ALLE_PRUEFUNGEN) + 1, 0, 1, 4)
+        for checkbox in self.pruefung_checkboxen.values():
+            checkbox.toggled.connect(self._bereichszeilen_anpassen)
+        self._bereichszeilen_anpassen()
+
         form = QFormLayout()
         # Eingabefelder wachsen mit der Dialogbreite mit, statt bei einer
         # Fenstervergrößerung auf ihrer ursprünglichen Größe stehen zu bleiben.
@@ -1183,6 +1336,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Verband", self.verband)
         form.addRow("Meldestelle", self.meldestelle)
         form.addRow(self.gruppe_pruefungen)
+        form.addRow(self.gruppe_bereiche)
 
         if not bearbeiten:
             self.pfad_feld = QLineEdit()
@@ -1230,6 +1384,35 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         """Angehakte Prüfungen in Speicherform (siehe db.pruefungen_als_text)."""
         return pruefungen_als_text([k for k, cb in self.pruefung_checkboxen.items() if cb.isChecked()])
 
+    def _sichtbare_bereich_kuerzel(self) -> list[str]:
+        angehakt = [k for k, cb in self.pruefung_checkboxen.items() if cb.isChecked()]
+        return angehakt or list(self.pruefung_checkboxen)
+
+    def _bereichszeilen_anpassen(self, _checked: bool = False) -> None:
+        sichtbar = set(self._sichtbare_bereich_kuerzel())
+        for kuerzel, widgets in self.bereich_felder.items():
+            for widget in widgets:
+                widget.setVisible(kuerzel in sichtbar)
+
+    def _startnummer_bereiche_lesen(self) -> dict[str, tuple[int, int]]:
+        """Eingetragene Bereiche der sichtbaren Prüfungen. Wirft ValueError mit einem
+        Text für den Nutzer, wenn nur "von" oder nur "bis" ausgefüllt ist."""
+        bereiche: dict[str, tuple[int, int]] = {}
+        for kuerzel in self._sichtbare_bereich_kuerzel():
+            beschriftung, von_feld, bis_feld = self.bereich_felder[kuerzel]
+            von, bis = von_feld.text().strip(), bis_feld.text().strip()
+            if not von and not bis:
+                continue
+            if not von or not bis:
+                raise ValueError(f"{beschriftung.text()}: bitte „von“ UND „bis“ eintragen oder beide leer lassen.")
+            bereiche[kuerzel] = (int(von), int(bis))
+        return bereiche
+
+    def startnummer_bereiche_text(self) -> str | None:
+        """Bereiche in Speicherform (siehe db.startnummer_bereiche_als_text) - bereits in
+        _pruefen_und_akzeptieren geprüft."""
+        return startnummer_bereiche_als_text(self._startnummer_bereiche_lesen())
+
     def datum_iso(self) -> str:
         """Eingegebenes Datum in Speicherform JJJJ-MM-TT (bereits in
         _pruefen_und_akzeptieren geprüft, siehe db.normalisiere_datum)."""
@@ -1269,4 +1452,28 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         if not self._bearbeiten and not self.pfad_feld.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte einen Speicherort angeben.")
             return
+        try:
+            bereich_fehler = pruefe_startnummer_bereiche(self._startnummer_bereiche_lesen())
+        except ValueError as fehler:
+            bereich_fehler = str(fehler)
+        if bereich_fehler:
+            QMessageBox.warning(self, "Startnummern-Bereiche", bereich_fehler)
+            return
+        # UX-Test 02.10.2026, K6: Beim Anlegen darauf hinweisen, dass leere Angaben auf dem
+        # Anmeldeformular fehlen - Speichern bleibt trotzdem möglich.
+        fehlend = [name for name, leer in (("Verband", not self.verband.text().strip()),
+                                           ("Meldestelle", self.meldestelle_text() is None)) if leer]
+        if not self._bearbeiten and fehlend:
+            antwort = QMessageBox.question(
+                self, "Angaben für das Anmeldeformular",
+                f"{' und '.join(fehlend)} {'ist' if len(fehlend) == 1 else 'sind'} leer und "
+                f"{'fehlt' if len(fehlend) == 1 else 'fehlen'} dann auf dem Anmeldeformular für die Teilnehmer.\n\n"
+                "Du kannst das auch später im Reiter „Verwaltung“ über „Veranstaltungsdaten "
+                "bearbeiten…“ nachtragen.\n\n"
+                "Trotzdem jetzt speichern?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            )
+            if antwort != QMessageBox.Yes:
+                (self.verband if "Verband" in fehlend else self.meldestelle).setFocus()
+                return
         self.accept()

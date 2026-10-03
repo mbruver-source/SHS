@@ -26,7 +26,7 @@ import os
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
 from app import (
     VERSION,
@@ -35,6 +35,7 @@ from app import (
     _wiederherstellungsziele_planen,
     AuswertungTab,
     BewertungsbogenAuswahlDialog,
+    DatensicherungTab,
     ErgebnisTab,
     ExportTab,
     FormularImportTab,
@@ -76,6 +77,25 @@ from db_import import (
 )
 from desktop_darstellung import _erzeuge_qss
 from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
+
+
+@pytest.fixture(autouse=True)
+def gespeichert_meldungen(monkeypatch):
+    """UX-Test U7: Nach jedem Speichern erscheint ein modales Meldungsfenster - in den Tests
+    wird es durch eine Aufzeichnung ersetzt, damit kein Test daran hängen bleibt."""
+    import desktop_gemeinsam
+
+    meldungen = []
+
+    def _aufzeichnen(parent, pfad, titel, datei_oeffnen_text="PDF öffnen"):
+        meldungen.append((str(pfad), titel, datei_oeffnen_text))
+
+    monkeypatch.setattr(desktop_gemeinsam, "_datei_gespeichert_melden", _aufzeichnen)
+    monkeypatch.setattr("app._datei_gespeichert_melden", _aufzeichnen)
+    # UX-Test U1: nach Importen wird die Sammelvergabe per Rückfrage angeboten - in den
+    # Tests nur aufzeichnen (eigener Test unten nutzt die echte Funktion).
+    monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda parent, conn: meldungen.append(("import", None, None)))
+    return meldungen
 
 
 @pytest.fixture
@@ -366,6 +386,193 @@ def test_keine_teilnahme_fragt_bei_erfassten_ergebnissen_nach(qtbot, conn, monke
     assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 1
     # Das Ergebnis bleibt gespeichert.
     assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
+
+
+def _zeilen_markieren(tab, *zeilen):
+    from PySide6.QtCore import QItemSelectionModel
+
+    modell = tab.tabelle.selectionModel()
+    modell.clearSelection()
+    for zeile in zeilen:
+        modell.select(tab.tabelle.model().index(zeile, 0), QItemSelectionModel.Select | QItemSelectionModel.Rows)
+
+
+def test_mehrfachmarkierung_bezahlt_und_keine_teilnahme(qtbot, conn, monkeypatch):
+    """UX-Test 02.10.2026, K7: Bezahlt/Keine Teilnahme wirken auf alle markierten Zeilen,
+    Bearbeiten/Löschen/Tauschen/Bewertungsbogen nur bei genau einer."""
+    a = _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    _teilnehmer_anlegen(conn, nachname="C", startnummer=3)
+    setze_bezahlt(conn, a, True)
+    eintragen_ergebnis(conn, b, "Flächensuche", 50, 35)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    _zeilen_markieren(tab, 0, 1)
+    assert tab.bezahlt_btn.isEnabled() and tab.teilnahme_btn.isEnabled()
+    for knopf in (tab.bearbeiten_btn, tab.bewertungsbogen_btn):
+        assert not knopf.isEnabled()
+    # UX-Nachtest N1/N2: Löschen und (bei genau zwei) Tauschen gehen auch bei Mehrfachauswahl.
+    assert tab.loeschen_btn.isEnabled() and tab.tauschen_btn.isEnabled()
+
+    # Nicht alle bezahlt -> alle markierten werden bezahlt; erneut -> alle unbezahlt.
+    qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
+    assert {t["nachname"]: t["bezahlt"] for t in list_teilnehmer(conn)} == {"A": 1, "B": 1, "C": 0}
+    assert len(tab._ausgewaehlte_ids()) == 2  # Markierung bleibt erhalten
+    qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
+    assert {t["nachname"]: t["bezahlt"] for t in list_teilnehmer(conn)} == {"A": 0, "B": 0, "C": 0}
+
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.Yes)
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+    assert len(fragen) == 1 and "„B, Max“" in fragen[0] and "„A, Max“" not in fragen[0]
+    assert {t["nachname"]: t["keine_teilnahme"] for t in list_teilnehmer(conn)} == {"A": 1, "B": 1, "C": 0}
+    assert tab.teilnahme_btn.text() == "Teilnahme wiederherstellen"
+    qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
+    assert {t["nachname"]: t["keine_teilnahme"] for t in list_teilnehmer(conn)} == {"A": 0, "B": 0, "C": 0}
+
+
+def test_ausgeblendete_markierte_zeilen_werden_nicht_umgeschaltet(qtbot, conn):
+    """K7-Verifikation: Strg+A, dann Filter - nur sichtbare Teilnehmer zählen."""
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.selectAll()
+    tab.filter_startnummer.setText("2")
+    tab._filter_anwenden()
+    assert tab.bearbeiten_btn.isEnabled()  # nur noch B sichtbar markiert
+    qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
+    assert {t["nachname"]: t["bezahlt"] for t in list_teilnehmer(conn)} == {"A": 0, "B": 1}
+
+
+def test_loeschen_nennt_markierten_statt_aktuellen_teilnehmer(qtbot, conn, monkeypatch):
+    """K7-Verifikation: aktuelle Zeile (B) und Markierung (A) laufen auseinander."""
+    from PySide6.QtCore import QItemSelectionModel
+
+    a = _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    modell = tab.tabelle.selectionModel()
+    modell.setCurrentIndex(tab.tabelle.model().index(1, 0), QItemSelectionModel.NoUpdate)
+    _zeilen_markieren(tab, 0)
+    assert tab.tabelle.currentRow() == 1 and tab._ausgewaehlte_id() == a
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a_, **k: fragen.append(a_[2]) or QMessageBox.No)
+    tab._teilnehmer_loeschen()
+    assert "„A, Max“" in fragen[0]
+
+
+def test_mehrere_markierte_loeschen_und_zwei_markierte_tauschen(qtbot, conn, monkeypatch):
+    """UX-Nachtest 03.10.2026: Löschen wirkt auf alle markierten (N1), bei genau zwei
+    markierten tauscht "Startnummer tauschen…" diese beiden direkt (N2)."""
+    a = _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    _teilnehmer_anlegen(conn, nachname="C", startnummer=3)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a_, **k: fragen.append(a_[2]) or QMessageBox.Yes)
+
+    _zeilen_markieren(tab, 0, 1)
+    assert tab.tauschen_btn.isEnabled() and tab.loeschen_btn.isEnabled()
+    assert not tab.bearbeiten_btn.isEnabled()
+    assert "genau einem" in tab.bearbeiten_btn.toolTip()
+    qtbot.mouseClick(tab.tauschen_btn, Qt.MouseButton.LeftButton)
+    assert "„A, Max“ (Nr. 1)" in fragen[-1] and "„B, Max“ (Nr. 2)" in fragen[-1]
+    nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(conn)}
+    assert (nummern[a], nummern[b]) == (2, 1)
+
+    _zeilen_markieren(tab, 0, 1, 2)
+    assert not tab.tauschen_btn.isEnabled()
+    qtbot.mouseClick(tab.loeschen_btn, Qt.MouseButton.LeftButton)
+    assert "Diese 3 Teilnehmer" in fragen[-1]
+    assert list_teilnehmer(conn) == []
+
+
+def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
+    """UX-Nachtest 03.10.2026, N3: endet der Plan vor der Wunschzeit, nennt eine Meldung die
+    tatsächliche Uhrzeit."""
+    conn, _pfad = termin
+    _teilnehmer_anlegen(conn, art="ED", stufe=1, disziplin="Trümmerfeld")
+    set_veranstaltung(conn, verein="V", datum="2026-11-14", zeitplan_start="09:00")
+    richter = add_zeitplan_richter(conn, "Anna")
+    add_zeitplan_pruefungsblock(conn, richter, "ED", 1, "Trümmerfeld", 10)
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+
+    class _Dialog:
+        def __init__(self, *a, **k):
+            from PySide6.QtWidgets import QCheckBox, QLineEdit
+            self.fuer_alle = QCheckBox()
+            self.fuer_alle.setChecked(True)
+            self.uhrzeit = QLineEdit("12:00")
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def werte(self):
+            return {"dauer_minuten": 30, "bezeichnung": "Mittag"}
+
+    monkeypatch.setattr("app.PauseDialog", _Dialog)
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a_, **k: meldungen.append(a_[2]))
+    tab._pause_hinzufuegen(richter)
+    assert meldungen and "Anna: 09:10 Uhr" in meldungen[0]
+
+
+def test_markierung_bleibt_nach_aenderung_beim_selben_teilnehmer(qtbot, conn):
+    """UX-Test 02.10.2026, K7: Verschiebt sich die Zeile durch eine Änderung (hier neue
+    Startnummer), bleibt die Markierung beim Teilnehmer statt bei der Zeilennummer."""
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.selectRow(1)
+    assert tab._ausgewaehlte_id() == b
+
+    update_teilnehmer(conn, b, NeuerTeilnehmer(
+        nachname="B", vorname="Max", rufname_hund="Bello", art="ED", stufe=1,
+        disziplin="Flächensuche", startnummer=9))
+    update_teilnehmer(conn, b, NeuerTeilnehmer(
+        nachname="B", vorname="Max", rufname_hund="Bello", art="ED", stufe=1,
+        disziplin="Flächensuche", startnummer=None))
+    tab.aktualisieren()
+
+    assert tab.tabelle.item(0, 1).text() == "B"  # ohne Startnummer jetzt oben
+    assert tab._ausgewaehlte_id() == b
+
+
+def test_sicherung_dateiname_mit_pruefungsdatum_und_verein(qtbot, conn):
+    """UX-Test 02.10.2026, K10."""
+    import datetime
+
+    heute = datetime.date.today().isoformat()
+    ohne = DatensicherungTab()
+    qtbot.addWidget(ohne)
+    assert ohne._dateiname_vorschlag() == f"SHS-Sicherung_{heute}.zip"
+
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-11-14")
+    tab = DatensicherungTab(conn=conn)
+    qtbot.addWidget(tab)
+    assert tab._dateiname_vorschlag() == f"SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-{heute}.zip"
+
+
+def test_teilnehmer_knopfleiste_zweizeilig(qtbot, conn):
+    """Vor-Build-Klärung 03.10.2026 (U12): Startnummern- und Import-Knöpfe in einer zweiten
+    Zeile, damit der Reiter auch auf kleinen Bildschirmen passt."""
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    oben = tab.bearbeiten_btn.geometry().y()
+    assert tab.bewertungsbogen_btn.geometry().y() == oben
+    assert tab.tauschen_btn.geometry().y() > oben
 
 
 def test_keine_teilnahme_fehlt_in_ergebnis_tab(qtbot, conn):
@@ -2009,6 +2216,8 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
         "ort": "Köppern",
         # Marco, 28.09.2026: Verband wird übernommen, Meldestelle bewusst nicht.
         "verband": "HSVRM",
+        # UX-Test U1: Startnummern-Bereiche werden ebenfalls übernommen (hier keine hinterlegt).
+        "startnummer_bereiche": None,
     }
 
 
@@ -2054,13 +2263,14 @@ def test_startnummer_checkbox_deaktiviert_spinbox_und_ergibt_keine_startnummer(q
     dialog.vorname.setText("Max")
     dialog.rufname_hund.setText("Bello")
 
-    assert dialog.startnummer.isEnabled()
-    assert dialog.ergebnis().startnummer == dialog.startnummer.value()
+    # UX-Test U1: Neuanlage startet ohne Startnummer ("steht noch nicht fest").
+    assert not dialog.startnummer.isEnabled()
+    assert dialog.ergebnis().startnummer is None
 
     qtbot.mouseClick(dialog.startnummer_unbekannt, Qt.MouseButton.LeftButton)
 
-    assert not dialog.startnummer.isEnabled()
-    assert dialog.ergebnis().startnummer is None
+    assert dialog.startnummer.isEnabled()
+    assert dialog.ergebnis().startnummer == dialog.startnummer.value() == 1
 
 
 def test_bestehender_teilnehmer_ohne_startnummer_zeigt_checkbox_aktiviert(qtbot, conn):
@@ -2083,6 +2293,7 @@ def test_doppelte_startnummer_zeigt_warnung_mit_namen_statt_blockade_ohne_hinwei
     dialog.nachname.setText("Neu")
     dialog.vorname.setText("Nina")
     dialog.rufname_hund.setText("Rex")
+    dialog.startnummer_unbekannt.setChecked(False)  # Neuanlage startet mit Haken (UX-Test U1)
     dialog.startnummer.setValue(5)
 
     warnungen = []
@@ -2108,6 +2319,7 @@ def test_doppelte_startnummer_wird_bei_aktivierter_checkbox_nicht_geprueft(qtbot
     dialog.nachname.setText("Neu")
     dialog.vorname.setText("Nina")
     dialog.rufname_hund.setText("Rex")
+    dialog.startnummer_unbekannt.setChecked(False)  # Neuanlage startet mit Haken (UX-Test U1)
     dialog.startnummer.setValue(5)
     qtbot.mouseClick(dialog.startnummer_unbekannt, Qt.MouseButton.LeftButton)
 
@@ -2350,7 +2562,8 @@ def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qt
     text_unvollstaendig = tab.tabelle.item(zeile_unvollstaendig, 7).text()
     assert text_unvollstaendig.startswith("⚠")
     assert "Chip-Nr." in text_unvollstaendig
-    assert "Gegenstand fehlt" in text_unvollstaendig
+    # UX-Test 02.10.2026, U14: Gegenstände erscheinen als "noch offen" statt "fehlt".
+    assert "Gegenstand noch offen" in text_unvollstaendig
     assert tab.tabelle.item(zeile_vollstaendig, 7).text() == ""
 
 
@@ -2907,3 +3120,646 @@ def test_design_ohne_beschreibbaren_tempordner_startet_trotzdem(darstellung_spei
 
     assert darstellung._aktives_design == "dunkel"
     assert QApplication.instance().styleSheet() == _erzeuge_qss("blau", "dunkel")
+
+
+def test_standardknoepfe_deutsch(qapp):
+    """UX-Test 02.10.2026, U6: Standardknöpfe erscheinen deutsch (Ja/Nein/Abbrechen), auch
+    ohne mitgelieferte qtbase_de.qm; andere Texte bleiben unverändert."""
+    import desktop_gemeinsam
+    from PySide6.QtCore import QCoreApplication
+
+    vorher = list(desktop_gemeinsam._installierte_uebersetzer)
+    try:
+        desktop_gemeinsam.deutsche_qt_texte_laden(qapp)
+        box = QMessageBox()
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        assert sorted(b.text() for b in box.buttons()) == ["&Ja", "&Nein"]
+        knoepfe = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        assert sorted(b.text() for b in knoepfe.buttons()) == ["Abbrechen", "OK"]
+        assert QCoreApplication.translate("IrgendeinKontext", "Hallo") == "Hallo"
+    finally:
+        for uebersetzer in desktop_gemeinsam._installierte_uebersetzer[len(vorher):]:
+            qapp.removeTranslator(uebersetzer)
+        desktop_gemeinsam._installierte_uebersetzer[:] = vorher
+
+
+def test_strg_s_speichert_in_der_ergebniserfassung(qtbot, termin, monkeypatch):
+    """UX-Test 02.10.2026, K11: Strg+S löst in der Ergebniserfassung "Alle Ergebnisse
+    speichern" aus, solange der Fokus im Reiter liegt."""
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    _teilnehmer_anlegen(conn)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    tab = fenster.ergebnis_tab
+    fenster._tabs.setCurrentWidget(tab)
+
+    aufrufe = []
+    monkeypatch.setattr(type(tab), "alle_speichern", lambda self: aufrufe.append(True))
+
+    # Tastenkürzel greifen nur im aktiven Fenster - offscreen muss es explizit aktiviert werden.
+    fenster.activateWindow()
+    qtbot.waitUntil(fenster.isActiveWindow)
+    tab.tabelle.setFocus()
+    qtbot.keyClick(tab.tabelle, Qt.Key_S, Qt.ControlModifier)
+    assert aufrufe == [True]
+
+    # Fokus in einem eingebetteten Punktefeld (setCellWidget) - typischer Fall beim Tippen.
+    punktefeld = next(
+        w for w in tab.tabelle.findChildren(QLineEdit) if w.isVisible() and w.isEnabled()
+    )
+    punktefeld.setFocus()
+    qtbot.keyClick(punktefeld, Qt.Key_S, Qt.ControlModifier)
+    assert aufrufe == [True, True]
+
+    # In einem anderen Reiter löst Strg+S nicht aus.
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    fenster.teilnehmer_tab.setFocus()
+    qtbot.keyClick(fenster.teilnehmer_tab, Qt.Key_S, Qt.ControlModifier)
+    assert aufrufe == [True, True]
+
+
+def test_absturzprotokoll_schreibt_start_und_unbehandelte_fehler(tmp_path, monkeypatch):
+    """UX-Test 02.10.2026, P1: Startzeile und unbehandelte Fehler landen im
+    Absturzprotokoll; eine zu große Datei beginnt von vorn."""
+    import faulthandler
+    import sys
+
+    import desktop_gemeinsam
+
+    aktiviert = {}
+    # pytest hat faulthandler selbst aktiv - hier nur den Aufruf prüfen, nicht umbiegen.
+    monkeypatch.setattr(faulthandler, "enable", lambda **kw: aktiviert.update(kw))
+    monkeypatch.setattr(sys, "excepthook", lambda *a: None)
+    monkeypatch.setattr(desktop_gemeinsam, "_ABSTURZPROTOKOLL_MAX_BYTES", 200)
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", None)
+
+    alt = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
+    alt.write_text("x" * 500, encoding="utf-8")
+
+    pfad = desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=tmp_path)
+    assert pfad == alt
+    assert aktiviert["file"] is desktop_gemeinsam._absturzprotokoll_datei
+
+    try:
+        raise RuntimeError("Testfehler P1")
+    except RuntimeError:
+        sys.excepthook(*sys.exc_info())
+    desktop_gemeinsam._absturzprotokoll_datei.close()
+
+    inhalt = pfad.read_text(encoding="utf-8")
+    assert "x" * 500 not in inhalt
+    assert "Version 9.9.9" in inhalt
+    assert "RuntimeError: Testfehler P1" in inhalt
+
+
+def test_absturzprotokoll_ohne_schreibrecht_startet_trotzdem(tmp_path):
+    """Kann das Protokoll nicht angelegt werden, liefert die Funktion None, statt den
+    Programmstart abzubrechen."""
+    import desktop_gemeinsam
+
+    unmoeglich = tmp_path / "datei_statt_ordner"
+    unmoeglich.write_text("x")
+    assert desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=unmoeglich) is None
+
+
+def test_punkte_ueber_maximum_rot_und_klartext_beim_speichern(qtbot, termin, monkeypatch):
+    """UX-Test 02.10.2026, U5: "65" bei höchstens 60 wird sofort markiert und beim
+    Speichern im Klartext abgelehnt statt mit "CHECK constraint failed"."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    tab = fenster.ergebnis_tab
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+
+    qtbot.keyClicks(suche_feld, "65")
+    qtbot.keyClicks(anzeige_feld, "30")
+    assert suche_feld.text() == "65"
+    assert "border" in suche_feld.styleSheet()
+    assert suche_feld.toolTip() == "Höchstens 60 Punkte."
+    assert "border" not in anzeige_feld.styleSheet()
+
+    meldungen = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: meldungen.append(a[2]))
+    tab.alle_speichern()
+
+    assert len(meldungen) == 1
+    assert "Suche höchstens 60 Punkte (eingegeben: 65)" in meldungen[0]
+    assert "CHECK" not in meldungen[0]
+    assert tab._zeile_ist_ungespeichert(0)
+
+    suche_feld.setText("55")
+    assert "border" not in suche_feld.styleSheet()
+
+
+def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
+    """UX-Test 02.10.2026, U5: "45,5" wird nicht stillschweigend zu 45 - abgelehnte
+    Zeichen erzeugen einen Hinweis."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    tab = fenster.ergebnis_tab
+    suche_feld, _anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+
+    qtbot.keyClicks(suche_feld, "45,5")
+
+    assert suche_feld.text() == "45"
+    assert "Nur ganze Punkte von 0 bis 60" in tab.status_label.text()
+
+    # N6 (UX-Nachtest): bleibt hervorgehoben stehen, bis die nächste gültige Eingabe kommt.
+    assert "font-weight:bold" in tab.status_label.text()
+    suche_feld.setText("4")
+    assert tab.status_label.text() == ""
+
+
+def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
+    """UX-Test 02.10.2026, U3: Felder links haben eine Mindestbreite (kein "uster" statt
+    "Muster" mehr), und die Startgröße passt auf den verfügbaren Bildschirm."""
+    import desktop_dialoge
+
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.nachname.minimumWidth() == desktop_dialoge._MINDESTBREITE_TEXTFELD
+    assert dialog.nachname.width() >= desktop_dialoge._MINDESTBREITE_TEXTFELD
+    frei = dialog.screen().availableGeometry()
+    breite, hoehe = desktop_dialoge._TEILNEHMER_DIALOG_GROESSE
+    assert dialog.width() <= min(breite, int(frei.width() * 0.95))
+    assert dialog.height() <= min(hoehe, int(frei.height() * 0.9))
+
+
+def test_lange_namensliste_in_auswertung_verbreitert_fenster_nicht(qtbot, termin):
+    """UX-Test 02.10.2026, U12: Die Liste "Noch ohne vollständiges Ergebnis" bricht um,
+    statt das Hauptfenster über die Bildschirmbreite zu ziehen."""
+    conn, pfad = termin
+    for i in range(40):
+        _teilnehmer_anlegen(conn, nachname=f"Langername{i:02d}", vorname="Vorname", startnummer=i + 1)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.auswertung_tab
+    tab.aktualisieren()
+
+    assert tab.ausstehend_label.wordWrap()
+    assert tab.status_label.wordWrap()
+    assert tab.ausstehend_label.minimumSizeHint().width() < 600
+
+
+
+def test_pdf_speichern_meldet_ort_und_nutzt_ausdrucke_ordner(qtbot, termin, monkeypatch, gespeichert_meldungen):
+    """UX-Test 02.10.2026, U7: Standard-Ablageort ist "Ausdrucke/<Termin>" neben der
+    Termin-Datei (wird beim Speichern angelegt); nach dem Speichern erscheint eine Meldung
+    und die Statuszeile zeigt den Pfad in Windows-Schreibweise."""
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    _teilnehmer_anlegen(conn)
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    export_tab = fenster.export_tab
+    erwartet = os.path.join(os.path.dirname(os.path.abspath(pfad)), "Ausdrucke",
+                            os.path.splitext(os.path.basename(pfad))[0])
+    assert export_tab._ablageort.pfad == erwartet
+
+    vorschlaege = []
+
+    def dialog(_parent, _titel, vorschlag, _filter):
+        vorschlaege.append(vorschlag)
+        return vorschlag.replace("\\", "/"), "PDF-Datei (*.pdf)"
+
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", dialog)
+    monkeypatch.setattr("app.pdf_export.erstelle_ergebnisliste_pdf", lambda c, p, *a, **k: None)
+
+    export_tab._ergebnisliste_exportieren()
+
+    assert os.path.isdir(erwartet)
+    assert os.path.dirname(vorschlaege[0]) == erwartet
+    assert len(gespeichert_meldungen) == 1
+    assert gespeichert_meldungen[0][1] == "Ergebnisliste gespeichert"
+    assert "/" not in export_tab.status_label.text().split(": ", 1)[1]
+
+
+def test_import_dialog_startet_in_downloads_und_merkt_ordner(qtbot, conn, monkeypatch, tmp_path):
+    """UX-Test 02.10.2026, U7: Importe starten im Ordner Downloads, danach im zuletzt
+    benutzten Import-Ordner."""
+    import desktop_gemeinsam
+
+    downloads = tmp_path / "home" / "Downloads"
+    downloads.mkdir(parents=True)
+    monkeypatch.setattr(desktop_gemeinsam.os.path, "expanduser", lambda p: str(tmp_path / "home") if p == "~" else p)
+    monkeypatch.setattr(desktop_gemeinsam, "_letzter_import_ordner", None)
+    assert desktop_gemeinsam._import_startordner() == str(downloads)
+
+    anderer = tmp_path / "Mail"
+    anderer.mkdir()
+    desktop_gemeinsam._import_ordner_merken(str(anderer / "liste.csv"))
+    assert desktop_gemeinsam._import_startordner() == str(anderer)
+
+
+
+def test_zeitplan_uebernimmt_richter_einmalig(qtbot, termin):
+    """UX-Test 02.10.2026, U8: Beim Öffnen des Termins erscheinen die Richter aus den
+    Veranstaltungsdaten als Spalten; bewusst gelöschte Richter tauchen nicht wieder auf."""
+    from db import list_zeitplan_richter, loesche_zeitplan_richter
+
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14",
+                      wertungsrichter_1="Anna Richter", wertungsrichter_2="Bernd Berger")
+
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    # Bloßes Öffnen des Termins verändert die Datei nicht.
+    assert list_zeitplan_richter(conn) == []
+
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    assert [r["name"] for r in list_zeitplan_richter(conn)] == ["Anna Richter", "Bernd Berger"]
+
+    for richter in list_zeitplan_richter(conn):
+        loesche_zeitplan_richter(conn, richter["id"])
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    assert list_zeitplan_richter(conn) == []
+
+
+
+def test_neuer_termin_hinweis_bei_leerem_verband_und_meldestelle(qtbot, monkeypatch, tmp_path):
+    """UX-Test 02.10.2026, K6: nur beim Anlegen, Speichern bleibt möglich."""
+    dialog = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14"})
+    qtbot.addWidget(dialog)
+    dialog.pfad_feld.setText(str(tmp_path / "t.db"))
+    fragen = []
+    antwort = [QMessageBox.No]
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[2]) or antwort[0])
+    akzeptiert = []
+    monkeypatch.setattr(dialog, "accept", lambda: akzeptiert.append(True))
+
+    dialog._pruefen_und_akzeptieren()
+    assert "Verband und Meldestelle sind leer" in fragen[-1]
+    assert not akzeptiert
+
+    dialog.verband.setText("HSVRM")
+    antwort[0] = QMessageBox.Yes
+    dialog._pruefen_und_akzeptieren()
+    assert fragen[-1].startswith("Meldestelle ist leer und fehlt")
+    assert akzeptiert
+
+    # Beim Bearbeiten kein Hinweis.
+    fragen.clear()
+    bearbeitet = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14"}, bearbeiten=True)
+    qtbot.addWidget(bearbeitet)
+    monkeypatch.setattr(bearbeitet, "accept", lambda: None)
+    bearbeitet._pruefen_und_akzeptieren()
+    assert not fragen
+
+
+def test_veranstaltungsdialog_startnummer_bereiche(qtbot, monkeypatch):
+    """UX-Test 02.10.2026, U1b: Bereichsfelder nur für angebotene Prüfungen (ohne Angebot
+    alle), Vorbelegung, Prüfung auf halbe Angaben und Überschneidungen."""
+    dialog = VeranstaltungsDialog(
+        vorbelegung={"verein": "HSV", "datum": "2026-11-14",
+                     "angebotene_pruefungen": "DK1,ED1-Trümmerfeld",
+                     "startnummer_bereiche": "DK1=1-20"},
+        bearbeiten=True,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    sichtbar = [k for k, (label, _v, _b) in dialog.bereich_felder.items() if label.isVisible()]
+    assert sichtbar == ["DK1", "ED1-Trümmerfeld"]
+    assert dialog.bereich_felder["DK1"][1].text() == "1"
+    assert dialog.bereich_felder["DK1"][2].text() == "20"
+
+    meldungen = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: meldungen.append(a[2]))
+    akzeptiert = []
+    monkeypatch.setattr(dialog, "accept", lambda: akzeptiert.append(True))
+
+    dialog.bereich_felder["ED1-Trümmerfeld"][1].setText("15")
+    dialog._pruefen_und_akzeptieren()
+    assert "„von“ UND „bis“" in meldungen[-1]
+
+    dialog.bereich_felder["ED1-Trümmerfeld"][2].setText("30")
+    dialog._pruefen_und_akzeptieren()
+    assert "überschneiden sich" in meldungen[-1]
+    assert not akzeptiert
+
+    dialog.bereich_felder["ED1-Trümmerfeld"][1].setText("21")
+    dialog._pruefen_und_akzeptieren()
+    assert akzeptiert == [True]
+    assert dialog.startnummer_bereiche_text() == "DK1=1-20,ED1-Trümmerfeld=21-30"
+
+    # Ohne angehakte Prüfungen sind alle 12 Zeilen sichtbar.
+    for checkbox in dialog.pruefung_checkboxen.values():
+        checkbox.setChecked(False)
+    assert all(label.isVisible() for label, _v, _b in dialog.bereich_felder.values())
+
+
+
+
+
+
+def test_startnummer_vorschlag_im_bereich_der_pruefung(qtbot):
+    """UX-Test 02.10.2026, U1: Beim Entfernen des Hakens die kleinste freie Nummer im
+    Bereich der gewählten Prüfung vorschlagen statt einer schon vergebenen "1"."""
+    dialog = TeilnehmerDialog(vergebene_nummern={1, 21, 22}, bereiche={"ED1-Trümmerfeld": (21, 40)})
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("ED")
+    dialog.stufe.setCurrentText("1")
+    dialog.disziplin.setCurrentText("Trümmerfeld")
+
+    dialog.startnummer_unbekannt.setChecked(False)
+    assert dialog.startnummer.value() == 23
+
+    # Wechsel auf eine Prüfung ohne Bereich zieht den unveränderten Vorschlag mit:
+    # kleinste freie Nummer insgesamt.
+    dialog.disziplin.setCurrentText("Flächensuche")
+    assert dialog.startnummer.value() == 2
+
+    # Von Hand geänderte Nummer bleibt beim Prüfungswechsel stehen.
+    dialog.startnummer.setValue(77)
+    dialog.disziplin.setCurrentText("Trümmerfeld")
+    assert dialog.startnummer.value() == 77
+
+
+def test_fehlende_startnummern_knopf_doppelklick_und_tausch_ohne_nummer(qtbot, termin, monkeypatch):
+    """UX-Test 02.10.2026, U1: Knopf vergibt gesammelt mit Abschlussmeldung, Doppelklick
+    öffnet Bearbeiten, Tausch zweier Teilnehmer ohne Nummer meldet sich verständlich."""
+    from app import TeilnehmerTab
+
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14", startnummer_bereiche="ED1-Flächensuche=10-20")
+    a = _teilnehmer_anlegen(conn, nachname="Albrecht", startnummer=None)
+    b = _teilnehmer_anlegen(conn, nachname="Bauer", startnummer=None)
+
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    infos = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append((titel, text)))
+
+    # Tausch zweier Teilnehmer ohne Nummer
+    tab.tabelle.selectRow(0)
+
+    class _Dialog:
+        def __init__(self, *args):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def ausgewaehlte_partner_id(self):
+            return b if tab._ausgewaehlte_id() == a else a
+
+    monkeypatch.setattr("app.StartnummerTauschenDialog", _Dialog)
+    tab._startnummer_tauschen()
+    assert infos[-1][0] == "Nichts zu tauschen"
+
+    # Sammelvergabe über den Knopf
+    knopf = next(k for k in tab.findChildren(QPushButton) if k.text() == "Fehlende Startnummern vergeben…")
+    qtbot.mouseClick(knopf, Qt.MouseButton.LeftButton)
+    assert infos[-1] == ("Startnummern vergeben", "2 Startnummer(n) vergeben.")
+    assert sorted(t["startnummer"] for t in list_teilnehmer(conn)) == [10, 11]
+
+    # Doppelklick öffnet Bearbeiten
+    geoeffnet = []
+    monkeypatch.setattr(TeilnehmerTab, "_teilnehmer_bearbeiten", lambda self: geoeffnet.append(True))
+    tab.tabelle.itemDoubleClicked.emit(tab.tabelle.item(0, 1))
+    assert geoeffnet == [True]
+
+
+
+def test_import_hinweis_ohne_bereiche_fragt_nicht(qtbot, conn, monkeypatch):
+    """UX-Test 02.10.2026, U1: Ohne Startnummern-Bereiche nach einem Import keine Rückfrage
+    (die ins Leere liefe), sondern ein Hinweis, wie es weitergeht."""
+    import app as app_modul
+
+    monkeypatch.undo()  # echte Funktion statt der Aufzeichnung aus der autouse-Fixture
+    _teilnehmer_anlegen(conn, startnummer=None)
+    fragen, infos = [], []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.No)
+    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append(text))
+
+    app_modul._startnummern_nach_import_anbieten(None, conn)
+    assert fragen == []
+    assert "Startnummern-Bereich" in infos[0]
+
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14", startnummer_bereiche="ED1-Flächensuche=1-5")
+    app_modul._startnummern_nach_import_anbieten(None, conn)
+    assert len(fragen) == 1
+
+
+
+def _dk_parallel_termin(conn):
+    """Drei DK-Blöcke derselben LK gleichzeitig bei drei Richtern = jedes Team dreifach."""
+    from db import zeitplan_richter_aus_veranstaltung_anlegen, list_zeitplan_richter
+
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14",
+                      wertungsrichter_1="Anna", wertungsrichter_2="Bernd", wertungsrichter_3="Clara")
+    for i, name in enumerate(["Muster", "Otto"], 1):
+        _teilnehmer_anlegen(conn, nachname=name, art="DK", stufe=1, disziplin=None, startnummer=i)
+    zeitplan_richter_aus_veranstaltung_anlegen(conn)
+    for richter, disziplin in zip(list_zeitplan_richter(conn), ("Trümmerfeld", "Flächensuche", "Behältnisstrecke")):
+        add_zeitplan_pruefungsblock(conn, richter["id"], "DK", 1, disziplin, 10)
+
+
+def test_zeitplan_markiert_ueberschneidungen(qtbot, termin):
+    """UX-Test 02.10.2026, U2b: betroffene Zeilen rot mit ⚠ und Tooltip, Seitenleiste
+    zeigt einen Warnbereich je Team; der Mindestabstand ist einstellbar und gespeichert."""
+    from PySide6.QtWidgets import QListWidget
+
+    conn, pfad = termin
+    _dk_parallel_termin(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    tab.aktualisieren()
+
+    # Nur die aktuellen Spalten (ältere warten nach dem Neuaufbau noch auf deleteLater).
+    spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
+    listen = [lw for spalte in spalten if spalte is not None for lw in spalte.findChildren(QListWidget)]
+    zeilen = [lw.item(i) for lw in listen for i in range(lw.count())]
+    markiert = [z for z in zeilen if z.text().startswith("⚠")]
+    assert len(markiert) == 6
+    assert "gleichzeitig" in markiert[0].toolTip()
+    # Verifikation U9: auch die Blockköpfe der betroffenen Blöcke sind markiert.
+    assert sum(1 for z in zeilen if z.text().startswith("▸ ⚠")) == 3
+    seitenleiste = tab._offene_starts_label.text()
+    assert "Überschneidungen (2 Team(s))" in seitenleiste
+    assert "Nr. 1 Muster" in seitenleiste
+
+    tab.mindestabstand.setValue(25)
+    assert get_veranstaltung(conn)["dk_mindestabstand"] == "25"
+
+
+def test_zeitplan_pdf_fragt_bei_ueberschneidungen(qtbot, termin, monkeypatch):
+    """UX-Test 02.10.2026, U2b: vor dem Zeitplan-PDF eine Rückfrage, wenn Teams doppelt
+    eingeplant sind; bei "Nein" wird nichts gespeichert."""
+    conn, pfad = termin
+    _dk_parallel_termin(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    fragen = []
+    monkeypatch.setattr("desktop_gemeinsam.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.No)
+    dialoge = []
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", lambda *a, **k: dialoge.append(a) or ("", ""))
+
+    fenster.zeitplan_tab._pdf_exportieren()
+
+    assert len(fragen) == 1 and "Überschneidung" in fragen[0]
+    assert dialoge == []
+
+
+
+def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatch):
+    """UX-Test 02.10.2026, U9: Blockköpfe mit Teilnehmerzahl über den eingerückten Teams;
+    "Automatisch verteilen" fragt nur nach, wenn schon ein Plan existiert."""
+    from PySide6.QtWidgets import QListWidget
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.Yes)
+    tab._automatisch_verteilen()
+    assert fragen == []  # leerer Plan: keine Warnung
+    tab._automatisch_verteilen()
+    assert len(fragen) == 1  # jetzt gibt es einen Plan, der ersetzt würde
+
+    spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
+    liste = next(lw for sp in spalten if sp is not None for lw in sp.findChildren(QListWidget))
+    texte = [liste.item(i).text() for i in range(liste.count())]
+    assert texte[0].startswith("▸ ED LK 1 – Flächensuche  (2 Teilnehmer")
+    assert liste.item(0).font().bold()
+    assert texte[1].lstrip().startswith("09:00") and "Nr. 1" in texte[1]
+
+
+
+def test_formular_import_ki_weg_eingeklappt_und_vorlage(qtbot, conn, monkeypatch, tmp_path, gespeichert_meldungen):
+    """UX-Test 02.10.2026, U10: der KI-Weg ist eingeklappt und lässt sich aufklappen; die
+    leere Excel-Vorlage wird mit den Import-Spalten gespeichert."""
+    from db_import import CSV_IMPORT_SPALTEN
+
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    assert not tab.prompt_feld.isVisible()
+    tab._ki_umschalter.click()
+    assert tab.prompt_feld.isVisible()
+
+    ziel = tmp_path / "vorlage.csv"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
+    next(b for b in tab.findChildren(QPushButton) if b.text() == "Leere Vorlage (CSV) speichern…").click()
+    assert ziel.read_text(encoding="utf-8-sig").strip() == ";".join(CSV_IMPORT_SPALTEN)
+    assert gespeichert_meldungen[-1][1] == "Vorlage gespeichert"
+
+
+def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(qtbot, termin, monkeypatch, tmp_path, gespeichert_meldungen):
+    """UX-Test 02.10.2026, N1 + U10: Export im Reiter "Export" (Excel-freundlich) und
+    Einlesen derselben Datei über den neuen Knopf im Reiter "Teilnehmer"."""
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14")
+    _teilnehmer_anlegen(conn, nachname="Müller", startnummer=5)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    ziel = tmp_path / "liste.csv"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
+    next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste (CSV, für Excel)…").click()
+    assert ziel.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert "Müller" in ziel.read_text(encoding="utf-8-sig")
+    assert gespeichert_meldungen[-1][1] == "Teilnehmerliste gespeichert"
+
+    # Dieselbe Datei im Reiter "Teilnehmer" wieder einlesen -> wird erkannt, kein zweiter
+    # Müller (UX-Nachtest N1), und die Meldung nennt ihn als bereits vorhanden.
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(ziel), ""))
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[2]))
+    next(b for b in fenster.teilnehmer_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste (Excel/CSV)…").click()
+    assert [t["nachname"] for t in list_teilnehmer(conn)].count("Müller") == 1
+    assert "bereits vorhanden" in meldungen[0]
+
+
+def test_gegenstand_offen_ist_dezent_und_entfaellt_bei_keine_teilnahme(qtbot, conn):
+    """UX-Test 02.10.2026, U14/K7: ohne fehlende Chip-Nr. erscheint ein offener Gegenstand
+    dezent grau (kein ⚠, nicht fett, Tooltip); bei "keine Teilnahme" entfällt er."""
+    from db import setze_keine_teilnahme
+
+    _teilnehmer_anlegen(conn, nachname="Offen", startnummer=1, chip_nr="123")
+    tid = _teilnehmer_anlegen(conn, nachname="Abgesagt", startnummer=2, chip_nr="456")
+    setze_keine_teilnahme(conn, tid, True)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+
+    zellen = {t["nachname"]: tab.tabelle.item(row, 7) for row, t in enumerate(tab._teilnehmer_je_zeile)}
+    offen = zellen["Offen"]
+    assert offen.text() == "Gegenstand noch offen"
+    assert not offen.font().bold()
+    assert "Prüfungstag" in offen.toolTip()
+    assert zellen["Abgesagt"].text() == "keine Teilnahme"
+
+
+def test_ergebniserfassung_leere_zeile_zeigt_noch_kein_ergebnis(qtbot, termin):
+    """UX-Test 02.10.2026, K1: leere Zeilen zeigen "noch kein Ergebnis" statt
+    "✓ gespeichert"; nach dem Speichern eines Ergebnisses "✓ gespeichert"."""
+    from app import _STATUS_SPALTE
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.ergebnis_tab
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "noch kein Ergebnis"
+    suche, anzeige = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche.setText("50")
+    anzeige.setText("30")
+    tab.alle_speichern()
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "✓ gespeichert"
+
+
+def test_auswertung_namensliste_vorname_nachname(qtbot, termin):
+    """UX-Test 02.10.2026, K2: "Vorname Nachname; …" statt "Nachname, Vorname, …"."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Graf", vorname="Greta", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Iske", vorname="Ina", startnummer=2)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.auswertung_tab.aktualisieren()
+    assert "Greta Graf; Ina Iske" in fenster.auswertung_tab.ausstehend_label.text()
+
+
+def test_auswertung_erklaert_von_x_bei_offenen(qtbot, conn):
+    """UX-Test 02.10.2026, K9: Hinweiszeile + Tooltip, solange jemand in der LK offen ist."""
+    fertig = _teilnehmer_anlegen(conn, nachname="Fertig", startnummer=1)
+    eintragen_ergebnis(conn, fertig, "Flächensuche", 60, 40)
+    _teilnehmer_anlegen(conn, nachname="Offen1", startnummer=2)
+    _teilnehmer_anlegen(conn, nachname="Offen2", startnummer=3)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.aktualisieren()
+
+    lk = tab.tabelle.item(0, 1).text()
+    platz = tab.tabelle.item(0, tab.tabelle.columnCount() - 1)
+    assert platz.text() == "1. von 1"
+    assert "nur Starter mit vollständigem Ergebnis" in platz.toolTip()
+    assert "2 noch offen" in platz.toolTip()
+    assert f"Hinweis {lk}: „von 1“ zählt nur Starter mit vollständigem Ergebnis – 2 noch offen." in (
+        tab.ausstehend_label.text()
+    )

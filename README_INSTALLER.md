@@ -177,8 +177,9 @@ ist, oder um den Build-Schritt nicht mehr manuell erledigen zu müssen.
    ```
 
    Das löst den Workflow automatisch aus, baut die Setup-Datei und veröffentlicht
-   sie als GitHub Release (Reiter „Releases" im Repo) inklusive automatisch
-   erzeugter Release-Notes.
+   sie als GitHub Release (Reiter „Releases" im Repo). Als Beschreibung dient
+   `RELEASE_NOTES.md` („Was ist neu“ in Alltagssprache – vor jedem Build neu
+   schreiben und mit committen), darunter automatisch erzeugte Release-Notes.
 
 Zum reinen Testen, ohne gleich ein Release zu erzeugen, lässt sich derselbe
 Workflow auch manuell anstoßen: Im Repo unter „Actions" → „Installer bauen" →

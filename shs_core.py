@@ -60,6 +60,11 @@ PUNKTE_MAX = {
     Disziplinart.DREIKAMPF: 300,
 }
 
+# Höchstpunkte je Disziplin für Suche und Anzeige - gemeinsam für Desktop (app.py) und Web
+# (app_web.py); die CHECK-Constraints in db.SCHEMA müssen dazu passen (Test in test_db).
+SUCHE_MAX = 60
+ANZEIGE_MAX = 40
+
 NICHT_BESTANDEN_TEXT = "nicht Bestanden"
 NICHT_BESTANDEN_ABK = "nB"
 

@@ -294,8 +294,11 @@ _DESIGNS: dict[str, dict] = {
         "TEXT": "#1B2430",
         "TEXT_STARK": "#16233E",
         "TEXT_BUTTON": "#2A3342",
-        "TEXT_GEDAEMPFT": "#6B7686",
-        "TEXT_HEADER": "#8A94A6",
+        # UX-Test 02.10.2026, U14: Reiter/Spaltenköpfe dunkler (vorher #6B7686/#8A94A6,
+        # Spaltenköpfe nur Kontrast 3:1 - für schlechtere Augen zu blass).
+        "TEXT_GEDAEMPFT": "#55606F",
+        "PLATZHALTER": "#6B7686",  # UX-Test U14: heller als TEXT_GEDAEMPFT
+        "TEXT_HEADER": "#55606F",
         "TEXT_DISABLED": "#A7B0BD",
         "TABELLE_ALT": "#FBFCFD",
         "SCROLL": "#D8DEE7",
@@ -320,8 +323,10 @@ _DESIGNS: dict[str, dict] = {
         "TEXT": "#2B2620",
         "TEXT_STARK": "#1F1A14",
         "TEXT_BUTTON": "#3A332A",
-        "TEXT_GEDAEMPFT": "#756B5E",
-        "TEXT_HEADER": "#8C8172",
+        # UX-Test 02.10.2026, U14: dunkler (vorher #756B5E/#8C8172).
+        "TEXT_GEDAEMPFT": "#5E5549",
+        "PLATZHALTER": "#756B5E",  # UX-Test U14: heller als TEXT_GEDAEMPFT
+        "TEXT_HEADER": "#5E5549",
         "TEXT_DISABLED": "#B3A898",
         "TABELLE_ALT": "#F7F3EC",
         "SCROLL": "#DDD4C5",
@@ -347,6 +352,7 @@ _DESIGNS: dict[str, dict] = {
         "TEXT_STARK": "#FFFFFF",
         "TEXT_BUTTON": "#DDE2E8",
         "TEXT_GEDAEMPFT": "#9AA4B2",
+        "PLATZHALTER": "#9AA4B2",  # UX-Test U14: heller als TEXT_GEDAEMPFT
         "TEXT_HEADER": "#9AA4B2",
         "TEXT_DISABLED": "#5F6875",
         "TABELLE_ALT": "#23272E",
@@ -373,6 +379,7 @@ _DESIGNS: dict[str, dict] = {
         "TEXT_STARK": "#000000",
         "TEXT_BUTTON": "#000000",
         "TEXT_GEDAEMPFT": "#333333",
+        "PLATZHALTER": "#333333",  # UX-Test U14: heller als TEXT_GEDAEMPFT
         "TEXT_HEADER": "#000000",
         "TEXT_DISABLED": "#6E6E6E",
         "TABELLE_ALT": "#F2F2F2",
@@ -490,7 +497,7 @@ def _design_palette(theme: dict, design: dict) -> QPalette:
         QPalette.BrightText: design["fehler"],
         QPalette.ToolTipBase: design["FLAECHE"],
         QPalette.ToolTipText: design["TEXT"],
-        QPalette.PlaceholderText: design["TEXT_GEDAEMPFT"],
+        QPalette.PlaceholderText: design["PLATZHALTER"],
         QPalette.Highlight: _auswahlfarbe(theme, design),
         QPalette.HighlightedText: design["TEXT"],
         QPalette.Link: theme["akzent"],

@@ -88,12 +88,25 @@ from db import (
     verschiebe_zeitplan_richter,
     zeitplan_gruppen,
     zeitplan_gruppen_status,
+    zeitplan_richter_aus_veranstaltung_anlegen,
+    fehlende_startnummern_vergeben,
+    naechste_freie_startnummer_im_bereich,
+    pruefe_startnummer_bereiche,
+    pruefungs_kuerzel,
+    startnummer_bereiche,
+    startnummer_bereiche_als_text,
+    dk_mindestabstand,
+    zeitplan_ueberschneidungen,
+    add_zeitplan_pause_bei_allen,
 )
 from db_import import (
     importiere_anmeldeformular_pdf,
     importiere_teilnehmer_aus_csv,
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
+    CSV_IMPORT_SPALTEN,
+    exportiere_teilnehmer_csv,
+    schreibe_csv_vorlage,
 )
 from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT
 
@@ -1166,39 +1179,143 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
 
-    def test_importiere_teilnehmer_aus_csv_bricht_bei_falscher_kodierung_sauber_ab(self):
-        # QS-Fund (Codeprüfung 21.09.): eine mit Windows-ANSI statt UTF-8 gespeicherte
-        # CSV-Datei (auf deutschem Windows beim "CSV speichern unter" in Excel der
-        # Standard) löste beim Weiterlesen einen UnicodeDecodeError AUSSERHALB der
-        # zeilenweisen try/except-Behandlung aus - der Import brach dadurch komplett mit
-        # einer unbehandelten Exception ab statt "nur die fehlerhafte Zeile zu
-        # überspringen" (siehe Docstring). Jetzt: sauberer Abbruch mit verständlicher
-        # Fehlermeldung statt Absturz; bereits verarbeitete Zeilen bleiben importiert.
-        #
-        # Genug gültige Zeilen VOR der fehlerhaften, um den internen Lesepuffer von
-        # TextIOWrapper (io.DEFAULT_BUFFER_SIZE = 8192 Byte) zu überschreiten - sonst
-        # würde Python den ungültigen Byte bereits beim Decodieren des ERSTEN Puffer-
-        # Blocks bemerken, bevor auch nur eine Zeile daraus ausgeliefert wurde, und der
-        # Test würde fälschlich "0 importiert" statt des eigentlich interessanten
-        # Verhaltens (Teilimport + sauberer Abbruch) prüfen.
+    def test_importiere_teilnehmer_aus_csv_liest_windows_kodierung(self):
+        # Eine mit Windows-ANSI statt UTF-8 gespeicherte CSV-Datei (auf deutschem Windows
+        # beim "CSV speichern unter" in Excel der Standard). Ursprünglich (QS-Fund 21.09.)
+        # ein Absturz, danach ein sauberer Abbruch mit Fehlermeldung; seit dem UX-Test
+        # 02.10.2026 (U10/N1) wird die Datei stattdessen als Windows-1252 gelesen und
+        # vollständig importiert - wie beim OMA-Import. Viele Zeilen, damit der Fall
+        # "Sonderzeichen erst weit hinten in der Datei" mit abgedeckt ist.
         fd, pfad = tempfile.mkstemp(suffix=".csv")
         os.close(fd)
         with open(pfad, "wb") as f:
-            f.write("nachname,vorname,rufname_hund,art,stufe,disziplin\n".encode("utf-8"))
+            # Komplett Windows-1252 wie Excel "CSV (Trennzeichen-getrennt)" (UX-Test U10).
+            f.write("nachname,vorname,rufname_hund,art,stufe,disziplin\n".encode("cp1252"))
             for i in range(300):
-                f.write(f"Gut{i},Vorname{i},Hund{i},ED,1,Trümmerfeld\n".encode("utf-8"))
+                f.write(f"Gut{i},Vorname{i},Hund{i},ED,1,Trümmerfeld\n".encode("cp1252"))
             # Eine mit Windows-1252 statt UTF-8 kodierte Zeile (enthält ein ü als 0xFC,
             # in UTF-8 ungültig als Fortsetzungsbyte) - löst beim Lesen als UTF-8 einen
             # UnicodeDecodeError aus.
             f.write("Schlecht,Zweiter,H\xfcndchen,ED,1,Trümmerfeld\n".encode("cp1252"))
         try:
             ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
-            self.assertGreater(ergebnis.importiert, 0)
-            self.assertEqual(len(ergebnis.fehler), 1)
-            self.assertIn("UTF-8", ergebnis.fehler[0])
-            namen = {t["nachname"] for t in list_teilnehmer(self.conn)}
-            self.assertNotIn("Schlecht", namen)
-            self.assertEqual(len(namen), ergebnis.importiert)
+            # UX-Test 02.10.2026, U10/N1: nicht-UTF-8-Dateien (Excel "CSV (Trennzeichen-
+            # getrennt)" speichert Windows-1252) werden jetzt als Windows-1252 gelesen,
+            # statt mit einer Fehlermeldung abzubrechen - wie beim OMA-Import.
+            self.assertEqual(ergebnis.fehler, [])
+            self.assertEqual(ergebnis.importiert, 301)
+            hunde = {t["rufname_hund"] for t in list_teilnehmer(self.conn)}
+            self.assertIn("H\xfcndchen", hunde)
+        finally:
+            os.remove(pfad)
+
+    def test_importiere_teilnehmer_aus_csv_mit_semikolon_wie_excel(self):
+        # UX-Test 02.10.2026, U10: deutsches Excel trennt mit Semikolon.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="cp1252") as f:
+            f.write("nachname;vorname;rufname_hund;art;stufe;disziplin;verein\r\n")
+            f.write("Müller;Jörg;Bärli;ED;1;Trümmerfeld;SV Köln, Süd\r\n")
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler), (1, []))
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["nachname"], t["rufname_hund"], t["verein"]), ("Müller", "Bärli", "SV Köln, Süd"))
+
+    def test_teilnehmer_csv_export_und_wieder_import(self):
+        # UX-Test 02.10.2026, N1: Export Excel-freundlich (Semikolon, BOM, TT.MM.JJJJ)
+        # mit Startnummer/Bezahlt/Status; derselbe Export lässt sich wieder einlesen.
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Müller", vorname="Jörg", rufname_hund="Bärli", art="ED", stufe=2,
+            disziplin="Flächensuche", startnummer=7, verein="SV Köln; Süd", wurftag="2021-03-12",
+            bezahlt=True,
+        ))
+        abgesagt = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Abs", vorname="Age", rufname_hund="Sagt", art="DK", stufe=1,
+        ))
+        setze_keine_teilnahme(self.conn, abgesagt, True)
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            self.assertEqual(exportiere_teilnehmer_csv(self.conn, pfad), 2)
+            with open(pfad, "rb") as f:
+                roh = f.read()
+            self.assertTrue(roh.startswith(b"\xef\xbb\xbf"))
+            text = roh.decode("utf-8-sig")
+            kopf = text.splitlines()[0]
+            erste = next(z for z in text.splitlines() if "Müller" in z)
+            self.assertTrue(kopf.startswith("startnummer;nachname;vorname;"))
+            self.assertIn("12.03.2021", erste)
+            self.assertIn('"SV Köln; Süd"', erste)
+            self.assertTrue(erste.endswith(";ja;"))
+
+            ziel = init_db(os.path.join(tempfile.mkdtemp(), "ziel.sqlite"))
+            ergebnis = importiere_teilnehmer_aus_csv(ziel, pfad)
+            self.assertEqual((ergebnis.importiert, ergebnis.fehler), (2, []))
+            mueller = next(t for t in list_teilnehmer(ziel) if t["nachname"] == "Müller")
+            self.assertEqual((mueller["verein"], mueller["wurftag"], mueller["disziplin"]),
+                             ("SV Köln; Süd", "2021-03-12", "Flächensuche"))
+            ziel.close()
+        finally:
+            os.remove(pfad)
+
+    def test_csv_export_entschaerft_formeln_und_reimport_ist_verlustfrei(self):
+        # Sicherheitsbefund N1 (Marco 03.10.2026: absichern): Werte, die Excel als Formel
+        # ausführen würde, bekommen ein "'" vorangestellt; Telefonnummern bleiben; der
+        # Re-Import entfernt das "'" wieder.
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="=HYPERLINK(\"http://x\")", vorname="@SUM(1)", rufname_hund="-Rex+1",
+            art="ED", stufe=1, disziplin="Trümmerfeld", telefon="+49 170 1234567", verein="-",
+            zwingername="'=x",
+        ))
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            exportiere_teilnehmer_csv(self.conn, pfad)
+            with open(pfad, encoding="utf-8-sig") as f:
+                zeile = f.read().splitlines()[1]
+            self.assertIn("'=HYPERLINK", zeile)
+            self.assertIn(";'@SUM(1);", zeile)
+            self.assertIn(";'-Rex+1;", zeile)
+            self.assertIn(";+49 170 1234567;", zeile)
+            ziel = init_db(os.path.join(tempfile.mkdtemp(), "ziel.sqlite"))
+            importiere_teilnehmer_aus_csv(ziel, pfad)
+            t = list_teilnehmer(ziel)[0]
+            self.assertEqual((t["nachname"], t["vorname"], t["rufname_hund"], t["telefon"], t["zwingername"]),
+                             ('=HYPERLINK("http://x")', "@SUM(1)", "-Rex+1", "+49 170 1234567", "'=x"))
+            ziel.close()
+        finally:
+            os.remove(pfad)
+
+    def test_csv_import_leere_datei_und_fuehrende_leerzeilen(self):
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            with open(pfad, "w", encoding="utf-8") as f:
+                f.write("nachname;vorname;rufname_hund;art;stufe;disziplin\n")
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 0)
+            self.assertTrue(any("keine Teilnehmerzeilen" in h for h in ergebnis.hinweise))
+
+            with open(pfad, "w", encoding="utf-8") as f:
+                f.write("\n\nnachname;vorname;rufname_hund;art;stufe;disziplin\n"
+                        "A;B;C;ED;1;Trümmerfeld\nX;;Y;ED;1;Trümmerfeld\n")
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            self.assertEqual(ergebnis.importiert, 1)
+            # Zeilennummer bezieht sich auf die Datei (2 Leerzeilen + Kopf + 1 gute Zeile).
+            self.assertTrue(ergebnis.fehler[0].startswith("Zeile 5 (X):"), ergebnis.fehler)
+        finally:
+            os.remove(pfad)
+
+    def test_csv_vorlage_hat_nur_kopfzeile(self):
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            schreibe_csv_vorlage(pfad)
+            with open(pfad, encoding="utf-8-sig") as f:
+                self.assertEqual(f.read().splitlines(), [";".join(CSV_IMPORT_SPALTEN)])
         finally:
             os.remove(pfad)
 
@@ -1291,6 +1408,86 @@ class TestDatenbank(unittest.TestCase):
                          ("ED", 2, "Behältnisstrecke"))
         self.assertEqual((teilnehmer["B"]["art"], teilnehmer["B"]["stufe"], teilnehmer["B"]["disziplin"]),
                          ("DK", 3, None))
+
+    def test_importiere_teilnehmer_aus_oma_lehnt_nicht_angebotene_pruefung_ab(self):
+        # UX-Test 02.10.2026, U4: wie der PDF-Import, sobald angebotene Prüfungen hinterlegt sind.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          angebotene_pruefungen=pruefungen_als_text(["DK1", "ED2-Behältnisstrecke"]))
+        pfad = self._oma_datei([
+            self._oma_zeile(Hund_Rufname="A", SHS_Disziplinen="LK2 Behältnissuche"),
+            self._oma_zeile(Hund_Rufname="B", SHS_Disziplinen="LK3 Dreikampf"),
+        ])
+        ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertIn("DK-LK 3 wird in diesem Termin nicht angeboten. Bitte mit dem Teilnehmer klären",
+                      ergebnis.fehler[0])
+        # UX-Nachtest N5: der Freischalt-Hinweis steht nur noch einmal in den Hinweisen.
+        self.assertNotIn("Veranstaltungsdaten", ergebnis.fehler[0])
+        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertIn("Veranstaltungsdaten bearbeiten", ergebnis.hinweise[0])
+        self.assertEqual([t["rufname_hund"] for t in list_teilnehmer(self.conn)], ["A"])
+
+    def test_importiere_teilnehmer_aus_csv_lehnt_nicht_angebotene_pruefung_ab(self):
+        # UX-Test 02.10.2026, U4: CSV wie PDF - nicht angebotene Prüfungen werden abgelehnt.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          angebotene_pruefungen=pruefungen_als_text(["ED1-Trümmerfeld"]))
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+                "Holst,Katrin,Freda,ED,1,Trümmerfeld\n"
+                "Meier,Jan,Rex,ED,3,Flächensuche\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.fehler), 1)
+        # UX-Nachtest N5: Name in der Meldung, Freischalt-Hinweis nur einmal.
+        self.assertIn("Zeile 3 (Jan Meier): Fläche LK 3 wird in diesem Termin nicht angeboten", ergebnis.fehler[0])
+        self.assertNotIn("Formular eines anderen Termins", ergebnis.fehler[0])
+        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertIn("Veranstaltungsdaten bearbeiten", ergebnis.hinweise[0])
+
+    def test_csv_import_ueberspringt_bereits_gemeldete(self):
+        """UX-Nachtest 03.10.2026, N1: dieselbe Datei zweimal -> keine Doppelten."""
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+                "Holst,Katrin,Freda,ED,1,Trümmerfeld\n"
+                "Meier,Jan,Rex,DK,2,\n"
+                "Meier,Jan,Rex,DK,2,\n"
+            )
+        try:
+            erstes = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            zweites = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual((erstes.importiert, len(erstes.uebersprungen)), (2, 1))  # Doppel in der Datei
+        self.assertEqual((zweites.importiert, len(zweites.uebersprungen)), (0, 3))
+        self.assertIn("Zeile 2 (Katrin Holst) mit Freda ist bereits gemeldet", zweites.uebersprungen[0])
+        self.assertEqual(len(list_teilnehmer(self.conn)), 2)
+        self.assertEqual(zweites.hinweise, [])
+
+    def test_importiere_teilnehmer_aus_csv_ohne_angebote_prueft_nicht_und_weist_darauf_hin(self):
+        # UX-Test 02.10.2026, U4 (Marco): ohne hinterlegte Angebote wird wie bisher alles
+        # übernommen, aber mit Hinweis.
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write("nachname,vorname,rufname_hund,art,stufe,disziplin\nMeier,Jan,Rex,ED,3,Flächensuche\n")
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertIn("keine angebotenen Prüfungen hinterlegt", ergebnis.hinweise[0])
 
     def test_importiere_teilnehmer_aus_oma_ungueltiges_geschlecht_ueberspringt_zeile(self):
         pfad = self._oma_datei([
@@ -1711,6 +1908,44 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(namen, ["Früh", "Spät"])
 
 
+class TestCsvMeldungen(unittest.TestCase):
+    def test_abgelehnte_zeilen_in_alltagssprache(self):
+        """Vor-Build-Klärung 03.10.2026: keine "None"/Python-Listen in den Meldungen."""
+        from db_import import _csv_zeile_zu_teilnehmer
+
+        basis = {"nachname": "A", "vorname": "B", "rufname_hund": "H", "art": "ED", "stufe": "1"}
+        with self.assertRaises(ValueError) as k:
+            _csv_zeile_zu_teilnehmer(basis)
+        self.assertEqual(
+            str(k.exception),
+            "Disziplin fehlt (bei Einzeldisziplin ED nötig) – bitte Trümmerfeld, Flächensuche "
+            "oder Behältnisstrecke eintragen",
+        )
+        with self.assertRaises(ValueError) as k:
+            _csv_zeile_zu_teilnehmer({**basis, "disziplin": "Trümmer"})
+        self.assertIn("Disziplin „Trümmer“ ist ungültig", str(k.exception))
+        with self.assertRaises(ValueError) as k:
+            _csv_zeile_zu_teilnehmer({**basis, "art": "", "disziplin": "Trümmerfeld"})
+        self.assertIn("Art fehlt – bitte ED (Einzeldisziplin) oder DK (Dreikampf)", str(k.exception))
+        with self.assertRaises(ValueError) as k:
+            _csv_zeile_zu_teilnehmer({**basis, "stufe": "4", "disziplin": "Trümmerfeld"})
+        self.assertIn("Leistungsklasse „4“ ist ungültig – bitte 1, 2 oder 3", str(k.exception))
+        for text in (str(k.exception),):
+            self.assertNotIn("None", text)
+            self.assertNotIn("[", text)
+
+
+class TestPunktgrenzen(unittest.TestCase):
+    def test_schema_passt_zu_gemeinsamen_punktgrenzen(self):
+        """UX-Test U5a: Desktop und Web nutzen shs_core.SUCHE_MAX/ANZEIGE_MAX - die
+        CHECK-Constraints der Datenbank müssen dieselben Grenzen haben."""
+        import db
+
+        for disziplin in ("truemmerfeld", "flaechensuche", "behaeltnis"):
+            self.assertIn(f"suche_{disziplin} BETWEEN 0 AND {db.SUCHE_MAX}", " ".join(db.SCHEMA.split()))
+            self.assertIn(f"anzeige_{disziplin} BETWEEN 0 AND {db.ANZEIGE_MAX}", " ".join(db.SCHEMA.split()))
+
+
 class TestZeitplan(unittest.TestCase):
     """Tests für die Zeitplan-Verwaltung: Richter-Spuren mit frei sortierbaren
     Prüfungsblöcken/Pausen, Teilnehmer-Gruppierung, automatische Verteilung sowie die
@@ -1744,6 +1979,167 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual(richter[0]["name"], "Richter 1")
         self.assertEqual(richter[1]["name"], "Richter 2")
         self.assertEqual([r["reihenfolge"] for r in richter], [0, 1])
+
+    def test_startnummer_bereiche_lesen_schreiben_und_pruefen(self):
+        # UX-Test 02.10.2026, U1: Speicherform, Rundweg über set_/get_veranstaltung,
+        # Überlappungs- und Gültigkeitsprüfung.
+        bereiche = {"ED1-Trümmerfeld": (21, 40), "DK1": (1, 20)}
+        text = startnummer_bereiche_als_text(bereiche)
+        self.assertEqual(text, "DK1=1-20,ED1-Trümmerfeld=21-40")
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14", startnummer_bereiche=text)
+        self.assertEqual(startnummer_bereiche(get_veranstaltung(self.conn)), bereiche)
+        self.assertIsNone(startnummer_bereiche_als_text({}))
+        self.assertIsNone(pruefe_startnummer_bereiche(bereiche))
+        fehler = pruefe_startnummer_bereiche({"DK1": (1, 20), "ED1-Trümmerfeld": (15, 30)})
+        self.assertIn("DK-LK 1", fehler)
+        self.assertIn("Trümmer LK 1", fehler)
+        self.assertIn("ungültig", pruefe_startnummer_bereiche({"DK1": (10, 5)}))
+        self.assertIn("ungültig", pruefe_startnummer_bereiche({"DK1": (0, 5)}))
+        self.assertEqual(pruefungs_kuerzel("ED", 2, "Flächensuche"), "ED2-Flächensuche")
+        self.assertEqual(pruefungs_kuerzel("DK", 3, None), "DK3")
+
+    def test_fehlende_startnummern_vergeben(self):
+        # UX-Test 02.10.2026, U1 (Marcos Entscheidungen): nur Teilnehmer ohne Nummer,
+        # vergebene bleiben, "keine Teilnahme" übersprungen, ohne Bereich bzw. bei vollem
+        # Bereich keine Nummer; Reihenfolge nach Prüfung, darin nach Name.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          startnummer_bereiche="DK1=1-3,ED1-Trümmerfeld=10-11")
+        vorhanden = self._teilnehmer("DK", 1, startnummer=2, nachname="Alt")
+        b = self._teilnehmer("DK", 1, nachname="Bauer")
+        a = self._teilnehmer("DK", 1, nachname="Albrecht")
+        abgesagt = self._teilnehmer("DK", 1, nachname="Abgesagt")
+        setze_keine_teilnahme(self.conn, abgesagt, True)
+        t1 = self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T1")
+        t2 = self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T2")
+        t3 = self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T3")
+        ohne = self._teilnehmer("ED", 2, "Flächensuche", nachname="Ohne")
+
+        ergebnis = fehlende_startnummern_vergeben(self.conn)
+
+        nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual(nummern[vorhanden], 2)
+        self.assertEqual(nummern[a], 1)
+        self.assertEqual(nummern[b], 3)
+        self.assertIsNone(nummern[abgesagt])
+        self.assertEqual((nummern[t1], nummern[t2], nummern[t3]), (10, 11, None))
+        self.assertIsNone(nummern[ohne])
+        self.assertEqual(len(ergebnis.vergeben), 4)
+        self.assertEqual([t["id"] for t in ergebnis.bereich_voll], [t3])
+        self.assertEqual([t["id"] for t in ergebnis.ohne_bereich], [ohne])
+        self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3)), None)
+        self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3), ausser_teilnehmer_id=b), 3)
+
+    def _dk_teams(self, stufe, anzahl, start=1):
+        return [self._teilnehmer("DK", stufe, startnummer=start + i, nachname=f"DK{stufe}-{i}") for i in range(anzahl)]
+
+    def test_dk_mindestabstand_standard_und_gespeichert(self):
+        # UX-Test 02.10.2026, U2: Standard 10 Minuten, ungültige Angaben fallen darauf zurück.
+        self.assertEqual(dk_mindestabstand(None), 10)
+        self.assertEqual(dk_mindestabstand({"dk_mindestabstand": "25"}), 25)
+        self.assertEqual(dk_mindestabstand({"dk_mindestabstand": "abc"}), 10)
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14", dk_mindestabstand="15")
+        self.assertEqual(dk_mindestabstand(get_veranstaltung(self.conn)), 15)
+
+    def test_ueberschneidung_bei_parallelen_dk_bloecken_wird_erkannt(self):
+        # UX-Test 02.10.2026, U2: drei DK-Blöcke derselben LK gleichzeitig bei drei
+        # Richtern (ohne Versatz) = jedes Team dreifach zur selben Zeit.
+        self._dk_teams(1, 4)
+        for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+            add_zeitplan_pruefungsblock(self.conn, add_zeitplan_richter(self.conn), "DK", 1, disziplin, 10)
+        konflikte = zeitplan_ueberschneidungen(self.conn)
+        self.assertTrue(konflikte)
+        self.assertTrue(all(k["gleichzeitig"] for k in konflikte))
+        self.assertEqual({k["teilnehmer"]["nachname"] for k in konflikte}, {"DK1-0", "DK1-1", "DK1-2", "DK1-3"})
+
+    def test_startversatz_rotiert_die_reihenfolge_im_block(self):
+        self._dk_teams(1, 4)
+        richter = add_zeitplan_richter(self.conn)
+        block = add_zeitplan_pruefungsblock(self.conn, richter, "DK", 1, "Trümmerfeld", 10)
+        self.conn.execute("UPDATE zeitplan_eintrag SET startversatz = 2 WHERE id = ?", (block,))
+        self.conn.commit()
+        namen = [z["teilnehmer"]["nachname"] for z in berechne_zeitplan(self.conn)[0]["zeilen"]]
+        self.assertEqual(namen, ["DK1-2", "DK1-3", "DK1-0", "DK1-1"])
+
+    def test_automatische_verteilung_ohne_ueberschneidungen(self):
+        # UX-Test 02.10.2026, U2 (Szenario aus dem UX-Test): DK-Teams verschiedener LK plus
+        # ED, 1-4 Richter - der Vorschlag darf kein Team gleichzeitig bzw. ohne
+        # Mindestabstand an zwei Stellen ansetzen.
+        self._dk_teams(1, 4, start=1)
+        self._dk_teams(2, 2, start=10)
+        self._dk_teams(3, 1, start=20)
+        for i, disziplin in enumerate(("Trümmerfeld", "Flächensuche", "Behältnisstrecke") * 3):
+            self._teilnehmer("ED", 1 + i % 3, disziplin, startnummer=30 + i, nachname=f"ED{i}")
+        for richterzahl in (1, 2, 3, 4):
+            with self.subTest(richter=richterzahl):
+                for r in list_zeitplan_richter(self.conn):
+                    self.conn.execute("DELETE FROM zeitplan_richter WHERE id = ?", (r["id"],))
+                self.conn.commit()
+                ids = [add_zeitplan_richter(self.conn) for _ in range(richterzahl)]
+                automatische_zeitplan_verteilung(self.conn, ids, 10)
+                self.assertEqual(zeitplan_ueberschneidungen(self.conn), [])
+                # Jedes Team ist weiterhin vollständig eingeplant (DK = 3 Starts).
+                starts = {}
+                for spur in berechne_zeitplan(self.conn):
+                    for zeile in spur["zeilen"]:
+                        if zeile["typ"] == "pruefung" and zeile["teilnehmer"]:
+                            starts[zeile["teilnehmer"]["nachname"]] = starts.get(zeile["teilnehmer"]["nachname"], 0) + 1
+                self.assertEqual(starts["DK1-0"], 3)
+                self.assertEqual(starts["DK3-0"], 3)
+                self.assertEqual(starts["ED0"], 1)
+
+    def test_automatische_verteilung_einzelnes_dk_team_bei_einem_richter(self):
+        # Verifikation U2a: ein einzelnes DK-Team bei nur einem Richter braucht
+        # Wartezeiten zwischen seinen drei Starts - ohne Überschneidung.
+        self._dk_teams(1, 1)
+        for abstand in ("10", "30"):
+            with self.subTest(abstand=abstand):
+                set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14", dk_mindestabstand=abstand)
+                for r in list_zeitplan_richter(self.conn):
+                    self.conn.execute("DELETE FROM zeitplan_richter WHERE id = ?", (r["id"],))
+                self.conn.commit()
+                automatische_zeitplan_verteilung(self.conn, [add_zeitplan_richter(self.conn)], 10)
+                self.assertEqual(zeitplan_ueberschneidungen(self.conn), [])
+
+    def test_pause_nach_markiertem_eintrag_und_bei_allen_richtern(self):
+        # UX-Test 02.10.2026, U9: Pause nach dem markierten Eintrag statt am Ende; gleiche
+        # Pause bei allen Richtern vor dem ersten Block ab der Uhrzeit (kein Teilen).
+        self._dk_teams(1, 3)
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=10, nachname="E1")
+        r1, r2 = add_zeitplan_richter(self.conn), add_zeitplan_richter(self.conn)
+        b1 = add_zeitplan_pruefungsblock(self.conn, r1, "DK", 1, "Trümmerfeld", 10)    # 09:00-09:30
+        add_zeitplan_pruefungsblock(self.conn, r1, "ED", 1, "Trümmerfeld", 10)          # 09:30-09:40
+        add_zeitplan_pruefungsblock(self.conn, r2, "ED", 1, "Trümmerfeld", 10)          # 09:00-09:10
+
+        pause = add_zeitplan_pause(self.conn, r1, 15, "Kaffee", nach_eintrag_id=b1)
+        self.assertEqual([e["id"] for e in list_zeitplan_eintraege(self.conn, r1)][1], pause)
+
+        # UX-Nachtest N3: tatsächliche Startzeit je Richter statt nur der Anzahl.
+        self.assertEqual(
+            add_zeitplan_pause_bei_allen(self.conn, "09:05", 30, "Mittag"),
+            [("Richter 1", "09:30"), ("Richter 2", "09:10")],
+        )
+        typen_r1 = [e["bezeichnung"] or e["disziplin"] for e in list_zeitplan_eintraege(self.conn, r1)]
+        typen_r2 = [e["bezeichnung"] or e["disziplin"] for e in list_zeitplan_eintraege(self.conn, r2)]
+        # r1: DK-Block läuft um 09:05 noch -> Mittag direkt danach (vor "Kaffee", der um 09:30 beginnt).
+        self.assertEqual(typen_r1, ["Trümmerfeld", "Mittag", "Kaffee", "Trümmerfeld"])
+        # r2: einziger Block beginnt vor 09:05 -> Mittag ans Ende.
+        self.assertEqual(typen_r2, ["Trümmerfeld", "Mittag"])
+        self.assertEqual(
+            [e["reihenfolge"] for e in list_zeitplan_eintraege(self.conn, r1)], [0, 1, 2, 3]
+        )
+
+    def test_zeitplan_richter_aus_veranstaltung_anlegen(self):
+        # UX-Test 02.10.2026, U8: Richter aus den Veranstaltungsdaten werden übernommen -
+        # nur in einen leeren Zeitplan, leere Namen werden übersprungen.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          wertungsrichter_1="Anna Richter", wertungsrichter_2="  ",
+                          wertungsrichter_3="Clara Christ")
+        self.assertEqual(zeitplan_richter_aus_veranstaltung_anlegen(self.conn), 2)
+        self.assertEqual([r["name"] for r in list_zeitplan_richter(self.conn)],
+                         ["Anna Richter", "Clara Christ"])
+        # Zweiter Aufruf ändert einen bestehenden Zeitplan nicht.
+        self.assertEqual(zeitplan_richter_aus_veranstaltung_anlegen(self.conn), 0)
+        self.assertEqual(len(list_zeitplan_richter(self.conn)), 2)
 
     def test_zeitplan_gruppen_ohne_keine_teilnahme(self):
         # Nutzerwunsch 02.10.2026: nicht erschienene Teilnehmer fallen aus dem Zeitplan.
@@ -2822,6 +3218,27 @@ class TestAnmeldeformularImport(unittest.TestCase):
         c.save()
         return pfad
 
+    def test_dreikampf_uebernimmt_alle_gegenstaende(self):
+        # UX-Test 02.10.2026, U11: die Beschränkung auf einen Gegenstand gilt nur für ED.
+        texte = dict(self.STANDARD_TEXTE, **{
+            anmeldeformular_gegenstand_feld(2, 1): "Ball",
+            anmeldeformular_gegenstand_feld(2, 2): "Leine",
+        })
+        pfad = self._pdf("dk.pdf", texte, haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK2",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual((ergebnis.importiert, ergebnis.hinweise), (1, []))
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["gegenstand_1"], t["gegenstand_2"]), ("Ball", "Leine"))
+
+    def test_ed_nur_zweites_gegenstandsfeld_ausgefuellt(self):
+        # UX-Test U11: bei ED zählt der erste AUSGEFÜLLTE Gegenstand, auch aus Feld 2.
+        texte = dict(self.STANDARD_TEXTE, **{anmeldeformular_gegenstand_feld(2, 2): "Leine"})
+        pfad = self._pdf("ed.pdf", texte, haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "ED2-Trümmerfeld",))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual((ergebnis.importiert, ergebnis.hinweise), (1, []))
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["gegenstand_1"], t["gegenstand_2"]), ("Leine", None))
+
     def test_vollstaendiges_formular_wird_uebernommen(self):
         texte = dict(self.STANDARD_TEXTE, **{
             anmeldeformular_gegenstand_feld(2, 1): "Handschuh",
@@ -2848,8 +3265,12 @@ class TestAnmeldeformularImport(unittest.TestCase):
                        "halter_plz", "halter_ort", "halter_mitgliedsnummer", "halter_mitgliedsverein",
                        "halter_lu_nr"):
             self.assertEqual(t[spalte], self.STANDARD_TEXTE[spalte], spalte)
-        self.assertEqual((t["gegenstand_1"], t["gegenstand_2"], t["gegenstand_3"]), ("Handschuh", "Schlüssel", None))
+        # UX-Test 02.10.2026, U11: bei Einzeldisziplin nur der erste Gegenstand, der zweite
+        # wird im Import-Ergebnis als nicht übernommen genannt.
+        self.assertEqual((t["gegenstand_1"], t["gegenstand_2"], t["gegenstand_3"]), ("Handschuh", None, None))
         self.assertEqual((t["gegenstand_1_disziplin"], t["gegenstand_2_disziplin"]), (None, None))
+        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertIn("nicht übernommen „Schlüssel“", ergebnis.hinweise[0])
 
     def test_nicht_angebotene_pruefung_wird_abgelehnt(self):
         # Verifikation 28.09.2026, Befund 1: Formular eines anderen Termins / falscher Termin.

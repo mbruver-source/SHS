@@ -10,11 +10,11 @@ in einer normalen Umgebung mit Internetzugang kurz gegentesten.
 
 Deckt einen ersten End-to-End-Ablauf ab:
   1. Termin anlegen oder öffnen (eine .sqlite-Datei pro Veranstaltung)
-  2. Teilnehmer erfassen, bearbeiten, löschen (mit Rückfrage). Die Startnummer
-     wird bei Neuanlage automatisch auf die kleinste freie Nummer vorgeschlagen
-     und beim Speichern gegen bereits vergebene Startnummern geprüft (auch als
-     Datenbank-Constraint abgesichert) - eine doppelte Vergabe ist so
-     ausgeschlossen.
+  2. Teilnehmer erfassen, bearbeiten, löschen (mit Rückfrage). Startnummern werden
+     gesammelt aus den Bereichen je Prüfung vergeben ("Fehlende Startnummern
+     vergeben…", UX-Test U1) oder einzeln in der Maske; beim Speichern wird gegen
+     bereits vergebene Startnummern geprüft (auch als Datenbank-Constraint
+     abgesichert) - eine doppelte Vergabe ist so ausgeschlossen.
   3. Ergebnisse je Disziplin eintragen (Eingabefelder ohne Vorbelegung - ein leeres
      Feld gilt als "noch nicht eingetragen", damit es nicht versehentlich als
      0-Punkte-Bewertung gespeichert wird), filterbar nach Art/Leistungsklasse(/
@@ -34,16 +34,19 @@ from __future__ import annotations
 
 import datetime
 import os
+import re
 import sqlite3
 import sys
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QItemSelectionModel, QUrl, Qt
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
     QCloseEvent,
     QDesktopServices,
     QIntValidator,
+    QKeySequence,
+    QShortcut,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -67,6 +70,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -105,7 +109,6 @@ from db import (
     list_zeitplan_richter,
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
-    naechste_freie_startnummer,
     pruefe_ergebnis_eingabe,
     set_veranstaltung,
     setze_bezahlt,
@@ -121,6 +124,13 @@ from db import (
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
     zeitplan_gruppen_status,
+    zeitplan_richter_aus_veranstaltung_anlegen,
+    fehlende_startnummern_vergeben,
+    startnummer_bereiche,
+    dk_mindestabstand,
+    zeitplan_ueberschneidungen,
+    add_zeitplan_pause_bei_allen,
+    list_zeitplan_eintraege,
 )
 from db_import import (
     CSV_IMPORT_SPALTEN,
@@ -128,6 +138,8 @@ from db_import import (
     importiere_teilnehmer_aus_csv,
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
+    exportiere_teilnehmer_csv,
+    schreibe_csv_vorlage,
 )
 from db_sicherung import (
     PasswortFalschError,
@@ -136,7 +148,7 @@ from db_sicherung import (
     sicherung_wiederherstellen,
 )
 import pdf_export
-from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT
+from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, ANZEIGE_MAX, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT, SUCHE_MAX
 from desktop_darstellung import (
     _darstellung_anwenden,
     _design_speichern,
@@ -150,16 +162,23 @@ from desktop_darstellung import (
 from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
     _Ablageort,
+    absturzprotokoll_einrichten,
     _aktualisiere_veranstaltung_feld,
+    _ausdrucke_ordner,
+    _datei_gespeichert_melden,
     _db_fehler_anzeigen,
+    deutsche_qt_texte_laden,
     _DQ_SPALTE,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
     _export_dateiname,
     _fehler_anzeigen,
+    _import_ordner_merken,
+    _import_startordner,
     _NumerischSortierbaresItem,
     _pdf_export_fehler_anzeigen,
     _pdf_speicherort_waehlen,
+    _pfad_anzeige,
     _responsive_schriftgroesse,
     ResponsiveSchriftMixin,
     _STATUS_SPALTE,
@@ -187,6 +206,81 @@ except ImportError:
     VERSION = "dev"
 
 
+def _fehlende_startnummern_vergeben_mit_meldung(parent, conn) -> None:
+    """UX-Test 02.10.2026, U1: Sammelvergabe (db.fehlende_startnummern_vergeben) mit
+    verständlicher Abschlussmeldung - wer hat eine Nummer bekommen, wer nicht und warum."""
+    if not startnummer_bereiche(get_veranstaltung(conn)):
+        QMessageBox.information(
+            parent, "Keine Startnummern-Bereiche",
+            "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“ → "
+            "„Veranstaltungsdaten bearbeiten…“) je Prüfung einen Startnummern-Bereich "
+            "eintragen, z. B. DK-LK 1: 1 bis 20.",
+        )
+        return
+    ergebnis = fehlende_startnummern_vergeben(conn)
+
+    def namen(liste):
+        return "\n".join(f"{t['vorname']} {t['nachname']} – {leistungsklasse_label(t)}" for t in liste)
+
+    text = f"{len(ergebnis.vergeben)} Startnummer(n) vergeben."
+    if ergebnis.ohne_bereich:
+        text += "\n\nKeine Nummer, weil für die Prüfung kein Bereich eingetragen ist:\n" + namen(ergebnis.ohne_bereich)
+    if ergebnis.bereich_voll:
+        text += "\n\nKeine Nummer, weil der Bereich der Prüfung voll ist:\n" + namen(ergebnis.bereich_voll)
+    QMessageBox.information(parent, "Startnummern vergeben", text)
+
+
+def _startnummern_nach_import_anbieten(parent, conn) -> None:
+    """UX-Test 02.10.2026, U1: Nach einem Import fehlen die Startnummern meist - direkt
+    anbieten, sie gesammelt zu vergeben."""
+    ohne = [t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None]
+    if not ohne:
+        return
+    if not startnummer_bereiche(get_veranstaltung(conn)):
+        QMessageBox.information(
+            parent, "Startnummern fehlen",
+            f"{len(ohne)} Teilnehmer haben noch keine Startnummer. Für die gesammelte Vergabe "
+            "(„Fehlende Startnummern vergeben…“ im Reiter „Teilnehmer“) zuerst je Prüfung einen "
+            "Startnummern-Bereich in den Veranstaltungsdaten eintragen (Reiter „Verwaltung“).",
+        )
+        return
+    antwort = QMessageBox.question(
+        parent, "Startnummern fehlen",
+        f"{len(ohne)} Teilnehmer haben noch keine Startnummer.\n\nJetzt „Fehlende "
+        "Startnummern vergeben“? (Bereits vergebene Nummern bleiben unverändert.)",
+    )
+    if antwort == QMessageBox.Yes:
+        _fehlende_startnummern_vergeben_mit_meldung(parent, conn)
+
+
+def _teilnehmerliste_importieren(parent, conn) -> None:
+    """CSV-/Excel-Teilnehmerliste einlesen - gemeinsam für den Reiter "Formular-Import" und
+    den Knopf im Reiter "Teilnehmer" (UX-Test 02.10.2026, U10)."""
+    pfad, _ = QFileDialog.getOpenFileName(parent, "CSV importieren", _import_startordner(), "CSV-Datei (*.csv)")
+    if not pfad:
+        return
+    _import_ordner_merken(pfad)
+    try:
+        ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
+    except OSError as exc:
+        QMessageBox.warning(parent, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+        return
+    text = f"{ergebnis.importiert} Teilnehmer importiert."
+    if ergebnis.uebersprungen:
+        # UX-Nachtest 03.10.2026, N1: bereits vorhandene Meldungen werden nicht doppelt angelegt.
+        text += (
+            f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
+            + "\n".join(ergebnis.uebersprungen)
+        )
+    if ergebnis.fehler:
+        text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
+    if ergebnis.hinweise:
+        text += "\n\nHinweis: " + "\n".join(ergebnis.hinweise)
+    QMessageBox.information(parent, "Import abgeschlossen", text)
+    if ergebnis.importiert:
+        _startnummern_nach_import_anbieten(parent, conn)
+
+
 class TeilnehmerTab(QWidget):
     def __init__(self, conn, parent=None, pfad: str | None = None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
@@ -209,8 +303,12 @@ class TeilnehmerTab(QWidget):
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabelle.setSelectionMode(QTableWidget.SingleSelection)
+        # UX-Test 02.10.2026, K7: Mehrfachmarkierung (Strg/Umschalt) für "Bezahlt
+        # umschalten" und "Keine Teilnahme"; die übrigen Knöpfe brauchen genau eine Zeile.
+        self.tabelle.setSelectionMode(QTableWidget.ExtendedSelection)
         self.tabelle.itemSelectionChanged.connect(self._auswahl_geaendert)
+        # UX-Test 02.10.2026, U1: Doppelklick auf eine Zeile öffnet "Bearbeiten…".
+        self.tabelle.itemDoubleClicked.connect(lambda _item: self._teilnehmer_bearbeiten())
         # Letzte Spalte füllt den restlichen Platz, wenn das Fenster größer ist als
         # die Summe der (an den Inhalt angepassten) Spaltenbreiten.
         self.tabelle.horizontalHeader().setStretchLastSection(True)
@@ -282,12 +380,22 @@ class TeilnehmerTab(QWidget):
         self.tauschen_btn.clicked.connect(self._startnummer_tauschen)
         self.tauschen_btn.setEnabled(False)
 
+        # UX-Test 02.10.2026, U1: Startnummern für alle ohne Nummer auf einmal vergeben.
+        vergeben_btn = QPushButton("Fehlende Startnummern vergeben…")
+        vergeben_btn.clicked.connect(self._fehlende_startnummern_vergeben)
+
         # Nutzerwunsch (20.09., Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln
         # eingegeben werden [...] ist Option möglich, von anderem Termin importieren?" -
         # übernimmt gezielt Stammdaten (nicht Startnummer/Gegenstände/Bezahlt-Status/
         # Ergebnis) aus einem anderen, bereits vorhandenen Termin.
         import_btn = QPushButton("Aus anderem Termin importieren…")
         import_btn.clicked.connect(self._aus_anderem_termin_importieren)
+
+        # UX-Test 02.10.2026, U10: die Excel-/CSV-Liste auch direkt hier einlesen können
+        # (Laien suchten sie im Reiter "Teilnehmer" bzw. unter "Aus anderem Termin").
+        liste_btn = QPushButton("Teilnehmerliste (Excel/CSV)…")
+        liste_btn.setToolTip("Eine Excel-Liste (als CSV gespeichert) mit einer Zeile je Teilnehmer einlesen.")
+        liste_btn.clicked.connect(self._teilnehmerliste_importieren)
 
         # Nutzerwunsch (21.09.): "In Teilnehmerliste Absprung zu Bewertungsbögen erzeugen
         # einfügen?" - Entscheidung (Rückfrage beantwortet): Direkt-Button pro Teilnehmer
@@ -297,16 +405,18 @@ class TeilnehmerTab(QWidget):
         self.bewertungsbogen_btn.clicked.connect(self._bewertungsbogen_exportieren)
         self.bewertungsbogen_btn.setEnabled(False)
 
+        # Vor-Build-Klärung 03.10.2026 (U12): zehn Knöpfe in einer Zeile waren auf kleinen
+        # Laptops breiter als der Bildschirm - zweizeilig: oben die Arbeit am markierten
+        # Teilnehmer, unten Startnummern und Importe.
         button_zeile = QHBoxLayout()
-        button_zeile.addWidget(hinzufuegen_btn)
-        button_zeile.addWidget(self.bearbeiten_btn)
-        button_zeile.addWidget(self.loeschen_btn)
-        button_zeile.addWidget(self.bezahlt_btn)
-        button_zeile.addWidget(self.teilnahme_btn)
-        button_zeile.addWidget(self.tauschen_btn)
-        button_zeile.addWidget(import_btn)
-        button_zeile.addWidget(self.bewertungsbogen_btn)
+        for knopf in (hinzufuegen_btn, self.bearbeiten_btn, self.loeschen_btn, self.bezahlt_btn,
+                      self.teilnahme_btn, self.bewertungsbogen_btn):
+            button_zeile.addWidget(knopf)
         button_zeile.addStretch()
+        button_zeile_2 = QHBoxLayout()
+        for knopf in (self.tauschen_btn, vergeben_btn, import_btn, liste_btn):
+            button_zeile_2.addWidget(knopf)
+        button_zeile_2.addStretch()
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -326,14 +436,46 @@ class TeilnehmerTab(QWidget):
         layout.addLayout(filter_zeile)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
+        layout.addLayout(button_zeile_2)
         layout.addWidget(self.status_label)
 
         self.aktualisieren()
 
+    def _ausgewaehlte_ids(self) -> list[int]:
+        """IDs aller markierten und sichtbaren Teilnehmer in Tabellenreihenfolge. Durch den
+        Filter ausgeblendete Zeilen zählen nicht mit, auch wenn sie noch markiert sind
+        (z. B. nach Strg+A) - sonst würden unsichtbare Teilnehmer mit umgeschaltet."""
+        ids = []
+        for index in sorted(self.tabelle.selectionModel().selectedRows(), key=lambda i: i.row()):
+            if self.tabelle.isRowHidden(index.row()):
+                continue
+            item = self.tabelle.item(index.row(), 0)
+            if item is not None:
+                ids.append(item.data(Qt.UserRole))
+        return ids
+
     def _ausgewaehlte_id(self) -> int | None:
-        zeile = self.tabelle.currentRow()
-        item = self.tabelle.item(zeile, 0)
-        return item.data(Qt.UserRole) if item is not None else None
+        """ID des markierten Teilnehmers - None bei keiner oder mehreren markierten Zeilen."""
+        ids = self._ausgewaehlte_ids()
+        return ids[0] if len(ids) == 1 else None
+
+    def _auswahl_wiederherstellen(self, ids: set[int]) -> None:
+        """Markiert nach dem Neuaufbau der Tabelle wieder dieselben Teilnehmer (K7) - vorher
+        blieb die Markierung auf der Zeilennummer stehen und sprang nach dem Speichern auf
+        einen anderen Teilnehmer, sobald sich die Sortierung verschob."""
+        modell = self.tabelle.selectionModel()
+        modell.clearSelection()
+        erste = True
+        for row in range(self.tabelle.rowCount()):
+            item = self.tabelle.item(row, 0)
+            if item is None or item.data(Qt.UserRole) not in ids:
+                continue
+            index = self.tabelle.model().index(row, 0)
+            if erste:
+                modell.setCurrentIndex(index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+                erste = False
+            else:
+                modell.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
 
     def _sortierung_gemerkt(self, spalte: int, reihenfolge) -> None:
         """Merkt sich die zuletzt per Spaltenklick gewählte Sortierung, damit
@@ -366,19 +508,35 @@ class TeilnehmerTab(QWidget):
                 )
             )
             self.tabelle.setRowHidden(row, not passt)
+        self._auswahl_geaendert()  # K7: ausgeblendete Markierungen zählen nicht
 
     def _auswahl_geaendert(self) -> None:
-        hat_auswahl = self._ausgewaehlte_id() is not None
-        self.bearbeiten_btn.setEnabled(hat_auswahl)
+        ausgewaehlte = [self._teilnehmer_je_id.get(i) for i in self._ausgewaehlte_ids()]
+        ausgewaehlte = [t for t in ausgewaehlte if t is not None]
+        hat_auswahl = bool(ausgewaehlte)
+        genau_einer = len(ausgewaehlte) == 1
+        self.bearbeiten_btn.setEnabled(genau_einer)
+        # UX-Nachtest 03.10.2026: Löschen wirkt auf alle markierten (N1); bei genau zwei
+        # markierten tauscht "Startnummer tauschen…" diese beiden direkt (N2).
         self.loeschen_btn.setEnabled(hat_auswahl)
         self.bezahlt_btn.setEnabled(hat_auswahl)
-        self.tauschen_btn.setEnabled(hat_auswahl and len(self._teilnehmer_je_zeile) > 1)
-        ausgewaehlt = self._teilnehmer_je_id.get(self._ausgewaehlte_id()) if hat_auswahl else None
-        keine_teilnahme = bool(ausgewaehlt and ausgewaehlt.get("keine_teilnahme"))
+        self.tauschen_btn.setEnabled(
+            (genau_einer and len(self._teilnehmer_je_zeile) > 1) or len(ausgewaehlte) == 2
+        )
+        nur_einer = "Nur bei genau einem markierten Teilnehmer möglich." if len(ausgewaehlte) > 1 else ""
+        self.bearbeiten_btn.setToolTip(nur_einer)
+        self.bewertungsbogen_btn.setToolTip(nur_einer)
+        self.tauschen_btn.setToolTip(
+            "Einen Teilnehmer markieren und den Partner wählen – oder genau zwei markieren."
+            if len(ausgewaehlte) > 2 else ""
+        )
+        # Bei Mehrfachmarkierung: "wiederherstellen" nur, wenn ALLE markierten bereits
+        # "keine Teilnahme" sind - sonst werden alle markierten als nicht erschienen markiert.
+        keine_teilnahme = hat_auswahl and all(t.get("keine_teilnahme") for t in ausgewaehlte)
         self.teilnahme_btn.setEnabled(hat_auswahl)
         self.teilnahme_btn.setText("Teilnahme wiederherstellen" if keine_teilnahme else "Keine Teilnahme")
         # Für nicht erschienene Teilnehmer gibt es keinen Bewertungsbogen mehr.
-        self.bewertungsbogen_btn.setEnabled(hat_auswahl and not keine_teilnahme)
+        self.bewertungsbogen_btn.setEnabled(genau_einer and not keine_teilnahme)
 
     def _namen_je_startnummer(self, ausser_teilnehmer_id: int | None = None) -> dict[int, str]:
         """Für die Warnmeldung bei doppelt vergebener Startnummer im TeilnehmerDialog -
@@ -393,8 +551,8 @@ class TeilnehmerTab(QWidget):
         dialog = TeilnehmerDialog(
             self,
             vergebene_nummern=vergebene_startnummern(self.conn),
-            naechste_nummer=naechste_freie_startnummer(self.conn),
             namen_je_startnummer=self._namen_je_startnummer(),
+            bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
         )
         if dialog.exec() == QDialog.Accepted:
             try:
@@ -414,6 +572,7 @@ class TeilnehmerTab(QWidget):
             vorhandener=aktuelle_daten,
             vergebene_nummern=vergebene_startnummern(self.conn, ausser_teilnehmer_id=teilnehmer_id),
             namen_je_startnummer=self._namen_je_startnummer(ausser_teilnehmer_id=teilnehmer_id),
+            bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
         )
         if dialog.exec() == QDialog.Accepted:
             try:
@@ -424,6 +583,10 @@ class TeilnehmerTab(QWidget):
             self.aktualisieren()
 
     def _startnummer_tauschen(self) -> None:
+        ids = self._ausgewaehlte_ids()
+        if len(ids) == 2:
+            self._zwei_markierte_tauschen(*ids)
+            return
         teilnehmer_id = self._ausgewaehlte_id()
         if teilnehmer_id is None:
             return
@@ -435,6 +598,15 @@ class TeilnehmerTab(QWidget):
         dialog = StartnummerTauschenDialog(self, aktuell, andere)
         if dialog.exec() == QDialog.Accepted:
             partner_id = dialog.ausgewaehlte_partner_id()
+            partner = next((t for t in andere if t["id"] == partner_id), None)
+            if partner is not None and aktuell["startnummer"] is None and partner["startnummer"] is None:
+                # UX-Test 02.10.2026, U1: vorher schloss der Dialog ohne Wirkung und Hinweis.
+                QMessageBox.information(
+                    self, "Nichts zu tauschen",
+                    "Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
+                    "mit „Fehlende Startnummern vergeben…“ oder über „Bearbeiten…“.",
+                )
+                return
             if partner_id is not None:
                 try:
                     tausche_startnummern(self.conn, teilnehmer_id, partner_id)
@@ -442,6 +614,46 @@ class TeilnehmerTab(QWidget):
                     _fehler_anzeigen(self, exc)
                     return
                 self.aktualisieren()
+
+    def _zwei_markierte_tauschen(self, id_a: int, id_b: int) -> None:
+        """UX-Nachtest 03.10.2026, N2: beide Personas markierten zum Tauschen zuerst beide
+        Teilnehmer - das tauscht jetzt direkt (nach Rückfrage)."""
+        a, b = get_teilnehmer(self.conn, id_a), get_teilnehmer(self.conn, id_b)
+        if a is None or b is None:
+            self.aktualisieren()
+            return
+        if a["startnummer"] is None and b["startnummer"] is None:
+            QMessageBox.information(
+                self, "Nichts zu tauschen",
+                "Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
+                "mit „Fehlende Startnummern vergeben…“ oder über „Bearbeiten…“.",
+            )
+            return
+
+        def beschreibung(t):
+            nummer = f"Nr. {t['startnummer']}" if t["startnummer"] is not None else "ohne Nummer"
+            return f"„{t['nachname']}, {t['vorname']}“ ({nummer})"
+
+        antwort = QMessageBox.question(
+            self, "Startnummern tauschen",
+            f"Startnummern von {beschreibung(a)} und {beschreibung(b)} tauschen?",
+        )
+        if antwort != QMessageBox.Yes:
+            return
+        try:
+            tausche_startnummern(self.conn, id_a, id_b)
+        except sqlite3.IntegrityError as exc:
+            _fehler_anzeigen(self, exc)
+            return
+        self.aktualisieren()
+
+    def _fehlende_startnummern_vergeben(self) -> None:
+        _fehlende_startnummern_vergeben_mit_meldung(self, self.conn)
+        self.aktualisieren()
+
+    def _teilnehmerliste_importieren(self) -> None:
+        _teilnehmerliste_importieren(self, self.conn)
+        self.aktualisieren()
 
     def _aus_anderem_termin_importieren(self) -> None:
         dialog = TerminImportDialog(self, self._pfad)
@@ -463,6 +675,9 @@ class TeilnehmerTab(QWidget):
                     QMessageBox.information(
                         self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert."
                     )
+                    if anzahl:
+                        _startnummern_nach_import_anbieten(self, self.conn)
+                        self.aktualisieren()
         finally:
             # Die zweite, nur für den Import geöffnete Verbindung muss in jedem Fall
             # geschlossen werden - unabhängig davon, ob der Dialog akzeptiert oder
@@ -490,63 +705,85 @@ class TeilnehmerTab(QWidget):
         except Exception as exc:
             _pdf_export_fehler_anzeigen(self, exc)
             return
-        self.status_label.setText(f"Bewertungsbogen gespeichert: {pfad}")
+        self.status_label.setText(f"Bewertungsbogen gespeichert: {_pfad_anzeige(pfad)}")
+        _datei_gespeichert_melden(self, pfad, "Bewertungsbogen gespeichert")
 
     def _teilnehmer_loeschen(self) -> None:
-        teilnehmer_id = self._ausgewaehlte_id()
-        if teilnehmer_id is None:
+        # K7-Verifikation: Namen aus den IDs statt aus currentRow() - bei Mehrfachmarkierung
+        # (Strg-Klick) kann die aktuelle Zeile eine andere sein als die markierte.
+        # UX-Nachtest 03.10.2026, N1: alle markierten auf einmal, mit EINER Rückfrage.
+        teilnehmer = [t for t in (self._teilnehmer_je_id.get(i) for i in self._ausgewaehlte_ids()) if t is not None]
+        if not teilnehmer:
             return
-        zeile = self.tabelle.currentRow()
-        name = f"{self.tabelle.item(zeile, 1).text()}, {self.tabelle.item(zeile, 2).text()}"
-        antwort = QMessageBox.question(
-            self,
-            "Teilnehmer löschen",
-            f"Teilnehmer „{name}“ inklusive erfasstem Ergebnis wirklich unwiderruflich löschen?",
-        )
+        namen = [f"„{t['nachname']}, {t['vorname']}“" for t in teilnehmer]
+        if len(namen) == 1:
+            frage = f"Teilnehmer {namen[0]} inklusive erfasstem Ergebnis wirklich unwiderruflich löschen?"
+        else:
+            liste = "\n".join(namen[:15]) + (f"\n… und {len(namen) - 15} weitere" if len(namen) > 15 else "")
+            frage = (
+                f"Diese {len(namen)} Teilnehmer inklusive erfasster Ergebnisse wirklich "
+                f"unwiderruflich löschen?\n\n{liste}"
+            )
+        antwort = QMessageBox.question(self, "Teilnehmer löschen", frage)
         if antwort == QMessageBox.Yes:
-            delete_teilnehmer(self.conn, teilnehmer_id)
+            for t in teilnehmer:
+                delete_teilnehmer(self.conn, t["id"])
             self.aktualisieren()
 
     def _bezahlt_umschalten(self) -> None:
-        teilnehmer_id = self._ausgewaehlte_id()
-        if teilnehmer_id is None:
+        ids = set(self._ausgewaehlte_ids())
+        aktuelle = [t for t in list_teilnehmer(self.conn) if t["id"] in ids]
+        if not aktuelle:
+            self.aktualisieren()
             return
-        aktuell = next(t for t in list_teilnehmer(self.conn) if t["id"] == teilnehmer_id)
+        # K7: Bei Mehrfachmarkierung einheitlich - sind schon alle bezahlt, werden alle auf
+        # "nicht bezahlt" gesetzt, sonst alle auf "bezahlt" (statt jede einzeln umzudrehen).
+        neu_bezahlt = not all(t["bezahlt"] for t in aktuelle)
         try:
-            setze_bezahlt(self.conn, teilnehmer_id, not aktuell["bezahlt"])
+            for t in aktuelle:
+                setze_bezahlt(self.conn, t["id"], neu_bezahlt)
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
-            return
         self.aktualisieren()
 
     def _teilnahme_umschalten(self) -> None:
-        teilnehmer_id = self._ausgewaehlte_id()
-        if teilnehmer_id is None:
-            return
-        aktuell = get_teilnehmer(self.conn, teilnehmer_id)
-        if aktuell is None:  # zwischenzeitlich gelöscht - nur die Liste auffrischen
+        aktuelle = [t for t in (get_teilnehmer(self.conn, i) for i in self._ausgewaehlte_ids()) if t is not None]
+        if not aktuelle:  # zwischenzeitlich gelöscht - nur die Liste auffrischen
             self.aktualisieren()
             return
-        neu_keine_teilnahme = not aktuell.get("keine_teilnahme")
-        if neu_keine_teilnahme and hat_erfasste_ergebnisse(self.conn, teilnehmer_id):
-            name = f"{aktuell['nachname']}, {aktuell['vorname']}"
+        # K7: wie _auswahl_geaendert - nur wenn alle markierten schon "keine Teilnahme"
+        # sind, wird die Teilnahme wiederhergestellt, sonst werden alle markiert.
+        neu_keine_teilnahme = not all(t.get("keine_teilnahme") for t in aktuelle)
+        mit_ergebnissen = [
+            f"{t['nachname']}, {t['vorname']}" for t in aktuelle
+            if neu_keine_teilnahme and not t.get("keine_teilnahme") and hat_erfasste_ergebnisse(self.conn, t["id"])
+        ]
+        if mit_ergebnissen:
+            if len(mit_ergebnissen) == 1:
+                wer = f"Für „{mit_ergebnissen[0]}“ sind"
+                subjekt = "der Teilnehmer"
+            else:
+                wer = "Für " + ", ".join(f"„{n}“" for n in mit_ergebnissen) + " sind"
+                subjekt = "die Teilnehmer"
             antwort = QMessageBox.question(
                 self,
                 "Keine Teilnahme",
-                f"Für „{name}“ sind bereits Ergebnisse erfasst. Sie bleiben gespeichert, "
-                "werden aber nicht mehr gewertet, solange der Teilnehmer als "
+                f"{wer} bereits Ergebnisse erfasst. Sie bleiben gespeichert, "
+                f"werden aber nicht mehr gewertet, solange {subjekt} als "
                 "„keine Teilnahme“ markiert ist.\n\nTrotzdem markieren?",
             )
             if antwort != QMessageBox.Yes:
                 return
         try:
-            setze_keine_teilnahme(self.conn, teilnehmer_id, neu_keine_teilnahme)
+            for t in aktuelle:
+                setze_keine_teilnahme(self.conn, t["id"], neu_keine_teilnahme)
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
-            return
         self.aktualisieren()
 
     def aktualisieren(self) -> None:
+        gemerkte_auswahl = set(self._ausgewaehlte_ids())
+        self.tabelle.clearSelection()
         teilnehmer = list_teilnehmer(self.conn)
         self._teilnehmer_ids = [t["id"] for t in teilnehmer]
         self._teilnehmer_je_zeile = teilnehmer
@@ -605,14 +842,33 @@ class TeilnehmerTab(QWidget):
             # Schrift statt orange/fett, damit sie sich klar vom echten Warnhinweis
             # unterscheidet und trotz Spaltenbreite lesbar bleibt). Ein echter Fehler hat
             # Vorrang vor der Info (siehe teilnehmer_gegenstand_hinweis()).
+            # UX-Test 02.10.2026, U14 (Marco: nur die Chip-Nr. auffällig): Gegenstände
+            # werden oft erst kurz vor dem Prüfungstag festgelegt - ein oranges ⚠ in fast
+            # jeder Zeile wirkte auf Laien, als sei alles falsch. Sie erscheinen jetzt dezent
+            # grau als "noch offen"; nur eine fehlende Chip-Nr. bleibt eine Warnung. Bei
+            # "keine Teilnahme" entfallen die Gegenstands-Hinweise ganz (K7).
             fehlend = teilnehmer_fehlende_pflichtangaben(t)
-            if fehlend:
-                vollstaendig_item = QTableWidgetItem("⚠ " + "; ".join(fehlend))
+            stark = [f for f in fehlend if f.startswith("Chip")]
+            gegenstand_offen = [f for f in fehlend if not f.startswith("Chip")] and not t.get("keine_teilnahme")
+            offen_text = "Gegenstände noch offen" if t["art"] == "DK" else "Gegenstand noch offen"
+            offen_tooltip = (
+                f"{offen_text} – kann bis zum Prüfungstag nachgetragen werden (Bearbeiten…)."
+            )
+            if stark:
+                text = "⚠ " + "; ".join(stark) + (f"; {offen_text}" if gegenstand_offen else "")
+                vollstaendig_item = QTableWidgetItem(text)
                 vollstaendig_item.setForeground(_farbe("warnung"))
-                vollstaendig_item.setToolTip("Fehlt noch: " + "; ".join(fehlend))
+                vollstaendig_item.setToolTip(
+                    "Fehlt noch: Chip-Nr. (wird am Prüfungstag zur Identifizierung gebraucht)."
+                    + (f"\n{offen_tooltip}" if gegenstand_offen else "")
+                )
                 schrift = vollstaendig_item.font()
                 schrift.setBold(True)
                 vollstaendig_item.setFont(schrift)
+            elif gegenstand_offen:
+                vollstaendig_item = QTableWidgetItem(offen_text)
+                vollstaendig_item.setForeground(_farbe("gedaempft"))
+                vollstaendig_item.setToolTip(offen_tooltip)
             else:
                 hinweis = teilnehmer_gegenstand_hinweis(t)
                 vollstaendig_item = QTableWidgetItem(hinweis or "")
@@ -645,6 +901,7 @@ class TeilnehmerTab(QWidget):
         # Vereinsnamen oder LK-Bezeichnungen nicht abgeschnitten werden - danach
         # bleiben die Spalten weiterhin von Hand nachziehbar.
         self.tabelle.resizeColumnsToContents()
+        self._auswahl_wiederherstellen(gemerkte_auswahl)
         self._auswahl_geaendert()
 
         # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
@@ -721,85 +978,130 @@ class FormularImportTab(QWidget):
     "Export") lässt sich ausgefüllt direkt einlesen - ganz ohne KI (siehe
     _anmeldeformulare_importieren)."""
 
+    _KI_UMSCHALTER_TEXT = "Andere Meldeformulare (Foto, Scan, Word) über ein KI-System einlesen"
+
     def __init__(self, conn, parent=None):
         super().__init__(parent)
         self.conn = conn
 
-        anleitung = QLabel(
-            "Ausfüllbares Anmeldeformular (empfohlen): im Reiter „Export“ mit "
-            "„Anmeldeformular (PDF)…“ erzeugen und an die Teilnehmer verteilen. Die "
-            "ausgefüllt zurückgeschickten PDF-Dateien hier mit „Anmeldeformulare (PDF) "
-            "importieren…“ einlesen (mehrere Dateien auf einmal möglich) - ohne KI, bereits "
-            "vorhandene Meldungen werden dabei übersprungen.\n\n"
-            "Andere Meldeformulare (z. B. Word-Dokument oder Foto/Scan) über ein KI-System:\n"
-            "1. Prompt unten kopieren und zusammen mit dem ausgefüllten Meldeformular "
-            "(PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben (z. B. Claude "
-            "oder ChatGPT).\n"
-            "2. Die dabei erzeugte CSV-Datei hier importieren - neue Teilnehmer erscheinen "
-            "danach im Reiter „Teilnehmer“.\n"
-            "Meldungen aus der OMA (Online-Meldeannahme) lassen sich ohne KI direkt mit "
-            "„OMA-Export importieren…“ übernehmen - bereits vorhandene Meldungen werden dabei "
-            "übersprungen."
-        )
-        anleitung.setWordWrap(True)
+        # UX-Test 02.10.2026, U10: drei Wege als eigene, kurz erklärte Abschnitte statt eines
+        # langen Textes über einem dominanten KI-Prompt; der KI-Weg ist eingeklappt.
+        def abschnitt(titel: str, erklaerung: str, *knoepfe: QPushButton) -> QGroupBox:
+            box = QGroupBox(titel)
+            text = QLabel(erklaerung)
+            text.setWordWrap(True)
+            zeile = QHBoxLayout()
+            for knopf in knoepfe:
+                zeile.addWidget(knopf)
+            zeile.addStretch()
+            inhalt = QVBoxLayout(box)
+            inhalt.addWidget(text)
+            inhalt.addLayout(zeile)
+            return box
 
-        self.prompt_feld = QPlainTextEdit(_formular_import_prompt())
-        self.prompt_feld.setReadOnly(True)
-        self.prompt_feld.setLineWrapMode(QPlainTextEdit.WidgetWidth)
-
-        kopieren_btn = QPushButton("Prompt kopieren")
-        kopieren_btn.clicked.connect(self._prompt_kopieren)
-        self.status_label = QLabel("")
+        anmeldeformular_btn = QPushButton("Anmeldeformulare (PDF) importieren…")
+        anmeldeformular_btn.setObjectName("primaerButton")
+        anmeldeformular_btn.clicked.connect(self._anmeldeformulare_importieren)
 
         import_btn = QPushButton("CSV importieren…")
-        import_btn.setObjectName("primaerButton")
         import_btn.clicked.connect(self._csv_importieren)
+        vorlage_btn = QPushButton("Leere Vorlage (CSV) speichern…")
+        vorlage_btn.clicked.connect(self._vorlage_speichern)
 
         oma_btn = QPushButton("OMA-Export importieren…")
         oma_btn.clicked.connect(self._oma_importieren)
 
-        anmeldeformular_btn = QPushButton("Anmeldeformulare (PDF) importieren…")
-        anmeldeformular_btn.clicked.connect(self._anmeldeformulare_importieren)
+        self.prompt_feld = QPlainTextEdit(_formular_import_prompt())
+        self.prompt_feld.setReadOnly(True)
+        self.prompt_feld.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        kopieren_btn = QPushButton("Prompt kopieren")
+        kopieren_btn.clicked.connect(self._prompt_kopieren)
+        self.status_label = QLabel("")
 
-        button_zeile = QHBoxLayout()
-        button_zeile.addWidget(kopieren_btn)
-        button_zeile.addWidget(self.status_label)
-        button_zeile.addStretch()
-        button_zeile.addWidget(anmeldeformular_btn)
-        button_zeile.addWidget(oma_btn)
-        button_zeile.addWidget(import_btn)
+        ki_anleitung = QLabel(
+            "1. „Prompt kopieren“ klicken und den Text zusammen mit dem ausgefüllten "
+            "Meldeformular (PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben "
+            "(z. B. Claude oder ChatGPT).\n"
+            "2. Die dabei erzeugte CSV-Datei oben unter „Teilnehmerliste aus Excel“ mit "
+            "„CSV importieren…“ einlesen.\n"
+            "Datenschutz: Die Formulare gehen dabei an den gewählten KI-Anbieter."
+        )
+        ki_anleitung.setWordWrap(True)
+        ki_knopfzeile = QHBoxLayout()
+        ki_knopfzeile.addWidget(kopieren_btn)
+        ki_knopfzeile.addWidget(self.status_label)
+        ki_knopfzeile.addStretch()
+        self._ki_bereich = QWidget()
+        ki_layout = QVBoxLayout(self._ki_bereich)
+        ki_layout.setContentsMargins(0, 0, 0, 0)
+        ki_layout.addWidget(ki_anleitung)
+        ki_layout.addWidget(self.prompt_feld)
+        ki_layout.addLayout(ki_knopfzeile)
+        self._ki_bereich.setVisible(False)
+        self._ki_umschalter = QPushButton("▸ " + self._KI_UMSCHALTER_TEXT)
+        self._ki_umschalter.setCheckable(True)
+        self._ki_umschalter.setFlat(True)
+        self._ki_umschalter.setStyleSheet("text-align: left;")
+        self._ki_umschalter.toggled.connect(self._ki_bereich_umschalten)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(anleitung)
-        layout.addWidget(self.prompt_feld)
-        layout.addLayout(button_zeile)
+        layout.addWidget(abschnitt(
+            "1. Ausgefüllte Anmeldeformulare (PDF) – empfohlen",
+            "Das Anmeldeformular erzeugst du im Reiter „Export“ und verschickst es an die "
+            "Teilnehmer. Die ausgefüllt zurückgeschickten PDF-Dateien hier einlesen – mehrere "
+            "auf einmal möglich, bereits vorhandene Meldungen werden übersprungen.",
+            anmeldeformular_btn,
+        ))
+        layout.addWidget(abschnitt(
+            "2. Teilnehmerliste aus Excel (CSV-Datei)",
+            "Eine Liste mit einer Zeile je Teilnehmer, z. B. vom Schriftführer. Die leere "
+            "Vorlage enthält die passenden Spaltenüberschriften: in Excel ausfüllen, als "
+            "„CSV“ speichern und hier einlesen.",
+            import_btn, vorlage_btn,
+        ))
+        layout.addWidget(abschnitt(
+            "3. Meldungen aus der OMA (Online-Meldeannahme)",
+            "Den Meldungs-Export der OMA direkt einlesen – bereits vorhandene Meldungen werden "
+            "übersprungen.",
+            oma_btn,
+        ))
+        layout.addWidget(self._ki_umschalter)
+        layout.addWidget(self._ki_bereich, 1)
+        layout.addStretch()
 
     def _prompt_kopieren(self) -> None:
         QApplication.clipboard().setText(self.prompt_feld.toPlainText())
         self.status_label.setText("Prompt kopiert.")
 
     def _csv_importieren(self) -> None:
-        pfad, _ = QFileDialog.getOpenFileName(self, "CSV importieren", "", "CSV-Datei (*.csv)")
+        _teilnehmerliste_importieren(self, self.conn)
+
+    def _vorlage_speichern(self) -> None:
+        """UX-Test 02.10.2026, U10: leere Excel-Vorlage mit den passenden Spalten."""
+        vorschlag = os.path.join(_import_startordner(), "Teilnehmerliste_Vorlage.csv")
+        pfad, _ = QFileDialog.getSaveFileName(self, "Vorlage speichern", vorschlag, "CSV-Datei (*.csv)")
         if not pfad:
             return
         try:
-            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+            schreibe_csv_vorlage(pfad)
         except OSError as exc:
-            QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+            QMessageBox.warning(self, "Speichern fehlgeschlagen", f"Die Vorlage konnte nicht gespeichert werden:\n{exc}")
             return
-        text = f"{ergebnis.importiert} Teilnehmer importiert."
-        if ergebnis.fehler:
-            text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
-        QMessageBox.information(self, "Import abgeschlossen", text)
+        _datei_gespeichert_melden(self, pfad, "Vorlage gespeichert", datei_oeffnen_text="Datei öffnen")
+
+    def _ki_bereich_umschalten(self, sichtbar: bool) -> None:
+        self._ki_bereich.setVisible(sichtbar)
+        self._ki_umschalter.setText(("▾ " if sichtbar else "▸ ") + self._KI_UMSCHALTER_TEXT)
 
     def _oma_importieren(self) -> None:
         """Übernimmt Meldungen aus einem OMA-Export (siehe importiere_teilnehmer_aus_oma in
         db.py) - ohne Umweg über den KI-Prompt."""
         pfad, _ = QFileDialog.getOpenFileName(
-            self, "OMA-Export importieren", "", "OMA-Export (*.csv *.txt);;Alle Dateien (*)"
+            self, "OMA-Export importieren", _import_startordner(), "OMA-Export (*.csv *.txt);;Alle Dateien (*)"
         )
         if not pfad:
             return
+        _import_ordner_merken(pfad)
         try:
             ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         except OSError as exc:
@@ -813,17 +1115,22 @@ class FormularImportTab(QWidget):
             )
         if ergebnis.fehler:
             text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
+        if ergebnis.hinweise:
+            text += "\n\nHinweis: " + "\n".join(ergebnis.hinweise)
         QMessageBox.information(self, "Import abgeschlossen", text)
+        if ergebnis.importiert:
+            _startnummern_nach_import_anbieten(self, self.conn)
 
     def _anmeldeformulare_importieren(self) -> None:
         """Liest ausgefüllte Anmeldeformulare (siehe pdf_export.erstelle_anmeldeformular_pdf)
         über db_import.importiere_anmeldeformular_pdf ein - eine Datei je Meldung, mehrere
         Dateien auf einmal wählbar (Nutzerwunsch 28.09.2026)."""
         pfade, _ = QFileDialog.getOpenFileNames(
-            self, "Anmeldeformulare importieren", "", "Anmeldeformular (*.pdf)"
+            self, "Anmeldeformulare importieren", _import_startordner(), "Anmeldeformular (*.pdf)"
         )
         if not pfade:
             return
+        _import_ordner_merken(pfade[0])
         # Kein try/except nötig: der Import fängt Lesefehler je Datei selbst ab und meldet
         # sie in ergebnis.fehler (Verifikation 28.09.2026, Befund 7a).
         ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
@@ -835,7 +1142,19 @@ class FormularImportTab(QWidget):
             )
         if ergebnis.fehler:
             text += f"\n\n{len(ergebnis.fehler)} Datei(en) nicht importiert:\n" + "\n".join(ergebnis.fehler)
+        if ergebnis.hinweise:
+            text += "\n\nHinweis:\n" + "\n".join(ergebnis.hinweise)
         QMessageBox.information(self, "Import abgeschlossen", text)
+        if ergebnis.importiert:
+            _startnummern_nach_import_anbieten(self, self.conn)
+
+
+# Höchstpunktzahlen je Disziplin (entsprechen den CHECK-Constraints in db.py). UX-Test
+# 02.10.2026, U5: der QIntValidator lässt "65" als Zwischenstand beim Tippen zu - solche
+# Werte werden deshalb sofort rot markiert und beim Speichern im Klartext abgelehnt, statt
+# erst an der Datenbank mit "CHECK constraint failed" zu scheitern.
+_SUCHE_MAX = SUCHE_MAX  # gemeinsame Konstanten aus shs_core (auch für die Web-Version)
+_ANZEIGE_MAX = ANZEIGE_MAX
 
 
 class ErgebnisTab(QWidget):
@@ -863,7 +1182,7 @@ class ErgebnisTab(QWidget):
 
         spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
-            spalten += [f"{disziplin}\nSuche (0-60)", f"{disziplin}\nAnzeige (0-40)"]
+            spalten += [f"{disziplin}\nSuche (0-{_SUCHE_MAX})", f"{disziplin}\nAnzeige (0-{_ANZEIGE_MAX})"]
         spalten += ["Disqualifiziert", "Abbruch", "Status"]
 
         self.tabelle = QTableWidget(0, len(spalten))
@@ -910,6 +1229,13 @@ class ErgebnisTab(QWidget):
         speichern_btn = QPushButton("Alle Ergebnisse speichern")
         speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         speichern_btn.clicked.connect(self.alle_speichern)
+        # UX-Test 02.10.2026, K11: Strg+S speichert wie der Button - nur solange der Fokus
+        # in diesem Reiter liegt (z. B. in einem Punktefeld). Über ein Lambda verbunden,
+        # damit Tests alle_speichern() per monkeypatch ersetzen können.
+        speichern_btn.setToolTip("Tastenkürzel: Strg+S")
+        speichern_kuerzel = QShortcut(QKeySequence.Save, self)
+        speichern_kuerzel.setContext(Qt.WidgetWithChildrenShortcut)
+        speichern_kuerzel.activated.connect(lambda: self.alle_speichern())
 
         aktualisieren_btn = QPushButton("Liste aktualisieren")
         aktualisieren_btn.clicked.connect(self._aktualisieren_mit_rueckfrage)
@@ -1061,14 +1387,14 @@ class ErgebnisTab(QWidget):
                 # "0" noch ein Platzhalterzeichen), damit ein versehentlich stehen
                 # gelassenes Feld nicht als echte 0-Punkte-Bewertung gespeichert wird.
                 suche_feld = QLineEdit()
-                suche_feld.setValidator(QIntValidator(0, 60, suche_feld))
+                suche_feld.setValidator(QIntValidator(0, _SUCHE_MAX, suche_feld))
                 suche_feld.setAlignment(Qt.AlignCenter)
                 if angezeigt_suche is not None:
                     suche_feld.setText(str(angezeigt_suche))
                 self.tabelle.setCellWidget(row, spalte_suche, suche_feld)
 
                 anzeige_feld = QLineEdit()
-                anzeige_feld.setValidator(QIntValidator(0, 40, anzeige_feld))
+                anzeige_feld.setValidator(QIntValidator(0, _ANZEIGE_MAX, anzeige_feld))
                 anzeige_feld.setAlignment(Qt.AlignCenter)
                 if angezeigt_anzeige is not None:
                     anzeige_feld.setText(str(angezeigt_anzeige))
@@ -1076,6 +1402,14 @@ class ErgebnisTab(QWidget):
 
                 suche_feld.textChanged.connect(lambda _text, r=row: self._aktualisiere_zeilenstatus(r))
                 anzeige_feld.textChanged.connect(lambda _text, r=row: self._aktualisiere_zeilenstatus(r))
+                # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend
+                # schlucken, sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5).
+                suche_feld.inputRejected.connect(
+                    lambda f=suche_feld: self._eingabe_abgelehnt(f, _SUCHE_MAX)
+                )
+                anzeige_feld.inputRejected.connect(
+                    lambda f=anzeige_feld: self._eingabe_abgelehnt(f, _ANZEIGE_MAX)
+                )
 
                 boxen[disziplin] = (suche_feld, anzeige_feld)
                 geladen[disziplin] = (suche_wert, anzeige_wert)
@@ -1224,6 +1558,12 @@ class ErgebnisTab(QWidget):
         )
         for c, w in enumerate(ziel):
             self.tabelle.setColumnWidth(c, w)
+        # UX-Test 02.10.2026, K1: Zeilen mindestens so hoch wie ein Eingabefeld - sonst
+        # wurden eingetippte Punkte unten abgeschnitten.
+        feldhoehe = QLineEdit().sizeHint().height()
+        kopf = self.tabelle.verticalHeader()
+        if kopf.defaultSectionSize() < feldhoehe + 4:
+            kopf.setDefaultSectionSize(feldhoehe + 4)
 
     def _spalte_geklickt(self, spalte: int) -> None:
         """Reagiert auf einen Klick auf eine Spaltenüberschrift: sortiert danach, erneuter
@@ -1428,11 +1768,38 @@ class ErgebnisTab(QWidget):
             suche_feld.setEnabled(not sperren)
             anzeige_feld.setEnabled(not sperren)
 
+    def _eingabe_abgelehnt(self, feld: QLineEdit, maximum: int) -> None:
+        """Hinweis, wenn der Validator ein Zeichen ablehnt (Komma, Buchstabe, dritte
+        Ziffer) - sonst wirkt es, als würde die Eingabe einfach verschluckt."""
+        hinweis = f"Nur ganze Punkte von 0 bis {maximum} eingeben (keine Kommazahlen)."
+        QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
+        # UX-Nachtest 03.10.2026, N6 (ersetzt den 8-Sekunden-Timer aus U5b): der Hinweis wurde
+        # leicht übersehen - er steht jetzt orange und fett in der Statuszeile, bis die nächste
+        # gültige Eingabe kommt. Die Hervorhebung steckt im Text selbst (Rich Text), damit
+        # spätere Statusmeldungen sie nicht erben.
+        self._eingabe_hinweis = (
+            f'<span style="color:{_farbe("warnung").name()}; font-weight:bold;">{hinweis}</span>'
+        )
+        self.status_label.setText(self._eingabe_hinweis)
+
+    def _eingabe_hinweis_ausblenden(self) -> None:
+        """Nimmt den Komma-Hinweis wieder weg - nur, wenn dort noch der Hinweis steht."""
+        hinweis = getattr(self, "_eingabe_hinweis", None)
+        if hinweis is not None and self.status_label.text() == hinweis:
+            self.status_label.setText("")
+        self._eingabe_hinweis = None
+
     def _aktualisiere_zeilenstatus(self, row: int) -> None:
         """Färbt die Zeile gelb und setzt den Status-Text, solange sich mindestens ein
-        Wert vom zuletzt gespeicherten Stand unterscheidet."""
+        Wert vom zuletzt gespeicherten Stand unterscheidet. Punktefelder mit einem Wert
+        über dem Maximum bekommen zusätzlich einen roten Rahmen und einen Tooltip."""
+        self._eingabe_hinweis_ausblenden()  # gültige Eingabe: Komma-Hinweis (U5b) weg
         ungespeichert = self._zeile_ist_ungespeichert(row)
         farbe = _farbe("ungespeichert_bg" if ungespeichert else "zeile_bg")
+        maximum_je_feld = {}
+        for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
+            maximum_je_feld[suche_feld] = _SUCHE_MAX
+            maximum_je_feld[anzeige_feld] = _ANZEIGE_MAX
 
         for col in range(self.tabelle.columnCount()):
             widget = self.tabelle.cellWidget(row, col)
@@ -1440,9 +1807,15 @@ class ErgebnisTab(QWidget):
                 # Gilt sowohl für die Punkte-QLineEdit-Felder als auch für den Container
                 # der Disqualifiziert-/Abbruch-Checkbox (siehe _zentrierte_zelle) -
                 # QSS-Hintergrundfarbe funktioniert für beide Widget-Arten gleich.
-                widget.setStyleSheet(
-                    f"background-color: {farbe.name()};" if ungespeichert else ""
-                )
+                stil = f"background-color: {farbe.name()};" if ungespeichert else ""
+                maximum = maximum_je_feld.get(widget)
+                if maximum is not None:
+                    wert = self._feldwert(widget)
+                    zu_hoch = wert is not None and wert > maximum
+                    if zu_hoch:
+                        stil += f" border: 2px solid {_farbe('fehler').name()};"
+                    widget.setToolTip(f"Höchstens {maximum} Punkte." if zu_hoch else "")
+                widget.setStyleSheet(stil)
             else:
                 item = self.tabelle.item(row, col)
                 if item is not None:
@@ -1453,9 +1826,25 @@ class ErgebnisTab(QWidget):
             if ungespeichert:
                 status_item.setText("● nicht gespeichert")
                 status_item.setForeground(_farbe("warnung"))
+            elif self._zeile_ist_leer(row):
+                # UX-Test 02.10.2026, K1: vorher stand auch bei noch leeren Zeilen
+                # "✓ gespeichert" - das wirkte, als seien schon Ergebnisse eingetragen.
+                status_item.setText("noch kein Ergebnis")
+                status_item.setForeground(_farbe("gedaempft"))
             else:
                 status_item.setText("✓ gespeichert")
                 status_item.setForeground(_farbe("ok"))
+
+    def _zeile_ist_leer(self, row: int) -> bool:
+        """Weder Punkte noch Disqualifiziert/Abbruch - gespeichert oder eingegeben."""
+        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+        if dq_box.isChecked() or abbruch_box.isChecked() or any(self._status_geladen_je_zeile[row]):
+            return False
+        return all(
+            self._feldwert(suche) is None and self._feldwert(anzeige) is None
+            and self._geladen_je_zeile[row][disziplin] == (None, None)
+            for disziplin, (suche, anzeige) in self._boxen_je_zeile[row].items()
+        )
 
     def farben_auffrischen(self) -> None:
         """Färbt alle Zeilen nach einem Wechsel des Hintergrund-Designs neu - bewusst
@@ -1506,6 +1895,16 @@ class ErgebnisTab(QWidget):
                     eingabe_fehler = pruefe_ergebnis_eingabe(suche_wert, anzeige_wert)
                     if eingabe_fehler is not None:
                         fehler.append(f"{name} – {disziplin}: {eingabe_fehler}")
+                        continue
+                    zu_hoch = [
+                        f"{teil} höchstens {maximum} Punkte (eingegeben: {wert})"
+                        for teil, wert, maximum in (
+                            ("Suche", suche_wert, _SUCHE_MAX), ("Anzeige", anzeige_wert, _ANZEIGE_MAX)
+                        )
+                        if wert > maximum
+                    ]
+                    if zu_hoch:
+                        fehler.append(f"{name} – {disziplin}: " + ", ".join(zu_hoch))
                         continue
 
                     try:
@@ -1577,6 +1976,9 @@ class AuswertungTab(QWidget):
         self.filter_startnummer.textChanged.connect(self._rendern)
 
         self.ausstehend_label = QLabel()
+        # UX-Test 02.10.2026, U12: die Namensliste kann sehr lang werden - ohne Umbruch zog
+        # dieses Label das ganze Hauptfenster über die Bildschirmbreite (~1800 px).
+        self.ausstehend_label.setWordWrap(True)
 
         aktualisieren_btn = QPushButton("Auswertung neu berechnen")
         aktualisieren_btn.clicked.connect(self.aktualisieren)
@@ -1588,6 +1990,7 @@ class AuswertungTab(QWidget):
         self.drucken_btn.clicked.connect(self._rangliste_drucken)
 
         self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)  # enthält nach "Rangliste drucken" einen langen Pfad (U12)
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -1628,7 +2031,8 @@ class AuswertungTab(QWidget):
         except Exception as exc:
             _pdf_export_fehler_anzeigen(self, exc)
             return
-        self.status_label.setText(f"Rangliste gespeichert: {pfad}")
+        self.status_label.setText(f"Rangliste gespeichert: {_pfad_anzeige(pfad)}")
+        _datei_gespeichert_melden(self, pfad, "Rangliste gespeichert")
 
     def aktualisieren(self) -> None:
         """Berechnet die Auswertung aus der Datenbank neu und aktualisiert den Filter."""
@@ -1672,6 +2076,13 @@ class AuswertungTab(QWidget):
             t for t in self._ausstehend if passt(leistungsklasse_label(t), t["startnummer"])
         ]
 
+        # UX-Test 02.10.2026, K9 (Marco 03.10.: Hinweiszeile + Tooltip): "von x" zählt nur
+        # Starter mit vollständigem Ergebnis - bei noch offenen Teilnehmern wirkte "1. von 2"
+        # bei 5 gemeldeten wie ein Fehler.
+        offen_je_lk: dict[str, int] = {}
+        for t in self._ausstehend:
+            offen_je_lk[leistungsklasse_label(t)] = offen_je_lk.get(leistungsklasse_label(t), 0) + 1
+
         self.tabelle.setRowCount(len(fertig_gefiltert))
         for row, t in enumerate(fertig_gefiltert):
             # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): db.berechne_auswertung() gibt
@@ -1706,18 +2117,40 @@ class AuswertungTab(QWidget):
                 wertnote_text,
                 platz_text,
             ]
+            offen = offen_je_lk.get(t.leistungsklasse, 0)
+            platz_tooltip = (
+                f"„von {t.von_startern}“ zählt nur Starter mit vollständigem Ergebnis in {t.leistungsklasse}"
+                + (f" – {offen} noch offen." if offen else ".")
+            )
             for col, wert in enumerate(werte):
                 item = QTableWidgetItem(wert)
                 if not t.bestanden:
                     item.setForeground(_farbe("fehler"))
+                if col == len(werte) - 1:
+                    item.setToolTip(platz_tooltip)
                 self.tabelle.setItem(row, col, item)
         self.tabelle.resizeColumnsToContents()
 
+        von_je_lk = {t.leistungsklasse: t.von_startern for t in fertig_gefiltert}
+        von_hinweise = [
+            f"Hinweis {lk}: „von {von}“ zählt nur Starter mit vollständigem Ergebnis – "
+            f"{offen_je_lk[lk]} noch offen."
+            for lk, von in sorted(von_je_lk.items()) if offen_je_lk.get(lk)
+        ]
+
         if ausstehend_gefiltert:
-            namen = ", ".join(f"{t['nachname']}, {t['vorname']}" for t in ausstehend_gefiltert)
-            self.ausstehend_label.setText(f"Noch ohne vollständiges Ergebnis ({len(ausstehend_gefiltert)}): {namen}")
+            # UX-Test 02.10.2026, K2: "Vorname Nachname; …" statt "Nachname, Vorname, …" -
+            # das doppelt belegte Komma machte unklar, wo ein Name endet.
+            namen = "; ".join(f"{t['vorname']} {t['nachname']}" for t in ausstehend_gefiltert)
+            self.ausstehend_label.setText(
+                "\n".join(von_hinweise + [f"Noch ohne vollständiges Ergebnis ({len(ausstehend_gefiltert)}): {namen}"])
+            )
         else:
-            self.ausstehend_label.setText("Alle Teilnehmer (in diesem Filter) sind vollständig ausgewertet.")
+            # K9-Verifikation: Sind in der LK noch andere offen (z. B. Filter auf eine
+            # Startnummer), nur der Hinweis - "alle vollständig" wirkte daneben widersprüchlich.
+            self.ausstehend_label.setText(
+                "\n".join(von_hinweise or ["Alle Teilnehmer (in diesem Filter) sind vollständig ausgewertet."])
+            )
 
 
 class TeilnehmerUebersichtTab(QWidget):
@@ -1848,6 +2281,7 @@ class ZeitplanTab(QWidget):
         # "Hoch"/"Runter" mehrfach hintereinander geklickt werden kann, ohne den Eintrag
         # jedes Mal erneut in der Liste auswählen zu müssen.
         self._markierter_eintrag_id: int | None = None
+        self._richter_uebernahme_erfolgt = False  # siehe aktualisieren() (U8)
 
         veranstaltung = get_veranstaltung(conn) or {}
 
@@ -1861,6 +2295,19 @@ class ZeitplanTab(QWidget):
         self.standard_dauer.setRange(1, 240)
         self.standard_dauer.setValue(10)
         self.standard_dauer.setSuffix(" Min.")
+
+        # UX-Test 02.10.2026, U2: Mindestabstand zwischen zwei Starts desselben Teams
+        # (DK-Disziplinen); gilt für "Automatisch verteilen…" und die Überschneidungs-
+        # Markierung, je Termin gespeichert.
+        self.mindestabstand = QSpinBox()
+        self.mindestabstand.setRange(0, 240)
+        self.mindestabstand.setSuffix(" Min.")
+        self.mindestabstand.setToolTip(
+            "Mindestabstand zwischen zwei Starts desselben Teams (z. B. Dreikampf: Pause für "
+            "den Hund und Wegezeit zwischen den Disziplinen)."
+        )
+        self.mindestabstand.setValue(dk_mindestabstand(veranstaltung))
+        self.mindestabstand.valueChanged.connect(self._mindestabstand_speichern)
 
         richter_hinzufuegen_btn = QPushButton("Richter hinzufügen")
         richter_hinzufuegen_btn.clicked.connect(self._richter_hinzufuegen)
@@ -1878,6 +2325,9 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addSpacing(16)
         kopf_zeile.addWidget(QLabel("Standard-Prüfungsdauer:"))
         kopf_zeile.addWidget(self.standard_dauer)
+        kopf_zeile.addSpacing(16)
+        kopf_zeile.addWidget(QLabel("Mindestabstand Team:"))
+        kopf_zeile.addWidget(self.mindestabstand)
         kopf_zeile.addSpacing(16)
         kopf_zeile.addWidget(richter_hinzufuegen_btn)
         kopf_zeile.addWidget(verteilen_btn)
@@ -1939,6 +2389,17 @@ class ZeitplanTab(QWidget):
 
     # --- Aufbau --------------------------------------------------------------
 
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        """UX-Test 02.10.2026, U8: beim ERSTEN Anzeigen des Reiters (nicht schon beim
+        Öffnen des Termins - das soll die Datei nicht verändern) die Richter aus den
+        Veranstaltungsdaten als Spalten anlegen, solange der Zeitplan noch leer ist. Nur
+        einmal je geöffnetem Termin, damit bewusst gelöschte Richter nicht wieder auftauchen."""
+        super().showEvent(event)
+        if not self._richter_uebernahme_erfolgt:
+            self._richter_uebernahme_erfolgt = True
+            if zeitplan_richter_aus_veranstaltung_anlegen(self.conn):
+                self.aktualisieren()
+
     def aktualisieren(self) -> None:
         """Baut die Richter-Spalten komplett neu aus dem aktuellen Datenbankstand auf -
         kein Zwischenspeicher, damit z.B. ein nachträglich geänderter Teilnehmerstand
@@ -1954,6 +2415,18 @@ class ZeitplanTab(QWidget):
                 widget.deleteLater()
 
         richter_liste = list_zeitplan_richter(self.conn)
+        namen_je_richter = {r["id"]: r["name"] for r in richter_liste}
+        konflikte = zeitplan_ueberschneidungen(self.conn) if richter_liste else []
+        # (Block, Team) -> Erklärung für die rote Markierung der betroffenen Zeilen.
+        self._konflikt_hinweise: dict[tuple, str] = {}
+        abstand = dk_mindestabstand(veranstaltung)
+        for k in konflikte:
+            for eigene, andere in ((k["erste"], k["zweite"]), (k["zweite"], k["erste"])):
+                art = "gleichzeitig" if k["gleichzeitig"] else f"weniger als {abstand} Min. Abstand"
+                self._konflikt_hinweise[(eigene["eintrag_id"], k["teilnehmer"]["id"])] = (
+                    f"Überschneidung ({art}): steht um {andere['start'].strftime('%H:%M')} auch bei "
+                    f"{namen_je_richter.get(andere['richter_id'], '?')} ({andere['disziplin']})."
+                )
         if not richter_liste:
             hinweis = QLabel("Noch keine Richter angelegt - über „Richter hinzufügen“ starten.")
             hinweis.setWordWrap(True)
@@ -1965,9 +2438,13 @@ class ZeitplanTab(QWidget):
                     self._richter_spalte(richter, zeilen_je_richter_id.get(richter["id"], []))
                 )
         self._spalten_layout.addStretch()
-        self._offene_starts_aktualisieren()
+        self._offene_starts_aktualisieren(konflikte, namen_je_richter)
 
-    def _offene_starts_aktualisieren(self) -> None:
+    def _mindestabstand_speichern(self, wert: int) -> None:
+        _aktualisiere_veranstaltung_feld(self.conn, dk_mindestabstand=str(wert))
+        self.aktualisieren()
+
+    def _offene_starts_aktualisieren(self, konflikte: list | None = None, namen_je_richter: dict | None = None) -> None:
         """Baut den Text der Seitenleiste "Offene Starts" aus zeitplan_gruppen_status()
         neu auf: eine Zeile je Art/Leistungsklasse/Disziplin mit mindestens einem
         Teilnehmer, grün mit Haken wenn bereits ein Prüfungsblock dafür angelegt wurde,
@@ -1979,16 +2456,34 @@ class ZeitplanTab(QWidget):
         zeilen = []
         ok = _farbe("ok").name()
         fehler = _farbe("fehler").name()
+        # UX-Test 02.10.2026, U2: Überschneidungen oben und auffällig - vorher war die
+        # Seitenleiste auch bei doppelt eingeplanten Teams komplett grün.
+        if konflikte:
+            namen_je_richter = namen_je_richter or {}
+            # Je Team zusammengefasst (statt je Paar): alle betroffenen Starts mit Richter.
+            je_team: dict[int, tuple[dict, set]] = {}
+            for k in konflikte:
+                team, starts = je_team.setdefault(k["teilnehmer"]["id"], (k["teilnehmer"], set()))
+                for zeile in (k["erste"], k["zweite"]):
+                    starts.add((zeile["start"], namen_je_richter.get(zeile["richter_id"], "?")))
+            zeilen.append(
+                f'<span style="color:{fehler}; font-weight:bold;">⚠ Überschneidungen ({len(je_team)} Team(s))</span>'
+            )
+            for team, starts in je_team.values():
+                nr = team["startnummer"] if team["startnummer"] is not None else "–"
+                liste = ", ".join(f"{start.strftime('%H:%M')} {name}" for start, name in sorted(starts))
+                zeilen.append(f'<span style="color:{fehler};">Nr. {nr} {team["nachname"]}: {liste}</span>')
+            zeilen.append("")
         for eintrag in status_liste:
             bezeichnung = f"{eintrag['art']} LK {eintrag['stufe']} – {eintrag['disziplin']}"
             if eintrag["eingeplant"]:
                 zeilen.append(
-                    f'<span style="color:{ok};">✓ {bezeichnung} ({eintrag["anzahl"]} TN)</span>'
+                    f'<span style="color:{ok};">✓ {bezeichnung} ({eintrag["anzahl"]} Teilnehmer)</span>'
                 )
             else:
                 zeilen.append(
                     f'<span style="color:{fehler}; font-weight:bold;">'
-                    f'✗ {bezeichnung} ({eintrag["anzahl"]} TN) – noch offen</span>'
+                    f'✗ {bezeichnung} ({eintrag["anzahl"]} Teilnehmer) – noch offen</span>'
                 )
         self._offene_starts_label.setText("<br>".join(zeilen))
 
@@ -2014,7 +2509,45 @@ class ZeitplanTab(QWidget):
 
         liste = QListWidget()
         markierte_zeile = None
+        # UX-Test 02.10.2026, U9: je Prüfungsblock eine fette Kopfzeile, die Teilnehmer
+        # eingerückt darunter - so ist sichtbar, dass "Hoch"/"Runter"/"Entfernen" den ganzen
+        # Block bewegen.
+        zeilen_je_block: dict[int, list] = {}
         for zeile in zeilen:
+            if zeile["typ"] == "pruefung":
+                zeilen_je_block.setdefault(zeile["eintrag_id"], []).append(zeile)
+        letzter_block = None
+        for zeile in zeilen:
+            if zeile["typ"] == "pruefung" and zeile["eintrag_id"] != letzter_block:
+                block = zeilen_je_block[zeile["eintrag_id"]]
+                anzahl = sum(1 for z in block if z["teilnehmer"] is not None)
+                umfang = (
+                    f"{anzahl} Teilnehmer, {block[0]['start'].strftime('%H:%M')}–{block[-1]['ende'].strftime('%H:%M')}"
+                    if anzahl else "keine Teilnehmer gemeldet"
+                )
+                hinweise = [
+                    self._konflikt_hinweise.get((z["eintrag_id"], z["teilnehmer"]["id"]))
+                    for z in block if z["teilnehmer"] is not None
+                ]
+                hinweise = [h for h in hinweise if h]
+                warnung = "⚠ " if hinweise else ""
+                kopf = QListWidgetItem(
+                    f"▸ {warnung}{zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  ({umfang})"
+                )
+                kopf.setData(Qt.UserRole, zeile["eintrag_id"])
+                schrift = kopf.font()
+                schrift.setBold(True)
+                kopf.setFont(schrift)
+                if hinweise:
+                    # Verifikation U9: Überschneidung auch an der Kopfzeile sichtbar machen.
+                    kopf.setForeground(_farbe("fehler"))
+                    kopf.setToolTip(f"{len(hinweise)} Team(s) dieses Blocks mit Überschneidung.")
+                liste.addItem(kopf)
+                if markierte_zeile is None and zeile["eintrag_id"] == self._markierter_eintrag_id:
+                    markierte_zeile = liste.count() - 1
+            letzter_block = zeile["eintrag_id"] if zeile["typ"] == "pruefung" else None
+            if zeile["typ"] == "pruefung" and zeile["teilnehmer"] is None:
+                continue  # leerer Block: nur die Kopfzeile
             item = self._zeile_listenelement(zeile)
             liste.addItem(item)
             if markierte_zeile is None and self._markierter_eintrag_id is not None and zeile["eintrag_id"] == self._markierter_eintrag_id:
@@ -2031,27 +2564,28 @@ class ZeitplanTab(QWidget):
         entfernen_btn = QPushButton("Entfernen")
         entfernen_btn.clicked.connect(lambda: self._eintrag_entfernen(liste))
 
+        # UX-Test 02.10.2026, U9: Knöpfe in zwei statt fünf Zeilen - mehr Höhe für die Liste.
         eintrag_buttons_1 = QHBoxLayout()
         eintrag_buttons_1.addWidget(hoch_btn)
         eintrag_buttons_1.addWidget(runter_btn)
+        eintrag_buttons_1.addWidget(bearbeiten_btn)
+        eintrag_buttons_1.addWidget(entfernen_btn)
         eintrag_buttons_2 = QHBoxLayout()
-        eintrag_buttons_2.addWidget(bearbeiten_btn)
-        eintrag_buttons_2.addWidget(entfernen_btn)
 
         block_btn = QPushButton("Prüfungsblock hinzufügen…")
         block_btn.clicked.connect(lambda: self._pruefungsblock_hinzufuegen(richter_id))
         pause_btn = QPushButton("Pause hinzufügen…")
-        pause_btn.clicked.connect(lambda: self._pause_hinzufuegen(richter_id))
+        pause_btn.clicked.connect(lambda: self._pause_hinzufuegen(richter_id, liste))
         loeschen_btn = QPushButton("Richter löschen")
         loeschen_btn.clicked.connect(lambda: self._richter_loeschen(richter_id, richter["name"]))
 
         layout = QVBoxLayout(box)
         layout.addLayout(kopf_zeile)
         layout.addWidget(liste, stretch=1)
+        eintrag_buttons_2.addWidget(block_btn)
+        eintrag_buttons_2.addWidget(pause_btn)
         layout.addLayout(eintrag_buttons_1)
         layout.addLayout(eintrag_buttons_2)
-        layout.addWidget(block_btn)
-        layout.addWidget(pause_btn)
         layout.addWidget(loeschen_btn)
         return box
 
@@ -2064,17 +2598,22 @@ class ZeitplanTab(QWidget):
         zeit = f"{zeile['start'].strftime('%H:%M')}–{zeile['ende'].strftime('%H:%M')}"
         if zeile["typ"] == "pause":
             text = f"{zeit}  Pause: {zeile['bezeichnung']}"
-        elif zeile["teilnehmer"] is None:
-            text = f"{zeit}  {zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  (noch keine Teilnehmer gemeldet)"
         else:
+            # Block-Angaben stehen in der Kopfzeile darüber (siehe _richter_spalte, U9).
             t = zeile["teilnehmer"]
             startnr = t["startnummer"] if t["startnummer"] is not None else "–"
-            text = (
-                f"{zeit}  {zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  "
-                f"Nr. {startnr}  {t['nachname']}, {t['vorname']} ({t['rufname_hund']})"
-            )
+            text = f"      {zeit}  Nr. {startnr}  {t['nachname']}, {t['vorname']} ({t['rufname_hund']})"
+        hinweis = None
+        if zeile["typ"] == "pruefung" and zeile.get("teilnehmer") is not None:
+            hinweis = getattr(self, "_konflikt_hinweise", {}).get((zeile["eintrag_id"], zeile["teilnehmer"]["id"]))
+        if hinweis:
+            text = "⚠ " + text
         item = QListWidgetItem(text)
         item.setData(Qt.UserRole, zeile["eintrag_id"])
+        if hinweis:
+            # UX-Test 02.10.2026, U2: betroffene Zeilen rot, Tooltip erklärt die Überschneidung.
+            item.setForeground(_farbe("fehler"))
+            item.setToolTip(hinweis)
         return item
 
     # --- Aktionen: Richter -----------------------------------------------------
@@ -2144,15 +2683,17 @@ class ZeitplanTab(QWidget):
                 "Bitte zuerst mindestens einen Richter anlegen.",
             )
             return
-        antwort = QMessageBox.question(
-            self, "Automatisch verteilen",
-            "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter "
-            "und ERSETZT dabei deren bisherigen Zeitplan (bereits eingefügte Pausen und "
-            "von Hand geänderte Reihenfolgen gehen dabei verloren). Fortfahren?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if antwort != QMessageBox.Yes:
-            return
+        # UX-Test 02.10.2026, U9: nur warnen, wenn es schon einen Plan gibt, der verloren ginge.
+        if any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter):
+            antwort = QMessageBox.question(
+                self, "Automatisch verteilen",
+                "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter "
+                "und ERSETZT dabei deren bisherigen Zeitplan (bereits eingefügte Pausen und "
+                "von Hand geänderte Reihenfolgen gehen dabei verloren). Fortfahren?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if antwort != QMessageBox.Yes:
+                return
         try:
             automatische_zeitplan_verteilung(
                 self.conn, [r["id"] for r in richter], standard_dauer_minuten=self.standard_dauer.value(),
@@ -2176,12 +2717,33 @@ class ZeitplanTab(QWidget):
             return
         self.aktualisieren()
 
-    def _pause_hinzufuegen(self, richter_id: int) -> None:
-        dialog = PauseDialog(self)
+    def _pause_hinzufuegen(self, richter_id: int, liste: QListWidget | None = None) -> None:
+        dialog = PauseDialog(self, neu=True)
         if dialog.exec() != QDialog.Accepted:
             return
+        markiert = liste.currentItem() if liste is not None else None
         try:
-            add_zeitplan_pause(self.conn, richter_id, **dialog.werte())
+            if dialog.fuer_alle.isChecked():
+                wunsch = dialog.uhrzeit.text().strip()
+                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte())
+                abweichend = [(name, zeit) for name, zeit in eingefuegt if zeit != wunsch]
+                if abweichend:
+                    # UX-Nachtest 03.10.2026, N3: "um 12:00 eingefügt" stimmte nicht, wenn ein
+                    # Plan vorher endet oder ein Block noch läuft - tatsächliche Zeiten nennen.
+                    QMessageBox.information(
+                        self, "Pause eingefügt",
+                        "Die Pause beginnt nicht überall um " + wunsch + ":\n\n"
+                        + "\n".join(f"{name or 'Richter'}: {zeit} Uhr" for name, zeit in eingefuegt)
+                        + "\n\nEin laufender Prüfungsblock wird nicht geteilt; endet der Plan eines "
+                        "Richters vorher, steht die Pause an seinem Ende.",
+                    )
+                self.status_label.setText(f"Pause bei {len(eingefuegt)} Richter(n) eingefügt.")
+            else:
+                # UX-Test 02.10.2026, U9: nach der markierten Zeile statt immer am Ende.
+                nach = markiert.data(Qt.UserRole) if markiert is not None else None
+                self._markierter_eintrag_id = add_zeitplan_pause(
+                    self.conn, richter_id, nach_eintrag_id=nach, **dialog.werte()
+                )
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
             return
@@ -2278,6 +2840,8 @@ class ExportTab(QWidget):
 
         # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
         # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
+        teilnehmerliste_btn = QPushButton("Teilnehmerliste (CSV, für Excel)…")
+        teilnehmerliste_btn.clicked.connect(self._teilnehmerliste_exportieren)
         anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
         anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
 
@@ -2379,10 +2943,16 @@ class ExportTab(QWidget):
         layout.addWidget(leistungsrichter_btn)
         layout.addWidget(zeitplan_btn)
         layout.addWidget(boegen_btn)
+        layout.addWidget(teilnehmerliste_btn)
         layout.addLayout(button_zeile)
-        layout.addWidget(hinweis)
-        layout.addStretch()
+        # UX-Test 02.10.2026, U7: Statuszeile direkt unter den Knöpfen; der lange Erklärtext
+        # scrollt, statt bei wenig Höhe mit der Statuszeile zu überlappen.
         layout.addWidget(self.status_label)
+        hinweis_scroll = QScrollArea()
+        hinweis_scroll.setWidget(hinweis)
+        hinweis_scroll.setWidgetResizable(True)
+        hinweis_scroll.setFrameShape(QScrollArea.NoFrame)
+        layout.addWidget(hinweis_scroll, 1)
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - wird bei jedem Export frisch aus der DB gelesen
@@ -2394,6 +2964,11 @@ class ExportTab(QWidget):
         return _pdf_speicherort_waehlen(self, self._ablageort, titel, vorschlag)
 
     def _ablageort_oeffnen(self) -> None:
+        if os.path.basename(os.path.dirname(self._ablageort.pfad)) == "Ausdrucke":
+            try:
+                os.makedirs(self._ablageort.pfad, exist_ok=True)
+            except OSError:
+                pass  # Meldung "existiert nicht" folgt direkt darunter
         if not os.path.isdir(self._ablageort.pfad):
             QMessageBox.warning(
                 self,
@@ -2422,7 +2997,27 @@ class ExportTab(QWidget):
             self._export_fehler_anzeigen(exc)
             return
         text = status_text(ergebnis) if callable(status_text) else status_text
-        self.status_label.setText(f"{text}: {pfad}")
+        self.status_label.setText(f"{text}: {_pfad_anzeige(pfad)}")
+        _datei_gespeichert_melden(self, pfad, text)
+
+    def _teilnehmerliste_exportieren(self) -> None:
+        """Nutzerwunsch 02.10.2026 (UX-Test, N1): alle Teilnehmer als Excel-freundliche CSV."""
+        try:
+            os.makedirs(self._ablageort.pfad, exist_ok=True)
+        except OSError:
+            pass
+        vorschlag = os.path.join(self._ablageort.pfad, self._export_dateiname("Teilnehmerliste").replace(".pdf", ".csv"))
+        pfad, _ = QFileDialog.getSaveFileName(self, "Teilnehmerliste speichern", vorschlag, "CSV-Datei (*.csv)")
+        if not pfad:
+            return
+        try:
+            anzahl = exportiere_teilnehmer_csv(self.conn, pfad)
+        except OSError as exc:
+            QMessageBox.critical(self, "Speichern fehlgeschlagen", f"Die Teilnehmerliste konnte nicht gespeichert werden:\n\n{exc}")
+            return
+        self._ablageort.pfad = os.path.dirname(pfad)
+        self.status_label.setText(f"Teilnehmerliste ({anzahl} Teilnehmer) gespeichert: {_pfad_anzeige(pfad)}")
+        _datei_gespeichert_melden(self, pfad, "Teilnehmerliste gespeichert", datei_oeffnen_text="In Excel öffnen")
 
     def _anmeldeformular_exportieren(self) -> None:
         # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf
@@ -2573,6 +3168,7 @@ class VerwaltungTab(QWidget):
             verband=dialog.verband.text().strip() or None,
             meldestelle=dialog.meldestelle_text(),
             angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
+            startnummer_bereiche=dialog.startnummer_bereiche_text(),
         )
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
@@ -2584,8 +3180,10 @@ class DatensicherungTab(QWidget):
     der übrigen Tabs. Deckt den bisher fehlenden Datensicherungsweg ab: bislang ließ sich
     der Termine-Ordner nur manuell (Datei-Explorer) sichern."""
 
-    def __init__(self, parent=None, aktueller_pfad: str | None = None):
+    def __init__(self, parent=None, aktueller_pfad: str | None = None, conn=None):
         super().__init__(parent)
+        # Nur für den Dateinamen-Vorschlag (K10): Prüfungsdatum und Verein des geöffneten Termins.
+        self.conn = conn
         # Nur zur Erkennung eines Namenskonflikts mit dem GERADE GEÖFFNETEN Termin beim
         # Wiederherstellen (siehe _sicherung_wiederherstellen/_konflikt_abfragen) - ein
         # Überschreiben dieser Datei würde mit der noch offenen sqlite3.Connection des
@@ -2594,17 +3192,17 @@ class DatensicherungTab(QWidget):
 
         hinweis = QLabel(
             "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner "
-            f"(„{termine_ordner()}“) als eine einzige ZIP-Datei - nicht nur den gerade "
-            "geöffneten Termin. Für eine Sicherung mit Passwort empfiehlt es sich, das "
-            "Passwort getrennt von der ZIP-Datei selbst aufzubewahren (z.B. nicht im "
-            "selben Ordner)."
+            f"(„{termine_ordner()}“) als eine einzige Sicherungsdatei (Endung .zip) - nicht "
+            "nur den gerade geöffneten Termin. Das Passwort einer geschützten Sicherung "
+            "am besten getrennt von der Sicherungsdatei aufbewahren (z. B. nicht auf "
+            "demselben USB-Stick)."
         )
         hinweis.setWordWrap(True)
 
-        erstellen_btn = QPushButton("Sicherung erstellen (ZIP)…")
+        erstellen_btn = QPushButton("Sicherung erstellen…")
         erstellen_btn.clicked.connect(self._sicherung_erstellen)
 
-        wiederherstellen_btn = QPushButton("Sicherung wiederherstellen (ZIP)…")
+        wiederherstellen_btn = QPushButton("Sicherung wiederherstellen…")
         wiederherstellen_btn.clicked.connect(self._sicherung_wiederherstellen)
 
         self.status_label = QLabel("")
@@ -2621,14 +3219,31 @@ class DatensicherungTab(QWidget):
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner
 
+    def _dateiname_vorschlag(self) -> str:
+        """UX-Test 02.10.2026, K10: Name mit Prüfungsdatum und Verein des geöffneten Termins,
+        damit man die Sicherung später einer Prüfung zuordnen kann, z. B.
+        "SHS-Sicherung_2026-11-14_Hundefreunde-Testhausen_erstellt-2026-10-03.zip"."""
+        heute = datetime.date.today().isoformat()
+        veranstaltung = get_veranstaltung(self.conn) if self.conn is not None else None
+        if not veranstaltung:
+            return f"SHS-Sicherung_{heute}.zip"
+        verein = veranstaltung["verein"] or ""
+        for umlaut, ersatz in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+            verein = verein.replace(umlaut, ersatz)
+        teile = [
+            re.sub(r"[^0-9-]", "", veranstaltung["datum"] or ""),
+            re.sub(r"[^A-Za-z0-9]+", "-", verein).strip("-")[:40].strip("-"),
+        ]
+        mitte = "_".join(t for t in teile if t)
+        return f"SHS-Sicherung_{mitte + '_' if mitte else ''}erstellt-{heute}.zip"
+
     def _sicherung_erstellen(self) -> None:
         dialog = SicherungErstellenDialog(self)
         if dialog.exec() != QDialog.Accepted:
             return
         passwort = dialog.passwort()
 
-        heute = datetime.date.today().isoformat()
-        vorschlag = os.path.join(os.path.expanduser("~"), f"SHS-Sicherung_{heute}.zip")
+        vorschlag = os.path.join(os.path.expanduser("~"), self._dateiname_vorschlag())
         pfad, _ = QFileDialog.getSaveFileName(self, "Sicherung speichern", vorschlag, "ZIP-Datei (*.zip)")
         if not pfad:
             return
@@ -2646,7 +3261,11 @@ class DatensicherungTab(QWidget):
             return
 
         zusatz = ", passwortgeschützt" if passwort else ""
-        self.status_label.setText(f"Sicherung erstellt: {pfad} ({anzahl} Termin(e){zusatz}).")
+        self.status_label.setText(f"Sicherung erstellt: {_pfad_anzeige(pfad)} ({anzahl} Termin(e){zusatz}).")
+        # UX-Test U7 (Marco 03.10.2026): auch hier ein Meldungsfenster statt nur der Statuszeile.
+        _datei_gespeichert_melden(
+            self, pfad, f"Sicherung erstellt ({anzahl} Termin(e){zusatz})", datei_oeffnen_text=None
+        )
 
     def _sicherung_wiederherstellen(self) -> None:
         zip_pfad, _ = QFileDialog.getOpenFileName(
@@ -3059,7 +3678,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # Ein gemeinsames _Ablageort-Objekt für die Tabs "Zeitplan" und "Export", damit ein
         # in einem der beiden Tabs bewusst gewählter Speicherort auch im jeweils anderen
         # als neuer Standard gilt (siehe _Ablageort oben).
-        ablageort = _Ablageort(os.path.dirname(pfad) if pfad else str(termine_ordner()))
+        # UX-Test 02.10.2026, U7: PDFs standardmäßig in "Ausdrucke/<Termin>" statt
+        # zwischen den Termin-Dateien.
+        ablageort = _Ablageort(_ausdrucke_ordner(pfad) if pfad else str(termine_ordner()))
 
         self.teilnehmer_tab = TeilnehmerTab(conn, pfad=pfad, ablageort=ablageort)
         self.formular_import_tab = FormularImportTab(conn)
@@ -3074,7 +3695,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
         # aktueller_pfad wird nur mitgegeben, damit ein Wiederherstellen den gerade
         # geöffneten Termin nicht versehentlich überschreibt (siehe DatensicherungTab).
-        self.datensicherung_tab = DatensicherungTab(aktueller_pfad=pfad)
+        self.datensicherung_tab = DatensicherungTab(aktueller_pfad=pfad, conn=conn)
 
         self._tabs.addTab(self.teilnehmer_tab, "Teilnehmer")
         self._tabs.addTab(self.formular_import_tab, "Formular-Import")
@@ -3199,7 +3820,12 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         button_zeile.addStretch()
         button_zeile.addWidget(andere_datei_btn)
 
-        hinweis = QLabel(f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.")
+        # UX-Test 02.10.2026, U14: Laien fanden das Design "Hoher Kontrast" nicht.
+        hinweis = QLabel(
+            f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.\n"
+            "Tipp: Schrift zu blass? Im Programm oben im Menü „Ansicht“ → „Hintergrund“ → "
+            "„Hoher Kontrast“ wählen."
+        )
         hinweis.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -3256,6 +3882,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 # Marco, 28.09.2026: Verband ebenfalls übernehmen, Meldestelle NICHT
                 # (die wechselt je Termin).
                 "verband": letzter.verband,
+                # UX-Test U1 (Marco 03.10.2026): Startnummern-Bereiche ebenfalls übernehmen.
+                "startnummer_bereiche": letzter.startnummer_bereiche,
             }
         dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung)
         if dialog.exec() != QDialog.Accepted:
@@ -3293,6 +3921,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             verband=dialog.verband.text().strip() or None,
             meldestelle=dialog.meldestelle_text(),
             angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
+            startnummer_bereiche=dialog.startnummer_bereiche_text(),
         )
         conn.close()
         self.pfad = pfad
@@ -3343,7 +3972,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
 
 def main() -> int:
+    absturzprotokoll_einrichten(VERSION)
     app = QApplication(sys.argv)
+    deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
 
     start = StartDialog()
@@ -3353,7 +3984,9 @@ def main() -> int:
     conn = init_db(start.pfad)
 
     fenster = HauptFenster(conn, start.pfad)
-    fenster.show()
+    # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
+    # Zeitplan-Spalten zu wenig Platz.
+    fenster.showMaximized()
     return app.exec()
 
 

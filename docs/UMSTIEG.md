@@ -57,11 +57,15 @@ So sieht ein Bewertungsbogen aus, den das Programm direkt erzeugt, ohne Serienbr
 - Disqualifikation und Abbruch werden in der Ergebniserfassung eigens erfasst.
 - Nicht erschienene Teilnehmer per „Keine Teilnahme“ markieren (Reiter „Teilnehmer“). Sie
   fallen dann aus Zeitplan, Wertung und Ausdrucken heraus, ohne gelöscht zu werden.
+- Startnummern-Bereiche je Prüfung; fehlende Startnummern werden auf einen Klick vergeben.
+- Teilnehmerlisten aus Excel einlesen (als CSV gespeichert) und die Teilnehmerliste als CSV für
+  Excel speichern (Reiter „Formular-Import“ bzw. „Export“).
+- Der Zeitplan warnt, wenn ein Dreikampf-Team zur selben Zeit an zwei Stellen steht.
 - Ergebniseingabe durch mehrere Richter gleichzeitig im Browser (optional, siehe
   [README_CONTAINER.md](../README_CONTAINER.md)).
 
-**Weggefallen:** Ein Export zurück in eine Tabellenkalkulation (`.ods`/`.xlsx`) gibt es nicht.
-Alle Ausgaben entstehen als PDF.
+**Weggefallen:** Ergebnisse, Ranglisten und Statistik gibt es nicht mehr als Tabellenkalkulation
+(`.ods`/`.xlsx`), sondern als PDF. Nur die Teilnehmerliste lässt sich als CSV für Excel speichern.
 
 ## Was mit deinen alten Daten passiert
 

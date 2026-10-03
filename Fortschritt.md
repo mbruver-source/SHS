@@ -3221,7 +3221,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | umgesetzt (Arbeitsstand 03.10.) | Siehe „K9 – umgesetzt“ |
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | umgesetzt (Arbeitsstand 03.10.) | Siehe „K10 – umgesetzt“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
-| K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
+| K12 | GitHub-Release-Seite ohne Release-Notes | umgesetzt (Build 1.0.40) | `RELEASE_NOTES.md` + `body_path` im Workflow, siehe „Version 1.0.40“ |
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | erledigt (03.10.): Absturzprotokoll umgesetzt; Gegenprobe Marco mit Demo ok, kein Absturz | Siehe „P1 – Absturzprotokoll umgesetzt“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | erledigt (03.10.): Gegenprobe Marco mit Demo ok – Effekt der Testumgebung, kein Code nötig | Siehe „P1, P2, N1 – Plan“ |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
@@ -4111,6 +4111,38 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     - **N7:** „TN“ ist im Zeitplan (Seitenleiste und Blockköpfe) zu „Teilnehmer“ ausgeschrieben.
     - Tests: neue und angepasste Tests in `test_db.py` und `test_app_gui.py`, alle grün.
       Verifikation ohne blockierende Befunde. Die Screenshots sind neu aufgenommen.
-- **Offen bis zum Build:**
-  - K12 Release-Notes;
-  - Versionsbump 1.0.40 und `docs/HANDBUCH.pdf` neu erzeugen (beides erst beim Build).
+- **Offen bis zum Build:** nichts mehr – siehe „Version 1.0.40“.
+
+## Version 1.0.40 (03.10.2026, Build auf Marcos Wunsch „jetzt neuen Build erzeugen“)
+
+**Enthalten:** die komplette Rubrik ux_test_2026_10 (U1–U14, K1–K12, N1 CSV-Export,
+P1-Absturzprotokoll), die Vor-Build-Klärung (U5a/b, U12 zweizeilig, CSV-Meldungen) und die
+Funde N1–N7 aus dem UX-Nachtest. Marcos Klick-Test P1/P2 war ok.
+
+**Build-Ablauf:**
+- **K12 Release-Notes:**
+  - Neue Datei `RELEASE_NOTES.md` mit „Was ist neu in 1.0.40“ in Alltagssprache.
+  - `.github/workflows/build-installer.yml` nutzt sie als Release-Text (`body_path`), die
+    automatische Commit-Liste bleibt darunter (`generate_release_notes`).
+  - `README_INSTALLER.md` beschreibt den Ablauf. Vor jedem Build wird `RELEASE_NOTES.md`
+    neu geschrieben.
+- **Doku:** `docs/UMSTIEG.md` angepasst:
+  - „Neu hinzugekommen“ nennt jetzt Startnummern-Bereiche, Excel-Listen und die
+    Überschneidungswarnung;
+  - „Weggefallen“ ist berichtigt, denn die Teilnehmerliste gibt es jetzt als CSV.
+- **Bereits vorher nachgezogen:**
+  - Handbuch, Screenshots (15 Bilder, Version 1.0.40), README, Website und `Architektur.md`
+    (siehe „Vor-Build-Klärung“).
+- **Version und PDF:**
+  - `bump_version.py` setzt 1.0.40, einschließlich „Stand: Version“ im Handbuch.
+  - `docs/HANDBUCH.pdf` ist neu erzeugt: 34 Seiten, mit Kap. 14/15 und 18 Bildern.
+- **Tests lokal:**
+  - unittest: 538 Tests OK (159 übersprungen, ohne PostgreSQL/teils pypdf);
+  - pytest GUI/Theme: 171 bestanden, 1 xfail.
+- **Verifikation vor dem Commit:** keine blockierenden Befunde. Marco hat die zwei Hinweise
+  entschieden:
+  - Qt-Sprachdatei: bleibt so. Der eingebaute Ersatz macht die Standardknöpfe in jedem Fall
+    deutsch; bei der Testinstallation von 1.0.40 prüfen, ob die Knöpfe deutsch sind.
+  - Die fremden, unversionierten `AGENTS.md` und `pdf/` bleiben bewusst außerhalb des
+    Commits.
+- **Push/Tag:** Marcos Aktion (`git push`, `git tag v1.0.40`, `git push origin v1.0.40`).

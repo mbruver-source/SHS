@@ -41,6 +41,8 @@ from shs_core import (
     ABBRUCH_TEXT,
     DISQUALIFIZIERT_ABK,
     DISQUALIFIZIERT_TEXT,
+    ANZEIGE_MAX,
+    SUCHE_MAX,
     Teilnehmerergebnis,
     Wertnote,
     berechne_rangliste,
@@ -72,7 +74,13 @@ CREATE TABLE IF NOT EXISTS veranstaltung (
     -- "DK1,ED2-Trümmerfeld"), steuert, welche Prüfungen im Formular ankreuzbar sind.
     verband TEXT,
     meldestelle TEXT,
-    angebotene_pruefungen TEXT
+    angebotene_pruefungen TEXT,
+    -- UX-Test 02.10.2026, U1: Startnummern-Bereich je Prüfung für die Sammelvergabe,
+    -- z. B. "DK1=1-20,ED1-Trümmerfeld=21-40" (Kürzel wie bei angebotene_pruefungen).
+    startnummer_bereiche TEXT,
+    -- UX-Test 02.10.2026, U2: Mindestabstand (Minuten) zwischen zwei Starts desselben
+    -- Teams, z. B. DK-Disziplinen nacheinander; leer = 10 Minuten.
+    dk_mindestabstand TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teilnehmer (
@@ -186,6 +194,10 @@ CREATE TABLE IF NOT EXISTS zeitplan_eintrag (
     disziplin TEXT CHECK (disziplin IN ('Trümmerfeld', 'Flächensuche', 'Behältnisstrecke')),
     dauer_minuten INTEGER NOT NULL CHECK (dauer_minuten > 0),
     bezeichnung TEXT,
+    -- UX-Test 02.10.2026, U2: Startversatz innerhalb des Blocks - mit welchem Team der
+    -- Block beginnt (Rotation), damit parallele DK-Blöcke nicht dasselbe Team gleichzeitig
+    -- ansetzen. 0 = Reihenfolge nach Startnummer.
+    startversatz INTEGER NOT NULL DEFAULT 0,
     -- Prüfungsblöcke brauchen Art/Leistungsklasse/Disziplin, Pausen dürfen sie nicht
     -- haben (Pausen haben stattdessen optional eine freie Bezeichnung).
     CHECK (
@@ -316,6 +328,10 @@ _VERANSTALTUNG_NEUE_SPALTEN = [
     "wertungsrichter_3", "wertungsrichter_4", "wertungsrichter_5",
     # Nutzerwunsch (28.09.2026): Anmeldeformular, siehe Kommentar bei SCHEMA oben.
     "verband", "meldestelle", "angebotene_pruefungen",
+    # UX-Test 02.10.2026, U1: Startnummern-Bereiche, siehe Kommentar bei SCHEMA oben.
+    "startnummer_bereiche",
+    # UX-Test 02.10.2026, U2: Mindestabstand für Starts desselben Teams.
+    "dk_mindestabstand",
 ]
 
 
@@ -526,6 +542,17 @@ def _migriere_ergebnisse_spalten(conn) -> None:
     _migriere_spalten(conn, "ergebnisse", _ERGEBNISSE_NEUE_SPALTEN)
 
 
+_ZEITPLAN_EINTRAG_NEUE_SPALTEN = [
+    # UX-Test 02.10.2026, U2: Rotation innerhalb eines Prüfungsblocks.
+    ("startversatz", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _migriere_zeitplan_spalten(conn) -> None:
+    """Ergänzt die neuen Zeitplan-Spalten in älteren Termin-Dateien (siehe _migriere_spalten)."""
+    _migriere_spalten(conn, "zeitplan_eintrag", _ZEITPLAN_EINTRAG_NEUE_SPALTEN)
+
+
 def init_db(pfad: str) -> sqlite3.Connection:
     """Öffnet (oder erstellt) die Termin-Datenbankdatei unter `pfad`.
 
@@ -544,6 +571,7 @@ def init_db(pfad: str) -> sqlite3.Connection:
         _migriere_veranstaltung_spalten(conn)
         _migriere_teilnehmer_spalten(conn)
         _migriere_ergebnisse_spalten(conn)
+        _migriere_zeitplan_spalten(conn)
     except Exception:
         conn.close()
         raise
@@ -561,6 +589,7 @@ def _richte_schema_im_aktuellen_suchpfad_ein(conn) -> None:
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
     _migriere_ergebnisse_spalten(conn)
+    _migriere_zeitplan_spalten(conn)
 
 
 def init_db_postgres(dsn: str) -> _PostgresConnection:
@@ -614,6 +643,8 @@ def set_veranstaltung(
     verband: str | None = None,
     meldestelle: str | None = None,
     angebotene_pruefungen: str | None = None,
+    startnummer_bereiche: str | None = None,
+    dk_mindestabstand: str | None = None,
 ) -> None:
     conn.execute(
         """
@@ -621,8 +652,8 @@ def set_veranstaltung(
             id, verein, ort, datum, vereins_nr, pruefungsnummer,
             wertungsrichter_1, wertungsrichter_2, wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
-            verband, meldestelle, angebotene_pruefungen
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             verein=excluded.verein, ort=excluded.ort, datum=excluded.datum,
             vereins_nr=excluded.vereins_nr, pruefungsnummer=excluded.pruefungsnummer,
@@ -633,13 +664,15 @@ def set_veranstaltung(
             pruefungsgebuehr_ed=excluded.pruefungsgebuehr_ed, pruefungsgebuehr_dk=excluded.pruefungsgebuehr_dk,
             zeitplan_start=excluded.zeitplan_start,
             verband=excluded.verband, meldestelle=excluded.meldestelle,
-            angebotene_pruefungen=excluded.angebotene_pruefungen
+            angebotene_pruefungen=excluded.angebotene_pruefungen,
+            startnummer_bereiche=excluded.startnummer_bereiche,
+            dk_mindestabstand=excluded.dk_mindestabstand
         """,
         (
             verein, ort, datum, vereins_nr, pruefungsnummer, wertungsrichter_1, wertungsrichter_2,
             wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
-            verband, meldestelle, angebotene_pruefungen,
+            verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand,
         ),
     )
     conn.commit()
@@ -789,6 +822,119 @@ def naechste_freie_startnummer(conn: sqlite3.Connection) -> int:
     return n
 
 
+# --- Startnummern-Bereiche und Sammelvergabe (UX-Test 02.10.2026, U1) ---------------
+# Marcos Entscheidungen: Bereich je Prüfung (Art + LK + Disziplin), je Termin gespeichert;
+# die Sammelvergabe vergibt nur an Teilnehmer OHNE Nummer (vergebene werden nie
+# überschrieben), überspringt "keine Teilnahme", und ein Bereich ist Pflicht - ohne Bereich
+# oder bei vollem Bereich bleiben die Teilnehmer ohne Nummer und werden gemeldet.
+# Überlappende Bereiche sind nicht erlaubt.
+
+def pruefungs_kuerzel(art: str, stufe: int, disziplin: str | None) -> str:
+    """Kürzel der Prüfung eines Teilnehmers wie in ALLE_PRUEFUNGEN (z. B. "DK1",
+    "ED2-Trümmerfeld")."""
+    return f"DK{stufe}" if art == "DK" else f"ED{stufe}-{disziplin}"
+
+
+def startnummer_bereiche(veranstaltung: dict | None) -> dict[str, tuple[int, int]]:
+    """Liest die Startnummern-Bereiche ("DK1=1-20,ED1-Trümmerfeld=21-40") als
+    {kuerzel: (von, bis)}. Unlesbare Einträge werden ignoriert."""
+    text = (veranstaltung or {}).get("startnummer_bereiche") or ""
+    bereiche: dict[str, tuple[int, int]] = {}
+    for eintrag in text.split(","):
+        kuerzel, _, spanne = eintrag.strip().partition("=")
+        von, _, bis = spanne.partition("-")
+        try:
+            bereiche[kuerzel.strip()] = (int(von), int(bis))
+        except ValueError:
+            continue
+    return bereiche
+
+
+def startnummer_bereiche_als_text(bereiche: dict[str, tuple[int, int]]) -> str | None:
+    """Speicherform für veranstaltung.startnummer_bereiche (None, wenn leer), in der
+    Reihenfolge von ALLE_PRUEFUNGEN."""
+    teile = [
+        f"{p.kuerzel}={bereiche[p.kuerzel][0]}-{bereiche[p.kuerzel][1]}"
+        for p in ALLE_PRUEFUNGEN if p.kuerzel in bereiche
+    ]
+    return ",".join(teile) or None
+
+
+def pruefe_startnummer_bereiche(bereiche: dict[str, tuple[int, int]]) -> str | None:
+    """Fehlertext für den Nutzer oder None: jeder Bereich von >= 1 und bis >= von,
+    keine zwei Bereiche überschneiden sich."""
+    def bezeichnung(kuerzel):
+        pruefung = pruefung_nach_kuerzel(kuerzel)
+        return pruefung.bezeichnung if pruefung else kuerzel
+
+    for kuerzel, (von, bis) in bereiche.items():
+        if von < 1 or bis < von:
+            return f"{bezeichnung(kuerzel)}: Bereich {von}–{bis} ist ungültig (von ab 1, bis nicht kleiner als von)."
+    eintraege = sorted(bereiche.items(), key=lambda e: e[1])
+    for (k1, (_v1, b1)), (k2, (v2, _b2)) in zip(eintraege, eintraege[1:]):
+        if v2 <= b1:
+            return (
+                f"Die Startnummern-Bereiche von {bezeichnung(k1)} und {bezeichnung(k2)} "
+                "überschneiden sich."
+            )
+    return None
+
+
+def naechste_freie_startnummer_im_bereich(
+    conn: sqlite3.Connection, bereich: tuple[int, int], ausser_teilnehmer_id: int | None = None
+) -> int | None:
+    """Kleinste freie Startnummer innerhalb von `bereich` oder None, wenn er voll ist."""
+    vergeben = vergebene_startnummern(conn, ausser_teilnehmer_id)
+    return next((n for n in range(bereich[0], bereich[1] + 1) if n not in vergeben), None)
+
+
+@dataclass
+class StartnummernVergabe:
+    """Ergebnis von fehlende_startnummern_vergeben()."""
+    vergeben: list[tuple[dict, int]] = field(default_factory=list)
+    ohne_bereich: list[dict] = field(default_factory=list)
+    bereich_voll: list[dict] = field(default_factory=list)
+
+
+def fehlende_startnummern_vergeben(conn: sqlite3.Connection) -> StartnummernVergabe:
+    """Vergibt allen Teilnehmern OHNE Startnummer (außer "keine Teilnahme") die jeweils
+    kleinste freie Nummer im Bereich ihrer Prüfung - Reihenfolge nach Prüfung (wie
+    ALLE_PRUEFUNGEN), darin nach Name. Bereits vergebene Nummern bleiben unangetastet.
+    Teilnehmer ohne hinterlegten Bereich bzw. bei vollem Bereich bleiben ohne Nummer und
+    werden im Ergebnis aufgeführt. Alles in einer Transaktion."""
+    bereiche = startnummer_bereiche(get_veranstaltung(conn))
+    reihenfolge = {p.kuerzel: i for i, p in enumerate(ALLE_PRUEFUNGEN)}
+    offen = [
+        t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None
+    ]
+    offen.sort(key=lambda t: (
+        reihenfolge.get(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]), len(reihenfolge)),
+        (t["nachname"] or "").casefold(), (t["vorname"] or "").casefold(), t["id"],
+    ))
+    vergeben_nummern = vergebene_startnummern(conn)
+    ergebnis = StartnummernVergabe()
+    try:
+        for t in offen:
+            bereich = bereiche.get(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]))
+            if bereich is None:
+                ergebnis.ohne_bereich.append(t)
+                continue
+            nummer = next(
+                (n for n in range(bereich[0], bereich[1] + 1) if n not in vergeben_nummern), None
+            )
+            if nummer is None:
+                ergebnis.bereich_voll.append(t)
+                continue
+            conn.execute("UPDATE teilnehmer SET startnummer = ? WHERE id = ?", (nummer, t["id"]))
+            vergeben_nummern.add(nummer)
+            ergebnis.vergeben.append((t, nummer))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return ergebnis
+
+
 def get_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
     row = conn.execute("SELECT * FROM teilnehmer WHERE id = ?", (teilnehmer_id,)).fetchone()
     return dict(row) if row else None
@@ -894,11 +1040,12 @@ def lies_datum(text: str | None) -> datetime.date | None:
     elif deutsch:
         tag, monat, jahr = deutsch.groups()
     else:
-        raise ValueError(f"ungültiges Datum {wert!r} (bitte TT.MM.JJJJ oder JJJJ-MM-TT)")
+        # UX-Test 02.10.2026, U14: mit Beispiel statt nur Formatkürzeln.
+        raise ValueError(f"„{wert}“ ist kein gültiges Datum – bitte z. B. 14.11.2026 eingeben (TT.MM.JJJJ)")
     try:
         return datetime.date(int(jahr), int(monat), int(tag))
     except ValueError:
-        raise ValueError(f"ungültiges Datum {wert!r} (diesen Tag gibt es nicht)") from None
+        raise ValueError(f"„{wert}“ ist kein gültiges Datum – diesen Tag gibt es nicht") from None
 
 
 def normalisiere_datum(text: str | None) -> str | None:
@@ -1460,6 +1607,23 @@ def add_zeitplan_richter(conn: sqlite3.Connection, name: str | None = None) -> i
     return cur.lastrowid
 
 
+def zeitplan_richter_aus_veranstaltung_anlegen(conn: sqlite3.Connection) -> int:
+    """UX-Test 02.10.2026, U8: Legt für die in den Veranstaltungsdaten eingetragenen
+    Richter 1-5 je eine Zeitplan-Spur mit ihrem Namen an - aber nur, solange der Zeitplan
+    noch gar keine Richter hat (ein bestehender Zeitplan wird nie verändert). Liefert die
+    Anzahl der angelegten Richter."""
+    if list_zeitplan_richter(conn):
+        return 0
+    veranstaltung = get_veranstaltung(conn) or {}
+    namen = [
+        (veranstaltung.get(f"wertungsrichter_{nummer}") or "").strip() for nummer in range(1, 6)
+    ]
+    namen = [name for name in namen if name]
+    for name in namen:
+        add_zeitplan_richter(conn, name)
+    return len(namen)
+
+
 def umbenennen_zeitplan_richter(conn: sqlite3.Connection, richter_id: int, name: str) -> None:
     conn.execute("UPDATE zeitplan_richter SET name = ? WHERE id = ?", (name, richter_id))
     conn.commit()
@@ -1521,17 +1685,65 @@ def add_zeitplan_pruefungsblock(
 
 def add_zeitplan_pause(
     conn: sqlite3.Connection, richter_id: int, dauer_minuten: int, bezeichnung: str | None = None,
+    nach_eintrag_id: int | None = None,
 ) -> int:
-    naechste_reihenfolge = len(list_zeitplan_eintraege(conn, richter_id))
+    """Fügt eine Pause in die Spur des Richters ein - ans Ende oder (UX-Test 02.10.2026,
+    U9) direkt nach dem Eintrag `nach_eintrag_id` (z. B. dem in der Liste markierten Block)."""
+    eintraege = list_zeitplan_eintraege(conn, richter_id)
+    position = len(eintraege)
+    if nach_eintrag_id is not None:
+        position = next((i + 1 for i, e in enumerate(eintraege) if e["id"] == nach_eintrag_id), position)
+    pause_id = _pause_an_position_einfuegen(conn, richter_id, position, dauer_minuten, bezeichnung)
+    conn.commit()
+    return pause_id
+
+
+def _pause_an_position_einfuegen(conn, richter_id: int, position: int, dauer_minuten: int, bezeichnung: str | None) -> int:
+    """Schiebt die Einträge ab `position` um eins nach hinten und fügt dort eine Pause ein
+    (ohne commit - siehe Aufrufer)."""
+    for eintrag in list_zeitplan_eintraege(conn, richter_id)[position:][::-1]:
+        conn.execute(
+            "UPDATE zeitplan_eintrag SET reihenfolge = ? WHERE id = ?", (eintrag["reihenfolge"] + 1, eintrag["id"])
+        )
     cur = conn.execute(
         """
         INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, dauer_minuten, bezeichnung)
         VALUES (?, ?, 'pause', ?, ?)
         """,
-        (richter_id, naechste_reihenfolge, dauer_minuten, bezeichnung),
+        (richter_id, position, dauer_minuten, bezeichnung),
     )
-    conn.commit()
     return cur.lastrowid
+
+
+def add_zeitplan_pause_bei_allen(
+    conn: sqlite3.Connection, uhrzeit: str, dauer_minuten: int, bezeichnung: str | None = None,
+) -> list[tuple[str, str]]:
+    """UX-Test 02.10.2026, U9 (Marco öffnet damit bewusst die Entscheidung vom 14.09.):
+    gleiche Pause bei allen Richtern. Je Spur wird sie vor dem ersten Eintrag eingefügt,
+    der um `uhrzeit` (HH:MM) oder später beginnt - ein gerade laufender Block wird also
+    nicht geteilt. Alles in einer Transaktion.
+
+    Liefert je Richter (Name, tatsächliche Startzeit "HH:MM") - UX-Nachtest 03.10.2026, N3:
+    endet ein Plan vor der Wunschzeit, steht die Pause am Ende und beginnt früher; das soll
+    die Meldung ehrlich sagen."""
+    zeitpunkt = datetime.datetime.strptime(uhrzeit.strip(), "%H:%M")
+    try:
+        eingefuegt = []
+        for spur in berechne_zeitplan_bloecke(conn):
+            bloecke = spur["bloecke"]
+            position = next(
+                (i for i, block in enumerate(bloecke) if block["start"].time() >= zeitpunkt.time()), len(bloecke)
+            )
+            eingefuegt.append(_pause_an_position_einfuegen(conn, spur["richter_id"], position, dauer_minuten, bezeichnung))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    startzeiten = {
+        block["id"]: (spur["richter_name"], block["start"].strftime("%H:%M"))
+        for spur in berechne_zeitplan_bloecke(conn) for block in spur["bloecke"]
+    }
+    return [startzeiten[eintrag_id] for eintrag_id in eingefuegt if eintrag_id in startzeiten]
 
 
 def aktualisiere_zeitplan_eintrag(
@@ -1643,7 +1855,10 @@ def _teilnehmer_fuer_pruefungseintrag(alle_teilnehmer: list[dict], eintrag: dict
         if t["art"] == eintrag["art"] and t["stufe"] == eintrag["stufe"]
         and (eintrag["art"] == "DK" or t["disziplin"] == eintrag["disziplin"])
     ]
-    return sorted(gefiltert, key=lambda t: (t["startnummer"] is None, t["startnummer"] or 0))
+    gefiltert.sort(key=lambda t: (t["startnummer"] is None, t["startnummer"] or 0))
+    # UX-Test 02.10.2026, U2: Startversatz = Rotation (Block beginnt mit dem k-ten Team).
+    versatz = (eintrag.get("startversatz") or 0) % len(gefiltert) if gefiltert else 0
+    return gefiltert[versatz:] + gefiltert[:versatz]
 
 
 def _zeitplan_startzeit(veranstaltung: dict | None) -> datetime.datetime:
@@ -1670,37 +1885,94 @@ def berechne_zeitplan(conn: sqlite3.Connection) -> list[dict]:
     veranstaltung = get_veranstaltung(conn)
     uhrzeit_start = _zeitplan_startzeit(veranstaltung)
     alle_teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
-    ergebnis = []
-    for richter in list_zeitplan_richter(conn):
-        aktuelle_zeit = uhrzeit_start
-        zeilen = []
-        for eintrag in list_zeitplan_eintraege(conn, richter["id"]):
-            if eintrag["typ"] == "pause":
+    return [
+        {
+            "richter_id": richter["id"], "richter": richter["name"],
+            "zeilen": _zeitplan_zeilen(list_zeitplan_eintraege(conn, richter["id"]), alle_teilnehmer, uhrzeit_start),
+        }
+        for richter in list_zeitplan_richter(conn)
+    ]
+
+
+def _zeitplan_zeilen(eintraege: list[dict], alle_teilnehmer: list[dict], uhrzeit_start) -> list[dict]:
+    """Zeilen (je Teilnehmer bzw. Pause) einer Richter-Spur mit Start-/Endzeit - siehe
+    berechne_zeitplan. Auch für die automatische Verteilung (Plan im Speicher)."""
+    aktuelle_zeit = uhrzeit_start
+    zeilen = []
+    for eintrag in eintraege:
+        if eintrag["typ"] == "pause":
+            start, ende = aktuelle_zeit, aktuelle_zeit + datetime.timedelta(minutes=eintrag["dauer_minuten"])
+            zeilen.append({
+                "typ": "pause", "start": start, "ende": ende,
+                "bezeichnung": eintrag["bezeichnung"] or "Pause",
+                "eintrag_id": eintrag["id"],
+            })
+            aktuelle_zeit = ende
+        else:
+            teilnehmer_liste = _teilnehmer_fuer_pruefungseintrag(alle_teilnehmer, eintrag)
+            if not teilnehmer_liste:
+                zeilen.append({
+                    "typ": "pruefung", "start": aktuelle_zeit, "ende": aktuelle_zeit,
+                    "art": eintrag["art"], "stufe": eintrag["stufe"], "disziplin": eintrag["disziplin"],
+                    "teilnehmer": None, "eintrag_id": eintrag["id"],
+                })
+            for t in teilnehmer_liste:
                 start, ende = aktuelle_zeit, aktuelle_zeit + datetime.timedelta(minutes=eintrag["dauer_minuten"])
                 zeilen.append({
-                    "typ": "pause", "start": start, "ende": ende,
-                    "bezeichnung": eintrag["bezeichnung"] or "Pause",
-                    "eintrag_id": eintrag["id"],
+                    "typ": "pruefung", "start": start, "ende": ende,
+                    "art": eintrag["art"], "stufe": eintrag["stufe"], "disziplin": eintrag["disziplin"],
+                    "teilnehmer": t, "eintrag_id": eintrag["id"],
                 })
                 aktuelle_zeit = ende
-            else:
-                teilnehmer_liste = _teilnehmer_fuer_pruefungseintrag(alle_teilnehmer, eintrag)
-                if not teilnehmer_liste:
-                    zeilen.append({
-                        "typ": "pruefung", "start": aktuelle_zeit, "ende": aktuelle_zeit,
-                        "art": eintrag["art"], "stufe": eintrag["stufe"], "disziplin": eintrag["disziplin"],
-                        "teilnehmer": None, "eintrag_id": eintrag["id"],
+    return zeilen
+
+
+# --- Überschneidungen (UX-Test 02.10.2026, U2) -----------------------------------------
+# Marco: ein Team darf nie gleichzeitig an zwei Stellen eingeplant sein; zwischen zwei
+# Starts desselben Teams (z. B. DK-Disziplinen) gilt ein einstellbarer Mindestabstand.
+STANDARD_MINDESTABSTAND = 10
+
+
+def dk_mindestabstand(veranstaltung: dict | None) -> int:
+    """Mindestabstand in Minuten zwischen zwei Starts desselben Teams (Standard 10)."""
+    roh = (veranstaltung or {}).get("dk_mindestabstand")
+    if roh is None or str(roh).strip() == "":
+        return STANDARD_MINDESTABSTAND
+    try:
+        return max(0, int(roh))
+    except (TypeError, ValueError):
+        return STANDARD_MINDESTABSTAND
+
+
+def _ueberschneidungen_in_zeilen(zeilen_je_richter: list[tuple[int, list[dict]]], mindestabstand: int) -> list[dict]:
+    """Findet Teams, die gleichzeitig bzw. mit zu wenig Abstand in zwei Zeilen stehen.
+    Ergebnis je Konflikt: teilnehmer, erste/zweite Zeile (mit richter_id), gleichzeitig."""
+    abstand = datetime.timedelta(minutes=mindestabstand)
+    je_team: dict[int, list[tuple[int, dict]]] = {}
+    for richter_id, zeilen in zeilen_je_richter:
+        for zeile in zeilen:
+            if zeile["typ"] == "pruefung" and zeile.get("teilnehmer") is not None:
+                je_team.setdefault(zeile["teilnehmer"]["id"], []).append((richter_id, zeile))
+    konflikte = []
+    for eintraege in je_team.values():
+        eintraege.sort(key=lambda e: e[1]["start"])
+        for i, (richter_a, a) in enumerate(eintraege):
+            for richter_b, b in eintraege[i + 1:]:
+                if b["start"] < a["ende"] + abstand:
+                    konflikte.append({
+                        "teilnehmer": a["teilnehmer"], "erste": {**a, "richter_id": richter_a},
+                        "zweite": {**b, "richter_id": richter_b}, "gleichzeitig": b["start"] < a["ende"],
                     })
-                for t in teilnehmer_liste:
-                    start, ende = aktuelle_zeit, aktuelle_zeit + datetime.timedelta(minutes=eintrag["dauer_minuten"])
-                    zeilen.append({
-                        "typ": "pruefung", "start": start, "ende": ende,
-                        "art": eintrag["art"], "stufe": eintrag["stufe"], "disziplin": eintrag["disziplin"],
-                        "teilnehmer": t, "eintrag_id": eintrag["id"],
-                    })
-                    aktuelle_zeit = ende
-        ergebnis.append({"richter_id": richter["id"], "richter": richter["name"], "zeilen": zeilen})
-    return ergebnis
+    return konflikte
+
+
+def zeitplan_ueberschneidungen(conn: sqlite3.Connection) -> list[dict]:
+    """Alle Überschneidungen im aktuellen Zeitplan (auch nach Handbearbeitung) - Grundlage
+    für die rote Markierung, die Warnliste und die Rückfrage vor dem Zeitplan-PDF."""
+    plan = berechne_zeitplan(conn)
+    return _ueberschneidungen_in_zeilen(
+        [(r["richter_id"], r["zeilen"]) for r in plan], dk_mindestabstand(get_veranstaltung(conn))
+    )
 
 
 def berechne_zeitplan_bloecke(conn: sqlite3.Connection) -> list[dict]:
@@ -1758,26 +2030,173 @@ def automatische_zeitplan_verteilung(
         gruppen.sort(key=lambda g: len(g["teilnehmer"]), reverse=True)
 
         gesamtdauer_je_richter = {richter_id: 0 for richter_id in richter_ids}
-        naechste_reihenfolge = {richter_id: 0 for richter_id in richter_ids}
+        plan: dict[int, list[dict]] = {richter_id: [] for richter_id in richter_ids}
         for gruppe in gruppen:
             ziel_richter = min(richter_ids, key=lambda r: gesamtdauer_je_richter[r])
-            dauer = len(gruppe["teilnehmer"]) * standard_dauer_minuten
-            conn.execute(
-                """
-                INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, art, stufe, disziplin, dauer_minuten)
-                VALUES (?, ?, 'pruefung', ?, ?, ?, ?)
-                """,
-                (
-                    ziel_richter, naechste_reihenfolge[ziel_richter],
-                    gruppe["art"], gruppe["stufe"], gruppe["disziplin"], standard_dauer_minuten,
-                ),
-            )
-            naechste_reihenfolge[ziel_richter] += 1
-            gesamtdauer_je_richter[ziel_richter] += dauer
+            plan[ziel_richter].append({
+                "typ": "pruefung", "art": gruppe["art"], "stufe": gruppe["stufe"],
+                "disziplin": gruppe["disziplin"], "dauer_minuten": standard_dauer_minuten,
+                "startversatz": 0, "bezeichnung": None,
+            })
+            gesamtdauer_je_richter[ziel_richter] += len(gruppe["teilnehmer"]) * standard_dauer_minuten
+
+        # UX-Test 02.10.2026, U2: DK-Blöcke so rotieren (Startversatz), dass kein Team
+        # gleichzeitig bzw. ohne Mindestabstand an zwei Stellen steht; reicht die Rotation
+        # nicht (z. B. nur 1-2 Teams), eine sichtbare Wartezeit vor dem Block einfügen.
+        _dk_bloecke_entzerren(
+            plan, list_teilnehmer(conn, nur_teilnehmende=True),
+            _zeitplan_startzeit(get_veranstaltung(conn)), dk_mindestabstand(get_veranstaltung(conn)),
+        )
+
+        for richter_id, eintraege in plan.items():
+            for reihenfolge, e in enumerate(eintraege):
+                conn.execute(
+                    """
+                    INSERT INTO zeitplan_eintrag
+                        (richter_id, reihenfolge, typ, art, stufe, disziplin, dauer_minuten, bezeichnung, startversatz)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        richter_id, reihenfolge, e["typ"], e["art"], e["stufe"], e["disziplin"],
+                        e["dauer_minuten"], e["bezeichnung"], e["startversatz"],
+                    ),
+                )
         conn.commit()
     except Exception:
         conn.rollback()
         raise
+
+
+WARTEZEIT_BEZEICHNUNG = "Wartezeit (DK)"
+
+
+def _dk_bloecke_entzerren(plan: dict[int, list[dict]], alle_teilnehmer: list[dict], uhrzeit_start, mindestabstand: int) -> None:
+    """Wählt im Plan (im Speicher, siehe automatische_zeitplan_verteilung) für jeden
+    DK-Block - in der Reihenfolge seines Beginns - den Startversatz, der keine
+    Überschneidung mit den bereits festgelegten Blöcken erzeugt. Gelingt das mit keinem
+    Versatz, wird vor dem Block eine Wartezeit (Vielfaches der Block-Dauer) eingefügt."""
+    def zeilen_je_richter():
+        return [(rid, _zeitplan_zeilen(eintraege, alle_teilnehmer, uhrzeit_start)) for rid, eintraege in plan.items()]
+
+    # DK-Blöcke derselben Leistungsklasse in jeder Spur möglichst nicht direkt
+    # hintereinander (sonst steht ein Team ohne Abstand zweimal nacheinander an).
+    for rid, eintraege in plan.items():
+        rest, neu_geordnet = list(eintraege), []
+        while rest:
+            letzter = neu_geordnet[-1] if neu_geordnet else None
+            gesperrt = ("DK", letzter["stufe"]) if letzter and letzter["art"] == "DK" else None
+            wahl = next((e for e in rest if (e["art"], e["stufe"]) != gesperrt), rest[0])
+            rest.remove(wahl)
+            neu_geordnet.append(wahl)
+        plan[rid] = neu_geordnet
+
+    # Temporäre IDs, damit sich die berechneten Zeilen ihren Plan-Einträgen zuordnen lassen.
+    for eintraege in plan.values():
+        for e in eintraege:
+            e["id"] = f"plan-{id(e)}"
+
+    def konflikte_mit(eintrag, fixiert_ids):
+        relevant = {eintrag["id"], *fixiert_ids}
+        gefiltert = [
+            (rid, [z for z in zeilen if z.get("eintrag_id") in relevant])
+            for rid, zeilen in zeilen_je_richter()
+        ]
+        # Alle Konflikte zwischen den festgelegten Blöcken und dem aktuellen - auch solche
+        # zwischen zwei festgelegten: verschiebt sich der aktuelle Block, rücken andere
+        # Einträge derselben Spur mit.
+        return _ueberschneidungen_in_zeilen(gefiltert, mindestabstand)
+
+    offen = [(rid, e) for rid, eintraege in plan.items() for e in eintraege if e["typ"] == "pruefung" and e["art"] == "DK"]
+    fixiert: list[str] = []
+    while offen:
+        # Nächster DK-Block = der mit dem frühesten Beginn im aktuellen Plan.
+        zeilen = dict(zeilen_je_richter())
+        def beginn(paar):
+            rid, e = paar
+            return min((z["start"] for z in zeilen[rid] if z.get("eintrag_id") == e["id"]), default=uhrzeit_start)
+        offen.sort(key=beginn)
+        rid, eintrag = offen.pop(0)
+        anzahl = len(_teilnehmer_fuer_pruefungseintrag(alle_teilnehmer, eintrag)) or 1
+        eintraege = plan[rid]
+        bekannte = {
+            (k["teilnehmer"]["id"], frozenset((k["erste"]["eintrag_id"], k["zweite"]["eintrag_id"])))
+            for k in _ueberschneidungen_in_zeilen(
+                [(r, [z for z in zl if z.get("eintrag_id") in set(fixiert)]) for r, zl in zeilen_je_richter()],
+                mindestabstand,
+            )
+        }
+
+        def schluessel(konflikte):
+            return {
+                (k["teilnehmer"]["id"], frozenset((k["erste"]["eintrag_id"], k["zweite"]["eintrag_id"])))
+                for k in konflikte
+            }
+
+        def passender_versatz() -> bool:
+            # Erfolgreich, wenn KEINE NEUE Überschneidung entsteht - eine früher nicht
+            # auflösbare (dann in der Oberfläche markierte) soll nicht alle weiteren
+            # Blöcke blockieren.
+            for versatz in range(anzahl):
+                eintrag["startversatz"] = versatz
+                if not schluessel(konflikte_mit(eintrag, fixiert)) - bekannte:
+                    return True
+            return False
+
+        # 1. Versuch: an der geplanten Stelle oder - damit kein Leerlauf entsteht - an
+        # einer anderen Stelle der Spur desselben Richters, zuerst weiter hinten, dann
+        # weiter vorn (andere Blöcke füllen dann die Lücke).
+        ursprung = eintraege.index(eintrag)
+        gefunden = False
+        # Nicht hinter noch offene DK-Blöcke derselben LK (dieselben Teams) rücken - sonst
+        # stünde ein offener Block direkt vor dem festgelegten, und keine spätere Wartezeit
+        # könnte den Abstand zwischen beiden noch herstellen (Verifikation U2a).
+        ohne_aktuellen = [e for e in eintraege if e is not eintrag]
+        grenze = min(
+            (i for i, e in enumerate(ohne_aktuellen)
+             if e["typ"] == "pruefung" and e["art"] == "DK" and e["stufe"] == eintrag["stufe"]
+             and e["id"] not in fixiert),
+            default=len(ohne_aktuellen),
+        )
+        positionen = list(range(ursprung, grenze + 1)) + list(range(ursprung - 1, -1, -1))
+        for ziel in positionen:
+            eintraege.remove(eintrag)
+            eintraege.insert(ziel, eintrag)
+            if passender_versatz():
+                gefunden = True
+                break
+        if gefunden:
+            fixiert.append(eintrag["id"])
+            continue
+        eintraege.remove(eintrag)
+        eintraege.insert(ursprung, eintrag)
+
+        # 2. Versuch: sichtbare Wartezeit vor dem Block, schrittweise verlängert.
+        wartezeit = None
+        for warte_schritte in range(0, 4 * anzahl + 10):
+            if warte_schritte:
+                if wartezeit is None:
+                    wartezeit = {
+                        "typ": "pause", "art": None, "stufe": None, "disziplin": None,
+                        "dauer_minuten": eintrag["dauer_minuten"], "startversatz": 0,
+                        "bezeichnung": WARTEZEIT_BEZEICHNUNG, "id": f"plan-warte-{id(eintrag)}",
+                    }
+                    eintraege.insert(eintraege.index(eintrag), wartezeit)
+                else:
+                    wartezeit["dauer_minuten"] = warte_schritte * eintrag["dauer_minuten"]
+            if passender_versatz():
+                break
+        else:
+            # Nicht auflösbar (z. B. ein einzelnes Team bei nur einem Richter und großem
+            # Mindestabstand): keine nutzlose Wartezeit stehen lassen - die verbleibende
+            # Überschneidung wird in der Oberfläche markiert.
+            if wartezeit is not None:
+                eintraege.remove(wartezeit)
+            eintrag["startversatz"] = 0
+        fixiert.append(eintrag["id"])
+
+    for eintraege in plan.values():
+        for e in eintraege:
+            e.pop("id", None)
 
 
 # --- Terminübersicht -----------------------------------------------------------
@@ -1819,6 +2238,9 @@ class TerminInfo:
     # vorgeschlagen, die Meldestelle bewusst nicht. None bei alten Termin-Dateien, die die
     # Spalte noch nicht haben (liste_termine öffnet nur lesend, ohne Migration).
     verband: str | None = None
+    # UX-Test 02.10.2026, U1: Startnummern-Bereiche werden beim neuen Termin vom letzten
+    # Termin übernommen (Marco: "je Termin, mit Übernahme").
+    startnummer_bereiche: str | None = None
 
 
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
@@ -1843,6 +2265,7 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
                 anzahl_teilnehmer=anzahl,
                 lesbar=True,
                 verband=v["verband"] if v and "verband" in v.keys() else None,
+                startnummer_bereiche=v["startnummer_bereiche"] if v and "startnummer_bereiche" in v.keys() else None,
             ))
         except sqlite3.DatabaseError:
             ergebnisse.append(TerminInfo(
@@ -2297,6 +2720,7 @@ def oeffne_termin_postgres(conn, schema_name: str) -> None:
     _migriere_veranstaltung_spalten(conn)
     _migriere_teilnehmer_spalten(conn)
     _migriere_ergebnisse_spalten(conn)
+    _migriere_zeitplan_spalten(conn)
 
 
 def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
@@ -2392,6 +2816,8 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             verband=veranstaltung.get("verband"),
             meldestelle=veranstaltung.get("meldestelle"),
             angebotene_pruefungen=veranstaltung.get("angebotene_pruefungen"),
+            startnummer_bereiche=veranstaltung.get("startnummer_bereiche"),
+            dk_mindestabstand=veranstaltung.get("dk_mindestabstand"),
         )
 
     id_zuordnung: dict[int, int] = {}
