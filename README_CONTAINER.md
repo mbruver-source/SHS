@@ -33,6 +33,12 @@ bleiben Desktop-Aufgaben vor/nach dem Prüfungstag.
    auch wenn bereits ein Administrator existiert. Einfach einen Code erzeugen und als
    `SHS_ADMIN_SETUP_CODE=...` in die vorhandene `.env` eintragen.
 
+   **Seit der Sicherheitsprüfung vom 03.10.2026:** Die Web-Version startet nicht, solange
+   in `.env` noch die Platzhalter („bitte-hier-…“) stehen oder der Session-Schlüssel
+   kürzer als 32 bzw. der Einrichtungs-Code kürzer als 12 Zeichen ist. Die Fehlermeldung im
+   Container-Log nennt den Befehl zum Erzeugen. Wer bisher mit einem Platzhalter gearbeitet
+   hat: neuen Schlüssel eintragen, dann müssen sich alle einmal neu anmelden.
+
    ```
    cp .env.example .env
    ```
@@ -125,7 +131,8 @@ Einrichtung, danach genügt Schritt 3 pro Termin:
    ```
    (`localhost:5432` funktioniert, weil `compose.yaml` den Datenbank-Port gezielt nur
    auf `127.0.0.1` freigibt – erreichbar von diesem Rechner aus, nicht aus dem übrigen
-   Vereinsnetz.) Am einfachsten als Umgebungsvariable setzen, dann muss `--dsn` bei
+   Vereinsnetz.) Am besten als Umgebungsvariable setzen (ein Passwort direkt in `--dsn` wäre in der
+   Prozessliste und Befehlshistorie sichtbar, S-10), dann muss `--dsn` bei
    jedem Aufruf unten entfallen:
    ```
    $env:SHS_POSTGRES_DSN = "postgresql://shs:<Passwort>@localhost:5432/shs"

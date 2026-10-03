@@ -27,14 +27,19 @@ name: Container bauen
 #   3. Tag setzen: `git tag v1.2.0 && git push origin v1.2.0`
 #      -> baut UND veröffentlicht sowohl den Windows-Installer als auch dieses Image
 
+# Sicherheitsprüfung 03.10.2026, S-3: Fremde Actions sind auf einen festen Commit-Hash
+# festgelegt (dahinter als Kommentar die Version) - ein nachträglich verschobener Tag
+# kann so keinen anderen Code in den Build bringen. Aktualisieren: neuen Hash per
+# "git ls-remote https://github.com/<owner>/<action> refs/tags/<version>" ermitteln.
+
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+# S-3: Grundsätzlich nur Leserechte; Schreibrecht für ghcr.io nur im publish-Job.
 permissions:
   contents: read
-  packages: write # nötig, damit der Publish-Schritt bei einem Tag nach ghcr.io pushen darf
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/shs-web
@@ -52,13 +57,15 @@ jobs:
     # "down" fehlte - ein Job-weites "env:" deckt beide Fälle gleichzeitig ab.)
     env:
       SHS_DB_PASSWORD: smoketest
-      SHS_WEB_SECRET_KEY: smoketest
+      # Seit S-2 (Sicherheitsprüfung 03.10.2026) lehnt die Web-Version Platzhalter und zu
+      # kurze Werte ab (Schlüssel >= 32, Einrichtungscode >= 12 Zeichen) - reine Testwerte.
+      SHS_WEB_SECRET_KEY: smoketest-schluessel-nur-fuer-ci-0123456789
       # Seit Codeprüfung 22.09. (G1) Pflichtwert in compose.yaml - ohne ihn bricht
       # "compose up" im Smoke-Test ab.
-      SHS_ADMIN_SETUP_CODE: smoketest
+      SHS_ADMIN_SETUP_CODE: smoketest-einrichtung
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
         run: docker compose -f compose.yaml up --build -d
@@ -84,9 +91,12 @@ jobs:
     needs: smoke-test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # nötig, damit dieser Job bei einem Tag nach ghcr.io pushen darf
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Versionsnummer aus version.txt auslesen
         id: version
@@ -97,26 +107,33 @@ jobs:
         # verhindert, dass ein zu früh gesetzter Tag (vor dem Committen/Pushen der per
         # bump_version.py erhöhten version.txt) ein Image mit einer Versionsnummer
         # veröffentlicht, die nicht zum Tag passt.
+        env:
+          DATEI_VERSION: ${{ steps.version.outputs.version }}
         run: |
+          # S-9: nur Tags im Format vX.Y.Z
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag hat nicht das Format vX.Y.Z"
+            exit 1
+          fi
           tag_version="${GITHUB_REF_NAME#v}"
-          file_version="${{ steps.version.outputs.version }}"
+          file_version="$DATEI_VERSION"
           if [ "$tag_version" != "$file_version" ]; then
             echo "::error::Tag '$GITHUB_REF_NAME' passt nicht zu version.txt (enthaelt '$file_version'). Vermutlich wurde getaggt, BEVOR die per 'python bump_version.py' erhoehte version.txt committet und gepusht wurde - siehe README_INSTALLER.md, Ablauf fuer ein Release."
             exit 1
           fi
 
       - name: Buildx einrichten
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Bei ghcr.io anmelden
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Image bauen und veröffentlichen
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: Containerfile

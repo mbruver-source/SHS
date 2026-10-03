@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.40. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.41. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -140,7 +140,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen. |
 | **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung (siehe unten). |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
-| **„Teilnehmerliste (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
+| **„Teilnehmerliste einlesen (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
 | **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
 
 ### Startnummern vergeben
@@ -309,18 +309,18 @@ unten.
 ### Teilnehmerliste aus Excel übernehmen
 
 Eine Liste mit einer Zeile je Teilnehmer – z. B. vom Schriftführer – liest du mit
-**„CSV importieren…“** ein (Abschnitt 2 im Reiter „Formular-Import“; derselbe Weg steckt im
-Reiter „Teilnehmer“ hinter **„Teilnehmerliste (Excel/CSV)…“**).
+**„Teilnehmerliste einlesen (Excel/CSV)…“** ein (Abschnitt 2 im Reiter „Formular-Import“; denselben
+Knopf gibt es auch im Reiter „Teilnehmer“).
 
 1. **„Leere Vorlage (CSV) speichern…“** klicken – die Datei enthält die passenden
    Spaltenüberschriften (nachname, vorname, rufname_hund, art, stufe, disziplin, …).
 2. Die Vorlage in Excel öffnen, je Teilnehmer eine Zeile ausfüllen und wieder **als CSV**
    speichern („CSV UTF-8“ oder „CSV (Trennzeichen-getrennt)“ – beides wird erkannt).
-3. Mit **„CSV importieren…“** einlesen.
+3. Die Datei mit **„Teilnehmerliste einlesen (Excel/CSV)…“** auswählen.
 
 Pflicht sind Nachname, Vorname, Rufname des Hundes, Art (ED oder DK), Leistungsklasse (1–3) und
 bei ED die Disziplin (Trümmerfeld, Flächensuche oder Behältnisstrecke). Eine mit
-**„Teilnehmerliste (CSV, für Excel)…“** (Reiter „Export“) gespeicherte Liste lässt sich ebenso
+**„Teilnehmerliste speichern (CSV, für Excel)…“** (Reiter „Export“) gespeicherte Liste lässt sich ebenso
 wieder einlesen.
 
 ### Per KI (Foto, Scan, Word)
@@ -331,7 +331,7 @@ Ausgefüllte Meldeformulare (PDF, Word oder Foto/Scan) lassen sich mit einem KI-
 
 1. **„Prompt kopieren“** klicken.
 2. Im KI-Assistenten den Prompt einfügen und die Meldeformulare anhängen.
-3. Die erzeugte CSV-Datei speichern und mit **„CSV importieren…“** einlesen.
+3. Die erzeugte CSV-Datei speichern und mit **„Teilnehmerliste einlesen (Excel/CSV)…“** einlesen.
 
 Für beide CSV-Wege gilt: Jede Zeile wird ein neuer Teilnehmer – außer er ist schon gemeldet (gleicher Name, Hund,
 Art, Leistungsklasse und Disziplin; dann wird er übersprungen und genannt). Startnummer, Gegenstände und Bezahlt-Status
@@ -357,7 +357,7 @@ sowie Dreikampf):
 1. Einen neuen Test-Termin anlegen (siehe [Kapitel 3](#3-termine)) und dabei alle
    „Angebotenen Prüfungen“ ankreuzen (oder keine) – sonst werden Teilnehmer in nicht
    angebotenen Prüfungen beim Einlesen abgelehnt.
-2. Im Reiter „Formular-Import“ mit **„CSV importieren…“** die Beispieldatei einlesen – alle 20
+2. Im Reiter „Formular-Import“ mit **„Teilnehmerliste einlesen (Excel/CSV)…“** die Beispieldatei einlesen – alle 20
    Teilnehmer werden übernommen.
 3. Startnummern vergeben – die CSV enthält sie nicht: nach dem Import die Frage „Jetzt
    vergeben?“ mit Ja beantworten (dafür vorher Startnummern-Bereiche eintragen, siehe oben)
@@ -485,8 +485,16 @@ Startnummer wird dabei nicht berücksichtigt.
 - **Bestanden** ist nur, wer in **jeder** Disziplin mindestens 70 Punkte hat – sonst
   „nicht Bestanden (nB)“, unabhängig von der Gesamtpunktzahl. In der Platzierung steht dann
   „nB (von N Startern)“.
-- Punktgleiche erhalten denselben Platz. Nicht bestanden, Disqualifiziert und Abbruch erhalten
-  keinen Platz, zählen aber bei den Startern mit und erscheinen rot.
+- Punktgleiche erhalten denselben Platz, der nächste Platz wird übersprungen (1., 2., 2., 4.).
+  Nicht bestanden, Disqualifiziert und Abbruch erhalten keinen Platz, zählen aber bei den
+  Startern mit und erscheinen rot.
+- **Stechen:** Sind mehrere punktgleich auf **Platz 1**, entscheidet ein Stechen. Bis es
+  eingetragen ist, steht bei ihnen „1. (Stechen offen)“ und unten der Hinweis „Stechen nötig
+  in …“. Nach dem Stechen mit **„Stechen-Sieger festlegen…“** den Sieger wählen: Er wird 1.
+  („nach Stechen“), alle anderen Punktgleichen werden 2. Mit „Stechen noch offen“ lässt sich
+  die Wahl zurücknehmen. Ändern sich danach die Punkte und es gibt keinen Gleichstand mehr,
+  zählt die Wahl nicht mehr. Solange ein Stechen offen ist, fragt das Programm vor der
+  Ergebnisliste bzw. Rangliste nach.
 
 ### Übersicht
 
@@ -540,7 +548,7 @@ anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Explorer.
 | **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
 | **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. |
-| **Teilnehmerliste (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick in Excel und lässt sich auch wieder einlesen. |
+| **Teilnehmerliste speichern (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick in Excel und lässt sich auch wieder einlesen. |
 
 Den Bewertungsbogen eines **einzelnen** Teilnehmers erzeugst du schneller im Reiter
 „Teilnehmer“ mit **„Bewertungsbogen (PDF)…“**.
@@ -689,6 +697,16 @@ Benutzerprofil (neben dem Ordner `Termine`). Hänge sie bitte an eine Fehlermeld
 (siehe unten) – vorher kurz hineinschauen, ob echte Teilnehmerdaten darin stehen (auch dein
 Windows-Benutzername kann in Dateipfaden vorkommen).
 
+**Funktioniert meine Installation vollständig?**
+Das Programm kann sich selbst prüfen, ohne deine Termine anzufassen. Dazu im Startmenü
+„Ausführen“ (Windows-Taste + R) öffnen und eingeben:
+`"%LOCALAPPDATA%\Programs\SHS-Pruefungsprogramm\SHS-Pruefungsprogramm.exe" --selbsttest`
+(bzw. den Pfad, unter dem du es installiert hast). Nach etwa einer halben Minute steht das
+Ergebnis in der Datei `shs_selbsttest.log` im Temp-Ordner (Windows-Taste + R, `%TEMP%`
+eingeben). „ERGEBNIS: alles OK“ heißt: Termine, Auswertung, PDFs, Formular-Import,
+Datensicherung und Oberfläche funktionieren. Bei einer Fehlermeldung die Datei bitte an die
+Fehlermeldung anhängen (siehe unten).
+
 ### Fehler melden oder Wunsch äußern
 
 Bitte über die [Issues auf GitHub](https://github.com/mbruver-source/SHS/issues/new/choose) mit
@@ -749,7 +767,7 @@ Die zurückgeschickten Formulare speicherst du in einem Ordner, z. B. auf dem De
 
 Kommt eine Anmeldung per Telefon, auf Papier oder als Foto, legst du den Teilnehmer von Hand
 an: Reiter **„Teilnehmer“** → **„Teilnehmer hinzufügen…“** → Felder ausfüllen → **„OK“**.
-Eine Liste aus Excel liest du über **„Teilnehmerliste (Excel/CSV)…“** ein (siehe
+Eine Liste aus Excel liest du über **„Teilnehmerliste einlesen (Excel/CSV)…“** ein (siehe
 [Kapitel 5](#teilnehmerliste-aus-excel-übernehmen)). Auch danach fragt das Programm, ob es
 die Startnummern gleich vergeben soll. Wer schon in der Liste steht, wird beim erneuten
 Einlesen nicht doppelt angelegt.
@@ -846,6 +864,7 @@ oder der Button **„❓ Hilfe“** oben rechts im Programm.
 | **Reiter** | Die Registerkarten oben im Programmfenster („Teilnehmer“, „Zeitplan“ …). |
 | **SH-R** | Spürhundesport-Richter. Das Feld „SH-R“ auf den Etiketten ist für seinen Stempel. |
 | **Sicherungsdatei** | Eine Datei (Endung `.zip`), in der alle Termine stecken – zum Aufbewahren, z. B. auf einem USB-Stick. |
+| **Stechen** | Entscheidet bei Punktgleichheit auf Platz 1, wer gewinnt. Den Sieger trägst du im Reiter „Auswertung“ ein. |
 | **Starter / „1. von 2“** | „von 2“ zählt die Teams einer Leistungsklasse, deren Ergebnis schon vollständig eingetragen ist. |
 | **Startnummern-Bereich** | Welche Startnummern zu welcher Prüfung gehören, z. B. 1 bis 20 für DK LK 1. |
 | **Termin / Termin-Datei** | Eine Prüfung mit allen Teilnehmern und Ergebnissen. Jede Prüfung ist eine eigene Datei. |

@@ -88,6 +88,7 @@ from shs_core import (
     DISQUALIFIZIERT_TEXT,
     NICHT_BESTANDEN_ABK,
     berechne_wertnote_dk,
+    platz_text,
 )
 
 # --- Gemeinsame Stile -------------------------------------------------------
@@ -634,7 +635,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
     story: list = []
     titel = "Ergebnisliste"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+        titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
@@ -652,17 +653,15 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
         )
         daten = [["Platz", "Start-Nr.", "Name", "Gesamtpunkte", "Wertnote"]]
         for t in gruppe:
-            if t.platzierung is not None:
-                platz = f"{t.platzierung}. von {t.von_startern}"
-            else:
-                # UX-Test 02.10.2026, K3: "nB" nur bei echtem Nichtbestehen.
-                platz = _PLATZ_OHNE_RANG.get(t.wertnote.abkuerzung, NICHT_BESTANDEN_ABK)
+            # S1 (03.10.2026): "(Stechen offen)" / "(nach Stechen)" über shs_core.platz_text.
+            # UX-Test 02.10.2026, K3: ohne Platz "nB" nur bei echtem Nichtbestehen.
+            platz = platz_text(t) or _PLATZ_OHNE_RANG.get(t.wertnote.abkuerzung, NICHT_BESTANDEN_ABK)
             # Bei Disqualifiziert/Abbruch "–" statt einer irreführenden "0" (wie im
             # Auswertungs-Tab der Desktop-App).
             punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
             daten.append([platz, _wert(startnummer_je_id.get(t.id)), t.name, punkte, f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
         if len(daten) > 1:
-            tabelle = Table(daten, colWidths=[28 * mm, 20 * mm, 50 * mm, 30 * mm, 42 * mm], repeatRows=1)
+            tabelle = Table(daten, colWidths=[40 * mm, 18 * mm, 46 * mm, 27 * mm, 39 * mm], repeatRows=1)
             tabelle.setStyle(TableStyle([
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
@@ -876,7 +875,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
     story: list = []
     titel = "Ergebnisliste – Formular zum Ausfüllen"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+        titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "Start-Nr., Name und Verein sind vorausgefüllt. Platz, Gesamtpunkte und Wertnote "
@@ -1180,7 +1179,7 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     story: list = []
     titel = "Übersicht für Prüfungsleitung"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+        titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "Rot hervorgehobene „Impfpass gültig bis“-Einträge sind zum Prüfungstag "
@@ -1266,7 +1265,7 @@ def erstelle_chipnummernliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     story: list = []
     titel = "Chipnummernliste"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+        titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
@@ -1323,7 +1322,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     story: list = []
     titel = "Richter-Bedarf"
     if veranstaltung:
-        titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+        titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
     story.append(Paragraph(titel, _TITEL))
     story.append(Paragraph(
         "1 Einzeldisziplin (ED) = 1 Einheit, 1 Dreikampf (DK) = 3 Einheiten. Ein "
@@ -1497,16 +1496,16 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     if not plaene:
         titel = "Zeitplan"
         if veranstaltung:
-            titel += f" – {veranstaltung['verein']} ({_datum_kurz(veranstaltung['datum'])})"
+            titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
         story.append(Paragraph(titel, _TITEL))
         story.append(Paragraph("Es sind noch keine Richter/Zeitplan-Einträge angelegt.", _TEXT))
     else:
         for i, plan in enumerate(plaene):
             if i > 0:
                 story.append(PageBreak())
-            titel = f"Zeitplan – {plan['richter']}"
+            titel = f"Zeitplan – {_p_wert(plan['richter'])}"
             if veranstaltung:
-                titel += f" ({veranstaltung['verein']}, {_datum_kurz(veranstaltung['datum'])})"
+                titel += f" ({_p_wert(veranstaltung['verein'])}, {_datum_kurz(veranstaltung['datum'])})"
             story.append(Paragraph(titel, _TITEL))
             story.append(Spacer(1, 2 * mm))
             if not plan["zeilen"]:

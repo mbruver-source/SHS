@@ -36,6 +36,7 @@ from db import (
     pruefungen_als_text,
     set_veranstaltung,
     setze_ergebnis_status,
+    setze_stechen_sieger,
     setze_keine_teilnahme,
 )
 import pdf_export
@@ -212,6 +213,60 @@ class TestPdfExport(unittest.TestCase):
 
     def _pfad(self, name: str) -> str:
         return os.path.join(self.tmpdir, name)
+
+    def test_alle_pdfs_maskieren_markup_in_allen_feldern(self):
+        """Sicherheitsprüfung 03.10.2026, S-4 (Codex-Nachweis): reportlab-Markup in
+        Vereins-, Richter- oder Teilnehmerdaten (z. B. aus einer fremden Termin-Datei) darf
+        weder ein lokales Bild einbetten noch den Export abbrechen - für JEDES PDF."""
+        import dataclasses
+
+        from pypdf import PdfReader
+
+        bild = os.path.join(self.tmpdir, "marker.png")
+        with open(bild, "wb") as datei:  # 1x1-PNG
+            datei.write(bytes.fromhex(
+                "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"))
+        markup = f'<img src="{bild}" width="5" height="5"/>&<font color="kaputt">X</font>'
+        textfelder = ["verein", "ort", "vereins_nr", "pruefungsnummer", "pruefungsleiter",
+                      "verband", "meldestelle"] + [f"wertungsrichter_{i}" for i in range(1, 6)]
+        set_veranstaltung(self.conn, datum="2026-09-19",
+                          angebotene_pruefungen="DK1,ED1-Trümmerfeld",
+                          **{feld: f"{feld} {markup}" for feld in textfelder})
+        felder = {f.name for f in dataclasses.fields(NeuerTeilnehmer)}
+        text_werte = {f: f"{f} {markup}" for f in felder if f in (
+            "nachname", "vorname", "rufname_hund", "verein", "zwingername", "rasse", "chip_nr",
+            "strasse", "ort", "verband", "mitgliedsnummer", "email", "telefon", "gegenstand_1",
+            "halter_vorname", "halter_nachname", "halter_ort", "halter_mitgliedsverein")}
+        ed = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1, **text_werte))
+        dk = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            art="DK", stufe=1, startnummer=2, **text_werte))
+        eintragen_ergebnis(self.conn, ed, "Trümmerfeld", 50, 30)
+        richter = add_zeitplan_richter(self.conn, f"Richterin {markup}")
+        add_zeitplan_pruefungsblock(self.conn, richter, "ED", 1, "Trümmerfeld", 10)
+        add_zeitplan_pause(self.conn, richter, 15, f"Pause {markup}")
+
+        ausgaben = {
+            "ergebnisliste": lambda p: pdf_export.erstelle_ergebnisliste_pdf(self.conn, p),
+            "etiketten": lambda p: pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, p),
+            "leere_liste": lambda p: pdf_export.erstelle_leere_ergebnisliste_pdf(self.conn, p),
+            "statistik": lambda p: pdf_export.erstelle_statistik_pdf(self.conn, p),
+            "uebersicht": lambda p: pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, p),
+            "chipliste": lambda p: pdf_export.erstelle_chipnummernliste_pdf(self.conn, p),
+            "richterbedarf": lambda p: pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, p),
+            "zeitplan": lambda p: pdf_export.erstelle_zeitplan_pdf(self.conn, p),
+            "anmeldeformular": lambda p: pdf_export.erstelle_anmeldeformular_pdf(self.conn, p),
+            "bogen_ed": lambda p: pdf_export.erstelle_bewertungsbogen_pdf(self.conn, ed, p),
+            "bogen_dk": lambda p: pdf_export.erstelle_bewertungsbogen_pdf(self.conn, dk, p),
+            "alle_boegen": lambda p: pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, p),
+        }
+        for name, erzeugen in ausgaben.items():
+            with self.subTest(pdf=name):
+                ziel = self._pfad(f"markup_{name}.pdf")
+                erzeugen(ziel)
+                bilder = [b for seite in PdfReader(ziel).pages for b in seite.images]
+                self.assertEqual(bilder, [], f"{name}: eingebettetes Bild aus Markup")
 
     def _anwesend_und_fehlend(self):
         """Nutzerwunsch 02.10.2026: ein anwesender und ein als "keine Teilnahme"
@@ -846,6 +901,20 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Ohneverein, O, Bello", text)
         self.assertNotIn(", ,", text)
         self.assertIn("Gesamt: 269 nB", text)
+
+    def test_ergebnisliste_zeigt_stechen_offen_und_nach_stechen(self):
+        # S1 (Marco 03.10.2026).
+        a = self._dk_mit_vollen_punkten("Erster", 1)
+        b = self._dk_mit_vollen_punkten("Zweiter", 2)
+        pfad = self._pfad("ergebnisliste_stechen.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertEqual(text.count("1. von 2 (Stechen offen)"), 2)
+        setze_stechen_sieger(self.conn, b, [a, b])
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertIn("1. von 2 (nach Stechen)", text)
+        self.assertIn("2. von 2", text)
 
     def test_ergebnisliste_platz_spalte_disq_statt_nb(self):
         # UX-Test 02.10.2026, K3.

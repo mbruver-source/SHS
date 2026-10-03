@@ -23,24 +23,51 @@ Ablauf am Prüfungstag:
      Termin-Datei (Zuordnung über die Startnummer) - danach laufen
      PDF-Export/Auswertung/Zeitplan wie gewohnt in der Desktop-Version weiter.
 
-Beispiele:
-  python sync_termin.py export Herbstpruefung_2026.sqlite --dsn "postgresql://user:pass@host/db"
-  python sync_termin.py import termin_3 Herbstpruefung_2026.sqlite --dsn "postgresql://user:pass@host/db"
+Beispiele (empfohlen: Verbindungsstring über die Umgebungsvariable SHS_POSTGRES_DSN):
+  Windows (PowerShell):  $env:SHS_POSTGRES_DSN = "postgresql://user:pass@host/db"
+  Linux/macOS:           export SHS_POSTGRES_DSN="postgresql://user:pass@host/db"
+  python sync_termin.py export Herbstpruefung_2026.sqlite
+  python sync_termin.py import termin_3 Herbstpruefung_2026.sqlite
 
---dsn kann in beiden Befehlen weggelassen werden, wenn stattdessen die Umgebungsvariable
-SHS_POSTGRES_DSN gesetzt ist.
+--dsn ist weiterhin möglich, z. B. --dsn "postgresql://user@host/db" mit dem Passwort in
+PGPASSWORD bzw. einer .pgpass-Datei. Sicherheitsprüfung 03.10.2026, S-10: Ein PASSWORT direkt
+in --dsn ist für andere Benutzer desselben Rechners in der Prozessliste sichtbar und landet in
+der Befehlshistorie - das Werkzeug warnt dann.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+from urllib.parse import parse_qs, urlsplit
 
 import db
 
 
+def dsn_enthaelt_passwort(dsn: str) -> bool:
+    """S-10: True, wenn der Verbindungsstring ein Passwort enthält - als URL
+    (postgresql://user:passwort@host/db) oder als Schlüssel-Wert-Paar (password=...)."""
+    if "://" in dsn:
+        try:
+            teile = urlsplit(dsn)
+            # libpq erlaubt das Passwort auch als Parameter: postgresql://u@h/db?password=...
+            return bool(teile.password) or "password" in {k.lower() for k in parse_qs(teile.query)}
+        except ValueError:
+            return False
+    return re.search(r"(^|\s)password\s*=", dsn, re.IGNORECASE) is not None
+
+
 def _postgres_dsn(uebergeben: str | None) -> str:
+    if uebergeben and dsn_enthaelt_passwort(uebergeben):
+        print(
+            "Hinweis: Das Passwort in --dsn ist für andere Benutzer dieses Rechners in der "
+            "Prozessliste sichtbar und steht in der Befehlshistorie. Besser den "
+            "Verbindungsstring über die Umgebungsvariable SHS_POSTGRES_DSN übergeben "
+            "(siehe python sync_termin.py --help).",
+            file=sys.stderr,
+        )
     dsn = uebergeben or os.environ.get("SHS_POSTGRES_DSN")
     if not dsn:
         print(

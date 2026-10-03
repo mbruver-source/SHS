@@ -176,5 +176,40 @@ class TestVorhandeneSpaltenPostgresZweig(unittest.TestCase):
         self.assertEqual(gesendete_params, ("veranstaltung",))
 
 
+
+class TestSyncTerminDsnWarnung(unittest.TestCase):
+    """Sicherheitsprüfung 03.10.2026, S-10: Warnung bei Passwort in --dsn."""
+
+    def test_passwort_wird_erkannt(self):
+        import sync_termin
+
+        self.assertTrue(sync_termin.dsn_enthaelt_passwort("postgresql://shs:geheim@db/shs"))
+        self.assertTrue(sync_termin.dsn_enthaelt_passwort("host=db user=shs password=geheim"))
+        self.assertTrue(sync_termin.dsn_enthaelt_passwort("password = geheim host=db"))
+        self.assertTrue(sync_termin.dsn_enthaelt_passwort("postgresql://shs@db/shs?password=geheim"))
+        self.assertTrue(sync_termin.dsn_enthaelt_passwort("postgres://db/shs?user=shs&password=geheim"))
+        self.assertFalse(sync_termin.dsn_enthaelt_passwort("postgresql://shs@db/shs?sslmode=require"))
+        self.assertFalse(sync_termin.dsn_enthaelt_passwort("postgresql://shs@db/shs"))
+        self.assertFalse(sync_termin.dsn_enthaelt_passwort("host=db user=shs"))
+        self.assertFalse(sync_termin.dsn_enthaelt_passwort("host=db user=password_admin"))
+
+    def test_warnung_nur_bei_passwort_im_argument(self):
+        import contextlib
+        import io
+
+        import sync_termin
+
+        fehler = io.StringIO()
+        with contextlib.redirect_stderr(fehler):
+            self.assertEqual(sync_termin._postgres_dsn("postgresql://shs:geheim@db/shs"),
+                             "postgresql://shs:geheim@db/shs")
+        self.assertIn("Prozessliste", fehler.getvalue())
+
+        fehler = io.StringIO()
+        with contextlib.redirect_stderr(fehler):
+            sync_termin._postgres_dsn("postgresql://shs@db/shs")
+        self.assertEqual(fehler.getvalue(), "")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -70,6 +70,7 @@ from db import (
     loesche_zeitplan_richter,
     naechste_freie_startnummer,
     oeffne_termin_postgres,
+    benutzer_stand,
     pruefe_login,
     pruefungsgebuehr_fuer_art,
     set_veranstaltung,
@@ -1908,6 +1909,62 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(namen, ["Früh", "Spät"])
 
 
+def _ohne_kennung(konto):
+    """pruefe_login()/benutzer_stand() liefern seit C-1 (03.10.2026) zusätzlich die
+    Konto-Kennung für die Session - für Vergleiche der übrigen Felder ausblenden."""
+    return None if konto is None else {k: v for k, v in konto.items() if k != "kennung"}
+
+
+def test_konto_kennung_aendert_sich_bei_neuanlage_und_passwort():
+    """C-1: gleiche Kennung für dasselbe Konto, neue bei Neuanlage unter gleichem Namen."""
+    import db as _db
+
+    zeile = {"benutzername": "Helfer", "erstellt_am": "2026-10-03T10:00:00", "passwort_hash": "pbkdf2:a$x$1"}
+    gleich = dict(zeile, benutzername="helfer")
+    anderer_hash = dict(zeile, passwort_hash="pbkdf2:a$y$2")
+    assert _db._konto_kennung(zeile) == _db._konto_kennung(gleich)
+    assert _db._konto_kennung(zeile) != _db._konto_kennung(anderer_hash)
+
+
+class TestFremdeTriggerUndViews(unittest.TestCase):
+    def test_trigger_und_views_werden_beim_oeffnen_entfernt(self):
+        """Sicherheitsprüfung 03.10.2026, H-1 (Codex-Nachweis): ein fremder Trigger setzte
+        eingetragene Ergebnisse still auf 0 - init_db entfernt Trigger/Views vorab."""
+        import db as _db
+
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "fremd.sqlite")
+            conn = init_db(pfad)
+            tid = add_teilnehmer(conn, NeuerTeilnehmer(
+                nachname="A", vorname="B", rufname_hund="H", art="ED", stufe=1,
+                disziplin="Flächensuche", startnummer=1))
+            conn.execute(
+                "CREATE TRIGGER manipulation AFTER UPDATE OF suche_flaechensuche ON ergebnisse "
+                "BEGIN UPDATE ergebnisse SET suche_flaechensuche = 0 WHERE teilnehmer_id = NEW.teilnehmer_id; END"
+            )
+            conn.execute("CREATE VIEW sicht AS SELECT * FROM teilnehmer")
+            conn.execute('CREATE TRIGGER "bös""er name" AFTER INSERT ON teilnehmer BEGIN SELECT 1; END')
+            conn.commit()
+            conn.close()
+
+            conn = init_db(pfad)
+            try:
+                self.assertEqual(
+                    _db.entfernte_fremdobjekte(),
+                    ['trigger bös"er name', "trigger manipulation", "view sicht"],
+                )
+                self.assertEqual(
+                    conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type IN ('trigger','view')").fetchone()[0], 0
+                )
+                eintragen_ergebnis(conn, tid, "Flächensuche", 50, 30)
+                self.assertEqual(get_ergebnis(conn, tid)["suche_flaechensuche"], 50)
+            finally:
+                conn.close()
+            conn = init_db(pfad)  # sauber: nichts mehr zu entfernen
+            conn.close()
+            self.assertEqual(_db.entfernte_fremdobjekte(), [])
+
+
 class TestCsvMeldungen(unittest.TestCase):
     def test_abgelehnte_zeilen_in_alltagssprache(self):
         """Vor-Build-Klärung 03.10.2026: keine "None"/Python-Listen in den Meldungen."""
@@ -3707,7 +3764,9 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
         self.assertTrue(admin_einrichten(self.conn, "chef", "sicheres_passwort"))
         self.assertTrue(gibt_es_admin(self.conn))
         konto = pruefe_login(self.conn, "chef", "sicheres_passwort")
-        self.assertEqual(konto, {"benutzername": "chef", "ist_admin": True})
+        self.assertEqual(_ohne_kennung(konto), {"benutzername": "chef", "ist_admin": True})
+        # C-1 (03.10.2026): Konto-Kennung für die Session, gleich zu benutzer_stand().
+        self.assertEqual(konto["kennung"], benutzer_stand(self.conn, "chef")["kennung"])
 
     def test_admin_einrichten_lehnt_zweiten_ersten_admin_ab(self):
         admin_einrichten(self.conn, "chef", "sicheres_passwort")
@@ -3726,7 +3785,7 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
         admin_einrichten(self.conn, "chef", "sicheres_passwort")
         benutzer_anlegen(self.conn, "helfer", "helferpasswort")
         konto = pruefe_login(self.conn, "helfer", "helferpasswort")
-        self.assertEqual(konto, {"benutzername": "helfer", "ist_admin": False})
+        self.assertEqual(_ohne_kennung(konto), {"benutzername": "helfer", "ist_admin": False})
 
     def test_liste_benutzer_alphabetisch_ohne_passwort_hash(self):
         admin_einrichten(self.conn, "zeno", "sicheres_passwort")
@@ -3786,11 +3845,11 @@ class TestBenutzerkontenPostgres(unittest.TestCase):
         # funktionieren, nur das Passwort bleibt GROSS-/kleinschreibungsempfindlich.
         admin_einrichten(self.conn, "Marco", "sicheres_passwort")
         self.assertEqual(
-            pruefe_login(self.conn, "marco", "sicheres_passwort"),
+            _ohne_kennung(pruefe_login(self.conn, "marco", "sicheres_passwort")),
             {"benutzername": "Marco", "ist_admin": True},
         )
         self.assertEqual(
-            pruefe_login(self.conn, "MARCO", "sicheres_passwort"),
+            _ohne_kennung(pruefe_login(self.conn, "MARCO", "sicheres_passwort")),
             {"benutzername": "Marco", "ist_admin": True},
         )
         self.assertIsNone(pruefe_login(self.conn, "Marco", "Sicheres_Passwort"))

@@ -33,6 +33,7 @@ dort unabhängig von der Oberfläche getestet - dieses Fenster ruft sie nur auf.
 from __future__ import annotations
 
 import datetime
+import html
 import os
 import re
 import sqlite3
@@ -100,6 +101,7 @@ from db import (
     eintragen_ergebnis,
     ergebnisse_je_teilnehmer,
     get_teilnehmer,
+    entfernte_fremdobjekte,
     get_veranstaltung,
     hat_erfasste_ergebnisse,
     init_db,
@@ -113,6 +115,7 @@ from db import (
     set_veranstaltung,
     setze_bezahlt,
     setze_ergebnis_status,
+    setze_stechen_sieger,
     setze_keine_teilnahme,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
@@ -148,7 +151,16 @@ from db_sicherung import (
     sicherung_wiederherstellen,
 )
 import pdf_export
-from shs_core import ABBRUCH_ABK, ABBRUCH_TEXT, ANZEIGE_MAX, DISQUALIFIZIERT_ABK, DISQUALIFIZIERT_TEXT, SUCHE_MAX
+from shs_core import (
+    ABBRUCH_ABK,
+    ABBRUCH_TEXT,
+    ANZEIGE_MAX,
+    DISQUALIFIZIERT_ABK,
+    DISQUALIFIZIERT_TEXT,
+    SUCHE_MAX,
+    platz_text,
+    stechen_gruppen,
+)
 from desktop_darstellung import (
     _darstellung_anwenden,
     _design_speichern,
@@ -163,6 +175,7 @@ from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
     _Ablageort,
     absturzprotokoll_einrichten,
+    meldungsfenster_als_klartext,
     _aktualisiere_veranstaltung_feld,
     _ausdrucke_ordner,
     _datei_gespeichert_melden,
@@ -256,7 +269,7 @@ def _startnummern_nach_import_anbieten(parent, conn) -> None:
 def _teilnehmerliste_importieren(parent, conn) -> None:
     """CSV-/Excel-Teilnehmerliste einlesen - gemeinsam für den Reiter "Formular-Import" und
     den Knopf im Reiter "Teilnehmer" (UX-Test 02.10.2026, U10)."""
-    pfad, _ = QFileDialog.getOpenFileName(parent, "CSV importieren", _import_startordner(), "CSV-Datei (*.csv)")
+    pfad, _ = QFileDialog.getOpenFileName(parent, "Teilnehmerliste einlesen", _import_startordner(), "CSV-Datei (*.csv)")
     if not pfad:
         return
     _import_ordner_merken(pfad)
@@ -279,6 +292,14 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
     QMessageBox.information(parent, "Import abgeschlossen", text)
     if ergebnis.importiert:
         _startnummern_nach_import_anbieten(parent, conn)
+
+
+
+def _klartext_tooltip(text: str) -> str:
+    """Sicherheitsprüfung 03.10.2026, S-1: Tooltips deutet Qt automatisch als HTML, sobald
+    der Text danach aussieht. Enthält er Namen aus Importen, wird er deshalb maskiert und
+    ausdrücklich als Rich Text ausgezeichnet - so erscheint er immer wörtlich."""
+    return "<qt>" + html.escape(text).replace("\n", "<br>") + "</qt>"
 
 
 class TeilnehmerTab(QWidget):
@@ -393,8 +414,13 @@ class TeilnehmerTab(QWidget):
 
         # UX-Test 02.10.2026, U10: die Excel-/CSV-Liste auch direkt hier einlesen können
         # (Laien suchten sie im Reiter "Teilnehmer" bzw. unter "Aus anderem Termin").
-        liste_btn = QPushButton("Teilnehmerliste (Excel/CSV)…")
-        liste_btn.setToolTip("Eine Excel-Liste (als CSV gespeichert) mit einer Zeile je Teilnehmer einlesen.")
+        liste_btn = QPushButton("Teilnehmerliste einlesen (Excel/CSV)…")
+        # N8 (nach 1.0.40): eindeutig "einlesen" - der fast gleich benannte Export-Knopf im
+        # Reiter "Export" heißt "Teilnehmerliste speichern (CSV, für Excel)…".
+        liste_btn.setToolTip(
+            "Eine Excel-Liste (als CSV gespeichert) mit einer Zeile je Teilnehmer einlesen. "
+            "Speichern als CSV geht im Reiter „Export“."
+        )
         liste_btn.clicked.connect(self._teilnehmerliste_importieren)
 
         # Nutzerwunsch (21.09.): "In Teilnehmerliste Absprung zu Bewertungsbögen erzeugen
@@ -430,6 +456,7 @@ class TeilnehmerTab(QWidget):
         filter_zeile.addStretch()
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -1003,7 +1030,7 @@ class FormularImportTab(QWidget):
         anmeldeformular_btn.setObjectName("primaerButton")
         anmeldeformular_btn.clicked.connect(self._anmeldeformulare_importieren)
 
-        import_btn = QPushButton("CSV importieren…")
+        import_btn = QPushButton("Teilnehmerliste einlesen (Excel/CSV)…")
         import_btn.clicked.connect(self._csv_importieren)
         vorlage_btn = QPushButton("Leere Vorlage (CSV) speichern…")
         vorlage_btn.clicked.connect(self._vorlage_speichern)
@@ -1017,13 +1044,14 @@ class FormularImportTab(QWidget):
         kopieren_btn = QPushButton("Prompt kopieren")
         kopieren_btn.clicked.connect(self._prompt_kopieren)
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
 
         ki_anleitung = QLabel(
             "1. „Prompt kopieren“ klicken und den Text zusammen mit dem ausgefüllten "
             "Meldeformular (PDF, Word-Dokument oder Foto/Scan) einem KI-System übergeben "
             "(z. B. Claude oder ChatGPT).\n"
             "2. Die dabei erzeugte CSV-Datei oben unter „Teilnehmerliste aus Excel“ mit "
-            "„CSV importieren…“ einlesen.\n"
+            "„Teilnehmerliste einlesen (Excel/CSV)…“ einlesen.\n"
             "Datenschutz: Die Formulare gehen dabei an den gewählten KI-Anbieter."
         )
         ki_anleitung.setWordWrap(True)
@@ -1249,6 +1277,7 @@ class ErgebnisTab(QWidget):
         aktualisieren_btn.clicked.connect(self._aktualisieren_mit_rueckfrage)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -1950,6 +1979,46 @@ class ErgebnisTab(QWidget):
             )
 
 
+def _fremdobjekte_melden(parent) -> None:
+    """Sicherheitsprüfung 03.10.2026, H-1: Hinweis, wenn init_db() aus der gerade geöffneten
+    Termin-Datei fremde Datenbank-Regeln (Trigger/Views) entfernt hat."""
+    entfernt = entfernte_fremdobjekte()
+    if entfernt:
+        QMessageBox.warning(
+            parent, "Termin-Datei bereinigt",
+            "Die Termin-Datei enthielt unerwartete Datenbank-Regeln, die das Programm selbst nie "
+            "anlegt. Sie wurden zur Sicherheit entfernt:\n\n" + "\n".join(entfernt[:10])
+            + ("\n…" if len(entfernt) > 10 else "")
+            + "\n\nDie Teilnehmer und Ergebnisse selbst sind unverändert. Stammt die Datei "
+            "nicht von dir, prüfe die Ergebnisse bitte kurz.",
+        )
+
+
+def _vorname_nachname(name: str) -> str:
+    """"Nachname, Vorname" (Teilnehmerergebnis.name) -> "Vorname Nachname" (wie K2)."""
+    nachname, _, vorname = name.partition(", ")
+    return f"{vorname} {nachname}".strip()
+
+
+def _stechen_offen_bestaetigen(parent, conn, leistungsklasse: str | None = None) -> bool:
+    """S1 (Marco 03.10.2026): Rückfrage vor der Ergebnisliste, wenn ein Stechen um Platz 1
+    noch offen ist (wie beim Zeitplan mit Überschneidungen). True = trotzdem erzeugen."""
+    fertig, _ = berechne_auswertung(conn)
+    offen = [
+        lk for lk, g in stechen_gruppen(fertig).items()
+        if all(t.stechen == "offen" for t in g) and (leistungsklasse is None or lk == leistungsklasse)
+    ]
+    if not offen:
+        return True
+    antwort = QMessageBox.question(
+        parent, "Stechen offen",
+        "In " + ", ".join(offen) + " sind mehrere punktgleich auf Platz 1 – das Stechen ist noch "
+        "nicht eingetragen (Reiter „Auswertung“ → „Stechen-Sieger festlegen…“).\n\n"
+        "Die Ergebnisliste trotzdem jetzt speichern? Dort steht dann „Stechen offen“.",
+    )
+    return antwort == QMessageBox.Yes
+
+
 class AuswertungTab(QWidget):
     def __init__(self, conn, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
@@ -1987,6 +2056,7 @@ class AuswertungTab(QWidget):
         # UX-Test 02.10.2026, U12: die Namensliste kann sehr lang werden - ohne Umbruch zog
         # dieses Label das ganze Hauptfenster über die Bildschirmbreite (~1800 px).
         self.ausstehend_label.setWordWrap(True)
+        self.ausstehend_label.setTextFormat(Qt.PlainText)  # S-1: enthält Namen
 
         aktualisieren_btn = QPushButton("Auswertung neu berechnen")
         aktualisieren_btn.clicked.connect(self.aktualisieren)
@@ -1996,8 +2066,13 @@ class AuswertungTab(QWidget):
         # Start-Nr.-Filter (Marcos Entscheidung).
         self.drucken_btn = QPushButton("Rangliste drucken (PDF)…")
         self.drucken_btn.clicked.connect(self._rangliste_drucken)
+        # S1 (Marco 03.10.2026): Sieger eines Stechens bei Gleichstand um Platz 1 festlegen.
+        self.stechen_btn = QPushButton("Stechen-Sieger festlegen…")
+        self.stechen_btn.setToolTip("Bei Punktgleichheit auf Platz 1 entscheidet ein Stechen – hier den Sieger eintragen.")
+        self.stechen_btn.clicked.connect(self._stechen_sieger_festlegen)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)  # enthält nach "Rangliste drucken" einen langen Pfad (U12)
 
         filter_zeile = QHBoxLayout()
@@ -2015,10 +2090,44 @@ class AuswertungTab(QWidget):
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(aktualisieren_btn)
         button_zeile.addWidget(self.drucken_btn)
+        button_zeile.addWidget(self.stechen_btn)
         button_zeile.addStretch()
         layout.addLayout(button_zeile)
         layout.addWidget(self.status_label)
 
+        self.aktualisieren()
+
+    def _stechen_sieger_festlegen(self) -> None:
+        """S1: je Gleichstand um Platz 1 den Stechen-Sieger wählen (oder offen lassen)."""
+        gruppen = stechen_gruppen(self._fertig)
+        if not gruppen:
+            QMessageBox.information(self, "Kein Stechen", "Es gibt keinen Gleichstand um Platz 1.")
+            return
+        offen_text = "Stechen noch offen"
+        eintraege, zuordnung = [], {}
+        for lk, gruppe in gruppen.items():
+            for t in gruppe:
+                text = f"{lk}: {_vorname_nachname(t.name)} ({t.gesamtpunkte} Punkte)"
+                eintraege.append(text)
+                zuordnung[text] = (lk, int(t.id))
+            text = f"{lk}: {offen_text}"
+            eintraege.append(text)
+            zuordnung[text] = (lk, None)
+        aktuell = next(
+            (i for i, e in enumerate(eintraege)
+             if zuordnung[e][1] is not None and any(
+                 t.stechen == "gewonnen" and int(t.id) == zuordnung[e][1] for g in gruppen.values() for t in g)),
+            0,
+        )
+        auswahl, ok = QInputDialog.getItem(
+            self, "Stechen-Sieger festlegen",
+            "Wer hat das Stechen gewonnen? Er wird 1., die anderen Punktgleichen werden 2.",
+            eintraege, aktuell, False,
+        )
+        if not ok:
+            return
+        lk, sieger = zuordnung[auswahl]
+        setze_stechen_sieger(self.conn, sieger, [int(t.id) for t in gruppen[lk]])
         self.aktualisieren()
 
     def _gewaehlte_leistungsklasse(self) -> str | None:
@@ -2028,6 +2137,8 @@ class AuswertungTab(QWidget):
 
     def _rangliste_drucken(self) -> None:
         leistungsklasse = self._gewaehlte_leistungsklasse()
+        if not _stechen_offen_bestaetigen(self, self.conn, leistungsklasse):
+            return
         praefix = "Ergebnisliste" if leistungsklasse is None else f"Ergebnisliste_{leistungsklasse.replace(' ', '_')}"
         pfad = _pdf_speicherort_waehlen(
             self, self._ablageort, "Rangliste speichern", _export_dateiname(self.conn, praefix)
@@ -2112,10 +2223,8 @@ class AuswertungTab(QWidget):
                 wertnote_text = f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"
                 punkte_text = str(t.gesamtpunkte)
 
-            if t.platzierung is None:
-                platz_text = f"{status_text} (von {t.von_startern} Startern)"
-            else:
-                platz_text = f"{t.platzierung}. von {t.von_startern}"
+            # S1 (03.10.2026): "(Stechen offen)" / "(nach Stechen)" über shs_core.platz_text.
+            platz = platz_text(t) or f"{status_text} (von {t.von_startern} Startern)"
             werte = [
                 str(self._startnummer_je_id.get(t.id) or ""),
                 t.leistungsklasse,
@@ -2123,7 +2232,7 @@ class AuswertungTab(QWidget):
                 self._rufname_hund_je_id.get(t.id, ""),
                 punkte_text,
                 wertnote_text,
-                platz_text,
+                platz,
             ]
             offen = offen_je_lk.get(t.leistungsklasse, 0)
             platz_tooltip = (
@@ -2145,6 +2254,16 @@ class AuswertungTab(QWidget):
             f"{offen_je_lk[lk]} noch offen."
             for lk, von in sorted(von_je_lk.items()) if offen_je_lk.get(lk)
         ]
+        # S1 (Marco 03.10.2026): Gleichstand um Platz 1 -> Stechen.
+        sichtbare_lk = set(von_je_lk)
+        gruppen = {lk: g for lk, g in stechen_gruppen(self._fertig).items() if lk in sichtbare_lk}
+        self.stechen_btn.setEnabled(bool(stechen_gruppen(self._fertig)))
+        von_hinweise = [
+            f"Stechen nötig in {lk}: "
+            + ", ".join(_vorname_nachname(t.name) for t in g)
+            + f" ({g[0].gesamtpunkte} Punkte) – danach „Stechen-Sieger festlegen…“."
+            for lk, g in gruppen.items() if all(t.stechen == "offen" for t in g)
+        ] + von_hinweise
 
         if ausstehend_gefiltert:
             # UX-Test 02.10.2026, K2: "Vorname Nachname; …" statt "Nachname, Vorname, …" -
@@ -2384,6 +2503,7 @@ class ZeitplanTab(QWidget):
         inhalt_zeile.addWidget(self._offene_starts_box)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -2480,18 +2600,22 @@ class ZeitplanTab(QWidget):
             for team, starts in je_team.values():
                 nr = team["startnummer"] if team["startnummer"] is not None else "–"
                 liste = ", ".join(f"{start.strftime('%H:%M')} {name}" for start, name in sorted(starts))
-                zeilen.append(f'<span style="color:{fehler};">Nr. {nr} {team["nachname"]}: {liste}</span>')
+                # Sicherheitsprüfung 03.10.2026, S-1: Namen/Bezeichnungen maskieren (Rich Text).
+                zeilen.append(
+                    f'<span style="color:{fehler};">Nr. {nr} {html.escape(str(team["nachname"]))}: '
+                    f'{html.escape(liste)}</span>'
+                )
             zeilen.append("")
         for eintrag in status_liste:
             bezeichnung = f"{eintrag['art']} LK {eintrag['stufe']} – {eintrag['disziplin']}"
             if eintrag["eingeplant"]:
                 zeilen.append(
-                    f'<span style="color:{ok};">✓ {bezeichnung} ({eintrag["anzahl"]} Teilnehmer)</span>'
+                    f'<span style="color:{ok};">✓ {html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer)</span>'
                 )
             else:
                 zeilen.append(
                     f'<span style="color:{fehler}; font-weight:bold;">'
-                    f'✗ {bezeichnung} ({eintrag["anzahl"]} Teilnehmer) – noch offen</span>'
+                    f'✗ {html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer) – noch offen</span>'
                 )
         self._offene_starts_label.setText("<br>".join(zeilen))
 
@@ -2621,7 +2745,7 @@ class ZeitplanTab(QWidget):
         if hinweis:
             # UX-Test 02.10.2026, U2: betroffene Zeilen rot, Tooltip erklärt die Überschneidung.
             item.setForeground(_farbe("fehler"))
-            item.setToolTip(hinweis)
+            item.setToolTip(_klartext_tooltip(hinweis))  # S-1: enthält Richternamen
         return item
 
     # --- Aktionen: Richter -----------------------------------------------------
@@ -2848,7 +2972,7 @@ class ExportTab(QWidget):
 
         # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
         # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
-        teilnehmerliste_btn = QPushButton("Teilnehmerliste (CSV, für Excel)…")
+        teilnehmerliste_btn = QPushButton("Teilnehmerliste speichern (CSV, für Excel)…")
         teilnehmerliste_btn.clicked.connect(self._teilnehmerliste_exportieren)
         anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
         anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
@@ -2933,6 +3057,7 @@ class ExportTab(QWidget):
         hinweis.setWordWrap(True)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
         button_zeile = QHBoxLayout()
@@ -3045,6 +3170,8 @@ class ExportTab(QWidget):
         )
 
     def _ergebnisliste_exportieren(self) -> None:
+        if not _stechen_offen_bestaetigen(self, self.conn):
+            return
         self._pdf_export_ausfuehren(
             "Ergebnisliste speichern", "Ergebnisliste",
             lambda pfad: pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad),
@@ -3138,6 +3265,7 @@ class VerwaltungTab(QWidget):
         hinweis.setWordWrap(True)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -3214,6 +3342,7 @@ class DatensicherungTab(QWidget):
         wiederherstellen_btn.clicked.connect(self._sicherung_wiederherstellen)
 
         self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
         layout = QVBoxLayout(self)
@@ -3338,6 +3467,7 @@ class DatensicherungTab(QWidget):
         nicht erst angeboten - die noch offene Datenbankverbindung würde damit kollidieren
         (auf Windows vermutlich mit einer schwer verständlichen Dateisperren-Fehlermeldung)."""
         box = QMessageBox(self)
+        box.setTextFormat(Qt.PlainText)  # S-1: Dateiname nie als HTML deuten
         box.setWindowTitle("Termin bereits vorhanden")
         text = f"Der Termin „{dateiname}“ ist im Termine-Ordner bereits vorhanden.\n\nWie soll damit verfahren werden?"
         if ist_offener_termin:
@@ -3754,6 +3884,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             return
 
         neue_verbindung = init_db(dialog.pfad)
+        _fremdobjekte_melden(self)
         alte_verbindung = self.conn
         self._termin_setzen(neue_verbindung, dialog.pfad)
         alte_verbindung.close()
@@ -3980,8 +4111,17 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
 
 def main() -> int:
+    # T1 (Marco 03.10.2026): "--selbsttest [protokoll]" prüft die gebündelte EXE ohne
+    # Fenster (CI nach dem PyInstaller-Build und nach der Installation; auch zur
+    # Fehlersuche beim Nutzer). Siehe selbsttest.py.
+    if "--selbsttest" in sys.argv:
+        from selbsttest import fuehre_selbsttest_aus
+
+        position = sys.argv.index("--selbsttest")
+        return fuehre_selbsttest_aus(sys.argv[position + 1] if len(sys.argv) > position + 1 else None)
     absturzprotokoll_einrichten(VERSION)
     app = QApplication(sys.argv)
+    meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
 
@@ -3990,6 +4130,7 @@ def main() -> int:
         return 0
 
     conn = init_db(start.pfad)
+    _fremdobjekte_melden(None)
 
     fenster = HauptFenster(conn, start.pfad)
     # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die

@@ -575,6 +575,104 @@ def test_teilnehmer_knopfleiste_zweizeilig(qtbot, conn):
     assert tab.tauschen_btn.geometry().y() > oben
 
 
+_ALTDATEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdaten", "altversionen")
+
+
+@pytest.mark.parametrize(
+    "version", sorted(os.listdir(_ALTDATEN)) if os.path.isdir(_ALTDATEN) else []
+)
+def test_altversion_oeffnet_im_hauptfenster_mit_allen_reitern(qtbot, tmp_path, version, monkeypatch):
+    """T3 (Upgrade-Tests, 03.10.2026): Termin-Datei einer älteren Version (siehe
+    test_altversionen.py) im Hauptfenster öffnen und jeden Reiter einmal anzeigen."""
+    import shutil
+
+    kopie = tmp_path / "termin.sqlite"
+    shutil.copy(os.path.join(_ALTDATEN, version, "termin.sqlite"), kopie)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    conn = init_db(str(kopie))
+    try:
+        fenster = HauptFenster(conn, str(kopie))
+        qtbot.addWidget(fenster)
+        fenster.show()
+        for index in range(fenster._tabs.count()):
+            fenster._tabs.setCurrentIndex(index)
+            qtbot.wait(10)
+        assert fenster.teilnehmer_tab.tabelle.rowCount() == 7
+    finally:
+        conn.close()
+
+
+def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypatch):
+    """S1 (Marco 03.10.2026): Gleichstand um Platz 1 -> Hinweis + "Stechen offen", Sieger
+    über "Stechen-Sieger festlegen…", Rückfrage vor der Rangliste solange offen."""
+    a = _teilnehmer_anlegen(conn, nachname="Anna", vorname="A", disziplin="Trümmerfeld", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="Ben", vorname="B", disziplin="Trümmerfeld", startnummer=2)
+    eintragen_ergebnis(conn, a, "Trümmerfeld", 58, 37)
+    eintragen_ergebnis(conn, b, "Trümmerfeld", 55, 40)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.aktualisieren()
+
+    platz_spalte = tab.tabelle.columnCount() - 1
+    plaetze = {tab.tabelle.item(r, 2).text(): tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
+    assert set(plaetze.values()) == {"1. von 2 (Stechen offen)"}
+    assert "Stechen nötig in ED LK 1 Trümmerfeld: A Anna, B Ben (95 Punkte)" in tab.ausstehend_label.text()
+    assert tab.stechen_btn.isEnabled()
+
+    # Rückfrage vor dem Druck; "Nein" bricht ab, bevor ein Dateifenster kommt.
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *x, **k: fragen.append(x[2]) or QMessageBox.No)
+    monkeypatch.setattr("app._pdf_speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
+    tab._rangliste_drucken()
+    assert "Stechen" in fragen[0]
+
+    # Sieger festlegen: Ben.
+    def waehlen(_p, _t, _l, eintraege, _i, _e):
+        return next(e for e in eintraege if "B Ben" in e), True
+
+    monkeypatch.setattr("app.QInputDialog.getItem", waehlen)
+    tab._stechen_sieger_festlegen()
+    plaetze = {tab.tabelle.item(r, 2).text(): tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
+    assert plaetze == {"Ben, B": "1. von 2 (nach Stechen)", "Anna, A": "2. von 2"}
+    assert "Stechen nötig" not in tab.ausstehend_label.text()
+
+
+def test_selbsttest_erfolg_und_fehlerfall(qtbot, tmp_path, monkeypatch):
+    """T1 (Marco 03.10.2026): "--selbsttest" liefert 0 und ein Protokoll; scheitert ein
+    Schritt (z. B. ein in der EXE fehlendes Modul), Exit-Code 1 mit Fehlerzeile."""
+    import pdf_export
+    import selbsttest
+
+    protokoll = tmp_path / "ok.log"
+    assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 0
+    text = protokoll.read_text(encoding="utf-8")
+    assert "ERGEBNIS: alles OK" in text and "Oberfläche mit allen Reitern" in text
+
+    def kaputt(*_a, **_k):
+        raise ImportError("reportlab fehlt (simuliert)")
+
+    monkeypatch.setattr(pdf_export, "erstelle_statistik_pdf", kaputt)
+    protokoll = tmp_path / "fehler.log"
+    assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 1
+    text = protokoll.read_text(encoding="utf-8")
+    assert "FEHLER  PDF-Ausgaben" in text and "reportlab fehlt (simuliert)" in text
+    assert "ERGEBNIS: 1 Fehler" in text
+
+
+def test_fremdobjekte_meldung(qtbot, monkeypatch):
+    """H-1: Nach dem Entfernen fremder Trigger/Views erscheint ein Hinweis, sonst nicht."""
+    import app as app_modul
+
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    monkeypatch.setattr(app_modul, "entfernte_fremdobjekte", lambda: [])
+    app_modul._fremdobjekte_melden(None)
+    assert meldungen == []
+    monkeypatch.setattr(app_modul, "entfernte_fremdobjekte", lambda: ["trigger manipulation"])
+    app_modul._fremdobjekte_melden(None)
+    assert "trigger manipulation" in meldungen[0]
+
+
 def test_keine_teilnahme_fehlt_in_ergebnis_tab(qtbot, conn):
     _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fehlt = _teilnehmer_anlegen(conn, nachname="Fehlt", startnummer=2)
@@ -1277,7 +1375,7 @@ def test_formular_import_tab_csv_import_legt_teilnehmer_an_und_zeigt_zusammenfas
     tab.show()
 
     qtbot.mouseClick(
-        next(b for b in tab.findChildren(QPushButton) if b.text() == "CSV importieren…"),
+        next(b for b in tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste einlesen (Excel/CSV)…"),
         Qt.MouseButton.LeftButton,
     )
 
@@ -3585,6 +3683,55 @@ def _dk_parallel_termin(conn):
         add_zeitplan_pruefungsblock(conn, richter["id"], "DK", 1, disziplin, 10)
 
 
+def test_seitenleiste_maskiert_namen(qtbot, termin):
+    """Sicherheitsprüfung 03.10.2026, S-1: Namen aus Importen/fremden Dateien landen im
+    Rich Text der Seitenleiste nur maskiert - kein eingeschleustes Markup (z. B. <img>)."""
+    conn, pfad = termin
+    _dk_parallel_termin(conn)
+    otto = next(t for t in list_teilnehmer(conn) if t["nachname"] == "Otto")
+    update_teilnehmer(conn, otto["id"], NeuerTeilnehmer(
+        nachname='<img src="x.png">Otto', vorname="Max", rufname_hund="Bello", art="DK", stufe=1,
+        startnummer=2))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    tab.aktualisieren()
+    text = tab._offene_starts_label.text()
+    assert "&lt;img" in text
+    assert "<img" not in text
+
+
+def test_meldungsfenster_zeigen_reinen_text(monkeypatch):
+    """S-1: Standard-Meldungsfenster deuten Texte (mit Namen) nie als HTML."""
+    from desktop_gemeinsam import meldungsfenster_als_klartext
+
+    for name in ("question", "information", "warning", "critical"):
+        monkeypatch.setattr(QMessageBox, name, getattr(QMessageBox, name))
+    monkeypatch.setattr(QMessageBox, "_shs_klartext", False, raising=False)
+    meldungsfenster_als_klartext()
+    gesehen = []
+
+    def ausfuehren(box):
+        gesehen.append((box.textFormat(), box.text()))
+        return int(QMessageBox.StandardButton.Yes)
+
+    monkeypatch.setattr(QMessageBox, "exec", ausfuehren)
+    antwort = QMessageBox.question(None, "Löschen", 'Teilnehmer „<img src="x">“ löschen?')
+    assert antwort == QMessageBox.Yes
+    QMessageBox.warning(None, "Hinweis", "<b>fett</b>")
+    assert [f for f, _t in gesehen] == [Qt.PlainText, Qt.PlainText]
+
+
+def test_klartext_tooltip_maskiert_namen():
+    """S-1: Tooltips mit Richternamen zeigen Markup wörtlich statt es auszuführen."""
+    from app import _klartext_tooltip
+
+    tooltip = _klartext_tooltip('Gleichzeitig bei <img src="//server/x.png">\nzweite Zeile')
+    assert "<img" not in tooltip
+    assert "&lt;img" in tooltip
+    assert tooltip.startswith("<qt>") and "<br>" in tooltip
+
+
 def test_zeitplan_markiert_ueberschneidungen(qtbot, termin):
     """UX-Test 02.10.2026, U2b: betroffene Zeilen rot mit ⚠ und Tooltip, Seitenleiste
     zeigt einen Warnbereich je Team; der Mindestabstand ist einstellbar und gespeichert."""
@@ -3693,7 +3840,7 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
 
     ziel = tmp_path / "liste.csv"
     monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
-    next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste (CSV, für Excel)…").click()
+    next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste speichern (CSV, für Excel)…").click()
     assert ziel.read_bytes().startswith(b"\xef\xbb\xbf")
     assert "Müller" in ziel.read_text(encoding="utf-8-sig")
     assert gespeichert_meldungen[-1][1] == "Teilnehmerliste gespeichert"
@@ -3703,7 +3850,7 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(ziel), ""))
     meldungen = []
     monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[2]))
-    next(b for b in fenster.teilnehmer_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste (Excel/CSV)…").click()
+    next(b for b in fenster.teilnehmer_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste einlesen (Excel/CSV)…").click()
     assert [t["nachname"] for t in list_teilnehmer(conn)].count("Müller") == 1
     assert "bereits vorhanden" in meldungen[0]
 

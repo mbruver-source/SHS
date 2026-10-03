@@ -622,6 +622,7 @@ class StartnummerTauschenDialog(QDialog):
             f"Startnummer von {teilnehmer['nachname']}, {teilnehmer['vorname']} "
             f"(aktuell: {eigene_anzeige}) tauschen mit:"
         )
+        hinweis.setTextFormat(Qt.PlainText)  # S-1: Name nie als HTML deuten
         hinweis.setWordWrap(True)
 
         self.partner_combo = QComboBox()
@@ -1079,13 +1080,13 @@ mehrere auf einmal; bereits vorhandene Meldungen werden übersprungen, abgelehnt
 Grund aufgelistet (z. B. mehrere Prüfungen angekreuzt oder eine im Termin nicht angebotene
 Prüfung).</p>
 <p><b>Teilnehmerliste aus Excel:</b> "Leere Vorlage (CSV) speichern…" liefert die passenden
-Spalten; in Excel ausfüllen, als CSV speichern und mit "CSV importieren…" einlesen (auch über
-"Teilnehmerliste (Excel/CSV)…" im Reiter "Teilnehmer"). Komma/Semikolon und die Excel-
+Spalten; in Excel ausfüllen, als CSV speichern und mit "Teilnehmerliste einlesen (Excel/CSV)…" einlesen (denselben
+Knopf gibt es auch im Reiter "Teilnehmer"). Komma/Semikolon und die Excel-
 Kodierung werden erkannt.</p>
 <p>"OMA-Export importieren…" übernimmt den Meldungs-Export der Online-Meldeannahme direkt.</p>
 <p><b>Andere Meldeformulare</b> (Word, Foto/Scan, handschriftlich) mit Hilfe eines KI-Assistenten
 (unten aufklappen): "Prompt kopieren", Prompt und Formulare an den KI-Assistenten geben, die
-erzeugte CSV-Datei mit "CSV importieren…" einlesen. Jede Zeile wird ein neuer Teilnehmer (ohne Startnummer,
+erzeugte CSV-Datei mit "Teilnehmerliste einlesen (Excel/CSV)…" einlesen. Jede Zeile wird ein neuer Teilnehmer (ohne Startnummer,
 Gegenstände und Bezahlt-Status); fehlerhafte Zeilen werden mit Grund aufgelistet und
 übersprungen. Achtung Datenschutz: Die Formulare gehen dabei an den gewählten KI-Anbieter.</p>
 <p>Zum Ausprobieren gibt es eine Beispieldatei mit 20 erfundenen Teilnehmern auf der
@@ -1131,7 +1132,8 @@ Art/Leistungsklasse und Startnummer. "Nicht bestanden" wird rot markiert und erh
 Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualisiert die
 Anzeige. "Rangliste drucken (PDF)…" speichert die Rangliste als PDF - ist im Filter eine
 Art/Leistungsklasse gewählt, nur diese, sonst alle (der Startnummer-Filter wird dabei nicht
-berücksichtigt).</p>
+berücksichtigt). Sind mehrere punktgleich auf Platz 1, steht dort "Stechen offen": nach dem
+Stechen mit "Stechen-Sieger festlegen…" den Sieger wählen - er wird 1., die anderen 2.</p>
 
 <h3>Reiter "Übersicht"</h3>
 <p>Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen und die
@@ -1154,7 +1156,7 @@ Anmeldeformulars.</p>
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
 Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
 Zeitplan sowie
-alle Bewertungsbögen gesammelt. "Teilnehmerliste (CSV, für Excel)…" speichert alle Teilnehmer
+alle Bewertungsbögen gesammelt. "Teilnehmerliste speichern (CSV, für Excel)…" speichert alle Teilnehmer
 mit Stammdaten als Excel-Liste (lässt sich auch wieder einlesen). PDFs landen standardmäßig im
 Ordner "Ausdrucke" des Termins; nach dem Speichern zeigt ein Fenster, wo die Datei liegt.
 "Ablageort öffnen" zeigt den Ordner im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen

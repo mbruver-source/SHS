@@ -46,10 +46,10 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ## Tests lokal ausführen (ohne PySide6/psycopg2/pytest)
 
 ```
-python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core
+python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen
 ```
 
-Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf) stehen in `requirements-dev.txt`. Ohne
+Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne
 `pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
 
 GUI-Tests (`test_app_gui.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
@@ -106,6 +106,11 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu
   erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer aus dem
   System-Reminder anhängen, sofern vorhanden).
+- Direkt nach dem Build-Commit: `python tools/altdaten_erzeugen.py --aktuell` erzeugt die
+  Altdatei der neuen Version (Termin + Sicherungen, erfundene Daten) für die Upgrade-Tests
+  (`test_altversionen.py`); `test_altversionen` laufen lassen und die neuen Dateien unter
+  `testdaten/altversionen/` als eigenen Commit nachreichen (Marcos Entscheidung T3,
+  03.10.2026).
 - `git push`, `git tag`, `git push --tags` NIE selbst ausführen - das bleibt immer Marcos
   eigene Aktion. Ihm die genauen Befehle nennen, wenn nötig.
 

@@ -157,6 +157,10 @@ class Teilnehmerergebnis:
     wertnote: Wertnote
     platzierung: int | None = field(init=False, default=None)
     von_startern: int = field(init=False, default=0)
+    # S1 (Marco 03.10.2026): Gleichstand um Platz 1 entscheidet ein Stechen.
+    # "offen" = punktgleich auf Platz 1, Sieger noch nicht festgelegt;
+    # "gewonnen" = Stechen-Sieger (Platz 1); sonst None.
+    stechen: str | None = field(init=False, default=None)
 
     @property
     def gesamtpunkte(self) -> int:
@@ -167,7 +171,9 @@ class Teilnehmerergebnis:
         return self.wertnote.bestanden
 
 
-def berechne_rangliste(teilnehmer: list[Teilnehmerergebnis]) -> list[Teilnehmerergebnis]:
+def berechne_rangliste(
+    teilnehmer: list[Teilnehmerergebnis], stechen_sieger: set[str] | frozenset[str] = frozenset()
+) -> list[Teilnehmerergebnis]:
     """Berechnet die Platzierung je Leistungsklasse (höhere Punktzahl = besserer Rang).
 
     Verwendet "Standard Competition Ranking" (wie Excel/Calc RANK.EQ): Teilnehmer
@@ -182,6 +188,12 @@ def berechne_rangliste(teilnehmer: list[Teilnehmerergebnis]) -> list[Teilnehmere
     Das Original bildet das über die riesige Kreuztabelle "Hilfstabelle Rankingliste"
     (25.200 Formeln) ab - hier reicht dafür ein einfaches Sortieren pro
     Leistungsklassen-Gruppe.
+
+    Stechen (S1, Marco 03.10.2026): Sind mehrere Bestandene punktgleich auf Platz 1,
+    entscheidet ein Stechen. Ist GENAU einer von ihnen in `stechen_sieger` (IDs), wird er
+    1. (stechen="gewonnen") und die übrigen Punktgleichen teilen Platz 2; sonst bleiben alle
+    auf Platz 1 mit stechen="offen". Die Plätze danach zählen wie bisher weiter (1., 2., 2.,
+    4.). Gleichstand auf anderen Plätzen: unverändert, kein Stechen.
     """
     ergebnis: list[Teilnehmerergebnis] = []
     leistungsklassen = sorted({t.leistungsklasse for t in teilnehmer})
@@ -204,9 +216,47 @@ def berechne_rangliste(teilnehmer: list[Teilnehmerergebnis]) -> list[Teilnehmere
             t.von_startern = anzahl_starter
             ergebnis.append(t)
 
+        spitze = [t for t in bestandene if t.platzierung == 1]
+        if len(spitze) > 1:
+            sieger = [t for t in spitze if t.id in stechen_sieger]
+            for t in spitze:
+                if len(sieger) == 1:
+                    t.stechen = "gewonnen" if t is sieger[0] else None
+                    t.platzierung = 1 if t is sieger[0] else 2
+                else:
+                    t.stechen = "offen"
+
         for t in nicht_bestandene:
             t.platzierung = None
             t.von_startern = anzahl_starter
             ergebnis.append(t)
 
     return ergebnis
+
+
+def platz_text(t: Teilnehmerergebnis) -> str | None:
+    """Platzierung zur Anzeige ("1. von 4", mit Stechen-Vermerk); None ohne Platzierung."""
+    if t.platzierung is None:
+        return None
+    text = f"{t.platzierung}. von {t.von_startern}"
+    if t.stechen == "offen":
+        return text + " (Stechen offen)"
+    if t.stechen == "gewonnen":
+        return text + " (nach Stechen)"
+    return text
+
+
+def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis]) -> dict[str, list[Teilnehmerergebnis]]:
+    """Leistungsklassen mit Gleichstand um Platz 1 (Stechen offen ODER schon entschieden) -
+    für Hinweis, Auswahl des Siegers und die Rückfrage vor dem Druck."""
+    gruppen: dict[str, list[Teilnehmerergebnis]] = {}
+    for lk in sorted({t.leistungsklasse for t in ergebnisse}):
+        gruppe = [t for t in ergebnisse if t.leistungsklasse == lk and t.bestanden]
+        if not gruppe:
+            continue
+        hoechste = max(t.gesamtpunkte for t in gruppe)
+        spitze = [t for t in gruppe if t.gesamtpunkte == hoechste]
+        if len(spitze) > 1:
+            gruppen[lk] = spitze
+    return gruppen
+

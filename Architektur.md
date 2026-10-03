@@ -95,9 +95,11 @@ flowchart TB
 | `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Startnummern-Bereiche je Prüfung (`veranstaltung.startnummer_bereiche`, `fehlende_startnummern_vergeben`), Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung (automatische Verteilung mit DK-Mindestabstand, Überschneidungsprüfung `zeitplan_ueberschneidungen`, Pausen an Position bzw. bei allen Richtern, Richter aus den Veranstaltungsdaten), Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
 | `db_import.py` | Teilnehmer-Import und -Export (Desktop): CSV (Excel-Liste oder KI; UTF-8/Windows-Kodierung, `;`/`,` erkannt, leere Vorlage), OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; alle Wege prüfen die angebotenen Prüfungen (`_angebot_pruefen`); Teilnehmerliste als CSV-Export (`exportiere_teilnehmer_csv`, mit Schutz vor CSV-Formeln); baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
 | `db_sicherung.py` | Backup/Restore aller Termin-Dateien (ZIP, optional `pyzipper`-verschlüsselt); baut auf `db.py` auf | `test_backup.py` |
-| `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung, Punktgrenzen `SUCHE_MAX`/`ANZEIGE_MAX` (gemeinsam für Desktop und Web) | `test_shs_core.py` |
+| `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung, Punktgrenzen `SUCHE_MAX`/`ANZEIGE_MAX` (gemeinsam für Desktop und Web) | `test_shs_core.py`, `test_bewertung_referenz.py` (mit Marco abgestimmte Referenzfälle + Eigenschaftstests mit `hypothesis`) |
 | `pdf_export.py` | PDF-Erzeugung (reportlab): Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Zeitplan, Richter-Bedarf, ausfüllbares Anmeldeformular (Canvas + AcroForm; Feldnamen als Konstanten `ANMELDEFORMULAR_*` in `db.py`, gemeinsam mit dem Import) | `test_pdf_export.py` |
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
+| `selbsttest.py` | `--selbsttest [protokoll]` der Desktop-App (aus `app.main()`): prüft ohne Fenster Termin, Auswertung, PDFs, pypdf, CSV, verschlüsselte Sicherung und alle Reiter; Exit-Code 0/1 + Protokoll. Die CI startet damit die gebaute und die still installierte EXE (`build-installer.yml`) | `test_app_gui.py` (`test_selbsttest_erfolg_und_fehlerfall`) |
+| `tools/altdaten_erzeugen.py`, `testdaten/altversionen/` | Termin-Dateien und Sicherungen älterer Versionen (mit dem Code des jeweiligen Git-Tags erzeugt, erfundene Daten) für die Upgrade-Tests; beim Build mit `--aktuell` um die neue Version ergänzen | `test_altversionen.py`, Altdatei-Test in `test_app_gui.py` |
 | `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`) für Releases hochzählen | `test_bump_version.py` |
 | `templates/*.html` | Jinja2-Templates für `app_web.py` (Login, Ersteinrichtung, Termin-/Benutzerverwaltung, Ergebniserfassung) | (über `test_app_web.py` abgedeckt) |
 | `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante | `.github/workflows/build-container.yml` |
@@ -119,6 +121,21 @@ flowchart TB
   Eintragen"), global über alle Termine (nicht mehr an einen einzelnen Termin gebunden).
 - **Datei-Upload/Download statt direktem Dateizugriff des Containers**: funktioniert
   unabhängig davon, ob Container und Desktop-App auf demselben Gerät laufen.
+- **Sicherheitsgrundsätze (Sicherheitsprüfung 03.10.2026, Details in `Fortschritt.md` und
+  `Sicherheitspruefung-2026-10/`)**:
+  - Termin-Dateien und Sicherungen gelten als fremde Eingaben: `init_db` entfernt fremde
+    Trigger und Views, Sicherungs-ZIPs haben Obergrenzen und lehnen Pfadanteile und
+    Windows-Gerätenamen ab.
+  - Namen erscheinen in Qt nie als HTML: Meldungsfenster sind global auf reinen Text
+    umgestellt (`meldungsfenster_als_klartext`), Rich-Text-Stellen nutzen `html.escape`. In
+    PDFs geht jeder Nutzertext über `_p_wert`.
+  - Web:
+    - Die Session ist an eine Konto-Kennung gebunden (`db._konto_kennung`).
+    - Schutz-Header werden zentral in `after_request` gesetzt.
+    - Abmelden geht nur per POST.
+    - Platzhalter-Geheimnisse werden beim Start abgelehnt.
+  - CI: Schreibrechte nur in den Veröffentlichungs-Jobs, Actions auf Commit-Hashes, feste
+    Werkzeugversionen.
 
 ## 4. Test-Suite-Struktur
 
@@ -147,7 +164,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) noch nicht.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
   test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version
-  test_shs_core` deckt alles außer GUI- und echten Postgres-Tests ab.
+  test_shs_core test_bewertung_referenz test_altversionen` deckt alles außer GUI- und echten Postgres-Tests ab.
 
 ## 5. Woher kommt was (Verweise)
 

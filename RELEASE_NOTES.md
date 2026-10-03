@@ -1,63 +1,38 @@
-## Was ist neu in 1.0.40
+## Was ist neu in 1.0.41
 
-Diese Version setzt die Ergebnisse eines ausführlichen Bedien-Tests um: erfahrene Prüfungsleiter,
-normale Vereinsmitglieder und Einsteiger haben eine komplette Prüfung durchgespielt. Fast alle
-Änderungen machen das Programm einfacher und verständlicher. Deine Termine bleiben beim Update
-erhalten – einfach die neue Version über die alte installieren.
+Diese Version bringt das **Stechen** bei Punktgleichheit auf Platz 1, eindeutigere Knöpfe
+für die Teilnehmerliste und viele Verbesserungen bei der Sicherheit. Deine Termine bleiben
+beim Update erhalten – einfach die neue Version über die alte installieren.
 
-**Termin und Startnummern**
-- Je Prüfung lässt sich ein **Startnummern-Bereich** festlegen (z. B. DK-LK 1: 1–20). Mit
-  „Fehlende Startnummern vergeben…“ bekommen alle Teilnehmer ohne Nummer auf einmal eine,
-  nach jedem Import fragt das Programm auch von selbst danach.
-- Neue Teilnehmer starten ohne Startnummer. Wer eine möchte, bekommt die nächste freie Nummer
-  aus dem passenden Bereich vorgeschlagen.
-- Das Anmeldeformular zeigt jetzt auch den **Ort**. Fehlen Verband oder Meldestelle, weist das
-  Programm beim Anlegen darauf hin.
+**Stechen bei Punktgleichheit**
+- Sind mehrere Teilnehmer einer Prüfung punktgleich auf **Platz 1**, zeigt die Auswertung
+  „1. (Stechen offen)“ und darunter, in welcher Prüfung ein Stechen nötig ist.
+- Nach dem Stechen wählst du mit **„Stechen-Sieger festlegen…“** den Sieger. Er wird
+  „1. (nach Stechen)“, die anderen werden 2. – auch in Rangliste und Ergebnisliste (PDF).
+- Ist ein Stechen noch offen, fragt das Programm vor dem Drucken nach.
 
-**Teilnehmer**
-- **Mehrere Teilnehmer markieren** (Strg-/Umschalt-Klick): „Bezahlt umschalten“, „Keine
-  Teilnahme“ und „Löschen“ wirken auf alle markierten. Zwei markierte lassen sich direkt
-  per „Startnummer tauschen…“ tauschen.
-- Doppelklick auf eine Zeile öffnet „Bearbeiten…“. Die Markierung bleibt nach dem Speichern
-  beim selben Teilnehmer.
-- Die Erfassungsmaske öffnet groß genug, nichts ist mehr abgeschnitten. Die Knöpfe stehen in
-  zwei Zeilen und passen auch auf kleinere Bildschirme.
-- In „Anmerkungen“ ist nur noch eine fehlende Chip-Nr. orange. Offene Gegenstände erscheinen
-  grau als Erinnerung.
+**Teilnehmerliste: eindeutige Knöpfe**
+- Einlesen heißt jetzt **„Teilnehmerliste einlesen (Excel/CSV)…“** (Reiter „Teilnehmer“
+  und „Formular-Import“), Speichern heißt **„Teilnehmerliste speichern (CSV, für Excel)…“**
+  (Reiter „Export“). Vorher waren beide Namen kaum zu unterscheiden.
 
-**Teilnehmer einlesen**
-- **Excel-Teilnehmerlisten** (als CSV gespeichert) lassen sich direkt einlesen, eine leere
-  Vorlage gibt es per Knopf. Umlaute und Excel-Formate werden erkannt.
-- Alle Importwege (PDF, Excel/CSV, OMA) lehnen Prüfungen ab, die der Termin nicht anbietet,
-  und überspringen bereits gemeldete Teilnehmer – nichts wird doppelt angelegt.
-- Verständliche Meldungen mit Namen statt Fachsprache.
-- Neu: **Teilnehmerliste als CSV für Excel** speichern (Reiter „Export“).
+**Sicherheit**
+- Termin-Dateien und Sicherungen aus fremder Hand werden beim Öffnen geprüft: Versteckte
+  Datenbank-Befehle, die Ergebnisse verändern könnten, entfernt das Programm und meldet das.
+- Sicherungen mit unsinnig großen oder zu vielen Dateien werden abgelehnt.
+- Namen mit Sonderzeichen (z. B. spitzen Klammern) erscheinen in Fenstern und PDFs immer
+  genau so, wie sie eingegeben wurden.
+- Web-Version:
+  - Nach dem Löschen und Neuanlegen eines Benutzers gilt eine alte Anmeldung nicht mehr.
+  - Der Start mit den Beispiel-Passwörtern aus `.env.example` wird verweigert.
+  - Zusätzliche Schutzmaßnahmen im Browser.
+  - Abmelden ist besser abgesichert.
 
-**Zeitplan**
-- Die Richter aus dem Termin stehen automatisch als Spalten im Zeitplan.
-- „Automatisch verteilen…“ setzt Dreikampf-Teams nie gleichzeitig bei zwei Richtern an und
-  hält einen einstellbaren Mindestabstand ein. Überschneidungen werden rot markiert.
-- Pausen kommen nach der markierten Zeile; eine Mittagspause lässt sich bei allen Richtern auf
-  einmal einfügen. Prüfungsblöcke sind mit fetten Kopfzeilen übersichtlicher.
-
-**Ergebnisse und Auswertung**
-- Punkte über 60/40 werden sofort rot markiert und verständlich abgelehnt, Kommazahlen
-  bekommen einen Hinweis. Leere Zeilen zeigen „noch kein Ergebnis“. Strg+S speichert.
-- Die Rangliste erklärt „1. von 2“, solange noch Ergebnisse fehlen.
-- Ergebnisliste: „Disq.“ bzw. „Abbr.“ statt „nB“, keine Überschrift mehr allein am
-  Seitenende. Etiketten kennzeichnen „nB“ und lassen leere Angaben sauber weg.
-
-**Ausdrucke und Datensicherung**
-- Nach jedem Speichern zeigt ein Fenster, wo die Datei liegt – mit „PDF öffnen“ und
-  „Ordner zeigen“. Vorgeschlagen wird ein eigener Ordner „Ausdrucke“ je Termin.
-- Der Name der Sicherungsdatei enthält Prüfungsdatum und Verein.
-
-**Bedienung und Lesbarkeit**
-- Das Programm startet maximiert, alle Knöpfe sind deutsch („Ja/Nein/Abbrechen“).
-- Bessere Kontraste, verständlichere Texte, Tipp zum Design „Hoher Kontrast“.
-- Bei einem unerwarteten Programmende schreibt das Programm ein Protokoll
-  (`absturzprotokoll.txt`), das bei der Fehlersuche hilft.
+**Im Hintergrund**
+- Jeder Installer wird vor der Veröffentlichung automatisch gestartet, installiert und
+  getestet.
+- Die Bewertung wird mit festen Referenzfällen geprüft. Außerdem wird bei jeder Version
+  getestet, dass Termine und Sicherungen aus älteren Versionen weiter sauber geöffnet werden.
 
 **Handbuch**
-- Neues Kapitel **„Die erste Prüfung Schritt für Schritt“** für Einsteiger und ein **Glossar**,
-  alle Bilder aktualisiert.
+- Abschnitt zum Stechen in Kapitel 8 und im Glossar, neue Bilder.

@@ -30,6 +30,12 @@
     align-items: center;
   }
   header a { color: #fff; text-decoration: none; }
+  header form.abmelden { display: inline; margin: 0; }
+  header form.abmelden button {
+    background: none; border: none; padding: 0; margin: 0;
+    color: #fff; font: inherit; cursor: pointer;
+  }
+  header form.abmelden button:hover, header form.abmelden button:focus { text-decoration: underline; }
   header .titel { font-weight: 600; }
   main {
     max-width: 640px;
@@ -104,7 +110,10 @@
       {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a> ·{% endif %}
       {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a> ·{% endif %}
       {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a> ·{% endif %}
-      <a href="{{ url_for('logout') }}">Abmelden ({{ session.get('benutzername') }})</a>
+      <form class="abmelden" method="post" action="{{ url_for('logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Abmelden ({{ session.get('benutzername') }})</button>
+      </form>
     </nav>
   {% endif %}
 </header>

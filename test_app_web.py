@@ -302,7 +302,7 @@ class TestAppWeb(_AppWebTestBasis):
 
     def test_normaler_login_erscheint_sobald_admin_existiert(self):
         self._anmelden()
-        self.client.get("/logout")
+        self.client.post("/logout")
         antwort = self.client.get("/")
         self.assertNotIn("Ersteinrichtung".encode(), antwort.data)
         self.assertIn("Benutzername".encode(), antwort.data)
@@ -311,14 +311,14 @@ class TestAppWeb(_AppWebTestBasis):
 
     def test_login_mit_falschem_passwort_zeigt_fehler(self):
         self._anmelden()
-        self.client.get("/logout")
+        self.client.post("/logout")
         antwort = self.client.post("/", data={"benutzername": _ADMIN_NAME, "passwort": "falsches_passwort"})
         self.assertEqual(antwort.status_code, 200)
         self.assertIn("falsch".encode(), antwort.data)
 
     def test_login_mit_unbekanntem_benutzer_zeigt_denselben_fehler(self):
         self._anmelden()
-        self.client.get("/logout")
+        self.client.post("/logout")
         antwort = self.client.post("/", data={"benutzername": "gibtsnicht", "passwort": "irgendwas123"})
         self.assertIn("falsch".encode(), antwort.data)
 
@@ -327,7 +327,7 @@ class TestAppWeb(_AppWebTestBasis):
         # beim Anmelden - insbesondere auf Mobilgeräten mit automatischer
         # Groß-/Kleinschreibung des ersten Buchstabens - wird aber "Chef" eingegeben.
         self._anmelden()
-        self.client.get("/logout")
+        self.client.post("/logout")
         antwort = self.client.post(
             "/",
             data={"benutzername": _ADMIN_NAME.upper(), "passwort": _ADMIN_PASSWORT},
@@ -356,9 +356,38 @@ class TestAppWeb(_AppWebTestBasis):
         antwort = self.client.get("/teilnehmer")
         self.assertEqual(antwort.status_code, 302)
 
+    def test_logout_per_get_meldet_nicht_ab(self):
+        """S-6: Abmelden nur per POST mit CSRF-Token - ein GET (z. B. über ein Bild auf
+        einer fremden Seite) beendet die Sitzung nicht."""
+        self._anmelden()
+        antwort = self.client.get("/logout")
+        self.assertEqual(antwort.status_code, 405)
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
+
+    def test_abmelde_formular_mit_csrf_token(self):
+        self._anmelden()
+        seite = self.client.get("/teilnehmer").data.decode()
+        self.assertRegex(
+            seite,
+            r'<form class="abmelden" method="post" action="/logout">\s*'
+            r'<input type="hidden" name="csrf_token" value="[^"]+">',
+        )
+
+    def test_sicherheits_header_in_jeder_antwort(self):
+        """S-6: Schutz-Header gegen Einbetten, MIME-Raten, Caching und fremde Skripte."""
+        for antwort in (self.client.get("/"), self.client.get("/teilnehmer")):
+            with self.subTest(pfad=antwort.request.path):
+                self.assertEqual(antwort.headers["X-Frame-Options"], "DENY")
+                self.assertEqual(antwort.headers["X-Content-Type-Options"], "nosniff")
+                self.assertEqual(antwort.headers["Cache-Control"], "no-store")
+                self.assertEqual(antwort.headers["Referrer-Policy"], "same-origin")
+                csp = antwort.headers["Content-Security-Policy"]
+                self.assertIn("frame-ancestors 'none'", csp)
+                self.assertIn("script-src 'none'", csp)
+
     def test_logout_entfernt_session(self):
         self._anmelden()
-        self.client.get("/logout")
+        self.client.post("/logout")
         antwort = self.client.get("/teilnehmer")
         self.assertEqual(antwort.status_code, 302)
 
@@ -442,7 +471,7 @@ class TestAppWeb(_AppWebTestBasis):
     def test_nicht_admin_bekommt_403_bei_benutzerverwaltung(self):
         self._anmelden()
         db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
-        self.client.get("/logout")
+        self.client.post("/logout")
         self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"})
         antwort = self.client.get("/admin/benutzer")
         self.assertEqual(antwort.status_code, 403)
@@ -459,7 +488,8 @@ class TestAppWeb(_AppWebTestBasis):
         )
         self.assertIn("helfer".encode(), antwort.data)
         konto = db.pruefe_login(self.conn, "helfer", "helferpasswort")
-        self.assertEqual(konto, {"benutzername": "helfer", "ist_admin": False})
+        self.assertEqual({k: konto[k] for k in ("benutzername", "ist_admin")}, {"benutzername": "helfer", "ist_admin": False})
+        self.assertEqual(len(konto["kennung"]), 32)  # C-1: Konto-Kennung für die Session
 
     def test_admin_benutzeranlage_lehnt_doppelten_namen_ab(self):
         self._anmelden()
@@ -534,7 +564,7 @@ class TestAppWeb(_AppWebTestBasis):
         geleert haben (nicht nur einmalig abweisen)."""
         self._anmelden()
         db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
-        self.client.get("/logout")
+        self.client.post("/logout")
         self.client.post(
             "/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True
         )
@@ -548,6 +578,40 @@ class TestAppWeb(_AppWebTestBasis):
         # Anfrage abgewiesen - auch admin-geschützte Bereiche sind jetzt wieder zu.
         self.assertEqual(self.client.get("/admin/benutzer").status_code, 302)
 
+    def test_altes_cookie_gilt_nicht_fuer_neu_angelegtes_konto_gleichen_namens(self):
+        """Sicherheitsprüfung 03.10.2026, C-1 (Codex-Nachweis): Konto "helfer" wird
+        gelöscht und unter demselben Namen als ADMIN neu angelegt - das alte Cookie darf
+        weder das neue Konto noch Admin-Rechte bekommen."""
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        self.client.post(
+            "/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True
+        )
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 200)
+
+        db.benutzer_loeschen(self.conn, "helfer")
+        db.benutzer_anlegen(self.conn, "helfer", "ganz-neues-passwort", ist_admin=True)
+
+        self.assertEqual(self.client.get("/admin/benutzer").status_code, 302)
+        self.assertEqual(self.client.get("/teilnehmer").status_code, 302)
+
+    def test_platzhalter_und_zu_kurze_geheimnisse_werden_abgelehnt(self):
+        """Sicherheitsprüfung 03.10.2026, S-2: Werte aus .env.example bzw. zu kurze Werte
+        verhindern den Start; leer bleibt erlaubt."""
+        pruefe = app_web.pruefe_web_geheimnisse
+        pruefe("", "")
+        pruefe("a" * 64, "b" * 16)
+        for schluessel, code in (
+            ("bitte-hier-einen-erzeugten-schluessel-eintragen", ""),
+            ("zu-kurz", ""),
+            ("a" * 64, "bitte-hier-einen-erzeugten-code-eintragen"),
+            ("a" * 64, "kurz"),
+        ):
+            with self.subTest(schluessel=schluessel, code=code):
+                with self.assertRaises(RuntimeError):
+                    pruefe(schluessel, code)
+
     def test_rollenaenderung_wird_ohne_neuanmeldung_uebernommen(self):
         """Teil desselben Fixes: _aktueller_benutzer_oder_redirect() aktualisiert
         session["ist_admin"] bei JEDER Anfrage neu aus der Datenbank - ein
@@ -556,7 +620,7 @@ class TestAppWeb(_AppWebTestBasis):
         Session weiterhin Admin-Zugriff gewähren würde)."""
         self._anmelden()
         db.benutzer_anlegen(self.conn, "helfer", "helferpasswort", ist_admin=True)
-        self.client.get("/logout")
+        self.client.post("/logout")
         self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"})
         self.assertEqual(self.client.get("/admin/benutzer").status_code, 200)
 
@@ -892,7 +956,7 @@ class TestAppWeb(_AppWebTestBasis):
     def test_nicht_admin_bekommt_403_bei_termineverwaltung(self):
         self._anmelden()
         db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
-        self.client.get("/logout")
+        self.client.post("/logout")
         self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"})
         for pfad, methode in [
             ("/admin/termine", "get"),
@@ -1127,7 +1191,10 @@ class TestAppWeb(_AppWebTestBasis):
         dessen (von itsdangerous mitsignierter) Zeitstempel `sekunden` in der
         Vergangenheit liegt - simuliert ein altes, z. B. abgegriffenes Cookie."""
         serializer = app_web.app.session_interface.get_signing_serializer(app_web.app)
-        daten = {"benutzername": _ADMIN_NAME, "ist_admin": True, "schema_name": _TEST_SCHEMA}
+        # C-1 (03.10.2026): eine gültige Session enthält auch die Konto-Kennung.
+        kennung = db.benutzer_stand(self.conn, _ADMIN_NAME)["kennung"]
+        daten = {"benutzername": _ADMIN_NAME, "ist_admin": True, "schema_name": _TEST_SCHEMA,
+                 "konto_kennung": kennung}
         with patch("time.time", return_value=time.time() - sekunden):
             return serializer.dumps(daten)
 
@@ -1333,7 +1400,7 @@ class TestAppWebPostgres(unittest.TestCase):
         self.pg.commit()
         self.assertTrue(admin_vorhanden)
 
-        self.client.get("/logout")
+        self.client.post("/logout")
         self.assertEqual(self.client.get("/teilnehmer").status_code, 302)
         antwort = self.client.post(
             "/", data={"benutzername": _ADMIN_NAME, "passwort": _ADMIN_PASSWORT}, follow_redirects=True,

@@ -30,6 +30,48 @@ class PasswortFalschError(Exception):
     ist falsch (siehe sicherung_inhalt()/sicherung_wiederherstellen())."""
 
 
+# Sicherheitsprüfung 03.10.2026, S-8: Obergrenzen für Sicherungs-ZIPs. Ein präpariertes
+# ZIP hätte sonst mit wenigen KB beim Entpacken Gigabytes erzeugen können ("ZIP-Bombe").
+# Großzügig gewählt - ein Termin ist typischerweise unter 1 MB groß.
+_MAX_ZIP_EINTRAEGE = 500
+_MAX_DATEIGROESSE = 200 * 1024 * 1024  # je Termin-Datei
+_MAX_GESAMTGROESSE = 1024 * 1024 * 1024  # alle Termin-Dateien zusammen
+
+# S-8: Unter Windows reservierte Gerätenamen - "CON.sqlite" o. Ä. würde nicht als Datei,
+# sondern auf ein Gerät geschrieben.
+_WINDOWS_GERAETENAMEN = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)}
+)
+
+
+def _zip_grenzen_pruefen(zf) -> None:
+    """S-8: Wirft ValueError, wenn das ZIP zu viele Einträge hat oder eine Termin-Datei
+    bzw. alle zusammen ausgepackt die Obergrenzen überschreiten. Maßgeblich ist die im
+    ZIP angegebene Originalgröße; zipfile/pyzipper liefern beim Lesen nie mehr Bytes als
+    dort angegeben."""
+    eintraege = zf.infolist()
+    if len(eintraege) > _MAX_ZIP_EINTRAEGE:
+        raise ValueError(
+            f"Die Sicherung enthält mehr als {_MAX_ZIP_EINTRAEGE} Einträge - das ist keine "
+            "mit diesem Programm erstellte Sicherung."
+        )
+    gesamt = 0
+    for info in eintraege:
+        if info.file_size > _MAX_DATEIGROESSE:
+            raise ValueError(
+                f"Die Datei „{info.filename}“ in der Sicherung ist ausgepackt größer als "
+                f"{_MAX_DATEIGROESSE // (1024 * 1024)} MB - das ist keine gültige Termin-Datei."
+            )
+        gesamt += info.file_size
+    if gesamt > _MAX_GESAMTGROESSE:
+        raise ValueError(
+            f"Die Sicherung ist ausgepackt größer als {_MAX_GESAMTGROESSE // (1024 * 1024 * 1024)} GB "
+            "- das ist keine mit diesem Programm erstellte Sicherung."
+        )
+
+
 def _ist_sicherer_dateiname(name: str) -> bool:
     """Prüft, ob `name` ein "flacher" Dateiname ohne Pfadanteile ist - also ohne '/'
     oder '\\\\' und ohne '..'-Segmente. sicherung_erstellen() schreibt ZIP-Einträge
@@ -49,6 +91,9 @@ def _ist_sicherer_dateiname(name: str) -> bool:
     if not name or name != os.path.basename(name):
         return False
     if "\\" in name or ".." in Path(name).parts:
+        return False
+    # S-8: Windows-Gerätenamen (auch mit Endung oder Leerzeichen vor dem Punkt).
+    if name.split(".")[0].rstrip(" ").upper() in _WINDOWS_GERAETENAMEN:
         return False
     return True
 
@@ -125,6 +170,7 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
         with pyzipper.AESZipFile(zip_pfad) as zf:
             if passwort:
                 zf.setpassword(passwort.encode("utf-8"))
+            _zip_grenzen_pruefen(zf)
             # _ist_sicherer_dateiname() filtert Einträge mit Pfadanteilen (z.B.
             # '../../wichtig.sqlite') schon hier heraus, BEVOR sie dem Nutzer in der
             # Konflikt-Auswahl angezeigt werden (siehe Docstring dort).
@@ -177,6 +223,8 @@ def sicherung_wiederherstellen(
         with pyzipper.AESZipFile(zip_pfad) as zf:
             if passwort:
                 zf.setpassword(passwort.encode("utf-8"))
+            # S-8: auch hier, falls ein Aufrufer sicherung_inhalt() nicht vorschaltet.
+            _zip_grenzen_pruefen(zf)
             for quelle, ziel in entscheidungen.items():
                 # Zweite, unabhängige Absicherung gegen Path Traversal (siehe
                 # _ist_sicherer_dateiname()) - auch wenn sicherung_inhalt() unsichere

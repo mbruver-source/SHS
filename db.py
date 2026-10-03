@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime
 import math
+import hashlib
 import re
 import secrets
 import sqlite3
@@ -169,7 +170,10 @@ CREATE TABLE IF NOT EXISTS ergebnisse (
     -- keine aus den Punktwerten berechnete Wertnote gebildet (siehe berechne_auswertung()
     -- unten). Boolean-Konvention wie teilnehmer.bezahlt (INTEGER 0/1).
     disqualifiziert INTEGER NOT NULL DEFAULT 0 CHECK (disqualifiziert IN (0, 1)),
-    abbruch INTEGER NOT NULL DEFAULT 0 CHECK (abbruch IN (0, 1))
+    abbruch INTEGER NOT NULL DEFAULT 0 CHECK (abbruch IN (0, 1)),
+    -- S1 (Marco 03.10.2026): Sieger eines Stechens bei Gleichstand um Platz 1 (0/1).
+    -- Gilt nur, solange der Gleichstand besteht (siehe shs_core.berechne_rangliste).
+    stechen_sieger INTEGER NOT NULL DEFAULT 0 CHECK (stechen_sieger IN (0, 1))
 );
 
 -- Zeitplan: je Termin beliebig viele "Richter"-Spuren (zeitplan_richter), jede
@@ -529,6 +533,7 @@ def _migriere_teilnehmer_spalten(conn) -> None:
 _ERGEBNISSE_NEUE_SPALTEN = [
     ("disqualifiziert", "INTEGER NOT NULL DEFAULT 0"),
     ("abbruch", "INTEGER NOT NULL DEFAULT 0"),
+    ("stechen_sieger", "INTEGER NOT NULL DEFAULT 0"),  # S1, 03.10.2026
 ]
 
 
@@ -553,6 +558,30 @@ def _migriere_zeitplan_spalten(conn) -> None:
     _migriere_spalten(conn, "zeitplan_eintrag", _ZEITPLAN_EINTRAG_NEUE_SPALTEN)
 
 
+# Sicherheitsprüfung 03.10.2026, H-1: Das Programm legt selbst NIE Trigger oder Views an.
+# Stehen welche in einer Termin-Datei, stammen sie von außen (präparierte oder fremde Datei)
+# und könnten z. B. eingetragene Ergebnisse still verändern (Codex-Nachweis: 50 -> 0).
+_ENTFERNTE_FREMDOBJEKTE: list[str] = []
+
+
+def _fremde_trigger_und_views_entfernen(conn) -> list[str]:
+    """Entfernt alle Trigger und Views aus einer SQLite-Termin-Datei; liefert ihre Namen."""
+    objekte = conn.execute(
+        "SELECT type, name FROM sqlite_master WHERE type IN ('trigger', 'view') ORDER BY type, name"
+    ).fetchall()
+    for typ, name in objekte:
+        conn.execute(f'DROP {"TRIGGER" if typ == "trigger" else "VIEW"} IF EXISTS "{name.replace(chr(34), chr(34) * 2)}"')
+    if objekte:
+        conn.commit()
+    return [f"{typ} {name}" for typ, name in objekte]
+
+
+def entfernte_fremdobjekte() -> list[str]:
+    """Trigger/Views, die das zuletzt per init_db() geöffnete Termin-File enthielt und die
+    dabei entfernt wurden (leer im Normalfall) - für einen Hinweis in der Oberfläche."""
+    return list(_ENTFERNTE_FREMDOBJEKTE)
+
+
 def init_db(pfad: str) -> sqlite3.Connection:
     """Öffnet (oder erstellt) die Termin-Datenbankdatei unter `pfad`.
 
@@ -562,10 +591,14 @@ def init_db(pfad: str) -> sqlite3.Connection:
     21.09.) - sonst bliebe die Datei über die offene, nie wieder erreichbare Verbindung
     gesperrt (unter Windows verhindert das ein anschließendes os.remove() der
     temporären Upload-Datei mit einem PermissionError)."""
+    global _ENTFERNTE_FREMDOBJEKTE
     conn = sqlite3.connect(pfad)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        # Sicherheitsprüfung 03.10.2026, H-1: ZUERST fremde Trigger/Views entfernen, bevor
+        # irgendetwas in die Datei geschrieben wird (auch nicht die Migrationen).
+        _ENTFERNTE_FREMDOBJEKTE = _fremde_trigger_und_views_entfernen(conn)
         conn.executescript(SCHEMA)
         conn.commit()
         _migriere_veranstaltung_spalten(conn)
@@ -1161,6 +1194,18 @@ def setze_ergebnis_status(
     conn.commit()
 
 
+def setze_stechen_sieger(conn: sqlite3.Connection, sieger_id: int | None, gruppe_ids: list[int]) -> None:
+    """S1 (Marco 03.10.2026): legt den Sieger eines Stechens fest - alle `gruppe_ids` (die
+    Punktgleichen auf Platz 1) verlieren die Markierung, `sieger_id` bekommt sie. Mit
+    sieger_id=None wird das Stechen wieder auf "offen" gesetzt."""
+    for tid in gruppe_ids:
+        conn.execute(
+            "UPDATE ergebnisse SET stechen_sieger = ? WHERE teilnehmer_id = ?",
+            (int(tid == sieger_id), tid),
+        )
+    conn.commit()
+
+
 def _disziplin_punkte(ergebnis: dict, disziplin: str) -> int | None:
     """Summe aus Such- und Anzeigeleistung einer einzelnen Disziplin, oder None,
     wenn eine der beiden noch nicht erfasst ist."""
@@ -1535,6 +1580,7 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
 
     fertig: list[Teilnehmerergebnis] = []
     ausstehend: list[dict] = []
+    stechen_sieger = {str(tid) for tid, e in ergebnis_rows.items() if e.get("stechen_sieger")}
 
     for t in teilnehmer_rows:
         # add_teilnehmer() legt für jeden Teilnehmer sofort eine passende Zeile in
@@ -1577,7 +1623,7 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
             )
         )
 
-    return berechne_rangliste(fertig), ausstehend
+    return berechne_rangliste(fertig, stechen_sieger), ausstehend
 
 
 # --- Zeitplan --------------------------------------------------------------
@@ -2549,12 +2595,25 @@ def benutzer_stand(conn, benutzername: str) -> dict | None:
     zuvor ggf. gewechselt war)."""
     _setze_termin_suchpfad(conn, "public")
     zeile = conn.execute(
-        "SELECT benutzername, ist_admin FROM web_benutzer WHERE LOWER(benutzername) = LOWER(?)",
+        "SELECT benutzername, ist_admin, passwort_hash, erstellt_am FROM web_benutzer "
+        "WHERE LOWER(benutzername) = LOWER(?)",
         (benutzername.strip(),),
     ).fetchone()
     if zeile is None:
         return None
-    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"])}
+    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"]),
+            "kennung": _konto_kennung(zeile)}
+
+
+def _konto_kennung(zeile) -> str:
+    """Sicherheitsprüfung 03.10.2026, C-1: Fingerabdruck EINES konkreten Kontos für die
+    Session. Der Benutzername allein reichte nicht - wurde ein Konto gelöscht und unter
+    demselben Namen neu angelegt (ggf. als Administrator), übernahm ein altes Cookie dessen
+    Rechte. Erstellzeit und (zufällig gesalzener) Passwort-Hash ändern sich bei jeder
+    Neuanlage und bei jedem Passwortwechsel; gespeichert wird nur dieser Hash-Wert, nicht
+    der Passwort-Hash selbst."""
+    roh = f"{zeile['benutzername'].lower()}|{zeile['erstellt_am']}|{zeile['passwort_hash']}"
+    return hashlib.sha256(roh.encode("utf-8")).hexdigest()[:32]
 
 
 # Dummy-Passwort-Hash für den Timing-Seitenkanal-Schutz in pruefe_login() unten - EINMALIG
@@ -2600,7 +2659,8 @@ def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
 
     _setze_termin_suchpfad(conn, "public")
     zeile = conn.execute(
-        "SELECT benutzername, passwort_hash, ist_admin FROM web_benutzer WHERE LOWER(benutzername) = LOWER(?)",
+        "SELECT benutzername, passwort_hash, ist_admin, erstellt_am FROM web_benutzer "
+        "WHERE LOWER(benutzername) = LOWER(?)",
         (benutzername.strip(),),
     ).fetchone()
     if zeile is None:
@@ -2608,7 +2668,8 @@ def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
         return None
     if not check_password_hash(zeile["passwort_hash"], passwort):
         return None
-    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"])}
+    return {"benutzername": zeile["benutzername"], "ist_admin": bool(zeile["ist_admin"]),
+            "kennung": _konto_kennung(zeile)}
 
 
 def verbinde_postgres_server(dsn: str) -> _PostgresConnection:

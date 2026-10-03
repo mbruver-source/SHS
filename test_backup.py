@@ -356,6 +356,68 @@ class TestIstSichererDateiname(unittest.TestCase):
     def test_leerer_name_ist_unsicher(self):
         self.assertFalse(_ist_sicherer_dateiname(""))
 
+    def test_windows_geraetenamen_sind_unsicher(self):
+        """Sicherheitsprüfung 03.10.2026, S-8."""
+        for name in ("CON.sqlite", "con.sqlite", "NUL.sqlite", "COM1.sqlite", "lpt9.sqlite",
+                     "AUX .sqlite", "PRN.tar.sqlite"):
+            with self.subTest(name=name):
+                self.assertFalse(_ist_sicherer_dateiname(name))
+        for name in ("CONTROL.sqlite", "Konzert.sqlite", "COM10.sqlite", "Nulltest.sqlite"):
+            with self.subTest(name=name):
+                self.assertTrue(_ist_sicherer_dateiname(name))
+
+
+class TestZipGrenzen(unittest.TestCase):
+    """Sicherheitsprüfung 03.10.2026, S-8: Obergrenzen gegen ZIP-Bomben. Die Grenzen werden
+    für den Test verkleinert, damit keine großen Dateien entstehen."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        basis = pathlib.Path(self._tmpdir.name)
+        self.ordner = basis / "termine"
+        self.ordner.mkdir()
+        self.zip_pfad = str(basis / "sicherung.zip")
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _zip(self, eintraege: dict[str, bytes]):
+        with zipfile.ZipFile(self.zip_pfad, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for name, daten in eintraege.items():
+                zf.writestr(name, daten)
+
+    def test_zu_viele_eintraege(self):
+        self._zip({f"t{i}.sqlite": b"x" for i in range(4)})
+        with patch("db_sicherung._MAX_ZIP_EINTRAEGE", 3):
+            with self.assertRaisesRegex(ValueError, "mehr als 3 Einträge"):
+                sicherung_inhalt(self.zip_pfad)
+
+    def test_zu_grosse_einzeldatei(self):
+        # Stark komprimierbar: wenige Bytes im ZIP, ausgepackt deutlich größer.
+        self._zip({"a.sqlite": b"\0" * 5000})
+        self.assertLess(pathlib.Path(self.zip_pfad).stat().st_size, 1000)
+        with patch("db_sicherung._MAX_DATEIGROESSE", 4000):
+            with self.assertRaisesRegex(ValueError, "a.sqlite"):
+                sicherung_inhalt(self.zip_pfad)
+            with self.assertRaises(ValueError):
+                sicherung_wiederherstellen(self.zip_pfad, {"a.sqlite": "a.sqlite"}, ordner=self.ordner)
+        self.assertEqual(list(self.ordner.iterdir()), [])
+
+    def test_zu_grosse_gesamtgroesse(self):
+        self._zip({"a.sqlite": b"\0" * 3000, "b.sqlite": b"\0" * 3000})
+        with patch("db_sicherung._MAX_GESAMTGROESSE", 5000):
+            with self.assertRaisesRegex(ValueError, "ausgepackt größer"):
+                sicherung_inhalt(self.zip_pfad)
+
+    def test_normale_sicherung_liegt_unter_den_grenzen(self):
+        _termin_anlegen(self.ordner, "a.sqlite")
+        sicherung_erstellen(self.zip_pfad, ordner=self.ordner)
+        self.assertEqual(sicherung_inhalt(self.zip_pfad), ["a.sqlite"])
+
+    def test_geraetename_wird_nicht_angeboten(self):
+        self._zip({"CON.sqlite": b"x", "a.sqlite": b"x"})
+        self.assertEqual(sicherung_inhalt(self.zip_pfad), ["a.sqlite"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

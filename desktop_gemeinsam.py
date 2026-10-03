@@ -117,6 +117,7 @@ def _datei_gespeichert_melden(parent, pfad: str, titel: str, datei_oeffnen_text:
     """Meldung nach dem Speichern mit den nächsten Schritten [PDF öffnen] [Ordner zeigen]
     [OK] - statt nur einer leicht übersehenen Statuszeile."""
     box = QMessageBox(parent)
+    box.setTextFormat(Qt.PlainText)  # S-1: Pfade/Namen nie als HTML deuten
     box.setIcon(QMessageBox.Information)
     box.setWindowTitle(titel)
     box.setText(f"Gespeichert unter:\n{_pfad_anzeige(pfad)}")
@@ -500,6 +501,34 @@ def _qt_uebersetzungs_ordner() -> list[str]:
     if bundle:
         ordner.append(os.path.join(bundle, "PySide6", "translations"))
     return ordner
+
+
+def meldungsfenster_als_klartext() -> None:
+    """Sicherheitsprüfung 03.10.2026, S-1: Qt zeigt Meldungstexte automatisch als
+    formatierten Text (HTML) an, sobald sie danach aussehen. Viele Meldungen enthalten Namen
+    aus Importen bzw. fremden Termin-Dateien - ein präparierter Name könnte so Markup oder
+    ein Bild (auch über einen Netzwerkpfad) einschleusen. Alle Standard-Meldungsfenster
+    (question/information/warning/critical) zeigen ihren Text deshalb als reinen Text.
+    Wird einmal beim Programmstart aufgerufen; mehrfaches Aufrufen schadet nicht."""
+    if getattr(QMessageBox, "_shs_klartext", False):
+        return
+
+    def _fabrik(icon, standard_knoepfe):
+        def meldung(parent, titel, text, buttons=standard_knoepfe,
+                    defaultButton=QMessageBox.StandardButton.NoButton):
+            box = QMessageBox(icon, titel, text, buttons, parent)
+            box.setTextFormat(Qt.PlainText)
+            if defaultButton != QMessageBox.StandardButton.NoButton:
+                box.setDefaultButton(defaultButton)
+            return QMessageBox.StandardButton(box.exec())
+        return staticmethod(meldung)
+
+    ok = QMessageBox.StandardButton.Ok
+    QMessageBox.question = _fabrik(QMessageBox.Icon.Question, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    QMessageBox.information = _fabrik(QMessageBox.Icon.Information, ok)
+    QMessageBox.warning = _fabrik(QMessageBox.Icon.Warning, ok)
+    QMessageBox.critical = _fabrik(QMessageBox.Icon.Critical, ok)
+    QMessageBox._shs_klartext = True
 
 
 def deutsche_qt_texte_laden(app) -> bool:

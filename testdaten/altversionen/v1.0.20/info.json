@@ -1,0 +1,12 @@
+{
+  "version": "1.0.20",
+  "kann": {
+    "disqualifikation": false,
+    "keine_teilnahme": false,
+    "richter_3": true,
+    "kontaktfelder": true,
+    "halter": true,
+    "geburtsdatum": false,
+    "anmeldeformular": false
+  }
+}

@@ -33,6 +33,9 @@ Thumbs.db
 # Termin-Dateien der Desktop-Version (enthalten Personendaten) - sollen nie versehentlich
 # ins Repo gelangen (Codeprüfung 22.09., G13)
 *.sqlite
+# Ausnahme (T3, 03.10.2026): erfundene Termin-Dateien älterer Versionen für die
+# Upgrade-Tests (test_altversionen.py), erzeugt von tools/altdaten_erzeugen.py.
+!testdaten/altversionen/*/termin.sqlite
 
 # Lokale Konfiguration für compose.yaml (Datenbank-Passwort, Session-Schlüssel) - siehe
 # .env.example für die Vorlage. Enthält Geheimnisse, gehört NICHT ins Repo.

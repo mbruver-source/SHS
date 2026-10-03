@@ -21,24 +21,35 @@ name: Installer bauen
 # So bleibt version.txt die einzige, eindeutige Quelle der Versionsnummer - siehe
 # README_INSTALLER.md.
 
+# Sicherheitsprüfung 03.10.2026, S-3: Fremde Actions sind auf einen festen Commit-Hash
+# festgelegt (dahinter als Kommentar die Version) - ein nachträglich verschobener Tag
+# kann so keinen anderen Code in den Build bringen. Aktualisieren: neuen Hash per
+# "git ls-remote https://github.com/<owner>/<action> refs/tags/<version>" ermitteln.
+
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
 
+# S-3: Der Build-Job (installiert Fremdpakete) hat nur Leserechte; das Schreibrecht zum
+# Anlegen des GitHub-Release hat allein der getrennte release-Job.
 permissions:
-  contents: write # nötig, damit der Workflow bei einem Tag ein GitHub-Release anlegen darf
+  contents: read
 
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Code auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Python einrichten
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: "pip"
@@ -47,7 +58,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          # S-3: feste PyInstaller-Version (Stand 03.10.2026) - Updates bewusst hier anheben.
+          pip install pyinstaller==6.22.3
 
       - name: Versionsnummer aus version.txt auslesen
         id: version
@@ -65,11 +77,21 @@ jobs:
         # jetzt stattdessen VOR dem eigentlichen Build klar erkennbar ab.
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
+        # S-9 (Sicherheitsprüfung 03.10.2026): Tag-Name nur über eine Umgebungsvariable statt
+        # direkt ins Skript eingesetzt (sonst würde z. B. ein Tag "v$(...)" ausgeführt), und
+        # nur im Format vX.Y.Z.
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          DATEI_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $tagVersion = "${{ github.ref_name }}".TrimStart('v')
-          $fileVersion = "${{ steps.version.outputs.version }}"
+          if ($env:TAG_NAME -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "Tag hat nicht das Format vX.Y.Z"
+            exit 1
+          }
+          $tagVersion = $env:TAG_NAME.Substring(1)
+          $fileVersion = $env:DATEI_VERSION
           if ($tagVersion -ne $fileVersion) {
-            Write-Error "Tag '${{ github.ref_name }}' passt nicht zu version.txt (enthaelt '$fileVersion'). Vermutlich wurde getaggt, BEVOR die per 'python bump_version.py' erhoehte version.txt committet und gepusht wurde - siehe README_INSTALLER.md, Ablauf fuer ein Release. Zuerst 'python bump_version.py' laufen lassen, version.txt/version_info.txt/version.py committen und pushen, DANACH den (neuen) Tag setzen."
+            Write-Error "Tag '$($env:TAG_NAME)' passt nicht zu version.txt (enthaelt '$fileVersion'). Vermutlich wurde getaggt, BEVOR die per 'python bump_version.py' erhoehte version.txt committet und gepusht wurde - siehe README_INSTALLER.md, Ablauf fuer ein Release. Zuerst 'python bump_version.py' laufen lassen, version.txt/version_info.txt/version.py committen und pushen, DANACH den (neuen) Tag setzen."
             exit 1
           }
 
@@ -84,23 +106,73 @@ jobs:
             exit 1
           }
 
+      - name: Selbsttest der gebauten .exe (--selbsttest)
+        # T1 (Marco 03.10.2026): startet die frisch gebaute EXE ohne Fenster und prüft
+        # Termin, Auswertung, alle PDFs, Anmeldeformular-Import (pypdf), CSV, verschlüsselte
+        # Sicherung (pyzipper) und die Oberfläche mit allen Reitern - fehlt in build.spec ein
+        # Modul/Plugin, scheitert der Build HIER statt erst beim Nutzer.
+        shell: pwsh
+        run: |
+          $protokoll = Join-Path $env:RUNNER_TEMP "selbsttest_exe.log"
+          $p = Start-Process -FilePath "dist\SHS-Pruefungsprogramm.exe" -ArgumentList "--selbsttest", "`"$protokoll`"" -Wait -PassThru
+          if (Test-Path $protokoll) { Get-Content $protokoll } else { Write-Host "Kein Protokoll geschrieben" }
+          if ($p.ExitCode -ne 0) { Write-Error "Selbsttest der .exe fehlgeschlagen (Exit-Code $($p.ExitCode))"; exit 1 }
+
       - name: Inno Setup installieren
-        run: choco install innosetup -y
+        # S-3: feste Inno-Setup-Version (Stand 03.10.2026)
+        run: choco install innosetup --version=6.7.1 -y
 
       - name: Installer mit Inno Setup bauen
         run: ISCC installer.iss /DMyAppVersion=${{ steps.version.outputs.version }}
 
+      - name: Installer still installieren, installierte .exe testen, deinstallieren
+        # T1 (Marco 03.10.2026): prüft auch die Inno-Setup-Paketierung. Installation nur für
+        # den aktuellen Benutzer in einen Temp-Ordner, danach wieder entfernen.
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "Output\SHS-Pruefungsprogramm-Setup-*.exe" | Select-Object -First 1
+          $ziel = Join-Path $env:RUNNER_TEMP "shs-installiert"
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=`"$ziel`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "Installation fehlgeschlagen (Exit-Code $($p.ExitCode))"; exit 1 }
+          $exe = Join-Path $ziel "SHS-Pruefungsprogramm.exe"
+          if (!(Test-Path $exe)) { Write-Error "Installierte .exe fehlt: $exe"; exit 1 }
+          $protokoll = Join-Path $env:RUNNER_TEMP "selbsttest_installiert.log"
+          $t = Start-Process -FilePath $exe -ArgumentList "--selbsttest", "`"$protokoll`"" -Wait -PassThru
+          if (Test-Path $protokoll) { Get-Content $protokoll } else { Write-Host "Kein Protokoll geschrieben" }
+          $u = Start-Process -FilePath (Join-Path $ziel "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          if ($t.ExitCode -ne 0) { Write-Error "Selbsttest der installierten .exe fehlgeschlagen (Exit-Code $($t.ExitCode))"; exit 1 }
+          if ($u.ExitCode -ne 0) { Write-Error "Deinstallation fehlgeschlagen (Exit-Code $($u.ExitCode))"; exit 1 }
+
       - name: Setup-.exe als Artefakt hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SHS-Pruefungsprogramm-Setup-${{ steps.version.outputs.version }}
           path: Output\SHS-Pruefungsprogramm-Setup-*.exe
 
-      - name: GitHub-Release erstellen (nur bei Versions-Tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    # S-3: eigener Job mit Schreibrecht, nur bei einem Versions-Tag - führt keinen Build-
+    # Code aus, sondern veröffentlicht nur das geprüfte Artefakt aus dem build-Job.
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # nötig, um das GitHub-Release anzulegen
+    steps:
+      - name: Code auschecken (für RELEASE_NOTES.md)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          files: Output\SHS-Pruefungsprogramm-Setup-*.exe
+          persist-credentials: false
+
+      - name: Setup-.exe aus dem build-Job holen
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: SHS-Pruefungsprogramm-Setup-${{ needs.build.outputs.version }}
+          path: Output
+
+      - name: GitHub-Release erstellen
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: Output/SHS-Pruefungsprogramm-Setup-*.exe
           # Kurze deutsche Beschreibung "Was ist neu" (wird vor jedem Build neu geschrieben),
           # darunter die automatisch erzeugte Commit-Liste.
           body_path: RELEASE_NOTES.md

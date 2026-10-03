@@ -137,6 +137,34 @@ def _csrf_pruefen():
     if not erwartet or not secrets.compare_digest(erwartet.encode("utf-8"), erhalten.encode("utf-8")):
         abort(403)
 
+
+# Sicherheitsprüfung 03.10.2026, S-6: zentrale Schutz-Header für jede Antwort.
+# - Content-Security-Policy: nur eigene Inhalte; 'unsafe-inline' für Styles, weil die
+#   Templates eingebettete <style>-Blöcke und style-Attribute nutzen. Skripte gibt es
+#   keine (script-src 'none'). frame-ancestors/X-Frame-Options verhindern das Einbetten
+#   in fremde Seiten (Clickjacking).
+# - Cache-Control no-store: Teilnehmer-/Ergebnisdaten nicht im Browser-Cache ablegen
+#   (gemeinsam genutzte Vereinsrechner).
+_SICHERHEITS_HEADER = {
+    "Content-Security-Policy": (
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; "
+        "img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "Cache-Control": "no-store",
+}
+
+
+@app.after_request
+def _sicherheits_header_setzen(antwort):
+    for name, wert in _SICHERHEITS_HEADER.items():
+        antwort.headers.setdefault(name, wert)
+    return antwort
+
+
 # Verbindungsstring zum gemeinsamen PostgreSQL-Server - siehe db.verbinde_postgres_server()
 # für das Format. Bewusst über eine Umgebungsvariable statt hart im Code, analog zu
 # SHS_TEST_POSTGRES_DSN in test_db.py.
@@ -150,7 +178,38 @@ app.config["SHS_POSTGRES_DSN"] = os.environ.get("SHS_POSTGRES_DSN", "")
 # Web-Servers erneut mit Benutzername/Passwort anmelden müssen. Für den echten Einsatz
 # am Prüfungstag SHS_WEB_SECRET_KEY fest setzen (z.B. per
 # `python -c "import secrets; print(secrets.token_hex(32))"` einmalig erzeugen).
-app.secret_key = os.environ.get("SHS_WEB_SECRET_KEY") or secrets.token_hex(32)
+# Sicherheitsprüfung 03.10.2026, S-2: Platzhalter aus .env.example bzw. zu kurze Werte
+# werden abgelehnt - mit dem öffentlich bekannten Beispielschlüssel ließen sich Session-
+# Cookies (auch eines Administrators) fälschen (Codex-Nachweis).
+_MINDESTLAENGE_SCHLUESSEL = 32
+_MINDESTLAENGE_EINRICHTUNGSCODE = 12
+
+
+def pruefe_web_geheimnisse(schluessel: str, einrichtungscode: str) -> None:
+    """Wirft RuntimeError mit verständlicher Anleitung, wenn SHS_WEB_SECRET_KEY bzw.
+    SHS_ADMIN_SETUP_CODE noch Platzhalter oder zu kurz sind. Leere Werte sind erlaubt
+    (Schlüssel: zufällig je Start; Einrichtungscode: Ersteinrichtung gesperrt)."""
+    fehler = []
+    if schluessel and (schluessel.startswith("bitte-hier") or len(schluessel) < _MINDESTLAENGE_SCHLUESSEL):
+        fehler.append(
+            f"SHS_WEB_SECRET_KEY ist ein Platzhalter oder kürzer als {_MINDESTLAENGE_SCHLUESSEL} Zeichen. "
+            'Erzeugen mit: python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+    if einrichtungscode and (
+        einrichtungscode.startswith("bitte-hier") or len(einrichtungscode) < _MINDESTLAENGE_EINRICHTUNGSCODE
+    ):
+        fehler.append(
+            f"SHS_ADMIN_SETUP_CODE ist ein Platzhalter oder kürzer als {_MINDESTLAENGE_EINRICHTUNGSCODE} Zeichen. "
+            'Erzeugen mit: python -c "import secrets; print(secrets.token_urlsafe(16))"'
+        )
+    if fehler:
+        raise RuntimeError("Web-Version nicht gestartet (siehe .env bzw. README_CONTAINER.md):\n- " + "\n- ".join(fehler))
+
+
+pruefe_web_geheimnisse(
+    os.environ.get("SHS_WEB_SECRET_KEY", "").strip(), os.environ.get("SHS_ADMIN_SETUP_CODE", "").strip()
+)
+app.secret_key = os.environ.get("SHS_WEB_SECRET_KEY", "").strip() or secrets.token_hex(32)
 
 # Explizit gesetzt statt sich auf den Flask-Standard zu verlassen (QS-Review 19./20.09.):
 # "Lax" schickt das Session-Cookie bei einer normalen Navigation zu dieser Seite (Link/
@@ -240,7 +299,9 @@ def _aktueller_benutzer_oder_redirect():
     if not benutzername:
         return False, redirect(url_for("login"))
     konto = db.benutzer_stand(_postgres_verbindung(), benutzername)
-    if konto is None:
+    # Sicherheitsprüfung 03.10.2026, C-1: auch die Konto-Kennung muss passen - sonst
+    # übernähme ein altes Cookie ein unter gleichem Namen neu angelegtes Konto.
+    if konto is None or session.get("konto_kennung") != konto["kennung"]:
         session.clear()
         return False, redirect(url_for("login"))
     session["ist_admin"] = konto["ist_admin"]
@@ -346,9 +407,11 @@ def login():
                 # wurde - dann ganz normal zum Login weiter, statt einen zweiten "ersten"
                 # Administrator anzulegen (siehe db.admin_einrichten).
                 if db.admin_einrichten(conn, benutzername, passwort):
+                    konto = db.benutzer_stand(conn, benutzername)
                     session.clear()
                     session["benutzername"] = benutzername
                     session["ist_admin"] = True
+                    session["konto_kennung"] = konto["kennung"] if konto else None
                     return redirect(url_for("termin_waehlen"))
                 return redirect(url_for("login"))
         return render_template("ersteinrichtung.html", fehler=fehler, code_nicht_konfiguriert=False)
@@ -361,12 +424,15 @@ def login():
             session.clear()
             session["benutzername"] = konto["benutzername"]
             session["ist_admin"] = konto["ist_admin"]
+            session["konto_kennung"] = konto["kennung"]
             return redirect(url_for("termin_waehlen"))
         fehler = "Benutzername oder Passwort falsch. Bitte erneut versuchen."
     return render_template("login.html", fehler=fehler)
 
 
-@app.route("/logout")
+# S-6: Abmelden nur per POST (mit CSRF-Token, siehe _csrf_pruefen) - per GET hätte eine
+# fremde Seite angemeldete Nutzer z. B. über ein eingebettetes Bild abmelden können.
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))

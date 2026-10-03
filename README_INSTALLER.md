@@ -176,7 +176,8 @@ ist, oder um den Build-Schritt nicht mehr manuell erledigen zu müssen.
    git push origin v1.2.0
    ```
 
-   Das löst den Workflow automatisch aus, baut die Setup-Datei und veröffentlicht
+   Das löst den Workflow automatisch aus, baut die Setup-Datei, prüft die gebaute und die
+   still installierte .exe mit `--selbsttest` (bricht bei einem Fehler ab) und veröffentlicht
    sie als GitHub Release (Reiter „Releases" im Repo). Als Beschreibung dient
    `RELEASE_NOTES.md` („Was ist neu“ in Alltagssprache – vor jedem Build neu
    schreiben und mit committen), darunter automatisch erzeugte Release-Notes.
