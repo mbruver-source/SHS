@@ -4513,7 +4513,7 @@ Bereich, nacheinander und nur lesend: Web/Server, Desktop/Dateiformate, Build/CI
 | S-9 | gering | `github.ref_name` direkt im pwsh-Skript | umsetzen (Marco 03.10.): Tag über env, Format prüfen |
 | S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | umsetzen (Marco 03.10.): Doku mit Umgebungsvariable + Warnhinweis |
 | S-7 | – | Temp-Datei beim Zurückholen | von Codex nicht bestätigt |
-| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | notiert, nicht umsetzen (Marco 03.10.): bekannte Restrisiken; H-4 wird durch das Auto-Speichern beim Schließen abgemildert |
+| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | notiert, nicht umsetzen (Marco 03.10.): bekannte Restrisiken; H-4 wird durch das Auto-Speichern beim Schließen abgemildert. Nach 1.0.41 (Marco 03.10.): beim nächsten Build erneut vorlegen |
 
 **Umsetzungsreihenfolge** (je Punkt einzeln, mit Tests und Verifikation; der Code bleibt bis
 zum nächsten Build uncommittet):
