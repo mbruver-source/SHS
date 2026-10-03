@@ -3222,7 +3222,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
-| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | geplant | Siehe „P1, P2, N1 – Plan“ |
+| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | Absturzprotokoll umgesetzt (Arbeitsstand 03.10.); Gegenprobe durch Marco offen | Siehe „P1 – Absturzprotokoll umgesetzt“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | geplant | Siehe „P1, P2, N1 – Plan“ |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | geplant | Siehe „P1, P2, N1 – Plan“ |
 
@@ -3525,3 +3525,26 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   Tabelle, Fokus in einem Punktefeld und keine Auslösung in einem anderen Reiter ab. Die
   letzten beiden Fälle kamen auf Hinweis der Verifikation dazu.
 - **Tests:** 139 bestanden, 1 xfail. Verifikations-Subagent: keine Befunde.
+
+### P1 – Absturzprotokoll umgesetzt (03.10.2026, Arbeitsstand, noch kein Build/Code-Commit)
+- **`desktop_gemeinsam.py`:** neue Funktion `absturzprotokoll_einrichten(version, ordner=None)`.
+  Datei `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` (neben `Termine`).
+  - Bei jedem Start eine Startzeile mit Zeit und Version.
+  - Unbehandelte Python-Fehler werden über `sys.excepthook` mit Zeit und Traceback
+    protokolliert, danach wird der bisherige Hook weitergerufen.
+  - Harte Abstürze schreibt `faulthandler` in die offen gehaltene Datei.
+  - Ab 1 MB beginnt die Datei beim nächsten Start von vorn.
+  - Kann die Datei nicht angelegt werden, startet das Programm trotzdem normal.
+- **`app.py` `main()`:** ruft die Funktion als Erstes auf.
+- **`docs/HANDBUCH.md` Kap. 13:** neuer FAQ-Eintrag „Programm hat sich plötzlich beendet“.
+  - Erklärt Ort der Datei, Anhang an die Fehlermeldung und Datenschutz: erst
+    hineinschauen, auch der Benutzername kann in Pfaden stehen.
+  - Bleibt bis zum Build im Arbeitsstand, weil er eine noch nicht ausgelieferte Funktion
+    beschreibt.
+- **Zwei neue GUI-Tests:** Startzeile, Traceback und Größenbegrenzung; Start ohne
+  Schreibrecht.
+- **Tests:** 141 bestanden, 1 xfail.
+- **Verifikations-Subagent:** keine Befunde. Seine drei optionalen Hinweise sind eingearbeitet:
+  Benutzername-Hinweis im Handbuch, Docstring im zweiten Test, Modulvariable im Test per
+  monkeypatch zurückgesetzt.
+- **Offen bleibt Marcos Gegenprobe P1/P2 in der echten App** (siehe Plan).
