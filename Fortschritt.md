@@ -3204,7 +3204,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | umgesetzt (Arbeitsstand 03.10.) | Siehe „U7 – umgesetzt“ |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | umgesetzt (Arbeitsstand 03.10.) | Siehe „U8 – umgesetzt“ |
-| U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
+| U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U9 – umgesetzt“ |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
@@ -3798,3 +3798,25 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **U2 damit abgeschlossen** (Arbeitsstand, noch kein Build).
 - **Vor dem Build:** Screenshots `handbuch_zeitplan.png` und `zeitplan.png` neu aufnehmen
   (neues Feld, ggf. Wartezeit/Markierung).
+
+### U9 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`db.py`:**
+  - `add_zeitplan_pause(..., nach_eintrag_id=None)` fügt die Pause nach dem markierten
+    Eintrag ein, über die neue Hilfsfunktion `_pause_an_position_einfuegen`.
+  - Neu: `add_zeitplan_pause_bei_allen(conn, uhrzeit, dauer, bezeichnung)`. Die Pause kommt je
+    Spur vor den ersten Eintrag mit Beginn ab der Uhrzeit, ein laufender Block wird nicht
+    geteilt. Alles in einer Transaktion.
+- **PauseDialog:** Beim Hinzufügen gibt es den Haken „Bei allen Richtern einfügen, um HH:MM“
+  (Vorgabe 12:00) mit Uhrzeitprüfung und Erklärtext.
+  - **Marco öffnet damit bewusst die Entscheidung vom 14.09.** Einzelpausen bleiben möglich.
+- **ZeitplanTab:**
+  - „Pause hinzufügen…“ fügt nach der markierten Zeile ein, die neue Pause bleibt markiert.
+  - „Automatisch verteilen“ fragt nur nach, wenn schon ein Plan existiert.
+  - Jeder Block hat eine fette Kopfzeile „▸ … (N TN, von–bis)“ bzw. „keine Teilnehmer
+    gemeldet“, die Teams stehen eingerückt darunter.
+  - Bei Überschneidungen ist auch die Kopfzeile rot mit ⚠ (Befund der Verifikation, behoben).
+  - Die Knöpfe stehen in drei statt fünf Zeilen, dadurch sind die Listen höher.
+- **Handbuch Kap. 6, Schritte 3/4, und Hilfetext** sind angepasst.
+- **Tests:** neu in `test_db` (Pause nach Eintrag / bei allen) und im GUI-Test (Blockköpfe,
+  Warnung nur mit Plan); der U2b-Test prüft zusätzlich die roten Blockköpfe. Alle Tests
+  grün.
