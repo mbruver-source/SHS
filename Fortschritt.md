@@ -3206,7 +3206,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | umgesetzt (Arbeitsstand 03.10.) | Siehe „U8 – umgesetzt“ |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U9 – umgesetzt“ |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
-| U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
+| U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | umgesetzt (Arbeitsstand 03.10.) | Siehe „U11 – umgesetzt“ |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
@@ -3865,3 +3865,21 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - Alle Tests grün. Verifikation inkl. Sicherheits-Nachprüfung: keine offenen Befunde.
 - **Vor dem Build:** Screenshots `handbuch_formular_import.png`, `handbuch_export.png` und
   `handbuch_teilnehmer.png` neu aufnehmen.
+
+### U11 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`pdf_export.py`, Anmeldeformular:** Unter „Gegenstände“ steht (ab LK 2 im Angebot) ein
+  einzeiliger Hinweis: „Bei Einzeldisziplin … nur den ersten Gegenstand angeben – mehrere
+  Gegenstände nur beim Dreikampf (DK).“ Das Formular bleibt einseitig, die Breite passt
+  (493 von 505 pt).
+- **`db_import.py`:**
+  - `_anmeldeformular_zu_teilnehmer` liefert jetzt (teilnehmer, verworfen).
+  - Bei ED wird nur der erste ausgefüllte Gegenstand übernommen. Weitere erscheinen in
+    `ergebnis.hinweise` als „nicht übernommen“, der Import-Dialog zeigt sie an.
+  - Damit entfällt die spätere Ja/Nein-Rückfrage, die den zweiten Gegenstand
+    stillschweigend verwarf. Dreikampf übernimmt weiterhin alle Gegenstände.
+- **Handbuch:** Kap. 4 (Tabelle „Bei ED ist nur ein Gegenstand vorgesehen“: nicht mehr nur
+  „ältere Daten“) und Kap. 5 (PDF-Import, Übernahme der Gegenstände).
+- **Tests:** Die bestehende Erwartung im Formular-Test ist angepasst. Neu sind Tests für
+  DK (alle Gegenstände) und ED mit nur Feld 2. Alle Tests grün, Verifikation ohne Befunde.
+- **Vor dem Build:** Den Screenshot `handbuch_anmeldeformular.png` neu aufnehmen (neuer
+  Hinweis).
