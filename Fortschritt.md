@@ -4164,3 +4164,6 @@ Funde N1–N7 aus dem UX-Nachtest. Marcos Klick-Test P1/P2 war ok.
   - Marco hat entschieden: Nachtrag-Commit ohne Versionsbump, der Tag v1.0.40 kommt erst
     danach auf diesen Commit. Die Verifikation fand nichts.
 - **Push/Tag:** Marcos Aktion (`git push`, `git tag v1.0.40`, `git push origin v1.0.40`).
+  Marco 03.10.: CI grün, Push und Tag durch („grün und alles durch“). Offen bleibt nur die
+  Kontrolle bei der Testinstallation, ob die Rückfrage-Knöpfe deutsch sind (Qt-Sprachdatei,
+  siehe oben).
