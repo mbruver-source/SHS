@@ -3721,3 +3721,26 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - Auf Hinweis der Verifikation erklärt ein Satz im Block, dass Bereiche abgewählter
     Prüfungen beim Speichern entfernt werden.
   - Neuer GUI-Test; die bestehende Vorbelegungs-Erwartung wurde um das neue Feld ergänzt.
+- **U1c Bedienung im Reiter Teilnehmer (fertig, Verifikation ohne Fehler):**
+  - Knopf „Fehlende Startnummern vergeben…“. Die Abschlussmeldung nennt vergebene
+    Nummern sowie Teilnehmer ohne Bereich bzw. bei vollem Bereich.
+  - Doppelklick auf eine Zeile öffnet „Bearbeiten…“.
+  - Nach CSV-, OMA-, PDF-Import und „Aus anderem Termin importieren“ fragt das Programm
+    „X Teilnehmer ohne Startnummer – jetzt vergeben?“. Ohne hinterlegte Bereiche kommt
+    stattdessen ein Hinweis, wie es weitergeht (Hinweis der Verifikation).
+  - „Startnummer tauschen“ zwischen zwei Teilnehmern ohne Nummer zeigt eine Meldung.
+  - TeilnehmerDialog:
+    - Die Neuanlage startet mit Haken „steht noch nicht fest“, ohne Vorschlag.
+    - Beim Entfernen des Hakens wird die kleinste freie Nummer im Bereich der Prüfung
+      eingetragen, sonst die kleinste freie insgesamt.
+    - Der Vorschlag folgt einer danach geänderten Prüfung, solange er nicht von Hand
+      geändert wurde (Hinweis der Verifikation).
+    - Vorhandene Nummern werden nie ersetzt.
+    - Der Parameter `naechste_nummer` entfällt, neu ist `bereiche`.
+  - Hilfe-Text angepasst. Validator der Bereichsfelder 1–999, wie das Startnummer-Feld.
+  - **Tests:**
+    - 3 bestehende Häkchen-Tests auf das neue Startverhalten angepasst.
+    - Neu: Vorschlag im Bereich, Knopf + Doppelklick + Tausch, Import-Hinweis ohne
+      Bereiche.
+    - Die autouse-Fixture zeichnet den Import-Hinweis auf.
+    - 152 GUI bestanden, unittest OK.
