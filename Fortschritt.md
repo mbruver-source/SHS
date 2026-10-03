@@ -4205,11 +4205,11 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 
 | ID | Punkt | Status | Plan |
 |---|---|---|---|
-| T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | vorgemerkt (Marco 03.10.) | Siehe „T1 – Plan“ |
-| T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | vorgemerkt (Marco 03.10.) | Siehe „T2 – Plan“ |
-| T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | vorgemerkt (Marco 03.10.) | Siehe „T3 – Plan“ |
+| T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T1 – Plan“ |
+| T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T2 – Plan“ |
+| T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T3 – Plan“ |
 
-### T1 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+### T1 – Plan (geklärt mit Marco 03.10.2026)
 - **Lücke:** `build-installer.yml` baut `dist/SHS-Pruefungsprogramm.exe` und den
   Inno-Setup-Installer, startet die EXE aber nie. Fehlt in `build.spec` ein verstecktes
   Modul oder eine Datendatei (Schriften, Vorlagen, Qt-Plugins, pypdf, pycryptodomex), sind
@@ -4228,8 +4228,13 @@ Versionsbump, kein Push ohne Marcos Anforderung.
     nutzbar) oder nur im CI-Build aktiv sein?
   - Soll zusätzlich der fertige Installer still installiert (`/VERYSILENT`) und die
     installierte EXE getestet werden? Das ist gründlicher, macht die CI aber langsamer.
+- **Geklärt (Marco 03.10.):**
+  - `--selbsttest` bleibt in der ausgelieferten EXE. Er ist für normale Nutzer unsichtbar und
+    hilft bei der Fehlersuche.
+  - Mit Installer-Test: In `build-installer.yml` wird der Installer mit `/VERYSILENT`
+    installiert, die installierte EXE mit `--selbsttest` gestartet und danach deinstalliert.
 
-### T2 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+### T2 – Plan (geklärt mit Marco 03.10.2026)
 - **Lücke:** Die Bewertung (`shs_core.py`: `berechne_wertnote_ed`, `berechne_wertnote_dk`,
   `berechne_rangliste`, Disqualifikation/Abbruch) ist der fachliche Kern, hat aber nur
   14 Tests in `test_shs_core.py`. Grenzwerte jeder Variante sind nicht systematisch
@@ -4252,8 +4257,13 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - Ist `hypothesis` als zusätzliche Test-Abhängigkeit in Ordnung?
   - Falls ein Referenzfall eine Abweichung zum heutigen Code zeigt: Erst melden und mit
     Marco entscheiden, nicht direkt korrigieren.
+- **Geklärt (Marco 03.10.):**
+  - Claude erstellt die Referenzfälle aus den Wertnoten-Tabellen und Bewertungsbögen. Marco
+    prüft sie **vor** dem Einbau als Tabelle.
+  - Abweichungen zum Code werden gemeldet, nicht still korrigiert.
+  - `hypothesis` ist als Test-Abhängigkeit in Ordnung, nur in `requirements-dev.txt`.
 
-### T3 – Plan (Entwurf, vor Umsetzung mit Marco klären)
+### T3 – Plan (geklärt mit Marco 03.10.2026)
 - **Lücke:** Die Migrationstests in `test_db.py` bauen alte Tabellen von Hand nach. Echte
   Dateien älterer Versionen (Spaltenreihenfolge, Standardwerte, Indizes, `user_version`,
   Sicherungs-ZIP-Format) werden nicht geprüft.
@@ -4275,3 +4285,14 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - Hat Marco echte alte Termin-Dateien, die anonymisiert zusätzlich hinein sollen?
   - Ist es in Ordnung, die Build-Checkliste in CLAUDE.md um „Altdatei der neuen Version
     erzeugen“ zu ergänzen?
+- **Geklärt (Marco 03.10.):**
+  - Bisher war noch keine Version real beim Verein im Einsatz. Deshalb 1.0.0, die Versionen
+    direkt vor größeren Datenmodell-Änderungen (ermittelt aus den Migrationslisten) und
+    1.0.40.
+  - Nur erfundene Testdaten.
+  - Die CLAUDE.md-Build-Checkliste bekommt „Altdatei der neuen Version erzeugen“.
+- **Reihenfolge der Umsetzung** (je Punkt einzeln, nach Marcos „weiter“): erst T2, dann T3,
+  dann T1.
+  - T2: Zuerst die Referenztabelle zur Kontrolle an Marco.
+  - T1: Lässt sich erst in der CI prüfen. Der Code bleibt bis zum nächsten Build
+    uncommittet.
