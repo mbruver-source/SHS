@@ -4207,7 +4207,7 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 |---|---|---|---|
 | T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T1 – Plan“ |
 | T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | umgesetzt (Arbeitsstand 03.10.) | Siehe „T2 – umgesetzt“ |
-| S1 | **Neu aus T2 (Marco 03.10.):** Stechen bei Gleichstand um Platz 1 | geplant, Details beim Umsetzen klären | Siehe „T2 – umgesetzt“ |
+| S1 | **Neu aus T2 (Marco 03.10.):** Stechen bei Gleichstand um Platz 1 | umgesetzt (Arbeitsstand 03.10.) | Siehe „S1 – umgesetzt“ |
 | T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | umgesetzt (Arbeitsstand 03.10.) | Siehe „T3 – umgesetzt“ |
 
 ### T1 – Plan (geklärt mit Marco 03.10.2026)
@@ -4385,4 +4385,51 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - CSV-Export und Anmeldeformular mit Altdaten.
   - Hinweis: Neu erzeugte Altdateien ergeben Binärdiffs, weil die ZIP-Zeitstempel sich
     ändern. Deshalb nur bei Bedarf neu erzeugen.
+
+### S1 – umgesetzt (03.10.2026, Arbeitsstand; bis zum nächsten Build uncommittet)
+- **Marcos Entscheidungen (03.10.):**
+  - Der Sieger wird im Reiter „Auswertung“ festgelegt.
+  - Bei drei oder mehr Punktgleichen entscheidet das Stechen nur den Sieger, die übrigen
+    teilen Platz 2.
+  - Anzeige: „1. von N (Stechen offen)“ bzw. „1. von N (nach Stechen)“.
+  - Vor der Ergebnisliste bzw. Rangliste kommt eine Rückfrage, solange ein Stechen offen
+    ist.
+  - Nur im Desktop, die Web-Version zeigt keine Rangliste.
+  - Randfall (Verifikation): Entsteht nach einer Korrektur wieder derselbe Gleichstand, gilt
+    der frühere Sieger wieder. Marco: so lassen.
+- **`shs_core.py`:**
+  - `berechne_rangliste(..., stechen_sieger)`: Ist genau einer der Punktgleichen auf
+    Platz 1 markiert, wird er 1. mit `stechen="gewonnen"`, die übrigen werden 2. Sonst
+    bleiben alle auf Platz 1 mit `stechen="offen"`. Die Plätze danach zählen weiter wie
+    bisher.
+  - Neu sind `platz_text()` (gemeinsam für Auswertung und PDF) und `stechen_gruppen()`.
+- **`db.py`:**
+  - Spalte `ergebnisse.stechen_sieger` im Schema und in der Migration, für SQLite und
+    PostgreSQL.
+  - `setze_stechen_sieger(conn, sieger_id | None, gruppe_ids)`.
+  - `berechne_auswertung` reicht die Markierungen durch.
+  - Der Web-Sync überträgt sie nicht, das ist nicht nötig. Beim Zurückholen bleibt sie in
+    der Termin-Datei erhalten.
+- **`app.py`:**
+  - Reiter Auswertung: Hinweis „Stechen nötig in … (95 Punkte)“, Platz-Vermerk und Knopf
+    „Stechen-Sieger festlegen…“. Die Auswahl enthält je Gruppe die Punktgleichen und
+    „Stechen noch offen“.
+  - Rückfrage `_stechen_offen_bestaetigen` vor „Rangliste drucken“ und
+    Export → „Ergebnisliste“.
+- **`pdf_export.py`:**
+  - Die Platz-Spalte der Ergebnisliste nutzt `platz_text()`.
+  - Die Spaltenbreiten sind neu verteilt (Platz 40, Start-Nr. 18, Name 46, Punkte 27,
+    Wertnote 39 mm), damit „1. von 12 (Stechen offen)“ hineinpasst.
+  - Etiketten, Statistik und die leere Ergebnisliste zeigen keinen Platztext.
+- **Doku:** Handbuch Kap. 8 (Absatz „Stechen“), Glossar („Stechen“) und Hilfetext Auswertung.
+- **Tests:**
+  - Der Platzhalter C1b in `test_bewertung_referenz.py` ist jetzt ein echter Test: offen,
+    Sieger, zurücksetzen, Gleichstand fällt weg. Neu ist C1c mit drei Punktgleichen.
+  - Dazu kommen je ein GUI-Test (Hinweis, Rückfrage, Sieger) und ein PDF-Test.
+  - Ergebnis: unittest OK mit 564 Tests, pytest GUI und Theme 180 grün.
+- **Verifikation:** keine Fehler, der eine Randfall ist entschieden (siehe oben).
+- **Vor dem Build:**
+  - Screenshot `handbuch_auswertung.png` neu aufnehmen (neuer Knopf).
+  - Zeile in `RELEASE_NOTES.md`.
+  - Die Demo-Checkliste um das Stechen ergänzen.
 
