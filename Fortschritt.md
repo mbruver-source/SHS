@@ -3215,7 +3215,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
 | K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | umgesetzt (Arbeitsstand 03.10.) | „(bisheriges Verhalten)“ entfernt (desktop_dialoge.py) |
 | K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | umgesetzt (Arbeitsstand 03.10.) | Siehe „K5 – umgesetzt“ |
-| K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | geplant | Siehe „K1–K12 – Plan“ |
+| K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | umgesetzt (Arbeitsstand 03.10.) | Siehe „K6 – umgesetzt“ |
 | K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | geplant | Siehe „K1–K12 – Plan“ |
 | K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
@@ -3936,3 +3936,17 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   „(nB)“ mit Klammern wäre breiter als das Feld (23 mm) und würde umbrechen.
   „Gesamt: 300 nB“ passt knapp einzeilig (52,9 von 53,2 pt nutzbar).
 - **Tests:** ein neuer Test in `test_pdf_export.py`, alle grün. Die Verifikation fand nichts.
+
+### K6 – umgesetzt (03.10.2026, Arbeitsstand)
+- **Hinweis beim Anlegen:** Bleiben Verband und/oder Meldestelle im Dialog „Neuer Termin“
+  leer, fragt das Programm: „… ist/sind leer und fehlt/fehlen dann auf dem Anmeldeformular …
+  Trotzdem jetzt speichern?“. „Ja“ ist vorausgewählt. Bei „Nein“ springt der Fokus ins leere
+  Feld. Beim Bearbeiten eines Termins kommt die Frage nicht, damit sie nicht bei jeder
+  Änderung erneut erscheint.
+- **Anmeldeformular:** Ist ein Ort eingetragen, steht im Kopfkasten rechts unter dem Datum
+  „Ort: …“. Der Kasten ist dafür mindestens 29 pt hoch, und das Formular bleibt einseitig,
+  auch wenn alle Prüfungen angeboten werden.
+- **Handbuch:** Kap. 3 (Hinweis) und Kap. 5 (Ort eingedruckt).
+- **Tests:** je ein neuer Test in `test_app_gui.py` und `test_pdf_export.py`. Die
+  Verifikation fand eine Kleinigkeit: Bei nur einem leeren Feld hieß es „fehlen“ statt
+  „fehlt“. Das ist behoben und im Test abgedeckt.
