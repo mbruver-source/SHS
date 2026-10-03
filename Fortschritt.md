@@ -4208,7 +4208,7 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 | T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T1 – Plan“ |
 | T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | umgesetzt (Arbeitsstand 03.10.) | Siehe „T2 – umgesetzt“ |
 | S1 | **Neu aus T2 (Marco 03.10.):** Stechen bei Gleichstand um Platz 1 | geplant, Details beim Umsetzen klären | Siehe „T2 – umgesetzt“ |
-| T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T3 – Plan“ |
+| T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | umgesetzt (Arbeitsstand 03.10.) | Siehe „T3 – umgesetzt“ |
 
 ### T1 – Plan (geklärt mit Marco 03.10.2026)
 - **Lücke:** `build-installer.yml` baut `dist/SHS-Pruefungsprogramm.exe` und den
@@ -4336,4 +4336,53 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 - **Tests:** 16 Tests, 15 grün, 1 übersprungen (S1). Keine Abweichung der Referenzfälle vom
   heutigen Code. Die Verifikation fand keine Befunde. Ihr Hinweis ist eingearbeitet: Der
   vollständige ED-Durchlauf läuft jetzt auch ohne `hypothesis`.
+
+### T3 – umgesetzt (03.10.2026, Arbeitsstand; bis zum nächsten Build uncommittet)
+- **Versionsauswahl** (Marco: noch keine Version im Vereinseinsatz): 8 Versionen, jede mit
+  einem anderen Datenmodell. Die Änderungen sind ermittelt über die Tabellenstruktur je
+  Git-Tag:
+  - v1.0.0: Basis bis 1.0.2;
+  - v1.0.13: vor den Kontaktfeldern aus 1.0.3 … bis vor Richter 3–5;
+  - v1.0.18: vor Rasse/Tollwut/Halter (1.0.19);
+  - v1.0.20: vor Disqualifiziert/Abbruch/Geburtsdatum (1.0.21);
+  - v1.0.37: vor Verband/Meldestelle/Angebot (1.0.38);
+  - v1.0.38: vor „Keine Teilnahme“ (1.0.39);
+  - v1.0.39: vor Startnummern-Bereichen/Mindestabstand (1.0.40);
+  - v1.0.40: aktuell.
+- **`tools/altdaten_erzeugen.py`:**
+  - Entpackt je Tag den Code per `git archive` und füllt mit genau diesem ALTEN Code einen
+    Termin.
+  - Inhalt: 7 erfundene Teilnehmer mit Kontaktdaten, Ergebnissen, nB, unvollständigem DK,
+    Disqualifikation und „Keine Teilnahme“, soweit die Version das kann; dazu einen Zeitplan
+    mit Pause.
+  - Dazu je eine Sicherung ohne und mit Passwort sowie `info.json` mit den Fähigkeiten der
+    Version. Ergebnis: `testdaten/altversionen/<tag>/`, zusammen etwa 440 KB.
+  - `--aktuell` erzeugt beim Build die neue Version aus HEAD/`version.txt`, denn der Tag
+    entsteht erst nach dem Push.
+- **`test_altversionen.py`** prüft jede Altdatei auf einer Kopie:
+  - Die Originale haben wirklich das alte Schema (Nachweis, dass die Migration getestet wird).
+  - Stammdaten bleiben erhalten, neue Felder haben sinnvolle Standardwerte.
+  - Auswertung und Rangliste stimmen.
+  - Der Zeitplan bleibt erhalten und lässt sich berechnen, inklusive Überschneidungsprüfung.
+  - Ergebnisliste, Etiketten, Bewertungsbogen und Zeitplan lassen sich als PDF erzeugen.
+  - Beide Sicherungen lassen sich wiederherstellen.
+  - Zweimaliges Öffnen ist unschädlich.
+- **GUI-Test:** `test_altversion_oeffnet_im_hauptfenster_mit_allen_reitern` öffnet jede
+  Altdatei im Hauptfenster und zeigt jeden Reiter einmal (8 Fälle).
+- **Weitere Dateien:**
+  - `.gitignore` hat eine Ausnahme nur für `testdaten/altversionen/*/termin.sqlite`.
+  - CLAUDE.md: Testbefehl und Build-Checkliste („direkt nach dem Build-Commit
+    `altdaten_erzeugen.py --aktuell`, Altdaten als eigener Commit“).
+  - `Architektur.md`: Modultabelle und Testübersicht.
+- **Ergebnis:** Alle Altversionen lassen sich mit dem aktuellen Code öffnen, auswerten,
+  drucken und wiederherstellen. Es wurde kein Upgrade-Fehler gefunden. Lokal:
+  - unittest OK;
+  - pytest (GUI, Theme, Altversionen) 187 grün.
+- **Verifikation:** keine Befunde. Ihr Hinweis ist eingearbeitet: Der Nur-Lesen-Zugriff nutzt
+  `Path.as_uri()`.
+- **Mögliche Erweiterungen** (optional, von Marco nicht beauftragt):
+  - Web-Sync bzw. PostgreSQL-Export mit Altdateien;
+  - CSV-Export und Anmeldeformular mit Altdaten.
+  - Hinweis: Neu erzeugte Altdateien ergeben Binärdiffs, weil die ZIP-Zeitstempel sich
+    ändern. Deshalb nur bei Bedarf neu erzeugen.
 
