@@ -3699,3 +3699,15 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **Verifikation:** ein Befund (siehe oben), behoben und nachgeprüft, danach keine Befunde.
 - **Vor dem Build:** Screenshots `handbuch_zeitplan.png` und `zeitplan.png` prüfen, ob sie
   noch zum Ablauf passen.
+
+### U1 – Zwischenstand (03.10.2026, Arbeitsstand)
+- **U1a Datenmodell (fertig, Verifikation ohne Befunde):**
+  - Neue Spalte `veranstaltung.startnummer_bereiche` (Format "DK1=1-20,ED1-Trümmerfeld=21-40"),
+    in Altdateien per Migration ergänzt.
+  - Die Spalte wird in `set_veranstaltung`, in der Termin-Kopie und in
+    `_aktualisiere_veranstaltung_feld` mitgeführt.
+  - Neue Funktionen in `db.py`: `pruefungs_kuerzel`, `startnummer_bereiche`,
+    `startnummer_bereiche_als_text`, `pruefe_startnummer_bereiche` (gültig, keine
+    Überschneidung), `naechste_freie_startnummer_im_bereich`, `fehlende_startnummern_vergeben`
+    (Ergebnis `StartnummernVergabe`).
+  - 2 neue Tests in `test_db.py`.
