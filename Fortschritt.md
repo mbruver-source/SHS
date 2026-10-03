@@ -3225,6 +3225,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | erledigt (03.10.): Absturzprotokoll umgesetzt; Gegenprobe Marco mit Demo ok, kein Absturz | Siehe „P1 – Absturzprotokoll umgesetzt“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | erledigt (03.10.): Gegenprobe Marco mit Demo ok – Effekt der Testumgebung, kein Code nötig | Siehe „P1, P2, N1 – Plan“ |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
+| N8 | CSV-Knöpfe zu ähnlich benannt: Import „Teilnehmerliste (Excel/CSV)…“ (Reiter Teilnehmer) wird für einen Export gehalten | vorgemerkt für nächsten Build (Marco 03.10.) | Siehe „N8 – Plan“ |
 
 ### U1 – Plan (mit Marco geklärt am 02.10.2026)
 
@@ -3446,6 +3447,24 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
   - Beim Build wird eine kurze deutsche Beschreibung „Was ist neu“ für das GitHub-Release
     erzeugt, z. B. als Datei oder Text für `build-installer.yml` bzw. die Release-Seite.
   - Veröffentlichen bleibt Marcos Aktion.
+
+### N8 – Plan (03.10.2026, nach 1.0.40; vorgemerkt, Umsetzung erst beim nächsten Build)
+- **Anlass:** Marco hielt im Reiter „Teilnehmer“ den Knopf „Teilnehmerliste (Excel/CSV)…“
+  für einen Export. Es ist aber der Import (U10). Der Export heißt im Reiter „Export“ fast
+  gleich: „Teilnehmerliste (CSV, für Excel)…“. Das Verhalten ist richtig, nur die Namen sind
+  zu ähnlich.
+- **Umsetzung:**
+  - Der Import-Knopf (Reiter „Teilnehmer“ und Reiter „Formular-Import“, Abschnitt 2) heißt
+    „Teilnehmerliste einlesen (Excel/CSV)…“. Ein Tooltip sagt, dass hier eingelesen wird.
+  - Der Export-Knopf (Reiter „Export“) heißt „Teilnehmerliste speichern (CSV, für
+    Excel)…“.
+- **Folgearbeiten:**
+  - Handbuch: Kap. 4 Knopftabelle, Kap. 5, Kap. 9 Exporttabelle, Kap. 14 Schritt 3.
+  - Hilfetext, README, Website und die Demo-Checkliste.
+  - Screenshots `handbuch_teilnehmer.png`, `handbuch_export.png` und
+    `handbuch_formular_import.png`.
+  - Die GUI-Tests, die Knöpfe über ihren Text finden, z. B.
+    `test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen`.
 
 ### P1, P2, N1 – Plan (02.10.2026)
 - **P1/P2: Marco prüft selbst in der echten App.**
