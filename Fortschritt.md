@@ -3757,3 +3757,28 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     `handbuch_teilnehmer.png` (neuer Knopf), `handbuch_teilnehmer_dialog_*.png`.
   - Siehe zusätzlich U12: Die Knopfleiste im Reiter Teilnehmer ist durch den neuen Knopf
     noch etwas breiter. Das ist ein optionaler Punkt zur Klärung.
+
+### U2 – Zwischenstand (03.10.2026, Arbeitsstand)
+- **U2a Daten und Logik (fertig):**
+  - Neue Spalten `zeitplan_eintrag.startversatz` (Rotation innerhalb eines Blocks, Standard 0
+    = bisherige Reihenfolge) und `veranstaltung.dk_mindestabstand` (Standard 10 Minuten).
+    Beide werden per Migration ergänzt, auch in PostgreSQL.
+  - `berechne_zeitplan` arbeitet über die neue Funktion `_zeitplan_zeilen` und berücksichtigt
+    die Rotation. Damit gilt sie auch im Zeitplan-PDF.
+  - Neu: `zeitplan_ueberschneidungen(conn)`. Sie findet gleiche Teams zur gleichen Zeit bzw.
+    mit zu wenig Abstand, auch nach Handbearbeitung.
+  - **„Automatisch verteilen“:**
+    - Baut den Plan im Speicher.
+    - Trennt DK-Blöcke derselben LK je Spur.
+    - Wählt für jeden DK-Block (in der Reihenfolge seines Beginns) Rotation und Position so,
+      dass keine neue Überschneidung entsteht. Dabei rückt er nie hinter noch offene
+      Geschwisterblöcke.
+    - Notfalls fügt er eine sichtbare Pause „Wartezeit (DK)“ ein. Unlösbares bleibt ohne
+      Wartezeit und wird markiert (U2b).
+  - **Messung mit dem Beispiel-CSV** (1–5 Richter, 1/4/8 zusätzliche DK-Teams, Abstand
+    0/10/30, 45 Kombinationen): 0 Überschneidungen. Szenario aus dem UX-Test (3 Richter):
+    Ende 11:00 statt DK-Teams dreifach gleichzeitig. Laufzeit unter 0,5 s, auch bei 300 Teams.
+  - **Verifikation:** ein Befund (Block rutschte hinter einen offenen Geschwisterblock, bei
+    1 Richter und einem DK-Team unlösbar). Behoben, dazu ein Regressionstest. Außerdem
+    liefert `dk_mindestabstand(0)` jetzt 0 statt 10.
+  - 5 neue Tests in `test_db.py`.
