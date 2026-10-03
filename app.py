@@ -38,13 +38,13 @@ import re
 import sqlite3
 import sys
 
-from PySide6.QtCore import QItemSelectionModel, QUrl, Qt
+from PySide6.QtCore import QItemSelectionModel, QRegularExpression, QUrl, Qt
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
     QCloseEvent,
     QDesktopServices,
-    QIntValidator,
+    QRegularExpressionValidator,
     QKeySequence,
     QShortcut,
 )
@@ -1150,11 +1150,19 @@ class FormularImportTab(QWidget):
 
 
 # Höchstpunktzahlen je Disziplin (entsprechen den CHECK-Constraints in db.py). UX-Test
-# 02.10.2026, U5: der QIntValidator lässt "65" als Zwischenstand beim Tippen zu - solche
+# 02.10.2026, U5: das Punktefeld ließ "65" als Zwischenstand beim Tippen zu - solche
 # Werte werden deshalb sofort rot markiert und beim Speichern im Klartext abgelehnt, statt
 # erst an der Datenbank mit "CHECK constraint failed" zu scheitern.
 _SUCHE_MAX = SUCHE_MAX  # gemeinsame Konstanten aus shs_core (auch für die Web-Version)
 _ANZEIGE_MAX = ANZEIGE_MAX
+
+
+def _punkte_validator(parent) -> QRegularExpressionValidator:
+    """Nur Ziffern (höchstens zwei) - unabhängig von der Spracheinstellung des Systems. Der
+    QIntValidator nahm in englischer/Linux-Einstellung "," als Tausender-Trennzeichen an
+    ("45," statt Hinweis; CI-Befund 03.10.2026). Werte über dem Maximum markiert
+    _aktualisiere_zeilenstatus rot, das Speichern lehnt sie im Klartext ab (U5)."""
+    return QRegularExpressionValidator(QRegularExpression(r"\d{0,2}"), parent)
 
 
 class ErgebnisTab(QWidget):
@@ -1387,14 +1395,14 @@ class ErgebnisTab(QWidget):
                 # "0" noch ein Platzhalterzeichen), damit ein versehentlich stehen
                 # gelassenes Feld nicht als echte 0-Punkte-Bewertung gespeichert wird.
                 suche_feld = QLineEdit()
-                suche_feld.setValidator(QIntValidator(0, _SUCHE_MAX, suche_feld))
+                suche_feld.setValidator(_punkte_validator(suche_feld))
                 suche_feld.setAlignment(Qt.AlignCenter)
                 if angezeigt_suche is not None:
                     suche_feld.setText(str(angezeigt_suche))
                 self.tabelle.setCellWidget(row, spalte_suche, suche_feld)
 
                 anzeige_feld = QLineEdit()
-                anzeige_feld.setValidator(QIntValidator(0, _ANZEIGE_MAX, anzeige_feld))
+                anzeige_feld.setValidator(_punkte_validator(anzeige_feld))
                 anzeige_feld.setAlignment(Qt.AlignCenter)
                 if angezeigt_anzeige is not None:
                     anzeige_feld.setText(str(angezeigt_anzeige))

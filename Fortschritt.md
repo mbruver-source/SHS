@@ -4150,4 +4150,17 @@ Funde N1–N7 aus dem UX-Nachtest. Marcos Klick-Test P1/P2 war ok.
   darunter `RELEASE_NOTES.md` und der Workflow (dort im Wurzelordner). Byte-Abgleich
   identisch. Ältere, bisher nicht gespiegelte Website-Dateien unter `docs/` sind dabei
   mit aktualisiert.
+- **CI-Nachtrag (03.10., nach Marcos Push):** Die Linux-CI hatte 2 Fehlschläge, die unter
+  Windows nicht auftreten.
+  - **Punktefeld:** Der `QIntValidator` nahm in englischer Spracheinstellung „,“ als
+    Tausender-Trennzeichen an („45,“ statt Hinweis). Das hätte auch ein englisch
+    eingestelltes Windows betroffen. Jetzt prüft `_punkte_validator` mit einer Regex, die
+    nur Ziffern zulässt (höchstens zwei), unabhängig von der Sprache. Die Grenzen 60/40
+    prüfen wie bisher die Rotmarkierung und das Speichern (U5). Der Test setzt jetzt die
+    englische Einstellung vor dem Fensteraufbau und scheitert nachweislich mit dem alten
+    Code.
+  - **Pfad-Test:** Er erwartete die Windows-Schreibweise. Jetzt vergleicht er mit
+    `os.path.normpath`. Das ist nur eine Testkorrektur.
+  - Marco hat entschieden: Nachtrag-Commit ohne Versionsbump, der Tag v1.0.40 kommt erst
+    danach auf diesen Commit. Die Verifikation fand nichts.
 - **Push/Tag:** Marcos Aktion (`git push`, `git tag v1.0.40`, `git push origin v1.0.40`).

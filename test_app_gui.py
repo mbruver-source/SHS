@@ -3263,13 +3263,21 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
     conn, pfad = termin
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
 
-    fenster = HauptFenster(conn, pfad)
-    qtbot.addWidget(fenster)
-    fenster.show()
-    tab = fenster.ergebnis_tab
-    suche_feld, _anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    # Englische Spracheinstellung wie in der CI (Linux): dort galt "," früher als
+    # Tausender-Trennzeichen und wurde angenommen. Jetzt unabhängig von der Sprache abgelehnt.
+    from PySide6.QtCore import QLocale
 
-    qtbot.keyClicks(suche_feld, "45,5")
+    vorher = QLocale()
+    QLocale.setDefault(QLocale(QLocale.English, QLocale.UnitedStates))
+    try:
+        fenster = HauptFenster(conn, pfad)
+        qtbot.addWidget(fenster)
+        fenster.show()
+        tab = fenster.ergebnis_tab
+        suche_feld, _anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+        qtbot.keyClicks(suche_feld, "45,5")
+    finally:
+        QLocale.setDefault(vorher)
 
     assert suche_feld.text() == "45"
     assert "Nur ganze Punkte von 0 bis 60" in tab.status_label.text()
@@ -3345,7 +3353,10 @@ def test_pdf_speichern_meldet_ort_und_nutzt_ausdrucke_ordner(qtbot, termin, monk
     assert os.path.dirname(vorschlaege[0]) == erwartet
     assert len(gespeichert_meldungen) == 1
     assert gespeichert_meldungen[0][1] == "Ergebnisliste gespeichert"
-    assert "/" not in export_tab.status_label.text().split(": ", 1)[1]
+    # Pfad in der Schreibweise des Systems (Windows "\\", Linux "/") - CI läuft unter Linux.
+    assert export_tab.status_label.text().split(": ", 1)[1] == os.path.normpath(
+        os.path.join(erwartet, "Ergebnisliste_2026-09-19.pdf")
+    )
 
 
 def test_import_dialog_startet_in_downloads_und_merkt_ordner(qtbot, conn, monkeypatch, tmp_path):
