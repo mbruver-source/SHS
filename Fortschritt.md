@@ -3208,7 +3208,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | umgesetzt (Arbeitsstand 03.10.) | Siehe „U11 – umgesetzt“ |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
-| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
+| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | umgesetzt (Arbeitsstand 03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel + Glossar siehe „U13 (Rest) – umgesetzt“ |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | umgesetzt (Arbeitsstand 03.10.) | Siehe „U14 – umgesetzt“ |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
 | K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
@@ -4004,3 +4004,23 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - Teilnehmer mit „keine Teilnahme“ zählen weder als Starter noch als offen.
 - **Handbuch:** Kap. 8.
 - **Tests:** je einer in `test_app_gui.py` und `test_pdf_export.py`, alle grün.
+
+### U13 (Rest) – umgesetzt (03.10.2026, Arbeitsstand; Handbuch bis zum Build uncommittet)
+- **Kap. 14 „Die erste Prüfung Schritt für Schritt“:** in Alltagssprache und mit jedem Klick,
+  in neun Schritten: Termin anlegen, Anmeldeformular, Anmeldungen einlesen, Startnummern und
+  Zahlungen, Zeitplan mit Mittagspause, Ausdrucke vorher, Prüfungstag, Auswertung, Sicherung.
+- **Kap. 15 „Glossar“:** rund 30 Begriffe, z. B. Reiter, Termin-Datei, ED/DK/LK, nB/Disq./Abbr.,
+  „von x“, CSV, PDF, KI/Prompt, OMA, SH-R, Sicherungsdatei, Verschlüsselung, Tooltip,
+  Markieren.
+- **Platzierung:** Beide Kapitel stehen bewusst am Ende statt als neues Kapitel 2. Ein Einschub
+  hätte alle Kapitelnummern und Anker-Verweise verschoben. Stattdessen verweisen die
+  Einleitung („Zum ersten Mal dabei?“), das Inhaltsverzeichnis und Kap. 1 darauf.
+- **Kap. 10:** „Sicherungsdatei (Endung .zip)“ statt „ZIP-Datei“.
+- **Verifikation:** Alle Knopf- und Feldnamen stimmen wörtlich. Eingearbeitet:
+  - Im Zeitplan-Ablauf kommt die Mittagspause jetzt nach der Überschneidungsprüfung. Der
+    Rat, dafür neu zu verteilen, ist entfallen, weil das die Pause löschen würde.
+  - Hinweis, dass die Startnummern-Frage die Bereiche aus Schritt 1 braucht.
+  - „Richter hinzufügen“ als Ausweg, falls keine Richterspalten erscheinen.
+  - Disq./Abbr. zählen bei „von x“ mit.
+- **Vor dem Build:** `docs/HANDBUCH.pdf` neu erzeugen. Neue Bilder sind für die Kapitel nicht
+  nötig, sie verweisen auf die vorhandenen Kapitel.
