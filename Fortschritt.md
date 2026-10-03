@@ -4501,19 +4501,25 @@ Bereich, nacheinander und nur lesend: Web/Server, Desktop/Dateiformate, Build/CI
 
 | ID | Schwere | Fund | Status |
 |---|---|---|---|
-| C-1 | mittel | Alte Web-Sitzung übernimmt ein unter gleichem Namen neu angelegtes Konto (Codex, reproduziert) | offen, mit Marco zu besprechen |
-| S-1 | mittel | Zeitplan-Seitenleiste: Namen ohne Maskierung als Rich Text (reproduziert) | offen, mit Marco zu besprechen |
-| S-2 | mittel | Platzhalter aus `.env.example` werden akzeptiert (Cookie-Fälschung reproduziert) | offen, mit Marco zu besprechen |
-| S-3 | mittel | CI-Härtung (Rechte, Actions-Pinning, Versionen) | offen, mit Marco zu besprechen |
-| S-4 | mittel | 7 PDF-Titel ohne `_p_wert`: lokales Bild einbettbar, Export bricht ab (reproduziert) | offen, mit Marco zu besprechen |
-| H-1 | mittel | Trigger aus fremden Termin-Dateien verändern Ergebnisse (reproduziert) | offen, mit Marco zu besprechen |
-| S-5 | gering | Web-App nutzt das DB-Eigentümerkonto | offen, mit Marco zu besprechen |
-| S-6 | gering | Sicherheits-Header, `no-store`, Abmelden per GET | offen, mit Marco zu besprechen |
-| S-8 | gering | Sicherungs-ZIP ohne Größen-/Anzahlgrenze, `CON.sqlite` | offen, mit Marco zu besprechen |
-| S-9 | gering | `github.ref_name` direkt im pwsh-Skript | offen, mit Marco zu besprechen |
-| S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | offen, mit Marco zu besprechen |
+| C-1 | mittel | Alte Web-Sitzung übernimmt ein unter gleichem Namen neu angelegtes Konto (Codex, reproduziert) | umsetzen (Marco 03.10.): Sitzung an feste Konto-ID binden |
+| S-1 | mittel | Zeitplan-Seitenleiste: Namen ohne Maskierung als Rich Text (reproduziert) | umsetzen (Marco 03.10.): html.escape + alle Rich-Text-Stellen prüfen |
+| S-2 | mittel | Platzhalter aus `.env.example` werden akzeptiert (Cookie-Fälschung reproduziert) | umsetzen (Marco 03.10.): Start mit Platzhaltern/zu kurzem Schlüssel verweigern |
+| S-3 | mittel | CI-Härtung (Rechte, Actions-Pinning, Versionen) | umsetzen (Marco 03.10.): Rechte je Job, Actions per Hash, feste Werkzeugversionen |
+| S-4 | mittel | 7 PDF-Titel ohne `_p_wert`: lokales Bild einbettbar, Export bricht ab (reproduziert) | umsetzen (Marco 03.10.): `_p_wert` überall + Test über alle PDFs |
+| H-1 | mittel | Trigger aus fremden Termin-Dateien verändern Ergebnisse (reproduziert) | umsetzen (Marco 03.10.): Trigger/Views beim Öffnen entfernen + Hinweis |
+| S-5 | gering | Web-App nutzt das DB-Eigentümerkonto | zurückgestellt (Marco 03.10.): Ausbaupunkt, Nutzen gering bei hohem Umbau |
+| S-6 | gering | Sicherheits-Header, `no-store`, Abmelden per GET | umsetzen (Marco 03.10.): Sicherheits-Header + Abmelden per POST |
+| S-8 | gering | Sicherungs-ZIP ohne Größen-/Anzahlgrenze, `CON.sqlite` | umsetzen (Marco 03.10.): Grenzen Anzahl/Größe, Gerätenamen ablehnen |
+| S-9 | gering | `github.ref_name` direkt im pwsh-Skript | umsetzen (Marco 03.10.): Tag über env, Format prüfen |
+| S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | umsetzen (Marco 03.10.): Doku mit Umgebungsvariable + Warnhinweis |
 | S-7 | – | Temp-Datei beim Zurückholen | von Codex nicht bestätigt |
-| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | offen, mit Marco zu besprechen |
+| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | notiert, nicht umsetzen (Marco 03.10.): bekannte Restrisiken; H-4 wird durch das Auto-Speichern beim Schließen abgemildert |
+
+**Umsetzungsreihenfolge** (je Punkt einzeln, mit Tests und Verifikation; der Code bleibt bis
+zum nächsten Build uncommittet):
+1. C-1, H-1, S-1, S-4, S-2, S-6, S-8 – lokal prüfbar.
+2. S-3, S-9 – Workflows, wirksam erst in der CI.
+3. S-10 – Doku und Warnhinweis.
 
 Bereits bewusst entschieden und nicht neu: HTTP ohne HTTPS bei der Web-Version (Entscheidung
 zur ersten Ausbaustufe).
