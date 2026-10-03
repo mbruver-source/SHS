@@ -3197,7 +3197,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | ID | Punkt (Details im Bericht) | Status | Entscheidung / Plan |
 |---|---|---|---|
 | U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | umgesetzt (Arbeitsstand 03.10.) | Siehe „U1 – Plan“ und „U1 – Zwischenstand“ |
-| U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
+| U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | umgesetzt (Arbeitsstand 03.10.) | Siehe „U2 – Plan“ und „U2 – Zwischenstand“ |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U3 – umgesetzt“ |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
@@ -3790,3 +3790,11 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - `_zeitplan_pdf_exportieren` fragt vor dem Speichern nach, wenn Überschneidungen bestehen.
     Das gilt im Reiter Zeitplan und im Reiter Export.
   - 2 neue GUI-Tests. Messung bei 300 Teams: ca. 6 ms zusätzlich je Aktualisierung.
+- **U2c Handbuch und Hilfe (fertig, Gegencheck ohne Befund):**
+  - Kap. 6, Schritt 3: Mindestabstand, Rotation, „Wartezeit (DK)“.
+  - Neuer Absatz „Überschneidungen“: Markierung, Seitenleiste, Rückfrage vor dem PDF,
+    Abhilfe.
+  - Der Hilfetext des Reiters Zeitplan ist ergänzt.
+- **U2 damit abgeschlossen** (Arbeitsstand, noch kein Build).
+- **Vor dem Build:** Screenshots `handbuch_zeitplan.png` und `zeitplan.png` neu aufnehmen
+  (neues Feld, ggf. Wartezeit/Markierung).
