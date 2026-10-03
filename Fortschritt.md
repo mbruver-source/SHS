@@ -3198,7 +3198,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 |---|---|---|---|
 | U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
-| U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
+| U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U3 – umgesetzt“ |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
@@ -3596,3 +3596,21 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **3 neue Tests in `test_db.py`:** OMA lehnt ab; CSV lehnt ab; CSV ohne Angebote ergibt
   einen Hinweis.
 - **Tests:** unittest 500 OK, GUI 143 bestanden. Verifikations-Subagent: keine Befunde.
+
+### U3 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`desktop_dialoge.py`, TeilnehmerDialog:**
+  - Startgröße `_TEILNEHMER_DIALOG_GROESSE = (1040, 720)` statt 780×640, begrenzt auf 95 %
+    der Breite und 90 % der Höhe der verfügbaren Bildschirmfläche. OK/Abbrechen liegen
+    außerhalb der Scrollfläche und bleiben sichtbar.
+  - Die Textfelder der linken Spalte haben eine Mindestbreite
+    `_MINDESTBREITE_TEXTFELD = 170`.
+  - Auf sehr kleinen Bildschirmen scrollt die Scrollfläche bei Bedarf waagerecht
+    (Standard-Richtlinie), statt Eingaben abzuschneiden.
+- **Sichtprüfung** bei 1920×1080: alle Felder vollständig lesbar („Mustermann-Schulze“),
+  Gebühr-Haken sichtbar.
+- **Neuer GUI-Test** `test_teilnehmer_dialog_startgroesse_und_feldbreite`. Die
+  Bildschirmgrenzen wurden auf Hinweis der Verifikation geschärft.
+- **Tests:** 144 bestanden. Verifikations-Subagent: keine Befunde mit Handlungsbedarf.
+- **Vor dem Build:** Handbuch-Screenshots `docs/bilder/handbuch_teilnehmer_dialog_dk.png`
+  und `_ed.png` neu aufnehmen. Das Handbuch-Bild war schon bisher ca. 1000 px breit, der
+  Inhalt bleibt gleich, nur zur Sicherheit vergleichen.
