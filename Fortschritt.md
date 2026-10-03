@@ -3225,7 +3225,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | erledigt (03.10.): Absturzprotokoll umgesetzt; Gegenprobe Marco mit Demo ok, kein Absturz | Siehe „P1 – Absturzprotokoll umgesetzt“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | erledigt (03.10.): Gegenprobe Marco mit Demo ok – Effekt der Testumgebung, kein Code nötig | Siehe „P1, P2, N1 – Plan“ |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
-| N8 | CSV-Knöpfe zu ähnlich benannt: Import „Teilnehmerliste (Excel/CSV)…“ (Reiter Teilnehmer) wird für einen Export gehalten | vorgemerkt für nächsten Build (Marco 03.10.) | Siehe „N8 – Plan“ |
+| N8 | CSV-Knöpfe zu ähnlich benannt: Import „Teilnehmerliste (Excel/CSV)…“ (Reiter Teilnehmer) wird für einen Export gehalten | umgesetzt in 1.0.41 | Siehe „N8 – Plan“ |
 
 ### U1 – Plan (mit Marco geklärt am 02.10.2026)
 
@@ -4551,3 +4551,48 @@ Tests lokal: unittest 579 OK (159 übersprungen), GUI 185 passed, 1 xfailed.
 
 **Beim nächsten Tag-Build beobachten:** getrennter Release-Job (Artefakt-Übergabe),
 Inno-Setup-Version 6.7.1 per choco und Selbsttest (T1).
+
+## Version 1.0.41 (03.10.2026, Build auf Marcos Wunsch „neues Build“)
+
+- **Offene Punkte vor dem Build:**
+  - Die Verifikation fand nur Kleinigkeiten:
+    - `docs/handbuch.html` ist nur ein Weiterleiter, passt.
+    - Die Versionsangabe im Handbuch zieht der Bump nach.
+    - Handbuch Kap. 13 „Abmelden über den Link oben rechts“: bleibt so, auf Marcos
+      Entscheidung. Für Nutzer sieht der POST-Knopf wie ein Link aus.
+  - Die Nachfunde der Sicherheits-Verifikation waren schon eingearbeitet.
+- **N8 umgesetzt:**
+  - Neue Knopfnamen:
+    - Import „Teilnehmerliste einlesen (Excel/CSV)…“ im Reiter Teilnehmer und im
+      Formular-Import, Abschnitt 2. Das ersetzt auch „CSV importieren…“.
+    - Export „Teilnehmerliste speichern (CSV, für Excel)…“.
+  - Tooltip am Import-Knopf verweist auf den Reiter „Export“.
+  - Nachgezogen: Dateidialog-Titel, Hilfetext, Handbuch Kap. 4/5/9/14, Website,
+    GUI-Tests und die Demo-Checkliste. In die Demo-Checkliste kam auch der Punkt zum Stechen
+    dazu.
+- **Gebündelt:**
+  - S1 Stechen;
+  - T1 Selbsttest und Installer-Test in der CI;
+  - T2 Referenzfälle;
+  - T3 Altversionen;
+  - Sicherheitsfunde C-1, H-1, S-1, S-2, S-3, S-4, S-6, S-8, S-9, S-10;
+  - N8.
+- **Doku:**
+  - 14 Screenshots neu (Version 1.0.41, Skript wie bei 1.0.40). Das Anmeldeformular-Bild
+    bleibt unverändert.
+  - `Architektur.md` hat den neuen Absatz „Sicherheitsgrundsätze“.
+  - `RELEASE_NOTES.md` für 1.0.41 ist neu geschrieben.
+  - `docs/HANDBUCH.pdf` ist neu erzeugt.
+- **Version:** `bump_version.py` 1.0.40 → 1.0.41.
+- **Tests:** unittest 579 OK (159 übersprungen), GUI und Theme 185 passed, 1 xfailed.
+- **Commits:**
+  - `fcfbbb2` Build;
+  - `4f6e2a2` Altdaten v1.0.41 (`altdaten_erzeugen.py --aktuell`; `test_altversionen`
+    und die GUI-Altversionstests sind grün).
+- **Beim CI-Lauf des Tags beobachten:**
+  - erstmals getrennter `release`-Job (Artefakt-Übergabe);
+  - Actions auf Commit-Hashes;
+  - `pyinstaller==6.22.3` und Inno Setup 6.7.1 per choco;
+  - Selbsttest der gebauten und der installierten EXE;
+  - die Tag-Formatprüfung.
+- Push und Tag macht Marco selbst.
