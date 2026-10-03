@@ -4524,3 +4524,30 @@ zum nächsten Build uncommittet):
 Bereits bewusst entschieden und nicht neu: HTTP ohne HTTPS bei der Web-Version (Entscheidung
 zur ersten Ausbaustufe).
 
+
+### Sicherheitsfunde – umgesetzt (03.10.2026, Arbeitsstand; Code bis zum nächsten Build uncommittet)
+
+Alle von Marco freigegebenen Funde sind umgesetzt, jeweils mit Tests. S-5 bleibt
+zurückgestellt, H-2 bis H-4 sind nur notiert.
+
+| ID | Umsetzung | Tests |
+|---|---|---|
+| C-1 | `db._konto_kennung()`: Hash aus Name, Anlagezeit und Passwort-Hash. Steht bei Login/Ersteinrichtung in der Session und wird bei jeder Anfrage verglichen; bei Abweichung wird die Session geleert. Auch eine Passwortänderung meldet alte Sitzungen ab. | test_app_web (altes Cookie gilt nicht für neues Konto gleichen Namens), test_db |
+| H-1 | `init_db` entfernt fremde Trigger und Views aus Termin-Dateien. Die Desktop-App meldet das beim Öffnen bzw. beim Terminwechsel (`_fremdobjekte_melden`). | test_db `TestFremdeTriggerUndViews`, GUI `test_fremdobjekte_meldung` |
+| S-1 | Meldungsfenster (question/information/warning/critical) zeigen immer reinen Text (`meldungsfenster_als_klartext()` beim Start). Seitenleiste mit `html.escape`. Hinweis-/Status-Labels, Tauschdialog und Konflikt-Dialog auf PlainText. Konflikt-Tooltips mit Richternamen über `_klartext_tooltip()`. | GUI: Seitenleiste, Meldungsfenster, Tooltip |
+| S-4 | `_p_wert` an allen 8 PDF-Titeln (Verein, Richter). | `test_alle_pdfs_maskieren_markup_in_allen_feldern`; ohne Maskierung schlägt er fehl |
+| S-2 | `pruefe_web_geheimnisse()`: Die Web-Version startet nicht mit „bitte-hier…“-Platzhaltern, einem Schlüssel unter 32 oder einem Einrichtungscode unter 12 Zeichen. Smoke-Test-Werte und README_CONTAINER angepasst. | test_app_web |
+| S-6 | Zentrale Header per `after_request`: CSP (`script-src 'none'`, `frame-ancestors 'none'`, Styles inline erlaubt), X-Frame-Options DENY, nosniff, Referrer-Policy same-origin, Cache-Control no-store. Abmelden nur noch per POST mit CSRF-Token (Formular als Link gestaltet). | test_app_web (GET /logout → 405, Formular mit Token, Header) |
+| S-8 | Sicherungs-ZIP: höchstens 500 Einträge, 200 MB je Datei, 1 GB gesamt. Windows-Gerätenamen (CON, NUL, COM1 …) werden abgelehnt. Gefälschte Größenangaben helfen nicht, beim Lesen werden nie mehr Bytes geliefert (geprüft). | test_backup `TestZipGrenzen`, Gerätenamen |
+| S-3 | Workflows: global nur `contents: read`. Schreibrechte nur im neuen `release`-Job (Installer) bzw. im `publish`-Job (ghcr.io). Alle Actions auf Commit-Hash (Version als Kommentar, Stand 03.10.). `pyinstaller==6.22.3`, `choco innosetup --version=6.7.1`, `persist-credentials: false` beim Build-Checkout. | erst in der CI wirksam; YAML geprüft, Hashes per `git ls-remote` gegengeprüft |
+| S-9 | Tag-Prüfung über `env` statt direkt im Skript, nur Format `vX.Y.Z` (Installer und Container). | erst in der CI wirksam |
+| S-10 | `sync_termin.py` warnt bei Passwort in `--dsn` (URL, `password=`, Query-Parameter). Docstring und README_CONTAINER empfehlen `SHS_POSTGRES_DSN`. | test_db_postgres_wrapper |
+
+Verifikation: zwei unabhängige Subagent-Prüfungen. Deren Nachfunde sind eingearbeitet:
+S-1-Tooltip und Statuslabels, Konflikt-Dialog, Container-Tag-Prüfung über env,
+S-10-Query-Parameter.
+
+Tests lokal: unittest 579 OK (159 übersprungen), GUI 185 passed, 1 xfailed.
+
+**Beim nächsten Tag-Build beobachten:** getrennter Release-Job (Artefakt-Übergabe),
+Inno-Setup-Version 6.7.1 per choco und Selbsttest (T1).
