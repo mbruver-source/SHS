@@ -3220,7 +3220,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | geplant | Siehe „K1–K12 – Plan“ |
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
-| K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | geplant | Siehe „K1–K12 – Plan“ |
+| K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | geplant | Siehe „P1, P2, N1 – Plan“ |
 | P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | geplant | Siehe „P1, P2, N1 – Plan“ |
@@ -3512,3 +3512,16 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - `desktop_dialoge.py`, `BewertungsbogenAuswahlDialog`: Der Hinweistext lautet jetzt nur
   „Standardmäßig sind alle angehakt.“
 - Tests der Bewertungsbögen grün, Verifikations-Subagent ohne Befunde.
+
+### K11 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`app.py`, ErgebnisTab:** neues Tastenkürzel `QShortcut(QKeySequence.Save)` mit Kontext
+  `Qt.WidgetWithChildrenShortcut`.
+  - Strg+S löst „Alle Ergebnisse speichern“ aus, aber nur, solange der Fokus im Reiter liegt,
+    auch in einem Punktefeld.
+  - Ein gerade getippter Wert wird mitgespeichert, weil `alle_speichern` die Feldtexte direkt
+    liest.
+  - Der Knopf zeigt den Tooltip „Tastenkürzel: Strg+S“.
+- **Neuer GUI-Test** `test_strg_s_speichert_in_der_ergebniserfassung`: deckt Fokus auf der
+  Tabelle, Fokus in einem Punktefeld und keine Auslösung in einem anderen Reiter ab. Die
+  letzten beiden Fälle kamen auf Hinweis der Verifikation dazu.
+- **Tests:** 139 bestanden, 1 xfail. Verifikations-Subagent: keine Befunde.
