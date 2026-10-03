@@ -3218,7 +3218,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | umgesetzt (Arbeitsstand 03.10.) | Siehe „K6 – umgesetzt“ |
 | K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | umgesetzt (Arbeitsstand 03.10.) | Siehe „K7 – umgesetzt“ |
 | K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
-| K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
+| K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | umgesetzt (Arbeitsstand 03.10.) | Siehe „K9 – umgesetzt“ |
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | umgesetzt (Arbeitsstand 03.10.) | Siehe „K10 – umgesetzt“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
@@ -3986,3 +3986,21 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   ohnehin neu gebaut.
 - **Handbuch:** Kap. 10.
 - **Tests:** ein neuer GUI-Test. Die Verifikation fand nichts.
+
+### K9 – umgesetzt (03.10.2026, Arbeitsstand; Form von Marco am 03.10. gewählt: Hinweiszeile + Tooltip)
+- **Reiter „Auswertung“:**
+  - Die Platzierung bleibt kurz („1. von 2“).
+  - Die Platz-Zelle hat einen Tooltip: „„von 2“ zählt nur Starter mit vollständigem Ergebnis
+    in DK LK 1 – 3 noch offen.“
+  - Sind in einer Leistungsklasse noch Teilnehmer offen, steht unten zusätzlich je
+    Leistungsklasse „Hinweis DK LK 1: „von 2“ zählt nur Starter mit vollständigem Ergebnis –
+    3 noch offen.“
+  - Steht ein Filter auf einer Startnummer und sind nur noch andere offen, erscheint nur der
+    Hinweis, ohne den widersprüchlichen Satz „alle vollständig ausgewertet“ (kosmetischer
+    Befund der Verifikation, behoben).
+- **Ergebnisliste-PDF:** Unter „Noch ohne vollständiges Ergebnis“ steht der Satz „„von N“ in
+  der Platz-Spalte zählt nur Starter mit vollständigem Ergebnis – k noch offen.“, sofern es
+  in der Leistungsklasse schon gewertete Starter gibt.
+- Teilnehmer mit „keine Teilnahme“ zählen weder als Starter noch als offen.
+- **Handbuch:** Kap. 8.
+- **Tests:** je einer in `test_app_gui.py` und `test_pdf_export.py`, alle grün.
