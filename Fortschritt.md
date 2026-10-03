@@ -3202,7 +3202,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
-| U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
+| U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | umgesetzt (Arbeitsstand 03.10.) | Siehe „U7 – umgesetzt“ |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
@@ -3632,3 +3632,38 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   Laptops (z. B. 1366×768 bei 125 % ≈ 1093 px logisch) wäre das Fenster damit noch etwas
   breiter als der Bildschirm. Möglich wäre z. B. eine zweizeilige Knopfleiste. Mit U1 kommt
   noch ein weiterer Knopf hinzu, das sollte dort mitbedacht werden.
+
+### U7 – umgesetzt (03.10.2026, Arbeitsstand)
+- **Marcos Entscheidungen 03.10.:**
+  - Ordner `Termine\Ausdrucke\<Termin>` (neben der Termin-Datei).
+  - Auch die Datensicherung bekommt das Meldungsfenster.
+- **`desktop_gemeinsam.py`:** neue Hilfsfunktionen
+  - `_ausdrucke_ordner(termin_pfad)` und `_pfad_anzeige` (Windows-Schreibweise);
+  - `_ordner_zeigen` (Explorer mit markierter Datei);
+  - `_datei_gespeichert_melden(parent, pfad, titel, datei_oeffnen_text="PDF öffnen")`:
+    Meldungsfenster „Gespeichert unter …“ mit [PDF öffnen] [Ordner zeigen] [OK];
+  - `_import_startordner` / `_import_ordner_merken`: erst Downloads, dann der zuletzt
+    benutzte Import-Ordner;
+  - `_pdf_speicherort_waehlen` legt den Ordner bei Bedarf an.
+- **`app.py`:**
+  - Der Ablageort je Termin ist `Ausdrucke\<Termin>`.
+  - Eine Meldung nach dem Speichern erscheint bei Bewertungsbogen, Rangliste, allen
+    9 Export-Knöpfen, Zeitplan und Datensicherung (dort ohne „PDF öffnen“).
+  - CSV-/OMA-/PDF-Import starten in Downloads bzw. im letzten Import-Ordner.
+  - Reiter Export: Die Statuszeile steht direkt unter den Knöpfen, der Erklärtext in einer
+    Scrollfläche (keine Überlappung mehr).
+  - „Ablageort öffnen“ legt den Ausdrucke-Ordner bei Bedarf an.
+- **`docs/HANDBUCH.md`:** Kap. 9 (Speicherort, Meldungsfenster) und Kap. 10 (PDFs gehören
+  nicht zur Sicherung). Bleibt bis zum Build im Arbeitsstand.
+- **Tests:**
+  - Autouse-Fixture `gespeichert_meldungen` ersetzt das modale Fenster in allen GUI-Tests.
+  - Neu: `test_pdf_speichern_meldet_ort_und_nutzt_ausdrucke_ordner` und
+    `test_import_dialog_startet_in_downloads_und_merkt_ordner`.
+  - 147 GUI bestanden, unittest 500 OK.
+- **Verifikations-Subagent:** keine Befunde. Alle PDF-Export-Wege melden. Die Termin-Liste
+  und die Sicherung arbeiten nicht rekursiv, `Ausdrucke` stört dort also nicht.
+- **Optional, VOR dem nächsten Build mit Marco klären:** Beim Löschen eines Termins bleibt
+  sein Ordner `Ausdrucke\<Termin>` liegen. Es geht nichts verloren. Mitlöschen (mit
+  Rückfrage) oder bewusst so lassen?
+- **Vor dem Build:** Den Screenshot `handbuch_export.png` neu aufnehmen (geändertes Layout
+  im Reiter Export).
