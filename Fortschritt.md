@@ -4492,19 +4492,28 @@ Bereich, nacheinander und nur lesend: Web/Server, Desktop/Dateiformate, Build/CI
 **Ergebnis:** kein kritischer und kein hoher Fund. Bericht und Einzelberichte liegen in
 `Sicherheitspruefung-2026-10/`.
 
+**Zweitprüfung durch Codex (03.10., Auftrag von Marco):**
+- Prüfung des Quellcodes, Nachweis in einer lokalen Testinstanz mit Testdaten, keine externen
+  Ziele. Das Repo blieb unverändert (Hash-Vergleich).
+- Ergebnis: 11 Befunde (0 kritisch, 0 hoch, 6 mittel, 5 gering). Neu ist C-1; S-4 und H-1
+  sind hochgestuft, S-7 ist nicht bestätigt.
+- Siehe `Sicherheitspruefung-2026-10/Bericht.md` (zusammengeführt) und `codex_bericht.md`.
+
 | ID | Schwere | Fund | Status |
 |---|---|---|---|
-| S-1 | mittel | Zeitplan-Seitenleiste: Namen ohne Maskierung als Rich Text | offen, mit Marco zu besprechen |
-| S-2 | mittel | Platzhalter aus `.env.example` werden akzeptiert | offen, mit Marco zu besprechen |
+| C-1 | mittel | Alte Web-Sitzung übernimmt ein unter gleichem Namen neu angelegtes Konto (Codex, reproduziert) | offen, mit Marco zu besprechen |
+| S-1 | mittel | Zeitplan-Seitenleiste: Namen ohne Maskierung als Rich Text (reproduziert) | offen, mit Marco zu besprechen |
+| S-2 | mittel | Platzhalter aus `.env.example` werden akzeptiert (Cookie-Fälschung reproduziert) | offen, mit Marco zu besprechen |
 | S-3 | mittel | CI-Härtung (Rechte, Actions-Pinning, Versionen) | offen, mit Marco zu besprechen |
-| S-4 | gering–mittel | 7 PDF-Titel ohne `_p_wert` (Export bricht bei `<` ab) | offen, mit Marco zu besprechen |
+| S-4 | mittel | 7 PDF-Titel ohne `_p_wert`: lokales Bild einbettbar, Export bricht ab (reproduziert) | offen, mit Marco zu besprechen |
+| H-1 | mittel | Trigger aus fremden Termin-Dateien verändern Ergebnisse (reproduziert) | offen, mit Marco zu besprechen |
 | S-5 | gering | Web-App nutzt das DB-Eigentümerkonto | offen, mit Marco zu besprechen |
 | S-6 | gering | Sicherheits-Header, `no-store`, Abmelden per GET | offen, mit Marco zu besprechen |
-| S-7 | gering | Temp-Datei beim Zurückholen bleibt in Fehlerfällen liegen | offen, mit Marco zu besprechen |
-| S-8 | gering | Sicherungs-ZIP ohne Größen-/Anzahlgrenze, Windows-Sondernamen | offen, mit Marco zu besprechen |
+| S-8 | gering | Sicherungs-ZIP ohne Größen-/Anzahlgrenze, `CON.sqlite` | offen, mit Marco zu besprechen |
 | S-9 | gering | `github.ref_name` direkt im pwsh-Skript | offen, mit Marco zu besprechen |
 | S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | offen, mit Marco zu besprechen |
-| H-1 bis H-4 | Hinweis | fremde SQLite ohne `trusted_schema=OFF`, Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | offen, mit Marco zu besprechen |
+| S-7 | – | Temp-Datei beim Zurückholen | von Codex nicht bestätigt |
+| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | offen, mit Marco zu besprechen |
 
 Bereits bewusst entschieden und nicht neu: HTTP ohne HTTPS bei der Web-Version (Entscheidung
 zur ersten Ausbaustufe).
