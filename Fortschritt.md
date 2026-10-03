@@ -3200,7 +3200,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | geplant | Siehe „U4 – Plan“ unter der Tabelle |
-| U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | geplant | Siehe „U5 – Plan“ unter der Tabelle |
+| U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
@@ -3548,3 +3548,27 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   Benutzername-Hinweis im Handbuch, Docstring im zweiten Test, Modulvariable im Test per
   monkeypatch zurückgesetzt.
 - **Offen bleibt Marcos Gegenprobe P1/P2 in der echten App** (siehe Plan).
+
+### U5 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`app.py`:** neue Konstanten `_SUCHE_MAX = 60` und `_ANZEIGE_MAX = 40` vor `ErgebnisTab`.
+  Sie werden auch für die Validatoren verwendet.
+- **Feld sofort rot:** `_aktualisiere_zeilenstatus` gibt Punktefeldern mit einem Wert über
+  dem Maximum einen roten Rahmen in der Design-Farbe „fehler“ und den Tooltip
+  „Höchstens 60 Punkte.“. Beim Korrigieren, Sperren und Design-Wechsel verschwindet er
+  wieder.
+- **Klartext beim Speichern:** `alle_speichern` prüft den Bereich vor der Datenbank und
+  meldet z. B. „Klein, Klaus – Trümmerfeld: Suche höchstens 60 Punkte (eingegeben: 65)“.
+  Der `IntegrityError`-Zweig bleibt als Rückfallebene.
+- **Komma-Hinweis:** `inputRejected` der Punktefelder ruft `_eingabe_abgelehnt` auf. Das
+  ergibt einen Tooltip am Feld und in der Statuszeile „Nur ganze Punkte von 0 bis 60
+  eingeben (keine Kommazahlen).“. Das kommt nur bei Benutzereingabe, nicht bei setText.
+- **Zwei neue GUI-Tests:** roter Rahmen + Klartext + Zurücksetzen; „45,5“ ergibt einen
+  Hinweis.
+- **Tests:** 143 bestanden, 1 xfail; unittest 494 OK. Screenshot-Sichtprüfung ok.
+- **Verifikations-Subagent:** keine Befunde.
+- **Optional, VOR dem nächsten Build mit Marco klären** (umsetzen / zurückstellen /
+  verwerfen):
+  - (a) Die Grenzen 60/40 sind in Desktop (`app.py`) und Web (`app_web.py` ~772) getrennt
+    hartkodiert. Eine gemeinsame Konstante, z. B. in `db.py`, wäre möglich.
+  - (b) Der Komma-Hinweis bleibt in der Statuszeile stehen, bis ihn etwas anderes
+    überschreibt.
