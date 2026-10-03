@@ -3196,7 +3196,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 
 | ID | Punkt (Details im Bericht) | Status | Entscheidung / Plan |
 |---|---|---|---|
-| U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
+| U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | umgesetzt (Arbeitsstand 03.10.) | Siehe „U1 – Plan“ und „U1 – Zwischenstand“ |
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U3 – umgesetzt“ |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
@@ -3744,3 +3744,16 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
       Bereiche.
     - Die autouse-Fixture zeichnet den Import-Hinweis auf.
     - 152 GUI bestanden, unittest OK.
+- **U1d Handbuch (fertig, Gegencheck ohne Widersprüche):**
+  - Kap. 3 erklärt die Startnummern-Bereiche.
+  - Kap. 4 bekommt die neue Tabellenzeile „Fehlende Startnummern vergeben…“, den Doppelklick,
+    das Häkchen-Verhalten und einen neuen Abschnitt „Startnummern vergeben“.
+  - Kap. 5 „Ausprobieren“, Schritt 3 ist angepasst.
+  - Auf Hinweis der Prüfung wurde der veraltete Modulkommentar in `app.py`
+    („automatisch vorgeschlagen“) korrigiert.
+- **U1 damit abgeschlossen** (Arbeitsstand, noch kein Build).
+- **Vor dem Build:**
+  - Screenshots neu aufnehmen: `handbuch_termin_anlegen.png` (neuer Bereichsblock),
+    `handbuch_teilnehmer.png` (neuer Knopf), `handbuch_teilnehmer_dialog_*.png`.
+  - Siehe zusätzlich U12: Die Knopfleiste im Reiter Teilnehmer ist durch den neuen Knopf
+    noch etwas breiter. Das ist ein optionaler Punkt zur Klärung.
