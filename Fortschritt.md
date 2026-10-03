@@ -3222,8 +3222,8 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | umgesetzt (Arbeitsstand 03.10.) | Siehe „K10 – umgesetzt“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
-| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | Absturzprotokoll umgesetzt (Arbeitsstand 03.10.); Gegenprobe durch Marco offen | Siehe „P1 – Absturzprotokoll umgesetzt“ |
-| P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | geplant | Siehe „P1, P2, N1 – Plan“ |
+| P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | erledigt (03.10.): Absturzprotokoll umgesetzt; Gegenprobe Marco mit Demo ok, kein Absturz | Siehe „P1 – Absturzprotokoll umgesetzt“ |
+| P2 | „Jetzt speichern?“ erscheint nach „No“ erneut (1×, evtl. Testumgebung) – Gegenprobe | erledigt (03.10.): Gegenprobe Marco mit Demo ok – Effekt der Testumgebung, kein Code nötig | Siehe „P1, P2, N1 – Plan“ |
 | N1 | **Neue Anforderung (Marco, 02.10.2026): Teilnehmer als CSV exportieren** | umgesetzt (Arbeitsstand 03.10.) | Siehe „U10 + N1 – umgesetzt“ |
 
 ### U1 – Plan (mit Marco geklärt am 02.10.2026)
@@ -4079,7 +4079,8 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - Handbuch: U7-Satz in Kap. 3.
   - Alles bleibt bis zum Build uncommittet, weil es unveröffentlichte Funktionen
     beschreibt.
+- **P1/P2-Gegenprobe (03.10., Marco):** mit der Demo-Checkliste ok, kein Absturz und keine
+  doppelte Rückfrage.
 - **Offen bis zum Build:**
-  - P1/P2-Gegenprobe durch Marco mit der Demo-Checkliste;
   - K12 Release-Notes;
   - Versionsbump 1.0.40 und `docs/HANDBUCH.pdf` neu erzeugen (beides erst beim Build).
