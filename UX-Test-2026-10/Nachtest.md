@@ -66,7 +66,7 @@ Reste stehen unten als neue Funde.
   ohne Absturz. Das neue Absturzprotokoll hat seinen Zweck erfüllt: Die Ursache war sofort
   nachvollziehbar.
 
-## Neue Funde (einzeln mit Marco zu besprechen)
+## Neue Funde (Marco 03.10.: alle für 1.0.40 freigegeben und umgesetzt, siehe Fortschritt.md)
 
 | # | Fund | Wer | Schwere |
 |---|---|---|---|

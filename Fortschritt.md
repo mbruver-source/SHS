@@ -4087,8 +4087,30 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - Abgleich: keiner der damaligen Funde ist „nicht behoben“.
   - Effekte der Testumgebung (geprüft): PDF-Fehler durch Pfadlänge > 260 nur in der Sandbox;
     Abbrüche beim Speicher-Aufräumen wie P1, laut Absturzprotokoll in der Harness.
-  - Neue Funde N1–N7 (siehe Bericht) werden einzeln mit Marco geklärt.
+  - Neue Funde N1–N7 (siehe Bericht): Marco hat am 03.10. alle für 1.0.40 freigegeben, alle
+    sind umgesetzt (Arbeitsstand):
+    - **N1:** Der CSV-Import überspringt bereits gemeldete Teilnehmer wie PDF/OMA, auch
+      Doppelte innerhalb der Datei, und nennt sie. „Löschen“ wirkt auf alle markierten, mit
+      einer Rückfrage samt Namen.
+    - **N2:** Bei genau zwei markierten Teilnehmern tauscht „Startnummer tauschen…“ diese
+      direkt, nach Rückfrage. Ausgegraute Knöpfe erklären per Tooltip „Nur bei genau einem
+      markierten Teilnehmer möglich.“
+    - **N3:** `add_zeitplan_pause_bei_allen` liefert je Richter die tatsächliche Startzeit.
+      Weicht sie von der Wunschzeit ab, nennt eine Meldung alle Zeiten.
+    - **N4:** Die Rückfrage beim Anlegen nennt jetzt korrekt „Reiter „Verwaltung“ →
+      „Veranstaltungsdaten bearbeiten…““; vorher stand dort „Termin bearbeiten…“, ein Fehler
+      aus K6. Im Handbuch:
+      - Kap. 14 sagt jetzt „DK-LK 1“ wie die Maske und erwähnt die Startnummern-Frage nach
+        dem CSV-Import, das Tauschen zweier Markierter und die Pause am Planende.
+      - Kap. 4, 5 und 6 beschreiben das neue Verhalten.
+    - **N5:** Import-Meldungen nennen „Zeile 8 (Mia Meyer)“. Der Freischalt-Hinweis steht nur
+      noch einmal am Ende, bei CSV, OMA und PDF.
+    - **N6:** Der Komma-Hinweis steht orange und fett in der Statuszeile, bis die nächste
+      gültige Eingabe kommt. Das ersetzt den 8-Sekunden-Timer aus U5b. Die Hervorhebung steckt
+      im Text selbst, damit spätere Meldungen sie nicht erben (Hinweis der Verifikation).
+    - **N7:** „TN“ ist im Zeitplan (Seitenleiste und Blockköpfe) zu „Teilnehmer“ ausgeschrieben.
+    - Tests: neue und angepasste Tests in `test_db.py` und `test_app_gui.py`, alle grün.
+      Verifikation ohne blockierende Befunde. Die Screenshots sind neu aufgenommen.
 - **Offen bis zum Build:**
-  - Klärung der Nachtest-Funde N1–N7;
   - K12 Release-Notes;
   - Versionsbump 1.0.40 und `docs/HANDBUCH.pdf` neu erzeugen (beides erst beim Build).
