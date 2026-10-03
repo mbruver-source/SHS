@@ -4024,3 +4024,62 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   - Disq./Abbr. zählen bei „von x“ mit.
 - **Vor dem Build:** `docs/HANDBUCH.pdf` neu erzeugen. Neue Bilder sind für die Kapitel nicht
   nötig, sie verweisen auf die vorhandenen Kapitel.
+
+### Vor-Build-Klärung (03.10.2026, Marco): Kleinigkeiten, Demo, Screenshots, Doku
+- **Entscheidungen zu den gesammelten optionalen Punkten:**
+  - **U5a, umgesetzt:** Die Punktgrenzen `SUCHE_MAX = 60` und `ANZEIGE_MAX = 40` stehen jetzt
+    in `shs_core.py` und werden von Desktop (`app.py`, auch die Spaltenköpfe) und Web
+    (`app_web.py`, Template `ergebnis_erfassen.html`) genutzt. Ein Test (`TestPunktgrenzen`)
+    prüft, dass die CHECK-Constraints im Schema dazu passen.
+  - **U5b, umgesetzt:** Der Komma-Hinweis in der Ergebniserfassung verschwindet nach
+    8 Sekunden bzw. bei der nächsten gültigen Eingabe. Andere Statusmeldungen bleiben
+    unberührt.
+  - **U7, bewusst so gelassen:** Beim Löschen eines Termins bleibt `Ausdrucke\<Termin>`
+    liegen. Das steht jetzt in Kap. 3 des Handbuchs.
+  - **U12, umgesetzt:** Die Knopfleiste im Reiter Teilnehmer ist zweizeilig. Oben steht die
+    Arbeit am markierten Teilnehmer, unten Startnummern und Importe. Die Mindestbreite des
+    Reiters sinkt mit Segoe UI von ca. 1400 auf ca. 740 px.
+- **Beim Demo-Probelauf neu gefunden (Marco: verständlich machen), umgesetzt:**
+  - Abgelehnte CSV-Zeilen melden jetzt in Alltagssprache z. B. „Disziplin fehlt (bei
+    Einzeldisziplin ED nötig) – bitte Trümmerfeld, Flächensuche oder Behältnisstrecke
+    eintragen“. Vorher stand dort „ungültige Disziplin None für ED (muss eine von [...]
+    sein)“.
+  - Neue Hilfsfunktion `db_import._csv_feld_fehler`, sie gilt auch für Art, Leistungsklasse,
+    Schulterhöhe und Geschlecht. Test: `TestCsvMeldungen`.
+- **Hilfe im Programm:** Der Zeitplan-Text empfahl noch „im Reiter Teilnehmer austragen“.
+  Jetzt steht dort „mit „Keine Teilnahme“ markieren (nicht löschen)“, passend zu U13.
+- **Verifikation:** zwei Agents, keine Befunde. Ihr einziger Hinweis (hartkodiertes „0–60“
+  im Hilfetext) bleibt bewusst, er ist reiner Text wie im Handbuch.
+- **Demo `C:\Users\mbruv\Documents\SHS-Demo-vor-Build` für P1/P2 und die UX-Punkte
+  aktualisiert:**
+  - `demo_erzeugen.py`: Startnummern-Bereiche im Haupttermin, Ivers ohne Chip-Nr. (orange
+    Warnung), neue Datei `demo_excel_liste.csv` (Semikolon, Windows-Kodierung, Umlaute).
+    Die DEMO-Termine sind neu erzeugt.
+  - `Checkliste.md` neu, P1 und P2 stehen vorn:
+    - P1: vier PDFs auf einmal importieren, direkt danach Ergebnisliste und Etiketten
+      speichern, `absturzprotokoll.txt` prüfen;
+    - P2: „Nein“ bei „Jetzt speichern?“;
+    - danach alle Neuerungen nach Reitern.
+  - Die erwarteten Ergebnisse sind per Probelauf auf einer Kopie bestätigt: PDF-Import 2/2,
+    CSV 1 importiert und 2 Fehler, Excel-Liste 2 importiert mit richtigen Umlauten.
+- **Screenshots neu** (offscreen, Segoe UI, Standard-Design, deutsche Qt-Texte, Version
+  1.0.40, Profilpfad als `C:\Users\Name`):
+  - `handbuch_start`, `_termin_anlegen` (mit Startnummern-Bereichen), `_teilnehmer`
+    (zweizeilige Knöpfe, graue Hinweise), `_teilnehmer_dialog_ed/_dk`;
+  - `_formular_import`, `_zeitplan` (Kopfzeilen, Mindestabstand, Pause bei allen),
+    `_ergebniserfassung` („noch kein Ergebnis“), `_auswertung` (K9-Hinweis), `_uebersicht`,
+    `_export`, `_datensicherung`;
+  - `_anmeldeformular` (Ort, ED-Hinweis; per LibreOffice gerendert);
+  - für README/Website `zeitplan.png` und `ergebniserfassung.png`;
+  - `bewertungsbogen.png` und die Web-Bilder sind unverändert.
+- **Doku:**
+  - README-Funktionstabelle und `docs/index.html`: Startnummern-Bereiche,
+    Mehrfachmarkierung, Excel-Liste, Überschneidungen, CSV-Export;
+  - `Architektur.md`: Modultabelle um die neuen Funktionen ergänzt;
+  - Handbuch: U7-Satz in Kap. 3.
+  - Alles bleibt bis zum Build uncommittet, weil es unveröffentlichte Funktionen
+    beschreibt.
+- **Offen bis zum Build:**
+  - P1/P2-Gegenprobe durch Marco mit der Demo-Checkliste;
+  - K12 Release-Notes;
+  - Versionsbump 1.0.40 und `docs/HANDBUCH.pdf` neu erzeugen (beides erst beim Build).
