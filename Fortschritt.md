@@ -3207,7 +3207,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
-| U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | geplant | Siehe „U12 – Plan“ unter der Tabelle |
+| U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
@@ -3614,3 +3614,21 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **Vor dem Build:** Handbuch-Screenshots `docs/bilder/handbuch_teilnehmer_dialog_dk.png`
   und `_ed.png` neu aufnehmen. Das Handbuch-Bild war schon bisher ca. 1000 px breit, der
   Inhalt bleibt gleich, nur zur Sicherheit vergleichen.
+
+### U12 – umgesetzt (03.10.2026, Arbeitsstand)
+- **Ursache gemessen** (Segoe UI, Design, 1920×1080, 20 Teilnehmer): Das Label „Noch ohne
+  vollständiges Ergebnis: …“ im Reiter **Auswertung** hatte keinen Umbruch und war ca.
+  1755 px breit. Die breiteste Reiterseite bestimmt die Mindestbreite des ganzen
+  Hauptfensters, daher der Sprung auf bis zu 1957 px.
+- **`app.py`:**
+  - `AuswertungTab.ausstehend_label` und `AuswertungTab.status_label` (nach „Rangliste
+    drucken“ steht dort ein langer Pfad, Hinweis der Verifikation) brechen jetzt um.
+  - `main()` startet das Hauptfenster mit `showMaximized()`.
+  - Gemessen: Das Fenster bleibt bei ca. 1196 px.
+- **Neuer GUI-Test** `test_lange_namensliste_in_auswertung_verbreitert_fenster_nicht`.
+- **Tests:** 145 bestanden. Verifikations-Subagent: keine Befunde.
+- **Optional, VOR dem nächsten Build mit Marco klären:** Die breiteste Stelle ist jetzt die
+  Knopfleiste im Reiter Teilnehmer mit 8 Knöpfen, ca. 1156 px Mindestbreite. Auf sehr kleinen
+  Laptops (z. B. 1366×768 bei 125 % ≈ 1093 px logisch) wäre das Fenster damit noch etwas
+  breiter als der Bildschirm. Möglich wäre z. B. eine zweizeilige Knopfleiste. Mit U1 kommt
+  noch ein weiterer Knopf hinzu, das sollte dort mitbedacht werden.
