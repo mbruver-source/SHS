@@ -3213,7 +3213,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
 | K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | geplant | Siehe „K1–K12 – Plan“ |
 | K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | geplant | Siehe „K1–K12 – Plan“ |
-| K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | geplant | Siehe „K1–K12 – Plan“ |
+| K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | umgesetzt (Arbeitsstand 03.10.) | „(bisheriges Verhalten)“ entfernt (desktop_dialoge.py) |
 | K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | geplant | Siehe „K1–K12 – Plan“ |
 | K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | geplant | Siehe „K1–K12 – Plan“ |
 | K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | geplant | Siehe „K1–K12 – Plan“ |
@@ -3507,3 +3507,8 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - `docs/HANDBUCH.pdf` wird wie üblich beim nächsten Build neu erzeugt.
 - Die Website-Änderung wird erst mit Marcos Push sichtbar.
 - Noch offen in U13: Einsteiger-Kapitel und Glossar (am Schluss der Reihenfolge).
+
+### K4 – umgesetzt (03.10.2026, Arbeitsstand)
+- `desktop_dialoge.py`, `BewertungsbogenAuswahlDialog`: Der Hinweistext lautet jetzt nur
+  „Standardmäßig sind alle angehakt.“
+- Tests der Bewertungsbögen grün, Verifikations-Subagent ohne Befunde.
