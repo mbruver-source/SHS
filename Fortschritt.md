@@ -3199,7 +3199,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U1 | Startnummern nach Import nur einzeln vergebbar; Vorschlag „1“ trotz Vergabe; kein Doppelklick = Bearbeiten; Tausch zweier TN ohne Nummer ohne Meldung | geplant | Siehe „U1 – Plan“ unter der Tabelle |
 | U2 | „Automatisch verteilen“ setzt DK-Teams gleichzeitig bei mehreren Richtern an, keine Warnung | geplant | Siehe „U2 – Plan“ unter der Tabelle |
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
-| U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | geplant | Siehe „U4 – Plan“ unter der Tabelle |
+| U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
@@ -3217,7 +3217,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | geplant | Siehe „K1–K12 – Plan“ |
 | K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | geplant | Siehe „K1–K12 – Plan“ |
 | K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | geplant | Siehe „K1–K12 – Plan“ |
-| K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | geplant | Siehe „K1–K12 – Plan“ |
+| K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
@@ -3572,3 +3572,27 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     hartkodiert. Eine gemeinsame Konstante, z. B. in `db.py`, wäre möglich.
   - (b) Der Komma-Hinweis bleibt in der Statuszeile stehen, bis ihn etwas anderes
     überschreibt.
+
+### U4 + K8 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`db_import.py`:**
+  - Neue gemeinsame Prüfung `_angebot_pruefen()` und neuer Meldungstext
+    `_nicht_angeboten_text()` für den PDF-, CSV- und OMA-Import.
+  - **CSV und OMA** lehnen Zeilen für Prüfungen ab, die der Termin nicht anbietet. Beim OMA
+    kommt die Dubletten-Erkennung zuerst, abgelehnte Zeilen zählen nicht als vorhanden.
+  - **Marcos Entscheidung 03.10.:** Sind im Termin gar keine angebotenen Prüfungen
+    hinterlegt, wird nicht geprüft, wie bisher. Das neue Feld `CsvImportErgebnis.hinweise`
+    meldet das, wenn etwas importiert oder abgelehnt wurde. Ältere Termine und
+    Beispieldaten funktionieren dadurch weiter.
+  - **K8 – neuer Text:** „… wird in diesem Termin nicht angeboten. Bitte mit dem Teilnehmer
+    klären. (Nur falls die Prüfung doch angeboten werden soll: Reiter „Verwaltung“ →
+    „Veranstaltungsdaten bearbeiten…“)“. Beim PDF-Import steht zusätzlich „- Formular eines
+    anderen Termins?“.
+- **`app.py`:** Die Meldungen nach CSV- und OMA-Import zeigen „Hinweis: …“ an.
+- **`docs/HANDBUCH.md` Kap. 5:**
+  - PDF-Abschnitt: Rücksprache vor dem Freischalten.
+  - KI/CSV-Abschnitt und OMA-Abschnitt: Ablehnung nicht angebotener Prüfungen.
+  - „Ausprobieren mit Beispieldaten“: beim Test-Termin alle oder keine Prüfungen ankreuzen.
+  - Bleibt bis zum Build im Arbeitsstand.
+- **3 neue Tests in `test_db.py`:** OMA lehnt ab; CSV lehnt ab; CSV ohne Angebote ergibt
+  einen Hinweis.
+- **Tests:** unittest 500 OK, GUI 143 bestanden. Verifikations-Subagent: keine Befunde.
