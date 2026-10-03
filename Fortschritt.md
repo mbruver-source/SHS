@@ -3210,9 +3210,9 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | umgesetzt (Arbeitsstand 03.10.) | Siehe „U14 – umgesetzt“ |
-| K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
-| K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | geplant | Siehe „K1–K12 – Plan“ |
-| K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | geplant | Siehe „K1–K12 – Plan“ |
+| K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
+| K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
+| K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | umgesetzt (Arbeitsstand 03.10.) | Siehe „K1–K3 – umgesetzt“ |
 | K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | umgesetzt (Arbeitsstand 03.10.) | „(bisheriges Verhalten)“ entfernt (desktop_dialoge.py) |
 | K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | geplant | Siehe „K1–K12 – Plan“ |
 | K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | geplant | Siehe „K1–K12 – Plan“ |
@@ -3912,3 +3912,18 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   (Platzhalter, Hilfetext, README/Website) sind eingearbeitet.
 - **Vor dem Build:** Screenshots `handbuch_teilnehmer.png` (graue Hinweise),
   `handbuch_datensicherung.png` und `handbuch_start.png` neu aufnehmen.
+
+### K1–K3 – umgesetzt (03.10.2026, Arbeitsstand)
+- **K1 Ergebniserfassung:**
+  - Zeilen ohne Punkte und ohne Disqualifiziert/Abbruch zeigen grau „noch kein Ergebnis“
+    statt „✓ gespeichert“ (`_zeile_ist_leer` in `app.py`).
+  - Die Zeilen sind mindestens so hoch wie ein Eingabefeld (+4 px), eingetippte Punkte
+    werden nicht mehr unten abgeschnitten.
+- **K2 Namenslisten:** offene Teilnehmer als „Greta Graf; Ina Iske“ in der Auswertung und im
+  Ergebnisliste-PDF. Die Etiketten behalten bewusst „Nachname, Vorname“.
+- **K3 Ergebnisliste-PDF:**
+  - Platz-Spalte: „Disq.“ bzw. „Abbr.“ statt „nB“; „nB“ nur bei echtem Nichtbestehen.
+  - Die Prüfungsüberschrift hat `keepWithNext` und wandert mit der Tabelle auf die nächste
+    Seite statt allein am Seitenende zu stehen.
+- **Tests:** neue Tests in `test_app_gui.py` und `test_pdf_export.py`, alle grün. Die
+  Verifikation (ein Agent für K1–K3) fand nichts.
