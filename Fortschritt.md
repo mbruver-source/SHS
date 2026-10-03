@@ -3711,3 +3711,13 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     Überschneidung), `naechste_freie_startnummer_im_bereich`, `fehlende_startnummern_vergeben`
     (Ergebnis `StartnummernVergabe`).
   - 2 neue Tests in `test_db.py`.
+- **U1b Eingabe der Bereiche (fertig, Verifikation ohne blockierende Befunde):**
+  - VeranstaltungsDialog: neuer Block „Startnummern-Bereiche“ mit „von/bis“ je Prüfung.
+    Sichtbar sind nur die angebotenen Prüfungen, ohne Angebot alle 12.
+  - Halb ausgefüllte oder überlappende Bereiche werden beim Speichern mit Meldung
+    abgelehnt.
+  - Ein neuer Termin übernimmt die Bereiche des letzten Termins (`TerminInfo.startnummer_bereiche`).
+  - Neuanlage und „Veranstaltungsdaten bearbeiten…“ speichern die Bereiche.
+  - Auf Hinweis der Verifikation erklärt ein Satz im Block, dass Bereiche abgewählter
+    Prüfungen beim Speichern entfernt werden.
+  - Neuer GUI-Test; die bestehende Vorbelegungs-Erwartung wurde um das neue Feld ergänzt.
