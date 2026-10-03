@@ -3203,7 +3203,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | umgesetzt (Arbeitsstand 03.10.) | Siehe „U5 – umgesetzt“ |
 | U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | umgesetzt (Arbeitsstand 03.10.) | Siehe „U7 – umgesetzt“ |
-| U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
+| U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | umgesetzt (Arbeitsstand 03.10.) | Siehe „U8 – umgesetzt“ |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
@@ -3667,3 +3667,28 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   Rückfrage) oder bewusst so lassen?
 - **Vor dem Build:** Den Screenshot `handbuch_export.png` neu aufnehmen (geändertes Layout
   im Reiter Export).
+
+### U8 – umgesetzt (03.10.2026, Arbeitsstand)
+- **`db.py`:** neue Funktion `zeitplan_richter_aus_veranstaltung_anlegen(conn)`.
+  - Legt für jeden in den Veranstaltungsdaten eingetragenen Richter 1–5 eine Zeitplan-Spur
+    mit seinem Namen an.
+  - Das geschieht nur, solange der Zeitplan noch keine Richter hat. Leere Namen werden
+    übersprungen.
+  - Nur der Desktop ruft sie auf, das Web nutzt sie nicht.
+- **`app.py`, `ZeitplanTab.showEvent`:** Die Übernahme läuft beim **ersten Anzeigen des
+  Reiters**, einmal je geöffnetem Termin.
+  - Auf Befund der Verifikation korrigiert: Die erste Fassung legte die Richter schon beim
+    bloßen Öffnen des Termins an, weil der Tab im Konstruktor `aktualisieren()` aufruft. Damit
+    hätte sich die Datei verändert, ohne dass der Zeitplan angesehen wurde. Das widersprach
+    dem Plan „beim Öffnen des Reiters“.
+  - Bewusst gelöschte Richter tauchen nicht wieder auf, bis der Termin neu geöffnet wird.
+- **`docs/HANDBUCH.md` Kap. 6, Schritt 2:** Richter erscheinen automatisch, weitere über
+  „Richter hinzufügen“.
+- **Tests:**
+  - `test_zeitplan_richter_aus_veranstaltung_anlegen` (`test_db.py`).
+  - `test_zeitplan_uebernimmt_richter_einmalig` (GUI) deckt ab: kein Schreiben beim Öffnen
+    des Termins, Übernahme beim Reiterwechsel, gelöschte Richter kommen nicht zurück.
+  - 148 GUI bestanden, unittest OK.
+- **Verifikation:** ein Befund (siehe oben), behoben und nachgeprüft, danach keine Befunde.
+- **Vor dem Build:** Screenshots `handbuch_zeitplan.png` und `zeitplan.png` prüfen, ob sie
+  noch zum Ablauf passen.
