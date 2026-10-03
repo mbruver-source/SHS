@@ -47,7 +47,7 @@ lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
 | **Auswertung** | Wertnote und Rangliste je Leistungsklasse, automatisch berechnet, inklusive „nicht bestanden“ (unter 70 Punkten in einer Disziplin). |
 | **Übersicht** | Teilnehmerzahlen je Art/Leistungsklasse und die Zahl der benötigten Leistungsrichter. |
 | **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. |
-| **Datensicherung** | Alle Termine in einer ZIP-Datei sichern und wiederherstellen, auf Wunsch mit Passwort (AES-256). |
+| **Datensicherung** | Alle Termine in einer Sicherungsdatei (ZIP) sichern und wiederherstellen, auf Wunsch mit Passwort verschlüsselt (AES-256). |
 
 <table>
 <tr>

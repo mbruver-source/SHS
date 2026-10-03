@@ -3209,7 +3209,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | umgesetzt (Arbeitsstand 03.10.) | Siehe „U11 – umgesetzt“ |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | umgesetzt (Arbeitsstand 03.10.) | Siehe „U12 – umgesetzt“ |
 | U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
-| U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
+| U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | umgesetzt (Arbeitsstand 03.10.) | Siehe „U14 – umgesetzt“ |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
 | K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | geplant | Siehe „K1–K12 – Plan“ |
 | K3 | Ergebnisliste-PDF: Platz „nB“ statt „Disq.“; Überschrift allein am Seitenende | geplant | Siehe „K1–K12 – Plan“ |
@@ -3883,3 +3883,32 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   DK (alle Gegenstände) und ED mit nur Feld 2. Alle Tests grün, Verifikation ohne Befunde.
 - **Vor dem Build:** Den Screenshot `handbuch_anmeldeformular.png` neu aufnehmen (neuer
   Hinweis).
+
+### U14 – umgesetzt (03.10.2026, Arbeitsstand; README/Website committet)
+- **⚠ entschärft (Marco 03.10.: nur die Chip-Nr. auffällig):**
+  - In der Spalte „Anmerkungen“ bleibt nur „⚠ Chip-Nr. fehlt“ orange und fett.
+  - Fehlende Gegenstände erscheinen grau als „Gegenstand noch offen“ bzw. bei DK „Gegenstände
+    noch offen“, mit dem Tooltip „kann bis zum Prüfungstag nachgetragen werden“.
+  - Bei „Keine Teilnahme“ entfallen die Gegenstands-Hinweise. Das ist zugleich ein Teil von K7.
+  - Die Logik in `db.teilnehmer_fehlende_pflichtangaben` ist unverändert, nur die Anzeige in
+    `app.py` ist neu.
+- **Alltagssprache:**
+  - Datensicherung: Dialog-, Reiter- und Hilfetexte sagen „Sicherungsdatei, mit Passwort
+    verschlüsselt“ statt „ZIP / AES-256“. Die Knöpfe heißen „Sicherung erstellen…“ und
+    „Sicherung wiederherstellen…“.
+  - Datumsmeldung (`db.lies_datum`): „„14.11.26“ ist kein gültiges Datum – bitte z. B.
+    14.11.2026 eingeben (TT.MM.JJJJ)“.
+  - Website (`docs/index.html`) laienfreundlich; README nennt ZIP/AES-256 weiterhin in
+    Klammern.
+- **Kontrast:**
+  - Reiternamen und Spaltenköpfe sind im hellen und im Sand-Design dunkler (#55606F bzw.
+    #5E5549). Spaltenköpfe vorher 2,98:1 bzw. 3,45:1, jetzt mindestens 4,5:1.
+  - Neuer Theme-Test; der Regressionswert des Standard-Designs ist bewusst angepasst.
+  - Platzhaltertexte behalten über die neue Farbe „PLATZHALTER“ die bisherige hellere
+    Farbe, damit sie sich von Eingaben abheben (Hinweis der Verifikation).
+- **„Hoher Kontrast“ auffindbar:** Tipp im Startbildschirm und oben in der Hilfe.
+- **Handbuch:** Kap. 4 (Tabelle der Anmerkungen) und Kap. 10 (Knopfnamen).
+- **Tests:** alle grün. Verifikation ohne nötige Änderungen, ihre drei Beobachtungen
+  (Platzhalter, Hilfetext, README/Website) sind eingearbeitet.
+- **Vor dem Build:** Screenshots `handbuch_teilnehmer.png` (graue Hinweise),
+  `handbuch_datensicherung.png` und `handbuch_start.png` neu aufnehmen.
