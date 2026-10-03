@@ -4206,7 +4206,8 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 | ID | Punkt | Status | Plan |
 |---|---|---|---|
 | T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T1 – Plan“ |
-| T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T2 – Plan“ |
+| T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | umgesetzt (Arbeitsstand 03.10.) | Siehe „T2 – umgesetzt“ |
+| S1 | **Neu aus T2 (Marco 03.10.):** Stechen bei Gleichstand um Platz 1 | geplant, Details beim Umsetzen klären | Siehe „T2 – umgesetzt“ |
 | T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T3 – Plan“ |
 
 ### T1 – Plan (geklärt mit Marco 03.10.2026)
@@ -4296,3 +4297,43 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - T2: Zuerst die Referenztabelle zur Kontrolle an Marco.
   - T1: Lässt sich erst in der CI prüfen. Der Code bleibt bis zum nächsten Build
     uncommittet.
+
+### T2 – umgesetzt (03.10.2026, Arbeitsstand; Tests bis zum nächsten Build uncommittet)
+- **Referenztabelle:** Claude hat sie aus den Wertnoten-Regeln erstellt, Marco hat sie am 03.10.
+  geprüft. Sie umfasst:
+  - ED: 11 Fälle, jede Notengrenze auf und unter der Schwelle, dazu 0 und 100 sowie
+    „60 Suche + 10 Anzeige = bestanden“;
+  - DK: 11 Fälle, darunter 100/100/69 = nicht bestanden trotz hoher Summe;
+  - Rangliste: 9 Fälle, nämlich Gleichstand, nB, Disqualifikation, Abbruch, „Keine
+    Teilnahme“, unvollständiger DK, Disqualifikation trotz eingetragener Punkte, getrennte
+    Ranglisten und gleiche Grenzen in LK 1–3.
+- **Von Marco bestätigte Regeln:**
+  - Die Notengrenzen gelten für alle Leistungsklassen gleich.
+  - Die Mindestpunktzahl 70 gilt nur auf die Summe aus Suche und Anzeige.
+  - Disqualifiziert und Abbruch zählen bei „von x“ mit, „Keine Teilnahme“ nicht.
+  - Gleichstand: 1., 2., 2., 4.
+- **Abweichung zum Code, gemeldet statt korrigiert → neuer Punkt S1 „Stechen“:**
+  - Bei Gleichstand um Platz 1 entscheidet ein Stechen. Heute vergibt das Programm zweimal
+    Platz 1.
+  - Marcos Wunsch: Rangliste und Ergebnisliste zeigen „Stechen nötig“. Nach dem Stechen legt
+    Marco den Sieger fest, er wird Erster, die übrigen Punktgleichen werden Zweite. Die Punkte
+    bleiben unverändert.
+  - Gleichstand auf anderen Plätzen bleibt wie heute.
+  - Offen bis zur Umsetzung: Wo wird der Sieger festgelegt (Reiter Auswertung)? Was passiert
+    bei drei und mehr Punktgleichen? Wie erscheint das Stechen im PDF und auf den Etiketten?
+- **Umsetzung:**
+  - Neue Datei `test_bewertung_referenz.py`: Teil A/B Wertnoten, Teil C Rangliste über die
+    Datenschicht, Teil D Eigenschaftstests mit `hypothesis`. Sie prüfen, dass mehr Punkte
+    nie eine schlechtere Note ergeben, dass „bestanden“ genau bei jeder Disziplin ≥ 70 gilt,
+    dass die Rangliste vollständig und konsistent ist und dass Disqualifikation und Abbruch
+    nie bestanden sind.
+  - Der Stechen-Fall steht als übersprungener Platzhaltertest drin. Er wird mit S1
+    ausformuliert.
+  - `hypothesis` steht in `requirements-dev.txt` und ist lokal in Anaconda installiert.
+    Fehlt es, werden nur die Eigenschaftstests übersprungen.
+  - Der Testbefehl in CLAUDE.md und `Architektur.md` umfasst jetzt
+    `test_bewertung_referenz`.
+- **Tests:** 16 Tests, 15 grün, 1 übersprungen (S1). Keine Abweichung der Referenzfälle vom
+  heutigen Code. Die Verifikation fand keine Befunde. Ihr Hinweis ist eingearbeitet: Der
+  vollständige ED-Durchlauf läuft jetzt auch ohne `hypothesis`.
+
