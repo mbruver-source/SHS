@@ -3782,3 +3782,11 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
     1 Richter und einem DK-Team unlösbar). Behoben, dazu ein Regressionstest. Außerdem
     liefert `dk_mindestabstand(0)` jetzt 0 statt 10.
   - 5 neue Tests in `test_db.py`.
+- **U2b Oberfläche (fertig, Verifikation ohne Befunde):**
+  - Reiter Zeitplan: neues Feld „Mindestabstand Team“, je Termin gespeichert.
+  - Betroffene Zeilen erscheinen mit ⚠ in Rot, der Tooltip nennt Zeit, Richter und Art
+    (gleichzeitig bzw. zu wenig Abstand).
+  - Die Seitenleiste zeigt oben „⚠ Überschneidungen (N Team(s))“, je Team zusammengefasst.
+  - `_zeitplan_pdf_exportieren` fragt vor dem Speichern nach, wenn Überschneidungen bestehen.
+    Das gilt im Reiter Zeitplan und im Reiter Export.
+  - 2 neue GUI-Tests. Messung bei 300 Teams: ca. 6 ms zusätzlich je Aktualisierung.
