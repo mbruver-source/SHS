@@ -26,7 +26,8 @@ musst du nicht installieren. Administratorrechte sind nicht nötig.
 > digital signiert, deshalb warnt Windows beim ersten Start. Auf **„Weitere Informationen“**
 > und dann **„Trotzdem ausführen“** klicken. Das ist nur einmal nötig.
 
-**Updates:** Im Programm über **Version → „Nach Updates suchen“**. Die neue Version einfach
+**Updates:** Im Programm oben rechts auf **„ℹ️ Version …“** klicken, dann
+**„Nach Updates suchen“**. Die neue Version einfach
 über die alte installieren – deine Termine bleiben erhalten.
 
 **Ausprobieren:** Mit der [Beispiel-CSV mit 20 erfundenen Teilnehmern](docs/beispiel_teilnehmer.csv)

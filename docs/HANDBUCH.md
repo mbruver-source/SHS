@@ -340,8 +340,9 @@ existiert (grün ✓) oder noch fehlt (rot ✗ „noch offen“).
 
 > **Wichtig zu „Entfernen“:** Ein Prüfungsblock merkt sich nur Art, Leistungsklasse, Disziplin
 > und Dauer. Wer darin geprüft wird, ergibt sich jedes Mal neu aus der Teilnehmerliste.
-> „Entfernen“ löscht deshalb immer den **ganzen Block**. Fällt ein Teilnehmer aus, einfach im
-> Reiter „Teilnehmer“ löschen – der Zeitplan passt sich von selbst an.
+> „Entfernen“ löscht deshalb immer den **ganzen Block**. Fällt ein Teilnehmer aus, ihn im
+> Reiter „Teilnehmer“ mit **„Keine Teilnahme“** markieren (siehe Kapitel 4) – nicht löschen.
+> Der Zeitplan passt sich von selbst an.
 
 ## 7. Ergebniserfassung
 

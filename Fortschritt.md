@@ -3208,7 +3208,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U10 | Mitgliederliste (Excel/CSV) für Laien nicht auffindbar; Reiter Formular-Import vom KI-Prompt dominiert | geplant | Siehe „U10 – Plan“ unter der Tabelle |
 | U11 | ED LK 2 aus PDF mit zwei Gegenständen → Yes/No-Rückfrage verwirft einen; Handbuch-Hinweis „ältere Daten“ ungenau | geplant | Siehe „U11 – Plan“ unter der Tabelle |
 | U12 | Fenstergrößen: Hauptfenster wächst über Bildschirmbreite, nur 600 px hoch | geplant | Siehe „U12 – Plan“ unter der Tabelle |
-| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | geplant | Siehe „U13 – Plan“ unter der Tabelle |
+| U13 | Handbuch: Kap. 6 „einfach löschen“ vs. „Keine Teilnahme“; Startnummern nach Import und Mitgliederlisten-Import fehlen; Update-Weg README vs. Handbuch | teilweise umgesetzt (03.10.) | Widerspruch Kap. 6 + Update-Weg erledigt; Einsteiger-Kapitel und Glossar folgen am Schluss |
 | U14 | Laien-Verständlichkeit: Fachwörter (ZIP, AES-256, Prompt, SH-R), viele ⚠, Datumsmeldung ohne Beispiel, „Hoher Kontrast“ nicht auffindbar | geplant | Siehe „U14 – Plan“ unter der Tabelle |
 | K1 | Ergebniserfassung: „✓ gespeichert“ bei leeren Zeilen, Statusspalte/Zahlen abgeschnitten | geplant | Siehe „K1–K12 – Plan“ |
 | K2 | Namenslisten „Graf, Greta, Iske, Ina …“ (Komma doppelt belegt) | geplant | Siehe „K1–K12 – Plan“ |
@@ -3497,3 +3497,13 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
   Optional prüfen, ob PyInstaller `qtbase_de.qm` mitliefert. Für die Knöpfe ist das dank
   des eingebauten Übersetzers nicht nötig.
 - Damit ist auch der offene Punkt „OK/Cancel-Buttons englisch“ vom 22./23.09. erledigt.
+
+### U13 (schneller Teil) – umgesetzt (03.10.2026, reine Doku, committet)
+- `docs/HANDBUCH.md` Kap. 6, Kasten „Wichtig zu ‚Entfernen‘“: Ein ausgefallener Teilnehmer
+  wird jetzt mit **„Keine Teilnahme“** markiert, nicht gelöscht (Verweis auf Kap. 4).
+- `README.md` und `docs/index.html` (Website): Der Update-Weg heißt einheitlich „ℹ️ Version …“
+  oben rechts → „Nach Updates suchen“, wie im Handbuch.
+- Verifikations-Subagent: keine Befunde, keine weiteren Stellen mit der alten Formulierung.
+- `docs/HANDBUCH.pdf` wird wie üblich beim nächsten Build neu erzeugt.
+- Die Website-Änderung wird erst mit Marcos Push sichtbar.
+- Noch offen in U13: Einsteiger-Kapitel und Glossar (am Schluss der Reihenfolge).
