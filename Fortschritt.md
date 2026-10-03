@@ -3216,7 +3216,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K4 | Bewertungsbögen-Auswahl: „(bisheriges Verhalten)“ | umgesetzt (Arbeitsstand 03.10.) | „(bisheriges Verhalten)“ entfernt (desktop_dialoge.py) |
 | K5 | Etiketten: „, ,“ bei leerem Verein; nB-Teilnehmer ohne Kennzeichnung | umgesetzt (Arbeitsstand 03.10.) | Siehe „K5 – umgesetzt“ |
 | K6 | Termin anlegen: kein Hinweis bei leerem Verband/Meldestelle; Ort fehlt auf Anmeldeformular | umgesetzt (Arbeitsstand 03.10.) | Siehe „K6 – umgesetzt“ |
-| K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | geplant | Siehe „K1–K12 – Plan“ |
+| K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | umgesetzt (Arbeitsstand 03.10.) | Siehe „K7 – umgesetzt“ |
 | K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
 | K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
@@ -3950,3 +3950,25 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **Tests:** je ein neuer Test in `test_app_gui.py` und `test_pdf_export.py`. Die
   Verifikation fand eine Kleinigkeit: Bei nur einem leeren Feld hieß es „fehlen“ statt
   „fehlt“. Das ist behoben und im Test abgedeckt.
+
+### K7 – umgesetzt (03.10.2026, Arbeitsstand)
+- **Mehrfachmarkierung** in der Teilnehmerliste (Strg-/Umschalt-Klick):
+  - „Bezahlt umschalten“ und „Keine Teilnahme“ wirken auf alle markierten Teilnehmer, und
+    zwar einheitlich: Sind alle schon gesetzt, wird es bei allen aufgehoben, sonst bei allen
+    gesetzt. Der Knopf heißt nur dann „Teilnahme wiederherstellen“, wenn alle markierten
+    „keine Teilnahme“ haben.
+  - Die Rückfrage bei erfassten Ergebnissen nennt alle Betroffenen in einer Meldung.
+  - Bearbeiten, Löschen, Startnummer tauschen und Bewertungsbogen bleiben bei genau einer
+    markierten Zeile aktiv.
+  - Durch den Filter ausgeblendete, aber noch markierte Zeilen (z. B. nach Strg+A) zählen
+    nicht mit (Befund der Verifikation).
+- **Markierung bleibt beim Teilnehmer:** `aktualisieren()` merkt sich die markierten IDs und
+  markiert sie nach dem Neuaufbau wieder. Vorher blieb die Zeilennummer stehen und die
+  Markierung sprang nach dem Speichern auf einen anderen Teilnehmer.
+- **Löschen-Rückfrage:** Der Name kommt jetzt aus der ID statt aus `currentRow()` (Befund der
+  Verifikation). Bei Strg-Klick konnten aktuelle und markierte Zeile auseinanderlaufen, und
+  der Dialog nannte dann eine andere Person als die gelöschte.
+- „Keine Teilnahme“ ohne Gegenstands-Hinweis war schon mit U14 erledigt.
+- **Handbuch:** Kap. 4, Knopftabelle.
+- **Tests:** vier neue GUI-Tests, alle grün. Die Verifikation fand zwei Befunde (siehe oben),
+  beide sind behoben und nachgeprüft.
