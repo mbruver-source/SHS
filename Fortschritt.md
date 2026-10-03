@@ -4481,3 +4481,31 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - Altdatei der neuen Version per `--aktuell`;
   - den CI-Lauf beobachten, ob beide Selbsttest-Schritte grün sind.
 
+## 03.10.2026: Sicherheits-Codeprüfung (Rubrik sicherheit_2026_10)
+
+**Anlass:** Marco wollte die Software auf Schwachstellen prüfen lassen. Ein Angriff durch
+Codex mit drei „Angreifern“ ließ sich so nicht durchführen: Der Auftrag wurde von einem
+Sicherheitsfilter angehalten, der begonnene Lauf wurde sofort gestoppt, es wurde nichts
+geändert. Stattdessen lief eine Sicherheits-Codeprüfung mit drei Prüfern, jeder mit eigenem
+Bereich, nacheinander und nur lesend: Web/Server, Desktop/Dateiformate, Build/CI/Lieferkette.
+
+**Ergebnis:** kein kritischer und kein hoher Fund. Bericht und Einzelberichte liegen in
+`Sicherheitspruefung-2026-10/`.
+
+| ID | Schwere | Fund | Status |
+|---|---|---|---|
+| S-1 | mittel | Zeitplan-Seitenleiste: Namen ohne Maskierung als Rich Text | offen, mit Marco zu besprechen |
+| S-2 | mittel | Platzhalter aus `.env.example` werden akzeptiert | offen, mit Marco zu besprechen |
+| S-3 | mittel | CI-Härtung (Rechte, Actions-Pinning, Versionen) | offen, mit Marco zu besprechen |
+| S-4 | gering–mittel | 7 PDF-Titel ohne `_p_wert` (Export bricht bei `<` ab) | offen, mit Marco zu besprechen |
+| S-5 | gering | Web-App nutzt das DB-Eigentümerkonto | offen, mit Marco zu besprechen |
+| S-6 | gering | Sicherheits-Header, `no-store`, Abmelden per GET | offen, mit Marco zu besprechen |
+| S-7 | gering | Temp-Datei beim Zurückholen bleibt in Fehlerfällen liegen | offen, mit Marco zu besprechen |
+| S-8 | gering | Sicherungs-ZIP ohne Größen-/Anzahlgrenze, Windows-Sondernamen | offen, mit Marco zu besprechen |
+| S-9 | gering | `github.ref_name` direkt im pwsh-Skript | offen, mit Marco zu besprechen |
+| S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | offen, mit Marco zu besprechen |
+| H-1 bis H-4 | Hinweis | fremde SQLite ohne `trusted_schema=OFF`, Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | offen, mit Marco zu besprechen |
+
+Bereits bewusst entschieden und nicht neu: HTTP ohne HTTPS bei der Web-Version (Entscheidung
+zur ersten Ausbaustufe).
+
