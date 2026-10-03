@@ -3219,7 +3219,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | K7 | Teilnehmerliste: Mehrfachmarkierung graut alle Knöpfe aus; Markierung springt nach Speichern; „Keine Teilnahme“ zeigt weiter „⚠ Gegenstand fehlt“ | umgesetzt (Arbeitsstand 03.10.) | Siehe „K7 – umgesetzt“ |
 | K8 | PDF-Import-Ablehnung „nicht angeboten“ verleitet zum Freischalten (Hinweis auf Reiter Verwaltung) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U4 + K8 – umgesetzt“ |
 | K9 | Rangliste „von 2“ obwohl 5 gemeldet (zählt nur Gewertete) | geplant | Siehe „K1–K12 – Plan“ |
-| K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | geplant | Siehe „K1–K12 – Plan“ |
+| K10 | Datensicherung: Dateiname mit Tagesdatum statt Prüfungsdatum | umgesetzt (Arbeitsstand 03.10.) | Siehe „K10 – umgesetzt“ |
 | K11 | Strg+S in Ergebniserfassung ohne Wirkung (unter Vorbehalt Testumgebung) | umgesetzt (Arbeitsstand 03.10.) | Strg+S in der Ergebniserfassung |
 | K12 | GitHub-Release-Seite ohne Release-Notes | geplant | Siehe „K1–K12 – Plan“ |
 | P1 | Stille Programmenden direkt nach Dateiauswahl (5/6 Personas) – Gegenprobe in echter App | Absturzprotokoll umgesetzt (Arbeitsstand 03.10.); Gegenprobe durch Marco offen | Siehe „P1 – Absturzprotokoll umgesetzt“ |
@@ -3972,3 +3972,17 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
 - **Handbuch:** Kap. 4, Knopftabelle.
 - **Tests:** vier neue GUI-Tests, alle grün. Die Verifikation fand zwei Befunde (siehe oben),
   beide sind behoben und nachgeprüft.
+
+### K10 – umgesetzt (03.10.2026, Arbeitsstand)
+- **Dateiname der Sicherung:** Er enthält Prüfungsdatum und Verein des geöffneten Termins
+  sowie den Tag der Sicherung, z. B.
+  `SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-2026-10-03.zip`.
+  - Umlaute werden umschrieben, andere Sonderzeichen durch „-“ ersetzt.
+  - Der Vereinsteil ist auf 40 Zeichen begrenzt.
+  - Ohne Veranstaltungsdaten bleibt es bei `SHS-Sicherung_<heute>.zip`.
+  - Die Sicherung umfasst weiterhin ALLE Termine. Datum und Verein dienen nur der
+    Wiedererkennung.
+- **Technisch:** `DatensicherungTab` bekommt dafür `conn`. Er wird bei jedem Terminwechsel
+  ohnehin neu gebaut.
+- **Handbuch:** Kap. 10.
+- **Tests:** ein neuer GUI-Test. Die Verifikation fand nichts.
