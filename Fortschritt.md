@@ -4205,7 +4205,7 @@ Versionsbump, kein Push ohne Marcos Anforderung.
 
 | ID | Punkt | Status | Plan |
 |---|---|---|---|
-| T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | geklärt (Marco 03.10.), bereit zur Umsetzung | Siehe „T1 – Plan“ |
+| T1 | Smoke-Test der gebauten Windows-EXE (PyInstaller) | umgesetzt (Arbeitsstand 03.10.), Nachweis in der CI beim nächsten Build | Siehe „T1 – umgesetzt“ |
 | T2 | Fachliche Referenzfälle für die Bewertung (Bewertungsbögen + Eigenschaftstests) | umgesetzt (Arbeitsstand 03.10.) | Siehe „T2 – umgesetzt“ |
 | S1 | **Neu aus T2 (Marco 03.10.):** Stechen bei Gleichstand um Platz 1 | umgesetzt (Arbeitsstand 03.10.) | Siehe „S1 – umgesetzt“ |
 | T3 | Upgrade-Tests mit echten Termin-Dateien und Sicherungen älterer Versionen | umgesetzt (Arbeitsstand 03.10.) | Siehe „T3 – umgesetzt“ |
@@ -4432,4 +4432,52 @@ Versionsbump, kein Push ohne Marcos Anforderung.
   - Screenshot `handbuch_auswertung.png` neu aufnehmen (neuer Knopf).
   - Zeile in `RELEASE_NOTES.md`.
   - Die Demo-Checkliste um das Stechen ergänzen.
+
+### T1 – umgesetzt (03.10.2026, Arbeitsstand; bis zum nächsten Build uncommittet)
+- **`selbsttest.py`** + **`app.main()`**: `SHS-Pruefungsprogramm.exe --selbsttest [protokoll]`
+  prüft ohne Fenster (Qt offscreen) in einem Temp-Ordner, der danach gelöscht wird:
+  - Termin, Teilnehmer, Ergebnisse, Zeitplan und Auswertung;
+  - 6 PDFs (reportlab);
+  - Anmeldeformular einlesen (pypdf);
+  - CSV-Export mit Doppel-Erkennung;
+  - verschlüsselte Sicherung samt Wiederherstellung (pyzipper);
+  - Oberfläche mit allen Reitern (PySide6).
+
+  Ergebnis ist Exit-Code 0 bzw. 1. Das Protokoll liegt standardmäßig in
+  `%TEMP%\shs_selbsttest.log`, denn die EXE hat keine Konsole. Der Schalter bleibt in der
+  ausgelieferten EXE (Marco).
+- **Robustheit:**
+  - Fehlt das Qt-Plugin „offscreen“ in der EXE, läuft der Test auf der normalen
+    Windows-Plattform.
+  - `faulthandler` schreibt bei einem harten Absturz den Stapel ins Protokoll; der
+    vorherige Zustand wird wiederhergestellt.
+  - Die Testdatenbank wird auch im Fehlerfall geschlossen.
+  - Der Test berührt keine echten Termine. Er kann aber einen leeren
+    `SHS-Pruefungsprogramm\Termine`-Ordner anlegen, wie ein normaler Programmstart.
+    Das ist harmlos und bleibt bewusst so.
+- **`build-installer.yml`:**
+  - Nach PyInstaller: `dist\SHS-Pruefungsprogramm.exe --selbsttest`.
+  - Nach Inno Setup: stille Installation (`/VERYSILENT /CURRENTUSER /DIR=…`), Selbsttest
+    der installierten EXE, Deinstallation über `unins000.exe`.
+  - Jeder Fehler bricht den Build ab, bevor ein Release entsteht. Das Protokoll erscheint
+    im CI-Log.
+- **Doku:**
+  - Handbuch Kap. 13: „Funktioniert meine Installation vollständig?“ mit Aufruf und Ort
+    des Protokolls.
+  - `Architektur.md`: Modultabelle.
+  - `README_INSTALLER.md`: Ablauf.
+- **Tests:**
+  - `test_selbsttest_erfolg_und_fehlerfall` prüft Erfolg und simulierten Modulfehler.
+  - Lokal: `python app.py --selbsttest` ergibt Exit 0, alle 6 Schritte OK, Temp-Ordner
+    aufgeräumt; pytest GUI und Theme 181 grün.
+  - PyInstaller ist lokal nicht installiert. Der echte Nachweis mit EXE und Installer
+    kommt aus der CI beim nächsten Build bzw. bei einem manuellen „Run workflow“.
+- **Verifikation:** keine kritischen Befunde. Ihre Hinweise zu `faulthandler` und dem
+  Schließen der Datenbank sind eingearbeitet.
+- **Damit sind T1–T3 und S1 umgesetzt.** Alles liegt im Arbeitsstand und kommt mit dem
+  nächsten Build. Vor dem Build zusätzlich:
+  - eine Zeile in `RELEASE_NOTES.md` (Stechen, Selbsttest);
+  - den Screenshot der Auswertung;
+  - Altdatei der neuen Version per `--aktuell`;
+  - den CI-Lauf beobachten, ob beide Selbsttest-Schritte grün sind.
 
