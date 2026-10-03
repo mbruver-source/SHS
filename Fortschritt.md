@@ -3201,7 +3201,7 @@ Status: `offen` → `geplant` (Entscheidung + Umsetzungsplan festgehalten) → `
 | U3 | Teilnehmer-Maske 780×640 zu schmal (Wiederauftreten trotz Fix 21.09., Gegenprobe echte App) | geplant | Siehe „U3 – Plan“ unter der Tabelle |
 | U4 | CSV-/OMA-Import prüft angebotene Prüfungen nicht (PDF-Import schon) | geplant | Siehe „U4 – Plan“ unter der Tabelle |
 | U5 | „CHECK constraint failed …“ bei Punkten außerhalb des Bereichs; „45,5“ still zu 45 | geplant | Siehe „U5 – Plan“ unter der Tabelle |
-| U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | geplant | Siehe „U6 – Plan“ unter der Tabelle |
+| U6 | Englische Yes/No/Cancel-Knöpfe (keine Qt-Übersetzung; bekannt seit 22./23.09.) | umgesetzt (Arbeitsstand 03.10.) | Siehe „U6 – umgesetzt“ |
 | U7 | Keine sichtbare Rückmeldung nach PDF-Speichern; Speicherort Termine-Ordner; Import startet nicht in Downloads; Statuszeile überlappt Erklärtext | geplant | Siehe „U7 – Plan“ unter der Tabelle |
 | U8 | Richter aus Veranstaltungsdaten werden im Zeitplan nicht übernommen | geplant | Siehe „U8 – Plan“ unter der Tabelle |
 | U9 | Zeitplan: Pause am Ende statt nach Markierung, Hoch/Runter blockweise, „verloren“-Warnung ohne Plan, kleine Listen (Pause je Richter = Entscheidung 14.09.) | geplant | Siehe „U9 – Plan“ unter der Tabelle |
@@ -3476,3 +3476,24 @@ Verifikations-Subagent, Fortschritt.md, Commit. Erst danach folgt der nächste.
    - U14 und K1–K3, K5–K7, K9, K10;
    - U13 (Einsteiger-Kapitel, Glossar) am Schluss, weil es auf allem aufbaut;
    - K12 beim nächsten Build.
+
+### U6 – umgesetzt (03.10.2026, Arbeitsstand, noch kein Build und kein Code-Commit)
+- **`desktop_gemeinsam.py`:** neue Funktion `deutsche_qt_texte_laden(app)`.
+  - Lädt `qtbase_de.qm`, falls vorhanden. Gesucht wird im Qt-Standardpfad, in
+    `PySide6/translations` und im PyInstaller-Bundle.
+  - Installiert zusätzlich immer den eingebauten Übersetzer `_DeutscheStandardtexte`. Er
+    übersetzt die Standardknöpfe (Ja/Nein/Abbrechen/Speichern/Schließen …), die
+    QMessageBox-Details und das Kontextmenü der Eingabefelder.
+  - Für alle anderen Texte liefert er `None`, Qt nimmt dann den Originaltext. Ein leerer
+    String würde dagegen als Übersetzung gelten.
+  - Das lokale Anaconda-PySide6 bringt keine `.qm` mit, daher die zweite Stufe.
+- **`app.py` `main()`:** ruft die Funktion direkt nach dem Anlegen der QApplication auf.
+- **Neuer GUI-Test:** `test_standardknoepfe_deutsch` (`test_app_gui.py`).
+- **Tests lokal:**
+  - pytest `test_app_gui.py` + `test_theme.py`: 138 bestanden, 1 xfail.
+  - unittest-Suite: 494 OK (141 übersprungen).
+- **Verifikations-Subagent:** keine Befunde.
+- **Beim nächsten Build prüfen:** Im installierten Programm erscheinen Ja/Nein/Abbrechen.
+  Optional prüfen, ob PyInstaller `qtbase_de.qm` mitliefert. Für die Knöpfe ist das dank
+  des eingebauten Übersetzers nicht nötig.
+- Damit ist auch der offene Punkt „OK/Cancel-Buttons englisch“ vom 22./23.09. erledigt.
