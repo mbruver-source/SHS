@@ -40,3 +40,7 @@ Thumbs.db
 # Lokale Konfiguration für compose.yaml (Datenbank-Passwort, Session-Schlüssel) - siehe
 # .env.example für die Vorlage. Enthält Geheimnisse, gehört NICHT ins Repo.
 .env
+# Ausnahme: erfundene Testsicherungen für die Upgrade-Tests (test_altversionen.py),
+# erzeugt von tools/altdaten_erzeugen.py.
+!testdaten/altversionen/*/sicherung.zip
+!testdaten/altversionen/*/sicherung_passwort.zip
