@@ -47,3 +47,6 @@ Thumbs.db
 # erzeugt von tools/altdaten_erzeugen.py.
 !testdaten/altversionen/*/sicherung.zip
 !testdaten/altversionen/*/sicherung_passwort.zip
+# Noch nicht veröffentlichte Sicherheitsberichte - erst nach dem Release ins Repo
+# (siehe CLAUDE.md, Abschnitt "Sicherheitsfunde erst nach dem Release veröffentlichen")
+_unveroeffentlicht/

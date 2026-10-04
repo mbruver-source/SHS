@@ -35,6 +35,21 @@ freigegebenen Ständen vor. Etablierter Prozess: jeder QS-/Sicherheits-Befund wi
 dem Nutzer besprochen und erst nach seinem expliziten Go umgesetzt - das gilt für jede
 Sitzung und jeden Subagent gleichermaßen, auch für automatisierte/geplante Läufe.
 
+## Sicherheitsfunde erst nach dem Release veröffentlichen (Marco 04.10.2026)
+
+Das Repo ist öffentlich. Am 03.10.2026 standen die Sicherheitsberichte samt Nachstellung
+knapp eine Stunde vor dem Release mit den Fixes im Netz. Das soll nicht wieder passieren:
+
+- Berichte zu Sicherheitsprüfungen und gemeldeten Lücken entstehen im Ordner
+  `_unveroeffentlicht/` (per `.gitignore` ausgeschlossen), nicht im Repo.
+- In `Fortschritt.md`, Commit-Nachrichten und Code-Kommentaren werden offene
+  Sicherheitsfunde bis zum Release nur allgemein beschrieben (z. B. "Sicherheitskorrektur
+  S-1, Details folgen"), ohne betroffene Stelle, Angriffsweg oder Nachstellung.
+- Erst wenn das Release mit allen Fixes veröffentlicht ist (CI grün, Installer und Image
+  verfügbar), werden die Berichte in den Repo-Ordner verschoben und committet. Funde, die
+  zurückgestellt oder nur notiert sind, werden dabei vorher mit Marco abgestimmt.
+- UX-Tests und andere Berichte ohne Sicherheitsbezug sind davon nicht betroffen.
+
 ## Bereits bewusst akzeptierte, nicht zu wiederholende QS-Funde
 
 Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entscheidung
