@@ -30,8 +30,11 @@ musst du nicht installieren. Administratorrechte sind nicht nötig.
 **„Nach Updates suchen“**. Die neue Version einfach
 über die alte installieren – deine Termine bleiben erhalten.
 
-**Ausprobieren:** Mit der [Beispiel-CSV mit 20 erfundenen Teilnehmern](docs/beispiel_teilnehmer.csv)
-lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
+**Ausprobieren:** Der Button **„🎓 Demoprüfung“** spielt einmal einen kompletten Prüfungstag
+mit erfundenen Daten vor und erklärt jeden Schritt – deine Termine bleiben dabei unberührt
+(siehe [„Demoprüfung“](docs/HANDBUCH.md#demoprüfung)). Mit der
+[Beispiel-CSV mit 20 erfundenen Teilnehmern](docs/beispiel_teilnehmer.csv) lässt sich das
+Programm danach gefahrlos selbst testen – Anleitung im Handbuch unter
 [„Ausprobieren mit Beispieldaten“](docs/HANDBUCH.md#ausprobieren-mit-beispieldaten).
 
 ## Was das Programm kann
@@ -48,6 +51,7 @@ lässt sich das Programm vorher gefahrlos testen – Anleitung im Handbuch unter
 | **Übersicht** | Teilnehmerzahlen je Art/Leistungsklasse und die Zahl der benötigten Leistungsrichter. |
 | **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. Teilnehmerliste als CSV für Excel. |
 | **Datensicherung** | Alle Termine in einer Sicherungsdatei (ZIP) sichern und wiederherstellen, auf Wunsch mit Passwort verschlüsselt (AES-256). |
+| **Demoprüfung** | Führt einen ganzen Prüfungstag mit erfundenen Daten vor – vom Termin bis zur Ergebnisliste. Das Programm klickt selbst, ein Fenster erklärt jeden Schritt. Der Demo-Termin wird danach gelöscht. |
 
 <table>
 <tr>

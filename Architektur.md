@@ -27,6 +27,7 @@ flowchart TB
         DeskDialoge["desktop_dialoge.py<br/>Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
         DeskGemeinsam["desktop_gemeinsam.py<br/>gemeinsame GUI-Hilfen<br/>(Ablageorte, PDF-Speichern, Fehlermeldungen)"]
         DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Akzentfarben"]
+        DeskDemo["desktop_demo.py + demo_daten.py<br/>geführte Demoprüfung<br/>(Temp-Termin, Erklärfenster)"]
         DbImport["db_import.py<br/>CSV-/OMA-/Stammdaten-Import,<br/>ausgefüllte Anmeldeformulare (PDF, pypdf)"]
         DbSicherung["db_sicherung.py<br/>Datensicherung (ZIP/pyzipper)"]
     end
@@ -55,6 +56,11 @@ flowchart TB
     AppPy --> DeskDarstellung
     AppPy --> DbImport
     AppPy --> DbSicherung
+    AppPy --> DeskDemo
+    DeskDemo --> DeskDialoge
+    DeskDemo --> DeskGemeinsam
+    DeskDemo --> PdfExport
+    DeskDemo --> DbPy
     DeskDialoge --> DeskGemeinsam
     DeskDialoge --> DbPy
     DeskGemeinsam --> DbPy
@@ -91,6 +97,8 @@ flowchart TB
 | `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung); von `app.py` per `from … import` eingebunden | `test_app_gui.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/PDF-Speicherdialog (Ordner `Termine\Ausdrucke\<Termin>`, Meldung „gespeichert“ mit „PDF öffnen“/„Ordner zeigen“), Startordner der Importe, Fehlermeldungen, responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle, deutsche Qt-Texte (`deutsche_qt_texte_laden`), Absturzprotokoll (`absturzprotokoll_einrichten`: `sys.excepthook` + `faulthandler` → `absturzprotokoll.txt`) | `test_app_gui.py` |
 | `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
+| `desktop_demo.py` | Geführte Demoprüfung (Button „🎓 Demoprüfung“ im Hauptfenster und im Startdialog): `DemoTour` legt einen Termin in einem eigenen Temp-Ordner an (nie im Termine-Ordner), führt 15 Schritte über die echten Reiter vor (ohne modale Rückfragen), `DemoPanel` erklärt, `DemoMarkierung` rahmt das aktive Element (selbst gezeichnet, kein Stylesheet); am Ende wird der vorherige Termin wiederhergestellt und der Temp-Ordner gelöscht. Importiert bewusst NICHT `app` (bekommt das Hauptfenster bzw. eine Fenster-Fabrik übergeben, sonst doppelter Import über `__main__`) | `test_app_gui.py` |
+| `demo_daten.py` | Erfundene Daten der Demoprüfung (Veranstaltung, 8 Teilnehmer mit Ergebnissen: V/V-Stechen, SG, G, nB, DQ, 2× DK), ohne Qt | `test_db.py` (`TestDemoDaten`) |
 | `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
 | `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Startnummern-Bereiche je Prüfung (`veranstaltung.startnummer_bereiche`, `fehlende_startnummern_vergeben`), Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung (automatische Verteilung mit DK-Mindestabstand, Überschneidungsprüfung `zeitplan_ueberschneidungen`, Pausen an Position bzw. bei allen Richtern, Richter aus den Veranstaltungsdaten), Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
 | `db_import.py` | Teilnehmer-Import und -Export (Desktop): CSV (Excel-Liste oder KI; UTF-8/Windows-Kodierung, `;`/`,` erkannt, leere Vorlage), OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; alle Wege prüfen die angebotenen Prüfungen (`_angebot_pruefen`); Teilnehmerliste als CSV-Export (`exportiere_teilnehmer_csv`, mit Schutz vor CSV-Formeln); baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
@@ -162,6 +170,8 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   Modul nachschlägt - deshalb sind bisher nur aufgerufene Bausteine (Dialoge, Hilfen,
   Darstellung, Import, Sicherung) ausgelagert, die aufrufenden Tabs und die intern
   gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) noch nicht.
+  Ausnahme `desktop_demo.py`: ruft Tab-Methoden über die übergebene Fenster-Instanz auf (die
+  schlagen weiter in `app` nach); Demo-Tests patchen `desktop_demo.X` bzw. `db.X`.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
   test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version
   test_shs_core test_bewertung_referenz test_altversionen` deckt alles außer GUI- und echten Postgres-Tests ab.

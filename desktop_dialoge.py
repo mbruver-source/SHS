@@ -1043,6 +1043,17 @@ Termin öffnest du per Doppelklick oder "Öffnen"; "Löschen…" entfernt eine T
 unwiderruflich (mit Rückfrage). Im Hauptfenster kannst du über "Anderen Termin öffnen…"
 jederzeit wechseln.</p>
 
+<h3>Demoprüfung</h3>
+<p>Der Knopf "🎓 Demoprüfung" (oben rechts im Hauptfenster und im Startbildschirm) spielt
+einmal einen kompletten Prüfungstag mit erfundenen Daten vor: Termin anlegen, Teilnehmer,
+Startnummern, Bezahlt, Zeitplan, Ergebnisse, Disqualifikation, Auswertung mit Stechen und
+die Ergebnisliste als PDF. Das Programm klickt selbst, ein kleines Fenster erklärt jeden
+Schritt; du drückst nur "Weiter" ("Weiter" füllt einen laufenden Schritt auch sofort fertig
+aus). Der Demo-Termin liegt in einem temporären Ordner und wird am Ende gelöscht (eine dann
+noch im PDF-Programm geöffnete Ergebnisliste beim nächsten Programmstart) – deine Termine
+bleiben unberührt, der Reiter "Datensicherung" ist
+währenddessen gesperrt. "Beenden" bricht jederzeit ab.</p>
+
 <h3>Reiter "Teilnehmer"</h3>
 <p>Liste aller gemeldeten Teilnehmer. "Teilnehmer hinzufügen…" öffnet die Erfassungsmaske:
 Stammdaten, Verband/Mitgliedsnummer, Anschrift (Straße/Hausnummer/PLZ/Ort) und Kontaktdaten
@@ -1377,6 +1388,31 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
         self.resize(620, 700)
         self._schriftgroesse_anwenden()
+
+    def veranstaltung_werte(self) -> dict:
+        """Alle Eingaben als Argumente für db.set_veranstaltung bzw.
+        _aktualisiere_veranstaltung_feld (nach _pruefen_und_akzeptieren aufrufen) - vorher
+        wortgleich in StartDialog._neuer_termin und VerwaltungTab._veranstaltung_bearbeiten,
+        jetzt auch von der Demoprüfung genutzt."""
+        return dict(
+            verein=self.verein.text().strip(),
+            datum=self.datum_iso(),
+            ort=self.ort.text().strip() or None,
+            vereins_nr=self.vereins_nr.text().strip() or None,
+            pruefungsnummer=self.pruefungsnummer.text().strip() or None,
+            wertungsrichter_1=self.wertungsrichter_1.text().strip() or None,
+            wertungsrichter_2=self.wertungsrichter_2.text().strip() or None,
+            wertungsrichter_3=self.wertungsrichter_3.text().strip() or None,
+            wertungsrichter_4=self.wertungsrichter_4.text().strip() or None,
+            wertungsrichter_5=self.wertungsrichter_5.text().strip() or None,
+            pruefungsleiter=self.pruefungsleiter.text().strip() or None,
+            pruefungsgebuehr_ed=self.pruefungsgebuehr_ed.text().strip() or None,
+            pruefungsgebuehr_dk=self.pruefungsgebuehr_dk.text().strip() or None,
+            verband=self.verband.text().strip() or None,
+            meldestelle=self.meldestelle_text(),
+            angebotene_pruefungen=self.angebotene_pruefungen_text(),
+            startnummer_bereiche=self.startnummer_bereiche_text(),
+        )
 
     def meldestelle_text(self) -> str | None:
         """Meldestelle (mehrzeilig) in Speicherform; None, wenn leer."""

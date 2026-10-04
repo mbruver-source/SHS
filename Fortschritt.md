@@ -4608,3 +4608,141 @@ Die neuen Workflow-Einstellungen aus S-3/S-9 und T1 sind damit in der CI bestät
 - feste Versionen von PyInstaller und Inno Setup;
 - Rechte je Job;
 - Tag-Prüfung.
+
+## 04.10.2026: Geführte Demoprüfung (Arbeitsstand; bis zum nächsten Build uncommittet)
+
+**Wunsch (Marco):** Ein Button oben rechts, der einem Anwender einmal die Grundfunktionen an
+einem normalen Prüfungstag vorführt, mit realistischen Einträgen und einem Demo-Termin. Je
+Einheit drückt man auf „Weiter“, und eine Erklärung sagt, was gerade passiert und warum.
+
+**Entscheidungen (Marco, 04.10.2026):**
+- Das Programm führt selbst vor; der Anwender klickt nur „Weiter“ (oder „Beenden“).
+- Button „🎓 Demoprüfung“ im Hauptfenster oben rechts (vor „❓ Hilfe“) und im Startdialog.
+- Die Demo öffnet sichtbar das Fenster „Neuen Termin anlegen“, legt den Termin an, zeigt
+  alles und löscht den Termin am Ende wieder.
+- Demodaten werden weggeworfen (Temp-Ordner, nie im Termine-Ordner).
+- Alle Stationen: Termin, Teilnehmer, Startnummern, Bezahlt, Zeitplan, Ergebnisse,
+  Disqualifikation, Speichern, Auswertung, Stechen, Ergebnisliste (PDF), Hinweis auf die
+  Web-Erfassung am Tablet, Termin löschen.
+
+**Umsetzung:**
+- Neu `desktop_demo.py`:
+  - `DemoTour`: legt den Termin per `tempfile.mkdtemp(prefix="shs_demo_")` an, prüft
+    zusätzlich, dass der Pfad nicht im Termine-Ordner liegt, und führt 15 Schritte plus
+    Einführung aus. Die Teilaktionen laufen mit 150 ms Abstand, damit man zusehen kann;
+    „Weiter“ während der Animation führt den Schritt sofort zu Ende.
+  - Modale Rückfragen/Meldungen werden umgangen: Startnummern, Zeitplan-Verteilung, Stechen
+    und PDF laufen direkt über `db`/`pdf_export`, das Ergebnis steht im Erklärfenster;
+    vor jedem Reiterwechsel speichert die Demo die Ergebniserfassung.
+  - `DemoPanel`: nicht-modales Erklärfenster (alle Texte als reiner Text, S-1).
+  - `DemoMarkierung`: selbst gezeichneter Rahmen in der Akzentfarbe um das aktive Element,
+    ohne Stylesheet (Design-Tests unberührt).
+  - Am Ende: vorheriger Termin und Reiter wiederhergestellt bzw. das Demo-Fenster
+    geschlossen, Verbindung geschlossen, Temp-Ordner gelöscht. Alte `shs_demo_*`-Reste
+    (älter als eine Stunde) räumt `demo_reste_aufraeumen` bei jedem Programmstart und vor
+    jeder Demo auf. Fenster schließen während der Demo beendet sie sauber.
+  - Importiert bewusst nicht `app` (Doppel-Import über `__main__`), bekommt das Fenster bzw.
+    eine Fenster-Fabrik übergeben.
+- Neu `demo_daten.py`: „DEMO Hundefreunde Musterstadt“, Richter Erika Beispiel / Hans Probe,
+  vier angebotene Prüfungen mit Startnummern-Bereichen, acht erfundene Teilnehmer
+  (Albers/Brandt je 96 = Stechen, SG, G, nB, DQ, 2× DK; Hansen ohne Chip-Nr. und unbezahlt).
+- `app.py`:
+  - `HauptFenster`: Knopf `demo_btn`, Parameter `demo` an `__init__`/`_termin_setzen`
+    (Titel „DEMO – …“, Reiter „Datensicherung“ gesperrt), `_demo_starten`,
+    `_demo_sperren` (Terminwechsel und zweiter Start gesperrt), `closeEvent` beendet zuerst
+    die Demo. Die Rückfrage zu ungespeicherten Ergebnissen ist als
+    `_ungespeicherte_ergebnisse_klaeren` aus `_termin_wechseln` herausgezogen und gilt auch
+    vor dem Demo-Start.
+  - `StartDialog`: Knopf rechts neben dem Willkommenstext (`demo_angefordert`), ohne
+    Auto-Default, Fokus bleibt auf der Terminliste. `main()` nutzt
+    `_startdialog_schleife()`: nach der Demo erscheint wieder der Startdialog.
+  - Buttons als Attribute zum Markieren: `hinzufuegen_btn`, `vergeben_btn`, `verteilen_btn`,
+    `speichern_btn`, `ergebnisliste_btn`; `ErgebnisTab.eingabefelder(teilnehmer_id)`.
+- `desktop_dialoge.py`: `VeranstaltungsDialog.veranstaltung_werte()` ersetzt den doppelten
+  Argumentblock in `StartDialog._neuer_termin` und `VerwaltungTab._veranstaltung_bearbeiten`;
+  Hilfetext um den Abschnitt „Demoprüfung“ ergänzt.
+- **Tests:** `test_app_gui.py` +9 (Knöpfe, Startdialog-Schleife, kompletter Durchlauf mit
+  Zwischenständen und Aufräumen, Beenden mitten in der Ergebniserfassung, Fenster schließen,
+  Start ohne Termin, Klartext, `veranstaltung_werte`; jede modale Box gilt als Fehler).
+  `test_db.py` +`TestDemoDaten` (4 Tests). Lokal: unittest 583 OK (159 übersprungen), GUI 179
+  passed + Theme, 1 xfailed.
+- **Doku:** Handbuch Kap. 3 neuer Abschnitt „Demoprüfung“ (mit Tabelle, Screenshot
+  `docs/bilder/handbuch_demo.png`), Hinweis oben und Tipp in Kap. 14; Screenshot
+  `handbuch_start.png` neu (Demo-Knopf); `Architektur.md` (Diagramm, Modultabelle,
+  Patch-Hinweis).
+
+**Verifikation (unabhängiger Subagent, 04.10.2026):** nichts Schwerwiegendes - echte Daten
+bleiben sicher, Umbauten verhaltensgleich, kein blockierendes Meldungsfenster, S-1 eingehalten,
+Erklärtexte stimmen mit dem Code überein. Sechs kleine Befunde; Marco hat am 04.10.2026 alle
+zur Umsetzung freigegeben und dazu gewünscht, dass die Demo langsamer tippt, wie von Hand:
+1. Graue Hinweise „Gegenstand der Suchdisziplin nicht zugeordnet“ bei fünf ED-Teilnehmern
+   (die Erklärung zu Schritt 4 kündigt nur die fehlende Chip-Nr. an) → in `demo_daten.py`
+   `gegenstand_1_disziplin` ergänzt, Test `test_anmerkungen_zeigen_nur_die_fehlende_chip_nummer`.
+2. `beenden()` ohne try/finally, `starten()` ohne Aufräumen bei Fehlern → Verbindung, Temp-
+   Ordner und Erklärfenster werden jetzt in jedem Fall abgeräumt.
+3. „gelöscht“ wurde unbedingt versprochen, eine im PDF-Programm offene Ergebnisliste kann
+   unter Windows liegen bleiben → Texte (Schritt 13, Statusleiste, Handbuch) entsprechend
+   ergänzt; Reste räumt `demo_reste_aufraeumen` beim nächsten Programmstart weg (siehe
+   Gegenprüfung unten).
+4. Testlücken → neue Tests: Start ohne Termin mit eigener Ereignisschleife und Schließen über
+   das X (inkl. `quitOnLastWindowClosed`).
+5. Im eigenen Termin während Schritt 1 eingetippte Ergebnisse gingen in Schritt 2 still
+   verloren → Schritt 2 fragt jetzt wie beim Terminwechsel (`_ungespeicherte_ergebnisse_klaeren`):
+   „Ja“ speichert; „Nein“ auf die erste Frage verwirft wie beim Terminwechsel und macht
+   weiter. Lässt sich nicht alles speichern und lautet die Antwort auf „Trotzdem
+   weitermachen?“ „Nein“, bricht die Demo mit Hinweis ab: Nach „Beenden“ ist der eigene
+   Termin mit den Eingaben wieder da. Tests für beide Wege.
+6. Zwei veraltete Kommentare in `app.py` (Kopfzeile, `closeEvent`) korrigiert.
+
+**Tipp-Tempo (Marcos Wunsch):** Texte und Punkte werden Zeichen für Zeichen getippt (55–140 ms
+je Zeichen, leicht schwankend), zwischen Arbeitsschritten 600 ms Pause; `DemoTour.TEMPO`
+skaliert alles (Tests: 0). „Weiter“ füllt einen laufenden Schritt sofort fertig aus. Test
+`test_demo_tippt_zeichen_fuer_zeichen_und_weiter_fuehrt_sofort_zu_ende`.
+
+**Stand danach:** unittest 584 OK (159 übersprungen), GUI und Theme 198 passed, 1 xfailed.
+Screenshot `handbuch_demo.png` neu (Zähler „Schritt 8 von 15“: die Begrüßung heißt jetzt
+„Einführung“ und zählt nicht mit).
+
+**Entscheidung Screenshots (Marco 04.10.2026):** Die übrigen Hauptfenster-Screenshots im
+Handbuch (Kopfzeile noch ohne „🎓 Demoprüfung“) werden beim nächsten Build mit dem
+Screenshot-Skript wie bei 1.0.41 neu aufgenommen.
+
+**Gegenprüfung der Nachbesserungen (Subagent, vor dem Build 1.0.42):** keine blockierenden
+Fehler, Tipp-Test in 3 Läufen stabil. Sechs kleine Punkte, Marco hat alle zur Umsetzung
+freigegeben:
+1. „Später automatisch aufgeräumt“ stimmte nur halb (Reste nur vor der nächsten Demo und erst
+   nach einem Tag) → `demo_reste_aufraeumen` läuft jetzt bei jedem Programmstart (`app.main`)
+   und vor jeder Demo, für Reste älter als eine Stunde (eine laufende Demo in einem zweiten
+   Programmfenster bleibt unberührt). Texte sagen „beim nächsten Programmstart“.
+2. Hinweis auf die offene PDF fehlte in Hilfetext und Schritt 15 → ergänzt; Begrüßung und
+   Hilfe nennen außerdem, dass „Weiter“ einen laufenden Schritt sofort fertig ausfüllt.
+3. `TEMPO` blieb nach `_alles_sofort` als Instanzattribut hängen → eigener Merker `_sofort`.
+4. Nach einem Fehler beim Zurückwechseln blieben die Knöpfe gesperrt → `_demo_sperren(False)`
+   im `finally`.
+5. Abbruchmeldung in Schritt 2 klang nach „geht weiter“ → präzisiert; Test für den
+   „Nein“-Weg; Beschreibung oben (Punkt 5) korrigiert.
+6. Langer Textliteral in Schritt 13 umbrochen.
+Neue Tests: Abbruch in Schritt 2, Knöpfe nach Fehler frei, `TEMPO` unverändert,
+`demo_reste_aufraeumen` (nur alte Demo-Ordner).
+
+## Version 1.0.42 (04.10.2026, Build auf Marcos Wunsch „neues build“)
+
+- **Offene Punkte vor dem Build:**
+  - H-2 bis H-4 (Sicherheitshinweise vom 03.10.) vorgelegt: Marco stellt sie weiter zurück,
+    Erinnerung beim nächsten Build bleibt.
+  - Gegenprüfung der Demo-Nachbesserungen: sechs kleine Punkte, alle umgesetzt (siehe
+    Abschnitt „Geführte Demoprüfung“ oben).
+- **Gebündelt:** geführte Demoprüfung (`desktop_demo.py`, `demo_daten.py`) samt beider
+  Verifikationsrunden und Tipp-Tempo.
+- **Doku:**
+  - 12 Screenshots neu (Skript wie bei 1.0.41, um die Demo-Aufnahme ergänzt; Version 1.0.42):
+    `handbuch_start`, `_demo` (neu), `_teilnehmer`, `_formular_import`, `_zeitplan`,
+    `_ergebniserfassung`, `_auswertung`, `_uebersicht`, `_export`, `_datensicherung`,
+    `zeitplan.png`, `ergebniserfassung.png`. Die Dialog-Bilder sind pixelgleich geblieben.
+  - README (Ausprobieren, Funktionstabelle) und `docs/index.html` (Kachel „Demoprüfung“,
+    Hinweis bei den Tipps) ergänzt; `RELEASE_NOTES.md` für 1.0.42 neu.
+  - `docs/HANDBUCH.pdf` neu erzeugt.
+- **Version:** `bump_version.py` 1.0.41 → 1.0.42.
+- **Tests:** unittest 584 OK (159 übersprungen), GUI und Theme 202 passed, 1 xfailed.
+- Nicht im Build: `AGENTS.md` und `pdf/` (nicht Teil dieser Änderung, ungetrackt).
+- Push und Tag macht Marco selbst.

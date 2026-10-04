@@ -210,6 +210,7 @@ from desktop_dialoge import (
     VeranstaltungsDialog,
     _wiederherstellungsziele_planen,
 )
+from desktop_demo import DemoTour, demo_ohne_termin_ausfuehren, demo_reste_aufraeumen
 try:
     # version.py wird von bump_version.py automatisch erzeugt (siehe dort) und ist daher
     # in einer frischen Arbeitskopie vor dem allerersten Build noch nicht vorhanden - der
@@ -368,7 +369,8 @@ class TeilnehmerTab(QWidget):
         self.filter_bezahlt.addItems(["Alle", "Bezahlt", "Nicht bezahlt"])
         self.filter_bezahlt.currentTextChanged.connect(self._filter_anwenden)
 
-        hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
+        # Als Attribut (wie vergeben_btn unten), damit die Demoprüfung den Knopf markieren kann.
+        self.hinzufuegen_btn = hinzufuegen_btn = QPushButton("Teilnehmer hinzufügen…")
         hinzufuegen_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         hinzufuegen_btn.clicked.connect(self._teilnehmer_hinzufuegen)
 
@@ -402,7 +404,7 @@ class TeilnehmerTab(QWidget):
         self.tauschen_btn.setEnabled(False)
 
         # UX-Test 02.10.2026, U1: Startnummern für alle ohne Nummer auf einmal vergeben.
-        vergeben_btn = QPushButton("Fehlende Startnummern vergeben…")
+        self.vergeben_btn = vergeben_btn = QPushButton("Fehlende Startnummern vergeben…")
         vergeben_btn.clicked.connect(self._fehlende_startnummern_vergeben)
 
         # Nutzerwunsch (20.09., Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln
@@ -1262,7 +1264,7 @@ class ErgebnisTab(QWidget):
         self.filter_startnummer.setMaximumWidth(80)
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
-        speichern_btn = QPushButton("Alle Ergebnisse speichern")
+        self.speichern_btn = speichern_btn = QPushButton("Alle Ergebnisse speichern")  # Attribut für die Demoprüfung
         speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         speichern_btn.clicked.connect(self.alle_speichern)
         # UX-Test 02.10.2026, K11: Strg+S speichert wie der Button - nur solange der Fokus
@@ -1314,6 +1316,16 @@ class ErgebnisTab(QWidget):
             if self._zeile_ist_ungespeichert(row):
                 return True
         return False
+
+    def eingabefelder(self, teilnehmer_id: int):
+        """(Zeile, Punktefelder je Disziplin, (Disqualifiziert-, Abbruch-Checkbox)) eines
+        Teilnehmers oder None - für die Demoprüfung (desktop_demo), die die Felder sichtbar
+        ausfüllt. Scrollt die Zeile dabei in den sichtbaren Bereich."""
+        for row, t in enumerate(self._teilnehmer_je_zeile):
+            if t["id"] == teilnehmer_id:
+                self.tabelle.scrollTo(self.tabelle.model().index(row, 0))
+                return row, self._boxen_je_zeile[row], self._status_boxen_je_zeile[row]
+        return None
 
     def aktualisieren(self) -> None:
         """Baut die Tabelle komplett neu aus der Datenbank auf (verwirft dabei nicht
@@ -2439,7 +2451,7 @@ class ZeitplanTab(QWidget):
         richter_hinzufuegen_btn = QPushButton("Richter hinzufügen")
         richter_hinzufuegen_btn.clicked.connect(self._richter_hinzufuegen)
 
-        verteilen_btn = QPushButton("Automatisch verteilen…")
+        self.verteilen_btn = verteilen_btn = QPushButton("Automatisch verteilen…")  # Attribut für die Demoprüfung
         verteilen_btn.clicked.connect(self._automatisch_verteilen)
 
         export_btn = QPushButton("Zeitplan (PDF)…")
@@ -2977,7 +2989,7 @@ class ExportTab(QWidget):
         anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
         anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
 
-        ergebnisliste_btn = QPushButton("Ergebnisliste (PDF)…")
+        self.ergebnisliste_btn = ergebnisliste_btn = QPushButton("Ergebnisliste (PDF)…")  # Attribut für die Demoprüfung
         ergebnisliste_btn.clicked.connect(self._ergebnisliste_exportieren)
 
         leere_ergebnisliste_btn = QPushButton("Ergebnisliste zum Ausfüllen (PDF, leer)…")
@@ -3286,26 +3298,7 @@ class VerwaltungTab(QWidget):
         # Über den gemeinsamen Helfer statt direkt set_veranstaltung, damit das vom
         # Zeitplan-Tab gepflegte Feld zeitplan_start dabei erhalten bleibt (dieser Dialog
         # hat dafür bewusst kein eigenes Feld, siehe ZeitplanTab).
-        _aktualisiere_veranstaltung_feld(
-            self.conn,
-            verein=dialog.verein.text().strip(),
-            datum=dialog.datum_iso(),
-            ort=dialog.ort.text().strip() or None,
-            vereins_nr=dialog.vereins_nr.text().strip() or None,
-            pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
-            wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
-            wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
-            wertungsrichter_3=dialog.wertungsrichter_3.text().strip() or None,
-            wertungsrichter_4=dialog.wertungsrichter_4.text().strip() or None,
-            wertungsrichter_5=dialog.wertungsrichter_5.text().strip() or None,
-            pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
-            pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
-            pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
-            verband=dialog.verband.text().strip() or None,
-            meldestelle=dialog.meldestelle_text(),
-            angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
-            startnummer_bereiche=dialog.startnummer_bereiche_text(),
-        )
+        _aktualisiere_veranstaltung_feld(self.conn, **dialog.veranstaltung_werte())
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
 
@@ -3652,12 +3645,15 @@ class VersionDialog(QDialog):
 
 
 class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
-    def __init__(self, conn, pfad: str):
+    def __init__(self, conn, pfad: str, demo: bool = False):
         super().__init__()
         self.resize(900, 600)
+        # Laufende Demoprüfung (desktop_demo.DemoTour) oder None.
+        self._demo_tour = None
         self._theme_menue_aufbauen()
 
-        # Hilfe-Button oben rechts im Fenster, direkt neben "Anderen Termin öffnen…" -
+        # Hilfe-Button ganz rechts in der Kopfzeile (davor "Anderen Termin öffnen…",
+        # "Version" und "Demoprüfung") -
         # optisch in der Nähe der nativen Minimieren/Maximieren/Schließen-Schaltflächen
         # des Betriebssystems. Ein Button lässt sich in Qt nicht direkt IN die native
         # Titelleiste selbst setzen (die gehört dem Betriebssystem). Hinweis: ein Ecken-
@@ -3675,12 +3671,22 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._tabs.currentChanged.connect(self._tab_gewechselt)
         self._vorheriger_tab_index = 0
 
-        wechseln_btn = QPushButton("Anderen Termin öffnen…")
-        wechseln_btn.clicked.connect(self._termin_wechseln)
+        self.wechseln_btn = QPushButton("Anderen Termin öffnen…")
+        self.wechseln_btn.clicked.connect(self._termin_wechseln)
+
+        # Marcos Wunsch 04.10.2026: geführte Demoprüfung mit erfundenen Daten (desktop_demo).
+        self.demo_btn = QPushButton("🎓 Demoprüfung")
+        self.demo_btn.setToolTip(
+            "Spielt einmal einen kompletten Prüfungstag mit erfundenen Daten vor – "
+            "deine Termine bleiben unverändert."
+        )
+        self.demo_btn.clicked.connect(self._demo_starten)
+
         kopf_zeile = QHBoxLayout()
         kopf_zeile.addStretch()
-        kopf_zeile.addWidget(wechseln_btn)
+        kopf_zeile.addWidget(self.wechseln_btn)
         kopf_zeile.addWidget(version_btn)
+        kopf_zeile.addWidget(self.demo_btn)
         kopf_zeile.addWidget(hilfe_btn)
 
         zentral = QWidget()
@@ -3689,7 +3695,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         zentral_layout.addWidget(self._tabs)
         self.setCentralWidget(zentral)
 
-        self._termin_setzen(conn, pfad)
+        self._termin_setzen(conn, pfad, demo=demo)
         self._schriftgroesse_anwenden()
 
     def _theme_menue_aufbauen(self) -> None:
@@ -3758,12 +3764,27 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def _version_anzeigen(self) -> None:
         VersionDialog(self).exec()
 
+    def _demo_starten(self) -> None:
+        """Startet die Demoprüfung (desktop_demo.DemoTour) im Temp-Ordner; der geöffnete
+        Termin wird am Ende wiederhergestellt."""
+        if self._demo_tour is not None:
+            self._demo_tour.panel_zeigen()
+            return
+        if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem die Demoprüfung starten"):
+            return
+        DemoTour(fenster=self).starten()
+
+    def _demo_sperren(self, aktiv: bool) -> None:
+        """Während der Demo kein Terminwechsel und kein zweiter Demo-Start."""
+        self.demo_btn.setEnabled(not aktiv)
+        self.wechseln_btn.setEnabled(not aktiv)
+
     def closeEvent(self, event: QCloseEvent) -> None:
         """Speichert automatisch noch nicht gespeicherte Ergebnisse, bevor das Programm
         beendet wird - auf Wunsch des Nutzers, damit beim Schließen (z.B. über das
         Fenster-X) nichts verloren geht, ohne dass dafür extra nachgefragt werden muss
         (anders als beim Tabwechsel/Terminwechsel, wo weiterhin gefragt wird, siehe
-        _tab_gewechselt/_termin_wechseln oben).
+        _tab_gewechselt/_ungespeicherte_ergebnisse_klaeren unten).
 
         QS-Fund (19./20.09.): alle_speichern() kann NICHT jede Zeile speichern - z.B.
         wenn nur eines von zwei zusammengehörigen Feldern ausgefüllt ist, zeigt es zwar
@@ -3772,13 +3793,21 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         Warnung verschwand zusammen mit dem Fenster, ohne dass die Änderung je gespeichert
         wurde und ohne dass der Nutzer noch die Möglichkeit gehabt hätte, sie zu
         korrigieren. Nach dem Speicherversuch wird deshalb erneut geprüft: bleiben
-        Änderungen ungespeichert übrig, wird - genau wie bei _tab_gewechselt/
-        _termin_wechseln - nachgefragt, ob trotzdem beendet (und diese Änderungen
+        Änderungen ungespeichert übrig, wird - genau wie bei
+        _ungespeicherte_ergebnisse_klaeren (Terminwechsel, Demoprüfung) - nachgefragt, ob trotzdem beendet (und diese Änderungen
         verworfen) oder das Schließen abgebrochen werden soll, damit die fehlerhafte
         Zeile noch korrigiert werden kann. Vorbelegter Standard ist "Nein" (nicht
         schließen) - anders als bei den übrigen Ja/Nein-Rückfragen in diesem Fenster, wo
         der übliche Fall (Speichern) vorbelegt ist, ist hier der sicherere Standard das
         NICHT versehentliche Verwerfen von Daten."""
+        # Laufende Demoprüfung zuerst beenden: sie stellt den echten Termin wieder her (die
+        # Prüfung unten gilt dann ihm) bzw. schließt ihr eigenes Fenster samt Demo-Termin.
+        tour = self._demo_tour
+        if tour is not None:
+            tour.beenden()
+            if tour.eigenes_fenster:
+                event.accept()
+                return
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
             self.ergebnis_tab.alle_speichern()
             if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
@@ -3796,17 +3825,20 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                     return
         event.accept()
 
-    def _termin_setzen(self, conn, pfad: str) -> None:
+    def _termin_setzen(self, conn, pfad: str, demo: bool = False) -> None:
         """Verbindet das Fenster mit einem (neuen oder anfänglichen) Termin: setzt Titel
-        und baut alle Tabs für diesen Termin neu auf."""
+        und baut alle Tabs für diesen Termin neu auf. `demo`: Termin der Demoprüfung -
+        Titel mit "DEMO", Reiter "Datensicherung" gesperrt (arbeitet auf den echten
+        Terminen)."""
         self.conn = conn
         self.pfad = pfad
-        self.setWindowTitle(f"SHS Prüfungsprogramm – {pfad}")
+        praefix = "DEMO – " if demo else ""
+        self.setWindowTitle(f"{praefix}SHS Prüfungsprogramm – {pfad}")
 
         veranstaltung = get_veranstaltung(conn)
         if veranstaltung:
             self.setWindowTitle(
-                f"SHS Prüfungsprogramm – {veranstaltung['verein']} ({datum_anzeige(veranstaltung['datum'])})"
+                f"{praefix}SHS Prüfungsprogramm – {veranstaltung['verein']} ({datum_anzeige(veranstaltung['datum'])})"
             )
 
         self._tabs.blockSignals(True)
@@ -3844,6 +3876,12 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._tabs.addTab(self.verwaltung_tab, "Verwaltung")
         self._tabs.addTab(self.export_tab, "Export")
         self._tabs.addTab(self.datensicherung_tab, "Datensicherung")
+        if demo:
+            index = self._tabs.indexOf(self.datensicherung_tab)
+            self._tabs.setTabEnabled(index, False)
+            self._tabs.setTabToolTip(
+                index, "Während der Demoprüfung gesperrt – dieser Reiter arbeitet mit deinen echten Terminen."
+            )
         self._tabs.blockSignals(False)
 
         self._vorheriger_tab_index = 0
@@ -3851,6 +3889,27 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
         anderen Termin gewechselt werden kann."""
+        if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem den Termin wechseln"):
+            return
+
+        dialog = StartDialog(self, aktueller_pfad=self.pfad)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        if dialog.demo_angefordert:
+            DemoTour(fenster=self).starten()
+            return
+        if not dialog.pfad:
+            return
+
+        neue_verbindung = init_db(dialog.pfad)
+        _fremdobjekte_melden(self)
+        alte_verbindung = self.conn
+        self._termin_setzen(neue_verbindung, dialog.pfad)
+        alte_verbindung.close()
+
+    def _ungespeicherte_ergebnisse_klaeren(self, verwerfen_frage: str) -> bool:
+        """Vor dem Verlassen des Termins (Terminwechsel, Demoprüfung): bei ungespeicherten
+        Ergebnissen nachfragen und ggf. speichern. False = Vorgang abbrechen."""
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
             antwort = QMessageBox.question(
                 self,
@@ -3871,23 +3930,14 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                         self,
                         "Nicht alle Ergebnisse gespeichert",
                         "Einige Ergebnisse konnten nicht gespeichert werden (siehe vorherige "
-                        "Meldung).\n\nTrotzdem den Termin wechseln und diese ungespeicherten "
+                        f"Meldung).\n\n{verwerfen_frage} und diese ungespeicherten "
                         "Änderungen verwerfen?",
                         QMessageBox.Yes | QMessageBox.No,
                         QMessageBox.No,
                     )
                     if antwort != QMessageBox.Yes:
-                        return
-
-        dialog = StartDialog(self, aktueller_pfad=self.pfad)
-        if dialog.exec() != QDialog.Accepted or not dialog.pfad:
-            return
-
-        neue_verbindung = init_db(dialog.pfad)
-        _fremdobjekte_melden(self)
-        alte_verbindung = self.conn
-        self._termin_setzen(neue_verbindung, dialog.pfad)
-        alte_verbindung.close()
+                        return False
+        return True
 
     def _tab_gewechselt(self, index: int) -> None:
         # Beim Verlassen der Ergebniserfassung mit noch nicht gespeicherten Änderungen
@@ -3926,6 +3976,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.setWindowTitle("SHS Prüfungsprogramm")
         self.resize(600, 380)
         self.pfad: str | None = None
+        # "🎓 Demoprüfung" gewählt - der Aufrufer startet dann die Demo (desktop_demo).
+        self.demo_angefordert = False
         self._termine: list = []
         # Nur gesetzt, wenn der Dialog aus einem bereits offenen Hauptfenster heraus
         # ("Anderen Termin öffnen…") gestartet wurde - siehe _termin_loeschen.
@@ -3967,12 +4019,28 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         )
         hinweis.setWordWrap(True)
 
+        demo_btn = QPushButton("🎓 Demoprüfung")
+        demo_btn.setToolTip(
+            "Spielt einmal einen kompletten Prüfungstag mit erfundenen Daten vor – "
+            "deine Termine bleiben unverändert."
+        )
+        demo_btn.clicked.connect(self._demo_waehlen)
+        # Steht im Layout als erster Knopf - ohne das bekäme er beim Öffnen den Fokus und
+        # würde als Standard-Knopf (blau, Enter) hervorgehoben statt "Neuen Termin anlegen…".
+        demo_btn.setAutoDefault(False)
+        kopf_zeile = QHBoxLayout()
+        willkommen = QLabel("Willkommen im SHS Prüfungsprogramm – bitte einen Termin wählen oder neu anlegen:")
+        willkommen.setWordWrap(True)
+        kopf_zeile.addWidget(willkommen, 1)
+        kopf_zeile.addWidget(demo_btn)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Willkommen im SHS Prüfungsprogramm – bitte einen Termin wählen oder neu anlegen:"))
+        layout.addLayout(kopf_zeile)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
         layout.addWidget(hinweis)
 
+        self.tabelle.setFocus()  # wie vor dem Demo-Knopf: Fokus zuerst auf der Terminliste
         self._aktualisieren()
         self._schriftgroesse_anwenden()
 
@@ -4042,26 +4110,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             return
 
         conn = init_db(pfad)
-        set_veranstaltung(
-            conn,
-            verein=dialog.verein.text().strip(),
-            datum=dialog.datum_iso(),
-            ort=dialog.ort.text().strip() or None,
-            vereins_nr=dialog.vereins_nr.text().strip() or None,
-            pruefungsnummer=dialog.pruefungsnummer.text().strip() or None,
-            wertungsrichter_1=dialog.wertungsrichter_1.text().strip() or None,
-            wertungsrichter_2=dialog.wertungsrichter_2.text().strip() or None,
-            wertungsrichter_3=dialog.wertungsrichter_3.text().strip() or None,
-            wertungsrichter_4=dialog.wertungsrichter_4.text().strip() or None,
-            wertungsrichter_5=dialog.wertungsrichter_5.text().strip() or None,
-            pruefungsleiter=dialog.pruefungsleiter.text().strip() or None,
-            pruefungsgebuehr_ed=dialog.pruefungsgebuehr_ed.text().strip() or None,
-            pruefungsgebuehr_dk=dialog.pruefungsgebuehr_dk.text().strip() or None,
-            verband=dialog.verband.text().strip() or None,
-            meldestelle=dialog.meldestelle_text(),
-            angebotene_pruefungen=dialog.angebotene_pruefungen_text(),
-            startnummer_bereiche=dialog.startnummer_bereiche_text(),
-        )
+        set_veranstaltung(conn, **dialog.veranstaltung_werte())
         conn.close()
         self.pfad = pfad
         self.accept()
@@ -4103,11 +4152,29 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             return
         self._aktualisieren()
 
+    def _demo_waehlen(self) -> None:
+        self.demo_angefordert = True
+        self.accept()
+
     def _andere_datei_oeffnen(self) -> None:
         pfad, _ = QFileDialog.getOpenFileName(self, "Termin öffnen", str(termine_ordner()), "SHS-Termin (*.sqlite)")
         if pfad:
             self.pfad = pfad
             self.accept()
+
+
+def _startdialog_schleife() -> str | None:
+    """Zeigt den Startdialog, bis ein Termin gewählt oder abgebrochen wurde (None). Eine
+    dort gestartete Demoprüfung läuft in einem eigenen Fenster; danach erscheint der
+    Startdialog wieder."""
+    while True:
+        start = StartDialog()
+        if start.exec() != QDialog.Accepted:
+            return None
+        if start.demo_angefordert:
+            demo_ohne_termin_ausfuehren(HauptFenster)
+            continue
+        return start.pfad or None
 
 
 def main() -> int:
@@ -4124,15 +4191,17 @@ def main() -> int:
     meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
+    # Reste früherer Demoprüfungen (z. B. eine beim Beenden noch geöffnete PDF) wegräumen.
+    demo_reste_aufraeumen()
 
-    start = StartDialog()
-    if start.exec() != QDialog.Accepted or not start.pfad:
+    pfad = _startdialog_schleife()
+    if not pfad:
         return 0
 
-    conn = init_db(start.pfad)
+    conn = init_db(pfad)
     _fremdobjekte_melden(None)
 
-    fenster = HauptFenster(conn, start.pfad)
+    fenster = HauptFenster(conn, pfad)
     # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
     # Zeitplan-Spalten zu wenig Platz.
     fenster.showMaximized()

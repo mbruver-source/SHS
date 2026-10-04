@@ -3977,5 +3977,83 @@ class TestTerminSyncPostgres(unittest.TestCase):
         self.assertEqual(ergebnis["anzeige_truemmerfeld"], 28)
 
 
+class TestDemoDaten(unittest.TestCase):
+    """Die erfundenen Daten der Demoprüfung (demo_daten.py) müssen zur Datenschicht passen
+    und genau die Wertnoten ergeben, die die Erklärtexte in desktop_demo.py beschreiben."""
+
+    def setUp(self):
+        import demo_daten
+        from db import fehlende_startnummern_vergeben, set_veranstaltung
+
+        self.demo = demo_daten
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = init_db(os.path.join(self.tmp.name, "demo.sqlite"))
+        set_veranstaltung(self.conn, **demo_daten.veranstaltung())
+        self.ids = {}
+        for eintrag in demo_daten.TEILNEHMER:
+            tid = add_teilnehmer(self.conn, NeuerTeilnehmer(**eintrag["daten"]))
+            self.ids[eintrag["daten"]["nachname"]] = tid
+            for disziplin, (suche, anzeige) in eintrag.get("ergebnis", {}).items():
+                eintragen_ergebnis(self.conn, tid, disziplin, suche, anzeige)
+            if eintrag.get("status") == "dq":
+                setze_ergebnis_status(self.conn, tid, True, False)
+        self.vergabe = fehlende_startnummern_vergeben(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_jede_pruefung_ist_angeboten_und_alle_bekommen_eine_startnummer(self):
+        from db import angebotene_pruefungen, get_veranstaltung, pruefungs_kuerzel
+
+        angeboten = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))}
+        for t in list_teilnehmer(self.conn):
+            self.assertIn(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]), angeboten)
+        self.assertEqual(len(self.vergabe.vergeben), len(self.demo.TEILNEHMER))
+        self.assertEqual(self.vergabe.ohne_bereich, [])
+        self.assertEqual(self.vergabe.bereich_voll, [])
+
+    def test_punkte_liegen_in_den_grenzen(self):
+        from shs_core import ANZEIGE_MAX, SUCHE_MAX
+
+        for eintrag in self.demo.TEILNEHMER:
+            for suche, anzeige in eintrag.get("ergebnis", {}).values():
+                self.assertTrue(0 <= suche <= SUCHE_MAX and 0 <= anzeige <= ANZEIGE_MAX)
+
+    def test_wertnoten_und_genau_ein_stechen(self):
+        fertig, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual(ausstehend, [])
+        noten = {t.name.split(",")[0]: t.wertnote.abkuerzung for t in fertig}
+        self.assertEqual(noten, {
+            "Albers": "V", "Brandt": "V", "Claasen": "G", "Dietrich": "SG", "Ehlers": "nB",
+            "Fischer": "DISQ", "Gerdes": "SG", "Hansen": "G",
+        })
+        offen = sorted(t.name.split(",")[0] for t in fertig if t.stechen == "offen")
+        self.assertEqual(offen, ["Albers", "Brandt"])
+        self.assertIn(self.demo.STECHEN_SIEGER, offen)
+
+    def test_anmerkungen_zeigen_nur_die_fehlende_chip_nummer(self):
+        """Die Erklärung zu Schritt 4 kündigt nur Hansens fehlende Chip-Nr. an - sonst darf
+        die Spalte „Anmerkungen“ nichts zeigen (Verifikation 04.10.2026, Befund 1)."""
+        from db import teilnehmer_fehlende_pflichtangaben, teilnehmer_gegenstand_hinweis
+
+        for t in list_teilnehmer(self.conn):
+            self.assertIsNone(teilnehmer_gegenstand_hinweis(t), t["nachname"])
+            fehlend = teilnehmer_fehlende_pflichtangaben(t)
+            if t["nachname"] == "Hansen":
+                self.assertEqual(len(fehlend), 1)
+                self.assertIn("Chip", fehlend[0])
+            else:
+                self.assertEqual(fehlend, [], t["nachname"])
+
+    def test_chip_nummer_fehlt_nur_beim_hinweis_teilnehmer_und_ist_fiktiv(self):
+        ohne_chip = [t["daten"]["nachname"] for t in self.demo.TEILNEHMER if not t["daten"].get("chip_nr")]
+        self.assertEqual(ohne_chip, ["Hansen"])
+        for eintrag in self.demo.TEILNEHMER:
+            chip = eintrag["daten"].get("chip_nr")
+            if chip:
+                self.assertTrue(chip.startswith("999"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

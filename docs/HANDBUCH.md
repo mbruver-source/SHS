@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.41. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.42. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -13,8 +13,9 @@ Stand: Version 1.0.41. Alle Screenshots zeigen erfundene Testdaten.
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
 - Kurzhilfe im Programm: Button **„❓ Hilfe“** oben rechts
-- Programm vorher ausprobieren: Beispiel-CSV mit 20 erfundenen Teilnehmern, siehe
-  [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
+- Programm vorher ausprobieren: Button **„🎓 Demoprüfung“** spielt einen kompletten
+  Prüfungstag vor, siehe [Demoprüfung](#demoprüfung); dazu eine Beispiel-CSV mit 20
+  erfundenen Teilnehmern, siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
 
 ## Inhalt
 
@@ -94,8 +95,41 @@ steht oben.
 | **„Öffnen“** (oder Doppelklick) | Öffnet den markierten Termin. |
 | **„Löschen…“** | Löscht den markierten Termin nach Rückfrage **unwiderruflich**, mit allen Teilnehmer- und Ergebnisdaten. Der gerade geöffnete Termin lässt sich nicht löschen. Bereits erzeugte PDFs im Ordner `Ausdrucke` bleiben bewusst erhalten – bei Bedarf dort von Hand löschen. |
 | **„Andere Termin-Datei öffnen…“** | Öffnet eine Termin-Datei (`*.sqlite`) von einem anderen Ort, z. B. einem USB-Stick. |
+| **„🎓 Demoprüfung“** (oben rechts) | Spielt einen kompletten Prüfungstag mit erfundenen Daten vor, siehe [Demoprüfung](#demoprüfung). |
 
 Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“** oben rechts.
+
+### Demoprüfung
+
+![Demoprüfung beim Eintragen der Ergebnisse](bilder/handbuch_demo.png)
+
+Der Button **„🎓 Demoprüfung“** steht im Startbildschirm und im Hauptfenster oben rechts neben
+**„❓ Hilfe“**. Die Demo spielt einmal einen ganz normalen Prüfungstag vor:
+
+1. Termin anlegen (das Fenster „Neuen Termin anlegen“ füllt sich von selbst),
+2. einen Teilnehmer in der Erfassungsmaske eintragen, sieben weitere Meldungen kommen dazu,
+3. Startnummern vergeben und abhaken, wer bezahlt hat,
+4. den Zeitplan automatisch verteilen,
+5. Ergebnisse eintragen, eine Disqualifikation setzen und speichern,
+6. die Auswertung ansehen und ein Stechen entscheiden,
+7. die Ergebnisliste als PDF erzeugen (**„PDF öffnen“** zeigt sie),
+8. ein Hinweis, wie Richter am Tablet eintragen können,
+9. den Demo-Termin wieder löschen.
+
+Das Programm klickt und tippt dabei selbst. Ein kleines Fenster erklärt jeden Schritt: was
+gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du klickst nur auf
+**„Weiter ▶“**, mit **„Beenden“** brichst du jederzeit ab.
+
+Das Programm tippt in normalem Tempo, wie von Hand. Wer es eilig hat, drückt einfach
+**„Weiter ▶“**: Dann wird der laufende Schritt sofort fertig ausgefüllt.
+
+Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem temporären Ordner, nicht
+bei deinen Terminen, und wird am Ende samt PDF gelöscht. Ist die Ergebnisliste dann noch in
+einem PDF-Programm geöffnet, räumt das Programm sie beim nächsten Start weg. Deine echten Termine bleiben
+unberührt. Der Reiter **„Datensicherung“** ist während der Demo gesperrt, weil er immer mit
+deinen echten Terminen arbeitet. Startest du die Demo aus dem Hauptfenster, bist du danach
+wieder in deinem vorherigen Termin. Gibt es dort noch nicht gespeicherte Ergebnisse, fragt das
+Programm vorher wie beim Terminwechsel nach.
 
 ### Neuen Termin anlegen
 
@@ -721,9 +755,11 @@ Sicherung. Fett gedruckt ist immer genau das, was auf dem Bildschirm steht und w
 anklickst. Ein **„Reiter“** ist eine der Registerkarten oben im Programmfenster
 („Teilnehmer“, „Formular-Import“, „Zeitplan“ …) – ein Klick darauf zeigt die jeweilige Seite.
 
-> **Tipp für den Anfang:** Probiere alles einmal gefahrlos mit erfundenen Teilnehmern aus,
-> bevor es ernst wird (siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)).
-> Den Probe-Termin löschst du danach einfach wieder.
+> **Tipp für den Anfang:** Schau dir zuerst die [Demoprüfung](#demoprüfung) an (Button
+> **„🎓 Demoprüfung“**). Sie zeigt den ganzen Ablauf in wenigen Minuten. Danach probierst du
+> alles einmal gefahrlos mit erfundenen Teilnehmern selbst aus, bevor es ernst wird (siehe
+> [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)). Den Probe-Termin
+> löschst du danach einfach wieder.
 
 ### Schritt 1: Den Termin anlegen (einige Wochen vorher)
 

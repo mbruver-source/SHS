@@ -3921,3 +3921,440 @@ def test_auswertung_erklaert_von_x_bei_offenen(qtbot, conn):
     assert f"Hinweis {lk}: „von 1“ zählt nur Starter mit vollständigem Ergebnis – 2 noch offen." in (
         tab.ausstehend_label.text()
     )
+
+
+# --- Demoprüfung (Marcos Wunsch 04.10.2026, desktop_demo.py) --------------------------
+
+
+@pytest.fixture
+def demo_umgebung(tmp_path, monkeypatch):
+    """Temp- und Termine-Ordner der Demo ins tmp_path umleiten, ohne Pausen ablaufen
+    lassen und jede modale Rückfrage/Meldung zum Testfehler machen - die Demo darf den
+    Anwender nie mit einem Meldungsfenster blockieren."""
+    import tempfile
+
+    import desktop_demo
+    from PySide6.QtWidgets import QInputDialog
+
+    temp = tmp_path / "temp"
+    termine = tmp_path / "termine"
+    temp.mkdir()
+    termine.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temp))
+    for modul in ("desktop_demo", "desktop_dialoge", "app"):
+        monkeypatch.setattr(f"{modul}.termine_ordner", lambda: termine)
+    monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 0)
+
+    def _modal(*args, **kwargs):
+        pytest.fail(f"Demoprüfung zeigt ein modales Fenster: {args[1:3]}")
+
+    for name in ("question", "information", "warning", "critical"):
+        monkeypatch.setattr(QMessageBox, name, _modal)
+    monkeypatch.setattr(QInputDialog, "getItem", _modal)
+    return temp, termine
+
+
+def _demo_bis(tour, praefix: str | None, pruefen=None, max_schritte: int = 30) -> None:
+    """Klickt „Weiter“, bis der Schritt mit `praefix` erreicht ist (None: bis zum Ende).
+    `pruefen(titel)` läuft nach jedem fertig ausgeführten Schritt."""
+    for _ in range(max_schritte):
+        if tour.ist_beendet:
+            assert praefix is None, f"Demo beendet, bevor „{praefix}“ erreicht war"
+            return
+        titel = tour._schritte[tour._index].titel
+        assert tour._panel.weiter_btn.isEnabled(), tour._panel.hinweis_label.text()
+        if pruefen is not None:
+            pruefen(titel)
+        if praefix is not None and titel.startswith(praefix):
+            return
+        tour.weiter()
+    pytest.fail("Demo endet nicht")
+
+
+def test_demo_button_im_hauptfenster_startet_demo(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    gestartet = []
+
+    class _TourAttrappe:
+        def __init__(self, fenster=None, fenster_fabrik=None):
+            gestartet.append(fenster)
+
+        def starten(self):
+            gestartet.append("gestartet")
+
+    monkeypatch.setattr("app.DemoTour", _TourAttrappe)
+    knoepfe = [b for b in fenster.findChildren(QPushButton) if b.text() == "🎓 Demoprüfung"]
+    assert len(knoepfe) == 1 and knoepfe[0].isVisible()
+
+    qtbot.mouseClick(knoepfe[0], Qt.MouseButton.LeftButton)
+
+    assert gestartet == [fenster, "gestartet"]
+
+
+def test_demo_button_im_startdialog(qtbot, monkeypatch):
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    knoepfe = [b for b in dialog.findChildren(QPushButton) if b.text() == "🎓 Demoprüfung"]
+    assert len(knoepfe) == 1
+
+    qtbot.mouseClick(knoepfe[0], Qt.MouseButton.LeftButton)
+
+    assert dialog.demo_angefordert is True
+    assert dialog.result() == QDialog.Accepted
+
+
+def test_startdialog_schleife_zeigt_nach_demo_wieder_den_startdialog(monkeypatch):
+    import app
+
+    ablauf = []
+
+    class _StartAttrappe:
+        aufrufe = 0
+
+        def __init__(self, *args, **kwargs):
+            type(self).aufrufe += 1
+            self.demo_angefordert = type(self).aufrufe == 1
+            self.pfad = None if self.demo_angefordert else "termin.sqlite"
+
+        def exec(self):
+            return QDialog.Accepted
+
+    monkeypatch.setattr("app.StartDialog", _StartAttrappe)
+    monkeypatch.setattr("app.demo_ohne_termin_ausfuehren", lambda fabrik: ablauf.append(fabrik))
+
+    assert app._startdialog_schleife() == "termin.sqlite"
+    assert ablauf == [HauptFenster]
+    assert _StartAttrappe.aufrufe == 2
+
+
+def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_umgebung):
+    from db import (
+        berechne_auswertung,
+        list_zeitplan_eintraege,
+        list_zeitplan_richter,
+        pruefungs_kuerzel,
+        startnummer_bereiche,
+    )
+
+    temp, termine = demo_umgebung
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    alter_index = fenster._tabs.currentIndex()
+
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    assert tour is not None
+    demo_ordner = os.path.dirname(tour.pfad)
+    assert os.path.dirname(demo_ordner) == str(temp)
+    assert not fenster.demo_btn.isEnabled() and not fenster.wechseln_btn.isEnabled()
+    gesehen = []
+
+    def pruefen(titel):
+        gesehen.append(titel.split(".")[0] if titel[0].isdigit() else "")
+        demo_conn = tour.conn
+        if titel.startswith("2."):
+            assert fenster.conn is demo_conn
+            assert fenster.windowTitle().startswith("DEMO – ")
+            assert not fenster._tabs.isTabEnabled(fenster._tabs.indexOf(fenster.datensicherung_tab))
+        elif titel.startswith("4."):
+            assert len(list_teilnehmer(demo_conn)) == 8
+        elif titel.startswith("5."):
+            bereiche = startnummer_bereiche(get_veranstaltung(demo_conn))
+            for t in list_teilnehmer(demo_conn):
+                von, bis = bereiche[pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"])]
+                assert t["startnummer"] is not None and von <= t["startnummer"] <= bis
+        elif titel.startswith("6."):
+            offen = [t["nachname"] for t in list_teilnehmer(demo_conn) if not t["bezahlt"]]
+            assert offen == ["Hansen"]
+        elif titel.startswith("7."):
+            richter = list_zeitplan_richter(demo_conn)
+            assert [r["name"] for r in richter] == ["Erika Beispiel", "Hans Probe"]
+            assert any(list_zeitplan_eintraege(demo_conn, r["id"]) for r in richter)
+        elif titel.startswith("10."):
+            assert not fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
+        elif titel.startswith("12."):
+            fertig, ausstehend = berechne_auswertung(demo_conn)
+            assert ausstehend == []
+            assert sorted(t.wertnote.abkuerzung for t in fertig) == ["DISQ", "G", "G", "SG", "SG", "V", "V", "nB"]
+            assert [t.name for t in fertig if t.stechen == "gewonnen"] == ["Albers, Anna"]
+        elif titel.startswith("13."):
+            assert tour.pdf_pfad and os.path.isfile(tour.pdf_pfad)
+            assert tour.pdf_pfad.startswith(demo_ordner)
+
+    _demo_bis(tour, None, pruefen)
+
+    assert gesehen == [""] + [str(n) for n in range(1, 16)]
+    assert fenster._demo_tour is None
+    assert fenster.conn is conn and fenster.pfad == pfad
+    assert fenster._tabs.currentIndex() == alter_index
+    assert not fenster.windowTitle().startswith("DEMO")
+    assert fenster._tabs.isTabEnabled(fenster._tabs.indexOf(fenster.datensicherung_tab))
+    assert fenster.demo_btn.isEnabled() and fenster.wechseln_btn.isEnabled()
+    assert not os.path.exists(demo_ordner)
+    assert list(termine.iterdir()) == []
+    conn.execute("SELECT 1")  # echter Termin weiterhin offen
+
+
+def test_demopruefung_beenden_mitten_in_der_ergebniserfassung(qtbot, termin, demo_umgebung):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "8.")
+    assert fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
+    demo_ordner = os.path.dirname(tour.pfad)
+
+    qtbot.mouseClick(tour._panel.beenden_btn, Qt.MouseButton.LeftButton)
+
+    assert tour.ist_beendet and fenster._demo_tour is None
+    assert fenster.conn is conn
+    assert not fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
+    assert not os.path.exists(demo_ordner)
+
+
+def test_demopruefung_endet_beim_schliessen_des_fensters(qtbot, termin, demo_umgebung):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "3.")  # Teilnehmer-Dialog ist offen
+    demo_ordner = os.path.dirname(tour.pfad)
+
+    assert fenster.close()
+
+    assert tour.ist_beendet
+    assert fenster.conn is conn
+    assert not os.path.exists(demo_ordner)
+
+
+def test_demopruefung_aus_startdialog_mit_eigenem_fenster(qtbot, demo_umgebung):
+    from desktop_demo import DemoTour
+
+    tour = DemoTour(fenster_fabrik=HauptFenster)
+    beendet = []
+    tour.beendet.connect(lambda: beendet.append(True))
+    tour.starten()
+    fenster = tour._fenster
+    assert fenster.isVisible() and fenster._demo_tour is tour
+    assert fenster.windowTitle().startswith("DEMO – ")
+    demo_ordner = os.path.dirname(tour.pfad)
+
+    _demo_bis(tour, None)
+
+    assert beendet == [True]
+    assert not fenster.isVisible()
+    assert not os.path.exists(demo_ordner)
+
+
+def test_demopruefung_erklaerfenster_zeigt_nur_klartext(qtbot, termin, demo_umgebung):
+    """S-1: Texte im Erklärfenster werden nie als HTML gedeutet."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    labels = tour._panel.findChildren(QLabel)
+    assert labels and all(label.textFormat() == Qt.PlainText for label in labels)
+    tour.beenden()
+
+
+def test_veranstaltungsdialog_liefert_alle_werte_fuer_set_veranstaltung(qtbot):
+    import inspect
+
+    dialog = VeranstaltungsDialog(vorbelegung={"verein": "V", "datum": "2026-10-04"}, bearbeiten=True)
+    qtbot.addWidget(dialog)
+
+    werte = dialog.veranstaltung_werte()
+
+    assert werte["verein"] == "V" and werte["datum"] == "2026-10-04"
+    assert set(werte) <= set(inspect.signature(set_veranstaltung).parameters) - {"conn"}
+
+
+def test_demo_ohne_termin_eigene_schleife_endet_beim_schliessen_ueber_das_x(qtbot, demo_umgebung):
+    """Verifikation 04.10.2026, Befund 4: Start aus dem Startdialog (eigene Ereignisschleife)
+    und Schließen des Demo-Fensters über das X - die Schleife endet, der Temp-Ordner ist
+    weg und quitOnLastWindowClosed ist wiederhergestellt."""
+    from PySide6.QtCore import QTimer
+
+    from desktop_demo import demo_ohne_termin_ausfuehren
+
+    temp, _termine = demo_umgebung
+    anwendung = QApplication.instance()
+    vorher = anwendung.quitOnLastWindowClosed()
+    fenster = []
+
+    def fabrik(conn, pfad, demo=False):
+        neues = HauptFenster(conn, pfad, demo=demo)
+        fenster.append(neues)
+        QTimer.singleShot(0, neues.close)  # läuft erst in der Schleife der Demo
+        return neues
+
+    demo_ohne_termin_ausfuehren(fabrik)
+
+    assert len(fenster) == 1
+    assert fenster[0]._demo_tour is None
+    assert anwendung.quitOnLastWindowClosed() == vorher
+    assert list(temp.iterdir()) == []
+
+
+def test_demo_fragt_in_schritt_2_nach_ungespeicherten_ergebnissen_im_eigenen_termin(
+    qtbot, termin, demo_umgebung, monkeypatch
+):
+    """Verifikation 04.10.2026, Befund 5: Während Schritt 1 im eigenen Termin eingetippte
+    Ergebnisse gehen beim Umschalten auf den Demo-Termin nicht still verloren."""
+    conn, pfad = termin
+    tid = add_teilnehmer(conn, NeuerTeilnehmer(
+        nachname="Echt", vorname="Erika", rufname_hund="Bello", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "1.")
+    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
+    felder["Trümmerfeld"][0].setText("50")
+    felder["Trümmerfeld"][1].setText("30")
+    fragen = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.Yes)
+
+    tour.weiter()
+
+    assert fragen == ["Ungespeicherte Ergebnisse"]
+    assert get_ergebnis(conn, tid)["suche_truemmerfeld"] == 50
+    assert fenster.conn is tour.conn
+    tour.beenden()
+
+
+def test_demo_tippt_zeichen_fuer_zeichen_und_weiter_fuehrt_sofort_zu_ende(qtbot, termin, demo_umgebung, monkeypatch):
+    import demo_daten
+    import desktop_demo
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 1.0)
+
+    tour.weiter()  # Schritt 1 beginnt zu tippen
+    dialog = tour._dialog
+    verein = demo_daten.VERANSTALTUNG["verein"]
+    assert dialog.verein.text() != verein  # erst ein Teil getippt
+    qtbot.waitUntil(lambda: len(dialog.verein.text()) >= 3, timeout=3000)
+    assert verein.startswith(dialog.verein.text())
+
+    tour._alles_sofort()
+
+    assert dialog.verein.text() == verein
+    assert dialog.meldestelle.toPlainText() == demo_daten.VERANSTALTUNG["meldestelle"]
+    tour.beenden()
+
+
+def test_demo_haelt_in_schritt_2_an_wenn_ergebnisse_im_eigenen_termin_nicht_speicherbar(
+    qtbot, termin, demo_umgebung, monkeypatch
+):
+    """Gegenprüfung 04.10.2026, Befund 5: „Nein“ auf „Trotzdem weitermachen?“ hält die Demo
+    an; nach „Beenden“ ist der eigene Termin mit den Eingaben wieder da."""
+    conn, pfad = termin
+    tid = add_teilnehmer(conn, NeuerTeilnehmer(
+        nachname="Echt", vorname="Erika", rufname_hund="Bello", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "1.")
+    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
+    felder["Trümmerfeld"][0].setText("50")  # nur Suche - lässt sich nicht speichern
+    fragen = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        lambda *a, **k: fragen.append(a[1]) or (QMessageBox.Yes if len(fragen) == 1 else QMessageBox.No),
+    )
+
+    tour.weiter()
+
+    assert fragen == ["Ungespeicherte Ergebnisse", "Nicht alle Ergebnisse gespeichert"]
+    assert not tour._panel.weiter_btn.isEnabled()
+    assert "nicht weitermachen" in tour._panel.hinweis_label.text()
+    assert fenster.conn is conn  # noch nicht auf den Demo-Termin umgeschaltet
+
+    tour.beenden()
+
+    assert fenster.conn is conn
+    assert fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()  # Eingabe nicht verloren
+    assert fenster.demo_btn.isEnabled() and fenster.wechseln_btn.isEnabled()
+
+
+def test_demo_beenden_gibt_knoepfe_auch_nach_fehler_frei(qtbot, termin, demo_umgebung, monkeypatch):
+    """Gegenprüfung 04.10.2026, Befund 4."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "3.")
+    demo_ordner = os.path.dirname(tour.pfad)
+
+    def _kaputt(*args, **kwargs):
+        raise RuntimeError("simulierter Fehler")
+
+    monkeypatch.setattr(fenster, "_termin_setzen", _kaputt)
+    with pytest.raises(RuntimeError):
+        tour.beenden()
+
+    assert fenster.demo_btn.isEnabled() and fenster.wechseln_btn.isEnabled()
+    assert not os.path.exists(demo_ordner)
+    assert not tour._panel.isVisible()
+
+
+def test_demo_weiter_ueberschreibt_tempo_nicht(qtbot, termin, demo_umgebung):
+    """Gegenprüfung 04.10.2026, Befund 3: TEMPO bleibt ein Klassenwert."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    tour.weiter()
+    tour.weiter()
+    assert "TEMPO" not in vars(tour)
+    tour.beenden()
+
+
+def test_demo_reste_aufraeumen_loescht_nur_alte_demo_ordner(demo_umgebung):
+    import time
+
+    from desktop_demo import demo_reste_aufraeumen
+
+    temp, _termine = demo_umgebung
+    alt = temp / "shs_demo_alt"
+    jung = temp / "shs_demo_jung"
+    fremd = temp / "anderes_programm"
+    for ordner in (alt, jung, fremd):
+        ordner.mkdir()
+        (ordner / "Ergebnisliste.pdf").write_bytes(b"%PDF")
+    vor_zwei_stunden = time.time() - 2 * 3600
+    for ordner in (alt, fremd):
+        os.utime(ordner, (vor_zwei_stunden, vor_zwei_stunden))
+
+    demo_reste_aufraeumen()
+
+    assert not alt.exists()
+    assert jung.exists() and fremd.exists()
