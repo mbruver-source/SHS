@@ -4752,3 +4752,6 @@ Neue Tests: Abbruch in Schritt 2, Knöpfe nach Fehler frei, `TEMPO` unverändert
 - Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` nachgezogen: 32 Dateien,
   Hash-Abgleich identisch.
 - Push und Tag macht Marco selbst.
+
+**Nachtrag 04.10.2026: 1.0.42 ausgeliefert.** Marco hat gepusht und `v1.0.42` getaggt; alle
+CI-Jobs sind grün durchgelaufen (Rückmeldung Marco: „alles grün und erl.“).
