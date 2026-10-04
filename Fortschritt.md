@@ -4745,4 +4745,10 @@ Neue Tests: Abbruch in Schritt 2, Knöpfe nach Fehler frei, `TEMPO` unverändert
 - **Version:** `bump_version.py` 1.0.41 → 1.0.42.
 - **Tests:** unittest 584 OK (159 übersprungen), GUI und Theme 202 passed, 1 xfailed.
 - Nicht im Build: `AGENTS.md` und `pdf/` (nicht Teil dieser Änderung, ungetrackt).
+- **Commits:**
+  - `94eebcb` Build;
+  - `8c9bf56` Altdaten v1.0.42 (`altdaten_erzeugen.py --aktuell`; `test_altversionen` und
+    die GUI-Altversionstests sind grün).
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` nachgezogen: 32 Dateien,
+  Hash-Abgleich identisch.
 - Push und Tag macht Marco selbst.
