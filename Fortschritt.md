@@ -5034,6 +5034,10 @@ Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche A
   - unittest 591 OK (159 übersprungen);
   - `test_bump_version` (pytest) 14 passed;
   - GUI und Theme 221 passed, 1 skipped, 1 xfailed.
+- **Commits:**
+  - `4a57408` Build;
+  - `1a39efd` Altdaten v1.0.44 (`test_altversionen` und die GUI-Altversionstests sind grün).
+- Quellcode-Spiegel nachgezogen: 28 Dateien, Byte-Abgleich identisch.
 - **Nach dem Build, nur Marco:**
   - Push und Tag;
   - CI;
