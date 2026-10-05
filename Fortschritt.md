@@ -4952,6 +4952,12 @@ Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche A
   - unittest 591 OK (159 übersprungen);
   - `test_bump_version` (pytest) 14 passed;
   - GUI und Theme 218 passed, 1 skipped, 1 xfailed.
+- **Commits:**
+  - `030c997` Build;
+  - `44d317c` Altdaten v1.0.43 (`altdaten_erzeugen.py --aktuell`; `test_altversionen` und
+    die GUI-Altversionstests sind grün).
+- Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` nachgezogen: 49 Dateien (inkl.
+  `AGENTS.md` und Altdaten v1.0.43), Byte-Abgleich identisch.
 - **Nach dem Build, nur Marco:**
   - Push und Tag;
   - CI-Smoke-Test mit Secrets;
