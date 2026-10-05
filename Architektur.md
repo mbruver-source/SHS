@@ -93,13 +93,13 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save), `StartDialog`, `VersionDialog` + Update-Prüfung; `main()` lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein | `test_app_gui.py` |
+| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save; Beenden durch Windows/Setup über `commitDataRequest` → `_sitzungsende_pruefen`, abgebrochenes Abmelden über `SitzungsendeFilter`, eingerichtet von `sitzungsende_einrichten`), `StartDialog`, `VersionDialog` + Update-Prüfung; `main()` lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein | `test_app_gui.py` |
 | `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung); von `app.py` per `from … import` eingebunden | `test_app_gui.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/PDF-Speicherdialog (Ordner `Termine\Ausdrucke\<Termin>`, Meldung „gespeichert“ mit „PDF öffnen“/„Ordner zeigen“), Startordner der Importe, Fehlermeldungen, responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle, deutsche Qt-Texte (`deutsche_qt_texte_laden`), Absturzprotokoll (`absturzprotokoll_einrichten`: `sys.excepthook` + `faulthandler` → `absturzprotokoll.txt`) | `test_app_gui.py` |
 | `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()` inkl. Palette/Fusion für Dunkel; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
-| `desktop_demo.py` | Geführte Demoprüfung (Button „🎓 Demoprüfung“ im Hauptfenster und im Startdialog): `DemoTour` legt einen Termin in einem eigenen Temp-Ordner an (nie im Termine-Ordner), führt 15 Schritte über die echten Reiter vor (ohne modale Rückfragen), `DemoPanel` erklärt, `DemoMarkierung` rahmt das aktive Element (selbst gezeichnet, kein Stylesheet); am Ende wird der vorherige Termin wiederhergestellt und der Temp-Ordner gelöscht. Importiert bewusst NICHT `app` (bekommt das Hauptfenster bzw. eine Fenster-Fabrik übergeben, sonst doppelter Import über `__main__`) | `test_app_gui.py` |
+| `desktop_demo.py` | Geführte Demoprüfung (Button „🎓 Demoprüfung“ im Hauptfenster und im Startdialog): `DemoTour` legt einen Termin in einem eigenen Temp-Ordner an (nie im Termine-Ordner), führt 15 Schritte über die echten Reiter vor (ohne modale Rückfragen), `DemoPanel` erklärt, `DemoMarkierung` rahmt das aktive Element (selbst gezeichnet, kein Stylesheet); nach jedem fertigen Schritt automatisch weiter nach `DemoTour.AUTO_WEITER_S` Sekunden (abschaltbar; wartet bei offener Meldung, hält bei „PDF öffnen“ und eigener Eingabe im Demo-Dialog an); am Ende wird der vorherige Termin wiederhergestellt und der Temp-Ordner gelöscht. Importiert bewusst NICHT `app` (bekommt das Hauptfenster bzw. eine Fenster-Fabrik übergeben, sonst doppelter Import über `__main__`) | `test_app_gui.py` |
 | `demo_daten.py` | Erfundene Daten der Demoprüfung (Veranstaltung, 8 Teilnehmer mit Ergebnissen: V/V-Stechen, SG, G, nB, DQ, 2× DK), ohne Qt | `test_db.py` (`TestDemoDaten`) |
-| `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung | `test_app_web.py` |
+| `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung; Geheimnisse über `geheimnis_lesen` (`<NAME>_FILE` vor `<NAME>`) | `test_app_web.py` |
 | `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, Teilnehmer, Startnummern-Bereiche je Prüfung (`veranstaltung.startnummer_bereiche`, `fehlende_startnummern_vergeben`), Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung (automatische Verteilung mit DK-Mindestabstand, Überschneidungsprüfung `zeitplan_ueberschneidungen`, Pausen an Position bzw. bei allen Richtern, Richter aus den Veranstaltungsdaten), Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
 | `db_import.py` | Teilnehmer-Import und -Export (Desktop): CSV (Excel-Liste oder KI; UTF-8/Windows-Kodierung, `;`/`,` erkannt, leere Vorlage), OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; alle Wege prüfen die angebotenen Prüfungen (`_angebot_pruefen`); Teilnehmerliste als CSV-Export (`exportiere_teilnehmer_csv`, mit Schutz vor CSV-Formeln); baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
 | `db_sicherung.py` | Backup/Restore aller Termin-Dateien (ZIP, optional `pyzipper`-verschlüsselt); baut auf `db.py` auf | `test_backup.py` |
@@ -108,9 +108,9 @@ flowchart TB
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
 | `selbsttest.py` | `--selbsttest [protokoll]` der Desktop-App (aus `app.main()`): prüft ohne Fenster Termin, Auswertung, PDFs, pypdf, CSV, verschlüsselte Sicherung und alle Reiter; Exit-Code 0/1 + Protokoll. Die CI startet damit die gebaute und die still installierte EXE (`build-installer.yml`) | `test_app_gui.py` (`test_selbsttest_erfolg_und_fehlerfall`) |
 | `tools/altdaten_erzeugen.py`, `testdaten/altversionen/` | Termin-Dateien und Sicherungen älterer Versionen (mit dem Code des jeweiligen Git-Tags erzeugt, erfundene Daten) für die Upgrade-Tests; beim Build mit `--aktuell` um die neue Version ergänzen | `test_altversionen.py`, Altdatei-Test in `test_app_gui.py` |
-| `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`) für Releases hochzählen | `test_bump_version.py` |
+| `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`, Image-Tag `shs-web:X.Y.Z` in `compose.yaml`) für Releases hochzählen | `test_bump_version.py` |
 | `templates/*.html` | Jinja2-Templates für `app_web.py` (Login, Ersteinrichtung, Termin-/Benutzerverwaltung, Ergebniserfassung) | (über `test_app_web.py` abgedeckt) |
-| `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante | `.github/workflows/build-container.yml` |
+| `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante; Basis-Images per Digest, Geheimnisse als Secrets aus `secrets/` | `.github/workflows/build-container.yml` |
 | `installer.iss`, `build.spec` | Windows-Installer (Inno Setup) bzw. PyInstaller-Bundling für die Desktop-Variante | `.github/workflows/build-installer.yml` |
 
 ## 3. Wichtige Architekturentscheidungen (Kurzfassung - Details in `Fortschritt.md`)
@@ -142,6 +142,18 @@ flowchart TB
     - Schutz-Header werden zentral in `after_request` gesetzt.
     - Abmelden geht nur per POST.
     - Platzhalter-Geheimnisse werden beim Start abgelehnt.
+  - Container (H-2/H-3, 05.10.2026):
+    - Geheimnisse (DB-Passwort, Session-Schlüssel, Einrichtungs-Code) kommen als
+      Compose-Secrets aus `secrets/*.txt`, nicht aus der Umgebung; eine leere oder nicht
+      lesbare Datei bricht den Start ab. Das DB-Passwort geht getrennt vom DSN an psycopg2
+      (`db.verbinde_postgres_server(dsn, password)`).
+    - `python`- und `postgres`-Basis sind per Digest festgelegt, das Web-Image per
+      Versions-Tag (zieht `bump_version.py` mit).
+    - Der web-Dienst läuft mit nur lesbarem Dateisystem (`/tmp` als tmpfs), ohne
+      Capabilities und mit `no-new-privileges`.
+  - Desktop-Installer (H-4): `CloseApplications=yes`. Qt 6 fragt beim Beenden durch das
+    Setup nur über `commitDataRequest`; dort speichert die App automatisch und kann bei
+    ungespeicherten Resten ablehnen. `closeEvent` kommt erst nach der Zusage.
   - CI: Schreibrechte nur in den Veröffentlichungs-Jobs, Actions auf Commit-Hashes, feste
     Werkzeugversionen.
 

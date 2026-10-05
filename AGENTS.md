@@ -1,4 +1,7 @@
-# SHS-Prüfungsprogramm - Hinweise für Claude-Sitzungen
+# SHS-Prüfungsprogramm - Hinweise für Codex-Sitzungen
+
+Diese Datei ist der Spiegel von `CLAUDE.md` für Codex (Stand 05.10.2026). Maßgeblich ist
+`CLAUDE.md`; bei Änderungen an einer der beiden Dateien die andere nachziehen.
 
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
@@ -10,8 +13,6 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.
 - **Ursprünglicher fachlicher Hintergrund/Migrationsplan:** `Grobkonzept.md`
-- **`AGENTS.md`** ist der Spiegel dieser Datei für Codex-Sitzungen - bei Änderungen hier
-  dort nachziehen (nur werkzeugspezifische Stellen weichen ab).
 
 ## Arbeitsweise mit Subagents (mit dem Nutzer am 20.09.2026 abgestimmt)
 
@@ -75,10 +76,10 @@ PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2` und laufen nur in der CI
 
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben (aus dem Cowork-Arbeitsablauf übernommen, 21.09.2026)
 
-Bis zur Migration auf Claude Code lief die Zusammenarbeit über Cowork, mit einem eigenen
-Cowork-Skill (`shs-projekt-workflow`) für das Sitzungs-/Drumherum. Damit diese mit Marco
+Bis zur Migration auf Claude Code (und daneben Codex) lief die Zusammenarbeit über Cowork,
+mit einem eigenen Cowork-Skill (`shs-projekt-workflow`) für das Sitzungs-/Drumherum. Damit diese mit Marco
 abgestimmten Abläufe nicht verloren gehen, stehen sie ab jetzt hier - unabhängig vom
-jeweils genutzten Werkzeug (Cowork oder Claude Code).
+jeweils genutzten Werkzeug (Cowork, Claude Code oder Codex).
 
 ### Feedback-Aufnahme
 
@@ -121,8 +122,8 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   dann alle seit dem letzten Build gesammelten Änderungen bündeln, Version per
   `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
   `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu
-  erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer aus dem
-  System-Reminder anhängen, sofern vorhanden).
+  erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer anhängen,
+  sofern das Werkzeug einen vorgibt).
 - Direkt nach dem Build-Commit: `python tools/altdaten_erzeugen.py --aktuell` erzeugt die
   Altdatei der neuen Version (Termin + Sicherungen, erfundene Daten) für die Upgrade-Tests
   (`test_altversionen.py`); `test_altversionen` laufen lassen und die neuen Dateien unter

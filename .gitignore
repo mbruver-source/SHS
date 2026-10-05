@@ -37,9 +37,13 @@ Thumbs.db
 # Upgrade-Tests (test_altversionen.py), erzeugt von tools/altdaten_erzeugen.py.
 !testdaten/altversionen/*/termin.sqlite
 
-# Lokale Konfiguration für compose.yaml (Datenbank-Passwort, Session-Schlüssel) - siehe
-# .env.example für die Vorlage. Enthält Geheimnisse, gehört NICHT ins Repo.
+# Lokale Konfiguration für compose.yaml - siehe .env.example für die Vorlage. Gehört
+# NICHT ins Repo (ältere Installationen hatten dort noch die Geheimnisse).
 .env
+# Geheimnisse der Web-Version als Secret-Dateien (H-3, siehe compose.yaml)
+secrets/
+# Lokale Formular-PDFs (z. B. Bewertungsbögen zum Vergleichen) - nicht Teil des Repos
+pdf/
 # Datensicherungen der Desktop-Version (ZIP, enthalten alle Termine mit Personendaten) -
 # sollen nie versehentlich ins Repo gelangen (Sicherheitsprüfung 03.10.2026, Prüfer 3)
 *.zip

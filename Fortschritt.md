@@ -209,7 +209,7 @@ Stand: 22.09.2026 (aktualisiert: Version 1.0.25 gebaut - Hund-Spalte in Ergebnis
 - **Umgesetzt in `app.py`:** neue Funktion `_neueste_version_pruefen()` fragt `https://api.github.com/repos/mbruver-source/SHS/releases/latest` ab (funktioniert seit der Öffentlichstellung ohne Zugangsdaten, über die Standardbibliothek `urllib` - keine neue Abhängigkeit) und liefert entweder die neueste Versionsnummer oder einen verständlichen Fehlertext (kein Internet, GitHub nicht erreichbar, noch kein Release, unerwartete Antwort - jeweils abgefangen statt das Programm abstürzen zu lassen). Neue Hilfsfunktion `_version_tupel()` vergleicht Versionsnummern als `(major, minor, patch)`-Tupel. `VersionDialog` zeigt nach Klick auf "Nach Updates suchen" direkt im Dialog an, ob eine neuere Version existiert (mit zusätzlichem Download-Button zur Releases-Seite) oder ob die installierte Version bereits aktuell ist bzw. eine Fehlermeldung. Ein zusätzlicher, immer sichtbarer Link "Releases-Seite im Browser öffnen" bleibt als manueller Rückfallweg bestehen (löst NIE selbst die API-Abfrage aus). Läuft synchron/blockierend (kurzer 5-Sekunden-Timeout, kein eigener Hintergrund-Thread) - bewusst einfach gehalten, da es sich um eine einzelne, vom Nutzer per Klick ausgelöste Anfrage handelt, keinen Programmstart blockiert und der Dialog ohnehin modal ist.
 - **Hilfe-Text** (Reiter "Versionsanzeige" im Hilfe-Dialog) entsprechend aktualisiert.
 - **Testabdeckung:** `test_app_gui.py` - vier neue/ersetzte Tests (echter Klick-Test über pytest-qt, GitHub-API dabei über `_neueste_version_pruefen` gemockt, kein echter Netzwerkzugriff nötig): neuere Version verfügbar zeigt Hinweistext + Download-Button, der beim Klick die Releases-Seite öffnet; bereits aktuelle Version zeigt entsprechenden Hinweis ohne Download-Button; ein simulierter Netzwerkfehler zeigt den Fehlertext an; der separate "Releases-Seite öffnen"-Link ruft nachweislich NIE die API auf. Läuft wie die übrigen `test_app_gui.py`-Tests nur in der CI (kein PySide6 lokal installierbar) - hier nur per `py_compile` auf Syntaxfehler geprüft.
-- **Noch offen:** CI-Bestätigung dieser vier neuen Tests, sowie ein echter Test beim Nutzer (idealerweise einmal mit und einmal ohne Internetverbindung, sowie nach einem tatsächlichen neuen Release zum Prüfen der "neuere Version verfügbar"-Anzeige).
+- **Noch offen:** CI-Bestätigung dieser vier neuen Tests, sowie ein echter Test beim Nutzer (idealerweise einmal mit und einmal ohne Internetverbindung, sowie nach einem tatsächlichen neuen Release zum Prüfen der "neuere Version verfügbar"-Anzeige). **Geklärt 05.10.2026**, siehe Abschnitt „05.10.2026: Offene Altpunkte geklärt“ am Ende.
 
 **Realer CI-Fund (19.09.) und Behebung: `TestBenutzerkontenPostgres::test_doppelter_benutzername_wird_abgelehnt` schlägt gegen echtes PostgreSQL fehl**
 - **Vom Nutzer gemeldet:** kompletter `pytest -v`-Lauf aus der CI eingefügt - 247 bestanden, 1 fehlgeschlagen (`InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block`), 31 übersprungen. Anhand der im Log sichtbaren Testnamen erkannt, dass dieser Lauf noch VOR dem automatischen Update-Check-Feature (siehe eigener Abschnitt oben) lag - der eigentliche Fehler betrifft aber ohnehin einen unabhängigen, seit Fortsetzung 5 bestehenden Test, der hier zum ersten Mal tatsächlich gegen einen echten PostgreSQL-Server lief.
@@ -4513,7 +4513,7 @@ Bereich, nacheinander und nur lesend: Web/Server, Desktop/Dateiformate, Build/CI
 | S-9 | gering | `github.ref_name` direkt im pwsh-Skript | umsetzen (Marco 03.10.): Tag über env, Format prüfen |
 | S-10 | gering | `sync_termin.py --dsn` mit Passwort auf der Kommandozeile | umsetzen (Marco 03.10.): Doku mit Umgebungsvariable + Warnhinweis |
 | S-7 | – | Temp-Datei beim Zurückholen | von Codex nicht bestätigt |
-| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | notiert, nicht umsetzen (Marco 03.10.): bekannte Restrisiken; H-4 wird durch das Auto-Speichern beim Schließen abgemildert. Nach 1.0.41 (Marco 03.10.): beim nächsten Build erneut vorlegen |
+| H-2 bis H-4 | Hinweis | Pinning Web, DB-Passwort in Umgebung, `CloseApplications=force` | notiert (Marco 03.10.), am 05.10. zur Umsetzung freigegeben und im Arbeitsstand umgesetzt, siehe „H-2 bis H-4 – umgesetzt“. Die Annahme „H-4 durch Auto-Speichern abgemildert“ griff zu kurz: gespeichert wurde, ein Ablehnen bei Resten war aber nicht möglich |
 
 **Umsetzungsreihenfolge** (je Punkt einzeln, mit Tests und Verifikation; der Code bleibt bis
 zum nächsten Build uncommittet):
@@ -4765,6 +4765,8 @@ Marco hat die noch offenen Einträge aus dem September geklärt:
   der Desktop-App, die nach dem Zurückholen die Ergebnisse enthält und über die
   ZIP-Datensicherung gesichert wird. Der Hinweis auf die „noch offene“ Strategie in
   `compose.yaml` wird beim Umbau H-2/H-3 angepasst.
+- **Update-Check** (echter Test nach einem neuen Release, mit und ohne Internet):
+  erledigt (Marco, Nachtrag 05.10.).
 - **SignPath Foundation:** Derzeit keine Rückmeldung abwarten. Erst wieder aufgreifen, wenn
   die Anwendung weiter verbreitet ist.
 - **H-2 bis H-4** (Sicherheitshinweise vom 03.10.): jetzt zur Umsetzung freigegeben.
@@ -4773,3 +4775,154 @@ Marco hat die noch offenen Einträge aus dem September geklärt:
   - H-3: Geheimnisse über Docker-/Podman-Secrets statt `.env` als Standard.
   - H-4: `CloseApplications=yes` statt `force`.
   Umsetzung folgt im Arbeitsstand, ohne Build.
+
+### H-2 bis H-4 – umgesetzt (05.10.2026, Arbeitsstand; Code bis zum nächsten Build uncommittet)
+
+- **H-4 Installer:**
+  - `installer.iss`: `CloseApplications=yes` statt `force`.
+  - Qt 6 fragt beim Beenden durch Windows oder das Setup (Restart Manager,
+    `WM_QUERYENDSESSION`) nur über `commitDataRequest`, ob beendet werden darf.
+    `closeEvent` kommt erst nach der Zusage (`WM_ENDSESSION` → `quit()`). Auto-Speichern
+    lief also auch vorher, aber ein Ablehnen bei Resten war nicht möglich. (Die erste
+    Verifikation hatte angenommen, `closeEvent` komme gar nicht; die zweite hat das mit
+    echten Windows-Nachrichten nachgestellt und richtiggestellt.)
+  - Neu in `app.py`: `HauptFenster._beenden_vorbereiten` als gemeinsame Logik für das
+    Fenster-X und `_sitzungsende_pruefen` (an `app.commitDataRequest` in `main()`). Bleibt
+    etwas ungespeichert und verwirft der Nutzer es nicht, lehnt `manager.cancel()` das
+    Beenden ab. Ohne erlaubte Interaktion wird nicht gefragt, sondern abgelehnt.
+  - Nach der Zusage merkt sich das Fenster die Freigabe, damit das folgende `closeEvent`
+    nicht doppelt warnt und fragt (Befund der zweiten Verifikation). Wird das Abmelden
+    danach doch abgebrochen (`WM_ENDSESSION` mit `wParam=FALSE`, meldet Qt nicht), nimmt
+    `SitzungsendeFilter` (nativer Ereignisfilter, nur Windows) die Freigabe zurück
+    (Befund der dritten Verifikation; zuerst geplante 60-Sekunden-Frist dadurch entfallen).
+  - Sechs neue GUI-Tests (`test_sitzungsende_*`, `test_abgebrochenes_abmelden_*`). Die
+    zwei Filter-Tests laufen nur unter Windows (in der CI auf Ubuntu übersprungen); der zum
+    Abbruch richtet alles wie `main()` ein (`sitzungsende_einrichten`) und schickt eine echte
+    `WM_ENDSESSION`-Nachricht, braucht dafür die echte Windows-Plattform statt offscreen.
+  - Nach der vierten Verifikation (keine Fehler) auf Marcos Wunsch noch: Filter-Rumpf in
+    `try/except` (ein unerwarteter Fehler soll nie bis zur Bedienung durchschlagen), Test
+    über die echte Installation. Nach der fünften Verifikation (keine Fehler) außerdem im Test: eigener `SendMessageW`-Prototyp statt global gesetzter `argtypes`, Abräumen auch bei gescheiterter Einrichtung.
+  - Bekannte Kleinigkeit, bewusst nur notiert (Marco 05.10.): `alle_speichern()` zeigt
+    seine Warnung auch, wenn das System keine Interaktion erlaubt. Unter Windows ist
+    Interaktion immer erlaubt, betrifft praktisch nur X11/macOS.
+- **H-2 feste Versionen:**
+  - `Containerfile`: `python:3.11.17-slim@sha256:6f31d6e9…`.
+  - `compose.yaml`: `postgres:16.15@sha256:1a6ab3f5…`; beide Digests entsprechen dem
+    Stand vom 05.10. von `3.11-slim` bzw. `16`.
+  - Web-Image `shs-web:1.0.42` statt `latest`. `bump_version.py` zieht den Tag mit
+    (`compose_version_schreiben`, wie das Handbuch vor `version.txt`). Tests in
+    `test_bump_version.py`, autouse-Fixture schützt die echte `compose.yaml`.
+  - web-Dienst gehärtet: `read_only`, `tmpfs /tmp`, `cap_drop: ALL`,
+    `no-new-privileges`.
+  - Keine Hash-Lock-Datei, kein Dependabot (Marco).
+- **H-3 Geheimnisse als Secrets:**
+  - DB-Passwort, Session-Schlüssel und Einrichtungs-Code kommen aus `secrets/*.txt`
+    (Compose-Secrets unter `/run/secrets`), nicht mehr aus `.env`. `secrets/` steht in
+    `.gitignore` und `.containerignore`.
+  - `app_web.geheimnis_lesen(name)` liest `<NAME>_FILE`, sonst `<NAME>`. Eine nicht
+    lesbare oder leere Datei bricht den Start mit klarer Meldung ab.
+  - `db.verbinde_postgres_server(dsn, password=None)` gibt das Passwort getrennt an
+    psycopg2; der DSN in `compose.yaml` ist ohne Passwort. postgres nutzt
+    `POSTGRES_PASSWORD_FILE`.
+  - CI-Smoke-Test legt die Secret-Dateien mit Testwerten an.
+  - Doku: `README_CONTAINER.md` (neue Abschnitte „Geheimnisse“ mit Umzugsanleitung und
+    SELinux-Hinweis, „Versionen“; `sync_termin.py` mit `PGPASSWORD`), `.env.example`,
+    `README_INSTALLER.md`, Ersteinrichtungsseite, `sync_termin.py`-Docstring.
+- **Verifikation** (unabhängiger Subagent): 6 Befunde, mit Marco einzeln geklärt, alle
+  umgesetzt: Qt-6-Handler (1), leere Datei (2), Reihenfolge in `bump_version.main` (3),
+  `pytest`-Import in `test_bump_version.py` optional (4), veraltete Texte (5),
+  SELinux-Hinweis (6).
+- **Tests:** unittest 591 OK (159 übersprungen), `test_bump_version` per pytest 14 passed,
+  GUI und Theme (offscreen) 208 passed, 1 skipped (Abbruch-Test braucht die Windows-Plattform), 1 xfailed; beide Filter-Tests mit echter Windows-Plattform grün.
+- **Noch nicht geprüft** (lokal kein Docker/Podman):
+  - Compose-Stack mit Secrets, Härtung und Digests: erst im CI-Smoke-Test nach dem Push.
+  - Installer-Update über die laufende App: Marco nach dem Build, einmal mit gespeicherten
+    und einmal mit halb ausgefüllten Ergebnissen.
+  - Umzug von Marcos eigener Installation nach der README.
+
+## 05.10.2026: Demoprüfung – automatisch weiter (Arbeitsstand; bis zum nächsten Build uncommittet)
+
+- **Wunsch Marco:** einen Countdown von 10 Sekunden für den Knopf „Weiter“ der Demo, nach
+  Ablauf geht es automatisch weiter.
+- **Geklärt mit Marco:**
+  - Der Countdown startet erst, wenn die jeweilige Demo-Aufgabe fertig ist, also nach dem
+    letzten Klicken bzw. Tippen des Schritts.
+  - Die Zahl steht im Knopf („Weiter ▶ (10)“ … „(1)“).
+  - Ein Kästchen „Automatisch weiter“, standardmäßig an, schaltet das ab.
+  - „PDF öffnen“ hält den Countdown an.
+  - Im letzten Schritt („Fertig ✔“) gibt es keinen Countdown.
+- **Umsetzung** in `desktop_demo.py`:
+  - `DemoPanel.auto_box`, `countdown_anzeigen`, Signal `auto_weiter_umgeschaltet`.
+  - `DemoTour.AUTO_WEITER_S = 10` (0 = aus).
+  - Eigener 1-Sekunden-Timer `_countdown` mit `_countdown_starten` (am Ende von
+    `_naechste_aktion`), `_countdown_stoppen` (bei `weiter`, `_schritt_zeigen`,
+    `_fehler_zeigen`, `beenden`, Haken heraus) und `_countdown_tick`.
+  - `_pdf_oeffnen` stoppt den Countdown vor dem Öffnen.
+  - Der Begrüßungstext und der Modul-Docstring erwähnen das automatische Weiter.
+- **Tests:**
+  - Der Fixture `demo_umgebung` setzt `AUTO_WEITER_S = 0`.
+  - 10 neue GUI-Tests (`test_demo_*countdown*`, `test_demo_automatisch_weiter_abschaltbar`,
+    `test_demo_pdf_oeffnen_haelt_den_countdown_an` u. a.).
+  - GUI und Theme (offscreen) 218 passed, 1 skipped, 1 xfailed; unittest 591 OK
+    (159 übersprungen).
+- **Doku:**
+  - `docs/HANDBUCH.md`, Abschnitt „Demoprüfung“, ist ergänzt.
+  - **Vor dem Build:** Screenshot `docs/bilder/handbuch_demo.png` neu aufnehmen, weil
+    Knopf und Kästchen sich sichtbar geändert haben.
+- **Verifikation** (unabhängiger Subagent, u. a. echter Durchlauf mit TEMPO 1: läuft von
+  allein durch alle 16 Schritte, bleibt am Ende stehen, keine Meldungsfenster): 1 Befund
+  „sollte“ und 4 Kleinigkeiten, mit Marco einzeln geklärt, alle umgesetzt:
+  1. Hatte der Anwender selbst ein sperrendes Fenster offen, lief die Demo darunter weiter
+     (im Test 3 Schritte). Jetzt zählt `_countdown_tick` nicht, solange
+     `QApplication.activeModalWidget()` gesetzt ist.
+  2. Sekundenzahl in Tooltip und Begrüßung aus `AUTO_WEITER_S`.
+  3. Handbuch: „Du klickst auf „Weiter ▶“ oder lässt die Demo laufen“.
+  4. Nach „PDF öffnen“ zeigt das Erklärfenster „Automatisch weiter angehalten – weiter
+     mit „Weiter ▶““ (eigene Zeile `pause_label`, `_countdown_anhalten`).
+  5. Eigene Eingabe (Taste oder Mausklick) in einem Demo-Dialog hält den Countdown für
+     den Schritt ebenso an (`DemoTour.eventFilter` an der QApplication, wird in
+     `beenden` wieder entfernt). Erneutes Anhaken von „Automatisch weiter“ hebt das
+     Anhalten auf.
+- **Zweite Verifikation** (keine Fehler; Klicks ins Erklärfenster oder Hauptfenster halten
+  nicht fälschlich an, Echtlauf sauber): 1 „sollte“ und 3 Kleinigkeiten, mit Marco
+  geklärt, alle umgesetzt:
+  1. Handbuch trennt jetzt „angehalten“ („PDF öffnen“, eigene Eingabe; weiter mit
+     „Weiter ▶“) von „wartet“ (Meldung offen; läuft danach von allein weiter).
+  2. Nach einem geschlossenen sperrenden Fenster bleiben mindestens 3 Sekunden
+     (`AUTO_WEITER_NACH_MODAL_S`). Nach der dritten Kurzprüfung: der erste Tick nach dem
+     Schließen startet den Sekundentakt neu, damit es wirklich volle 3 Sekunden sind.
+  3. Reine Umschalttasten (Alt, Strg, Umschalt, Meta, AltGr, Feststell) halten nicht an.
+  4. `_countdown_anhalten` prüft den letzten Schritt wie `_countdown_starten`.
+
+## 05.10.2026: Build-Vorbereitung (noch kein Build)
+
+Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche Anforderung.
+- **Gebündelt für den nächsten Build** (Code im Arbeitsstand, uncommittet):
+  - H-2 bis H-4: feste Versionen, Secrets, Container-Härtung, Installer und
+    Schließen-Handler;
+  - Demo: automatisch weiter.
+- **Doku nachgezogen und committet:**
+  - `Architektur.md`: Modultabelle (`app.py`, `desktop_demo.py`, `app_web.py`,
+    `bump_version.py`, Container) und Sicherheitsgrundsätze (Container, Installer);
+  - `CLAUDE.md`: Zeilenzahlen `app.py`/`db.py`, Verweis auf `AGENTS.md`;
+  - `AGENTS.md`: neu aus `CLAUDE.md` abgeleitet (Spiegel für Codex, bisher ungetrackt und
+    auf Stand 22.09.), auf Marcos Wunsch ins Repo;
+  - `.gitignore`: `pdf/` (lokale Formular-PDFs).
+- **Handbuch und Screenshot** (gehören zum Build, bis dahin uncommittet):
+  - `docs/HANDBUCH.md`, Abschnitt Demoprüfung, ist ergänzt.
+  - `docs/bilder/handbuch_demo.png` ist neu aufgenommen (Countdown-Knopf „Weiter ▶ (10)“
+    und Kästchen „Automatisch weiter“).
+  - Auf dem Bild steht oben „Version 1.0.42“. Beim Build nach dem Versionsbump deshalb
+    noch einmal aufnehmen, ebenso die übrigen Screenshots mit Versionsanzeige wie bei
+    1.0.42.
+- **Beim Build noch:**
+  - offene Punkte klären (die Erinnerung an H-2 bis H-4 ist dann erledigt und wird
+    gelöscht);
+  - Screenshots mit Versionsanzeige;
+  - `bump_version.py` (zieht jetzt auch `compose.yaml` mit);
+  - `docs/HANDBUCH.pdf`, Tests, Commit;
+  - Altdaten (`tools/altdaten_erzeugen.py --aktuell`) und der Quellcode-Spiegel.
+- **Nach dem Build, nur Marco:**
+  - CI-Smoke-Test mit Secrets nach dem Push;
+  - Installer-Update über die laufende App (gespeichert und halb ausgefüllt);
+  - Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt „Geheimnisse“.
