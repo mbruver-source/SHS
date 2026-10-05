@@ -1,23 +1,33 @@
 # Podman/Docker-Compose-Definition für die Web-Version (Web-Backend + PostgreSQL) -
-# siehe README_CONTAINER.md für den vollständigen Ablauf (.env einrichten, starten,
-# stoppen, Versionsnummer) und Fortschritt.md für den Architektur-Hintergrund.
+# siehe README_CONTAINER.md für den vollständigen Ablauf (Geheimnisse in secrets/ und
+# .env einrichten, starten, stoppen, Versionsnummer) und Fortschritt.md für den
+# Architektur-Hintergrund.
 #
 # Start (Podman): podman-compose up -d
 #   - ohne lokal vorhandenes "web"-Image wird automatisch aus dem Containerfile gebaut
 #     (siehe "build:" unten) - für einen erzwungenen Neu-Build: podman-compose up --build -d
-#   - um stattdessen das zuletzt über GitHub Actions veröffentlichte Image zu verwenden:
-#     podman-compose pull && podman-compose up -d
+#   - um stattdessen das über GitHub Actions veröffentlichte Image genau dieser Version zu
+#     verwenden: podman-compose pull && podman-compose up -d
+#
+# Feste Versionen (Sicherheitshinweis H-2, Marco 05.10.2026): postgres per Digest, das
+# web-Image per Versions-Tag (zieht bump_version.py bei jedem Build nach). Digest
+# nachziehen: siehe README_CONTAINER.md, Abschnitt "Versionen".
 #
 # Funktioniert unverändert auch mit "docker compose" (Compose-Spec-Standarddatei).
 
 services:
   db:
-    image: postgres:16
+    # Hauptversion bleibt bewusst 16 - ein Wechsel bräuchte ein Upgrade des Datenbestands.
+    image: postgres:16.15@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${SHS_DB_USER:-shs}
-      POSTGRES_PASSWORD: ${SHS_DB_PASSWORD:?bitte SHS_DB_PASSWORD in .env setzen - siehe .env.example}
+      # Passwort aus der Secret-Datei statt aus .env (Sicherheitshinweis H-3) - steht so
+      # nicht in "podman inspect". Wirkt nur beim allerersten Start mit leerem Volume.
+      POSTGRES_PASSWORD_FILE: /run/secrets/shs_db_passwort
       POSTGRES_DB: ${SHS_DB_NAME:-shs}
+    secrets:
+      - shs_db_passwort
     volumes:
       - shs_postgres_daten:/var/lib/postgresql/data
     healthcheck:
@@ -39,18 +49,33 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    image: ${SHS_WEB_IMAGE:-ghcr.io/mbruver-source/shs-web:latest}
+    image: ${SHS_WEB_IMAGE:-ghcr.io/mbruver-source/shs-web:1.0.43}
     restart: unless-stopped
+    # Härtung (H-2): Dateisystem nur lesbar (Uploads/Downloads nutzen /tmp), keine
+    # Linux-Capabilities (Port 5000 braucht keine), keine Rechteausweitung.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       db:
         condition: service_healthy
     environment:
-      # Format/Details siehe db.verbinde_postgres_server() bzw. app_web.py.
-      SHS_POSTGRES_DSN: postgresql://${SHS_DB_USER:-shs}:${SHS_DB_PASSWORD:?bitte SHS_DB_PASSWORD in .env setzen - siehe .env.example}@db:5432/${SHS_DB_NAME:-shs}
-      SHS_WEB_SECRET_KEY: ${SHS_WEB_SECRET_KEY:?bitte SHS_WEB_SECRET_KEY in .env setzen - siehe .env.example}
+      # Format/Details siehe db.verbinde_postgres_server() bzw. app_web.py. DSN bewusst
+      # ohne Passwort - das kommt getrennt aus der Secret-Datei (H-3, app_web.geheimnis_lesen).
+      SHS_POSTGRES_DSN: postgresql://${SHS_DB_USER:-shs}@db:5432/${SHS_DB_NAME:-shs}
+      SHS_POSTGRES_PASSWORD_FILE: /run/secrets/shs_db_passwort
+      SHS_WEB_SECRET_KEY_FILE: /run/secrets/shs_web_secret_key
       # Einrichtungs-Code für das Anlegen des ersten Administrators (Codeprüfung 22.09.,
-      # G1) - ohne ihn verweigert app_web.py die Ersteinrichtung, siehe .env.example.
-      SHS_ADMIN_SETUP_CODE: ${SHS_ADMIN_SETUP_CODE:?bitte SHS_ADMIN_SETUP_CODE in .env setzen - siehe .env.example}
+      # G1) - ohne ihn verweigert app_web.py die Ersteinrichtung, siehe README_CONTAINER.md.
+      SHS_ADMIN_SETUP_CODE_FILE: /run/secrets/shs_admin_setup_code
+    secrets:
+      - shs_db_passwort
+      - shs_web_secret_key
+      - shs_admin_setup_code
     ports:
       - "5000:5000"
     healthcheck:
@@ -60,8 +85,20 @@ services:
       retries: 3
       start_period: 10s
 
+# Geheimnisse als Dateien im Ordner secrets/ (steht in .gitignore/.containerignore) -
+# Anlegen und Umzug von einer älteren .env siehe README_CONTAINER.md, Abschnitt
+# "Geheimnisse". Die Dateien müssen für den Container-Benutzer lesbar sein.
+secrets:
+  shs_db_passwort:
+    file: ./secrets/db_passwort.txt
+  shs_web_secret_key:
+    file: ./secrets/web_secret_key.txt
+  shs_admin_setup_code:
+    file: ./secrets/admin_setup_code.txt
+
 volumes:
   # Bleibt über Neustarts/"compose down" hinweg erhalten (nur "compose down -v" löscht
-  # auch die Datenbank - siehe README_CONTAINER.md, Abschnitt "Stoppen"). Ersetzt NICHT
-  # die noch offene PostgreSQL-Backup-Strategie aus Fortschritt.md.
+  # auch die Datenbank - siehe README_CONTAINER.md, Abschnitt "Stoppen"). Eine eigene
+  # PostgreSQL-Sicherung gibt es bewusst nicht (Marco 05.10.2026): maßgeblich ist die
+  # Termin-Datei der Desktop-App nach dem Zurückholen, gesichert über deren Datensicherung.
   shs_postgres_daten:

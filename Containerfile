@@ -9,7 +9,9 @@
 # app.py/pdf_export.py werden nicht mit hineinkopiert) - die beiden Varianten bleiben
 # unabhängig baubar, siehe Kommentar in requirements-postgres.txt.
 
-FROM python:3.11-slim
+# Feste Basis per Digest (Sicherheitshinweis H-2, Marco 05.10.2026): entspricht
+# python:3.11.17-slim, Stand 05.10.2026. Nachziehen: siehe README_CONTAINER.md, "Versionen".
+FROM python:3.11.17-slim@sha256:6f31d6e9ba2b0a787a3f81c37b004155b87b9efa1b771182bd550c1615745be5
 
 WORKDIR /app
 

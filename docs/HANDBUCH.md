@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.42. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.43. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -117,11 +117,22 @@ Der Button **„🎓 Demoprüfung“** steht im Startbildschirm und im Hauptfens
 9. den Demo-Termin wieder löschen.
 
 Das Programm klickt und tippt dabei selbst. Ein kleines Fenster erklärt jeden Schritt: was
-gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du klickst nur auf
-**„Weiter ▶“**, mit **„Beenden“** brichst du jederzeit ab.
+gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du klickst auf
+**„Weiter ▶“** oder lässt die Demo laufen, mit **„Beenden“** brichst du jederzeit ab.
 
 Das Programm tippt in normalem Tempo, wie von Hand. Wer es eilig hat, drückt einfach
 **„Weiter ▶“**: Dann wird der laufende Schritt sofort fertig ausgefüllt.
+
+Ist ein Schritt fertig, zählt der Knopf zehn Sekunden herunter („Weiter ▶ (10)“) und
+schaltet dann von allein weiter. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst
+klickt, nimmt den Haken bei **„Automatisch weiter“** heraus.
+
+- Schaust du die Ergebnisliste über **„PDF öffnen“** an oder tippst bzw. klickst du selbst in
+  einem Fenster der Demo, hält der Countdown für diesen Schritt an. Im Erklärfenster steht
+  dann „Automatisch weiter angehalten“, weiter geht es mit **„Weiter ▶“**.
+- Ist eine Meldung oder Rückfrage des Programms offen, wartet der Countdown nur. Nach dem
+  Schließen zählt er von allein weiter, mit mindestens drei Sekunden Vorlauf.
+- Im letzten Schritt wartet die Demo, bis du auf **„Fertig ✔“** klickst.
 
 Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem temporären Ordner, nicht
 bei deinen Terminen, und wird am Ende samt PDF gelöscht. Ist die Ergebnisliste dann noch in

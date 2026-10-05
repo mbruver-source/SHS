@@ -1,7 +1,9 @@
 """Geführte Demoprüfung (Marcos Wunsch 04.10.2026): Das Programm spielt einmal einen
 kompletten Prüfungstag mit erfundenen Daten vor - Termin anlegen, Teilnehmer, Startnummern,
 Bezahlt, Zeitplan, Ergebnisse, Auswertung, Stechen, Ergebnisliste - und erklärt in einem
-kleinen Fenster je Schritt, was gerade passiert und warum. Der Anwender klickt nur „Weiter“.
+kleinen Fenster je Schritt, was gerade passiert und warum. Der Anwender klickt nur „Weiter“
+- oder lässt die Demo laufen: Ist ein Schritt fertig, geht es nach 10 Sekunden von allein
+weiter (Marcos Wunsch 05.10.2026, abschaltbar über „Automatisch weiter“).
 
 Sicherheit der echten Daten: Die Demo arbeitet ausschließlich in einem eigenen
 Temp-Ordner (tempfile.mkdtemp, nie im Termine-Ordner) und löscht ihn am Ende wieder. Der
@@ -31,10 +33,11 @@ from pathlib import Path
 from typing import Callable
 
 import shiboken6
-from PySide6.QtCore import QEventLoop, QObject, QPoint, QRect, QRectF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QEvent, QEventLoop, QObject, QPoint, QRect, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFont, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -170,12 +173,14 @@ class DemoPanel(QWidget):
 
     weiter_geklickt = Signal()
     beenden_geklickt = Signal()
+    auto_weiter_umgeschaltet = Signal(bool)
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.Tool)
         self.setWindowTitle("🎓 Demoprüfung")
         self._schliessen_erlaubt = False
         self._extra_aktion: Callable[[], None] | None = None
+        self._letzter = False
 
         self.schritt_label = QLabel()
         self.titel_label = QLabel()
@@ -185,7 +190,10 @@ class DemoPanel(QWidget):
         self.titel_label.setFont(schrift)
         self.text_label = QLabel()
         self.hinweis_label = QLabel()
-        for label in (self.schritt_label, self.titel_label, self.text_label, self.hinweis_label):
+        # Eigene Zeile statt hinweis_label (das z. B. den Speicherort der PDF zeigt).
+        self.pause_label = QLabel("Automatisch weiter angehalten – weiter mit „Weiter ▶“.")
+        self.pause_label.setVisible(False)
+        for label in (self.schritt_label, self.titel_label, self.text_label, self.hinweis_label, self.pause_label):
             label.setTextFormat(Qt.PlainText)
             label.setWordWrap(True)
         self.text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -194,6 +202,14 @@ class DemoPanel(QWidget):
         self.extra_btn = QPushButton()
         self.extra_btn.setVisible(False)
         self.extra_btn.clicked.connect(self._extra_ausfuehren)
+        # Automatisch weiter (Marcos Wunsch 05.10.2026): gilt für die ganze Demo, wird
+        # nicht über sie hinaus gespeichert.
+        self.auto_box = QCheckBox("Automatisch weiter")
+        self.auto_box.setChecked(True)
+        self.auto_box.setToolTip(
+            f"Ist ein Schritt fertig, geht es nach {DemoTour.AUTO_WEITER_S} Sekunden von allein weiter."
+        )
+        self.auto_box.toggled.connect(self.auto_weiter_umgeschaltet)
         self.beenden_btn = QPushButton("Beenden")
         self.beenden_btn.setToolTip("Demo abbrechen – der Demo-Termin wird gelöscht.")
         self.beenden_btn.clicked.connect(self.beenden_geklickt)
@@ -204,6 +220,7 @@ class DemoPanel(QWidget):
 
         knopf_zeile = QHBoxLayout()
         knopf_zeile.addWidget(self.extra_btn)
+        knopf_zeile.addWidget(self.auto_box)
         knopf_zeile.addStretch()
         knopf_zeile.addWidget(self.beenden_btn)
         knopf_zeile.addWidget(self.weiter_btn)
@@ -213,6 +230,7 @@ class DemoPanel(QWidget):
         layout.addWidget(self.titel_label)
         layout.addWidget(self.text_label, 1)
         layout.addWidget(self.hinweis_label)
+        layout.addWidget(self.pause_label)
         layout.addLayout(knopf_zeile)
         self.setMinimumWidth(440)
         self.resize(480, 320)
@@ -225,7 +243,9 @@ class DemoPanel(QWidget):
         self.text_label.setText(schritt.text)
         self.hinweis(None)
         self.extra(None)
-        self.weiter_btn.setText("Fertig ✔" if letzter else "Weiter ▶")
+        self._letzter = letzter
+        self.countdown_anzeigen(None)
+        self.angehalten_anzeigen(False)
         self.weiter_btn.setEnabled(True)
         self.adjustSize()
         if not self._positioniert:
@@ -233,6 +253,19 @@ class DemoPanel(QWidget):
             self._in_ecke_setzen(rechts=True)
         self.show()
         self.raise_()
+
+    def countdown_anzeigen(self, sekunden: int | None) -> None:
+        """Knopftext „Weiter ▶ (n)“ während des Countdowns, sonst „Weiter ▶“ bzw. im
+        letzten Schritt „Fertig ✔“ (dort gibt es keinen Countdown)."""
+        if self._letzter:
+            self.weiter_btn.setText("Fertig ✔")
+        elif sekunden is None:
+            self.weiter_btn.setText("Weiter ▶")
+        else:
+            self.weiter_btn.setText(f"Weiter ▶ ({sekunden})")
+
+    def angehalten_anzeigen(self, angehalten: bool) -> None:
+        self.pause_label.setVisible(angehalten)
 
     def hinweis(self, text: str | None) -> None:
         self.hinweis_label.setText(text or "")
@@ -280,6 +313,12 @@ class DemoPanel(QWidget):
         event.accept()
 
 
+# Tasten, die allein keine Eingabe sind (siehe DemoTour.eventFilter).
+_NUR_UMSCHALTTASTEN = frozenset(
+    (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta, Qt.Key.Key_AltGr, Qt.Key.Key_CapsLock)
+)
+
+
 class DemoTour(QObject):
     """Steuert die Demo: legt den Demo-Termin im Temp-Ordner an, führt die Schritte aus
     und räumt am Ende (oder bei „Beenden“/Fenster schließen) alles wieder ab.
@@ -298,6 +337,11 @@ class DemoTour(QObject):
     #: alles sofort. „Weiter“ führt einen laufenden Schritt jederzeit sofort zu Ende.
     TEMPO = 1.0
     PAUSE_MS = 600
+    #: Automatisch weiter (Marcos Wunsch 05.10.2026): so viele Sekunden nach dem Ende eines
+    #: Schritts (alle Aktionen ausgeführt) geht es von allein weiter; 0 = aus (Tests).
+    AUTO_WEITER_S = 10
+    #: Nach einem geschlossenen sperrenden Fenster bleiben mindestens so viele Sekunden.
+    AUTO_WEITER_NACH_MODAL_S = 3
     TASTE_MS = (55, 140)  # je Zeichen, leicht schwankend wie beim echten Tippen
 
     def __init__(self, fenster=None, fenster_fabrik=None):
@@ -327,6 +371,13 @@ class DemoTour(QObject):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._naechste_aktion)
+        self._countdown = QTimer(self)
+        self._countdown.setInterval(1000)
+        self._countdown.timeout.connect(self._countdown_tick)
+        self._rest = 0
+        self._modal_wartet = False  # siehe _countdown_tick
+        # Für den laufenden Schritt angehalten („PDF öffnen“, eigene Eingabe im Demo-Dialog).
+        self._angehalten = False
 
     # --- Start / Ende ---------------------------------------------------------
 
@@ -361,6 +412,9 @@ class DemoTour(QObject):
         self._panel = DemoPanel(self._fenster)
         self._panel.weiter_geklickt.connect(self.weiter)
         self._panel.beenden_geklickt.connect(self.beenden)
+        self._panel.auto_weiter_umgeschaltet.connect(self._auto_weiter_umgeschaltet)
+        # Eigene Eingaben im Demo-Dialog erkennen (siehe eventFilter).
+        QApplication.instance().installEventFilter(self)
         self._schritte = self._schritte_aufbauen()
         self._schritt_zeigen(0)
 
@@ -373,6 +427,7 @@ class DemoTour(QObject):
     def weiter(self) -> None:
         if self.ist_beendet:
             return
+        self._countdown_stoppen()
         # Läuft der aktuelle Schritt noch, wird er sofort zu Ende geführt.
         self._alles_sofort()
         if self.ist_beendet or (self._panel is not None and not self._panel.weiter_btn.isEnabled()):
@@ -390,6 +445,9 @@ class DemoTour(QObject):
             return
         self.ist_beendet = True
         self._timer.stop()
+        self._countdown.stop()
+        if QApplication.instance() is not None:
+            QApplication.instance().removeEventFilter(self)
         self._offen.clear()
         fenster = self._fenster if _lebt(self._fenster) else None
         try:
@@ -434,6 +492,8 @@ class DemoTour(QObject):
     # --- Ablauf ----------------------------------------------------------------
 
     def _schritt_zeigen(self, index: int) -> None:
+        self._countdown_stoppen()
+        self._angehalten = False
         self._index = index
         schritt = self._schritte[index]
         self._panel.anzeigen(index, len(self._schritte) - 1, schritt, index == len(self._schritte) - 1)
@@ -460,6 +520,7 @@ class DemoTour(QObject):
                 return
         if not self.ist_beendet:
             self._panel_ausweichen()
+            self._countdown_starten()
 
     def _alles_sofort(self) -> None:
         # Eigener Merker statt TEMPO zu überschreiben - sonst bliebe TEMPO danach als
@@ -474,9 +535,109 @@ class DemoTour(QObject):
     def _fehler_zeigen(self, exc: Exception) -> None:
         self._offen.clear()
         self._timer.stop()
+        self._countdown_stoppen()
         text = str(exc) if isinstance(exc, DemoFehler) else f"Dieser Schritt ließ sich nicht vorführen: {exc}"
         if _lebt(self._panel):
             self._panel.fehler(text + "\n\nBitte „Beenden“ drücken – der Demo-Termin wird dabei gelöscht.")
+
+    # --- Automatisch weiter (Marcos Wunsch 05.10.2026) ------------------------
+
+    def _countdown_starten(self) -> None:
+        """Startet nach einem fertigen Schritt den Countdown bis zum automatischen
+        „Weiter“ - nicht im letzten Schritt, nicht nach einem Fehler (Knopf gesperrt) und
+        nicht bei abgehaktem „Automatisch weiter“."""
+        self._countdown.stop()
+        if (
+            self.ist_beendet
+            or self.AUTO_WEITER_S <= 0
+            or not _lebt(self._panel)
+            or self._index + 1 >= len(self._schritte)
+            or not self._panel.weiter_btn.isEnabled()
+            or not self._panel.auto_box.isChecked()
+            or self._angehalten
+        ):
+            return
+        self._rest = self.AUTO_WEITER_S
+        self._modal_wartet = False
+        self._panel.countdown_anzeigen(self._rest)
+        self._countdown.start()
+
+    def _countdown_stoppen(self) -> None:
+        self._countdown.stop()
+        self._modal_wartet = False
+        if _lebt(self._panel):
+            self._panel.countdown_anzeigen(None)
+
+    def _countdown_tick(self) -> None:
+        # Hat der Anwender selbst ein sperrendes Fenster offen (Meldung, Teilnehmer
+        # bearbeiten …), wartet die Demo - sonst liefe sie darunter ungesehen weiter und das
+        # Erklärfenster wäre gesperrt (Verifikation 05.10.2026). Die eigenen Dialoge der
+        # Demo sind nicht-modal und stören hier nicht.
+        if QApplication.activeModalWidget() is not None:
+            # Danach nicht fast ohne Vorwarnung weiterschalten (Verifikation 05.10.2026).
+            self._modal_wartet = True
+            if self._rest < self.AUTO_WEITER_NACH_MODAL_S:
+                self._rest = self.AUTO_WEITER_NACH_MODAL_S
+                if _lebt(self._panel):
+                    self._panel.countdown_anzeigen(self._rest)
+            return
+        if self._modal_wartet:
+            # Erster Tick nach dem Schließen: Takt neu starten statt zu zählen, damit
+            # wirklich volle AUTO_WEITER_NACH_MODAL_S Sekunden bleiben.
+            self._modal_wartet = False
+            self._countdown.start()
+            return
+        self._rest -= 1
+        if self._rest <= 0:
+            self._countdown_stoppen()
+            self.weiter()
+        elif _lebt(self._panel):
+            self._panel.countdown_anzeigen(self._rest)
+
+    def _auto_weiter_umgeschaltet(self, an: bool) -> None:
+        # Bewusst wieder angehakt hebt auch ein Anhalten auf; neu gestartet wird aber nur,
+        # wenn der aktuelle Schritt schon fertig ist.
+        self._angehalten = False
+        if _lebt(self._panel):
+            self._panel.angehalten_anzeigen(False)
+        if an and not self._offen:
+            self._countdown_starten()
+        else:
+            self._countdown_stoppen()
+
+    def _countdown_anhalten(self) -> None:
+        """Hält das automatische Weiter für den laufenden Schritt an und sagt das im
+        Erklärfenster (nur, wenn es überhaupt eingeschaltet ist)."""
+        if self._angehalten or self.ist_beendet or not _lebt(self._panel):
+            return
+        self._angehalten = True
+        self._countdown_stoppen()
+        letzter = self._index + 1 >= len(self._schritte)
+        if self._panel.auto_box.isChecked() and self.AUTO_WEITER_S > 0 and not letzter:
+            self._panel.angehalten_anzeigen(True)
+
+    def _pdf_oeffnen(self, ziel: str) -> None:
+        # Beim Anschauen der PDF soll die Demo nicht weiterlaufen.
+        self._countdown_anhalten()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(ziel))
+
+    def eventFilter(self, obj, event) -> bool:  # type: ignore[override]
+        """Tippt oder klickt der Anwender selbst in einen Dialog der Demo (Termin in
+        Schritt 1, Teilnehmer in Schritt 3), hält das automatische Weiter an - sonst griffe
+        es mitten in seine Eingabe ein. Die Demo selbst erzeugt keine Tasten- oder
+        Mausereignisse (sie setzt Texte direkt), daher reicht die Art des Ereignisses.
+        Reine Umschalttasten (Alt, Strg, Umschalt …, z. B. für Alt+Tab) zählen nicht."""
+        typ = event.type()
+        if typ == QEvent.KeyPress and event.key() in _NUR_UMSCHALTTASTEN:
+            return False
+        if (
+            typ in (QEvent.KeyPress, QEvent.MouseButtonPress)
+            and _lebt(self._dialog)
+            and isinstance(obj, QWidget)
+            and (obj is self._dialog or self._dialog.isAncestorOf(obj))
+        ):
+            self._countdown_anhalten()
+        return False
 
     # --- Hilfsfunktionen ------------------------------------------------------
 
@@ -577,7 +738,9 @@ class DemoTour(QObject):
                 "Willkommen zur Demoprüfung",
                 "Die Demo spielt einen kompletten Prüfungstag einmal vor: vom Anlegen des "
                 "Termins über Teilnehmer, Zeitplan und Ergebnisse bis zur Ergebnisliste.\n\n"
-                "Das Programm klickt und tippt selbst – du drückst nur „Weiter“. Ein farbiger "
+                "Das Programm klickt und tippt selbst. Ist ein Schritt fertig, geht es nach "
+                f"{self.AUTO_WEITER_S} Sekunden von allein weiter – oder du drückst „Weiter“. Wer selbst "
+                "bestimmen will, nimmt den Haken bei „Automatisch weiter“ heraus. Ein farbiger "
                 "Rahmen zeigt jeweils, wo gerade gearbeitet wird. Wer es eilig hat: „Weiter“ "
                 "füllt einen laufenden Schritt sofort fertig aus.\n\n"
                 "Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem "
@@ -1005,7 +1168,7 @@ class DemoTour(QObject):
             pdf_export.erstelle_ergebnisliste_pdf(self.conn, ziel)
             self.pdf_pfad = ziel
             self._panel.hinweis(f"Gespeichert unter: {_pfad_anzeige(ziel)}")
-            self._panel.extra("PDF öffnen", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(ziel)))
+            self._panel.extra("PDF öffnen", lambda: self._pdf_oeffnen(ziel))
 
         return [zeigen, erzeugen]
 

@@ -100,9 +100,12 @@ python tools/handbuch_pdf.py
   Update kümmern müsste. Ein Update ist schlicht "alte .exe durch neue
   ersetzen".
 - Ist die Anwendung beim Update gerade geöffnet, fordert der Installer
-  (`CloseApplications=force`) automatisch zum Schließen auf und startet sie
+  (`CloseApplications=yes`) automatisch zum Schließen auf und startet sie
   nach der Installation auf Wunsch wieder (`RestartApplications=yes`) – der
-  Nutzer muss sie nicht selbst beenden.
+  Nutzer muss sie nicht selbst beenden. Die App speichert dabei offene Ergebnisse
+  automatisch. Bleibt etwas ungespeichert und verwirft der Nutzer es nicht
+  ausdrücklich, bleibt die App offen und der Installer meldet das (H-4,
+  05.10.2026).
 
 **Wichtig:** Die `AppId` in `installer.iss` (`#define AppId ...`) darf bei
 zukünftigen Releases **niemals verändert werden**. Nur die `AppVersion`
@@ -215,7 +218,7 @@ Abbruch gar nicht erst zu provozieren:
 ```
 python bump_version.py
 python tools/handbuch_pdf.py
-git add version.txt version_info.txt version.py docs/HANDBUCH.md docs/HANDBUCH.pdf
+git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf
 git commit -m "Version X.Y.Z"
 git push
 git tag vX.Y.Z && git push origin vX.Y.Z

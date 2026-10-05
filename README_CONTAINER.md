@@ -22,26 +22,68 @@ bleiben Desktop-Aufgaben vor/nach dem Prüfungstag.
 
 ## Einrichtung (einmalig)
 
-1. `.env.example` nach `.env` kopieren und die Werte eintragen (Datenbank-Passwort,
-   Session-Schlüssel, Einrichtungs-Code `SHS_ADMIN_SETUP_CODE` für den ersten
-   Administrator – siehe Kommentare in `.env.example`, insbesondere die Befehle zum
-   Erzeugen von Session-Schlüssel und Einrichtungs-Code). `.env` **nicht** committen
-   (steht in `.gitignore`).
-
-   **Update einer bestehenden Installation (ab der Version nach 1.0.28):**
-   `SHS_ADMIN_SETUP_CODE` ist jetzt ein Pflichtwert – ohne ihn startet `compose up` nicht,
-   auch wenn bereits ein Administrator existiert. Einfach einen Code erzeugen und als
-   `SHS_ADMIN_SETUP_CODE=...` in die vorhandene `.env` eintragen.
-
-   **Seit der Sicherheitsprüfung vom 03.10.2026:** Die Web-Version startet nicht, solange
-   in `.env` noch die Platzhalter („bitte-hier-…“) stehen oder der Session-Schlüssel
-   kürzer als 32 bzw. der Einrichtungs-Code kürzer als 12 Zeichen ist. Die Fehlermeldung im
-   Container-Log nennt den Befehl zum Erzeugen. Wer bisher mit einem Platzhalter gearbeitet
-   hat: neuen Schlüssel eintragen, dann müssen sich alle einmal neu anmelden.
+1. **Geheimnisse anlegen** (siehe Abschnitt „Geheimnisse“ unten): drei Dateien im
+   Ordner `secrets/` für Datenbank-Passwort, Session-Schlüssel und Einrichtungs-Code.
+2. Optional `.env.example` nach `.env` kopieren, um Benutzer- und Datenbankname oder das
+   Image zu ändern. Ohne `.env` gelten die Vorgaben (Benutzer und Datenbank `shs`).
+   `.env` und `secrets/` **nicht** committen (stehen in `.gitignore`).
 
    ```
    cp .env.example .env
    ```
+
+   **Seit der Sicherheitsprüfung vom 03.10.2026:** Die Web-Version startet nicht, solange
+   noch Platzhalter („bitte-hier-…“) eingetragen sind oder der Session-Schlüssel kürzer als
+   32 bzw. der Einrichtungs-Code kürzer als 12 Zeichen ist. Die Fehlermeldung im
+   Container-Log nennt den Befehl zum Erzeugen.
+
+## Geheimnisse
+
+Seit H-3 (05.10.2026) stehen Datenbank-Passwort, Session-Schlüssel und Einrichtungs-Code
+nicht mehr in `.env`, sondern als Secret-Dateien in `secrets/`. Die Container lesen sie
+unter `/run/secrets/`. So tauchen sie nicht in `podman inspect` auf, und Sonderzeichen im
+Passwort sind kein Problem mehr.
+
+| Datei | Inhalt | Erzeugen |
+|---|---|---|
+| `secrets/db_passwort.txt` | Datenbank-Passwort | `python -c "import secrets; print(secrets.token_hex(16))"` |
+| `secrets/web_secret_key.txt` | Session-Schlüssel (mind. 32 Zeichen) | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `secrets/admin_setup_code.txt` | Einrichtungs-Code für den ersten Administrator (mind. 12 Zeichen) | `python -c "import secrets; print(secrets.token_urlsafe(16))"` |
+
+Anlegen unter Windows (PowerShell):
+
+```
+mkdir secrets
+python -c "import secrets; print(secrets.token_hex(16))" | Out-File -Encoding ascii secrets\db_passwort.txt
+python -c "import secrets; print(secrets.token_hex(32))" | Out-File -Encoding ascii secrets\web_secret_key.txt
+python -c "import secrets; print(secrets.token_urlsafe(16))" | Out-File -Encoding ascii secrets\admin_setup_code.txt
+```
+
+Unter Linux:
+
+```
+mkdir -p secrets
+python3 -c "import secrets; print(secrets.token_hex(16))" > secrets/db_passwort.txt
+python3 -c "import secrets; print(secrets.token_hex(32))" > secrets/web_secret_key.txt
+python3 -c "import secrets; print(secrets.token_urlsafe(16))" > secrets/admin_setup_code.txt
+chmod 644 secrets/*.txt
+```
+
+Der Web-Container läuft als eigener Benutzer `shs` und muss die Dateien lesen dürfen.
+Unter Linux mit rootless Podman deshalb `chmod 644`, sonst bricht die Web-Version beim
+Start mit „Datei ist nicht lesbar“ ab. Den Ordner selbst schützt man über die Rechte des
+Benutzerkontos, unter dem Podman läuft. Auf Linux mit SELinux (z. B. Fedora, RHEL) kann der
+Zugriff trotzdem verweigert werden; dann hilft `chcon -t container_file_t secrets/*.txt`.
+Unter Windows (Podman Desktop/WSL) ist das nicht nötig.
+
+**Umzug einer bestehenden Installation** (die Geheimnisse standen bisher in `.env`):
+
+1. Die Werte von `SHS_DB_PASSWORD`, `SHS_WEB_SECRET_KEY` und `SHS_ADMIN_SETUP_CODE` aus
+   `.env` unverändert in die drei Dateien oben übernehmen. Das **Datenbank-Passwort muss
+   gleich bleiben**: PostgreSQL liest die Secret-Datei nur beim allerersten Start mit
+   leerem Volume, danach gilt das einmal gesetzte Passwort.
+2. Die drei Zeilen aus `.env` löschen.
+3. `podman-compose up -d` – die Daten im Volume bleiben erhalten.
 
 ## Starten
 
@@ -62,13 +104,40 @@ Nach einer Code-Änderung an `db.py`/`app_web.py` neu bauen:
 podman-compose up --build -d
 ```
 
-Um stattdessen das zuletzt über GitHub Actions veröffentlichte Image zu verwenden
-(siehe unten, „Versionsnummer & Releases“), statt selbst zu bauen:
+Um stattdessen das über GitHub Actions veröffentlichte Image zu verwenden (siehe unten,
+„Versionsnummer & Releases“), statt selbst zu bauen:
 
 ```
 podman-compose pull
 podman-compose up -d
 ```
+
+`compose.yaml` nennt dafür die feste Version (`shs-web:X.Y.Z`), nicht `latest`. Ein `pull`
+holt also genau das Image, das zur Compose-Datei passt.
+
+## Versionen
+
+Seit H-2 (05.10.2026) sind alle Images fest vorgegeben, damit sich beim Bauen oder Ziehen
+nichts unbemerkt ändert:
+
+- **Web-Image:** `ghcr.io/mbruver-source/shs-web:X.Y.Z` in `compose.yaml`. `bump_version.py`
+  zieht die Nummer bei jedem Build mit. Eine andere Version (oder `latest`) lässt sich über
+  `SHS_WEB_IMAGE` in `.env` wählen.
+- **Basis-Image** `python:3.11.x-slim` im `Containerfile` und **`postgres:16.x`** in
+  `compose.yaml` sind per Digest (`@sha256:…`) festgelegt. Für Sicherheitsupdates von Zeit
+  zu Zeit nachziehen, z. B. bei einem Build:
+  ```
+  docker buildx imagetools inspect python:3.11-slim
+  docker buildx imagetools inspect postgres:16
+  ```
+  (oder `podman manifest inspect …`). Den angezeigten Index-Digest samt genauer Version
+  eintragen. Die Hauptversion von PostgreSQL bleibt 16, ein Wechsel bräuchte ein Upgrade
+  des Datenbestands.
+- Die Python-Abhängigkeiten (`requirements-web.txt`, `requirements-postgres.txt`) haben
+  nur Ober- und Untergrenzen. Fest ist ein Stand über das versionierte Image.
+
+Der web-Dienst läuft zusätzlich gehärtet: Dateisystem nur lesbar (bis auf `/tmp`), keine
+Linux-Capabilities, keine Rechteausweitung.
 
 ## Stoppen
 
@@ -81,11 +150,10 @@ Die PostgreSQL-Daten bleiben dabei erhalten (liegen in einem eigenen, benannten 
 das entspricht dem Löschen der gesamten Web-Datenbank aller bisher veröffentlichten
 Termine und ist nur bewusst zu verwenden.
 
-**Noch keine Backup-Strategie für diese PostgreSQL-Daten** (siehe „Noch offen“ in
-`Fortschritt.md`) – die bestehende ZIP-Datensicherung der Desktop-Version sichert nur
-`.sqlite`-Dateien. Solange das nicht nachgerüstet ist: pro Termin möglichst zeitnah
-`sync_termin.py import` ausführen (siehe unten), damit die Ergebnisse auch in der
-gewohnten, per ZIP gesicherten `.sqlite`-Datei landen.
+**Keine eigene Sicherung der PostgreSQL-Daten** (bewusst, Entscheidung 05.10.2026):
+Maßgeblich ist die Termin-Datei der Desktop-Version. Pro Termin deshalb möglichst zeitnah
+`sync_termin.py import` ausführen (siehe unten), damit die Ergebnisse in der gewohnten,
+per ZIP gesicherten `.sqlite`-Datei landen.
 
 ## Benutzerkonten
 
@@ -97,7 +165,7 @@ db.py, Abschnitt "Benutzerkonten der Web-Version", und app_web.py):
 - **Administrator**: richtet sich beim allerersten Aufruf von `http://<Rechner-IP>:5000`
   selbst mit einem frei gewählten Benutzernamen/Passwort ein ("Ersteinrichtung" -
   erscheint nur, solange noch kein Administrator existiert). Dabei wird zusätzlich der
-  Einrichtungs-Code aus `SHS_ADMIN_SETUP_CODE` (`.env`) abgefragt, damit nicht jeder im
+  Einrichtungs-Code aus `secrets/admin_setup_code.txt` abgefragt, damit nicht jeder im
   Vereinsnetz, der die Seite zuerst aufruft, den Administrator anlegen kann; ist kein
   Code gesetzt (z. B. beim lokalen Start von `app_web.py` ohne diese Umgebungsvariable),
   bleibt die Ersteinrichtung gesperrt. Kann danach unter „Benutzer“ in der Kopfzeile
@@ -124,19 +192,17 @@ Einrichtung, danach genügt Schritt 3 pro Termin:
    ```
    pip install -r requirements-postgres.txt
    ```
-2. **Einmalig:** DSN aus den Werten in `.env` zusammensetzen. Mit den Vorgaben aus
-   `.env.example` (Benutzer `shs`, Datenbank `shs`) und dem selbst gesetzten Passwort:
+2. **Einmalig:** DSN ohne Passwort setzen (Vorgaben: Benutzer `shs`, Datenbank `shs`).
+   `localhost:5432` funktioniert, weil `compose.yaml` den Datenbank-Port gezielt nur auf
+   `127.0.0.1` freigibt – erreichbar von diesem Rechner aus, nicht aus dem übrigen
+   Vereinsnetz. Das Passwort kommt getrennt über `PGPASSWORD` direkt aus der Secret-Datei,
+   so steht es weder in der Befehlshistorie noch in der Prozessliste (S-10, H-3). Mit
+   beiden Variablen entfällt `--dsn` bei jedem Aufruf unten:
    ```
-   postgresql://shs:<dein SHS_DB_PASSWORD aus .env>@localhost:5432/shs
+   $env:SHS_POSTGRES_DSN = "postgresql://shs@localhost:5432/shs"
+   $env:PGPASSWORD = (Get-Content secrets\db_passwort.txt -Raw).Trim()
    ```
-   (`localhost:5432` funktioniert, weil `compose.yaml` den Datenbank-Port gezielt nur
-   auf `127.0.0.1` freigibt – erreichbar von diesem Rechner aus, nicht aus dem übrigen
-   Vereinsnetz.) Am besten als Umgebungsvariable setzen (ein Passwort direkt in `--dsn` wäre in der
-   Prozessliste und Befehlshistorie sichtbar, S-10), dann muss `--dsn` bei
-   jedem Aufruf unten entfallen:
-   ```
-   $env:SHS_POSTGRES_DSN = "postgresql://shs:<Passwort>@localhost:5432/shs"
-   ```
+   Alternativ eine `.pgpass`-Datei (unter Windows `%APPDATA%\postgresql\pgpass.conf`).
 3. **Vor jeder Prüfung:** Termin wie gewohnt in der Desktop-Version anlegen/planen,
    dann veröffentlichen:
    ```
@@ -192,7 +258,7 @@ README_INSTALLER.md):
 ```
 python bump_version.py                 # Versionsnummer erhöhen
 python tools/handbuch_pdf.py           # PDF-Handbuch mit neuer Nummer
-git add version.txt version_info.txt version.py docs/HANDBUCH.md docs/HANDBUCH.pdf
+git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf
 git commit -m "Version X.Y.Z"
 git push
 git tag vX.Y.Z && git push origin vX.Y.Z
@@ -221,8 +287,5 @@ kaputtgehen, analog zu `tests.yml` für die eigentliche Testsuite.
   Desktop-Version über Podman Desktop, oder ein separates Gerät im Vereinsnetz) ist
   bewusst noch nicht endgültig entschieden – dieses Setup funktioniert für beide Fälle
   unverändert, nur der Zielrechner unterscheidet sich.
-- Ein echter End-zu-Ende-Testlauf beim Nutzer (mehrere Geräte gleichzeitig im
-  Vereins-WLAN gegen einen echten PostgreSQL-Server) steht noch aus.
-- PostgreSQL-Backup-Strategie (siehe oben) fehlt noch.
 - Kein Reverse-Proxy/HTTPS (bewusst, siehe Deployment-Annahme oben) – bleibt so, solange
   die Web-Version nur im lokalen Vereins-Netzwerk läuft.

@@ -47,25 +47,21 @@ env:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    # Auf Job-Ebene statt in einem einzelnen Step gesetzt, damit ALLE Steps dieses Jobs
-    # dieselben Werte sehen - auch "Compose-Stack stoppen" unten, der "docker compose
-    # down" ganz unabhängig vom Start-Step aufruft und die beiden Variablen für die
-    # Interpolation von compose.yaml ebenfalls braucht. (Vorherige Fassung: erst per
-    # "echo ... >> $GITHUB_ENV" gesetzt, was erst ab dem NÄCHSTEN Step gilt und beim
-    # "up" in genau diesem Step fehlte; danach per "export" behoben, was zwar sofort im
-    # selben Step wirkt, aber nicht in spätere Steps übernommen wird und deshalb beim
-    # "down" fehlte - ein Job-weites "env:" deckt beide Fälle gleichzeitig ab.)
-    env:
-      SHS_DB_PASSWORD: smoketest
-      # Seit S-2 (Sicherheitsprüfung 03.10.2026) lehnt die Web-Version Platzhalter und zu
-      # kurze Werte ab (Schlüssel >= 32, Einrichtungscode >= 12 Zeichen) - reine Testwerte.
-      SHS_WEB_SECRET_KEY: smoketest-schluessel-nur-fuer-ci-0123456789
-      # Seit Codeprüfung 22.09. (G1) Pflichtwert in compose.yaml - ohne ihn bricht
-      # "compose up" im Smoke-Test ab.
-      SHS_ADMIN_SETUP_CODE: smoketest-einrichtung
+    # Die Geheimnisse kommen seit H-3 (05.10.2026) nicht mehr aus Umgebungsvariablen,
+    # sondern aus den Secret-Dateien in secrets/ (siehe compose.yaml) - der erste Step
+    # unten legt sie mit reinen Testwerten an. Seit S-2 (Sicherheitsprüfung 03.10.2026)
+    # lehnt die Web-Version Platzhalter und zu kurze Werte ab (Schlüssel >= 32,
+    # Einrichtungscode >= 12 Zeichen).
     steps:
       - name: Code auschecken
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Secret-Dateien mit Testwerten anlegen
+        run: |
+          mkdir -p secrets
+          printf '%s\n' 'smoketest-db-passwort' > secrets/db_passwort.txt
+          printf '%s\n' 'smoketest-schluessel-nur-fuer-ci-0123456789' > secrets/web_secret_key.txt
+          printf '%s\n' 'smoketest-einrichtung' > secrets/admin_setup_code.txt
 
       - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
         run: docker compose -f compose.yaml up --build -d

@@ -7,8 +7,9 @@
   {# Codeprüfung 22.09., G1: ohne SHS_ADMIN_SETUP_CODE keine Ersteinrichtung - siehe app_web.py. #}
   <div class="fehler">
     Die Ersteinrichtung ist gesperrt, weil kein Einrichtungs-Code konfiguriert ist.
-    Bitte in der <code>.env</code>-Datei <code>SHS_ADMIN_SETUP_CODE</code> setzen (siehe
-    <code>.env.example</code> und README_CONTAINER.md) und den Web-Server neu starten.
+    Bitte die Datei <code>secrets/admin_setup_code.txt</code> anlegen (bzw. ohne Container
+    <code>SHS_ADMIN_SETUP_CODE</code> setzen, siehe README_CONTAINER.md, Abschnitt
+    „Geheimnisse“) und den Web-Server neu starten.
   </div>
   {% else %}
   <p>
@@ -19,7 +20,7 @@
   </p>
   <p>
     Zur Absicherung wird zusätzlich der Einrichtungs-Code aus der Server-Konfiguration
-    (<code>SHS_ADMIN_SETUP_CODE</code> in der <code>.env</code>-Datei) abgefragt.
+    (Datei <code>secrets/admin_setup_code.txt</code>) abgefragt.
   </p>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   <form method="post">

@@ -2672,7 +2672,7 @@ def pruefe_login(conn, benutzername: str, passwort: str) -> dict | None:
             "kennung": _konto_kennung(zeile)}
 
 
-def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
+def verbinde_postgres_server(dsn: str, password: str | None = None) -> _PostgresConnection:
     """Öffnet eine Verbindung zum gemeinsam genutzten PostgreSQL-Server für die
     Terminverwaltung (anlegen/auflisten/öffnen/löschen, siehe die Funktionen unten) - das
     Pendant zum Anzeigen der Terminübersicht beim Programmstart der Desktop-Version
@@ -2685,11 +2685,15 @@ def verbinde_postgres_server(dsn: str) -> _PostgresConnection:
     dsn: vollständiger PostgreSQL-Verbindungsstring (ohne Bezug zu einem bestimmten
     Termin - die Datenbank selbst wird von allen Terminen gemeinsam genutzt, siehe
     Abschnitts-Kommentar oben), z. B. "postgresql://benutzer:passwort@host:5432/shs".
+    password: optional getrennt übergebenes Passwort (Sicherheitshinweis H-3, Secret-Datei
+    statt Passwort im DSN, siehe app_web.geheimnis_lesen). psycopg2 führt es mit dem DSN
+    zusammen; Sonderzeichen müssen dann nicht URL-kodiert werden.
     """
     import psycopg2
     import psycopg2.extras
 
-    roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+    extra = {"password": password} if password else {}
+    roh_verbindung = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor, **extra)
     conn = _PostgresConnection(roh_verbindung)
     # Die Einrichtung (Registry-Tabelle, nachgerüstete Spalte, Benutzertabelle samt Index)
     # läuft nur noch, wenn im Systemkatalog tatsächlich etwas fehlt - also praktisch nur

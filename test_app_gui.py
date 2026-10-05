@@ -22,6 +22,7 @@ das nicht zwingend, schadet aber auch nicht - hier der Einfachheit halber übera
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 from PySide6.QtCore import Qt
@@ -1779,6 +1780,182 @@ def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, 
     fenster.close()
 
     assert not fenster.isVisible()
+
+
+class _FakeSitzungsManager:
+    """Ersatz für QSessionManager (commitDataRequest, H-4): merkt sich cancel/release."""
+
+    def __init__(self, interaktion: bool):
+        self.interaktion = interaktion
+        self.abgebrochen = False
+        self.freigegeben = False
+
+    def allowsInteraction(self):
+        return self.interaktion
+
+    def cancel(self):
+        self.abgebrochen = True
+
+    def release(self):
+        self.freigegeben = True
+
+
+def test_sitzungsende_speichert_automatisch_und_erlaubt_beenden(qtbot, termin, monkeypatch):
+    """H-4 (05.10.2026): Beim Beenden durch Windows/Setup ruft Qt 6 kein closeEvent auf,
+    sondern commitDataRequest - auch dann muss automatisch gespeichert werden."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    zustand = {"ungespeichert": True, "gespeichert": False}
+    monkeypatch.setattr(
+        type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: zustand["ungespeichert"]
+    )
+
+    def _speichern(self):
+        zustand.update(gespeichert=True, ungespeichert=False)
+
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", _speichern)
+    manager = _FakeSitzungsManager(interaktion=True)
+
+    fenster._sitzungsende_pruefen(manager)
+
+    assert zustand["gespeichert"] is True
+    assert manager.abgebrochen is False
+    assert manager.freigegeben is True
+
+
+def test_sitzungsende_mit_zusage_fragt_im_folgenden_closeevent_nicht_erneut(qtbot, termin, monkeypatch):
+    """Zweite Verifikation 05.10.2026: Qt ruft nach der Zusage (WM_ENDSESSION -> quit())
+    noch closeEvent auf. Ohne gemerkte Freigabe kämen Warnung und Rückfrage doppelt, und
+    ein "Nein" würde das bereits zugesagte Beenden blockieren. Ein späteres Fenster-X nach
+    Ablauf der Freigabe prüft wieder normal."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+    antworten = [QMessageBox.Yes]
+
+    def _frage(*a, **k):
+        if not antworten:
+            raise AssertionError("zweite Rückfrage nach bereits erteilter Zusage")
+        return antworten.pop(0)
+
+    monkeypatch.setattr("app.QMessageBox.question", _frage)
+    manager = _FakeSitzungsManager(interaktion=True)
+
+    fenster._sitzungsende_pruefen(manager)
+    fenster.close()
+
+    assert manager.abgebrochen is False
+    assert not fenster.isVisible()
+
+    # Die Freigabe gilt nur für dieses eine closeEvent: das nächste Fenster-X fragt wieder
+    # (hier: "Nein" -> bleibt offen).
+    fenster.show()
+    antworten.append(QMessageBox.No)
+    fenster.close()
+    assert fenster.isVisible()
+    assert fenster._beenden_freigegeben is False
+    # Aufräumen: beim Teardown darf das Schließen nicht erneut blockieren.
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-Nachrichten (WM_ENDSESSION)")
+def test_abgebrochenes_abmelden_nimmt_die_freigabe_zurueck(qtbot, termin):
+    """Dritte Verifikation 05.10.2026: Nach Zusage, aber abgebrochenem Abmelden
+    (WM_ENDSESSION mit wParam=FALSE) darf ein späteres Fenster-X nicht ungeprüft schließen.
+    Eingerichtet wie in main() (sitzungsende_einrichten) und mit echter Windows-Nachricht an
+    das Fenster, damit auch ein Fehler beim Installieren des Filters auffällt."""
+    import ctypes
+
+    from app import sitzungsende_einrichten
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    qapp = QApplication.instance()
+    if qapp.platformName() != "windows":
+        pytest.skip("braucht die echte Windows-Plattform (nicht offscreen)")
+    # Eigener Prototyp statt user32.SendMessageW.argtypes zu setzen - das gälte sonst für
+    # den ganzen Testlauf.
+    senden = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t)(
+        ("SendMessageW", ctypes.windll.user32)
+    )
+    try:
+        sitzungsende_einrichten(qapp, fenster)
+        fenster.show()
+        fenster._beenden_freigegeben = True
+        senden(int(fenster.winId()), 0x0016, 0, 0x00000001)  # WM_ENDSESSION, wParam=FALSE, ENDSESSION_CLOSEAPP
+        assert fenster._beenden_freigegeben is False
+    finally:
+        # Abräumen auch dann, wenn die Einrichtung mittendrin gescheitert ist.
+        try:
+            qapp.commitDataRequest.disconnect(fenster._sitzungsende_pruefen)
+        except (RuntimeError, TypeError):
+            pass
+        filter_ = getattr(fenster, "_sitzungsende_filter", None)
+        if filter_ is not None:
+            qapp.removeNativeEventFilter(filter_)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows-Nachrichten (WM_ENDSESSION)")
+def test_sitzungsende_filter_ignoriert_echtes_beenden_und_unsinnige_nachrichten(qtbot, termin):
+    """WM_ENDSESSION mit wParam=TRUE lässt die Freigabe stehen; ein Null-Zeiger oder ein
+    fremder Ereignistyp darf keinen Fehler auslösen."""
+    import ctypes
+    import ctypes.wintypes
+
+    from app import SitzungsendeFilter
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    filter_ = SitzungsendeFilter(fenster)
+    msg = ctypes.wintypes.MSG()
+    msg.message = 0x0016
+    msg.wParam = 1
+    fenster._beenden_freigegeben = True
+
+    assert filter_.nativeEventFilter(b"windows_generic_MSG", ctypes.addressof(msg)) == (False, 0)
+    assert filter_.nativeEventFilter(b"windows_generic_MSG", 0) == (False, 0)
+    assert filter_.nativeEventFilter(b"xcb_generic_event_t", ctypes.addressof(msg)) == (False, 0)
+    assert fenster._beenden_freigegeben is True
+
+
+def test_sitzungsende_bricht_bei_resten_und_nein_ab(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    manager = _FakeSitzungsManager(interaktion=True)
+
+    fenster._sitzungsende_pruefen(manager)
+
+    assert manager.abgebrochen is True
+    assert manager.freigegeben is True
+
+
+def test_sitzungsende_ohne_rueckfrage_bricht_bei_resten_ohne_dialog_ab(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+
+    def _keine_rueckfrage(*a, **k):
+        raise AssertionError("ohne erlaubte Interaktion darf keine Rückfrage erscheinen")
+
+    monkeypatch.setattr("app.QMessageBox.question", _keine_rueckfrage)
+    manager = _FakeSitzungsManager(interaktion=False)
+
+    fenster._sitzungsende_pruefen(manager)
+
+    assert manager.abgebrochen is True
+    assert manager.freigegeben is False
 
 
 # --- Ergebniserfassung: Ergebnis wieder löschen (beide Felder leeren) --------------
@@ -3944,6 +4121,8 @@ def demo_umgebung(tmp_path, monkeypatch):
     for modul in ("desktop_demo", "desktop_dialoge", "app"):
         monkeypatch.setattr(f"{modul}.termine_ordner", lambda: termine)
     monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 0)
+    # Automatisch weiter aus - die Countdown-Tests schalten es gezielt ein.
+    monkeypatch.setattr(desktop_demo.DemoTour, "AUTO_WEITER_S", 0)
 
     def _modal(*args, **kwargs):
         pytest.fail(f"Demoprüfung zeigt ein modales Fenster: {args[1:3]}")
@@ -4322,6 +4501,187 @@ def test_demo_beenden_gibt_knoepfe_auch_nach_fehler_frei(qtbot, termin, demo_umg
     assert fenster.demo_btn.isEnabled() and fenster.wechseln_btn.isEnabled()
     assert not os.path.exists(demo_ordner)
     assert not tour._panel.isVisible()
+
+
+def _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3):
+    """Demo im Hauptfenster mit eingeschaltetem „Automatisch weiter“ (Fixture setzt 0)."""
+    import desktop_demo
+
+    monkeypatch.setattr(desktop_demo.DemoTour, "AUTO_WEITER_S", sekunden)
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    return fenster._demo_tour
+
+
+def test_demo_zaehlt_nach_fertigem_schritt_herunter_und_schaltet_weiter(qtbot, termin, demo_umgebung, monkeypatch):
+    """Marcos Wunsch 05.10.2026: Ist ein Schritt fertig, zählt „Weiter“ herunter und
+    schaltet dann von allein weiter (Tick hier direkt statt nach je 1 s)."""
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3)
+    assert tour._index == 0 and tour._countdown.isActive()
+    assert tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+
+    tour._countdown_tick()
+    assert tour._panel.weiter_btn.text() == "Weiter ▶ (2)"
+    tour._countdown_tick()
+    tour._countdown_tick()
+
+    assert tour._index == 1
+    # Neuer Schritt fertig (TEMPO 0) -> frischer Countdown.
+    assert tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    tour.beenden()
+
+
+def test_demo_countdown_startet_erst_wenn_der_schritt_fertig_ist(qtbot, termin, demo_umgebung, monkeypatch):
+    import desktop_demo
+
+    monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 1.0)
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    tour._countdown_stoppen()
+    tour._schritt_zeigen(1)  # „1. Neuen Termin anlegen“ tippt mit Pausen
+    assert tour._offen and not tour._countdown.isActive()
+    assert tour._panel.weiter_btn.text() == "Weiter ▶"
+
+    tour._alles_sofort()
+
+    assert not tour._offen and tour._countdown.isActive()
+    tour.beenden()
+
+
+def test_demo_klick_auf_weiter_waehrend_des_countdowns_geht_genau_einen_schritt(qtbot, termin, demo_umgebung, monkeypatch):
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    tour._countdown_tick()
+
+    qtbot.mouseClick(tour._panel.weiter_btn, Qt.MouseButton.LeftButton)
+
+    assert tour._index == 1
+    assert tour._rest == 3 and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    tour.beenden()
+
+
+def test_demo_automatisch_weiter_abschaltbar(qtbot, termin, demo_umgebung, monkeypatch):
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    assert tour._panel.auto_box.isChecked()
+
+    tour._panel.auto_box.setChecked(False)
+    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶"
+    tour.weiter()
+    assert tour._index == 1 and not tour._countdown.isActive()
+
+    tour._panel.auto_box.setChecked(True)
+    assert tour._countdown.isActive()
+    tour.beenden()
+
+
+def test_demo_kein_countdown_im_letzten_schritt_und_nach_fehler(qtbot, termin, demo_umgebung, monkeypatch):
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    _demo_bis(tour, "15.")
+    assert not tour._countdown.isActive()
+    assert tour._panel.weiter_btn.text() == "Fertig ✔"
+    tour.beenden()
+
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    tour._fehler_zeigen(RuntimeError("Testfehler"))
+    assert not tour._countdown.isActive() and not tour._panel.weiter_btn.isEnabled()
+    tour._panel.auto_box.setChecked(False)
+    tour._panel.auto_box.setChecked(True)
+    assert not tour._countdown.isActive()
+    tour.beenden()
+
+
+def test_demo_pdf_oeffnen_haelt_den_countdown_an(qtbot, termin, demo_umgebung, monkeypatch):
+    geoeffnet = []
+    monkeypatch.setattr("desktop_demo.QDesktopServices.openUrl", lambda url: geoeffnet.append(url) or True)
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    _demo_bis(tour, "13.")
+    assert tour._countdown.isActive() and tour._panel.extra_btn.isVisible()
+
+    qtbot.mouseClick(tour._panel.extra_btn, Qt.MouseButton.LeftButton)
+
+    assert len(geoeffnet) == 1
+    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶"
+    # Verifikation 05.10.2026, Punkt 4: sichtbarer Hinweis, warum es nicht weitergeht.
+    assert not tour._panel.pause_label.isHidden()
+    assert "angehalten" in tour._panel.pause_label.text()
+    # Der Speicherort-Hinweis bleibt dabei stehen.
+    assert "Gespeichert unter" in tour._panel.hinweis_label.text()
+
+    tour.weiter()
+    assert tour._index == 14 and tour._panel.pause_label.isHidden() and tour._countdown.isActive()
+    tour.beenden()
+
+
+def test_demo_countdown_wartet_solange_ein_sperrendes_fenster_offen_ist(qtbot, termin, demo_umgebung, monkeypatch):
+    """Verifikation 05.10.2026, Befund 1: Öffnet der Anwender selbst ein modales Fenster,
+    darf die Demo darunter nicht weiterlaufen."""
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=2)
+    modal = {"offen": True}
+    monkeypatch.setattr("desktop_demo.QApplication.activeModalWidget", lambda: object() if modal["offen"] else None)
+
+    for _ in range(5):
+        tour._countdown_tick()
+    # Zahl steht; nach dem Schließen bleiben mindestens AUTO_WEITER_NACH_MODAL_S (3).
+    assert tour._index == 0 and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+
+    modal["offen"] = False
+    tour._countdown_tick()  # erster Tick danach startet nur den Takt neu
+    assert tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    tour._countdown_tick()
+    tour._countdown_tick()
+    assert tour._index == 0
+    tour._countdown_tick()
+    assert tour._index == 1
+    tour.beenden()
+
+
+def test_demo_eigene_eingabe_im_demo_dialog_haelt_den_countdown_an(qtbot, termin, demo_umgebung, monkeypatch):
+    """Verifikation 05.10.2026, Punkt 5: Tippt der Anwender selbst in den Dialog der Demo,
+    greift das automatische Weiter nicht mitten in seine Eingabe ein."""
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    tour.weiter()  # „1. Neuen Termin anlegen“ - Dialog offen, Schritt fertig (TEMPO 0)
+    assert tour._dialog is not None and tour._countdown.isActive()
+    feld = tour._dialog.findChildren(QLineEdit)[0]
+
+    # Reine Umschalttasten (z. B. Alt für Alt+Tab) sind keine Eingabe.
+    for taste in (Qt.Key.Key_Alt, Qt.Key.Key_Shift, Qt.Key.Key_Control):
+        qtbot.keyClick(feld, taste)
+    assert tour._countdown.isActive() and not tour._angehalten
+
+    qtbot.keyClick(feld, Qt.Key.Key_A)
+
+    assert not tour._countdown.isActive() and tour._angehalten
+    assert not tour._panel.pause_label.isHidden()
+    # Bewusst wieder anhaken hebt das Anhalten auf.
+    tour._panel.auto_box.setChecked(False)
+    tour._panel.auto_box.setChecked(True)
+    assert tour._countdown.isActive() and tour._panel.pause_label.isHidden()
+    tour.beenden()
+
+
+def test_demo_entfernt_ihren_ereignisfilter_beim_beenden(qtbot, termin, demo_umgebung, monkeypatch):
+    entfernt = []
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    original = QApplication.instance().removeEventFilter
+    monkeypatch.setattr(
+        QApplication.instance(), "removeEventFilter", lambda obj: entfernt.append(obj) or original(obj)
+    )
+
+    tour.beenden()
+
+    assert tour in entfernt
+
+
+def test_demo_beenden_waehrend_des_countdowns(qtbot, termin, demo_umgebung, monkeypatch):
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
+    assert tour._countdown.isActive()
+
+    tour.beenden()
+
+    assert tour.ist_beendet and not tour._countdown.isActive()
+    tour._countdown_tick()  # ein verspäteter Tick darf nichts mehr auslösen
+    assert tour.ist_beendet
 
 
 def test_demo_weiter_ueberschreibt_tempo_nicht(qtbot, termin, demo_umgebung):

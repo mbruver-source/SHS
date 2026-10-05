@@ -23,9 +23,12 @@ Ablauf am Prüfungstag:
      Termin-Datei (Zuordnung über die Startnummer) - danach laufen
      PDF-Export/Auswertung/Zeitplan wie gewohnt in der Desktop-Version weiter.
 
-Beispiele (empfohlen: Verbindungsstring über die Umgebungsvariable SHS_POSTGRES_DSN):
-  Windows (PowerShell):  $env:SHS_POSTGRES_DSN = "postgresql://user:pass@host/db"
-  Linux/macOS:           export SHS_POSTGRES_DSN="postgresql://user:pass@host/db"
+Beispiele (empfohlen: Verbindungsstring ohne Passwort über die Umgebungsvariable
+SHS_POSTGRES_DSN, das Passwort getrennt über PGPASSWORD - siehe README_CONTAINER.md):
+  Windows (PowerShell):  $env:SHS_POSTGRES_DSN = "postgresql://shs@localhost:5432/shs"
+                         $env:PGPASSWORD = (Get-Content secrets/db_passwort.txt -Raw).Trim()
+  Linux/macOS:           export SHS_POSTGRES_DSN="postgresql://shs@localhost:5432/shs"
+                         export PGPASSWORD="$(cat secrets/db_passwort.txt)"
   python sync_termin.py export Herbstpruefung_2026.sqlite
   python sync_termin.py import termin_3 Herbstpruefung_2026.sqlite
 

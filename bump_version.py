@@ -13,7 +13,8 @@ version_info.txt (Windows-Versionsinfo, die PyInstaller in die .exe
 einbettet, siehe build.spec) sowie in version.py (von app.py importiert,
 für die Versionsanzeige in der GUI - siehe Version-Button neben "Hilfe").
 Außerdem wird die Zeile "Stand: Version X.Y.Z." in docs/HANDBUCH.md
-nachgezogen (docs/HANDBUCH.pdf danach mit tools/handbuch_pdf.py neu erzeugen).
+nachgezogen (docs/HANDBUCH.pdf danach mit tools/handbuch_pdf.py neu erzeugen),
+ebenso der Image-Tag "shs-web:X.Y.Z" in compose.yaml (Sicherheitshinweis H-2).
 
 Wird von build_installer.bat VOR dem PyInstaller-Build aufgerufen und gibt
 die neue Versionsnummer (z.B. "1.0.1") auf stdout aus, damit das Batch-Skript
@@ -40,6 +41,11 @@ VERSION_PY_DATEI = HIER / "version.py"
 # Benutzerhandbuch mit der Zeile "Stand: Version X.Y.Z." (siehe handbuch_version_schreiben)
 HANDBUCH_DATEI = HIER / "docs" / "HANDBUCH.md"
 _HANDBUCH_VERSIONSZEILE = re.compile(r"^(Stand: Version )\d+\.\d+\.\d+(\.)", re.MULTILINE)
+# Compose-Datei der Web-Version: Vorgabe-Image "ghcr.io/.../shs-web:X.Y.Z" statt ":latest"
+# (Sicherheitshinweis H-2, Marco 05.10.2026), damit ein "pull" genau die zur Compose-Datei
+# passende Version holt (siehe compose_version_schreiben).
+COMPOSE_DATEI = HIER / "compose.yaml"
+_COMPOSE_IMAGE_TAG = re.compile(r"(/shs-web:)\d+\.\d+\.\d+(\})")
 
 
 def version_lesen() -> tuple[int, int, int]:
@@ -152,12 +158,30 @@ def handbuch_version_schreiben(version_text: str) -> None:
             f.write(neu)
 
 
+def compose_version_schreiben(version_text: str) -> None:
+    """Zieht den Vorgabe-Tag "shs-web:X.Y.Z}" in compose.yaml auf die neue Version nach.
+    Gleiches Verhalten wie handbuch_version_schreiben: fehlt Datei oder Tag, passiert
+    nichts; Zeilenenden bleiben erhalten. main() ruft sie wie das Handbuch VOR dem
+    Hochzählen von version.txt auf."""
+    try:
+        with COMPOSE_DATEI.open(encoding="utf-8", newline="") as f:
+            inhalt = f.read()
+    except FileNotFoundError:
+        return
+    neu, anzahl = _COMPOSE_IMAGE_TAG.subn(rf"\g<1>{version_text}\g<2>", inhalt, count=1)
+    if anzahl:
+        with COMPOSE_DATEI.open("w", encoding="utf-8", newline="") as f:
+            f.write(neu)
+
+
 def main() -> str:
     aktuell = version_lesen()
     neu = naechste_version(aktuell)
     neu_text = ".".join(str(n) for n in neu)
-    # Zuerst das Handbuch: scheitert das (z. B. Datei gesperrt), ist noch nichts hochgezählt
+    # Zuerst Handbuch und compose.yaml: scheitert das (z. B. Datei gesperrt), ist
+    # version.txt noch nicht hochgezählt - ein erneuter Lauf erzeugt dieselbe Nummer.
     handbuch_version_schreiben(neu_text)
+    compose_version_schreiben(neu_text)
     VERSION_DATEI.write_text(neu_text + "\n", encoding="utf-8")
     version_info_schreiben(neu)
     version_py_schreiben(neu_text)

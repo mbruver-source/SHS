@@ -177,7 +177,7 @@ class _AppWebTestBasis(unittest.TestCase):
         self.geloeschte_termine = []
 
         self._patches = [
-            patch("db.verbinde_postgres_server", lambda dsn: _NichtSchliessendeVerbindung(self.conn)),
+            patch("db.verbinde_postgres_server", lambda dsn, password=None: _NichtSchliessendeVerbindung(self.conn)),
             patch("db.oeffne_termin_postgres", _fake_oeffne_termin),
             patch("db.liste_termine_postgres", lambda conn: self.termine),
             patch("db._setze_termin_suchpfad", _fake_setze_termin_suchpfad),
@@ -611,6 +611,68 @@ class TestAppWeb(_AppWebTestBasis):
             with self.subTest(schluessel=schluessel, code=code):
                 with self.assertRaises(RuntimeError):
                     pruefe(schluessel, code)
+
+    def test_geheimnis_wird_aus_secret_datei_gelesen(self):
+        """Sicherheitshinweis H-3 (05.10.2026): <NAME>_FILE hat Vorrang vor <NAME>,
+        Leerraum am Rand (Zeilenumbruch am Dateiende) wird entfernt."""
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "geheimnis.txt")
+            with open(pfad, "w", encoding="utf-8") as datei:
+                datei.write("  aus-der-datei\r\n")
+            with patch.dict(os.environ, {"SHS_TEST_GEHEIMNIS_FILE": pfad, "SHS_TEST_GEHEIMNIS": "aus-env"}):
+                self.assertEqual(app_web.geheimnis_lesen("SHS_TEST_GEHEIMNIS"), "aus-der-datei")
+
+    def test_geheimnis_ohne_datei_kommt_aus_der_umgebung(self):
+        with patch.dict(os.environ, {"SHS_TEST_GEHEIMNIS": " aus-env \n"}):
+            os.environ.pop("SHS_TEST_GEHEIMNIS_FILE", None)
+            self.assertEqual(app_web.geheimnis_lesen("SHS_TEST_GEHEIMNIS"), "aus-env")
+        with patch.dict(os.environ, {}):
+            os.environ.pop("SHS_TEST_GEHEIMNIS", None)
+            os.environ.pop("SHS_TEST_GEHEIMNIS_FILE", None)
+            self.assertEqual(app_web.geheimnis_lesen("SHS_TEST_GEHEIMNIS"), "")
+
+    def test_nicht_lesbare_secret_datei_bricht_mit_klarer_meldung_ab(self):
+        """Ist <NAME>_FILE gesetzt, die Datei aber nicht lesbar, darf die Web-Version nicht
+        still ohne Geheimnis (z. B. mit zufälligem Schlüssel oder gesperrter
+        Ersteinrichtung) weiterlaufen."""
+        with tempfile.TemporaryDirectory() as ordner:
+            fehlt = os.path.join(ordner, "fehlt.txt")
+            with patch.dict(os.environ, {"SHS_TEST_GEHEIMNIS_FILE": fehlt, "SHS_TEST_GEHEIMNIS": "aus-env"}):
+                with self.assertRaises(RuntimeError) as kontext:
+                    app_web.geheimnis_lesen("SHS_TEST_GEHEIMNIS")
+        self.assertIn("SHS_TEST_GEHEIMNIS_FILE", str(kontext.exception))
+        self.assertIn("nicht lesbar", str(kontext.exception))
+
+    def test_leere_secret_datei_bricht_mit_klarer_meldung_ab(self):
+        """Verifikation 05.10.2026: Eine leere Datei (z. B. weil der Befehl zum Erzeugen
+        nichts ausgegeben hat) darf nicht als "nicht gesetzt" durchgehen."""
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "leer.txt")
+            with open(pfad, "w", encoding="utf-8") as datei:
+                datei.write(" \n")
+            with patch.dict(os.environ, {"SHS_TEST_GEHEIMNIS_FILE": pfad}):
+                with self.assertRaises(RuntimeError) as kontext:
+                    app_web.geheimnis_lesen("SHS_TEST_GEHEIMNIS")
+        self.assertIn("ist leer", str(kontext.exception))
+
+    def test_db_passwort_wird_getrennt_an_die_verbindung_gereicht(self):
+        """H-3: Das Passwort aus SHS_POSTGRES_PASSWORD(_FILE) geht getrennt vom DSN an
+        db.verbinde_postgres_server; ohne Passwort wird None übergeben."""
+        aufrufe = []
+
+        def verbinden(dsn, password=None):
+            aufrufe.append((dsn, password))
+            return _NichtSchliessendeVerbindung(self.conn)
+
+        for passwort, erwartet in (("p@ss/wort", "p@ss/wort"), ("", None)):
+            with self.subTest(passwort=passwort):
+                aufrufe.clear()
+                with patch.dict(app_web.app.config, {"SHS_POSTGRES_PASSWORD": passwort}), patch(
+                    "db.verbinde_postgres_server", verbinden
+                ):
+                    with app_web.app.app_context():
+                        app_web._postgres_verbindung()
+                self.assertEqual(aufrufe, [(app_web.app.config["SHS_POSTGRES_DSN"], erwartet)])
 
     def test_rollenaenderung_wird_ohne_neuanmeldung_uebernommen(self):
         """Teil desselben Fixes: _aktueller_benutzer_oder_redirect() aktualisiert

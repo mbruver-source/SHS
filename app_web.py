@@ -165,10 +165,45 @@ def _sicherheits_header_setzen(antwort):
     return antwort
 
 
+def geheimnis_lesen(name: str) -> str:
+    """Liest ein Geheimnis aus der Datei in `<name>_FILE` (Docker-/Podman-Secret unter
+    /run/secrets, siehe compose.yaml), sonst aus der Umgebungsvariablen `<name>`.
+    Leerraum am Rand (z. B. der Zeilenumbruch am Dateiende) wird entfernt.
+
+    Sicherheitshinweis H-3 (Marco 05.10.2026): Über Secrets stehen DB-Passwort,
+    Signaturschlüssel und Einrichtungs-Code nicht mehr in der Container-Umgebung (sichtbar
+    per `podman inspect`). Der Weg über die Umgebungsvariable bleibt für den Betrieb ohne
+    Compose erhalten. Ist `<name>_FILE` gesetzt, die Datei aber nicht lesbar oder leer,
+    bricht der Start mit einer verständlichen Meldung ab, statt still ohne Geheimnis
+    weiterzulaufen (leer z. B., wenn der Befehl zum Erzeugen nichts ausgegeben hat - dann
+    liefe die Web-Version sonst mit zufälligem Schlüssel und gesperrter Ersteinrichtung)."""
+    pfad = os.environ.get(f"{name}_FILE", "").strip()
+    if pfad:
+        try:
+            with open(pfad, encoding="utf-8") as datei:
+                wert = datei.read().strip()
+        except OSError as fehler:
+            raise RuntimeError(
+                f"Web-Version nicht gestartet: {name}_FILE verweist auf {pfad}, die Datei ist "
+                f"nicht lesbar ({fehler.strerror}). Siehe README_CONTAINER.md, Abschnitt "
+                "Geheimnisse."
+            ) from None
+        if not wert:
+            raise RuntimeError(
+                f"Web-Version nicht gestartet: Die Datei {pfad} ({name}_FILE) ist leer. Siehe "
+                "README_CONTAINER.md, Abschnitt Geheimnisse."
+            )
+        return wert
+    return os.environ.get(name, "").strip()
+
+
 # Verbindungsstring zum gemeinsamen PostgreSQL-Server - siehe db.verbinde_postgres_server()
 # für das Format. Bewusst über eine Umgebungsvariable statt hart im Code, analog zu
-# SHS_TEST_POSTGRES_DSN in test_db.py.
+# SHS_TEST_POSTGRES_DSN in test_db.py. Das Passwort kann im DSN stehen oder getrennt über
+# SHS_POSTGRES_PASSWORD(_FILE) kommen (H-3) - getrennt sind auch Sonderzeichen wie @ / :
+# im Passwort kein Problem, die einen DSN-URL sonst zerlegen würden.
 app.config["SHS_POSTGRES_DSN"] = os.environ.get("SHS_POSTGRES_DSN", "")
+app.config["SHS_POSTGRES_PASSWORD"] = geheimnis_lesen("SHS_POSTGRES_PASSWORD")
 
 # Signaturschlüssel für die Session-Cookies (Flask signiert damit, verschlüsselt aber
 # NICHT den Cookie-Inhalt - dort landen Benutzername/Admin-Kennzeichen/Schema-Name, aber
@@ -203,13 +238,13 @@ def pruefe_web_geheimnisse(schluessel: str, einrichtungscode: str) -> None:
             'Erzeugen mit: python -c "import secrets; print(secrets.token_urlsafe(16))"'
         )
     if fehler:
-        raise RuntimeError("Web-Version nicht gestartet (siehe .env bzw. README_CONTAINER.md):\n- " + "\n- ".join(fehler))
+        raise RuntimeError("Web-Version nicht gestartet (siehe secrets/ bzw. README_CONTAINER.md, Abschnitt Geheimnisse):\n- " + "\n- ".join(fehler))
 
 
-pruefe_web_geheimnisse(
-    os.environ.get("SHS_WEB_SECRET_KEY", "").strip(), os.environ.get("SHS_ADMIN_SETUP_CODE", "").strip()
-)
-app.secret_key = os.environ.get("SHS_WEB_SECRET_KEY", "").strip() or secrets.token_hex(32)
+_web_schluessel = geheimnis_lesen("SHS_WEB_SECRET_KEY")
+pruefe_web_geheimnisse(_web_schluessel, geheimnis_lesen("SHS_ADMIN_SETUP_CODE"))
+app.secret_key = _web_schluessel or secrets.token_hex(32)
+del _web_schluessel
 
 # Explizit gesetzt statt sich auf den Flask-Standard zu verlassen (QS-Review 19./20.09.):
 # "Lax" schickt das Session-Cookie bei einer normalen Navigation zu dieser Seite (Link/
@@ -256,9 +291,10 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 # oder müsste irgendwo (Konsole/Container-Log) ausgegeben werden. Deshalb sicherer
 # Standard: ist die Variable leer/nicht gesetzt, wird die Ersteinrichtung verweigert
 # (mit Hinweis auf der Seite), auch beim lokalen Entwicklungsstart über app.run(). Im
-# Container ist sie über compose.yaml ohnehin Pflicht. Über app.config (wie
+# Container ist sie über die Secret-Datei Pflicht (fehlt sie, startet compose nicht; ist
+# sie leer, bricht geheimnis_lesen ab). Über app.config (wie
 # SHS_POSTGRES_DSN), damit die Tests sie gezielt setzen können.
-app.config["SHS_ADMIN_SETUP_CODE"] = os.environ.get("SHS_ADMIN_SETUP_CODE", "").strip()
+app.config["SHS_ADMIN_SETUP_CODE"] = geheimnis_lesen("SHS_ADMIN_SETUP_CODE")
 
 
 def _postgres_verbindung():
@@ -271,7 +307,7 @@ def _postgres_verbindung():
             raise RuntimeError(
                 "SHS_POSTGRES_DSN ist nicht gesetzt - siehe Modul-Docstring/README für die Einrichtung."
             )
-        g.postgres_conn = db.verbinde_postgres_server(dsn)
+        g.postgres_conn = db.verbinde_postgres_server(dsn, app.config.get("SHS_POSTGRES_PASSWORD") or None)
     return g.postgres_conn
 
 
@@ -398,7 +434,7 @@ def login():
             # auf str: mit str-Argumenten wirft es bei Nicht-ASCII-Zeichen (z. B. einem
             # "ä" im Code oder in der Eingabe) einen TypeError statt False zu liefern.
             if not secrets.compare_digest(eingegebener_code.encode("utf-8"), erwarteter_code.encode("utf-8")):
-                fehler = "Der Einrichtungs-Code ist falsch (siehe SHS_ADMIN_SETUP_CODE in der .env-Datei)."
+                fehler = "Der Einrichtungs-Code ist falsch (siehe secrets/admin_setup_code.txt)."
             else:
                 fehler = _pruefe_benutzername_und_passwort(benutzername, passwort, passwort_wiederholung)
             if fehler is None:

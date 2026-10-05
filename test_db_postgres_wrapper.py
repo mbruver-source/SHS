@@ -11,8 +11,9 @@ eine PostgreSQL-Anbindung verfügbar ist. Lief lokal bereits gegen einen echten
 PostgreSQL-16-Server (siehe Entwicklungs-Notizen); diese Tests sichern die
 Übersetzungslogik dauerhaft ab, ohne dafür einen Server zu benötigen."""
 
+import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import db
 
@@ -175,6 +176,31 @@ class TestVorhandeneSpaltenPostgresZweig(unittest.TestCase):
         self.assertIn("information_schema.columns", gesendetes_sql)
         self.assertEqual(gesendete_params, ("veranstaltung",))
 
+
+
+class TestVerbindePostgresServerPasswort(unittest.TestCase):
+    """Sicherheitshinweis H-3 (05.10.2026): Das Passwort kann getrennt vom DSN übergeben
+    werden (Secret-Datei) und wird dann als Schlüsselwort an psycopg2.connect gereicht."""
+
+    def _verbinden(self, password):
+        fake = MagicMock()
+        roh_cursor = fake.connect.return_value.cursor.return_value
+        roh_cursor.fetchone.return_value = {
+            "registry": True, "zugangscode": True, "benutzer": True, "benutzer_index": True
+        }
+        with patch.dict(sys.modules, {"psycopg2": fake, "psycopg2.extras": fake.extras}):
+            db.verbinde_postgres_server("postgresql://shs@db:5432/shs", password)
+        return fake.connect.call_args
+
+    def test_passwort_wird_als_schluesselwort_weitergegeben(self):
+        aufruf = self._verbinden("p@ss/wort:mit%sonderzeichen")
+        self.assertEqual(aufruf.args, ("postgresql://shs@db:5432/shs",))
+        self.assertEqual(aufruf.kwargs["password"], "p@ss/wort:mit%sonderzeichen")
+
+    def test_ohne_passwort_kein_schluesselwort(self):
+        for leer in (None, ""):
+            with self.subTest(password=leer):
+                self.assertNotIn("password", self._verbinden(leer).kwargs)
 
 
 class TestSyncTerminDsnWarnung(unittest.TestCase):

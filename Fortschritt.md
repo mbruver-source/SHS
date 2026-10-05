@@ -4926,3 +4926,34 @@ Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche A
   - CI-Smoke-Test mit Secrets nach dem Push;
   - Installer-Update über die laufende App (gespeichert und halb ausgefüllt);
   - Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt „Geheimnisse“.
+
+## Version 1.0.43 (05.10.2026, Build auf Marcos Wunsch „neuer Build“)
+
+- **Offene Punkte vor dem Build:**
+  - H-2 bis H-4 sind umgesetzt; die Erinnerung ist damit erledigt.
+  - Zwei Hinweise der letzten Kurzprüfung zum Demo-Countdown (die „(3)“ steht nach einer
+    Meldung 1–2 s; eine Meldung zwischen zwei Takten wird nicht bemerkt) hat Marco
+    verworfen: bleibt bewusst so.
+- **Gebündelt:**
+  - H-2 bis H-4: feste Versionen, Secrets, Container-Härtung, `CloseApplications=yes`
+    samt Schließen-Handler und Abbruch-Filter;
+  - Demo: automatisch weiter.
+- **Doku:**
+  - 11 Screenshots neu (Build-Skript wie bei 1.0.42, Version 1.0.43):
+    `handbuch_demo` (Countdown-Knopf, Kästchen), `_teilnehmer`, `_formular_import`,
+    `_zeitplan`, `_ergebniserfassung`, `_auswertung`, `_uebersicht`, `_export`,
+    `_datensicherung`, `zeitplan.png`, `ergebniserfassung.png`. Start- und Dialog-Bilder
+    sind pixelgleich geblieben.
+  - `RELEASE_NOTES.md` für 1.0.43 neu, mit dem Hinweis auf den Umzug der Geheimnisse.
+  - `docs/HANDBUCH.pdf` neu erzeugt.
+- **Version:** `bump_version.py` 1.0.42 → 1.0.43, zieht erstmals auch `compose.yaml`
+  (`shs-web:1.0.43`) mit.
+- **Tests:**
+  - unittest 591 OK (159 übersprungen);
+  - `test_bump_version` (pytest) 14 passed;
+  - GUI und Theme 218 passed, 1 skipped, 1 xfailed.
+- **Nach dem Build, nur Marco:**
+  - Push und Tag;
+  - CI-Smoke-Test mit Secrets;
+  - Installer-Update über die laufende App;
+  - Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt „Geheimnisse“.

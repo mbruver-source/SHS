@@ -39,7 +39,7 @@ import re
 import sqlite3
 import sys
 
-from PySide6.QtCore import QItemSelectionModel, QRegularExpression, QUrl, Qt
+from PySide6.QtCore import QAbstractNativeEventFilter, QItemSelectionModel, QRegularExpression, QUrl, Qt
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -3644,12 +3644,58 @@ class VersionDialog(QDialog):
         QDesktopServices.openUrl(QUrl(GITHUB_RELEASES_URL))
 
 
+_WM_ENDSESSION = 0x0016
+
+
+class SitzungsendeFilter(QAbstractNativeEventFilter):
+    """H-4 (dritte Verifikation 05.10.2026): Erkennt unter Windows ein abgebrochenes
+    Abmelden/Herunterfahren (WM_ENDSESSION mit wParam=FALSE) und nimmt dann die Freigabe aus
+    HauptFenster._sitzungsende_pruefen zurück. Qt meldet diesen Abbruch selbst nicht - ohne
+    den Filter schlösse ein späteres Fenster-X ungeprüft, neue Eingaben gingen verloren."""
+
+    def __init__(self, fenster: "HauptFenster"):
+        super().__init__()
+        self._fenster = fenster
+
+    def nativeEventFilter(self, event_type, message):
+        # Läuft für jede Windows-Nachricht: ein unerwarteter Fehler darf hier nie bis zur
+        # Bedienung durchschlagen (PySide6 reicht ihn sonst an den gerade laufenden
+        # Python-Code weiter) - im schlimmsten Fall bleibt eine Freigabe stehen.
+        try:
+            if bytes(event_type) == b"windows_generic_MSG" and int(message):
+                # Erst hier importiert: ctypes.wintypes gibt es sinnvoll nur unter Windows
+                # (die GUI-Tests der CI laufen unter Linux und importieren app.py).
+                import ctypes.wintypes
+
+                msg = ctypes.wintypes.MSG.from_address(int(message))
+                if msg.message == _WM_ENDSESSION and not msg.wParam:
+                    self._fenster._beenden_freigegeben = False
+        except Exception:
+            pass
+        return False, 0
+
+
+def sitzungsende_einrichten(app: QApplication, fenster: "HauptFenster") -> None:
+    """H-4: Verbindet das Beenden durch Windows/Setup mit dem Hauptfenster - Ablehnen ist
+    nur in commitDataRequest möglich, closeEvent kommt erst nach der Zusage (siehe
+    HauptFenster._sitzungsende_pruefen). Unter Windows zusätzlich SitzungsendeFilter für
+    ein abgebrochenes Abmelden; die Referenz am Fenster hält den Filter am Leben."""
+    app.commitDataRequest.connect(fenster._sitzungsende_pruefen)
+    if sys.platform == "win32":
+        fenster._sitzungsende_filter = SitzungsendeFilter(fenster)
+        app.installNativeEventFilter(fenster._sitzungsende_filter)
+
+
 class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def __init__(self, conn, pfad: str, demo: bool = False):
         super().__init__()
         self.resize(900, 600)
         # Laufende Demoprüfung (desktop_demo.DemoTour) oder None.
         self._demo_tour = None
+        # H-4: True, sobald _sitzungsende_pruefen das Beenden durch Windows/Setup erlaubt
+        # hat - das folgende closeEvent prüft dann nicht erneut. Ein abgebrochenes Abmelden
+        # setzt es über SitzungsendeFilter zurück.
+        self._beenden_freigegeben = False
         self._theme_menue_aufbauen()
 
         # Hilfe-Button ganz rechts in der Kopfzeile (davor "Anderen Termin öffnen…",
@@ -3799,18 +3845,40 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         Zeile noch korrigiert werden kann. Vorbelegter Standard ist "Nein" (nicht
         schließen) - anders als bei den übrigen Ja/Nein-Rückfragen in diesem Fenster, wo
         der übliche Fall (Speichern) vorbelegt ist, ist hier der sicherere Standard das
-        NICHT versehentliche Verwerfen von Daten."""
+        NICHT versehentliche Verwerfen von Daten.
+
+        H-4: Hat _sitzungsende_pruefen das Beenden durch Windows/Setup gerade erlaubt
+        (Qt ruft closeEvent erst danach über quit() auf), wird ohne zweite Prüfung
+        geschlossen - sonst kämen Warnung und Rückfrage doppelt, und ein "Nein" würde das
+        bereits zugesagte Beenden blockieren. Wird das Abmelden doch abgebrochen, nimmt
+        SitzungsendeFilter die Freigabe zurück."""
+        freigegeben = self._beenden_freigegeben
+        self._beenden_freigegeben = False
+        if freigegeben:
+            event.accept()
+            return
+        if self._beenden_vorbereiten():
+            event.accept()
+        else:
+            event.ignore()
+
+    def _beenden_vorbereiten(self, rueckfrage_moeglich: bool = True) -> bool:
+        """Gemeinsame Logik für closeEvent und das Beenden durch Windows/Setup
+        (_sitzungsende_pruefen): Demoprüfung beenden, ungespeicherte Ergebnisse automatisch
+        speichern, bei Resten nachfragen. True = Beenden erlaubt. Ohne erlaubte Rückfrage
+        (rueckfrage_moeglich=False) wird bei Resten nicht gefragt, sondern abgelehnt."""
         # Laufende Demoprüfung zuerst beenden: sie stellt den echten Termin wieder her (die
         # Prüfung unten gilt dann ihm) bzw. schließt ihr eigenes Fenster samt Demo-Termin.
         tour = self._demo_tour
         if tour is not None:
             tour.beenden()
             if tour.eigenes_fenster:
-                event.accept()
-                return
+                return True
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
             self.ergebnis_tab.alle_speichern()
             if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
+                if not rueckfrage_moeglich:
+                    return False
                 antwort = QMessageBox.question(
                     self,
                     "Nicht alle Ergebnisse gespeichert",
@@ -3820,10 +3888,30 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No,
                 )
-                if antwort != QMessageBox.Yes:
-                    event.ignore()
-                    return
-        event.accept()
+                return antwort == QMessageBox.Yes
+        return True
+
+    def _sitzungsende_pruefen(self, manager) -> None:
+        """Handler für QGuiApplication.commitDataRequest (siehe main()).
+
+        Sicherheitshinweis H-4 (Verifikation 05.10.2026): Schließt Windows die App beim
+        Abmelden oder das Setup beim Update (Restart Manager), fragt Qt 6 bei
+        WM_QUERYENDSESSION nur über dieses Signal, ob beendet werden darf. closeEvent kommt
+        erst danach (WM_ENDSESSION -> quit()), wenn die Zusage schon gegeben ist - ein
+        Ablehnen ist nur hier möglich. Hier läuft deshalb dieselbe Logik wie beim
+        Fenster-X; bleibt etwas ungespeichert und wird nicht ausdrücklich verworfen, lehnt
+        manager.cancel() das Beenden ab (Setup meldet dann, dass die App noch läuft, weil
+        installer.iss CloseApplications=yes statt force nutzt). Bei Zusage merkt sich das
+        Fenster die Freigabe, damit das folgende closeEvent nicht erneut fragt (siehe
+        SitzungsendeFilter für den abgebrochenen Fall)."""
+        rueckfrage = manager.allowsInteraction()
+        try:
+            self._beenden_freigegeben = self._beenden_vorbereiten(rueckfrage_moeglich=rueckfrage)
+            if not self._beenden_freigegeben:
+                manager.cancel()
+        finally:
+            if rueckfrage:
+                manager.release()
 
     def _termin_setzen(self, conn, pfad: str, demo: bool = False) -> None:
         """Verbindet das Fenster mit einem (neuen oder anfänglichen) Termin: setzt Titel
@@ -4202,6 +4290,7 @@ def main() -> int:
     _fremdobjekte_melden(None)
 
     fenster = HauptFenster(conn, pfad)
+    sitzungsende_einrichten(app, fenster)
     # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
     # Zeitplan-Spalten zu wenig Platz.
     fenster.showMaximized()

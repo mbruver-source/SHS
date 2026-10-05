@@ -35,3 +35,4 @@ requirements-dev.txt
 
 # Geheimnisse/lokale Konfiguration
 .env
+secrets/

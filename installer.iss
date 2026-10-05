@@ -73,7 +73,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 ; Inno Setup (ab Version 6) automatisch zum Schließen auf und kann die
 ; Anwendung danach wieder automatisch starten - wichtig für ein reibungsloses
 ; Update, ohne dass der Nutzer die Anwendung erst selbst beenden muss.
-CloseApplications=force
+; "yes" statt "force" (Sicherheitshinweis H-4, Marco 05.10.2026): Setup bittet die App über
+; den Restart Manager ums Beenden. Qt 6 fragt dabei über commitDataRequest, ob beendet
+; werden darf - app.py speichert dort automatisch (HauptFenster._sitzungsende_pruefen).
+; Bleibt etwas ungespeichert und verwirft der Nutzer es nicht, lehnt die App das Beenden ab
+; (closeEvent käme erst nach der Zusage). Mit "yes" wird sie dann nicht hart beendet;
+; Setup meldet, dass sie noch läuft.
+CloseApplications=yes
 RestartApplications=yes
 
 [Languages]
