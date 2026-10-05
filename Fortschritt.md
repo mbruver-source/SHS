@@ -5044,3 +5044,14 @@ Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche A
   - Update 1.0.43 → 1.0.44 vorher selbst schließen (1.0.43 setzt noch keinen Mutex);
   - beim **nächsten** Update (1.0.44 → später) über die laufende App prüfen, ob das Setup
     zu Beginn um das Schließen bittet.
+
+**Nachtrag 05.10.2026: 1.0.44 ausgeliefert.** Marco hat gepusht und `v1.0.44` getaggt; alle
+Workflows sind erfolgreich durchgelaufen (Rückmeldung Marco: „workflows erfolgreich
+durchgelaufen“).
+- Damit ist auch der Container-Smoke-Test mit den neuen Secret-Dateien, der Härtung des
+  web-Dienstes und den festen Digests in der CI bestätigt (H-2/H-3).
+- Weiter offen, nur bei Marco:
+  - Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt „Geheimnisse“;
+  - beim nächsten Update (1.0.44 → später) über die laufende App prüfen, ob das Setup zu
+    Beginn um das Schließen bittet (AppMutex) und dabei Auto-Speichern und Rückfrage
+    laufen.
