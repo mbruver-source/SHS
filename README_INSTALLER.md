@@ -106,6 +106,11 @@ python tools/handbuch_pdf.py
   automatisch. Bleibt etwas ungespeichert und verwirft der Nutzer es nicht
   ausdrücklich, bleibt die App offen und der Installer meldet das (H-4,
   05.10.2026).
+- Das klappt nicht immer: Hält z. B. ein Virenscanner die `.exe` ebenfalls offen, verzichtet
+  Inno Setup auf das automatische Schließen. Deshalb meldet sich das Programm zusätzlich mit
+  einem Mutex an (`AppMutex` in `installer.iss`, `laufkennung_setzen()` in `app.py`). Das
+  Setup erkennt es damit gleich zu Beginn und bittet, es zu schließen. Das wirkt ab einer
+  laufenden Version 1.0.44. Auch die Deinstallation erkennt so ein laufendes Programm.
 
 **Wichtig:** Die `AppId` in `installer.iss` (`#define AppId ...`) darf bei
 zukünftigen Releases **niemals verändert werden**. Nur die `AppVersion`

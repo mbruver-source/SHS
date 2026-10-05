@@ -3675,6 +3675,43 @@ class SitzungsendeFilter(QAbstractNativeEventFilter):
         return False, 0
 
 
+# Kennung, an der das Setup ein laufendes Programm erkennt (installer.iss, AppMutex).
+# NIE ändern ohne installer.iss mitzuziehen - test_app_gui prüft, dass beide gleich sind.
+LAUF_MUTEX_NAME = "SHS-Pruefungsprogramm-Laufend"
+# Zusätzlich im globalen Namensraum: erkennt auch ein Setup unter einem anderen Konto bzw.
+# eine laufende App in einer anderen Windows-Sitzung (Empfehlung der Inno-Setup-Doku).
+LAUF_MUTEX_NAMEN = (LAUF_MUTEX_NAME, "Global\\" + LAUF_MUTEX_NAME)
+_lauf_mutex: list = []  # Handles bleiben bis Programmende offen
+
+
+def laufkennung_setzen() -> bool:
+    """Meldet das laufende Programm unter Windows mit einem benannten Mutex an.
+
+    Anlass (Update-Test 05.10.2026): Ein Virenscanner (McAfee) hielt die EXE ebenfalls offen.
+    Den darf das Setup nicht schließen, deshalb verzichtete Inno Setup ganz auf das
+    automatische Schließen über den Restart Manager - die laufende App blieb unerkannt
+    offen, und das Ersetzen der EXE schlug mit „Zugriff verweigert“ fehl. Über `AppMutex`
+    erkennt das Setup das laufende Programm unabhängig davon gleich zu Beginn und bittet,
+    es zu schließen (dann mit dem normalen Auto-Speichern und der Rückfrage). True, wenn
+    die Kennung gesetzt ist (mindestens der lokale Name; der globale ist eine Zugabe)."""
+    if sys.platform != "win32" or _lauf_mutex:
+        return bool(_lauf_mutex)
+    try:
+        import ctypes
+
+        # Eigener Prototyp statt windll.kernel32.CreateMutexW.restype prozessweit zu ändern.
+        erzeugen = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)(
+            ("CreateMutexW", ctypes.windll.kernel32)
+        )
+        for name in LAUF_MUTEX_NAMEN:
+            handle = erzeugen(None, False, name)
+            if handle:
+                _lauf_mutex.append(handle)
+    except Exception:  # noqa: BLE001 - ohne Kennung läuft das Programm trotzdem
+        pass
+    return bool(_lauf_mutex)
+
+
 def sitzungsende_einrichten(app: QApplication, fenster: "HauptFenster") -> None:
     """H-4: Verbindet das Beenden durch Windows/Setup mit dem Hauptfenster - Ablehnen ist
     nur in commitDataRequest möglich, closeEvent kommt erst nach der Zusage (siehe
@@ -4275,6 +4312,7 @@ def main() -> int:
         position = sys.argv.index("--selbsttest")
         return fuehre_selbsttest_aus(sys.argv[position + 1] if len(sys.argv) > position + 1 else None)
     absturzprotokoll_einrichten(VERSION)
+    laufkennung_setzen()  # für das Setup (AppMutex), siehe dort
     app = QApplication(sys.argv)
     meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
     deutsche_qt_texte_laden(app)

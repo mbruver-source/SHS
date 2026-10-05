@@ -4963,3 +4963,80 @@ Auf Marcos Wunsch „Build vorbereiten“, gebaut wird erst auf ausdrückliche A
   - CI-Smoke-Test mit Secrets;
   - Installer-Update über die laufende App;
   - Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt „Geheimnisse“.
+
+## 05.10.2026: Update-Test 1.0.42 → 1.0.43 über die laufende App (Arbeitsstand; bis zum nächsten Build uncommittet)
+
+- **Rückmeldung Marco (2 Screenshots):**
+  - Der Update-Check in 1.0.42 meldet „Neue Version 1.0.43 verfügbar“. Das Release ist
+    also draußen, der Update-Check funktioniert.
+  - Beim Installieren über das laufende 1.0.42 (Versions-Dialog offen) kam „Fehler beim
+    Ersetzen einer vorhandenen Datei: DeleteFile schlug fehl; Code 5. Zugriff verweigert“.
+    Das Programm lief danach weiter, die Setup-Seite „Folgende Anwendungen verwenden
+    Dateien …“ kam vorher gar nicht.
+- **Diagnose** (nur lesend, Restart Manager `RmGetList` auf die installierte EXE bei
+  laufendem Programm):
+  - zwei eigene Prozesse: der PyInstaller-Startprozess („Onefile Hidden Window“,
+    `RmOtherWindow`) und das Programmfenster (`RmMainWindow`), beide schließbar;
+  - dazu **McAfee Framework Host** als `RmCritical`, Neustart-Grund
+    `RmRebootReasonPermissionDenied`.
+  - Hält ein Prozess die Datei, den das Setup nicht schließen darf, verzichtet Inno Setup
+    ganz auf das automatische Schließen. Deshalb kam die Seite nicht, und die EXE blieb
+    belegt.
+  - Unabhängig von `CloseApplications=yes`/`force` (H-4): Mit `force` wäre es genauso
+    gekommen.
+- **Entscheidung Marco:** AppMutex, dazu ein Hinweis im Handbuch.
+- **Umsetzung:**
+  - `app.py`: `LAUF_MUTEX_NAME = "SHS-Pruefungsprogramm-Laufend"` und
+    `laufkennung_setzen()` (benannter Mutex, nur Windows, Handle bis Programmende), aufgerufen
+    in `main()` nach `absturzprotokoll_einrichten`. Nicht beim `--selbsttest`, der vorher
+    zurückkehrt.
+  - `installer.iss`: `AppMutex=SHS-Pruefungsprogramm-Laufend`. Das Setup erkennt das
+    laufende Programm damit gleich zu Beginn und bittet, es zu schließen; dann laufen das
+    normale Auto-Speichern und die Rückfrage. Das automatische Schließen über den Restart
+    Manager bleibt, wo es klappt.
+  - Wirkt erst, wenn die **laufende** Version den Mutex setzt, also beim Update von 1.0.44
+    auf eine neuere Version.
+  - `docs/HANDBUCH.md`, Kap. 2: „Vor dem Update das Programm schließen“ und was bei
+    „Zugriff verweigert“ zu tun ist (Programm schließen, „Nochmals versuchen“).
+  - `README_INSTALLER.md` ergänzt.
+- **Tests:**
+  - `test_laufkennung_passt_zum_appmutex_im_installer` (Name gleich);
+  - `test_laufkennung_setzen_legt_den_mutex_an` (nur Windows, öffnet den Mutex wie das
+    Setup);
+  - GUI und Theme 221 passed, 1 skipped, 1 xfailed; unittest 591 OK (159 übersprungen).
+- **Verifikation** (keine Fehler; AppMutex-Syntax und Zeitpunkt bestätigt, onefile-Nachlauf
+  des Startprozesses praktisch unkritisch): 1 „sollte“ und 4 Kleinigkeiten, mit Marco
+  geklärt, umgesetzt:
+  - Handbuch: „vorher schließen“ zuerst, die Bitte des Setups erst „ab Version 1.0.44“.
+  - Eigener `WINFUNCTYPE`-Prototyp für `CreateMutexW` statt prozessweitem `restype`.
+  - Zusätzlich `Global\SHS-Pruefungsprogramm-Laufend` (`LAUF_MUTEX_NAMEN`, beide in
+    `AppMutex`) für Setup unter anderem Konto bzw. App in anderer Sitzung.
+  - Hinweis, dass auch die Deinstallation den Mutex prüft (`installer.iss`,
+    `README_INSTALLER.md`).
+  - Nicht umgesetzt, weil ohne Folgen: Handle-Aufräumen im Test bei fehlgeschlagenem
+    Assert (jetzt ohnehin per `finally`).
+
+## Version 1.0.44 (05.10.2026, Build auf Marcos Wunsch „neuer build“)
+
+- **Offene Punkte vor dem Build:** keine. Die Kurzprüfung der Mutex-Nachbesserungen
+  (Global-Name, eigener Prototyp, Handbuch, Deinstallation) ergab keine Befunde.
+- **Gebündelt:** AppMutex für die Update-Erkennung (siehe „Update-Test 1.0.42 → 1.0.43“
+  oben), Handbuch Kap. 2.
+- **Doku:**
+  - 11 Screenshots neu mit Version 1.0.44 (Build-Skript wie bei 1.0.43); Start- und
+    Dialog-Bilder sind pixelgleich geblieben.
+  - `Architektur.md`: Sicherheitsgrundsätze um den AppMutex ergänzt.
+  - `RELEASE_NOTES.md` für 1.0.44 neu, mit dem Hinweis: für dieses Update das Programm
+    vorher selbst schließen.
+  - `docs/HANDBUCH.pdf` neu erzeugt.
+- **Version:** `bump_version.py` 1.0.43 → 1.0.44 (inkl. `compose.yaml`).
+- **Tests:**
+  - unittest 591 OK (159 übersprungen);
+  - `test_bump_version` (pytest) 14 passed;
+  - GUI und Theme 221 passed, 1 skipped, 1 xfailed.
+- **Nach dem Build, nur Marco:**
+  - Push und Tag;
+  - CI;
+  - Update 1.0.43 → 1.0.44 vorher selbst schließen (1.0.43 setzt noch keinen Mutex);
+  - beim **nächsten** Update (1.0.44 → später) über die laufende App prüfen, ob das Setup
+    zu Beginn um das Schließen bittet.

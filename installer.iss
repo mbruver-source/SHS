@@ -81,6 +81,12 @@ PrivilegesRequiredOverridesAllowed=dialog
 ; Setup meldet, dass sie noch läuft.
 CloseApplications=yes
 RestartApplications=yes
+; Erkennt ein laufendes Programm unabhängig vom Restart Manager (Update-Test 05.10.2026:
+; ein Virenscanner hielt die EXE offen, Inno verzichtete deshalb auf das automatische
+; Schließen und die EXE ließ sich nicht ersetzen). Das Setup bittet dann zu Beginn, das
+; Programm zu schließen. Auch die Deinstallation prüft den Mutex. Namen = LAUF_MUTEX_NAMEN in
+; app.py (laufkennung_setzen): lokal und zusätzlich global (anderes Konto/andere Sitzung).
+AppMutex=SHS-Pruefungsprogramm-Laufend,Global\SHS-Pruefungsprogramm-Laufend
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"

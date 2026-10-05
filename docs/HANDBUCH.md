@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.43. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.44. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -66,6 +66,11 @@ für den optionalen Formular-Import per KI und für die optionale Web-Version.
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
   installieren – deine Termine bleiben erhalten. Eine automatische Suche im Hintergrund gibt es
   bewusst nicht.
+- **Vor dem Update das Programm schließen.** Beim Schließen werden offene Ergebnisse wie
+  gewohnt gespeichert. Ab Version 1.0.44 erkennt das Setup ein noch laufendes Programm und
+  bittet, es zu schließen. Meldet das Setup „Fehler beim Ersetzen einer vorhandenen Datei …
+  Zugriff verweigert“, läuft das Programm noch: Programm schließen, dann
+  **„Nochmals versuchen“** klicken.
 - **Aussehen:** Im Menü **„Ansicht“** gibt es zwei Einstellungen, die sich frei kombinieren
   lassen und gespeichert werden:
   - **„Hintergrund“:** Hell (Standard), Warm / Sand, Dunkel oder Hoher Kontrast. Hoher

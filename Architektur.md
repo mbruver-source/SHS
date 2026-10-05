@@ -154,6 +154,10 @@ flowchart TB
   - Desktop-Installer (H-4): `CloseApplications=yes`. Qt 6 fragt beim Beenden durch das
     Setup nur über `commitDataRequest`; dort speichert die App automatisch und kann bei
     ungespeicherten Resten ablehnen. `closeEvent` kommt erst nach der Zusage.
+  - Laufendes Programm beim Update (05.10.2026): Das Programm meldet sich per benanntem
+    Mutex an (`app.laufkennung_setzen`, lokal und `Global\`), `installer.iss` prüft ihn mit
+    `AppMutex`. So erkennt das Setup das Programm auch dann, wenn ein Virenscanner die EXE
+    offen hält und der Restart Manager deshalb gar nicht schließt.
   - CI: Schreibrechte nur in den Veröffentlichungs-Jobs, Actions auf Commit-Hashes, feste
     Werkzeugversionen.
 

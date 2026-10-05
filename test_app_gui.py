@@ -1782,6 +1782,46 @@ def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, 
     assert not fenster.isVisible()
 
 
+def test_laufkennung_passt_zum_appmutex_im_installer():
+    """Update-Test 05.10.2026: Das Setup erkennt das laufende Programm über AppMutex - der
+    Name in installer.iss muss exakt LAUF_MUTEX_NAME aus app.py sein."""
+    import re
+
+    import app
+
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "installer.iss"), encoding="utf-8") as datei:
+        inhalt = datei.read()
+    treffer = re.findall(r"^AppMutex=(.+)$", inhalt, re.MULTILINE)
+    assert treffer == [",".join(app.LAUF_MUTEX_NAMEN)]
+    assert app.LAUF_MUTEX_NAMEN[0] == app.LAUF_MUTEX_NAME
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="benannter Mutex nur unter Windows")
+def test_laufkennung_setzen_legt_den_mutex_an(monkeypatch):
+    import ctypes
+
+    import app
+
+    monkeypatch.setattr(app, "_lauf_mutex", [])
+    assert app.laufkennung_setzen() is True
+    assert app.laufkennung_setzen() is True  # zweiter Aufruf legt keine neuen an
+    assert len(app._lauf_mutex) == 2  # lokal und global
+
+    oeffnen = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p)(
+        ("OpenMutexW", ctypes.windll.kernel32)
+    )
+    schliessen = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p)(("CloseHandle", ctypes.windll.kernel32))
+    SYNCHRONIZE = 0x00100000
+    try:
+        for name in app.LAUF_MUTEX_NAMEN:
+            handle = oeffnen(SYNCHRONIZE, False, name)
+            assert handle, f"Setup würde das laufende Programm über {name} nicht erkennen"
+            schliessen(handle)
+    finally:
+        for handle in app._lauf_mutex:
+            schliessen(handle)
+
+
 class _FakeSitzungsManager:
     """Ersatz für QSessionManager (commitDataRequest, H-4): merkt sich cancel/release."""
 
