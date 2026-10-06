@@ -5077,3 +5077,6 @@ Bestätigung.
   Search Console eingereicht.
 - Pflege: Bei neuen, umbenannten oder entfernten Website-Seiten `docs/sitemap.xml` von Hand
   nachziehen.
+
+**Nachtrag 06.10.2026:** Marco hat gepusht und die Sitemap in der Search Console
+eingereicht.
