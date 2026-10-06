@@ -5063,3 +5063,7 @@ durchgelaufen“).
   `google-site-verification` für die Google Search Console.
 - Reine Website-Änderung, kein Programm-Code, kein Build nötig. Live erst nach Marcos
   `git push`; danach in der Search Console auf „Bestätigen“ klicken.
+
+**Nachtrag 06.10.2026:** Marco hat gepusht; die Bestätigung in der Google Search Console war
+erfolgreich. Das Meta-Tag muss dauerhaft in `docs/index.html` bleiben, sonst verfällt die
+Bestätigung.
