@@ -128,8 +128,15 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   (`test_altversionen.py`); `test_altversionen` laufen lassen und die neuen Dateien unter
   `testdaten/altversionen/` als eigenen Commit nachreichen (Marcos Entscheidung T3,
   03.10.2026).
-- `git push`, `git tag`, `git push --tags` NIE selbst ausführen - das bleibt immer Marcos
-  eigene Aktion. Ihm die genauen Befehle nennen, wenn nötig.
+- `git tag` und `git push --tags` NIE selbst ausführen - das bleibt immer Marcos eigene
+  Aktion. Ihm die genauen Befehle nennen, wenn nötig.
+- `git push` (Marcos Freigabe, 06.10.2026): Bei Kleinigkeiten ohne Programmcode darf die
+  Sitzung selbst pushen. Gemeint sind Dokumentation (`Fortschritt.md`, `Architektur.md`,
+  diese Datei usw.) und die Website unter `docs/`. Vorher mit
+  `git diff --stat origin/main..HEAD` prüfen, dass alle ungepushten Commits nur solche
+  Dateien betreffen. Sobald Programmcode, Tests, Build-/CI-Dateien oder ein Build-Commit
+  dabei sind, pusht weiterhin nur Marco. Die Regel "Sicherheitsfunde erst nach dem Release
+  veröffentlichen" gilt auch hier.
 
 ### Bekannte Fallstricke bei der Auslieferung (traten bisher beim Arbeiten über die Cowork-Geräte-Brücke auf)
 

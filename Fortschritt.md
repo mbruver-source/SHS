@@ -5103,3 +5103,11 @@ Auf Marcos Wunsch (Punkte 1 bis 4 aus der Durchsicht der Seitenköpfe):
 **Nachtrag 06.10.2026:** Marco hat gepusht. Die URL-Prüfung in der Search Console für
 `…/SHS/handbuch.html` war positiv: Google sieht den per JavaScript geladenen Handbuchtext.
 Auch die Link-Vorschau hat Marco getestet, sie funktioniert. Damit ist nichts mehr offen.
+
+## 06.10.2026: Push bei Kleinigkeiten ohne Programmcode
+
+- Marcos Freigabe: Bei reinen Dokumentations- und Website-Änderungen ohne Programmcode darf
+  die Sitzung selbst `git push` ausführen. Bei Änderungen am Programmcode pusht weiterhin
+  Marco. Tags setzt immer nur Marco.
+- In `CLAUDE.md` und `AGENTS.md` (Abschnitt Build-/Versionsdisziplin) nachgezogen, mit
+  Prüfung per `git diff --stat origin/main..HEAD` vor dem Push.
