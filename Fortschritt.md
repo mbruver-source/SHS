@@ -5055,3 +5055,11 @@ durchgelaufen“).
   - beim nächsten Update (1.0.44 → später) über die laufende App prüfen, ob das Setup zu
     Beginn um das Schließen bittet (AppMutex) und dabei Auto-Speichern und Rückfrage
     laufen.
+
+## 06.10.2026: Google-Site-Verification für die Website
+
+- Auf Marcos Wunsch steht in `docs/index.html` (GitHub Pages,
+  https://mbruver-source.github.io/SHS/) jetzt im `<head>` das Meta-Tag
+  `google-site-verification` für die Google Search Console.
+- Reine Website-Änderung, kein Programm-Code, kein Build nötig. Live erst nach Marcos
+  `git push`; danach in der Search Console auf „Bestätigen“ klicken.
