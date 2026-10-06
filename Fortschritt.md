@@ -5067,3 +5067,13 @@ durchgelaufen“).
 **Nachtrag 06.10.2026:** Marco hat gepusht; die Bestätigung in der Google Search Console war
 erfolgreich. Das Meta-Tag muss dauerhaft in `docs/index.html` bleiben, sonst verfällt die
 Bestätigung.
+
+## 06.10.2026: Sitemap für die Website
+
+- Auf Marcos Wunsch neu: `docs/sitemap.xml` mit Startseite, Handbuch, Umstieg und
+  Behältnisse. Impressum und Datenschutz fehlen absichtlich, weil beide `noindex` tragen.
+- Eine `robots.txt` ist bei einer GitHub-Projektseite nicht möglich (sie müsste unter
+  `mbruver-source.github.io/robots.txt` liegen). Die Sitemap wird daher direkt in der
+  Search Console eingereicht.
+- Pflege: Bei neuen, umbenannten oder entfernten Website-Seiten `docs/sitemap.xml` von Hand
+  nachziehen.
