@@ -5080,3 +5080,22 @@ Bestätigung.
 
 **Nachtrag 06.10.2026:** Marco hat gepusht und die Sitemap in der Search Console
 eingereicht.
+
+## 06.10.2026: Website für die Google-Suche und Link-Vorschau ergänzt
+
+Auf Marcos Wunsch (Punkte 1 bis 4 aus der Durchsicht der Seitenköpfe):
+- **Titel der Startseite:** jetzt „SHS-Prüfungsprogramm – Prüfungssoftware für den
+  Spürhundsport“, damit auch Suchende ohne SHS-Kenntnis sie finden.
+- **`meta description`** neu auf Handbuch, Umstieg und Behältnisse. Die Startseite hatte
+  schon eine.
+- **`link rel="canonical"`** auf allen vier indexierten Seiten, damit `/SHS/` und
+  `/SHS/index.html` nicht als doppelte Seiten gelten. Impressum und Datenschutz bleiben
+  `noindex` und bekommen keine Angaben.
+- **Open Graph** (`og:title`, `og:description`, `og:url`, `og:image` usw.) auf denselben
+  vier Seiten, für die Link-Vorschau in WhatsApp, Facebook und Messengern. Vorschaubild ist
+  `docs/bilder/handbuch_zeitplan.png` (1400 x 820). Wird der Screenshot umbenannt oder
+  ändert er seine Größe, die `og:image`-Angaben in den vier Seiten nachziehen.
+- Bewusst nicht gemacht: Favicon. Google zeigt nur ein Icon pro Hostname, und das käme von
+  `mbruver-source.github.io/`, nicht von `/SHS/`.
+- Noch bei Marco: in der Search Console per URL-Prüfung für `…/SHS/handbuch.html`
+  kontrollieren, ob Google den per JavaScript geladenen Handbuchtext sieht.
