@@ -5099,3 +5099,7 @@ Auf Marcos Wunsch (Punkte 1 bis 4 aus der Durchsicht der Seitenköpfe):
   `mbruver-source.github.io/`, nicht von `/SHS/`.
 - Noch bei Marco: in der Search Console per URL-Prüfung für `…/SHS/handbuch.html`
   kontrollieren, ob Google den per JavaScript geladenen Handbuchtext sieht.
+
+**Nachtrag 06.10.2026:** Marco hat gepusht. Die URL-Prüfung in der Search Console für
+`…/SHS/handbuch.html` war positiv: Google sieht den per JavaScript geladenen Handbuchtext.
+Offen ist nur noch der Test der Link-Vorschau, z. B. per WhatsApp.
