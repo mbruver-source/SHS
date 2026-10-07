@@ -5111,3 +5111,23 @@ Auch die Link-Vorschau hat Marco getestet, sie funktioniert. Damit ist nichts me
   Marco. Tags setzt immer nur Marco.
 - In `CLAUDE.md` und `AGENTS.md` (Abschnitt Build-/Versionsdisziplin) nachgezogen, mit
   Prüfung per `git diff --stat origin/main..HEAD` vor dem Push.
+
+## 07.10.2026: Feste Agenten-Typen für QS-Prüfung und Verifikation
+
+Anlass: Marcos Frage nach „Playbooks“. Das ist keine Funktion von Claude Code, sondern eine
+Sammlung fertiger `CLAUDE.md`-Vorlagen aus der Community. Für dieses Projekt bringen sie
+nichts, weil `CLAUDE.md`, `Fortschritt.md` und die eigenen Skills schon genauer passen.
+Nützlicher war, die bisher nur als Text beschriebenen Subagent-Rollen fest zu hinterlegen.
+
+- Neu in `.claude/agents/`: `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit` und
+  `verifikation`. Jede Datei enthält den festen Auftrag und die Schwerpunkte der Rolle. Alle
+  vier sollen vorher `Architektur.md` und die „Noch offen“-Abschnitte lesen und die beiden
+  akzeptierten Restrisiken beim Web-Login nicht erneut melden.
+- Werkzeuge: nur Read, Grep, Glob und Bash, kein Edit oder Write. Damit ist die Regel
+  „kein Subagent ändert eigenständig Code“ technisch abgesichert.
+- Modelle: `qs-wartbarkeit` läuft auf Sonnet, die anderen drei auf dem Modell der
+  Hauptsitzung.
+- Marcos Entscheidungen: Die Dateien liegen im Repo, obwohl es öffentlich ist. Sie
+  enthalten nur allgemeine Prüfgebiete, keine konkreten Funde. `CLAUDE.md` und `AGENTS.md`
+  verweisen im Abschnitt zur Arbeit mit Subagents darauf. In `AGENTS.md` steht zusätzlich,
+  dass Codex die Dateien nicht kennt und die Texte dort als Auftrag dienen.

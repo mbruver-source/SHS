@@ -27,15 +27,21 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
 3. **QS-Prüfungen mit differenzierten Rollen statt identischer Aufträge.** Bei einer
    Mehr-Subagent-Codeprüfung (z. B. 3 unabhängige Reviewer) jedem Subagent einen anderen
    Schwerpunkt geben statt 3x denselben allgemeinen Auftrag: Sicherheit / Korrektheit &
-   Edge-Cases / Wartbarkeit & Stil.
+   Edge-Cases / Wartbarkeit & Stil. Dafür gibt es feste Agenten-Typen in `.claude/agents/`:
+   `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit` (läuft auf Sonnet).
 4. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
    fertig gemeldet wird, prüft zusätzlich zum eigenen Testlauf ein separater Subagent Diff
-   und Tests gegen - besonders bei sicherheitsrelevanten Änderungen.
+   und Tests gegen - besonders bei sicherheitsrelevanten Änderungen. Dafür den
+   Agenten-Typ `verifikation` aus `.claude/agents/` nutzen.
 
 Kein Subagent nimmt eigenständig Code-Änderungen an bereits abgeschlossenen, vom Nutzer
 freigegebenen Ständen vor. Etablierter Prozess: jeder QS-/Sicherheits-Befund wird einzeln mit
 dem Nutzer besprochen und erst nach seinem expliziten Go umgesetzt - das gilt für jede
 Sitzung und jeden Subagent gleichermaßen, auch für automatisierte/geplante Läufe.
+
+Die vier Agenten-Typen (07.10.2026 mit Marco abgestimmt) haben kein Edit- oder
+Write-Werkzeug und ändern deshalb keinen Code. Sie liefern Befunde nur als Antwort; Berichte
+legt die Hauptsitzung ab (Sicherheitsberichte in `_unveroeffentlicht/`).
 
 ## Sicherheitsfunde erst nach dem Release veröffentlichen (Marco 04.10.2026)
 
