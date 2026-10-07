@@ -141,7 +141,8 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   Aktion. Ihm die genauen Befehle nennen, wenn nötig.
 - `git push` (Marcos Freigabe, 06.10.2026): Bei Kleinigkeiten ohne Programmcode darf die
   Sitzung selbst pushen. Gemeint sind Dokumentation (`Fortschritt.md`, `Architektur.md`,
-  diese Datei usw.) und die Website unter `docs/`. Vorher mit
+  diese Datei usw.), die Website unter `docs/` und die Agenten-Typen in `.claude/agents/`
+  (Ergänzung 07.10.2026). Vorher mit
   `git diff --stat origin/main..HEAD` prüfen, dass alle ungepushten Commits nur solche
   Dateien betreffen. Sobald Programmcode, Tests, Build-/CI-Dateien oder ein Build-Commit
   dabei sind, pusht weiterhin nur Marco. Die Regel "Sicherheitsfunde erst nach dem Release

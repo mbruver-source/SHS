@@ -5131,3 +5131,6 @@ Nützlicher war, die bisher nur als Text beschriebenen Subagent-Rollen fest zu h
   enthalten nur allgemeine Prüfgebiete, keine konkreten Funde. `CLAUDE.md` und `AGENTS.md`
   verweisen im Abschnitt zur Arbeit mit Subagents darauf. In `AGENTS.md` steht zusätzlich,
   dass Codex die Dateien nicht kennt und die Texte dort als Auftrag dienen.
+- Nachtrag 07.10.2026: Auf Marcos Wunsch gehören Änderungen an `.claude/agents/` jetzt zu
+  den Kleinigkeiten, die die Sitzung selbst pushen darf (Regel in `CLAUDE.md`/`AGENTS.md`
+  ergänzt).
