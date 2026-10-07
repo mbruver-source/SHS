@@ -5346,5 +5346,7 @@ Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 x
   Absicherung gegen doppelte Zielnamen in `sicherung_wiederherstellen()`. Der Bericht liegt
   jetzt in `QS-Pruefung-2026-10/`. Die Code-Kommentare „Details folgen“ verweisen auf diesen
   Abschnitt.
-- Weiter offen, nur bei Marco: Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt
-  „Geheimnisse“; Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
+- Von Marco erledigt (07.10.2026): Umzug seines Servers auf die Secret-Dateien nach
+  `README_CONTAINER.md`, Abschnitt „Geheimnisse“; Quellcode-Spiegel und claude.ai-Ablage
+  „SHS“ auf 1.0.45 nachgezogen.
+- Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
