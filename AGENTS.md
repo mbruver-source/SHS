@@ -143,6 +143,10 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   Dateien betreffen. Sobald Programmcode, Tests, Build-/CI-Dateien oder ein Build-Commit
   dabei sind, pusht weiterhin nur Marco. Die Regel "Sicherheitsfunde erst nach dem Release
   veröffentlichen" gilt auch hier.
+- Ausnahme (Marco 07.10.2026): Website-Änderungen unter `docs/`, die eine neue Funktion oder
+  neue Download-Dateien beschreiben, gehen erst zusammen mit dem Release online, das diese
+  enthält – nicht vorher separat pushen. Anlass: die Mac-/Linux-Vorschau; die Website hätte
+  sonst Downloads angekündigt, die es im aktuellen Release noch nicht gibt.
 
 ### Bekannte Fallstricke bei der Auslieferung (traten bisher beim Arbeiten über die Cowork-Geräte-Brücke auf)
 
