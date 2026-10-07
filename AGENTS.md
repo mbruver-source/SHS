@@ -30,6 +30,8 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    Schwerpunkt geben statt 3x denselben allgemeinen Auftrag: Sicherheit / Korrektheit &
    Edge-Cases / Wartbarkeit & Stil. Dafür gibt es feste Agenten-Typen in `.claude/agents/`:
    `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit` (läuft auf Sonnet).
+   Den ganzen Ablauf samt Gegenprüfung aller Befunde fasst der gespeicherte Workflow
+   `qs-pruefung` (`.claude/workflows/qs-pruefung.js`) zusammen.
 4. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
    fertig gemeldet wird, prüft zusätzlich zum eigenen Testlauf ein separater Subagent Diff
    und Tests gegen - besonders bei sicherheitsrelevanten Änderungen. Dafür den
@@ -125,24 +127,18 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   Anlass: 1.0.37 wurde gebaut, obwohl die Verifikation noch zwei kleine Punkte gemeldet hatte.
   Die kamen danach als Nachtrag-Commit dazu, sodass zwei Build-Durchläufe entstanden, wo einer
   gereicht hätte.
-- Wenn Marco einen Build anfordert: zuerst offene Punkte wie oben klären, dann Dokumente und
-  Screenshots wie oben aktualisieren,
-  dann alle seit dem letzten Build gesammelten Änderungen bündeln, Version per
-  `bump_version.py` erhöhen (zieht auch „Stand: Version …“ in
-  `docs/HANDBUCH.md` nach), danach `docs/HANDBUCH.pdf` per `tools/handbuch_pdf.py` neu
-  erzeugen, lokale Tests laufen lassen, committen (Attribution-Footer anhängen,
-  sofern das Werkzeug einen vorgibt).
-- Direkt nach dem Build-Commit: `python tools/altdaten_erzeugen.py --aktuell` erzeugt die
-  Altdatei der neuen Version (Termin + Sicherungen, erfundene Daten) für die Upgrade-Tests
-  (`test_altversionen.py`); `test_altversionen` laufen lassen und die neuen Dateien unter
-  `testdaten/altversionen/` als eigenen Commit nachreichen (Marcos Entscheidung T3,
-  03.10.2026).
+- Wenn Marco einen Build anfordert: die Checkliste in `.claude/skills/shs-build/SKILL.md`
+  abarbeiten (in Claude Code als Skill `shs-build`; Codex liest die Datei direkt; seit
+  07.10.2026). Sie enthält die Schritte in dieser Reihenfolge: offene Punkte klären, Dokumente und Screenshots wie oben,
+  `bump_version.py`, `tools/handbuch_pdf.py`, lokale Tests, Build-Commit, danach die
+  Altdaten der neuen Version als eigener Commit (Marcos Entscheidung T3, 03.10.2026).
+  Die Regeln in diesem Abschnitt gehen vor; ändern sie sich, die Checkliste nachziehen.
 - `git tag` und `git push --tags` NIE selbst ausführen - das bleibt immer Marcos eigene
   Aktion. Ihm die genauen Befehle nennen, wenn nötig.
 - `git push` (Marcos Freigabe, 06.10.2026): Bei Kleinigkeiten ohne Programmcode darf die
   Sitzung selbst pushen. Gemeint sind Dokumentation (`Fortschritt.md`, `Architektur.md`,
-  diese Datei usw.), die Website unter `docs/` und die Agenten-Typen in `.claude/agents/`
-  (Ergänzung 07.10.2026). Vorher mit
+  diese Datei usw.), die Website unter `docs/` sowie Agenten-Typen, Workflows und Skills in
+  `.claude/agents/`, `.claude/workflows/` und `.claude/skills/` (Ergänzung 07.10.2026). Vorher mit
   `git diff --stat origin/main..HEAD` prüfen, dass alle ungepushten Commits nur solche
   Dateien betreffen. Sobald Programmcode, Tests, Build-/CI-Dateien oder ein Build-Commit
   dabei sind, pusht weiterhin nur Marco. Die Regel "Sicherheitsfunde erst nach dem Release

@@ -5134,3 +5134,23 @@ Nützlicher war, die bisher nur als Text beschriebenen Subagent-Rollen fest zu h
 - Nachtrag 07.10.2026: Auf Marcos Wunsch gehören Änderungen an `.claude/agents/` jetzt zu
   den Kleinigkeiten, die die Sitzung selbst pushen darf (Regel in `CLAUDE.md`/`AGENTS.md`
   ergänzt).
+
+## 07.10.2026: Workflow `qs-pruefung` und Build-Skill `shs-build`
+
+Fortsetzung des Abschnitts zu den Agenten-Typen, auf Marcos Wunsch:
+- **`.claude/workflows/qs-pruefung.js`:** gespeicherter Workflow. Die drei Rollen
+  `qs-sicherheit`, `qs-korrektheit` und `qs-wartbarkeit` prüfen gleichzeitig. Danach prüft
+  ein Skeptiker jeden Befund am Code nach und versucht, ihn zu widerlegen. Er verwirft dabei
+  Doppelungen und bereits abgelehnte Punkte. Ergebnis: bestätigt / verworfen / ungeprüft.
+  Insgesamt vier Agenten, also etwa so teuer wie die bisherige Prüfung mit drei Reviewern plus
+  Verifikation. Aufruf mit Prüfgegenstand als Argument, ohne Argument prüft er die
+  ungepushten und nicht committeten Änderungen. Die bestätigten Befunde werden weiterhin
+  einzeln mit Marco besprochen.
+- **`.claude/skills/shs-build/SKILL.md`:** Checkliste für einen Build, nur auf Marcos
+  ausdrückliche Anforderung. Neu gegenüber der bisherigen Beschreibung: `RELEASE_NOTES.md`
+  steht jetzt ausdrücklich in der Liste (wurde bisher bei jedem Build gepflegt, stand aber
+  nicht in `CLAUDE.md`).
+- **`CLAUDE.md`/`AGENTS.md`:** Die Regeln zum Build bleiben dort, die Schrittfolge ist durch
+  einen Verweis auf die Checkliste ersetzt (Marcos Entscheidung: eine Quelle statt zwei).
+  Im Abschnitt zur Arbeit mit Subagents steht der Verweis auf den Workflow. Die Push-Regel
+  umfasst jetzt auch `.claude/workflows/` und `.claude/skills/`.
