@@ -5327,3 +5327,24 @@ Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 x
   erste echte Lauf der Mac-Jobs.
 - **Nach dem Release:** Bericht `_unveroeffentlicht/QS-Pruefung-db_sicherung-2026-10-07.md`
   ins Repo verschieben (Regel „Sicherheitsfunde erst nach dem Release“).
+
+## 07.10.2026: 1.0.45 ausgeliefert
+
+- Marco hat gepusht und `v1.0.45` getaggt. Alle Workflows grün (Tests, Container bauen,
+  Installer bauen). Das Release enthält alle fünf Dateien: Setup-.exe, beide .dmg (Apple
+  Silicon, Intel), AppImage und .deb – die Mac-Jobs liefen beim ersten echten Lauf
+  erfolgreich durch.
+- **Offener Punkt aus 1.0.44 erledigt:** Beim Update über eine noch laufende ältere Version
+  warnt das Setup jetzt und bittet, das Programm zu schließen (AppMutex), von Marco bestätigt.
+- **Q-1 jetzt veröffentlicht** (Release mit Fix draußen, CI grün, Installer und Image
+  verfügbar): Beim Wiederherstellen einer Sicherung wurde eine vorhandene Termin-Datei ohne
+  Konflikt-Dialog überschrieben, wenn sich der Name im ZIP nur in der Groß-/Kleinschreibung
+  unterschied (unter Windows dieselbe Datei). Voraussetzung war ein präpariertes oder fremdes
+  ZIP, das der Nutzer selbst auswählt; kein Fernangriff, Schwere niedrig. Behoben durch
+  Namensvergleich per `casefold` in der Konfliktplanung (`desktop_dialoge.py`), beim
+  geöffneten Termin (`app.py`), in `eindeutigen_dateinamen_finden()` und als zweite
+  Absicherung gegen doppelte Zielnamen in `sicherung_wiederherstellen()`. Der Bericht liegt
+  jetzt in `QS-Pruefung-2026-10/`. Die Code-Kommentare „Details folgen“ verweisen auf diesen
+  Abschnitt.
+- Weiter offen, nur bei Marco: Umzug seines Servers nach `README_CONTAINER.md`, Abschnitt
+  „Geheimnisse“; Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
