@@ -5154,3 +5154,176 @@ Fortsetzung des Abschnitts zu den Agenten-Typen, auf Marcos Wunsch:
   einen Verweis auf die Checkliste ersetzt (Marcos Entscheidung: eine Quelle statt zwei).
   Im Abschnitt zur Arbeit mit Subagents steht der Verweis auf den Workflow. Die Push-Regel
   umfasst jetzt auch `.claude/workflows/` und `.claude/skills/`.
+
+## 07.10.2026: QS-Prüfung `db_sicherung.py` (Arbeitsstand; Code bis zum nächsten Build uncommittet)
+
+Erster Lauf des Workflows `qs-pruefung`, Prüfgegenstand `db_sicherung.py`. Bestätigt waren
+sechs Befunde, einer wurde verworfen. Marco hat alle bestätigten Befunde zur Umsetzung
+freigegeben („alle Punkte bis auf 6 nacheinander umsetzen“). Der Bericht liegt bis zum
+Release in `_unveroeffentlicht/`.
+
+| Nr. | Rolle | Schwere | Befund | Umsetzung |
+|---|---|---|---|---|
+| Q-1 | Sicherheit | niedrig | Sicherheitskorrektur Q-1, Details folgen nach dem Release | Details folgen nach dem Release |
+| 2 | Korrektheit | mittel | `sicherung_erstellen()` schrieb direkt in die Zieldatei. Bei einem Abbruch (z. B. voller USB-Stick) war eine gleichnamige ältere Sicherung weg, zurück blieb ein gültig aussehendes ZIP mit nur einem Teil der Termine. | Das ZIP entsteht als temporäre Datei im Zielordner und ersetzt die Zieldatei erst danach per `os.replace()`, wie schon beim Wiederherstellen. |
+| 3 | Korrektheit | niedrig | Brach das Wiederherstellen mehrerer Termine ab, blieben schon ersetzte Termine ersetzt, die Meldung klang aber nach „nichts passiert“. | Beide Wege: Zuerst werden alle Einträge in temporäre Dateien entpackt (Lese-, Passwort- und Platzfehler ändern so noch nichts), erst dann wird ersetzt. Scheitert ein späteres Ersetzen (z. B. Datei unter Windows gesperrt), nennt die neue `TeilweiseWiederhergestelltError` die schon ersetzten Termine, und `app.py` zeigt sie im Meldungsfenster „Wiederherstellen unvollständig“. |
+| 4 | Wartbarkeit | optional | Öffnen des ZIPs, Passwort und Fehlerübersetzung standen doppelt, mit unterschiedlichen Meldungen. | Gemeinsamer Kontextmanager `_zip_oeffnen()`. Folge: Auch `sicherung_wiederherstellen()` meldet ein ungültiges ZIP jetzt als `ValueError`, und die Passwortmeldung ist überall gleich. |
+| 5 | Wartbarkeit | optional | Docstring von `sicherung_wiederherstellen()` nannte die Ausnahmen nicht. | Abschnitt „Wirft …“ ergänzt. Die Review-Historie bleibt (Hauskonvention). |
+| 6 | Wartbarkeit | – | Review-Historie aus dem Docstring von `_ist_sicherer_dateiname()` entfernen. | Verworfen (Gegenprüfung): Hauskonvention. |
+| 7 | Wartbarkeit | optional | Überschrift-Kommentar aus der Zeit in `db.py` wiederholte den Modul-Docstring. | Gestrichen, der pyzipper-Hinweis steht jetzt im Modul-Docstring. |
+
+Tests: 9 neue Tests (`test_backup.py`: 7, `test_app_gui.py`: 2 Tests mit 3 Fällen; Stand vor
+dem Nachtrag unten). Die neuen
+Tests in `test_backup.py` scheitern alle mit dem alten Stand von `db_sicherung.py` (geprüft).
+Lokal: unittest 598 OK (159 übersprungen), GUI 225 passed, 1 skipped, 1 xfailed.
+
+Hinweis: Die neue Sicherungsdatei entsteht über `tempfile.mkstemp()`. Unter Linux/macOS hat
+sie deshalb die Rechte 0600 (nur der Besitzer), vorher galt die Umask. Unter Windows ändert
+sich nichts.
+
+Weitere Folgen (aus der Verifikation):
+- Befund 4: Ist eine Sicherung beschädigt (z. B. Prüfsummenfehler eines Eintrags), lautete
+  die Meldung danach überall „Das ist keine gültige ZIP-Datei.“. Geändert, siehe Nachtrag.
+- Befund 3: Während des Wiederherstellens braucht der Termine-Ordner kurz Platz für alle
+  gewählten Termine gleichzeitig statt für einen. Bei Terminen unter 1 MB unerheblich.
+
+**Nachtrag nach der Verifikation (Marcos Entscheidungen, 07.10.2026):**
+1. Q-1 in Kommentaren, Docstrings und Testnamen nur noch allgemein (Testnamen `test_q1_…`).
+2. Ein Bedienungs-Grenzfall bei präparierten Sicherungen (Details mit Q-1 nach dem
+   Release) bleibt so (Marco: „lassen“). Es wird dabei nichts überschrieben, vom Programm
+   erstellte Sicherungen sind nicht betroffen.
+3. Eigene Meldung bei einer beschädigten Sicherung: Lässt sich das ZIP öffnen, ein Eintrag
+   aber nicht fehlerfrei lesen (Prüfsumme, Entpackfehler), meldet `_zip_oeffnen()` „Die
+   Sicherung ist beschädigt …“ mit der technischen Angabe. „Keine gültige ZIP-Datei“ gilt
+   nur noch, wenn sich die Datei gar nicht als ZIP öffnen lässt.
+4. Zusätzliche Tests: GUI-Test für das Meldungsfenster „Wiederherstellen unvollständig“,
+   ein GUI-Test zu Q-1, Abbruch-Test beim Erstellen jetzt auch mit Passwort (pyzipper),
+   zwei Tests für die Meldung „beschädigt“ (Prüfsummenfehler und Entpackfehler). Insgesamt
+   jetzt 8 neue Tests in `test_backup.py` und 4 GUI-Tests mit 5 Fällen.
+5. `docs/HANDBUCH.md`, Abschnitt Datensicherung: Absatz zu „Wiederherstellen
+   unvollständig“ (auch: scheitert schon der erste Termin, bleibt alles unverändert). Die
+   Meldung in `app.py` sagt jetzt „aus der Sicherung übernommen“, weil das auch für
+   Kopien stimmt. Kein neuer Screenshot nötig, der Reiter sieht unverändert aus.
+   `docs/HANDBUCH.pdf` wird wie üblich erst beim Build neu erzeugt.
+
+Außerdem aus der Verifikation direkt korrigiert: Q-1-Zeile oben ohne betroffene Dateien,
+Zeilenumbrüche, Leerzeilen. Bewusst nicht geändert: Strg+C während des Ersetzens erzeugt
+keine Teil-Meldung (in der GUI irrelevant, temporäre Dateien werden trotzdem entfernt).
+
+Tests lokal: unittest 600 OK (159 übersprungen), GUI 227 passed, 1 skipped, 1 xfailed.
+
+Testnamen `test_q1_…` bleiben wie sie sind (Marco 07.10.2026: „lass es so“), obwohl sie
+den betroffenen Bereich grob erkennen lassen; der Code verrät ihn ohnehin.
+
+## 07.10.2026: macOS- und Linux-Version als Vorschau, Programmsymbol (Arbeitsstand; bis zum nächsten Build uncommittet)
+
+**Wunsch Marco:** „auch für Apple und Linux die jeweilige Version bereitstellen“.
+
+**Ausgangslage (Explore-Subagent):** Der Code war schon fast plattformneutral. Termine liegen
+unter `~/SHS-Pruefungsprogramm/Termine`, die Windows-Teile (Mutex für das Setup,
+WM_ENDSESSION) sind per `sys.platform == "win32"` abgesichert, die Update-Prüfung öffnet nur
+die GitHub-Seite, und die Tests liefen in der CI schon unter Linux. macOS und Linux waren
+bisher nirgends geplant oder ausgeschlossen; die Doku setzte durchgehend Windows voraus.
+
+**Marcos Entscheidungen (07.10.2026):**
+- Linux: AppImage **und** .deb.
+- macOS: vorerst **ohne** Apple-Signatur/Notarisierung (Nutzer erlauben den ersten Start
+  einmal, Anleitung im Handbuch); Apple Silicon **und** Intel als getrennte .dmg.
+- Kein Mac/Linux-Rechner zum Testen vorhanden → beide als **„Vorschau“** kennzeichnen.
+- Kommt **direkt mit dem nächsten Build**, zusammen mit den QS-Fixes.
+- **Programmsymbol:** Das Programm hatte bisher keins. Nach Entwürfen (Pfote, Hundenase,
+  Schnauze, gezeichneter Beagle) hat Marco ein Foto seines Beagles geliefert; gewählt ist
+  „K2“: der ganze Kopf als Buntstift-Zeichnung.
+
+**Umsetzung:**
+- `symbol/programmsymbol.png/.ico/.icns`, erzeugt mit `tools/programmsymbol.py <foto>`
+  (das Foto selbst liegt nicht im Repo). Windows-EXE und Setup (`SetupIconFile`) bekommen
+  das Symbol ebenfalls; die Website ein Favicon (`docs/favicon.png`).
+- `desktop_gemeinsam.programmsymbol()`; `app.main()` setzt Fenstersymbol und
+  `setDesktopFileName("shs-pruefungsprogramm")` (Linux/Wayland). Der Selbsttest hat einen
+  neuen Schritt „Programmsymbol“.
+- `build.spec`: Windows unverändert eine EXE (jetzt mit Symbol); macOS `.app` (BUNDLE mit
+  Version aus `version.txt`); Linux Programmordner.
+- `tools/linux_pakete.sh`: baut AppImage und .deb aus dem Linux-Ordner.
+- `build-installer.yml`: neue Jobs `build-macos` (Matrix `macos-15` = Apple Silicon,
+  `macos-15-intel`) und `build-linux` (`ubuntu-22.04`, damit ab glibc 2.35 lauffähig), jeweils
+  mit `--selbsttest` (Mac: gebaute App und App aus dem .dmg; Linux: Ordner, AppImage und
+  installiertes .deb). appimagetool 1.9.1 und type2-runtime 20251108 mit fester Prüfsumme
+  (lokal gegengeprüft). Der `release`-Job veröffentlicht zusätzlich .dmg, AppImage und .deb;
+  **ein Fehler in einem Mac-/Linux-Job hält das Windows-Release nicht auf** (dann fehlt nur
+  diese Datei, der Job ist rot).
+- Hilfetexte: „Explorer“ → „Dateimanager (Explorer bzw. Finder)“, das helle Dateifenster im
+  Design Dunkel ausdrücklich „unter Windows“.
+- Doku: `docs/HANDBUCH.md` (Kapitel 2 mit macOS/Linux-Installation samt Gatekeeper-Schritten,
+  Termine-Pfade, Selbsttest-Befehle für Mac/Linux, „Dateimanager“), `docs/index.html`
+  (Beschreibung, „für Windows, macOS und Linux (Vorschau)“, Installationshinweis), `README.md`,
+  `README_INSTALLER.md` (neuer Abschnitt), `Architektur.md`, `CODE_SIGNING_POLICY.md`
+  (Mac/Linux nicht signiert), Build-Skill (`.claude/skills/shs-build`: nach dem Tag alle Jobs
+  prüfen).
+
+**Hinweise für den Build:**
+- Die Website (`docs/`) beschreibt die neuen Versionen. Sie darf deshalb erst zusammen mit
+  dem Release online gehen, nicht vorher separat gepusht werden.
+- Die Mac-Jobs lassen sich lokal nicht prüfen; der erste echte Lauf ist der Tag-Build.
+  Lokal geprüft: Windows-Build mit PyInstaller (Symbol in der EXE, PNG im Bundle; die EXE
+  selbst startet in der Anaconda-Umgebung nicht, weil dort `_sqlite3` nicht gebündelt wird –
+  bekannte Anaconda-Eigenheit, die CI nutzt python.org-Python).
+- **Linux lokal in einem Podman-Container nachgestellt** (Debian 12, Python 3.11, derselbe
+  Ablauf wie Job `build-linux`): PyInstaller-Build, AppImage und .deb gebaut, .deb installiert
+  (Programm in `/opt`, Startmenü-Eintrag, Symbol), Selbsttest von Ordner, AppImage und
+  installiertem .deb jeweils „alles OK“. Der Probelauf fand zwei fehlende Abhängigkeiten
+  (`libglib2.0-0`, `libgl1`), die auf den Ubuntu-Runnern zufällig vorhanden sind; beide stehen
+  jetzt im .deb (`Depends`) und in der Paketliste des CI-Jobs.
+
+**Nachtrag nach der Verifikation (07.10.2026):** keine Fehler in Workflow, `build.spec`,
+Linux-Skript und Programmcode. Eingearbeitet:
+- Handbuch: Unterlisten in Kapitel 2 und im FAQ zum Selbsttest so eingerückt bzw. abgesetzt,
+  dass sie auch im PDF (Python-Markdown) Listen sind (nachgerendert und geprüft); Windows-Weg
+  im FAQ als solcher gekennzeichnet; „ab macOS 13“ ergänzt.
+- `build.spec`: `LSMinimumSystemVersion` 13.0 (aktuelle PySide6/Qt), `version.txt` relativ
+  zur Spec-Datei (`SPECPATH`).
+- `tools/linux_pakete.sh`: `Exec` ohne `%F` (keine Datei-Argumente); im .deb zeigt `Exec` auf
+  `/opt/shs-pruefungsprogramm/SHS-Pruefungsprogramm`, damit die Fensterklasse unter X11 zu
+  `StartupWMClass` passt.
+- Workflow: `timeout-minutes: 45` für Mac- und Linux-Jobs (ein hängender Selbsttest hält das
+  Release sonst bis zu 6 Stunden auf); `codesign --verify` der Mac-App (kaputte Ad-hoc-
+  Signatur ergäbe auf Apple Silicon „beschädigt“); Kopfkommentar nennt alle Release-Dateien.
+- „Keine Administratorrechte nötig“ auf Website und in der README auf Windows eingegrenzt;
+  README_INSTALLER: Release-Text und Kurz-Checkliste um die Mac-/Linux-Jobs ergänzt.
+- Codex-Spiegel der Build-Checkliste (`.agents/skills/shs-build/SKILL.md`, nicht versioniert)
+  nachgezogen.
+
+**Tests zum Mac/Linux-Abschnitt:** neuer GUI-Test `test_programmsymbol_und_selbsttest_schritt`
+(Symbol lädt, .ico/.icns vorhanden, fehlendes Symbol lässt den Selbsttest scheitern).
+Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 xfailed.
+
+## Version 1.0.45 (07.10.2026, Build auf Marcos Wunsch „jetzt ein neues build“)
+
+- **Offene Punkte vor dem Build:** Die Verifikation über alles seit 1.0.44 fand keine Fehler,
+  aber zwölf Hinweise. Marco hat entschieden (07.10.2026):
+  - umgesetzt: Selbsttest-Beschreibungen (Workflow-Kommentar, `Architektur.md`, Handbuch-FAQ)
+    um Programmsymbol und Mac/Linux ergänzt; Checklisten-Punkt „Actions prüfen“ in
+    README_INSTALLER ans Ende; Favicon auch auf `docs/behaeltnisse/`; `docs/favicon.png` wird
+    jetzt von `tools/programmsymbol.py` mit erzeugt; Testnachweis im Mac/Linux-Abschnitt;
+    Handbuch-Beispiel „Datei in anderem Programm geöffnet“ auf Windows eingegrenzt;
+    `tools/linux_pakete.sh` mit Ausführrecht; Zeilenumbruch README.
+  - zur Kenntnis: Die Website geht mit dem Push online, das Release erst nach allen Jobs
+    (bis zu etwa 45 Minuten) – Tag direkt nach dem Push setzen. Die Maintainer-Adresse im .deb
+    ist so gewollt („Adresse ist ok“). Q-1-Testnamen bleiben (Entscheidung von vorhin).
+- **Enthalten seit 1.0.44:**
+  - QS-Prüfung `db_sicherung.py`: atomare Sicherung, zweiphasiges Wiederherstellen mit
+    Meldung „Wiederherstellen unvollständig“, eigene Meldung bei beschädigter Sicherung,
+    gemeinsamer Helfer `_zip_oeffnen()`, Sicherheitskorrektur Q-1 (Details folgen nach dem
+    Release).
+  - macOS-Vorschau (.dmg für Apple Silicon und Intel) und Linux-Vorschau (AppImage, .deb),
+    gebaut und selbstgetestet in der CI; Programmsymbol (Beagle) für alle Plattformen und die
+    Website.
+  - Doku: Handbuch Kapitel 2 (Installation auf Mac/Linux), Kapitel 3, 10, 13; Website,
+    README, README_INSTALLER, Architektur, CODE_SIGNING_POLICY, RELEASE_NOTES.
+- `bump_version.py` → 1.0.45, `docs/HANDBUCH.pdf` neu erzeugt.
+- Tests lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 xfailed.
+- **Nach dem Tag-Lauf:** prüfen, dass alle Jobs grün sind (auch `build-macos` 2x,
+  `build-linux`) und das Release .exe, beide .dmg, AppImage und .deb enthält. Es ist der
+  erste echte Lauf der Mac-Jobs.
+- **Nach dem Release:** Bericht `_unveroeffentlicht/QS-Pruefung-db_sicherung-2026-10-07.md`
+  ins Repo verschieben (Regel „Sicherheitsfunde erst nach dem Release“).

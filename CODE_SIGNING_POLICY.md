@@ -7,6 +7,10 @@ Grundlage für die kostenlose Codesignierung über die
 [SignPath Foundation](https://signpath.org/) (Zertifikat) und
 [SignPath.io](https://signpath.io/) (Signierungsplattform).
 
+Die seit Oktober 2026 zusätzlich angebotenen Vorschau-Versionen für macOS (`.dmg`) und
+Linux (AppImage, `.deb`) werden im selben Workflow gebaut, sind aber nicht signiert und
+fallen nicht unter diese Richtlinie.
+
 ## Über das Projekt
 
 SHS-Prüfungsprogramm verwaltet Prüfungstermine, Teilnehmer und Ergebnisse für

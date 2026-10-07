@@ -660,6 +660,28 @@ def test_selbsttest_erfolg_und_fehlerfall(qtbot, tmp_path, monkeypatch):
     assert "ERGEBNIS: 1 Fehler" in text
 
 
+def test_programmsymbol_und_selbsttest_schritt(qtbot, tmp_path, monkeypatch):
+    """Programmsymbol (Beagle, Marco 07.10.2026): die PNG wird geladen, .ico und .icns für
+    Windows bzw. macOS liegen daneben. Fehlt die PNG (z. B. nicht in build.spec/datas),
+    meldet der Selbsttest das als Fehler."""
+    from PySide6.QtCore import QSize
+
+    import desktop_gemeinsam
+    import selbsttest
+
+    symbol = desktop_gemeinsam.programmsymbol()
+    assert not symbol.isNull()
+    assert symbol.actualSize(QSize(512, 512)) == QSize(512, 512)
+    ordner = os.path.dirname(desktop_gemeinsam.programmsymbol_pfad())
+    for endung in ("ico", "icns"):
+        assert os.path.getsize(os.path.join(ordner, f"programmsymbol.{endung}")) > 10_000
+
+    monkeypatch.setattr(desktop_gemeinsam, "programmsymbol_pfad", lambda: str(tmp_path / "fehlt.png"))
+    protokoll = tmp_path / "symbol.log"
+    assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 1
+    assert "FEHLER  Programmsymbol" in protokoll.read_text(encoding="utf-8")
+
+
 def test_fremdobjekte_meldung(qtbot, monkeypatch):
     """H-1: Nach dem Entfernen fremder Trigger/Views erscheint ein Hinweis, sonst nicht."""
     import app as app_modul
@@ -3272,6 +3294,81 @@ def test_wiederherstellen_mehrere_kopien_und_ueberschreiben_gemischt(tmp_path):
     assert uebersprungen == 1
     # Kern von G5: keine zwei ZIP-Einträge landen auf derselben Zieldatei.
     assert len(set(entscheidungen.values())) == len(entscheidungen)
+
+
+# --- Sicherheitskorrektur Q-1 (07.10.2026), Details folgen ----
+
+
+@pytest.mark.parametrize("aktion, ziel", [("ueberschreiben", "Pruefung.sqlite"), ("kopie", "pruefung (2).sqlite")])
+def test_q1_wiederherstellen_konflikt_wird_abgefragt(tmp_path, aktion, ziel):
+    (tmp_path / "Pruefung.sqlite").write_bytes(b"")
+    abgefragt = []
+
+    def aktion_fuer(name):
+        abgefragt.append(name)
+        return aktion
+
+    entscheidungen, _ = _wiederherstellungsziele_planen(
+        ["pruefung.sqlite"], {"Pruefung.sqlite"}, tmp_path, aktion_fuer
+    )
+
+    assert abgefragt == ["pruefung.sqlite"]
+    assert entscheidungen == {"pruefung.sqlite": ziel}
+
+
+def test_q1_offener_termin_wird_erkannt(qtbot, tmp_path, monkeypatch):
+    (tmp_path / "Pruefung.sqlite").write_bytes(b"")
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
+    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
+    tab = DatensicherungTab(aktueller_pfad=str(tmp_path / "Pruefung.sqlite"))
+    qtbot.addWidget(tab)
+    abgefragt = []
+    monkeypatch.setattr(
+        tab, "_konflikt_abfragen",
+        lambda name, ist_offener_termin=False: abgefragt.append((name, ist_offener_termin)) or "ueberspringen",
+    )
+
+    tab._sicherung_wiederherstellen()
+
+    assert abgefragt == [("pruefung.sqlite", True)]
+
+
+def test_wiederherstellen_unvollstaendig_nennt_ersetzte_termine(qtbot, tmp_path, monkeypatch):
+    """QS-Prüfung 07.10.2026, Befund 3: Bricht das Wiederherstellen nach dem ersten
+    ersetzten Termin ab, nennt das Meldungsfenster die schon ersetzten Termine."""
+    from db_sicherung import TeilweiseWiederhergestelltError
+
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
+    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["a.sqlite", "b.sqlite"])
+
+    def wiederherstellen_mit_abbruch(*a, **k):
+        raise TeilweiseWiederhergestelltError(["a.sqlite"], PermissionError("Datei gesperrt"))
+
+    monkeypatch.setattr("app.sicherung_wiederherstellen", wiederherstellen_mit_abbruch)
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: meldungen.append((a[1], a[2])))
+    tab = DatensicherungTab()
+    qtbot.addWidget(tab)
+
+    tab._sicherung_wiederherstellen()
+
+    assert len(meldungen) == 1
+    titel, text = meldungen[0]
+    assert titel == "Wiederherstellen unvollständig"
+    assert "Datei gesperrt" in text
+    assert "a.sqlite" in text
+    assert "b.sqlite" not in text
+    assert "unvollständig: 1 Termin(e)" in tab.status_label.text()
+
+
+def test_q1_wiederherstellen_neue_eintraege_kollidieren_nicht(tmp_path):
+    entscheidungen, _ = _wiederherstellungsziele_planen(
+        ["A.sqlite", "a.sqlite"], set(), tmp_path, lambda name: pytest.fail("keine Rückfrage erwartet")
+    )
+
+    assert entscheidungen == {"A.sqlite": "A.sqlite", "a.sqlite": "a (2).sqlite"}
 
 
 # --- Codeprüfung 22.09., G9: Sortierung der Ergebniserfassung übersteht "aktualisieren" --

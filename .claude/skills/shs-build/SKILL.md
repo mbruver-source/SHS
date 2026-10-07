@@ -65,6 +65,9 @@ Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
   git tag vX.Y.Z
   git push --tags
   ```
+- Hinweis an Marco: Nach dem Tag-Lauf unter „Actions“ prüfen, ob alle Jobs grün sind, auch
+  `build-macos` (2x) und `build-linux`. Ein Fehler dort hält das Release nicht auf, dann
+  fehlen nur die betroffenen Dateien (.dmg, AppImage, .deb) im Release.
 - Hinweis an Marco: Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` und, falls
   geändert, `Fortschritt.md`/`Architektur.md`/`Grobkonzept.md` in der claude.ai-Ablage
   „SHS“ nachziehen.

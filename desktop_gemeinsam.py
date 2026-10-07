@@ -14,7 +14,7 @@ import os
 import sys
 
 from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -501,6 +501,19 @@ def _qt_uebersetzungs_ordner() -> list[str]:
     if bundle:
         ordner.append(os.path.join(bundle, "PySide6", "translations"))
     return ordner
+
+
+def programmsymbol_pfad() -> str:
+    """Pfad zu symbol/programmsymbol.png - im PyInstaller-Bundle unter sys._MEIPASS (dort per
+    build.spec mitgeliefert), sonst neben diesem Modul (Marco 07.10.2026, Beagle-Symbol)."""
+    basis = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(basis, "symbol", "programmsymbol.png")
+
+
+def programmsymbol() -> QIcon:
+    """Das Programmsymbol als QIcon; leer, falls die Datei fehlt (dann zeigt das System sein
+    Standardsymbol - der Selbsttest der gebauten Fassung prüft, dass sie dabei ist)."""
+    return QIcon(programmsymbol_pfad())
 
 
 def meldungsfenster_als_klartext() -> None:

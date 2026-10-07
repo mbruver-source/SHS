@@ -2,9 +2,10 @@
 
 **Prüfungen im Spürhundsport (SHS) planen, auswerten und drucken – ohne Tabellenkalkulation.**
 
-Das SHS-Prüfungsprogramm ist ein kostenloses Windows-Programm für die Prüfungsleitung eines
-Vereins. Es deckt den ganzen Ablauf eines Prüfungstermins ab: von der Meldung der Teilnehmer
-über Zeitplan und Bewertungsbögen bis zu Rangliste, Etiketten und Statistik.
+Das SHS-Prüfungsprogramm ist ein kostenloses Programm für Windows (macOS und Linux als
+Vorschau) für die Prüfungsleitung eines Vereins. Es deckt den ganzen Ablauf eines
+Prüfungstermins ab: von der Meldung der Teilnehmer über Zeitplan und Bewertungsbögen bis zu
+Rangliste, Etiketten und Statistik.
 
 Es ersetzt die bisherige LibreOffice-Datei „SHS Prüfungsprogramm“ samt Serienbrief-Vorlagen.
 Wertnoten und Rangliste werden nach denselben Regeln berechnet wie dort.
@@ -18,13 +19,21 @@ Wertnoten und Rangliste werden nach denselben Regeln berechnet wie dort.
 
 ➡️ **[Aktuelle Version herunterladen](https://github.com/mbruver-source/SHS/releases/latest)**
 
-Dort unter „Assets“ die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
+**Windows:** Dort unter „Assets“ die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
 Der Installer bringt alles mit, was das Programm braucht – Python oder andere Software
 musst du nicht installieren. Administratorrechte sind nicht nötig.
 
 > **Hinweis „Windows hat den Start dieser App verhindert“:** Der Installer ist noch nicht
 > digital signiert, deshalb warnt Windows beim ersten Start. Auf **„Weitere Informationen“**
 > und dann **„Trotzdem ausführen“** klicken. Das ist nur einmal nötig.
+
+**macOS und Linux (Vorschau):** Auf derselben Seite liegen außerdem
+`SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg` bzw. `…-macOS-Intel.dmg` sowie für Linux
+`SHS-Pruefungsprogramm-X.Y.Z-x86_64.AppImage` und `shs-pruefungsprogramm_X.Y.Z_amd64.deb`.
+Sie werden bei jedem Build automatisch geprüft, sind aber noch nicht auf echten Geräten
+erprobt; Rückmeldungen sind willkommen. Die Mac-Version ist nicht bei Apple registriert,
+den ersten Start musst du deshalb einmal erlauben – Schritt für Schritt im
+[Handbuch, Kapitel 2](docs/HANDBUCH.md#2-installation-und-updates).
 
 **Updates:** Im Programm oben rechts auf **„ℹ️ Version …“** klicken, dann
 **„Nach Updates suchen“**. Die neue Version einfach

@@ -81,7 +81,7 @@ flowchart TB
     end
     subgraph CI[".github/workflows"]
         Tests["tests.yml<br/>pytest, inkl. PostgreSQL-Service-Container<br/>+ PySide6-GUI-Tests (pytest-qt)"]
-        Installer["build-installer.yml<br/>PyInstaller + Inno Setup<br/>ausgelöst durch Tag 'vX.Y.Z'<br/>-> GitHub Release"]
+        Installer["build-installer.yml<br/>PyInstaller + Inno Setup (Windows)<br/>+ .dmg (macOS) / AppImage + .deb (Linux), Vorschau<br/>ausgelöst durch Tag 'vX.Y.Z'<br/>-> GitHub Release"]
         ContainerBuild["build-container.yml<br/>Image-Build -> ghcr.io"]
     end
 
@@ -106,12 +106,14 @@ flowchart TB
 | `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Rangliste-Bildung, Punktgrenzen `SUCHE_MAX`/`ANZEIGE_MAX` (gemeinsam für Desktop und Web) | `test_shs_core.py`, `test_bewertung_referenz.py` (mit Marco abgestimmte Referenzfälle + Eigenschaftstests mit `hypothesis`) |
 | `pdf_export.py` | PDF-Erzeugung (reportlab): Bewertungsbögen, Ergebnislisten, Etiketten, Statistik, Zeitplan, Richter-Bedarf, ausfüllbares Anmeldeformular (Canvas + AcroForm; Feldnamen als Konstanten `ANMELDEFORMULAR_*` in `db.py`, gemeinsam mit dem Import) | `test_pdf_export.py` |
 | `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
-| `selbsttest.py` | `--selbsttest [protokoll]` der Desktop-App (aus `app.main()`): prüft ohne Fenster Termin, Auswertung, PDFs, pypdf, CSV, verschlüsselte Sicherung und alle Reiter; Exit-Code 0/1 + Protokoll. Die CI startet damit die gebaute und die still installierte EXE (`build-installer.yml`) | `test_app_gui.py` (`test_selbsttest_erfolg_und_fehlerfall`) |
+| `selbsttest.py` | `--selbsttest [protokoll]` der Desktop-App (aus `app.main()`): prüft ohne Fenster Termin, Auswertung, PDFs, pypdf, CSV, verschlüsselte Sicherung, alle Reiter und das Programmsymbol; Exit-Code 0/1 + Protokoll. Die CI startet damit die gebaute und die still installierte EXE, die Mac-App (gebaut und aus dem .dmg) sowie unter Linux den Programmordner, das AppImage und das installierte .deb (`build-installer.yml`) | `test_app_gui.py` (`test_selbsttest_erfolg_und_fehlerfall`, `test_programmsymbol_und_selbsttest_schritt`) |
 | `tools/altdaten_erzeugen.py`, `testdaten/altversionen/` | Termin-Dateien und Sicherungen älterer Versionen (mit dem Code des jeweiligen Git-Tags erzeugt, erfundene Daten) für die Upgrade-Tests; beim Build mit `--aktuell` um die neue Version ergänzen | `test_altversionen.py`, Altdatei-Test in `test_app_gui.py` |
 | `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`, Image-Tag `shs-web:X.Y.Z` in `compose.yaml`) für Releases hochzählen | `test_bump_version.py` |
 | `templates/*.html` | Jinja2-Templates für `app_web.py` (Login, Ersteinrichtung, Termin-/Benutzerverwaltung, Ergebniserfassung) | (über `test_app_web.py` abgedeckt) |
 | `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante; Basis-Images per Digest, Geheimnisse als Secrets aus `secrets/` | `.github/workflows/build-container.yml` |
-| `installer.iss`, `build.spec` | Windows-Installer (Inno Setup) bzw. PyInstaller-Bundling für die Desktop-Variante | `.github/workflows/build-installer.yml` |
+| `installer.iss`, `build.spec` | Windows-Installer (Inno Setup) bzw. PyInstaller-Bundling für die Desktop-Variante; `build.spec` baut unter macOS die `.app`, unter Linux einen Programmordner (Vorschau seit 07.10.2026) | `.github/workflows/build-installer.yml` |
+| `tools/linux_pakete.sh` | baut aus dem Linux-Programmordner AppImage und .deb | `.github/workflows/build-installer.yml` (Job `build-linux`) |
+| `symbol/`, `tools/programmsymbol.py` | Programmsymbol (Beagle) als `.png`/`.ico`/`.icns`; `desktop_gemeinsam.programmsymbol()` lädt es zur Laufzeit | Selbsttest-Schritt „Programmsymbol“ |
 
 ## 3. Wichtige Architekturentscheidungen (Kurzfassung - Details in `Fortschritt.md`)
 

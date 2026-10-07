@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.44. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.45. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -57,15 +57,49 @@ für den optionalen Formular-Import per KI und für die optionale Web-Version.
 
 ## 2. Installation und Updates
 
-- **Installieren:** Die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` von der
-  [Release-Seite](https://github.com/mbruver-source/SHS/releases/latest) laden und starten.
+Alle Dateien gibt es auf der
+[Release-Seite](https://github.com/mbruver-source/SHS/releases/latest). Das Programm läuft unter
+**Windows**, als **Vorschau** auch unter **macOS** und **Linux**. Die Vorschau-Versionen werden
+bei jedem Build automatisch geprüft, sind aber noch nicht auf echten Mac- und Linux-Rechnern
+erprobt. Rückmeldungen dazu sind willkommen (siehe
+[Fehler melden](#fehler-melden-oder-wunsch-äußern)).
+
+- **Windows:** Die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
   Administratorrechte sind nicht nötig. Erscheint „Windows hat den Start dieser App
   verhindert“, auf **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
+- **macOS (Vorschau, ab macOS 13):** Es gibt zwei Dateien. Welche passt, steht im Apple-Menü
+  unter **„Über diesen Mac“**: Bei „Chip Apple M…“ die Datei
+  `SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg`, bei „Prozessor Intel …“ die Datei
+  `…-macOS-Intel.dmg`.
+
+    1. Die `.dmg`-Datei öffnen und **SHS-Pruefungsprogramm** auf den Ordner **„Programme“**
+       ziehen.
+    2. Das Programm ist nicht bei Apple registriert. Beim ersten Start meldet macOS deshalb,
+       dass es nicht überprüft werden kann. Auf **„Fertig“** klicken.
+    3. **Systemeinstellungen** → **„Datenschutz & Sicherheit“** öffnen, ganz nach unten
+       scrollen und bei SHS-Pruefungsprogramm auf **„Dennoch öffnen“** klicken, dann mit dem
+       Passwort bestätigen. Ab jetzt startet das Programm normal. (Bis macOS 14 genügt
+       stattdessen: Rechtsklick auf das Programm → **„Öffnen“** → **„Öffnen“**.)
+
+- **Linux (Vorschau):** für alle gängigen Distributionen ab etwa 2022 (z. B. Ubuntu 22.04,
+  Linux Mint 21, Debian 12), nur für 64-Bit-PCs (x86_64).
+
+    - **AppImage** (läuft ohne Installation): `SHS-Pruefungsprogramm-X.Y.Z-x86_64.AppImage`
+      laden, mit Rechtsklick → **„Eigenschaften“** als **ausführbar** markieren (oder im
+      Terminal `chmod +x SHS-Pruefungsprogramm-*.AppImage`) und per Doppelklick starten.
+      Startet es nicht, fehlt meist FUSE: das Paket `fuse3` installieren.
+    - **.deb-Paket** (Ubuntu, Mint, Debian, mit Eintrag im Startmenü):
+      `shs-pruefungsprogramm_X.Y.Z_amd64.deb` laden und per Doppelklick in der
+      Softwareverwaltung installieren oder im Terminal:
+      `sudo apt install ./shs-pruefungsprogramm_X.Y.Z_amd64.deb`. Entfernen mit
+      `sudo apt remove shs-pruefungsprogramm`, die Termine bleiben dabei erhalten.
+
 - **Version prüfen und aktualisieren:** Oben rechts auf **„ℹ️ Version …“** klicken, dann
   **„Nach Updates suchen“**. Gibt es eine neuere Version, erscheint
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
-  installieren – deine Termine bleiben erhalten. Eine automatische Suche im Hintergrund gibt es
-  bewusst nicht.
+  installieren – deine Termine bleiben erhalten. Unter macOS die App im Ordner „Programme“
+  ersetzen, beim AppImage die alte Datei durch die neue. Eine automatische Suche im
+  Hintergrund gibt es bewusst nicht.
 - **Vor dem Update das Programm schließen.** Beim Schließen werden offene Ergebnisse wie
   gewohnt gespeichert. Ab Version 1.0.44 erkennt das Setup ein noch laufendes Programm und
   bittet, es zu schließen. Meldet das Setup „Fehler beim Ersetzen einer vorhandenen Datei …
@@ -78,14 +112,16 @@ für den optionalen Formular-Import per KI und für die optionale Web-Version.
   - **„Akzentfarbe“:** Blau, Grün oder Violett, die Farbe der Haupt-Schaltflächen und der
     Markierungen.
 
-  Beim Design Dunkel bleibt das Windows-Fenster zum Öffnen und Speichern von Dateien hell.
-  Dieses Fenster stammt von Windows selbst.
+  Unter Windows bleibt beim Design Dunkel das Fenster zum Öffnen und Speichern von Dateien
+  hell. Dieses Fenster stammt von Windows selbst.
 
 ## 3. Termine
 
 Jeder Prüfungstermin ist eine eigene Datei. Standardmäßig liegen alle Termine im Ordner
 `SHS-Pruefungsprogramm\Termine` in deinem Benutzerprofil (z. B.
-`C:\Users\Name\SHS-Pruefungsprogramm\Termine`).
+`C:\Users\Name\SHS-Pruefungsprogramm\Termine`, unter macOS
+`/Users/Name/SHS-Pruefungsprogramm/Termine`, unter Linux
+`/home/Name/SHS-Pruefungsprogramm/Termine`).
 
 ### Startbildschirm
 
@@ -584,7 +620,7 @@ Jeder Button fragt nach dem Speicherort und erzeugt ein PDF. Vorgeschlagen wird 
 `Ausdrucke\<Termin>` neben der Termin-Datei (z. B. `…\SHS-Pruefungsprogramm\Termine\Ausdrucke\2026-11-14_Verein`),
 nach einem bewusst anderen Ordner dieser. Nach dem Speichern zeigt ein Fenster, wo die Datei
 liegt, mit **„PDF öffnen“** und **„Ordner zeigen“** – praktisch, um sie z. B. an eine E-Mail
-anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Explorer.
+anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimanager (Explorer bzw. Finder).
 
 | Button | Inhalt |
 |---|---|
@@ -628,6 +664,11 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
   den es schon gibt, wählst du **„Überschreiben“**, **„Als Kopie importieren“** oder
   **„Überspringen“**. Den gerade geöffneten Termin kann man nicht überschreiben.
   Wiederhergestellte Termine erscheinen beim nächsten „Anderen Termin öffnen…“.
+  Scheitert das Wiederherstellen, bevor der erste Termin übernommen ist, bleibt alles
+  unverändert. Scheitert es erst danach, zum Beispiel weil unter Windows eine Termin-Datei
+  gerade in einem anderen Programm geöffnet ist, meldet das Programm **„Wiederherstellen
+  unvollständig“** und nennt die Termine, die schon aus der Sicherung übernommen sind.
+  Alle anderen Termine sind unverändert.
 
 **Umzug auf einen anderen Rechner:** Auf dem alten Rechner eine Sicherung erstellen, auf dem neuen
 Rechner das Programm installieren und die Sicherung wiederherstellen.
@@ -745,16 +786,23 @@ Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt in solchen F�
 Protokoll in die Datei `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem
 Benutzerprofil (neben dem Ordner `Termine`). Hänge sie bitte an eine Fehlermeldung an
 (siehe unten) – vorher kurz hineinschauen, ob echte Teilnehmerdaten darin stehen (auch dein
-Windows-Benutzername kann in Dateipfaden vorkommen).
+Benutzername kann in Dateipfaden vorkommen).
 
 **Funktioniert meine Installation vollständig?**
-Das Programm kann sich selbst prüfen, ohne deine Termine anzufassen. Dazu im Startmenü
-„Ausführen“ (Windows-Taste + R) öffnen und eingeben:
+Das Programm kann sich selbst prüfen, ohne deine Termine anzufassen. Unter Windows dazu im
+Startmenü „Ausführen“ (Windows-Taste + R) öffnen und eingeben:
 `"%LOCALAPPDATA%\Programs\SHS-Pruefungsprogramm\SHS-Pruefungsprogramm.exe" --selbsttest`
 (bzw. den Pfad, unter dem du es installiert hast). Nach etwa einer halben Minute steht das
 Ergebnis in der Datei `shs_selbsttest.log` im Temp-Ordner (Windows-Taste + R, `%TEMP%`
-eingeben). „ERGEBNIS: alles OK“ heißt: Termine, Auswertung, PDFs, Formular-Import,
-Datensicherung und Oberfläche funktionieren. Bei einer Fehlermeldung die Datei bitte an die
+eingeben). Unter macOS bzw. Linux im Terminal eingeben (das Ergebnis steht dann in
+`shs_selbsttest.log` in deinem Benutzerordner):
+
+- macOS: `/Applications/SHS-Pruefungsprogramm.app/Contents/MacOS/SHS-Pruefungsprogramm --selbsttest ~/shs_selbsttest.log`
+- Linux (.deb): `shs-pruefungsprogramm --selbsttest ~/shs_selbsttest.log`
+- Linux (AppImage, im Ordner der Datei): `./SHS-Pruefungsprogramm-*.AppImage --selbsttest ~/shs_selbsttest.log`
+
+„ERGEBNIS: alles OK“ heißt: Termine, Auswertung, PDFs, Formular-Import,
+Datensicherung, Oberfläche und Programmsymbol funktionieren. Bei einer Fehlermeldung die Datei bitte an die
 Fehlermeldung anhängen (siehe unten).
 
 ### Fehler melden oder Wunsch äußern
@@ -802,7 +850,7 @@ Alles, was du jetzt noch nicht weißt, trägst du später im Reiter **„Verwalt
 1. Reiter **„Export“** anklicken.
 2. Auf **„Anmeldeformular (PDF)…“** klicken und **„Speichern“** wählen.
 3. Es erscheint ein Fenster, wo die Datei liegt. Mit **„Ordner zeigen“** siehst du sie im
-   Explorer und kannst sie z. B. an eine E-Mail anhängen.
+   Dateimanager (Explorer bzw. Finder) und kannst sie z. B. an eine E-Mail anhängen.
 4. Die Teilnehmer füllen das Formular am Computer aus, speichern es und schicken es zurück.
 
 ### Schritt 3: Die Anmeldungen einlesen

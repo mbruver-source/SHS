@@ -11,6 +11,9 @@ Installer-Build (dieser Abschnitt) muss aber auf einem **Windows-Rechner**
 erfolgen, weil PyInstaller eine Windows-.exe nur unter Windows erzeugen kann
 und Inno Setup ein reines Windows-Werkzeug ist.
 
+Die Vorschau-Versionen für macOS und Linux entstehen nur über GitHub Actions,
+siehe [unten](#macos--und-linux-vorschau).
+
 ## Voraussetzungen (einmalig, auf dem Windows-Build-Rechner)
 
 1. Python 3.11+ installiert.
@@ -186,7 +189,8 @@ ist, oder um den Build-Schritt nicht mehr manuell erledigen zu müssen.
 
    Das löst den Workflow automatisch aus, baut die Setup-Datei, prüft die gebaute und die
    still installierte .exe mit `--selbsttest` (bricht bei einem Fehler ab) und veröffentlicht
-   sie als GitHub Release (Reiter „Releases" im Repo). Als Beschreibung dient
+   sie – zusammen mit den Mac- und Linux-Dateien, siehe
+   [macOS- und Linux-Vorschau](#macos--und-linux-vorschau) – als GitHub Release (Reiter „Releases" im Repo). Als Beschreibung dient
    `RELEASE_NOTES.md` („Was ist neu“ in Alltagssprache – vor jedem Build neu
    schreiben und mit committen), darunter automatisch erzeugte Release-Notes.
 
@@ -229,6 +233,35 @@ git push
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
+## macOS- und Linux-Vorschau
+
+Seit Marcos Entscheidung vom 07.10.2026 baut derselbe Workflow `build-installer.yml`
+zusätzlich zur Windows-Version (alle nicht signiert, als „Vorschau“ gekennzeichnet):
+
+| Job | Runner | Ergebnis | Selbsttest |
+|---|---|---|---|
+| `build-macos` (Apple Silicon) | `macos-15` | `SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg` | gebaute App und App aus dem eingebundenen .dmg |
+| `build-macos` (Intel) | `macos-15-intel` | `SHS-Pruefungsprogramm-X.Y.Z-macOS-Intel.dmg` | wie oben |
+| `build-linux` | `ubuntu-22.04` | `SHS-Pruefungsprogramm-X.Y.Z-x86_64.AppImage`, `shs-pruefungsprogramm_X.Y.Z_amd64.deb` | gebauter Ordner, AppImage, installiertes .deb |
+
+- `build.spec` erkennt das System: unter macOS entsteht `dist/SHS-Pruefungsprogramm.app`,
+  unter Linux der Ordner `dist/SHS-Pruefungsprogramm/`. AppImage und .deb baut daraus
+  `tools/linux_pakete.sh`; appimagetool und die AppImage-Runtime werden mit fester Version
+  und Prüfsumme geladen (S-3).
+- Linux wird bewusst auf Ubuntu 22.04 gebaut: Das Programm läuft dann auf allen Systemen ab
+  glibc 2.35. Wird der Runner eingestellt, auf den nächsten wechseln und die
+  Mindestversion im Handbuch anpassen.
+- **Ein Fehler in einem Mac- oder Linux-Job hält das Release nicht auf.** Der `release`-Job
+  veröffentlicht dann die Windows-Version und die übrigen Dateien; der fehlgeschlagene Job
+  ist im Lauf rot. Nach jedem Tag-Build deshalb im Reiter „Actions“ nachsehen, ob alle Jobs
+  grün sind, und fehlende Dateien bei Bedarf mit dem nächsten Build nachliefern.
+- macOS-Version ohne Apple-Signatur: Nutzer müssen den ersten Start einmal erlauben
+  (Handbuch, Kapitel 2). Für eine Signatur mit Beglaubigung („Notarisierung“) wäre eine
+  Apple-Developer-Mitgliedschaft nötig.
+- Das Programmsymbol liegt in `symbol/` (`.png`, `.ico`, `.icns`) und wird mit
+  `python tools/programmsymbol.py <foto.jpg>` aus dem Beagle-Foto erzeugt; dasselbe Werkzeug
+  schreibt auch das Website-Symbol `docs/favicon.png`.
+
 ## Kurz-Checkliste pro Release
 
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,
@@ -245,3 +278,5 @@ git tag vX.Y.Z && git push origin vX.Y.Z
       und geprüft, dass (a) die neue Version läuft und (b) vorhandene
       Termine-Dateien weiterhin sichtbar sind
 - [ ] `AppId` in `installer.iss` **nicht** verändert
+- [ ] Nach dem Tag-Lauf unter „Actions“ prüfen, dass auch `build-macos` (2x) und
+      `build-linux` grün sind und das Release .exe, beide .dmg, AppImage und .deb enthält

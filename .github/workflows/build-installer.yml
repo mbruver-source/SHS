@@ -2,10 +2,13 @@ name: Installer bauen
 
 # Baut den Windows-Installer (PyInstaller + Inno Setup) automatisiert auf einem
 # GitHub-Windows-Runner - macht inhaltlich dasselbe wie build_installer.bat lokal.
+# Dazu (Vorschau, Marco 07.10.2026): die macOS-App als .dmg für Apple Silicon und Intel
+# (Job build-macos) sowie AppImage und .deb für Linux (Job build-linux), jeweils mit
+# demselben --selbsttest wie die Windows-EXE. Mac und Linux sind nicht signiert.
 #
 # Ausgelöst durch:
 #   - einen gepushten Versions-Tag nach dem Muster "vX.Y.Z" (z. B. "v1.2.0")
-#     -> baut UND veröffentlicht die Setup-.exe als GitHub Release
+#     -> baut UND veröffentlicht die Setup-.exe (dazu .dmg, AppImage, .deb) als GitHub Release
 #   - manuell über den Button "Run workflow" (workflow_dispatch)
 #     -> baut nur und lädt das Ergebnis als Artefakt hoch, zum Testen, ohne
 #        gleich ein Release zu erzeugen
@@ -109,8 +112,9 @@ jobs:
       - name: Selbsttest der gebauten .exe (--selbsttest)
         # T1 (Marco 03.10.2026): startet die frisch gebaute EXE ohne Fenster und prüft
         # Termin, Auswertung, alle PDFs, Anmeldeformular-Import (pypdf), CSV, verschlüsselte
-        # Sicherung (pyzipper) und die Oberfläche mit allen Reitern - fehlt in build.spec ein
-        # Modul/Plugin, scheitert der Build HIER statt erst beim Nutzer.
+        # Sicherung (pyzipper), die Oberfläche mit allen Reitern und das Programmsymbol - fehlt
+        # in build.spec ein Modul/Plugin/eine Datei, scheitert der Build HIER statt erst beim
+        # Nutzer. Dieselbe Prüfung läuft in build-macos und build-linux.
         shell: pwsh
         run: |
           $protokoll = Join-Path $env:RUNNER_TEMP "selbsttest_exe.log"
@@ -149,11 +153,171 @@ jobs:
           name: SHS-Pruefungsprogramm-Setup-${{ steps.version.outputs.version }}
           path: Output\SHS-Pruefungsprogramm-Setup-*.exe
 
+  build-macos:
+    # Vorschau (Marco 07.10.2026): je Mac-Typ auf dem passenden Runner gebaut und getestet,
+    # weil PyInstaller nur für die Architektur des laufenden Pythons baut.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            typ: AppleSilicon
+          - runner: macos-15-intel
+            typ: Intel
+    runs-on: ${{ matrix.runner }}
+    # Ein hängender Selbsttest soll das Release (wartet per needs) nicht stundenlang aufhalten.
+    timeout-minutes: 45
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Python einrichten
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Python-Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.22.3
+
+      - name: App mit PyInstaller bauen
+        run: pyinstaller build.spec
+
+      - name: Ad-hoc-Signatur der App prüfen
+        # Ohne gültige (Ad-hoc-)Signatur meldet macOS auf Apple-Silicon-Macs "beschädigt"
+        # statt des normalen Dialogs für nicht registrierte Programme.
+        run: codesign --verify --deep --strict --verbose=2 dist/SHS-Pruefungsprogramm.app
+
+      - name: Selbsttest der gebauten App
+        run: |
+          protokoll="$RUNNER_TEMP/selbsttest_app.log"
+          status=0
+          dist/SHS-Pruefungsprogramm.app/Contents/MacOS/SHS-Pruefungsprogramm --selbsttest "$protokoll" || status=$?
+          cat "$protokoll" || echo "Kein Protokoll geschrieben"
+          exit $status
+
+      - name: .dmg erstellen und die App daraus testen
+        # Die App liegt im Abbild neben einer Verknüpfung auf "Programme" zum Hineinziehen.
+        env:
+          MAC_TYP: ${{ matrix.typ }}
+        run: |
+          version="$(tr -d '[:space:]' < version.txt)"
+          mkdir -p dmg Output
+          cp -R dist/SHS-Pruefungsprogramm.app dmg/
+          ln -s /Applications dmg/Applications
+          dmg="Output/SHS-Pruefungsprogramm-$version-macOS-$MAC_TYP.dmg"
+          hdiutil create -volname "SHS-Pruefungsprogramm" -srcfolder dmg -ov -format UDZO "$dmg"
+          laufwerk="$(hdiutil attach -nobrowse -readonly "$dmg" | tail -1 | cut -f3)"
+          protokoll="$RUNNER_TEMP/selbsttest_dmg.log"
+          status=0
+          "$laufwerk/SHS-Pruefungsprogramm.app/Contents/MacOS/SHS-Pruefungsprogramm" --selbsttest "$protokoll" || status=$?
+          cat "$protokoll" || echo "Kein Protokoll geschrieben"
+          hdiutil detach "$laufwerk"
+          exit $status
+
+      - name: .dmg als Artefakt hochladen
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SHS-Pruefungsprogramm-macOS-${{ matrix.typ }}
+          path: Output/*.dmg
+
+  build-linux:
+    # Vorschau (Marco 07.10.2026). Ubuntu 22.04 statt "latest": das Programm läuft dann auch
+    # auf Systemen mit älterer glibc (ab 2.35, z. B. Ubuntu 22.04, Debian 12, Mint 21).
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Python einrichten
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Qt-Systembibliotheken installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 \
+            libxcb-xinerama0 libdbus-1-3 libfontconfig1 libglib2.0-0 libgl1
+
+      - name: Python-Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.22.3
+
+      - name: Programmordner mit PyInstaller bauen
+        run: pyinstaller build.spec
+
+      - name: Selbsttest des gebauten Programms
+        run: |
+          protokoll="$RUNNER_TEMP/selbsttest_linux.log"
+          status=0
+          dist/SHS-Pruefungsprogramm/SHS-Pruefungsprogramm --selbsttest "$protokoll" || status=$?
+          cat "$protokoll" || echo "Kein Protokoll geschrieben"
+          exit $status
+
+      - name: appimagetool und AppImage-Runtime laden (feste Version, Prüfsumme)
+        # S-3: feste Versionen mit Prüfsumme (Stand 07.10.2026: appimagetool 1.9.1,
+        # type2-runtime 20251108). Ohne --runtime-file würde appimagetool die Runtime
+        # ungeprüft in der jeweils neuesten Fassung nachladen.
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl -fsSL -o "$RUNNER_TEMP/runtime" https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  $RUNNER_TEMP/runtime" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/appimagetool"
+
+      - name: AppImage und .deb bauen
+        run: bash tools/linux_pakete.sh "$(tr -d '[:space:]' < version.txt)" "$RUNNER_TEMP/appimagetool" "$RUNNER_TEMP/runtime"
+
+      - name: AppImage testen
+        run: |
+          protokoll="$RUNNER_TEMP/selbsttest_appimage.log"
+          status=0
+          chmod +x Output/*.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Output/*.AppImage --selbsttest "$protokoll" || status=$?
+          cat "$protokoll" || echo "Kein Protokoll geschrieben"
+          exit $status
+
+      - name: .deb installieren, testen, entfernen
+        run: |
+          sudo apt-get install -y ./Output/*.deb
+          protokoll="$RUNNER_TEMP/selbsttest_deb.log"
+          status=0
+          shs-pruefungsprogramm --selbsttest "$protokoll" || status=$?
+          cat "$protokoll" || echo "Kein Protokoll geschrieben"
+          sudo apt-get remove -y shs-pruefungsprogramm
+          exit $status
+
+      - name: AppImage und .deb als Artefakt hochladen
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SHS-Pruefungsprogramm-Linux
+          path: |
+            Output/*.AppImage
+            Output/*.deb
+
   release:
     # S-3: eigener Job mit Schreibrecht, nur bei einem Versions-Tag - führt keinen Build-
-    # Code aus, sondern veröffentlicht nur das geprüfte Artefakt aus dem build-Job.
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Code aus, sondern veröffentlicht nur die geprüften Artefakte der Build-Jobs.
+    # Mac und Linux sind Vorschau (Marco 07.10.2026): Schlägt einer dieser Jobs fehl, wird
+    # das Release trotzdem mit der Windows-Version erstellt (always() + Prüfung von build);
+    # es fehlen dann nur die betroffenen Dateien. Der fehlgeschlagene Job bleibt im Lauf rot.
+    needs: [build, build-macos, build-linux]
+    if: always() && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write # nötig, um das GitHub-Release anzulegen
@@ -169,10 +333,24 @@ jobs:
           name: SHS-Pruefungsprogramm-Setup-${{ needs.build.outputs.version }}
           path: Output
 
+      - name: Mac- und Linux-Dateien holen (soweit gebaut)
+        # Fehlt ein Artefakt (Job fehlgeschlagen), fehlt nur diese Datei im Release.
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: SHS-Pruefungsprogramm-{macOS,Linux}*
+          path: Output
+          merge-multiple: true
+
       - name: GitHub-Release erstellen
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          files: Output/SHS-Pruefungsprogramm-Setup-*.exe
+          files: |
+            Output/SHS-Pruefungsprogramm-Setup-*.exe
+            Output/*.dmg
+            Output/*.AppImage
+            Output/*.deb
+          fail_on_unmatched_files: false
           # Kurze deutsche Beschreibung "Was ist neu" (wird vor jedem Build neu geschrieben),
           # darunter die automatisch erzeugte Commit-Liste.
           body_path: RELEASE_NOTES.md

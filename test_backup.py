@@ -3,10 +3,12 @@ db_sicherung.py). Reine Logik-/Dateisystem-Tests ohne Qt, im selben Stil wie tes
 (unittest, tempfile.TemporaryDirectory) - decken sowohl den unverschlüsselten Weg
 (Standard-`zipfile`) als auch den AES-256-verschlüsselten Weg (`pyzipper`) ab."""
 
+import os
 import pathlib
 import tempfile
 import unittest
 import zipfile
+import zlib
 from unittest.mock import patch
 
 import pyzipper
@@ -19,6 +21,7 @@ from db import (
 )
 from db_sicherung import (
     PasswortFalschError,
+    TeilweiseWiederhergestelltError,
     _ist_sicherer_dateiname,
     eindeutigen_dateinamen_finden,
     sicherung_erstellen,
@@ -38,6 +41,18 @@ def _termin_anlegen(ordner: pathlib.Path, dateiname: str, verein: str = "Testver
         nachname="Muster", vorname="Max", rufname_hund="Bello", art="ED", stufe=1, disziplin="Flächensuche"))
     conn.close()
     return pfad
+
+
+def _beschaedigtes_zip_schreiben(zip_pfad: str) -> None:
+    """Schreibt ein ZIP mit einem unkomprimierten Eintrag und verändert danach ein Byte
+    seines Inhalts - das ZIP bleibt lesbar, der Eintrag scheitert an der Prüfsumme."""
+    inhalt = b"SQLite format 3\0" + b"x" * 100
+    with zipfile.ZipFile(zip_pfad, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("a.sqlite", inhalt)
+    daten = bytearray(pathlib.Path(zip_pfad).read_bytes())
+    stelle = daten.index(inhalt) + 50
+    daten[stelle] ^= 0xFF
+    pathlib.Path(zip_pfad).write_bytes(bytes(daten))
 
 
 class TestSicherungErstellen(unittest.TestCase):
@@ -94,6 +109,42 @@ class TestSicherungErstellen(unittest.TestCase):
         ziel = str(self.ziel_ordner / "sicherung.zip")
         with self.assertRaises(ValueError):
             sicherung_erstellen(ziel, ordner=self.ordner)
+
+    def test_hinterlaesst_keine_temporaeren_dateien(self):
+        _termin_anlegen(self.ordner, "a.sqlite")
+        sicherung_erstellen(str(self.ziel_ordner / "sicherung.zip"), ordner=self.ordner)
+        self.assertEqual(sorted(p.name for p in self.ziel_ordner.iterdir()), ["sicherung.zip", "termine"])
+
+    def test_abbruch_laesst_vorhandene_sicherung_unveraendert(self):
+        """QS-Prüfung 07.10.2026, Befund 2: Scheitert das Schreiben mittendrin (z. B.
+        voller USB-Stick), bleibt eine gleichnamige ältere Sicherung byte-gleich erhalten,
+        statt durch ein gültig aussehendes, unvollständiges ZIP ersetzt zu werden. Ohne
+        Passwort schreibt zipfile, mit Passwort pyzipper - beide Wege werden geprüft."""
+        _termin_anlegen(self.ordner, "a.sqlite")
+        _termin_anlegen(self.ordner, "b.sqlite")
+        ziel = self.ziel_ordner / "sicherung.zip"
+
+        for passwort, zip_klasse in ((None, zipfile.ZipFile), ("geheim123", pyzipper.zipfile.ZipFile)):
+            with self.subTest(passwort=passwort):
+                sicherung_erstellen(str(ziel), passwort=passwort, ordner=self.ordner)
+                vorher = ziel.read_bytes()
+
+                original_write = zip_klasse.write
+                aufrufe = []
+
+                def write_mit_fehler(zf, *args, _original=original_write, _aufrufe=aufrufe, **kwargs):
+                    _aufrufe.append(args)
+                    if len(_aufrufe) == 2:
+                        raise OSError(28, "No space left on device")
+                    return _original(zf, *args, **kwargs)
+
+                with patch.object(zip_klasse, "write", write_mit_fehler):
+                    with self.assertRaises(OSError):
+                        sicherung_erstellen(str(ziel), passwort=passwort, ordner=self.ordner)
+
+                self.assertEqual(len(aufrufe), 2)
+                self.assertEqual(ziel.read_bytes(), vorher)
+                self.assertEqual(sorted(p.name for p in self.ziel_ordner.iterdir()), ["sicherung.zip", "termine"])
 
 
 class TestSicherungInhalt(unittest.TestCase):
@@ -164,6 +215,25 @@ class TestSicherungInhalt(unittest.TestCase):
             zf.writestr("unterordner/auch_boese.sqlite", "fake-inhalt")
             zf.writestr("a.sqlite", "fake-inhalt")
         self.assertEqual(sicherung_inhalt(self.zip_pfad), ["a.sqlite"])
+
+    def test_beschaedigter_eintrag_wird_als_beschaedigt_gemeldet(self):
+        """Marco 07.10.2026 (Nachtrag zur Verifikation): Lässt sich das ZIP öffnen, ein
+        Eintrag aber nicht fehlerfrei lesen, lautet die Meldung "beschädigt" statt "keine
+        gültige ZIP-Datei" - beim Prüfen des Inhalts wie beim Wiederherstellen."""
+        _beschaedigtes_zip_schreiben(self.zip_pfad)
+        with self.assertRaisesRegex(ValueError, "beschädigt"):
+            sicherung_inhalt(self.zip_pfad)
+        with self.assertRaisesRegex(ValueError, "beschädigt"):
+            sicherung_wiederherstellen(self.zip_pfad, {"a.sqlite": "a.sqlite"}, ordner=self.ordner)
+        self.assertEqual(list(self.ordner.iterdir()), [])
+
+    def test_entpackfehler_wird_als_beschaedigt_gemeldet(self):
+        """Wie oben, für Fehler des Entpackers (zlib/lzma) statt der Prüfsumme."""
+        _termin_anlegen(self.ordner, "a.sqlite")
+        sicherung_erstellen(self.zip_pfad, ordner=self.ordner)
+        with patch.object(pyzipper.AESZipFile, "read", side_effect=zlib.error("invalid stored block lengths")):
+            with self.assertRaisesRegex(ValueError, "beschädigt"):
+                sicherung_inhalt(self.zip_pfad)
 
     def test_zip_nur_mit_traversal_eintraegen_wirft_value_error(self):
         with zipfile.ZipFile(self.zip_pfad, "w") as zf:
@@ -292,6 +362,72 @@ class TestSicherungWiederherstellen(unittest.TestCase):
         # ...und keine liegen gebliebene .tmp-Datei im Zielordner.
         self.assertEqual([p.name for p in self.ziel_ordner.iterdir()], ["a.sqlite"])
 
+    def test_q1_doppelte_zielnamen_werden_abgelehnt(self):
+        """Sicherheitskorrektur Q-1 (07.10.2026), Details folgen."""
+        with zipfile.ZipFile(self.zip_pfad, "w") as zf:
+            zf.writestr("a.sqlite", "eins")
+            zf.writestr("A.sqlite", "zwei")
+
+        with self.assertRaisesRegex(ValueError, "mehrfach"):
+            sicherung_wiederherstellen(
+                self.zip_pfad, {"a.sqlite": "a.sqlite", "A.sqlite": "A.sqlite"}, ordner=self.ziel_ordner
+            )
+        self.assertEqual(list(self.ziel_ordner.iterdir()), [])
+
+    def test_lesefehler_ersetzt_noch_keinen_termin(self):
+        """QS-Prüfung 07.10.2026, Befund 3: Alle Einträge werden erst vollständig entpackt,
+        bevor ein vorhandener Termin ersetzt wird - ein Lesefehler beim zweiten Eintrag
+        lässt den ersten Termin unverändert."""
+        with zipfile.ZipFile(self.zip_pfad, "w") as zf:
+            zf.writestr("a.sqlite", "neu")
+        (self.ziel_ordner / "a.sqlite").write_text("alt")
+
+        with self.assertRaises(KeyError):
+            sicherung_wiederherstellen(
+                self.zip_pfad, {"a.sqlite": "a.sqlite", "fehlt.sqlite": "fehlt.sqlite"}, ordner=self.ziel_ordner
+            )
+        self.assertEqual((self.ziel_ordner / "a.sqlite").read_text(), "alt")
+        self.assertEqual([p.name for p in self.ziel_ordner.iterdir()], ["a.sqlite"])
+
+    def test_abbruch_nach_erstem_ersetzen_nennt_wiederhergestellte_termine(self):
+        """QS-Prüfung 07.10.2026, Befund 3: Scheitert das Ersetzen erst beim zweiten
+        Termin (z. B. Datei unter Windows gesperrt), nennt die Ausnahme den bereits
+        ersetzten ersten Termin. Temporäre Dateien bleiben nicht liegen."""
+        with zipfile.ZipFile(self.zip_pfad, "w") as zf:
+            zf.writestr("a.sqlite", "neu-a")
+            zf.writestr("b.sqlite", "neu-b")
+        (self.ziel_ordner / "a.sqlite").write_text("alt-a")
+        (self.ziel_ordner / "b.sqlite").write_text("alt-b")
+
+        original_replace = os.replace
+        aufrufe = []
+
+        def replace_mit_fehler(quelle, ziel):
+            aufrufe.append(ziel)
+            if len(aufrufe) == 2:
+                raise PermissionError("Datei gesperrt")
+            return original_replace(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", side_effect=replace_mit_fehler):
+            with self.assertRaises(TeilweiseWiederhergestelltError) as kontext:
+                sicherung_wiederherstellen(
+                    self.zip_pfad, {"a.sqlite": "a.sqlite", "b.sqlite": "b.sqlite"}, ordner=self.ziel_ordner
+                )
+
+        self.assertEqual(kontext.exception.geschrieben, ["a.sqlite"])
+        self.assertIsInstance(kontext.exception.ursache, PermissionError)
+        self.assertIn("a.sqlite", str(kontext.exception))
+        self.assertEqual((self.ziel_ordner / "a.sqlite").read_text(), "neu-a")
+        self.assertEqual((self.ziel_ordner / "b.sqlite").read_text(), "alt-b")
+        self.assertEqual(sorted(p.name for p in self.ziel_ordner.iterdir()), ["a.sqlite", "b.sqlite"])
+
+    def test_ungueltige_datei_wirft_value_error(self):
+        """QS-Prüfung 07.10.2026, Befund 4: wie sicherung_inhalt() über _zip_oeffnen()."""
+        kaputt = self.ziel_ordner.parent / "kaputt.zip"
+        kaputt.write_text("das ist kein ZIP")
+        with self.assertRaises(ValueError):
+            sicherung_wiederherstellen(str(kaputt), {"a.sqlite": "a.sqlite"}, ordner=self.ziel_ordner)
+
     def test_mit_passwort(self):
         _termin_anlegen(self.quell_ordner, "a.sqlite")
         sicherung_erstellen(self.zip_pfad, passwort="geheim123", ordner=self.quell_ordner)
@@ -332,6 +468,14 @@ class TestEindeutigenDateinamenFinden(unittest.TestCase):
         (self.ordner / "a (2).sqlite").write_text("x")
         (self.ordner / "a (3).sqlite").write_text("x")
         self.assertEqual(eindeutigen_dateinamen_finden(self.ordner, "a.sqlite"), "a (4).sqlite")
+
+    def test_q1_bereits_vergebene_namen(self):
+        """Sicherheitskorrektur Q-1 (07.10.2026), Details folgen."""
+        (self.ordner / "a.sqlite").write_text("x")
+        self.assertEqual(
+            eindeutigen_dateinamen_finden(self.ordner, "a.sqlite", bereits_vergeben={"A (2).sqlite"}),
+            "a (3).sqlite",
+        )
 
 
 class TestIstSichererDateiname(unittest.TestCase):

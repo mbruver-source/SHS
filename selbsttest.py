@@ -12,7 +12,9 @@ hilft bei der Fehlersuche beim Nutzer. Er berührt keine echten Termine: alles p
 einem Temp-Ordner, der danach gelöscht wird.
 
 Ergebnis: Exit-Code 0 (alles OK) bzw. 1, dazu eine Protokolldatei (die EXE hat keine
-Konsole) - Standard: %TEMP%\\shs_selbsttest.log.
+Konsole) - Standard: %TEMP%\\shs_selbsttest.log, unter macOS/Linux im System-Temp-Ordner
+(z. B. /tmp/shs_selbsttest.log). Unter macOS und Linux startet die CI damit die .app bzw. das
+AppImage und das installierte .deb-Paket.
 """
 from __future__ import annotations
 
@@ -84,7 +86,7 @@ def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
 
 def _offscreen_verfuegbar() -> bool:
     """Ist das Qt-Plugin "offscreen" vorhanden (in der EXE hängt das vom PyInstaller-Hook
-    ab)? Sonst bleibt es bei der normalen Windows-Plattform - ein kurz sichtbares Fenster
+    ab)? Sonst bleibt es bei der normalen Plattform des Systems - ein kurz sichtbares Fenster
     ist besser als ein Abbruch, weil Qt die erzwungene Plattform nicht findet."""
     try:
         from PySide6.QtCore import QLibraryInfo
@@ -222,3 +224,17 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         return f"{reiter} Reiter, Plattform {qapp.platformName()}"
 
     schritt("Oberfläche mit allen Reitern (PySide6)", oberflaeche)
+
+    def symbol():
+        # Fehlt symbol/programmsymbol.png im Bundle (build.spec, datas), zeigt das System nur
+        # sein Standardsymbol - das soll beim Build auffallen, nicht beim Nutzer.
+        from PySide6.QtWidgets import QApplication
+
+        from desktop_gemeinsam import programmsymbol, programmsymbol_pfad
+
+        QApplication.instance() or QApplication(sys.argv[:1])
+        if programmsymbol().isNull():
+            raise AssertionError(f"Programmsymbol fehlt: {programmsymbol_pfad()}")
+        return "symbol/programmsymbol.png"
+
+    schritt("Programmsymbol", symbol)

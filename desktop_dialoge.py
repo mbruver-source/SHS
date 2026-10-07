@@ -1004,24 +1004,32 @@ def _wiederherstellungsziele_planen(namen, vorhandene, ordner, aktion_fuer) -> t
     konnten zwei ZIP-Einträge auf dieselbe Zieldatei landen - z. B. enthält die Sicherung
     "A.sqlite" (vorhanden, als Kopie -> "A (2).sqlite") UND ein noch nicht vorhandenes
     "A (2).sqlite", und einer überschrieb still den anderen. Die Reihenfolge der Einträge
-    im ZIP spielt durch die zweite Runde keine Rolle mehr."""
+    im ZIP spielt durch die zweite Runde keine Rolle mehr.
+
+    Sicherheitskorrektur Q-1 (07.10.2026), Details folgen."""
+    vorhandene_namen = {n.casefold(): n for n in vorhandene}
     entscheidungen: dict[str, str] = {}
     als_kopie: list[str] = []
     uebersprungen = 0
     for name in namen:
-        if name not in vorhandene:
-            entscheidungen[name] = name
+        vorhandener_name = vorhandene_namen.get(name.casefold())
+        if vorhandener_name is None:
+            if name.casefold() in {ziel.casefold() for ziel in entscheidungen.values()}:
+                als_kopie.append(name)
+            else:
+                entscheidungen[name] = name
             continue
         aktion = aktion_fuer(name)
         if aktion == "ueberschreiben":
-            entscheidungen[name] = name
+            entscheidungen[name] = vorhandener_name
         elif aktion == "kopie":
             als_kopie.append(name)
         else:  # "ueberspringen"
             uebersprungen += 1
     for name in als_kopie:
+        # Die vorhandenen Namen ausdrücklich als belegt mitgeben (Q-1).
         entscheidungen[name] = eindeutigen_dateinamen_finden(
-            ordner, name, bereits_vergeben=set(entscheidungen.values())
+            ordner, name, bereits_vergeben=set(entscheidungen.values()) | set(vorhandene_namen.values())
         )
     return entscheidungen, uebersprungen
 
@@ -1170,7 +1178,7 @@ Zeitplan sowie
 alle Bewertungsbögen gesammelt. "Teilnehmerliste speichern (CSV, für Excel)…" speichert alle Teilnehmer
 mit Stammdaten als Excel-Liste (lässt sich auch wieder einlesen). PDFs landen standardmäßig im
 Ordner "Ausdrucke" des Termins; nach dem Speichern zeigt ein Fenster, wo die Datei liegt.
-"Ablageort öffnen" zeigt den Ordner im Explorer – alle Exporte (auch im Zeitplan-Tab) teilen
+"Ablageort öffnen" zeigt den Ordner im Dateimanager (Explorer bzw. Finder) – alle Exporte (auch im Zeitplan-Tab) teilen
 sich denselben Speicherort.</p>
 
 <h3>Reiter "Datensicherung"</h3>
@@ -1195,7 +1203,7 @@ eingebaut.</p>
 Kontrast. Unter "Akzentfarbe" legst du die Farbe der Haupt-Schaltflächen und Markierungen fest
 (Blau, Grün, Violett). Beides lässt sich frei kombinieren, wirkt sofort und wird gespeichert;
 noch nicht gespeicherte Ergebnisse bleiben dabei erhalten. Im Design Dunkel bleibt das
-Windows-Fenster zum Öffnen/Speichern von Dateien hell.</p>
+Fenster des Systems zum Öffnen/Speichern von Dateien unter Windows hell.</p>
 
 <h3>Ausführliches Handbuch</h3>
 <p>Ein ausführliches Benutzerhandbuch mit Screenshots (auch als PDF zum Ausdrucken) steht auf

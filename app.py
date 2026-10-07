@@ -146,6 +146,7 @@ from db_import import (
 )
 from db_sicherung import (
     PasswortFalschError,
+    TeilweiseWiederhergestelltError,
     sicherung_erstellen,
     sicherung_inhalt,
     sicherung_wiederherstellen,
@@ -176,6 +177,7 @@ from desktop_gemeinsam import (
     _Ablageort,
     absturzprotokoll_einrichten,
     meldungsfenster_als_klartext,
+    programmsymbol,
     _aktualisiere_veranstaltung_feld,
     _ausdrucke_ordner,
     _datei_gespeichert_melden,
@@ -3427,11 +3429,12 @@ class DatensicherungTab(QWidget):
 
         ordner = termine_ordner()
         vorhandene = {p.name for p in ordner.glob("*.sqlite")}
-        offener_name = os.path.basename(self._aktueller_pfad) if self._aktueller_pfad else None
+        # Sicherheitskorrektur Q-1 (07.10.2026), Details folgen.
+        offener_name = os.path.basename(self._aktueller_pfad).casefold() if self._aktueller_pfad else None
 
         entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
             namen, vorhandene, ordner,
-            lambda name: self._konflikt_abfragen(name, ist_offener_termin=(name == offener_name)),
+            lambda name: self._konflikt_abfragen(name, ist_offener_termin=(name.casefold() == offener_name)),
         )
 
         if not entscheidungen:
@@ -3440,6 +3443,19 @@ class DatensicherungTab(QWidget):
 
         try:
             wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)
+        except TeilweiseWiederhergestelltError as exc:
+            # QS-Prüfung 07.10.2026, Befund 3: nennen, was schon ersetzt ist.
+            QMessageBox.critical(
+                self, "Wiederherstellen unvollständig",
+                "Die Sicherung wurde nur teilweise wiederhergestellt:\n\n"
+                f"{exc.ursache}\n\n"
+                "Diese Termine sind bereits aus der Sicherung übernommen:\n"
+                + "\n".join(f"  • {name}" for name in exc.geschrieben),
+            )
+            self.status_label.setText(
+                f"Wiederherstellen unvollständig: {len(exc.geschrieben)} Termin(e) wiederhergestellt."
+            )
+            return
         except Exception as exc:
             QMessageBox.critical(
                 self, "Wiederherstellen fehlgeschlagen",
@@ -4314,6 +4330,10 @@ def main() -> int:
     absturzprotokoll_einrichten(VERSION)
     laufkennung_setzen()  # für das Setup (AppMutex), siehe dort
     app = QApplication(sys.argv)
+    # Fenster-, Taskleisten- und Dock-Symbol. Unter Linux (Wayland) ordnet die Desktop-
+    # Umgebung das Fenster über den Namen der .desktop-Datei (AppImage/.deb) ihrem Symbol zu.
+    app.setWindowIcon(programmsymbol())
+    app.setDesktopFileName("shs-pruefungsprogramm")
     meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)

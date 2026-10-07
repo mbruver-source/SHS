@@ -61,6 +61,8 @@ OutputBaseFilename=SHS-Pruefungsprogramm-Setup-{#MyAppVersion}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; Programmsymbol (Beagle, Marco 07.10.2026) auch für die Setup-Datei selbst.
+SetupIconFile=symbol\programmsymbol.ico
 ; Deinstallations-Einträge tragen ebenfalls die AppVersion, damit man in der
 ; Windows-Systemsteuerung sieht, welche Version installiert ist.
 UninstallDisplayName={#MyAppName}

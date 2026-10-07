@@ -49,7 +49,7 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    image: ${SHS_WEB_IMAGE:-ghcr.io/mbruver-source/shs-web:1.0.44}
+    image: ${SHS_WEB_IMAGE:-ghcr.io/mbruver-source/shs-web:1.0.45}
     restart: unless-stopped
     # Härtung (H-2): Dateisystem nur lesbar (Uploads/Downloads nutzen /tmp), keine
     # Linux-Capabilities (Port 5000 braucht keine), keine Rechteausweitung.
