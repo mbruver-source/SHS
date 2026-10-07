@@ -54,3 +54,7 @@ pdf/
 # Noch nicht veröffentlichte Sicherheitsberichte - erst nach dem Release ins Repo
 # (siehe CLAUDE.md, Abschnitt "Sicherheitsfunde erst nach dem Release veröffentlichen")
 _unveroeffentlicht/
+
+# Lokale Codex-Dateien (Skill-Spiegel, Einstellungen), nicht versioniert (Marco 07.10.2026)
+.agents/
+.codex/
