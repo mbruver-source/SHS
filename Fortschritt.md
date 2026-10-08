@@ -5350,3 +5350,22 @@ Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 x
   `README_CONTAINER.md`, Abschnitt „Geheimnisse“; Quellcode-Spiegel und claude.ai-Ablage
   „SHS“ auf 1.0.45 nachgezogen.
 - Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
+
+## 08.10.2026: Hinweis „Browser blockiert den Download“
+
+- **Marcos Rückmeldung:** Chrome blockiert beim ersten Download die Setup-.exe. Bisher stand
+  in den Unterlagen nur die SmartScreen-Warnung beim Start, nicht die Sperre im Browser.
+- **Ergänzt** (nur Doku, kein Programmcode): `docs/HANDBUCH.md` Kapitel 2 mit zwei
+  nummerierten Warnungen, zuerst Browser (Chrome, Edge, Firefox) und dann SmartScreen. Dazu
+  der neue Screenshot `docs/bilder/handbuch_edge_download.png` aus Marcos Edge-Screenshot,
+  zugeschnitten ohne fremden Download-Eintrag. Außerdem ein Hinweis in `README.md`, ein neuer
+  Abschnitt in `README_INSTALLER.md` und ein zusätzlicher Schritt auf der Website
+  (`docs/index.html`, Installationsliste).
+- Der Edge-Wortlaut („… wird häufig nicht heruntergeladen“, „…“ → „Beibehalten“) ist durch
+  Marcos Screenshots belegt. Der Chrome-Wortlaut stammt aus Marcos Vorlage (eine Google-KI-Antwort, nicht
+  selbst nachgestellt) und nennt deshalb beide Varianten („Gefährliche Datei behalten“ bzw. „Trotzdem behalten“).
+- **Bewusst nicht übernommen:** Den Tipp, „Sicheres Browsen“ in Chrome auszuschalten (aus
+  Marcos Vorlage). Er senkt den Schutz für alle Downloads, „Behalten“ reicht. Ebenso
+  weggelassen: „Link speichern unter…“, weil Chrome auch dabei prüft.
+- `docs/HANDBUCH.pdf` wird erst beim nächsten Build neu erzeugt. Push nur durch Marco
+  (Website geht damit erst bei seinem Push online).

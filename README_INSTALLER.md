@@ -134,6 +134,16 @@ Termine-Ordner bleibt bei jeder dieser Aktionen unangetastet. Ein Update
 "sieht" also weiterhin alle bisherigen Prüfungstermine, ohne dass dafür im
 Installer irgendetwas Besonderes nötig wäre.
 
+## Browser blockiert den Download
+
+Noch vor SmartScreen kann schon der Browser die Setup-Datei als „ungewöhnlich“ oder
+„gefährlich“ blockieren. Er prüft nicht den Inhalt, sondern den Ruf der Datei, und eine neue,
+unsignierte Version wurde noch kaum heruntergeladen. Die Freigabe geht über die
+Download-Liste des Browsers (Chrome: Strg + J → „Gefährliche Datei behalten“ bzw.
+„Trotzdem behalten“; Edge: „…“ → „Beibehalten“, ggf. „Mehr anzeigen“ → „Trotzdem
+beibehalten“). Die Schritte für die Nutzer stehen im Handbuch, Kapitel 2. Nach einer
+Signierung (siehe unten) dürfte die Sperre seltener werden, ganz verschwinden muss sie nicht.
+
 ## Windows-SmartScreen-Warnung beim ersten Start
 
 Da die Setup-Datei nicht signiert ist (siehe unten, warum das hier bewusst so

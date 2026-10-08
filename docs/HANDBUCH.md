@@ -65,8 +65,29 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 [Fehler melden](#fehler-melden-oder-wunsch-äußern)).
 
 - **Windows:** Die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
-  Administratorrechte sind nicht nötig. Erscheint „Windows hat den Start dieser App
-  verhindert“, auf **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
+  Administratorrechte sind nicht nötig. Weil die Datei noch nicht digital signiert ist, kann
+  es zwei einmalige Warnungen geben:
+
+    1. **Der Browser blockiert den Download.** Das Programm ist neu und wird selten
+       heruntergeladen, deshalb halten Browser es vorsorglich für verdächtig.
+        - **Chrome:** Mit **Strg + J** die Download-Liste öffnen. Bei der Datei auf
+          **„Gefährliche Datei behalten“** bzw. **„Trotzdem behalten“** klicken und die
+          Rückfrage bestätigen.
+        - **Edge:** meldet „… wird häufig nicht heruntergeladen“. Im Download-Fenster oben
+          rechts mit der Maus auf die Datei zeigen, auf **„…“** klicken → **„Beibehalten“**.
+          Fragt Edge danach noch einmal nach: **„Mehr anzeigen“** →
+          **„Trotzdem beibehalten“**.
+
+            ![Edge: Datei über „…“ → „Beibehalten“ freigeben](bilder/handbuch_edge_download.png)
+
+        - **Firefox:** blockiert die Datei normalerweise nicht. Falls doch: in der
+          Download-Liste (Pfeil oben rechts) auf die Datei klicken → **„Download erlauben“**.
+
+       Den Schutz des Browsers („Sicheres Browsen“) dafür bitte **nicht** ausschalten.
+
+    2. **Windows warnt beim Start.** Erscheint „Windows hat den Start dieser App verhindert“,
+       auf **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
+
 - **macOS (Vorschau, ab macOS 13):** Es gibt zwei Dateien. Welche passt, steht im Apple-Menü
   unter **„Über diesen Mac“**: Bei „Chip Apple M…“ die Datei
   `SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg`, bei „Prozessor Intel …“ die Datei

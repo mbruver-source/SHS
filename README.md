@@ -23,6 +23,11 @@ Wertnoten und Rangliste werden nach denselben Regeln berechnet wie dort.
 Der Installer bringt alles mit, was das Programm braucht – Python oder andere Software
 musst du nicht installieren. Administratorrechte sind nicht nötig.
 
+> **Browser blockiert den Download:** Chrome, Edge (selten auch Firefox) halten die neue,
+> unsignierte Datei vorsorglich für verdächtig. In der Download-Liste (Chrome: **Strg + J**)
+> bei der Datei **„Behalten“** bzw. **„Trotzdem behalten“** wählen. Genaue Schritte je
+> Browser: [Handbuch, Kapitel 2](docs/HANDBUCH.md#2-installation-und-updates).
+>
 > **Hinweis „Windows hat den Start dieser App verhindert“:** Der Installer ist noch nicht
 > digital signiert, deshalb warnt Windows beim ersten Start. Auf **„Weitere Informationen“**
 > und dann **„Trotzdem ausführen“** klicken. Das ist nur einmal nötig.
