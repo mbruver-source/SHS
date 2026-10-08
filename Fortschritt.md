@@ -5369,3 +5369,5 @@ Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 x
   weggelassen: „Link speichern unter…“, weil Chrome auch dabei prüft.
 - `docs/HANDBUCH.pdf` wird erst beim nächsten Build neu erzeugt. Push nur durch Marco
   (Website geht damit erst bei seinem Push online).
+- Auf Marcos Wunsch ausnahmsweise ohne Build: `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py`
+  neu erzeugt (Stand-Zeile weiter 1.0.45, Inhalt inkl. Browser-Hinweis).
