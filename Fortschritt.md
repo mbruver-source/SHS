@@ -5640,7 +5640,9 @@ Marcos Rückmeldung mit zwei Punkten:
     findet.
   - Reiter werden über ihre Attributnamen statt über feste Nummern gewählt.
   - 15-stellige Chip-Nr. für Testuser10–12.
-  - Der Screenshot-Test stellt Umgebung und `sys.modules` per monkeypatch wieder her.
+  - Der Screenshot-Test stellt Umgebung und `sys.modules` per monkeypatch wieder her
+    (Nachtrag nach der Nachprüfung: zuerst setzen, dann löschen, weil `delenv`/`delitem`
+    sich einen vorher fehlenden Eintrag sonst nicht merken).
   - Abweichungsliste oben richtiggestellt.
   - Zwei liegengebliebene Temp-Ordner aus Probeläufen gelöscht.
   - `CLAUDE.md` und `AGENTS.md` nennen das Skript bei der Build-Disziplin.
@@ -5648,3 +5650,10 @@ Marcos Rückmeldung mit zwei Punkten:
 - **Tests:**
   - unittest 610 OK (164 übersprungen);
   - GUI 236 passed, 1 skipped, 1 xfailed, 56 subtests passed.
+- **Nachprüfung (Commit `0c80102`):** Der Fix der Status-Spalte ist korrekt, auch bei schmalen
+  Fenstern sowie beim Sortieren und Filtern. Marco hat alle drei Punkte freigegeben, sie sind
+  als Nachtrag umgesetzt:
+  - Aufräumen im Screenshot-Test (siehe oben);
+  - veralteter Kommentar in `app.py`;
+  - Docstring und unbenutzter Parameter im Status-Spalten-Test.
+

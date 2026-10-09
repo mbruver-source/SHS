@@ -2252,14 +2252,14 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
 """
 
 
-def test_ergebnis_tabelle_status_spalte_fuellt_breite_auch_nach_neuaufbau(tmp_path):
+def test_ergebnis_tabelle_status_spalte_fuellt_breite_auch_nach_neuaufbau():
     """Marco 09.10.2026: Bei breitem Fenster bekommt die Status-Spalte den Restplatz - auch
     nach einem Neuaufbau ohne Größenänderung (Speichern, "Liste aktualisieren"). Vorher
     blieb rechts eine graue Lücke, bis man das Fenster in der Größe änderte. Läuft in einem
     eigenen Prozess, weil der Fehler nur mit echten Windows-Schriftmaßen auftrat: Der Import
     von tools/screenshots setzt QT_QPA_FONTDIR auf den Windows-Schriftenordner, und Qt lädt
-    Schriften erst bei Bedarf. Ohne diesen Ordner (z. B. Linux-CI) prüft der Test nur, dass
-    die Spalten die Breite füllen."""
+    Schriften erst bei Bedarf. Ohne diesen Ordner (z. B. Linux-CI) tritt der Fehler nicht
+    auf; die Prüfungen laufen trotzdem."""
     import subprocess
 
     repo = os.path.dirname(os.path.abspath(__file__))
@@ -5093,13 +5093,15 @@ def test_screenshot_skript_erzeugt_alle_bilder(tmp_path, monkeypatch):
     from PySide6.QtGui import QImage
 
     repo = Path(__file__).resolve().parent
-    # Der Import setzt QT_QPA_FONTDIR; monkeypatch stellt Umgebung, Suchpfad und
-    # sys.modules nach dem Test wieder her.
-    monkeypatch.delenv("QT_QPA_FONTDIR", raising=False)
+    # Der Import setzt QT_QPA_FONTDIR. Erst setzen, dann löschen: so merkt sich monkeypatch
+    # auch "war vorher nicht da" und stellt Umgebung und sys.modules nach dem Test wieder
+    # her (delenv/delitem allein merken sich einen fehlenden Eintrag nicht).
+    monkeypatch.setenv("QT_QPA_FONTDIR", "")
+    monkeypatch.delenv("QT_QPA_FONTDIR")
+    monkeypatch.setitem(sys.modules, "screenshots", None)
+    monkeypatch.delitem(sys.modules, "screenshots")
     monkeypatch.syspath_prepend(str(repo / "tools"))
-    monkeypatch.delitem(sys.modules, "screenshots", raising=False)
     import screenshots
-    monkeypatch.setitem(sys.modules, "screenshots", screenshots)
 
     umgebung = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
     lauf = subprocess.run(

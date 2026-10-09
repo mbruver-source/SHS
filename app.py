@@ -1663,7 +1663,8 @@ class ErgebnisTab(QWidget):
 
         # Spalten 0..(_STATUS_SPALTE-1): Start-Nr./Name/Hund/Art-LK, alle Disziplin-
         # Punktepaare sowie Disqualifiziert/Abbruch. Die Status-Spalte selbst bleibt außen
-        # vor - die bekommt über setStretchLastSection den Restplatz, dafür wird ihr
+        # vor - die bekommt den Restplatz (setStretchLastSection und ausdrücklich unten,
+        # siehe "Restplatz ausdrücklich an die Status-Spalte"), dafür wird ihr
         # längster möglicher Inhalt ("● nicht gespeichert", siehe _aktualisiere_zeilenstatus)
         # vorab von der verfügbaren Breite abgezogen, damit sie nicht auf (fast) 0
         # zusammengedrückt wird.
