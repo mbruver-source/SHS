@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.45. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.46. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -206,7 +206,7 @@ Programm vorher wie beim Terminwechsel nach.
 
 ### Neuen Termin anlegen
 
-![Dialog „Neuen Termin anlegen“](bilder/handbuch_termin_anlegen.png)
+![Dialog „Neuen Termin anlegen“, Ausschnitt Startnummern-Bereiche](bilder/handbuch_termin_anlegen.png)
 
 Pflicht sind **Austragender Verein\*** und **Datum\*** (TT.MM.JJJJ). Alle weiteren Angaben –
 Vereins-Nr., Ort, Prüfungsnummer, Prüfungsleiter, Richter 1–5, Prüfungsgebühr ED/DK – kannst
@@ -225,13 +225,24 @@ vergeben…“ (siehe [Kapitel 4](#4-teilnehmer)) die Nummern. Bereiche dürfen 
 überschneiden; eine Prüfung ohne Bereich bekommt keine automatische Nummer. Bei einem neuen
 Termin werden die Bereiche des letzten Termins vorgeschlagen.
 
+Schneller geht es mit **„Bereiche automatisch festlegen“**: Unter **„Standardgröße je
+Prüfung“** stellst du ein, wie viele Nummern eine Prüfung bekommt (z. B. 20), und
+übernimmst sie mit **„Für alle übernehmen“** in die Spalte **„Anzahl“**. Dort kannst du
+einzelne Prüfungen noch anpassen; „keine“ heißt: kein Bereich. Der Knopf vergibt die
+Bereiche dann lückenlos ab 1 in der Reihenfolge der Liste. Sind nur Trümmer LK 1 und
+Fläche LK 1 angeboten, ergibt das mit je 20 also 1–20 und 21–40. Er **überschreibt** die
+Bereiche aller angebotenen Prüfungen; danach
+kannst du einzelne von Hand ändern. Die „Anzahl“ geht dabei mit, und leerst du „von“ und
+„bis“, steht sie auf „keine“. Die Standardgröße wird gespeichert und beim nächsten
+Termin vorgeschlagen.
+
 Der **Speicherort\*** wird automatisch als `JJJJ-MM-TT_Verein.sqlite` vorgeschlagen. Behalte
 den Vorschlag möglichst bei: Nur Termine im Standardordner erscheinen im Startbildschirm und
 werden von der Datensicherung erfasst.
 
 ## 4. Teilnehmer
 
-![Reiter „Teilnehmer“ mit Anmerkungen und einem ausgegrauten Teilnehmer „keine Teilnahme“](bilder/handbuch_teilnehmer.png)
+![Reiter „Teilnehmer“ mit Anmerkungen, einem ausgegrauten Teilnehmer „keine Teilnahme“ und dem Hinweis „Ohne Startnummer“ unter den Knöpfen](bilder/handbuch_teilnehmer.png)
 
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
@@ -245,7 +256,8 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
 | **„Keine Teilnahme“** | Markiert nicht erschienene Teilnehmer (siehe unten), auch mehrere auf einmal. Sind alle markierten bereits so vermerkt, heißt der Button **„Teilnahme wiederherstellen“**. |
 | **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen. |
-| **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung (siehe unten). |
+| **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung, bei gesetztem „Filter Art/LK“ nur in dieser Prüfung (siehe unten). |
+| **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
 | **„Teilnehmerliste einlesen (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
 | **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
@@ -265,6 +277,20 @@ Bereits vergebene Nummern bleiben unverändert, Teilnehmer mit „Keine Teilnahm
 übersprungen. Wer keine Nummer bekommt (kein Bereich hinterlegt oder Bereich voll), steht in
 der Meldung danach. Einzelne Nummern änderst du über „Bearbeiten…“ oder „Startnummer
 tauschen…“.
+
+Willst du **alle** Nummern neu vergeben, etwa nach geänderten Bereichen, klickst du zuerst
+auf **„Alle Startnummern zurücksetzen…“** und dann auf „Fehlende Startnummern vergeben…“.
+Das solltest du nur vor der Prüfung tun: Der Zeitplan richtet sich nach den Startnummern,
+und im Web erfasste Ergebnisse werden beim Zurückholen über die Startnummer zugeordnet.
+
+Ist im **„Filter Art/LK“** eine Prüfung gewählt, wirken beide Knöpfe nur auf diese Prüfung,
+z. B. nur auf „ED LK 1 Trümmerfeld“. Rückfrage und Meldung nennen die Prüfung dann
+ausdrücklich. Die Filter „Start-Nr.“ und „Bezahlt“ haben darauf keinen Einfluss.
+
+Unter den Knöpfen steht, in welchen Prüfungen noch Teilnehmer **ohne Startnummer** sind,
+z. B. „Ohne Startnummer: DK LK 2 (1), ED LK 1 Trümmerfeld (2)“. Der Hinweis zeigt immer alle
+Prüfungen, auch bei gesetztem Filter, und verschwindet, sobald alle eine Nummer haben.
+Teilnehmer mit „Keine Teilnahme“ zählen nicht mit.
 
 ### Nicht erschienene Teilnehmer („Keine Teilnahme“)
 

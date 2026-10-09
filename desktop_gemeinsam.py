@@ -64,6 +64,7 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
         "angebotene_pruefungen": aktuell.get("angebotene_pruefungen"),
         "startnummer_bereiche": aktuell.get("startnummer_bereiche"),  # UX-Test U1
         "dk_mindestabstand": aktuell.get("dk_mindestabstand"),  # UX-Test U2
+        "startnummer_bereichsgroesse": aktuell.get("startnummer_bereichsgroesse"),  # Marco 09.10.2026
     }
     werte.update(overrides)
     set_veranstaltung(conn, **werte)

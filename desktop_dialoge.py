@@ -44,6 +44,7 @@ from db import (
     ALLE_PRUEFUNGEN,
     NeuerTeilnehmer,
     angebotene_pruefungen,
+    bereiche_automatisch_berechnen,
     dateiname_vorschlagen,
     datum_anzeige,
     init_db,
@@ -55,6 +56,7 @@ from db import (
     pruefungen_als_text,
     startnummer_bereiche,
     startnummer_bereiche_als_text,
+    startnummer_bereichsgroesse,
     termine_ordner,
     pruefungs_kuerzel,
 )
@@ -1309,11 +1311,40 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self.bereich_felder: dict[str, tuple[QLabel, QLineEdit, QLineEdit]] = {}
         self.gruppe_bereiche = QGroupBox("Startnummern-Bereiche (für „Fehlende Startnummern vergeben…“)")
         bereiche_raster = QGridLayout(self.gruppe_bereiche)
-        bereiche_raster.addWidget(QLabel("Prüfung"), 0, 0)
-        bereiche_raster.addWidget(QLabel("von"), 0, 1)
-        bereiche_raster.addWidget(QLabel("bis"), 0, 2)
-        for zeile, pruefung in enumerate(ALLE_PRUEFUNGEN, start=1):
+        # Marco 09.10.2026: Bereiche aus einer Anzahl je Prüfung automatisch festlegen
+        # (Standardgröße, je Prüfung änderbar), lückenlos ab 1 in der Reihenfolge der
+        # Prüfungen. Die Anzahl je Prüfung wird nicht gespeichert, sondern beim Öffnen aus
+        # dem vorhandenen Bereich abgeleitet.
+        self.standard_groesse = QSpinBox()
+        self.standard_groesse.setRange(1, 999)
+        self.standard_groesse.setValue(startnummer_bereichsgroesse(vorbelegung))
+        self.standard_uebernehmen_btn = QPushButton("Für alle übernehmen")
+        self.standard_uebernehmen_btn.clicked.connect(self._standardgroesse_uebernehmen)
+        self.automatisch_btn = QPushButton("Bereiche automatisch festlegen")
+        self.automatisch_btn.clicked.connect(self._bereiche_automatisch_festlegen)
+        # Zwei Zeilen statt einer: in einer Zeile war die Gruppe breiter als der Dialog
+        # (waagerechte Scrollleiste, Marco 09.10.2026).
+        groesse_zeile = QHBoxLayout()
+        groesse_zeile.addWidget(QLabel("Standardgröße je Prüfung:"))
+        groesse_zeile.addWidget(self.standard_groesse)
+        groesse_zeile.addStretch(1)
+        knopf_zeile = QHBoxLayout()
+        knopf_zeile.addWidget(self.standard_uebernehmen_btn)
+        knopf_zeile.addWidget(self.automatisch_btn)
+        knopf_zeile.addStretch(1)
+        bereiche_raster.addLayout(groesse_zeile, 0, 0, 1, 5)
+        bereiche_raster.addLayout(knopf_zeile, 1, 0, 1, 5)
+        bereiche_raster.addWidget(QLabel("Prüfung"), 2, 0)
+        bereiche_raster.addWidget(QLabel("Anzahl"), 2, 1)
+        bereiche_raster.addWidget(QLabel("von"), 2, 2)
+        bereiche_raster.addWidget(QLabel("bis"), 2, 3)
+        self.anzahl_felder: dict[str, QSpinBox] = {}
+        for zeile, pruefung in enumerate(ALLE_PRUEFUNGEN, start=3):
             beschriftung = QLabel(pruefung.bezeichnung)
+            anzahl_feld = QSpinBox()
+            anzahl_feld.setRange(0, 999)
+            anzahl_feld.setSpecialValueText("keine")
+            anzahl_feld.setValue(self.standard_groesse.value())
             von_feld, bis_feld = QLineEdit(), QLineEdit()
             for nummer_feld in (von_feld, bis_feld):
                 nummer_feld.setValidator(QIntValidator(1, 999, nummer_feld))  # wie Startnummer-Feld
@@ -1322,17 +1353,30 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
                 von, bis = vorher_bereiche[pruefung.kuerzel]
                 von_feld.setText(str(von))
                 bis_feld.setText(str(bis))
+                if 1 <= bis - von + 1 <= 999:
+                    anzahl_feld.setValue(bis - von + 1)
             bereiche_raster.addWidget(beschriftung, zeile, 0)
-            bereiche_raster.addWidget(von_feld, zeile, 1)
-            bereiche_raster.addWidget(bis_feld, zeile, 2)
+            bereiche_raster.addWidget(anzahl_feld, zeile, 1)
+            bereiche_raster.addWidget(von_feld, zeile, 2)
+            bereiche_raster.addWidget(bis_feld, zeile, 3)
             self.bereich_felder[pruefung.kuerzel] = (beschriftung, von_feld, bis_feld)
-        bereiche_raster.setColumnStretch(3, 1)
+            self.anzahl_felder[pruefung.kuerzel] = anzahl_feld
+            # Verifikation V1 (Marco 09.10.2026): von Hand geänderte von/bis-Felder ziehen
+            # die Anzahl mit, damit ein späteres "automatisch festlegen" sie beibehält.
+            for nummer_feld in (von_feld, bis_feld):
+                nummer_feld.textEdited.connect(
+                    lambda _text, kuerzel=pruefung.kuerzel: self._anzahl_aus_bereich(kuerzel)
+                )
+        bereiche_raster.setColumnStretch(4, 1)
         bereiche_hinweis = QLabel(
             "Nur für die oben angehakten Prüfungen (ohne Haken: alle). Bereiche abgewählter "
-            "Prüfungen werden beim Speichern entfernt. Leer lassen = keine automatische Vergabe."
+            "Prüfungen werden beim Speichern entfernt. Leer lassen = keine automatische Vergabe. "
+            "„Bereiche automatisch festlegen“ überschreibt die von/bis-Felder aller angebotenen "
+            "Prüfungen: lückenlos ab 1, "
+            "je Prüfung so viele Nummern wie unter „Anzahl“ (Anzahl „keine“ = kein Bereich)."
         )
         bereiche_hinweis.setWordWrap(True)
-        bereiche_raster.addWidget(bereiche_hinweis, len(ALLE_PRUEFUNGEN) + 1, 0, 1, 4)
+        bereiche_raster.addWidget(bereiche_hinweis, len(ALLE_PRUEFUNGEN) + 3, 0, 1, 5)
         for checkbox in self.pruefung_checkboxen.values():
             checkbox.toggled.connect(self._bereichszeilen_anpassen)
         self._bereichszeilen_anpassen()
@@ -1420,6 +1464,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             meldestelle=self.meldestelle_text(),
             angebotene_pruefungen=self.angebotene_pruefungen_text(),
             startnummer_bereiche=self.startnummer_bereiche_text(),
+            startnummer_bereichsgroesse=str(self.standard_groesse.value()),
         )
 
     def meldestelle_text(self) -> str | None:
@@ -1437,8 +1482,43 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     def _bereichszeilen_anpassen(self, _checked: bool = False) -> None:
         sichtbar = set(self._sichtbare_bereich_kuerzel())
         for kuerzel, widgets in self.bereich_felder.items():
-            for widget in widgets:
+            for widget in (*widgets, self.anzahl_felder[kuerzel]):
                 widget.setVisible(kuerzel in sichtbar)
+
+    def _anzahl_aus_bereich(self, kuerzel: str) -> None:
+        _beschriftung, von_feld, bis_feld = self.bereich_felder[kuerzel]
+        if not von_feld.text().strip() and not bis_feld.text().strip():
+            # Verifikation C: Bereich von Hand entfernt -> beim automatischen Festlegen
+            # nicht wieder anlegen.
+            self.anzahl_felder[kuerzel].setValue(0)
+            return
+        try:
+            anzahl = int(bis_feld.text()) - int(von_feld.text()) + 1
+        except ValueError:
+            return
+        if 1 <= anzahl <= 999:
+            self.anzahl_felder[kuerzel].setValue(anzahl)
+
+    def _standardgroesse_uebernehmen(self) -> None:
+        for anzahl_feld in self.anzahl_felder.values():
+            anzahl_feld.setValue(self.standard_groesse.value())
+
+    def _bereiche_automatisch_festlegen(self) -> None:
+        """Füllt die von/bis-Felder der sichtbaren Prüfungen lückenlos aus ihrer Anzahl
+        (Marco 09.10.2026: überschreibt alle bisherigen Bereiche)."""
+        sichtbar = self._sichtbare_bereich_kuerzel()
+        try:
+            bereiche = bereiche_automatisch_berechnen(
+                {kuerzel: self.anzahl_felder[kuerzel].value() for kuerzel in sichtbar}
+            )
+        except ValueError as fehler:
+            QMessageBox.warning(self, "Startnummern-Bereiche", str(fehler))
+            return
+        for kuerzel in sichtbar:
+            _beschriftung, von_feld, bis_feld = self.bereich_felder[kuerzel]
+            von, bis = bereiche.get(kuerzel, ("", ""))
+            von_feld.setText(str(von))
+            bis_feld.setText(str(bis))
 
     def _startnummer_bereiche_lesen(self) -> dict[str, tuple[int, int]]:
         """Eingetragene Bereiche der sichtbaren Prüfungen. Wirft ValueError mit einem

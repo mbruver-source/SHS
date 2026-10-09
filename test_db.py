@@ -96,6 +96,10 @@ from db import (
     pruefungs_kuerzel,
     startnummer_bereiche,
     startnummer_bereiche_als_text,
+    startnummer_bereichsgroesse,
+    startnummern_zuruecksetzen,
+    fehlende_startnummern_je_pruefung,
+    bereiche_automatisch_berechnen,
     dk_mindestabstand,
     zeitplan_ueberschneidungen,
     add_zeitplan_pause_bei_allen,
@@ -2086,6 +2090,85 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3)), None)
         self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3), ausser_teilnehmer_id=b), 3)
 
+    def test_startnummern_zuruecksetzen(self):
+        # Marco 09.10.2026: alle Startnummern auf einmal entfernen, danach neu vergeben.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          startnummer_bereiche="DK1=1-20")
+        self._teilnehmer("DK", 1, startnummer=5, nachname="Bauer")
+        self._teilnehmer("DK", 1, startnummer=7, nachname="Albrecht")
+        self._teilnehmer("DK", 1, nachname="Ohne")
+
+        self.assertEqual(startnummern_zuruecksetzen(self.conn), 2)
+        self.assertEqual([t["startnummer"] for t in list_teilnehmer(self.conn)], [None, None, None])
+        self.assertEqual(startnummern_zuruecksetzen(self.conn), 0)
+
+        fehlende_startnummern_vergeben(self.conn)
+        nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual(nummern, {"Albrecht": 1, "Bauer": 2, "Ohne": 3})
+
+    def test_startnummern_mit_pruefungsfilter(self):
+        # Marco 09.10.2026: der Filter Art/LK schränkt Zurücksetzen und Vergabe auf eine
+        # Prüfung ein; beim Zurücksetzen auch "keine Teilnahme". Nummern anderer Prüfungen
+        # im Bereich bleiben belegt.
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14",
+                          startnummer_bereiche="DK1=1-5,ED1-Trümmerfeld=6-10")
+        dk = self._teilnehmer("DK", 1, startnummer=1, nachname="DK")
+        t1 = self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=6, nachname="T1")
+        abgesagt = self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=7, nachname="Abgesagt")
+        setze_keine_teilnahme(self.conn, abgesagt, True)
+        fremd = self._teilnehmer("ED", 1, "Flächensuche", startnummer=8, nachname="Fremd")
+
+        self.assertEqual(startnummern_zuruecksetzen(self.conn, "ED1-Trümmerfeld"), 2)
+        nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual((nummern[dk], nummern[t1], nummern[abgesagt], nummern[fremd]), (1, None, None, 8))
+
+        dk_neu = self._teilnehmer("DK", 1, nachname="DK-Neu")
+        t2 = self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T2")
+        ergebnis = fehlende_startnummern_vergeben(self.conn, "ED1-Trümmerfeld")
+        nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual((nummern[t1], nummern[t2]), (6, 7))
+        self.assertIsNone(nummern[dk_neu])
+        self.assertIsNone(nummern[abgesagt])
+        self.assertEqual(len(ergebnis.vergeben), 2)
+        self.assertEqual(fehlende_startnummern_je_pruefung(self.conn), [("DK1", 1)])
+
+    def test_fehlende_startnummern_je_pruefung(self):
+        self.assertEqual(fehlende_startnummern_je_pruefung(self.conn), [])
+        self._teilnehmer("ED", 1, "Flächensuche", nachname="F")
+        self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T1")
+        self._teilnehmer("ED", 1, "Trümmerfeld", nachname="T2")
+        self._teilnehmer("DK", 2, nachname="DK")
+        self._teilnehmer("DK", 1, startnummer=3, nachname="Mit")
+        abgesagt = self._teilnehmer("DK", 3, nachname="Abgesagt")
+        setze_keine_teilnahme(self.conn, abgesagt, True)
+        self.assertEqual(
+            fehlende_startnummern_je_pruefung(self.conn),
+            [("DK2", 1), ("ED1-Trümmerfeld", 2), ("ED1-Flächensuche", 1)],
+        )
+
+    def test_bereiche_automatisch_berechnen(self):
+        # Marco 09.10.2026: lückenlos ab 1 in der Reihenfolge der Prüfungen (nicht der
+        # Eingabe), Anzahl je Prüfung, Anzahl 0 = kein Bereich.
+        self.assertEqual(
+            bereiche_automatisch_berechnen({"ED1-Flächensuche": 20, "ED1-Trümmerfeld": 20}),
+            {"ED1-Trümmerfeld": (1, 20), "ED1-Flächensuche": (21, 40)},
+        )
+        bereiche = bereiche_automatisch_berechnen({"DK2": 10, "DK1": 0, "ED3-Behältnisstrecke": 5})
+        self.assertEqual(bereiche, {"DK2": (1, 10), "ED3-Behältnisstrecke": (11, 15)})
+        self.assertIsNone(pruefe_startnummer_bereiche(bereiche))
+        self.assertEqual(bereiche_automatisch_berechnen({}), {})
+        self.assertEqual(bereiche_automatisch_berechnen({"DK1": 999}), {"DK1": (1, 999)})
+        with self.assertRaises(ValueError) as kontext:
+            bereiche_automatisch_berechnen({"DK1": 500, "DK2": 500})
+        self.assertIn("DK-LK 2", str(kontext.exception))
+
+    def test_startnummer_bereichsgroesse_standard_und_gespeichert(self):
+        self.assertEqual(startnummer_bereichsgroesse(None), 20)
+        self.assertEqual(startnummer_bereichsgroesse({"startnummer_bereichsgroesse": "abc"}), 20)
+        self.assertEqual(startnummer_bereichsgroesse({"startnummer_bereichsgroesse": "0"}), 20)
+        set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14", startnummer_bereichsgroesse="15")
+        self.assertEqual(startnummer_bereichsgroesse(get_veranstaltung(self.conn)), 15)
+
     def _dk_teams(self, stufe, anzahl, start=1):
         return [self._teilnehmer("DK", stufe, startnummer=start + i, nachname=f"DK{stufe}-{i}") for i in range(anzahl)]
 
@@ -2556,7 +2639,7 @@ class TestTerminuebersicht(unittest.TestCase):
         conn = init_db(str(pfad))
         set_veranstaltung(
             conn, verein="SGV Köppern e.V.", datum="2026-09-19", ort="Köppern", vereins_nr="123",
-            verband="HSVRM",
+            verband="HSVRM", startnummer_bereichsgroesse="25",
         )
         add_teilnehmer(conn, NeuerTeilnehmer(
             nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld"))
@@ -2571,6 +2654,8 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertEqual(termine[0].vereins_nr, "123")
         # Marco, 28.09.2026: auch der Verband wird für den neuen Termin vorgeschlagen.
         self.assertEqual(termine[0].verband, "HSVRM")
+        # Marco 09.10.2026: die Standardgröße der Startnummern-Bereiche ebenso.
+        self.assertEqual(termine[0].startnummer_bereichsgroesse, "25")
         self.assertEqual(termine[0].datum, "2026-09-19")
         self.assertEqual(termine[0].anzahl_teilnehmer, 1)
         self.assertTrue(termine[0].lesbar)
@@ -2707,6 +2792,7 @@ class TestTerminSync(unittest.TestCase):
             self.quelle, verein="Testverein", ort="Testort", datum="2026-09-19",
             wertungsrichter_1="Richter A", wertungsrichter_5="Richter E",
             verband="BLV", meldestelle="Meldestelle X", angebotene_pruefungen="DK1,ED2-Trümmerfeld",
+            startnummer_bereichsgroesse="25",
         )
         add_teilnehmer(self.quelle, NeuerTeilnehmer(
             nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
@@ -2722,6 +2808,7 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(veranstaltung["verband"], "BLV")
         self.assertEqual(veranstaltung["meldestelle"], "Meldestelle X")
         self.assertEqual(veranstaltung["angebotene_pruefungen"], "DK1,ED2-Trümmerfeld")
+        self.assertEqual(veranstaltung["startnummer_bereichsgroesse"], "25")  # Verifikation V2
 
         ziel_teilnehmer = list_teilnehmer(self.ziel)
         self.assertEqual(len(ziel_teilnehmer), 1)

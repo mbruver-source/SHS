@@ -2525,7 +2525,7 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
     letzter = TerminInfo(
         pfad="egal.sqlite", dateiname="egal.sqlite", verein="SGV Köppern e.V.",
         vereins_nr="123", ort="Köppern", datum="2026-09-19", anzahl_teilnehmer=5, lesbar=True,
-        verband="HSVRM",
+        verband="HSVRM", startnummer_bereichsgroesse="25",
     )
     monkeypatch.setattr("app.liste_termine", lambda: [letzter])
 
@@ -2555,6 +2555,8 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
         "verband": "HSVRM",
         # UX-Test U1: Startnummern-Bereiche werden ebenfalls übernommen (hier keine hinterlegt).
         "startnummer_bereiche": None,
+        # Marco 09.10.2026: ebenso die Standardgröße der Bereiche.
+        "startnummer_bereichsgroesse": "25",
     }
 
 
@@ -3887,6 +3889,62 @@ def test_veranstaltungsdialog_startnummer_bereiche(qtbot, monkeypatch):
     assert all(label.isVisible() for label, _v, _b in dialog.bereich_felder.values())
 
 
+def test_veranstaltungsdialog_bereiche_automatisch_festlegen(qtbot, monkeypatch):
+    """Marco 09.10.2026: Standardgröße, Anzahl je Prüfung, Automatik überschreibt alle
+    von/bis-Felder der angebotenen Prüfungen lückenlos ab 1; Standardgröße wird gespeichert."""
+    dialog = VeranstaltungsDialog(
+        vorbelegung={"verein": "HSV", "datum": "2026-11-14",
+                     "angebotene_pruefungen": "ED1-Trümmerfeld,ED1-Flächensuche,ED2-Flächensuche",
+                     "startnummer_bereiche": "ED1-Flächensuche=50-59",
+                     "startnummer_bereichsgroesse": "15"},
+        bearbeiten=True,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    assert dialog.standard_groesse.value() == 15
+    # Anzahl aus dem vorhandenen Bereich, sonst Standardgröße
+    assert dialog.anzahl_felder["ED1-Flächensuche"].value() == 10
+    assert dialog.anzahl_felder["ED1-Trümmerfeld"].value() == 15
+    assert dialog.anzahl_felder["ED1-Trümmerfeld"].isVisible()
+    assert not dialog.anzahl_felder["DK1"].isVisible()
+
+    dialog.standard_groesse.setValue(20)
+    qtbot.mouseClick(dialog.standard_uebernehmen_btn, Qt.MouseButton.LeftButton)
+    assert {f.value() for f in dialog.anzahl_felder.values()} == {20}
+    dialog.anzahl_felder["ED2-Flächensuche"].setValue(0)  # "keine" = kein Bereich
+    qtbot.mouseClick(dialog.automatisch_btn, Qt.MouseButton.LeftButton)
+    assert dialog.startnummer_bereiche_text() == "ED1-Trümmerfeld=1-20,ED1-Flächensuche=21-40"
+    assert dialog.bereich_felder["ED2-Flächensuche"][1].text() == ""
+
+    meldungen = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: meldungen.append(a[2]))
+    dialog.anzahl_felder["ED1-Trümmerfeld"].setValue(990)
+    qtbot.mouseClick(dialog.automatisch_btn, Qt.MouseButton.LeftButton)
+    assert "999" in meldungen[-1]
+    assert dialog.startnummer_bereiche_text() == "ED1-Trümmerfeld=1-20,ED1-Flächensuche=21-40"
+
+    assert dialog.veranstaltung_werte()["startnummer_bereichsgroesse"] == "20"
+
+    # Verifikation V1: von Hand geänderte von/bis-Felder ziehen die Anzahl mit.
+    dialog.anzahl_felder["ED1-Trümmerfeld"].setValue(20)
+    bis_feld = dialog.bereich_felder["ED1-Trümmerfeld"][2]
+    bis_feld.clear()
+    qtbot.keyClicks(bis_feld, "12")
+    assert dialog.anzahl_felder["ED1-Trümmerfeld"].value() == 12
+    qtbot.mouseClick(dialog.automatisch_btn, Qt.MouseButton.LeftButton)
+    assert dialog.startnummer_bereiche_text() == "ED1-Trümmerfeld=1-12,ED1-Flächensuche=13-32"
+
+    # Verifikation C: von und bis von Hand geleert -> Anzahl "keine", Bereich bleibt weg.
+    von_feld = dialog.bereich_felder["ED1-Trümmerfeld"][1]
+    for feld in (von_feld, bis_feld):
+        feld.selectAll()
+        qtbot.keyClick(feld, Qt.Key.Key_Delete)
+    assert dialog.anzahl_felder["ED1-Trümmerfeld"].value() == 0
+    qtbot.mouseClick(dialog.automatisch_btn, Qt.MouseButton.LeftButton)
+    assert dialog.startnummer_bereiche_text() == "ED1-Flächensuche=1-20"
+
+
 
 
 
@@ -3955,12 +4013,124 @@ def test_fehlende_startnummern_knopf_doppelklick_und_tausch_ohne_nummer(qtbot, t
     assert infos[-1] == ("Startnummern vergeben", "2 Startnummer(n) vergeben.")
     assert sorted(t["startnummer"] for t in list_teilnehmer(conn)) == [10, 11]
 
+    # Marco 09.10.2026: alle Startnummern zurücksetzen - "Nein" ändert nichts, "Ja" entfernt alle.
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.No)
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert "(2)" in fragen[-1]
+    assert sorted(t["startnummer"] for t in list_teilnehmer(conn)) == [10, 11]
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert [t["startnummer"] for t in list_teilnehmer(conn)] == [None, None]
+    assert tab.status_label.text() == "2 Startnummer(n) zurückgesetzt."
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert infos[-1] == ("Startnummern zurücksetzen", "Es ist noch keine Startnummer vergeben.")
+
     # Doppelklick öffnet Bearbeiten
     geoeffnet = []
     monkeypatch.setattr(TeilnehmerTab, "_teilnehmer_bearbeiten", lambda self: geoeffnet.append(True))
     tab.tabelle.itemDoubleClicked.emit(tab.tabelle.item(0, 1))
     assert geoeffnet == [True]
 
+
+
+def test_startnummern_filter_art_lk_und_hinweis(qtbot, termin, monkeypatch):
+    """Marco 09.10.2026: Der Filter Art/LK schränkt Zurücksetzen und Vergabe auf die
+    gefilterte Prüfung ein; der Hinweis unter den Knöpfen nennt immer alle Prüfungen mit
+    Teilnehmern ohne Startnummer."""
+    from app import TeilnehmerTab
+
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14",
+                      startnummer_bereiche="ED1-Trümmerfeld=1-10,ED1-Flächensuche=11-20")
+    _teilnehmer_anlegen(conn, nachname="Trümmer", disziplin="Trümmerfeld", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Fläche", disziplin="Flächensuche", startnummer=11)
+    _teilnehmer_anlegen(conn, nachname="Neu", disziplin="Flächensuche", startnummer=None)
+
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    tab.show()
+    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: ED LK 1 Flächensuche (1)"
+
+    infos, fragen = [], []
+    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append(text))
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.Yes)
+
+    tab.filter_combo.setCurrentText("ED LK 1 Trümmerfeld")
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert "„ED LK 1 Trümmerfeld“ (1)" in fragen[-1]
+    nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
+    assert nummern == {"Trümmer": None, "Fläche": 11, "Neu": None}
+    assert tab.status_label.text() == "1 Startnummer(n) in „ED LK 1 Trümmerfeld“ zurückgesetzt."
+    # Hinweis unabhängig vom Filter, Reihenfolge wie die Prüfungsliste
+    assert tab.startnummern_hinweis.text() == (
+        "Ohne Startnummer: ED LK 1 Trümmerfeld (1), ED LK 1 Flächensuche (1)"
+    )
+
+    qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
+    assert infos[-1] == "1 Startnummer(n) in „ED LK 1 Trümmerfeld“ vergeben."
+    nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
+    assert nummern == {"Trümmer": 1, "Fläche": 11, "Neu": None}
+    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: ED LK 1 Flächensuche (1)"
+
+    tab.filter_combo.setCurrentText("Alle")
+    qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
+    assert infos[-1] == "1 Startnummer(n) vergeben."
+    assert tab.startnummern_hinweis.text() == ""
+    assert not tab.startnummern_hinweis.isVisible()
+
+
+def test_vergabe_nach_import_ignoriert_filter(qtbot, termin, monkeypatch):
+    """Marco 09.10.2026: Die Vergabe nach einem Import gilt immer für alle Prüfungen,
+    auch wenn im Reiter "Teilnehmer" ein Filter Art/LK gesetzt ist."""
+    import app as app_modul
+    from app import TeilnehmerTab
+
+    monkeypatch.undo()  # echte Funktion statt der Aufzeichnung aus der autouse-Fixture
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14",
+                      startnummer_bereiche="ED1-Trümmerfeld=1-10,ED1-Flächensuche=11-20")
+    _teilnehmer_anlegen(conn, nachname="Trümmer", disziplin="Trümmerfeld", startnummer=1)
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    tab.filter_combo.setCurrentText("ED LK 1 Trümmerfeld")
+    assert tab._gefilterte_pruefung()[0] == "ED1-Trümmerfeld"  # Filter wirklich gesetzt
+    _teilnehmer_anlegen(conn, nachname="Neu-T", disziplin="Trümmerfeld", startnummer=None)
+    _teilnehmer_anlegen(conn, nachname="Neu-F", disziplin="Flächensuche", startnummer=None)
+
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+    app_modul._startnummern_nach_import_anbieten(tab, conn)
+
+    nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
+    assert nummern == {"Trümmer": 1, "Neu-T": 2, "Neu-F": 11}
+
+
+def test_gefilterte_pruefung_ohne_passende_pruefung_bricht_ab(qtbot, termin, monkeypatch):
+    """Verifikation A: Passt der Filtertext zu keiner Prüfung, kein stiller Rückfall auf
+    "Alle", sondern Meldung und Abbruch."""
+    from app import TeilnehmerTab
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=5)
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    assert tab._gefilterte_pruefung() == (None, None)
+    tab.filter_combo.setCurrentText("ED LK 1 Flächensuche")
+    assert tab._gefilterte_pruefung() == ("ED1-Flächensuche", "ED LK 1 Flächensuche")
+
+    tab.filter_combo.addItem("Gibt es nicht")
+    tab.filter_combo.setCurrentText("Gibt es nicht")
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    # Fiele A wieder auf "Alle" zurück, soll der Test rot werden statt an einem
+    # Meldungsfenster hängen zu bleiben.
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
+    assert warnungen == ["Unbekannte Prüfung", "Unbekannte Prüfung"]
+    assert [t["startnummer"] for t in list_teilnehmer(conn)] == [5]
 
 
 def test_import_hinweis_ohne_bereiche_fragt_nicht(qtbot, conn, monkeypatch):

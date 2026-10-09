@@ -5371,3 +5371,204 @@ Stand lokal: unittest 600 OK (159 übersprungen), GUI 228 passed, 1 skipped, 1 x
   (Website geht damit erst bei seinem Push online).
 - Auf Marcos Wunsch ausnahmsweise ohne Build: `docs/HANDBUCH.pdf` mit `tools/handbuch_pdf.py`
   neu erzeugt (Stand-Zeile weiter 1.0.45, Inhalt inkl. Browser-Hinweis).
+
+## 09.10.2026: Startnummern zurücksetzen und Bereiche automatisch festlegen (Arbeitsstand; bis zum nächsten Build uncommittet)
+
+Marcos Rückmeldung mit zwei Punkten:
+
+1. **Alle Startnummern im Reiter „Teilnehmer“ zurücksetzen.** Rückfrage: alle oder nur
+   markierte? Marco: **alle**. Umgesetzt mit dem neuen Knopf „Alle Startnummern
+   zurücksetzen…“ in der zweiten Knopfzeile neben „Fehlende Startnummern vergeben…“:
+   - Er fragt nach, die Vorgabe ist „Nein“. Die Frage nennt die Anzahl der betroffenen
+     Teilnehmer und warnt vor Zeitplan und Web-Abgleich, die beide an der Startnummer hängen.
+   - Ohne vergebene Nummern kommt nur ein Hinweis.
+   - Die Daten setzt `db.startnummern_zuruecksetzen()`. Sie setzt alle Startnummern auf NULL,
+     liefert die Anzahl zurück und läuft in einer Transaktion.
+   - Neu vergeben geht danach wie bisher mit der Sammelvergabe.
+2. **Startnummern-Bereiche in der Verwaltung automatisch festlegen**, z. B. Standardgröße 20,
+   ED1 Trümmer 1–20, ED1 Fläche 21–40. Marcos Entscheidungen auf die Rückfragen:
+   - Der Knopf **überschreibt alle** von/bis-Felder.
+   - Die Größe ist **je Prüfung** einstellbar.
+   - Die Vergabe läuft **nicht** automatisch mit.
+
+   Umgesetzt im `VeranstaltungsDialog`:
+   - Gruppe „Startnummern-Bereiche“ mit „Standardgröße je Prüfung“ und den Knöpfen „Für alle
+     übernehmen“ und „Bereiche automatisch festlegen“, dazu je Prüfung eine Spalte „Anzahl“.
+     „keine“ bedeutet: kein Bereich.
+   - Berechnet wird in `db.bereiche_automatisch_berechnen()`: lückenlos ab 1 in der
+     Reihenfolge von `ALLE_PRUEFUNGEN`, nur für die angebotenen (sichtbaren) Prüfungen. Gehen
+     die Nummern über 999 hinaus, kommt eine Meldung.
+   - Die Anzahl je Prüfung wird nicht gespeichert, sondern beim Öffnen aus dem vorhandenen
+     Bereich abgeleitet.
+   - Die Standardgröße wird in der neuen Spalte `veranstaltung.startnummer_bereichsgroesse`
+     gespeichert (leer = 20). Sie wird in den nächsten Termin übernommen (`TerminInfo`,
+     `StartDialog._neuer_termin`) und beim Kopieren eines Termins mitkopiert.
+- Tests:
+  - `test_db.py`: Zurücksetzen und Neuvergabe, Berechnung inklusive Überlauf, Standardgröße,
+    Übernahme in `liste_termine`.
+  - `test_app_gui.py`: Knopf mit Nein/Ja/ohne Nummern; Dialog mit Standardgröße, Anzahl und
+    Automatik; die Erwartung im Vorbelegungstest erweitert.
+  - Lokal laufen alle Tests grün: unittest-Satz und `test_app_gui.py`/`test_theme.py` mit
+    PySide6.
+- Doku: `docs/HANDBUCH.md` (Kapitel 3 und 4), `Architektur.md`.
+- **Vor dem nächsten Build offen:** Die Screenshots `docs/bilder/handbuch_teilnehmer.png`
+  (neuer Knopf) und `docs/bilder/handbuch_termin_anlegen.png` (neue Bereichs-
+  Steuerung) müssen neu aufgenommen werden. (Erledigt, siehe Abschnitt „Screenshots“.)
+
+### Befragung (shs-grill) am 09.10.2026: Marcos Entscheidungen
+
+- **Bestätigt wie umgesetzt:**
+  - Automatische Bereiche in der Reihenfolge Disziplin, dann LK (wie `ALLE_PRUEFUNGEN`).
+  - Lückenlos ab 1.
+  - Nur die Standardgröße und keine Anzahl aus den Anmeldungen.
+  - Beim Zurücksetzen wird nur gewarnt und nichts gesperrt, auch nicht bei erfassten
+    Ergebnissen oder einer Veröffentlichung im Web.
+- **Neu, Einschränkung durch den Filter:** Der Filter „Art/LK“ im Reiter „Teilnehmer“
+  begrenzt „Alle Startnummern zurücksetzen…“ und „Fehlende Startnummern vergeben…“.
+  - Bei „Alle“ gilt alles wie bisher.
+  - Ist eine Prüfung gefiltert, betrifft das Zurücksetzen nur deren Teilnehmer, auch die mit
+    „Keine Teilnahme“. Die Vergabe vergibt dann nur an Teilnehmer dieser Prüfung.
+  - Die Filter „Start-Nr.“ und „Bezahlt“ wirken nicht auf die beiden Aktionen.
+  - Die Rückfrage und die Meldungen nennen die gefilterte Prüfung; die Knopftexte bleiben.
+  - Die Vergabe fragt auch mit Filter nicht vorher nach.
+  - Die Vergabe, die nach einem Import angeboten wird, gilt immer für alle.
+- **Neu, Hinweis unter den Knöpfen:** Er steht immer aktuell unter der Startnummern-
+  Knopfzeile und nennt, in welchen Prüfungen Teilnehmer noch ohne Startnummer sind, mit
+  Anzahl, z. B. „Ohne Startnummer: DK LK 2 (1), ED LK 1 Trümmerfeld (3)“.
+  - Er zeigt immer alle Prüfungen, unabhängig vom Filter.
+  - Er nennt keinen Grund.
+  - „Keine Teilnahme“ zählt nicht mit.
+  - Er verschwindet, wenn alle eine Nummer haben.
+- **Verifikationspunkte:**
+  - V1 umsetzen: Die „Anzahl“ folgt von Hand geänderten von/bis-Feldern.
+  - V2 umsetzen: Tests für die Termin-Kopie und für die Übernahme eines echten Werts in einen
+    neuen Termin.
+  - V3 umsetzen: Testzahlen hier nachtragen.
+  - V4 (Standardgröße immer speichern) bewusst so lassen.
+  - V5 (nur `sqlite3.Error` abgefangen, wie bei allen Knöpfen) bewusst so lassen.
+- **Nicht relevant, von Marco bestätigt:** PDFs und Exporte, Web-Version, Datenschutz und
+  Umgebung.
+- **Abnahme:**
+  - Mit dem Filter „ED LK 1 Trümmerfeld“ wirken Zurücksetzen und Vergabe nur auf diese
+    Teilnehmer.
+  - Mit „Alle“ wirkt beides wie bisher.
+  - Der Hinweis stimmt nach jeder Änderung.
+  - Die Anzahl folgt von Hand geänderten von/bis-Feldern.
+  - Alle Tests sind grün.
+
+### Umsetzung der Befragung (09.10.2026)
+
+- `db.py`:
+  - `startnummern_zuruecksetzen(conn, pruefung=None)` und
+    `fehlende_startnummern_vergeben(conn, pruefung=None)` nehmen optional ein
+    Prüfungskürzel.
+  - Neu ist `fehlende_startnummern_je_pruefung(conn)`. Sie liefert Kürzel und Anzahl der
+    teilnehmenden Teilnehmer ohne Nummer, in der Reihenfolge der Prüfungsliste.
+- `app.py`, `TeilnehmerTab`:
+  - `_gefilterte_pruefung()` übersetzt die Auswahl im Filter Art/LK in das Kürzel.
+  - Zurücksetzen und Vergabe übergeben es; Rückfrage und Meldungen nennen die Prüfung.
+  - Die neue Zeile `startnummern_hinweis` unter der Startnummern-Knopfzeile wird bei jedem
+    `aktualisieren()` neu berechnet.
+  - Die Vergabe nach einem Import bleibt ohne Filter.
+- `desktop_dialoge.py`, V1: `textEdited` an von/bis setzt die Anzahl auf bis − von + 1.
+- Tests:
+  - `test_db.py`: Filter bei Zurücksetzen und Vergabe einschließlich „keine Teilnahme“,
+    `fehlende_startnummern_je_pruefung`, Termin-Kopie mit Standardgröße (V2).
+  - `test_app_gui.py`: Filter und Hinweis im Teilnehmer-Reiter, Anzahl folgt von/bis (V1),
+    Übernahme des echten Werts „25“ in den neuen Termin (V2).
+- Doku: `docs/HANDBUCH.md` (Filter und Hinweis), `Architektur.md`.
+- **Testzahlen (V3):**
+  - unittest-Satz: 610 Tests OK, davon 164 übersprungen (PostgreSQL und Teile von `pypdf`).
+  - `test_app_gui.py` und `test_theme.py` mit PySide6: 231 passed, 1 skipped, 1 xfailed,
+    56 subtests passed.
+- Vor dem nächsten Build weiter offen: die Screenshots `handbuch_teilnehmer.png` (neuer Knopf
+  und Hinweis) und `handbuch_termin_anlegen.png`. (Erledigt, siehe Abschnitt „Screenshots“.)
+
+### Zweite Verifikation (09.10.2026): Marcos Entscheidungen zu den Befunden
+
+- **A umgesetzt:** `_gefilterte_pruefung()` ordnet den Filtertext über die feste
+  Prüfungsliste (`ALLE_PRUEFUNGEN`) zu statt über die vorhandenen Teilnehmer. Passt keine
+  Prüfung, brechen beide Knöpfe mit der Meldung „Unbekannte Prüfung“ ab, statt still auf
+  „Alle“ auszuweichen.
+- **B bewusst so gelassen:** Die Anzahl in der Rückfrage stammt aus der angezeigten Liste,
+  die Statuszeile nennt die echte Zahl.
+- **C umgesetzt:** Werden von und bis von Hand geleert, steht die „Anzahl“ auf „keine“. Ein
+  späteres „automatisch festlegen“ legt den Bereich dann nicht wieder an.
+- **D umgesetzt:** Kommentare an beiden Knöpfen und an `_startnummern_nach_import_anbieten`
+  sowie die Tabellenzeile im Handbuch nennen den Filter.
+- **E umgesetzt:** Der Test `test_vergabe_nach_import_ignoriert_filter` ist ergänzt, dazu
+  `test_gefilterte_pruefung_ohne_passende_pruefung_bricht_ab` für A. Weitere optionale
+  Tests (Rollback, Hinweis nach jeder Einzelaktion) gibt es bewusst nicht; das ist indirekt
+  über `aktualisieren()` abgedeckt.
+- **Testzahlen:**
+  - unittest-Satz: 610 OK, davon 164 übersprungen.
+  - GUI-Tests: 233 passed, 1 skipped, 1 xfailed, 56 subtests passed.
+- **Dritte Verifikation (09.10.2026):** in Ordnung. Alle drei optionalen Punkte hat Marco
+  freigegeben und sie sind umgesetzt:
+  1. Der Import-Test prüft, dass der Filter wirklich gesetzt ist.
+  2. Der Abbruch-Test fängt Meldungsfenster ab, damit er nicht hängen bleibt.
+  3. Das Handbuch hat einen Satz dazu, dass die „Anzahl“ mit von/bis mitgeht.
+
+### Screenshots (09.10.2026, auf Marcos Wunsch „Screenshots erstellen“)
+
+- Neu aufgenommen wurden `docs/bilder/handbuch_teilnehmer.png` (1400 × 820) und
+  `docs/bilder/handbuch_termin_anlegen.png` (640 × 900).
+  - Aufnahme offscreen mit Segoe UI, Standard-Design, deutschen Qt-Texten und Version 1.0.45.
+  - Das Teilnehmer-Bild zeigt den neuen Knopf und den Hinweis „Ohne Startnummer: DK LK 2 (1),
+    ED LK 1 Trümmerfeld (2)“.
+  - Das Dialog-Bild ist auf die Startnummern-Bereiche gescrollt. Der Speicherort steht als
+    `C:\Users\Name\…`.
+  - Im Handbuch ist der Bildtext zum Teilnehmer-Bild ergänzt.
+- **Dabei aufgefallen und behoben** (Marcos Entscheidung): Die Zeile „Standardgröße | Für
+  alle übernehmen | Bereiche automatisch festlegen“ war breiter als der Dialog und erzeugte
+  eine waagerechte Scrollleiste. Die Knöpfe stehen jetzt in einer eigenen Zeile unter der
+  Standardgröße (`desktop_dialoge.py`).
+  - GUI-Tests danach: 233 passed, 1 skipped, 1 xfailed, 56 subtests passed.
+- Die Pfeile der Zahlenfelder sehen in der Offscreen-Aufnahme ungewohnt aus, wie schon im
+  Zeitplan-Bild. Das kommt nur von der Aufnahmeart und ist kein Programmfehler.
+- `docs/HANDBUCH.pdf` wird wie üblich erst beim Build erzeugt.
+- Kurzprüfung von Layout und Screenshots: in Ordnung. Zwei kosmetische Angleichungen im
+  Handbuch hat Marco freigegeben und sie sind umgesetzt: Das Beispiel für den Hinweis lautet
+  jetzt „(2)“ wie im Bild, und der Bildtext des Dialogs nennt „Ausschnitt
+  Startnummern-Bereiche“.
+
+## Version 1.0.46 (09.10.2026, Build auf Marcos Wunsch „neuer Build“)
+
+- **Offene Punkte vor dem Build:** Die Verifikation über alles seit 1.0.45 fand keine Fehler,
+  aber acht Hinweise. Marco hat am 09.10.2026 entschieden:
+  - **Umgesetzt:**
+    - Website (`docs/index.html`) und `README.md` nennen in der Funktion „Teilnehmer“ jetzt
+      auch Zurücksetzen und die automatischen Bereiche.
+    - `Architektur.md` nennt die Spalte `startnummer_bereichsgroesse` und die
+      Bereichs-Steuerung im Veranstaltungsdialog.
+    - Der Hinweistext im Dialog und das Handbuch sind präziser: Überschrieben werden die
+      Bereiche der angebotenen Prüfungen, und das Beispiel gilt, „wenn nur diese beiden
+      angeboten sind“. Der Dialog-Screenshot ist deshalb noch einmal aufgenommen.
+    - In `Fortschritt.md` sind die erledigten Screenshot-Punkte als erledigt vermerkt.
+    - `CLAUDE.md` und `AGENTS.md` nennen die aktuellen Zeilenzahlen.
+  - **Bewusst so gelassen:** Wird der Dialog neu geöffnet, zeigt eine angebotene Prüfung ohne
+    Bereich als Anzahl wieder die Standardgröße und nicht „keine“.
+  - **Ohnehin Teil des Builds:** `RELEASE_NOTES.md` für 1.0.46 und `docs/HANDBUCH.pdf`.
+- **Enthalten seit 1.0.45:**
+  - Startnummern:
+    - automatische Bereiche aus der Standardgröße und der Anzahl je Prüfung;
+    - neuer Knopf „Alle Startnummern zurücksetzen…“;
+    - der Filter Art/LK schränkt Zurücksetzen und Vergabe ein;
+    - der Hinweis „Ohne Startnummer: …“ unter den Knöpfen;
+    - die neue Spalte `veranstaltung.startnummer_bereichsgroesse`.
+    
+    Einzelheiten und Marcos Entscheidungen stehen in den Abschnitten vom 09.10.2026.
+  - Doku:
+    - Browser-Hinweis in Handbuch Kapitel 2, README, README_INSTALLER und Website (bereits
+      seit dem 08.10.2026 im Repo);
+    - Handbuch Kapitel 3 und 4 mit den Screenshots `handbuch_teilnehmer.png` (Version 1.0.46)
+      und `handbuch_termin_anlegen.png`.
+- `bump_version.py` → 1.0.46, `docs/HANDBUCH.pdf` neu erzeugt.
+- **Tests lokal:**
+  - unittest 610 OK (164 übersprungen);
+  - GUI 233 passed, 1 skipped, 1 xfailed, 56 subtests passed.
+  - Die neue Spalte ist auf echtem PostgreSQL nur in der CI geprüft.
+- **Nach dem Tag-Lauf:** prüfen, dass alle Jobs grün sind (auch `build-macos` 2x und
+  `build-linux`).
+- Die Website-Änderung (Funktion „Teilnehmer“) geht mit Marcos Push zusammen mit dem Release
+  online.

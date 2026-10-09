@@ -1,30 +1,23 @@
-## Was ist neu in 1.0.45
+## Was ist neu in 1.0.46
 
-**Neu: Vorschau für macOS und Linux**
-- Das Programm gibt es jetzt zusätzlich für den **Mac** (je eine Datei für Macs mit
-  Apple-Chip und mit Intel-Prozessor, ab macOS 13) und für **Linux** (als AppImage und als
-  .deb-Paket für Ubuntu, Mint, Debian).
-- Diese Versionen werden bei jedem Build automatisch geprüft, sind aber noch nicht auf echten
-  Mac- und Linux-Rechnern erprobt. Rückmeldungen sind sehr willkommen.
-- Die Mac-Version ist nicht bei Apple registriert. Den ersten Start musst du deshalb einmal
-  erlauben. Wie das geht, steht Schritt für Schritt im Handbuch, Kapitel 2.
-- Windows bleibt die Hauptversion. Dort ändert sich an Installation und Update nichts.
+**Startnummern schneller vergeben**
+- **Bereiche automatisch festlegen:** In den Veranstaltungsdaten (Reiter „Verwaltung“ →
+  „Veranstaltungsdaten bearbeiten…“) stellst du eine **Standardgröße je Prüfung** ein, zum
+  Beispiel 20. Ein Klick auf „Bereiche automatisch festlegen“ verteilt die Nummern dann
+  lückenlos ab 1 auf die angebotenen Prüfungen, etwa Trümmer LK 1 = 1–20 und
+  Fläche LK 1 = 21–40. In der neuen Spalte „Anzahl“ kannst du einzelne Prüfungen größer
+  oder kleiner machen. Die Standardgröße wird für den nächsten Termin vorgeschlagen.
+- **Alle Startnummern zurücksetzen:** Neuer Knopf im Reiter „Teilnehmer“. Danach vergibt
+  „Fehlende Startnummern vergeben…“ alle Nummern neu, z. B. nach geänderten Bereichen. Bitte
+  nur vor der Prüfung nutzen, weil Zeitplan und Web-Abgleich an den Startnummern hängen.
+- **Nur für eine Prüfung:** Ist im „Filter Art/LK“ eine Prüfung gewählt, wirken Zurücksetzen
+  und Vergabe nur auf diese Prüfung. Die Meldungen nennen die Prüfung dann ausdrücklich.
+- **Wer hat noch keine Nummer?** Unter den Knöpfen steht immer aktuell, in welchen Prüfungen
+  noch Teilnehmer ohne Startnummer sind, z. B. „Ohne Startnummer: DK LK 2 (1)“.
 
-**Neues Programmsymbol**
-- Das Programm hat jetzt ein eigenes Symbol: einen Beagle als Buntstift-Zeichnung. Du siehst
-  ihn in der Taskleiste, im Startmenü, im Fenster und auf der Website.
-
-**Datensicherung zuverlässiger**
-- **Sicherung erstellen:** Geht beim Speichern etwas schief, zum Beispiel weil der USB-Stick
-  voll ist, bleibt eine ältere Sicherung mit demselben Namen jetzt unverändert erhalten.
-  Bisher konnte stattdessen eine unvollständige Sicherung übrig bleiben, die man ihr nicht
-  ansah.
-- **Sicherung wiederherstellen:** Das Programm entpackt erst alle gewählten Termine und
-  ersetzt danach die vorhandenen. Scheitert es mittendrin trotzdem, zum Beispiel weil eine
-  Termin-Datei gerade in einem anderen Programm offen ist, meldet es
-  „Wiederherstellen unvollständig“ und nennt die Termine, die schon übernommen sind.
-- Ist eine Sicherungsdatei beschädigt, sagt das die Meldung jetzt auch so.
-- Außerdem enthält diese Version eine Sicherheitskorrektur. Details folgen nach dem Release.
+**Handbuch**
+- Neuer Hinweis in Kapitel 2: Was tun, wenn Chrome, Edge oder Firefox den Download der
+  Setup-Datei blockiert.
 
 **Für dieses Update** bitte wie gewohnt das Programm vorher schließen und die neue Version
 über die alte installieren. Deine Termine bleiben erhalten.

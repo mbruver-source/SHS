@@ -81,7 +81,10 @@ CREATE TABLE IF NOT EXISTS veranstaltung (
     startnummer_bereiche TEXT,
     -- UX-Test 02.10.2026, U2: Mindestabstand (Minuten) zwischen zwei Starts desselben
     -- Teams, z. B. DK-Disziplinen nacheinander; leer = 10 Minuten.
-    dk_mindestabstand TEXT
+    dk_mindestabstand TEXT,
+    -- Marco 09.10.2026: Standardgröße eines Startnummern-Bereichs je Prüfung für
+    -- "Bereiche automatisch festlegen" im Veranstaltungsdialog; leer = 20.
+    startnummer_bereichsgroesse TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teilnehmer (
@@ -336,6 +339,8 @@ _VERANSTALTUNG_NEUE_SPALTEN = [
     "startnummer_bereiche",
     # UX-Test 02.10.2026, U2: Mindestabstand für Starts desselben Teams.
     "dk_mindestabstand",
+    # Marco 09.10.2026: Standardgröße der Startnummern-Bereiche.
+    "startnummer_bereichsgroesse",
 ]
 
 
@@ -678,6 +683,7 @@ def set_veranstaltung(
     angebotene_pruefungen: str | None = None,
     startnummer_bereiche: str | None = None,
     dk_mindestabstand: str | None = None,
+    startnummer_bereichsgroesse: str | None = None,
 ) -> None:
     conn.execute(
         """
@@ -685,8 +691,9 @@ def set_veranstaltung(
             id, verein, ort, datum, vereins_nr, pruefungsnummer,
             wertungsrichter_1, wertungsrichter_2, wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
-            verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand,
+            startnummer_bereichsgroesse
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             verein=excluded.verein, ort=excluded.ort, datum=excluded.datum,
             vereins_nr=excluded.vereins_nr, pruefungsnummer=excluded.pruefungsnummer,
@@ -699,13 +706,15 @@ def set_veranstaltung(
             verband=excluded.verband, meldestelle=excluded.meldestelle,
             angebotene_pruefungen=excluded.angebotene_pruefungen,
             startnummer_bereiche=excluded.startnummer_bereiche,
-            dk_mindestabstand=excluded.dk_mindestabstand
+            dk_mindestabstand=excluded.dk_mindestabstand,
+            startnummer_bereichsgroesse=excluded.startnummer_bereichsgroesse
         """,
         (
             verein, ort, datum, vereins_nr, pruefungsnummer, wertungsrichter_1, wertungsrichter_2,
             wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
             verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand,
+            startnummer_bereichsgroesse,
         ),
     )
     conn.commit()
@@ -913,6 +922,47 @@ def pruefe_startnummer_bereiche(bereiche: dict[str, tuple[int, int]]) -> str | N
     return None
 
 
+#: Standardgröße eines Startnummern-Bereichs je Prüfung (Marco 09.10.2026) und
+#: höchste Startnummer (wie das Startnummer-Feld im Teilnehmer-Dialog).
+STANDARD_BEREICHSGROESSE = 20
+HOECHSTE_STARTNUMMER = 999
+
+
+def startnummer_bereichsgroesse(veranstaltung: dict | None) -> int:
+    """Gespeicherte Standardgröße der Startnummern-Bereiche (Standard 20)."""
+    roh = (veranstaltung or {}).get("startnummer_bereichsgroesse")
+    try:
+        groesse = int(roh)
+    except (TypeError, ValueError):
+        return STANDARD_BEREICHSGROESSE
+    return groesse if 1 <= groesse <= HOECHSTE_STARTNUMMER else STANDARD_BEREICHSGROESSE
+
+
+def bereiche_automatisch_berechnen(
+    groessen: dict[str, int], start: int = 1
+) -> dict[str, tuple[int, int]]:
+    """Lückenlose Startnummern-Bereiche ab `start` in der Reihenfolge von
+    ALLE_PRUEFUNGEN (Marco 09.10.2026), z. B. {"ED1-Trümmerfeld": 20,
+    "ED1-Flächensuche": 20} -> Trümmer 1-20, Fläche 21-40. Prüfungen, die nicht in
+    `groessen` stehen oder eine Größe < 1 haben, bekommen keinen Bereich. Wirft
+    ValueError mit einem Text für den Nutzer, wenn die Nummern über 999 hinauslaufen."""
+    bereiche: dict[str, tuple[int, int]] = {}
+    naechste = start
+    for pruefung in ALLE_PRUEFUNGEN:
+        groesse = groessen.get(pruefung.kuerzel, 0)
+        if groesse < 1:
+            continue
+        bis = naechste + groesse - 1
+        if bis > HOECHSTE_STARTNUMMER:
+            raise ValueError(
+                f"Die Bereiche passen nicht in die Startnummern 1–{HOECHSTE_STARTNUMMER} "
+                f"({pruefung.bezeichnung} ginge bis {bis}). Bitte die Anzahl verkleinern."
+            )
+        bereiche[pruefung.kuerzel] = (naechste, bis)
+        naechste = bis + 1
+    return bereiche
+
+
 def naechste_freie_startnummer_im_bereich(
     conn: sqlite3.Connection, bereich: tuple[int, int], ausser_teilnehmer_id: int | None = None
 ) -> int | None:
@@ -929,16 +979,25 @@ class StartnummernVergabe:
     bereich_voll: list[dict] = field(default_factory=list)
 
 
-def fehlende_startnummern_vergeben(conn: sqlite3.Connection) -> StartnummernVergabe:
+def _teilnehmer_kuerzel(t: dict) -> str:
+    return pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"])
+
+
+def fehlende_startnummern_vergeben(
+    conn: sqlite3.Connection, pruefung: str | None = None
+) -> StartnummernVergabe:
     """Vergibt allen Teilnehmern OHNE Startnummer (außer "keine Teilnahme") die jeweils
     kleinste freie Nummer im Bereich ihrer Prüfung - Reihenfolge nach Prüfung (wie
     ALLE_PRUEFUNGEN), darin nach Name. Bereits vergebene Nummern bleiben unangetastet.
     Teilnehmer ohne hinterlegten Bereich bzw. bei vollem Bereich bleiben ohne Nummer und
-    werden im Ergebnis aufgeführt. Alles in einer Transaktion."""
+    werden im Ergebnis aufgeführt. Alles in einer Transaktion. Mit `pruefung` (Kürzel wie
+    in ALLE_PRUEFUNGEN) nur für die Teilnehmer dieser Prüfung (Marco 09.10.2026: der
+    Filter Art/LK im Reiter "Teilnehmer" schränkt die Vergabe ein)."""
     bereiche = startnummer_bereiche(get_veranstaltung(conn))
     reihenfolge = {p.kuerzel: i for i, p in enumerate(ALLE_PRUEFUNGEN)}
     offen = [
-        t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None
+        t for t in list_teilnehmer(conn, nur_teilnehmende=True)
+        if t["startnummer"] is None and (pruefung is None or _teilnehmer_kuerzel(t) == pruefung)
     ]
     offen.sort(key=lambda t: (
         reihenfolge.get(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]), len(reihenfolge)),
@@ -1001,6 +1060,38 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
         ),
     )
     conn.commit()
+
+
+def startnummern_zuruecksetzen(conn: sqlite3.Connection, pruefung: str | None = None) -> int:
+    """Entfernt die Startnummern ALLER Teilnehmer des Termins (Marco 09.10.2026), z. B.
+    um sie danach mit fehlende_startnummern_vergeben() neu zu vergeben - mit `pruefung`
+    (Kürzel) nur die der Teilnehmer dieser Prüfung, einschließlich "keine Teilnahme".
+    Liefert die Zahl der Teilnehmer, die vorher eine Nummer hatten."""
+    ids = [
+        t["id"] for t in list_teilnehmer(conn)
+        if t["startnummer"] is not None and (pruefung is None or _teilnehmer_kuerzel(t) == pruefung)
+    ]
+    try:
+        for teilnehmer_id in ids:
+            conn.execute("UPDATE teilnehmer SET startnummer = NULL WHERE id = ?", (teilnehmer_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return len(ids)
+
+
+def fehlende_startnummern_je_pruefung(conn: sqlite3.Connection) -> list[tuple[str, int]]:
+    """(Kürzel, Anzahl) der Prüfungen, in denen teilnehmende Teilnehmer noch keine
+    Startnummer haben, in der Reihenfolge von ALLE_PRUEFUNGEN - für den Hinweis unter den
+    Startnummern-Knöpfen im Reiter "Teilnehmer" (Marco 09.10.2026)."""
+    anzahl: dict[str, int] = {}
+    for t in list_teilnehmer(conn, nur_teilnehmende=True):
+        if t["startnummer"] is None:
+            kuerzel = _teilnehmer_kuerzel(t)
+            anzahl[kuerzel] = anzahl.get(kuerzel, 0) + 1
+    reihenfolge = {p.kuerzel: i for i, p in enumerate(ALLE_PRUEFUNGEN)}
+    return sorted(anzahl.items(), key=lambda e: (reihenfolge.get(e[0], len(reihenfolge)), e[0]))
 
 
 def tausche_startnummern(conn: sqlite3.Connection, teilnehmer_id_a: int, teilnehmer_id_b: int) -> None:
@@ -2287,6 +2378,8 @@ class TerminInfo:
     # UX-Test 02.10.2026, U1: Startnummern-Bereiche werden beim neuen Termin vom letzten
     # Termin übernommen (Marco: "je Termin, mit Übernahme").
     startnummer_bereiche: str | None = None
+    # Marco 09.10.2026: die Standardgröße der Bereiche ebenfalls übernehmen.
+    startnummer_bereichsgroesse: str | None = None
 
 
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
@@ -2312,6 +2405,10 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
                 lesbar=True,
                 verband=v["verband"] if v and "verband" in v.keys() else None,
                 startnummer_bereiche=v["startnummer_bereiche"] if v and "startnummer_bereiche" in v.keys() else None,
+                startnummer_bereichsgroesse=(
+                    v["startnummer_bereichsgroesse"]
+                    if v and "startnummer_bereichsgroesse" in v.keys() else None
+                ),
             ))
         except sqlite3.DatabaseError:
             ergebnisse.append(TerminInfo(
@@ -2883,6 +2980,7 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             angebotene_pruefungen=veranstaltung.get("angebotene_pruefungen"),
             startnummer_bereiche=veranstaltung.get("startnummer_bereiche"),
             dk_mindestabstand=veranstaltung.get("dk_mindestabstand"),
+            startnummer_bereichsgroesse=veranstaltung.get("startnummer_bereichsgroesse"),
         )
 
     id_zuordnung: dict[int, int] = {}

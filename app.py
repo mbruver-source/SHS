@@ -129,7 +129,12 @@ from db import (
     zeitplan_gruppen_status,
     zeitplan_richter_aus_veranstaltung_anlegen,
     fehlende_startnummern_vergeben,
+    fehlende_startnummern_je_pruefung,
+    pruefung_nach_kuerzel,
+    pruefungs_kuerzel,
+    ALLE_PRUEFUNGEN,
     startnummer_bereiche,
+    startnummern_zuruecksetzen,
     dk_mindestabstand,
     zeitplan_ueberschneidungen,
     add_zeitplan_pause_bei_allen,
@@ -222,9 +227,20 @@ except ImportError:
     VERSION = "dev"
 
 
-def _fehlende_startnummern_vergeben_mit_meldung(parent, conn) -> None:
+def _pruefung_bezeichnung(kuerzel: str) -> str:
+    """Bezeichnung einer Prüfung wie im Filter Art/LK (db.leistungsklasse_label)."""
+    pruefung = pruefung_nach_kuerzel(kuerzel)
+    if pruefung is None:
+        return kuerzel
+    return leistungsklasse_label({"art": pruefung.art, "stufe": pruefung.stufe, "disziplin": pruefung.disziplin})
+
+
+def _fehlende_startnummern_vergeben_mit_meldung(
+    parent, conn, pruefung: str | None = None, bezeichnung: str | None = None
+) -> None:
     """UX-Test 02.10.2026, U1: Sammelvergabe (db.fehlende_startnummern_vergeben) mit
-    verständlicher Abschlussmeldung - wer hat eine Nummer bekommen, wer nicht und warum."""
+    verständlicher Abschlussmeldung - wer hat eine Nummer bekommen, wer nicht und warum.
+    Mit `pruefung`/`bezeichnung` nur für diese Prüfung (Filter Art/LK, Marco 09.10.2026)."""
     if not startnummer_bereiche(get_veranstaltung(conn)):
         QMessageBox.information(
             parent, "Keine Startnummern-Bereiche",
@@ -233,12 +249,13 @@ def _fehlende_startnummern_vergeben_mit_meldung(parent, conn) -> None:
             "eintragen, z. B. DK-LK 1: 1 bis 20.",
         )
         return
-    ergebnis = fehlende_startnummern_vergeben(conn)
+    ergebnis = fehlende_startnummern_vergeben(conn, pruefung)
 
     def namen(liste):
         return "\n".join(f"{t['vorname']} {t['nachname']} – {leistungsklasse_label(t)}" for t in liste)
 
-    text = f"{len(ergebnis.vergeben)} Startnummer(n) vergeben."
+    wo = f" in „{bezeichnung}“" if bezeichnung else ""
+    text = f"{len(ergebnis.vergeben)} Startnummer(n){wo} vergeben."
     if ergebnis.ohne_bereich:
         text += "\n\nKeine Nummer, weil für die Prüfung kein Bereich eingetragen ist:\n" + namen(ergebnis.ohne_bereich)
     if ergebnis.bereich_voll:
@@ -248,7 +265,8 @@ def _fehlende_startnummern_vergeben_mit_meldung(parent, conn) -> None:
 
 def _startnummern_nach_import_anbieten(parent, conn) -> None:
     """UX-Test 02.10.2026, U1: Nach einem Import fehlen die Startnummern meist - direkt
-    anbieten, sie gesammelt zu vergeben."""
+    anbieten, sie gesammelt zu vergeben. Bewusst immer für alle Prüfungen, auch wenn im
+    Reiter "Teilnehmer" ein Filter Art/LK gesetzt ist (Marco 09.10.2026)."""
     ohne = [t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None]
     if not ohne:
         return
@@ -405,9 +423,16 @@ class TeilnehmerTab(QWidget):
         self.tauschen_btn.clicked.connect(self._startnummer_tauschen)
         self.tauschen_btn.setEnabled(False)
 
-        # UX-Test 02.10.2026, U1: Startnummern für alle ohne Nummer auf einmal vergeben.
+        # UX-Test 02.10.2026, U1: Startnummern für alle ohne Nummer auf einmal vergeben -
+        # seit 09.10.2026 bei gesetztem Filter Art/LK nur für diese Prüfung.
         self.vergeben_btn = vergeben_btn = QPushButton("Fehlende Startnummern vergeben…")
         vergeben_btn.clicked.connect(self._fehlende_startnummern_vergeben)
+
+        # Marco 09.10.2026: alle Startnummern auf einmal entfernen (bei gesetztem Filter
+        # Art/LK nur die dieser Prüfung), z. B. um sie nach geänderten Bereichen mit
+        # "Fehlende Startnummern vergeben…" neu zu vergeben.
+        self.zuruecksetzen_btn = QPushButton("Alle Startnummern zurücksetzen…")
+        self.zuruecksetzen_btn.clicked.connect(self._alle_startnummern_zuruecksetzen)
 
         # Nutzerwunsch (20.09., Anmerkung zum Programm): "Teilnehmer müssen wieder einzeln
         # eingegeben werden [...] ist Option möglich, von anderem Termin importieren?" -
@@ -444,7 +469,7 @@ class TeilnehmerTab(QWidget):
             button_zeile.addWidget(knopf)
         button_zeile.addStretch()
         button_zeile_2 = QHBoxLayout()
-        for knopf in (self.tauschen_btn, vergeben_btn, import_btn, liste_btn):
+        for knopf in (self.tauschen_btn, vergeben_btn, self.zuruecksetzen_btn, import_btn, liste_btn):
             button_zeile_2.addWidget(knopf)
         button_zeile_2.addStretch()
 
@@ -468,6 +493,12 @@ class TeilnehmerTab(QWidget):
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
         layout.addLayout(button_zeile_2)
+        # Marco 09.10.2026: immer aktueller Hinweis, in welchen Prüfungen noch Teilnehmer
+        # ohne Startnummer sind (unabhängig vom Filter, ohne "keine Teilnahme").
+        self.startnummern_hinweis = QLabel("")
+        self.startnummern_hinweis.setTextFormat(Qt.PlainText)
+        self.startnummern_hinweis.setWordWrap(True)
+        layout.addWidget(self.startnummern_hinweis)
         layout.addWidget(self.status_label)
 
         self.aktualisieren()
@@ -678,9 +709,84 @@ class TeilnehmerTab(QWidget):
             return
         self.aktualisieren()
 
+    def _gefilterte_pruefung(self) -> tuple[str | None, str | None]:
+        """(Kürzel, Bezeichnung) der im Filter Art/LK gewählten Prüfung oder (None, None)
+        bei "Alle" - schränkt Zurücksetzen und Vergabe ein (Marco 09.10.2026). Die
+        Zuordnung läuft über die feste Prüfungsliste; passt keine Prüfung, kommt
+        (None, Filtertext) zurück und die Aufrufer brechen ab, statt still auf "Alle"
+        auszuweichen (Verifikation A)."""
+        filter_wert = self.filter_combo.currentText()
+        if filter_wert in ("Alle", ""):
+            return None, None
+        for pruefung in ALLE_PRUEFUNGEN:
+            if _pruefung_bezeichnung(pruefung.kuerzel) == filter_wert:
+                return pruefung.kuerzel, filter_wert
+        return None, filter_wert
+
+    def _gefilterte_pruefung_oder_meldung(self) -> tuple[str | None, str | None] | None:
+        pruefung, bezeichnung = self._gefilterte_pruefung()
+        if bezeichnung and pruefung is None:
+            QMessageBox.warning(
+                self, "Unbekannte Prüfung",
+                f"Zum Filter „{bezeichnung}“ gehört keine bekannte Prüfung. Bitte den Filter "
+                "Art/LK auf „Alle“ oder eine andere Prüfung stellen.",
+            )
+            return None
+        return pruefung, bezeichnung
+
+    def _startnummern_hinweis_aktualisieren(self) -> None:
+        fehlend = [
+            f"{_pruefung_bezeichnung(kuerzel)} ({anzahl})"
+            for kuerzel, anzahl in fehlende_startnummern_je_pruefung(self.conn)
+        ]
+        self.startnummern_hinweis.setText(
+            f"Ohne Startnummer: {', '.join(fehlend)}" if fehlend else ""
+        )
+        self.startnummern_hinweis.setVisible(bool(fehlend))
+
     def _fehlende_startnummern_vergeben(self) -> None:
-        _fehlende_startnummern_vergeben_mit_meldung(self, self.conn)
+        filter_pruefung = self._gefilterte_pruefung_oder_meldung()
+        if filter_pruefung is None:
+            return
+        _fehlende_startnummern_vergeben_mit_meldung(self, self.conn, *filter_pruefung)
         self.aktualisieren()
+
+    def _alle_startnummern_zuruecksetzen(self) -> None:
+        filter_pruefung = self._gefilterte_pruefung_oder_meldung()
+        if filter_pruefung is None:
+            return
+        pruefung, bezeichnung = filter_pruefung
+        anzahl = sum(
+            1 for t in self._teilnehmer_je_id.values()
+            if t["startnummer"] is not None
+            and (pruefung is None or pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]) == pruefung)
+        )
+        wo = f" in „{bezeichnung}“" if bezeichnung else ""
+        if not anzahl:
+            QMessageBox.information(
+                self, "Startnummern zurücksetzen", f"Es ist noch keine Startnummer{wo} vergeben."
+            )
+            return
+        wer = f"der Teilnehmer in „{bezeichnung}“" if bezeichnung else "ALLER Teilnehmer"
+        antwort = QMessageBox.question(
+            self, "Startnummern zurücksetzen",
+            f"Die Startnummern {wer} ({anzahl}) werden entfernt. Neu vergeben "
+            "kannst du sie danach mit „Fehlende Startnummern vergeben…“.\n\n"
+            "Achtung: Die Reihenfolge im Zeitplan richtet sich nach den Startnummern, und "
+            "im Web erfasste Ergebnisse werden beim Zurückholen über die Startnummer "
+            "zugeordnet. Nach einer Veröffentlichung im Web daher nicht mehr umnummerieren.\n\n"
+            "Fortfahren?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if antwort != QMessageBox.Yes:
+            return
+        try:
+            entfernt = startnummern_zuruecksetzen(self.conn, pruefung)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
+        self.aktualisieren()
+        self.status_label.setText(f"{entfernt} Startnummer(n){wo} zurückgesetzt.")
 
     def _teilnehmerliste_importieren(self) -> None:
         _teilnehmerliste_importieren(self, self.conn)
@@ -949,6 +1055,7 @@ class TeilnehmerTab(QWidget):
         self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
         self.filter_combo.blockSignals(False)
         self._filter_anwenden()
+        self._startnummern_hinweis_aktualisieren()
 
 
 def _formular_import_prompt() -> str:
@@ -4232,6 +4339,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 "verband": letzter.verband,
                 # UX-Test U1 (Marco 03.10.2026): Startnummern-Bereiche ebenfalls übernehmen.
                 "startnummer_bereiche": letzter.startnummer_bereiche,
+                # Marco 09.10.2026: die Standardgröße der Bereiche ebenso.
+                "startnummer_bereichsgroesse": letzter.startnummer_bereichsgroesse,
             }
         dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung)
         if dialog.exec() != QDialog.Accepted:
