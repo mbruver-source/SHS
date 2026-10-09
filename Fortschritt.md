@@ -5572,3 +5572,12 @@ Marcos Rückmeldung mit zwei Punkten:
   `build-linux`).
 - Die Website-Änderung (Funktion „Teilnehmer“) geht mit Marcos Push zusammen mit dem Release
   online.
+
+## 09.10.2026: 1.0.46 ausgeliefert
+
+- Marco hat gepusht und `v1.0.46` getaggt. Alle Actions sind grün, auch `build-macos` (2×)
+  und `build-linux`.
+- Damit ist auch die Website mit der neuen Funktionsbeschreibung „Teilnehmer“ online.
+- Es gibt keine offenen Sicherheitsfunde und nichts in `_unveroeffentlicht/`, das zu
+  veröffentlichen wäre.
+- Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
