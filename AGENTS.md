@@ -115,7 +115,8 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
   Anlass: Bei 1.0.35 wurde der Handbuch-Screenshot erst nach dem Build erneuert und musste
   deshalb auf den nächsten Build warten. Konkret vor jedem Build prüfen und nachziehen:
   - `docs/HANDBUCH.md` inhaltlich (neue/geänderte Funktionen, Bedienung);
-  - Screenshots in `docs/bilder/` für jede sichtbar geänderte Oberfläche neu aufnehmen;
+  - Screenshots in `docs/bilder/` für jede sichtbar geänderte Oberfläche neu aufnehmen
+    (Desktop-Bilder mit `tools/screenshots.py`, Details im Skill `shs-build`);
   - `Architektur.md`, `README*.md` und `Fortschritt.md`.
   Erst danach kommen Versionsbump, `docs/HANDBUCH.pdf` und Build. Kann ein Screenshot nicht
   erstellt werden, vor dem Build bei Marco nachfragen statt ohne ihn zu bauen.

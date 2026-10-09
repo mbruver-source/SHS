@@ -1716,6 +1716,13 @@ class ErgebnisTab(QWidget):
         )
         for c, w in enumerate(ziel):
             self.tabelle.setColumnWidth(c, w)
+        # Restplatz ausdrücklich an die Status-Spalte (Marco 09.10.2026): setStretchLastSection
+        # streckt nur bei einer Größenänderung neu. Nach einem Neuaufbau ohne Größenänderung
+        # (Speichern, "Liste aktualisieren") blieb sie sonst bei ihrer Inhaltsbreite stehen,
+        # und bei breiten Fenstern stand rechts eine graue Lücke.
+        rest = breite - sum(ziel)
+        if rest > self.tabelle.columnWidth(_STATUS_SPALTE):
+            self.tabelle.setColumnWidth(_STATUS_SPALTE, rest)
         # UX-Test 02.10.2026, K1: Zeilen mindestens so hoch wie ein Eingabefeld - sonst
         # wurden eingetippte Punkte unten abgeschnitten.
         feldhoehe = QLineEdit().sizeHint().height()

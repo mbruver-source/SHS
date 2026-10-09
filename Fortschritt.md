@@ -5581,3 +5581,70 @@ Marcos Rückmeldung mit zwei Punkten:
 - Es gibt keine offenen Sicherheitsfunde und nichts in `_unveroeffentlicht/`, das zu
   veröffentlichen wäre.
 - Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
+
+## 09.10.2026: Festes Screenshot-Skript `tools/screenshots.py` (Arbeitsstand)
+
+- **Anlass, Marcos Frage:** Das Screenshot-Skript wurde bei jedem Build neu geschrieben. Das
+  frühere lag nur in temporären Sitzungsordnern. Die Folge waren uneinheitliche Bilder:
+  Version 1.0.44 und 1.0.46 gemischt, 8 bzw. 12 Testuser, „Cancel“ statt „Abbrechen“, zwei
+  verschiedene Profilpfade.
+- **Marcos Entscheidungen:**
+  - alle Desktop-Bilder;
+  - feste Screenshot-Daten wie bisher: Testuser1–9, nur fürs Teilnehmer-Bild zusätzlich
+    Testuser10–12 ohne Startnummer;
+  - ein kurzer Testlauf in der CI;
+  - danach einmal alle Bilder ersetzen.
+- **Umgesetzt:** `tools/screenshots.py` erzeugt 15 Bilder in rund 15 Sekunden.
+  - Die Bilder: Start, Termin anlegen, Teilnehmer, beide Teilnehmer-Dialoge, Formular-Import,
+    Zeitplan (+ `zeitplan.png`), Ergebniserfassung (+ `ergebniserfassung.png`), Auswertung,
+    Übersicht, Export, Datensicherung, Demo.
+  - Darstellung: offscreen, Segoe UI, Standard-Design (die gespeicherte Auswahl wird nur
+    übergangen, nicht verändert), deutsche Qt-Texte, Version aus `version.py`.
+  - Alle Termine liegen in einem Temp-Ordner. Als Anzeigepfad erscheint
+    `C:\Users\Name\SHS-Pruefungsprogramm\Termine`.
+  - Optionen: `--nur name1,name2` und `--ziel ORDNER`.
+  - Nicht enthalten, weiter Handarbeit: Web-Bilder, Anmeldeformular, Bewertungsbogen,
+    Edge-Download.
+  - Das Erklärfenster der Demo ist ein eigenes Fenster. Es wird an seiner Programmposition
+    unten rechts ins Bild gemalt.
+- **Test:** `test_app_gui.py::test_screenshot_skript_erzeugt_alle_bilder` führt das Skript in
+  einem eigenen Prozess aus, weil es Qt global einrichtet. Er prüft alle 15 Dateien samt
+  Größe.
+- **Erster Lauf:** Alle Bilder in `docs/bilder/` sind ersetzt; `handbuch_start.png` ist
+  pixelgleich geblieben. Inhaltlich gibt es keine Abweichung zu den bisherigen Bildern außer:
+  - Version 1.0.46;
+  - „Abbrechen“ statt „Cancel“ in den Teilnehmer-Dialogen;
+  - Speicherort im Dialog „Neuen Termin anlegen“ jetzt `C:\Users\Name\SHS-Pruefungsprogramm\…`
+    wie im Programm;
+  - im DK-Teilnehmer-Dialog steht bei Testuser4 unter Geschlecht „–“ statt „Hündin“;
+  - das ⚠ vor „Chip-Nr. fehlt“ ist einfarbig statt als farbiges Emoji (Schrift der Aufnahme).
+- **Doku:** Build-Skill `shs-build` Schritt 2: Skript statt Handarbeit. Schritt 3: nach dem
+  Versionsbump noch einmal laufen lassen, damit die neue Version auf den Bildern steht.
+  Außerdem `Architektur.md` (Werkzeug-Tabelle).
+- **Programmfehler gefunden und behoben** (Marco: „prüfen und beheben“):
+  - **Symptom:** Bei breiten Fenstern (z. B. Full HD) schrumpfte in der Ergebniserfassung die
+    Spalte „Status“ nach jedem Neuaufbau der Tabelle (Speichern, „Liste aktualisieren“) auf
+    ihre Inhaltsbreite. Rechts blieb eine graue Lücke, bis man das Fenster in der Größe
+    änderte.
+  - **Ursache:** `setStretchLastSection` streckt nur bei einer Größenänderung neu.
+  - **Fix:** `ErgebnisTab._spaltenbreiten_anpassen` gibt der Status-Spalte den Restplatz jetzt
+    ausdrücklich (`app.py`).
+  - **Test:** `test_ergebnis_tabelle_status_spalte_fuellt_breite_auch_nach_neuaufbau` läuft
+    in einem eigenen Prozess, weil der Fehler nur mit echten Windows-Schriftmaßen auftrat.
+    Er ist ohne Fix rot (Spalten 789 statt 1875 Pixel) und mit Fix grün. In der Linux-CI
+    prüft er nur, dass die Spalten die Breite füllen.
+  - `ergebniserfassung.png` (README/Website) sieht damit wieder aus wie bisher.
+- **Verifikation des Skripts:** Marco hat entschieden, alle Kleinigkeiten umzusetzen:
+  - Aufrufbeispiel im Skriptkopf korrigiert.
+  - Klare Fehlermeldung, wenn die Demo Schritt 8 oder der Dialog die Scrollfläche nicht
+    findet.
+  - Reiter werden über ihre Attributnamen statt über feste Nummern gewählt.
+  - 15-stellige Chip-Nr. für Testuser10–12.
+  - Der Screenshot-Test stellt Umgebung und `sys.modules` per monkeypatch wieder her.
+  - Abweichungsliste oben richtiggestellt.
+  - Zwei liegengebliebene Temp-Ordner aus Probeläufen gelöscht.
+  - `CLAUDE.md` und `AGENTS.md` nennen das Skript bei der Build-Disziplin.
+- `docs/HANDBUCH.pdf` wird erst beim nächsten Build neu erzeugt (Marco).
+- **Tests:**
+  - unittest 610 OK (164 übersprungen);
+  - GUI 236 passed, 1 skipped, 1 xfailed, 56 subtests passed.

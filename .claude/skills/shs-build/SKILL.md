@@ -25,8 +25,12 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 ## 2. Dokumente und Screenshots nachziehen (vor dem Versionsbump)
 
 - `docs/HANDBUCH.md`: neue oder geänderte Funktionen und Bedienung.
-- `docs/bilder/`: für jede sichtbar geänderte Oberfläche neuen Screenshot. Geht das nicht,
-  Marco fragen, statt ohne zu bauen. Bei Änderungen an `handbuch_zeitplan.png` die
+- `docs/bilder/`: Desktop-Screenshots mit `PY tools/screenshots.py` neu erzeugen (alle 15
+  Bilder, feste Testdaten; einzelne mit `--nur name1,name2`, Namen siehe `BILDER` im Skript).
+  Danach jedes geänderte Bild ansehen (`git status docs/bilder`). Neue Oberflächen im Skript
+  ergänzen statt Ad-hoc-Code zu schreiben. Von Hand bleiben: Web-Bilder,
+  `handbuch_anmeldeformular`, `bewertungsbogen`, `handbuch_edge_download`. Geht ein Bild
+  nicht, Marco fragen, statt ohne zu bauen. Bei Änderungen an `handbuch_zeitplan.png` die
   `og:image`-Angaben der Website prüfen.
 - `Architektur.md`, `README*.md`.
 - `RELEASE_NOTES.md`: Abschnitt „Was ist neu in X.Y.Z“ für die kommende Version, in
@@ -36,7 +40,8 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 
 1. `PY bump_version.py` (zieht `version.txt`, `version_info.txt`, `version.py`,
    „Stand: Version …“ im Handbuch und den Image-Tag in `compose.yaml` nach).
-2. `PY tools/handbuch_pdf.py` erzeugt `docs/HANDBUCH.pdf` neu.
+2. `PY tools/screenshots.py` noch einmal, damit die Bilder die neue Versionsnummer zeigen.
+3. `PY tools/handbuch_pdf.py` erzeugt `docs/HANDBUCH.pdf` neu.
 
 ## 4. Tests
 

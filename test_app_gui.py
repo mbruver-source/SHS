@@ -2218,6 +2218,62 @@ def test_ergebnis_tabelle_passt_bei_typischer_maximierter_breite_ohne_scrollbalk
     assert tab.tabelle.horizontalScrollBar().maximum() == 0
 
 
+_STATUS_SPALTE_PRUEFUNG = """
+import os, sys, tempfile
+from pathlib import Path
+from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
+app = QApplication([])
+import db
+from app import HauptFenster
+from desktop_gemeinsam import _STATUS_SPALTE
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+    pfad = str(Path(tmp) / "t.sqlite")
+    conn = db.init_db(pfad)
+    sys.path.insert(0, str(Path.cwd() / "tools"))
+    import screenshots  # dieselben Testdaten wie auf den Handbuch-Bildern
+    for daten in screenshots.TEILNEHMER[:2]:
+        db.add_teilnehmer(conn, db.NeuerTeilnehmer(**daten))
+    fenster = HauptFenster(conn, pfad)
+    fenster.resize(1400, 820)
+    fenster.show()
+    QTest.qWait(150)
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    QTest.qWait(250)
+    fenster.resize(1917, 651)
+    QTest.qWait(300)
+    fenster.ergebnis_tab.aktualisieren()
+    QTest.qWait(300)
+    t = fenster.ergebnis_tab.tabelle
+    summe = sum(t.columnWidth(c) for c in range(t.columnCount()))
+    print(summe, t.viewport().width(), t.columnWidth(_STATUS_SPALTE), t.sizeHintForColumn(_STATUS_SPALTE))
+    fenster.close()
+    conn.close()
+"""
+
+
+def test_ergebnis_tabelle_status_spalte_fuellt_breite_auch_nach_neuaufbau(tmp_path):
+    """Marco 09.10.2026: Bei breitem Fenster bekommt die Status-Spalte den Restplatz - auch
+    nach einem Neuaufbau ohne Größenänderung (Speichern, "Liste aktualisieren"). Vorher
+    blieb rechts eine graue Lücke, bis man das Fenster in der Größe änderte. Läuft in einem
+    eigenen Prozess, weil der Fehler nur mit echten Windows-Schriftmaßen auftrat: Der Import
+    von tools/screenshots setzt QT_QPA_FONTDIR auf den Windows-Schriftenordner, und Qt lädt
+    Schriften erst bei Bedarf. Ohne diesen Ordner (z. B. Linux-CI) prüft der Test nur, dass
+    die Spalten die Breite füllen."""
+    import subprocess
+
+    repo = os.path.dirname(os.path.abspath(__file__))
+    lauf = subprocess.run(
+        [sys.executable, "-c", _STATUS_SPALTE_PRUEFUNG], cwd=repo,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": repo}, timeout=120,
+    )
+    assert lauf.returncode == 0, lauf.stderr[-3000:]
+    summe, viewport, status, inhalt = map(int, lauf.stdout.split()[-4:])
+    assert summe >= viewport, (summe, viewport)
+    assert status > inhalt
+
+
 def test_ergebnis_tabelle_schrumpft_punktespalten_nicht_unter_minimum_bei_schmalem_fenster(qtbot, conn):
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = ErgebnisTab(conn)
@@ -5025,3 +5081,34 @@ def test_demo_reste_aufraeumen_loescht_nur_alte_demo_ordner(demo_umgebung):
 
     assert not alt.exists()
     assert jung.exists() and fremd.exists()
+
+
+def test_screenshot_skript_erzeugt_alle_bilder(tmp_path, monkeypatch):
+    """Marco 09.10.2026: tools/screenshots.py erzeugt alle Desktop-Bilder fürs Handbuch.
+    Läuft in einem eigenen Prozess, weil das Skript Qt global einrichtet (Schrift,
+    Übersetzer, Design) - das darf die übrigen GUI-Tests nicht beeinflussen."""
+    import subprocess
+    from pathlib import Path
+
+    from PySide6.QtGui import QImage
+
+    repo = Path(__file__).resolve().parent
+    # Der Import setzt QT_QPA_FONTDIR; monkeypatch stellt Umgebung, Suchpfad und
+    # sys.modules nach dem Test wieder her.
+    monkeypatch.delenv("QT_QPA_FONTDIR", raising=False)
+    monkeypatch.syspath_prepend(str(repo / "tools"))
+    monkeypatch.delitem(sys.modules, "screenshots", raising=False)
+    import screenshots
+    monkeypatch.setitem(sys.modules, "screenshots", screenshots)
+
+    umgebung = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
+    lauf = subprocess.run(
+        [sys.executable, str(repo / "tools" / "screenshots.py"), "--ziel", str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=umgebung, timeout=300,
+    )
+    assert lauf.returncode == 0, lauf.stderr[-3000:]
+    for name, (breite, hoehe) in screenshots.BILD_DATEIEN.items():
+        bild = QImage(str(tmp_path / f"{name}.png"))
+        assert not bild.isNull(), f"{name}.png fehlt"
+        assert (bild.width(), bild.height()) == (breite, hoehe), name
