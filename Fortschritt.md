@@ -5859,3 +5859,35 @@ Marcos Rückmeldung mit zwei Punkten:
 - Es gibt keine offenen Sicherheitsfunde und nichts in `_unveroeffentlicht/`, das zu
   veröffentlichen wäre.
 - Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
+
+## 13.10.2026: Virtueller Desktop-Prüfer in 10 Teilen (nur `.claude/`, kein Programmcode)
+
+Marcos Wunsch: ein kritischer Spezialist auf Opus 5.5 mit hohem Effort soll die Desktopversion
+auf Fehler, Schwachstellen und nicht optimale Programmierung prüfen. Die Aufgabe ist nach den
+Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander starten lassen.
+
+- **Agenten-Typ `desktop-pruefer`** (`.claude/agents/desktop-pruefer.md`): `model:
+  claude-opus-5-5`, `effort: high`, nur lesende Werkzeuge. Er prüft in einem Durchgang
+  Korrektheit und Grenzfälle, Sicherheit, Qt-Besonderheiten, Datenintegrität,
+  Fehlerbehandlung, Wartbarkeit und Testlücken. Es gibt außerdem einen Gegenprüf-Modus für
+  Befundlisten.
+- **Skill `desktop-pruefung`** (`.claude/skills/desktop-pruefung/SKILL.md`): Mit
+  `/desktop-pruefung <Nr>` wird ein Teil geprüft, ohne Nummer wird der Stand gezeigt.
+  Die 10 Teile:
+  1. Teilnehmerliste
+  2. Teilnehmer-Dialog und Veranstaltung
+  3. Ergebniserfassung
+  4. Auswertung, Übersicht und Zeitplan
+  5. Import
+  6. Export und PDF
+  7. Datensicherung, Start und Termine
+  8. Hauptfenster, Lebenszyklus, Version und Update
+  9. Darstellung, Hilfe und Fehlerbehandlung
+  10. Demoprüfung
+- **Ablauf je Teil:** Prüfer → Gegenprüfung durch einen zweiten `desktop-pruefer` → Bericht
+  in `_unveroeffentlicht/desktop-pruefung/teil-NN.md` und `uebersicht.md`. Danach wird jeder
+  Befund einzeln mit Marco besprochen und erst nach seinem Go umgesetzt.
+- **Marcos Entscheidungen:** Start per Skill mit Teilnummer, Skeptiker-Gegenprüfung,
+  Berichte in `_unveroeffentlicht/`.
+- `CLAUDE.md` und `AGENTS.md` sind um den neuen Agenten-Typ ergänzt.
+- Noch kein Teil gestartet.

@@ -32,6 +32,10 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit` (läuft auf Sonnet).
    Den ganzen Ablauf samt Gegenprüfung aller Befunde fasst der gespeicherte Workflow
    `qs-pruefung` (`.claude/workflows/qs-pruefung.js`) zusammen.
+   Für eine gründliche Prüfung der ganzen Desktopversion gibt es zusätzlich den
+   Agenten-Typ `desktop-pruefer` (Opus 5.5, Effort hoch). Der Skill `desktop-pruefung`
+   startet ihn je Funktionsbereich in 10 einzeln startbaren Teilen samt Gegenprüfung
+   (13.10.2026).
 4. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
    fertig gemeldet wird, prüft zusätzlich zum eigenen Testlauf ein separater Subagent Diff
    und Tests gegen - besonders bei sicherheitsrelevanten Änderungen. Dafür den
@@ -42,9 +46,9 @@ freigegebenen Ständen vor. Etablierter Prozess: jeder QS-/Sicherheits-Befund wi
 dem Nutzer besprochen und erst nach seinem expliziten Go umgesetzt - das gilt für jede
 Sitzung und jeden Subagent gleichermaßen, auch für automatisierte/geplante Läufe.
 
-Die vier Agenten-Typen (07.10.2026 mit Marco abgestimmt) haben kein Edit- oder
-Write-Werkzeug und ändern deshalb keinen Code. Sie liefern Befunde nur als Antwort; Berichte
-legt die Hauptsitzung ab (Sicherheitsberichte in `_unveroeffentlicht/`).
+Die fünf Agenten-Typen (07.10.2026 mit Marco abgestimmt, `desktop-pruefer` seit 13.10.2026)
+haben kein Edit- oder Write-Werkzeug und ändern deshalb keinen Code. Sie liefern Befunde nur
+als Antwort; Berichte legt die Hauptsitzung ab (Sicherheitsberichte in `_unveroeffentlicht/`).
 Codex kennt diese Dateien nicht; dort die Texte als Auftrag für die jeweilige Rolle
 verwenden.
 
