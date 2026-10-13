@@ -5848,3 +5848,14 @@ Marcos Rückmeldung mit zwei Punkten:
   das war bereits korrekt geschwärzt; das Programm selbst war also nicht betroffen. Die
   Erwartung wird jetzt aus `repr()` des jeweiligen Systems berechnet. Lokal: GUI 247 passed.
   Den Tag `v1.0.47` erst setzen, wenn die CI für diesen Nachtrag grün ist.
+
+## 13.10.2026: 1.0.47 ausgeliefert
+
+- Marco hat nach grüner Test-CI für den Nachtrag `24fcba1` gepusht und `v1.0.47` getaggt.
+- **Actions für den Tag:** „Tests“, „Installer bauen“ (einschließlich macOS und Linux) und
+  „Container bauen“ sind grün.
+- **Im Release:** Setup (.exe), zwei .dmg (Apple Silicon und Intel), AppImage und .deb.
+- Damit sind auch das Handbuch mit dem neuen Export-Text und die Fehler-FAQ online.
+- Es gibt keine offenen Sicherheitsfunde und nichts in `_unveroeffentlicht/`, das zu
+  veröffentlichen wäre.
+- Weiter offen: Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten.
