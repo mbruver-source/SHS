@@ -5890,4 +5890,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
 - **Marcos Entscheidungen:** Start per Skill mit Teilnummer, Skeptiker-Gegenprüfung,
   Berichte in `_unveroeffentlicht/`.
 - `CLAUDE.md` und `AGENTS.md` sind um den neuen Agenten-Typ ergänzt.
-- Noch kein Teil gestartet.
+- **Teil 1 (Teilnehmerliste) am 13.10.2026 durchgeführt** (Commit 25f9572): 8 bestätigte
+  Befunde (1 mittel, 5 niedrig, 2 optional), kein Sicherheitsbefund. Bericht in
+  `_unveroeffentlicht/desktop-pruefung/teil-01.md`. Die Befunde sind noch nicht mit Marco
+  besprochen und noch nicht umgesetzt.
