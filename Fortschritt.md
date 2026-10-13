@@ -5657,3 +5657,188 @@ Marcos Rückmeldung mit zwei Punkten:
   - veralteter Kommentar in `app.py`;
   - Docstring und unbenutzter Parameter im Status-Spalten-Test.
 
+
+## 13.10.2026: Reiter „Export“ – Kurztext je Knopf statt langem Erklärtext (Arbeitsstand)
+
+- **Rückmeldung Marco:** Unten im Bereich Export steht viel Text, der sehr unordentlich ist.
+  Gemeint war ein einziges Label mit einem langen Absatz zu allen elf Knöpfen. Es mischte
+  `"…"` und `„…“`, nannte den Reiter einmal „Tab“ und endete mit dem veralteten Satz
+  „… werden jetzt im Reiter Verwaltung gepflegt“.
+- **Entscheidung (Marco):** Neben jedem Knopf steht eine kurze Zeile, der lange Absatz
+  entfällt. Zur Wahl standen auch Gruppen nach Ablauf und ein gegliederter, aufklappbarer
+  Text.
+- **Umsetzung (`app.py`, `ExportTab.__init__`):**
+  - Die Knöpfe stehen in einem `QGridLayout` mit Knopf und Kurztext.
+  - Einzelheiten aus dem alten Text zeigt der Tooltip an Knopf und Kurztext: Rücklauf über
+    Formular-Import, „SH-R“, rote Impfpass-Zelle, Formel für den Richter-Bedarf,
+    doppelseitiger Druck der Bewertungsbögen.
+  - Die `QScrollArea` und das Hinweis-Label sind entfernt.
+  - Knopftexte, Reihenfolge und `self.ergebnisliste_btn` sind unverändert.
+- **Dokumente:**
+  - `docs/bilder/handbuch_export.png` ist mit `tools/screenshots.py --nur handbuch_export`
+    neu erzeugt.
+  - `docs/HANDBUCH.md` (Abschnitt Export) erklärt in einem Satz die Kurztexte und Tooltips.
+  - `docs/HANDBUCH.pdf` folgt beim nächsten Build.
+- **Tests:**
+  - unittest 610 OK (164 übersprungen);
+  - GUI (`test_app_gui.py`, `test_theme.py`): 237 passed, 1 skipped, 1 xfailed (mit dem neuen
+    Test, siehe unten).
+- **Demoprüfung (Marco: „aktualisiere die Demo“):** Der Text von Schritt 13 erklärt jetzt auch die Kurztexte
+  und Tooltips (`desktop_demo.py`). Die Abläufe sind unverändert: Die Markierung liegt weiter auf
+  `ergebnisliste_btn`. `handbuch_demo.png` zeigt Schritt 8 und bleibt deshalb, wie es ist.
+- **Verifikation:** Der Diff entspricht dem Auftrag, die Inhalte stimmen mit dem Code überein.
+  Marco hat alle vier gemeldeten Kleinigkeiten freigegeben:
+  - **Tooltips für alle Knöpfe:** Ergebnisliste, Zeitplan und Teilnehmerliste hatten noch
+    keinen, obwohl Demo und Handbuch einen versprechen.
+  - **Texte vereinheitlicht:**
+    - Bewertungsbögen: „Auswahl der Leistungsklassen/Disziplinen“, wie im Handbuch und im
+      Auswahldialog.
+    - Statistik-Tooltip: Jugendliche zählen nur unter den vollständig bewerteten Teilnehmern.
+    - Code-Kommentar: Der Tooltip hängt an Knopf und Kurztext.
+  - **Überschrift:** „Ausdrucke und Listen“ statt „PDF-Ausgabe“, und das Handbuch nennt die
+    CSV-Teilnehmerliste als Ausnahme von „erzeugt ein PDF“.
+  - **Neuer GUI-Test `test_export_tab_jeder_knopf_hat_kurztext_und_tooltip`:** prüft für die
+    11 Knöpfe, dass jeder einen Tooltip und rechts daneben einen Kurztext hat.
+- Der Screenshot ist danach erneut erzeugt.
+- Im Build-Commit für 1.0.47 enthalten.
+
+## 13.10.2026: Fehlerfenster und „Diagnose kopieren“ statt Fehler-Dump (Arbeitsstand)
+
+- **Frage Marco:** Lohnt sich ein Feld „Fehler-Dump erzeugen“?
+- **Bestand:**
+  - Das Absturzprotokoll aus P1 gibt es schon.
+  - Der Selbsttest läuft nur über die Kommandozeile.
+  - Für Meldungen gibt es die GitHub-Vorlage.
+- **Lücke:**
+  - Unbehandelte Fehler landeten nur still im Protokoll, das Programm lief ohne Hinweis weiter.
+  - Die Protokolldatei musste man von Hand suchen.
+  - Das Fenster „Version“ zeigte nur die Versionsnummer.
+- **Entscheidung (Marco):**
+  - Fehlerfenster und „Diagnose kopieren“ ja.
+  - Kein Dump mit Termin-DB: Er enthielte Personendaten, und `docs/datenschutz.html` sagt
+    zu, dass nichts übertragen wird.
+  - Keine ZIP, kein automatischer Versand.
+- **Umsetzung:**
+  - `desktop_gemeinsam.py`:
+    - `diagnose_text(version, fehler)` liefert Version, System, Python/PySide6/Qt, „installiert
+      ja/nein“, den Protokollort, den aktuellen Fehler und die letzten 40 Protokollzeilen.
+    - Der Benutzerordner wird überall durch `~` ersetzt (`_ohne_benutzerpfad`). Ein
+      unlesbares Protokoll ergibt „(nicht lesbar)“.
+    - `fehlerfenster_einrichten(version)` legt einen Hook über `sys.excepthook`. Das
+      Absturzprotokoll schreibt weiter zuerst, danach erscheint `fehlerfenster_zeigen`. Das
+      gilt nur im Haupt-Thread mit `QApplication`. Ist schon ein Fehlerfenster offen,
+      erscheint kein zweites, und Fehler beim Anzeigen werden geschluckt.
+    - Das Fenster zeigt den Text als Klartext (S-1) und den Traceback unter „Details“. Knöpfe:
+      „Fehlerbericht kopieren“ (schließt das Fenster nicht), „Protokoll-Ordner öffnen“ und
+      „OK“.
+  - `app.py`:
+    - `main()` ruft `fehlerfenster_einrichten` nach `meldungsfenster_als_klartext` auf. Der
+      `--selbsttest`-Zweig ist nicht betroffen.
+    - `VersionDialog` hat einen Abschnitt mit Kurzhinweis sowie „Diagnose kopieren“ und
+      „Protokoll-Ordner öffnen“. Dieser Knopf ist ohne Protokoll deaktiviert.
+- **Dokumente:**
+  - `docs/HANDBUCH.md`: FAQ „Unerwarteter Fehler / ohne Meldung beendet“ und „Fehler melden“.
+  - `.github/ISSUE_TEMPLATE/fehler.yml`: Hinweis im Feld „Fehlermeldung“.
+  - `Architektur.md`: Modultabelle.
+  - Kein Handbuch-Screenshot betroffen, das Fenster „Version“ ist in keinem Bild enthalten.
+- **Tests:** vier neue GUI-Tests:
+  - Diagnose ohne Benutzerpfad und mit Protokollende;
+  - nur ein Fehlerfenster gleichzeitig, das Protokoll läuft weiter;
+  - Kopieren schließt das Fenster nicht und nutzt Klartext;
+  - „Diagnose kopieren“ im Fenster „Version“.
+
+  Ergebnis: GUI 241 passed, 1 skipped, 1 xfailed; unittest 610 OK (164 übersprungen);
+  `--selbsttest` alles OK.
+- **Handprobe:** offscreen mit einem echten Fehler in einem Slot. Das Fenster erscheint, das
+  Kopieren funktioniert, der Benutzername ist als `~` ersetzt.
+- **Verifikation:** Die Grundfunktion ist bestätigt, auch mit echtem `exec()`: Kopieren lässt
+  das Fenster offen, OK schließt es. Marco hat alle gemeldeten Punkte freigegeben, alle sind
+  umgesetzt:
+  1. **Benutzername:**
+     - `_ohne_benutzerpfad` ersetzt den Benutzerordner jetzt auch ohne Rücksicht auf
+       Groß-/Kleinschreibung, mit `/` und mit doppelten Backslashes (`repr()` in
+       Fehlertexten), als Windows-Kurzpfad (8.3) und nur als ganzen Ordnernamen.
+     - Der Benutzername selbst (Ordnername, `USERNAME`/`USER`, ab 3 Zeichen) wird durch
+       `<Benutzer>` ersetzt.
+  2. **Fensterflut:** Jedes Fehlerbild (Typ + letzte Traceback-Stelle) erscheint nur einmal
+     je Sitzung, sodass ein wiederkehrender Fehler in Timer oder `paintEvent` das Programm
+     nicht blockiert.
+  3. **Testzustand:** Die Protokoll-Tests setzen `_absturzprotokoll_pfad` zurück, die
+     Fehlerfenster-Tests nutzen eine gemeinsame Fixture.
+  4. **Neue Tests:**
+     - wiederkehrender Fehler;
+     - KeyboardInterrupt, Nebenthread, ohne QApplication;
+     - Fehler im bisherigen Hook und beim Anzeigen werden geschluckt;
+     - „Protokoll-Ordner öffnen“ im Fehlerfenster und im Fenster „Version“, einschließlich
+       des deaktivierten Zustands;
+     - die Diagnose führt den Fehler nicht doppelt auf.
+  5. Der Aufruf des bisherigen Hooks ist mit `try/except` abgesichert.
+  6. **Kleinigkeiten:**
+     - Der aktuelle Fehler wird nur aufgeführt, wenn er nicht schon im Protokollende steht.
+     - `diagnose_text` fängt auch Fehler bei den Systemangaben ab („(unbekannt)“).
+     - Das Fehlerfenster hängt am aktiven Programmfenster.
+     - Handbuch: `~` und `<Benutzer>`.
+- **Tests danach:**
+  - GUI 246 passed, 1 skipped, 1 xfailed;
+  - unittest 610 OK (164 übersprungen);
+  - `--selbsttest` alles OK.
+- **Nachprüfung:** ohne Befund (GUI 246 passed, unittest 610 OK). Marco hat die zwei Hinweise
+  bewusst zurückgestellt (13.10.2026):
+  - **Kurze, allgemeine Benutzernamen** (z. B. „max“, „admin“, ab 3 Zeichen) schwärzen auch
+    gleichlautenden Text in der Diagnose, z. B. `max(` → `<Benutzer>(`. Das ersetzt nur zu
+    viel und verrät nichts.
+  - **Fehlerbild = Typ + innerste Traceback-Stelle:** Verschiedene Fehler desselben Typs aus
+    derselben Zeile einer gemeinsamen Hilfsfunktion zeigen nur ein Fenster je Sitzung. Die
+    weiteren landen nur im Protokoll. Das ist die Abwägung gegen die Fensterflut.
+- Im Build-Commit für 1.0.47 enthalten.
+
+## Version 1.0.47 (13.10.2026, Build auf Marcos Wunsch „jetzt neues Build“)
+
+- **Offene Punkte vor dem Build:** Die Verifikation über alles seit 1.0.46 fand keine
+  Konflikte, aber einige Kleinigkeiten. Marco hat am 13.10.2026 alle vier Gruppen zur
+  Umsetzung freigegeben:
+  - **Datenschutz-Hinweis:** Fenster „Version“ und Release Notes versprachen „keine
+    Teilnehmerdaten“. Jetzt heißt es wie im Fehlerfenster und im Handbuch: keine
+    Termin-Datei, vor dem Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen (z. B. in
+    Fehlertexten).
+  - **Hilfe-Fenster und README:** Das Hilfe-Fenster (`desktop_dialoge.py`, Abschnitte
+    „Reiter Export“, „Versionsanzeige“ und Schlussabsatz) nennt Kurztexte und Tooltips sowie
+    „Diagnose kopieren“, „Protokoll-Ordner öffnen“ und das Fehlerfenster. `README.md`
+    verweist unter „Fragen, Fehler, Wünsche“ auf „Diagnose kopieren“.
+  - **Kommentare und Docstrings:**
+    - Der ExportTab-Docstring nennt „Ausdrucke und Listen“ und die CSV-Ausgabe.
+    - Der Modul-Docstring von `desktop_gemeinsam.py` nennt deutsche Qt-Texte,
+      Absturzprotokoll, Fehlerfenster und Diagnose.
+    - Der Kommentar zum Anmeldeformular steht jetzt über dem richtigen Knopf.
+  - **Selbsttest:** Neuer Schritt „Diagnose kopieren (Fehlermeldung)“ in `selbsttest.py`.
+    Er schlägt fehl, wenn eine Angabe „(unbekannt)“ ist, sodass ein im Bundle fehlendes
+    Modul in der CI auffällt. Das Handbuch nennt die Diagnose bei „ERGEBNIS: alles OK“.
+- **Bewusst zurückgestellt** (siehe Abschnitt „Fehlerfenster“): kurze, allgemeine
+  Benutzernamen schwärzen zu viel; Fehlerbild = Typ + innerste Stelle.
+- **Enthalten seit 1.0.46:**
+  - Reiter „Export“: Kurztext neben jedem Knopf, Tooltips mit Einzelheiten, Überschrift
+    „Ausdrucke und Listen“, der lange Erklärtext ist weg. Der Demo-Text von Schritt 13 ist
+    angepasst.
+  - Fehlerfenster bei unbehandelten Fehlern, „Fehlerbericht kopieren“ bzw. „Diagnose
+    kopieren“ (Fenster „Version“) mit geschwärztem Benutzerpfad und -namen, „Protokoll-Ordner
+    öffnen“.
+  - Bereits committet seit 1.0.46:
+    - festes Screenshot-Skript `tools/screenshots.py`;
+    - Fix: Die Status-Spalte der Ergebniserfassung füllt wieder die Tabellenbreite.
+  - Doku: Handbuch, Hilfe-Fenster, README, `Architektur.md`, Issue-Vorlage `fehler.yml`,
+    `RELEASE_NOTES.md` für 1.0.47.
+- `bump_version.py` → 1.0.47.
+- **Bilder:** Alle 15 Bilder sind mit `tools/screenshots.py` neu erzeugt. Geändert sind
+  `handbuch_export.png` (neues Layout) und die Versionsanzeige 1.0.47 in den übrigen Bildern.
+  Laut Pixelvergleich ist sonst nichts anders.
+- **Handbuch-PDF:** `docs/HANDBUCH.pdf` ist neu erzeugt (38 Seiten).
+  - **Hinweis zur Arbeitsumgebung:** Aus der Bash-Sandbox von Claude Code heraus schreibt
+    Edge headless still keine Datei (Rückgabe 0, aber kein PDF). Über das PowerShell-Werkzeug
+    klappt es.
+- **Tests lokal:**
+  - unittest 610 OK (164 übersprungen);
+  - GUI 246 passed, 1 skipped, 1 xfailed, 56 subtests passed;
+  - `--selbsttest` alles OK (8 Schritte).
+- **Nach dem Tag-Lauf:** prüfen, dass alle Jobs grün sind (auch `build-macos` 2x und
+  `build-linux`).
+- Die Handbuch-Änderungen gehen mit Marcos Push zusammen mit dem Release online.

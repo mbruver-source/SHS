@@ -1,3 +1,26 @@
+## Was ist neu in 1.0.47
+
+**Reiter „Export“ übersichtlicher**
+- Der lange Erklärtext unter den Knöpfen ist weg. Stattdessen steht neben jedem Knopf in
+  einer Zeile, was er erzeugt. Einzelheiten zeigt ein Hinweis, wenn die Maus kurz auf dem
+  Knopf oder dem Text bleibt.
+
+**Hilfe bei Fehlern**
+- Tritt ein unerwarteter Fehler auf, erscheint jetzt ein Fenster „Unerwarteter Fehler“, statt
+  dass das Programm still weiterläuft. Bereits gespeicherte Daten bleiben erhalten.
+- Mit **„Fehlerbericht kopieren“** (im Fehlerfenster) bzw. **„Diagnose kopieren“** (Knopf
+  „Version“) landen Programmversion, System und die letzten Einträge des Fehlerprotokolls in
+  der Zwischenablage – zum Einfügen in eine Fehlermeldung. Dein Benutzername wird dabei
+  ersetzt, Termin-Dateien sind nicht enthalten. Bitte vor dem Einfügen kurz durchsehen, ob
+  Teilnehmerdaten darin stehen (z. B. in Fehlertexten). Es wird nichts automatisch verschickt.
+
+**Kleinigkeiten**
+- Ergebniserfassung: Die Spalte „Status“ nutzt wieder die volle Breite der Tabelle.
+- Die Bilder im Handbuch sind einheitlich neu aufgenommen.
+
+**Für dieses Update** bitte wie gewohnt das Programm vorher schließen und die neue Version
+über die alte installieren. Deine Termine bleiben erhalten.
+
 ## Was ist neu in 1.0.46
 
 **Startnummern schneller vergeben**

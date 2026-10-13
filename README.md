@@ -107,8 +107,9 @@ Für die meisten Vereine reicht die Desktop-App allein. Details: [README_CONTAIN
 Fehler gefunden oder eine Idee? Bitte unter
 [Issues](https://github.com/mbruver-source/SHS/issues/new/choose) mit der Vorlage
 **„Fehler melden“** bzw. **„Idee / Wunsch“** melden. Die Formulare fragen die wichtigen Angaben
-(Programmversion, Schritte, Screenshot) direkt ab. **Bitte keine echten Teilnehmerdaten** in
-Meldungen oder Screenshots.
+(Programmversion, Schritte, Screenshot) direkt ab. Im Desktop-Programm liefert der Knopf
+„Version“ → **„Diagnose kopieren“** die technischen Angaben zum Einfügen. **Bitte keine echten
+Teilnehmerdaten** in Meldungen oder Screenshots.
 
 Sicherheitslücken bitte **nicht** als Issue melden, sondern wie in der
 [Sicherheitsrichtlinie](.github/SECURITY.md) beschrieben.

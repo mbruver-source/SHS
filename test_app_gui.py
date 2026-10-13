@@ -1538,6 +1538,25 @@ def test_export_tab_anmeldeformular_erzeugt_pdf(qtbot, conn, tmp_path, monkeypat
     assert tab.status_label.text().startswith("Anmeldeformular gespeichert")
 
 
+def test_export_tab_jeder_knopf_hat_kurztext_und_tooltip(qtbot, conn):
+    """Rückmeldung 13.10.2026: statt eines langen Erklärtextes steht neben jedem Export-Knopf
+    ein Kurztext; Einzelheiten zeigt der Tooltip an Knopf und Kurztext."""
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+
+    knoepfe = [b for b in tab.findChildren(QPushButton) if b.text() != "Ablageort öffnen"]
+    assert len(knoepfe) == 11
+    for knopf in knoepfe:
+        assert knopf.toolTip(), knopf.text()
+        rechts = [
+            label for label in tab.findChildren(QLabel)
+            if label.isVisible() and label.text() and label.toolTip() == knopf.toolTip()
+            and abs(label.y() - knopf.y()) < knopf.height() and label.x() > knopf.x()
+        ]
+        assert len(rechts) == 1, knopf.text()
+
+
 def test_formular_import_tab_anmeldeformulare_importieren_zeigt_zusammenfassung(qtbot, conn, monkeypatch):
     pfade = ["a.pdf", "b.pdf", "c.pdf"]
     monkeypatch.setattr("app.QFileDialog.getOpenFileNames", lambda *a, **k: (pfade, ""))
@@ -3665,6 +3684,7 @@ def test_absturzprotokoll_schreibt_start_und_unbehandelte_fehler(tmp_path, monke
     monkeypatch.setattr(sys, "excepthook", lambda *a: None)
     monkeypatch.setattr(desktop_gemeinsam, "_ABSTURZPROTOKOLL_MAX_BYTES", 200)
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", None)
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", None)
 
     alt = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
     alt.write_text("x" * 500, encoding="utf-8")
@@ -3693,6 +3713,229 @@ def test_absturzprotokoll_ohne_schreibrecht_startet_trotzdem(tmp_path):
     unmoeglich = tmp_path / "datei_statt_ordner"
     unmoeglich.write_text("x")
     assert desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=unmoeglich) is None
+
+
+def test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende(tmp_path, monkeypatch):
+    """Rückmeldung 13.10.2026: Diagnose zum Kopieren - Version, System, Ende des
+    Absturzprotokolls; der Benutzerordner erscheint nur als "~", der Benutzername als
+    "<Benutzer>" - auch in repr()-Schreibweise und anderer Groß-/Kleinschreibung."""
+    from pathlib import Path
+
+    import desktop_gemeinsam
+
+    heim = tmp_path / "Benutzer" / "MaxMuster"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: heim))
+    monkeypatch.setenv("USERNAME", "MaxMuster")
+    protokoll = heim / "SHS-Pruefungsprogramm" / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
+    protokoll.parent.mkdir(parents=True)
+    protokoll.write_text(
+        "alte Zeile\n" * 100
+        + f'File "{heim}\\x.py", line 1\n'
+        + f"FileNotFoundError: {str(heim / 'x.db')!r}\n"
+        + f"{str(heim).lower()}\\klein.txt und {heim.as_posix()}/vor.txt\n"
+        + "RuntimeError: zuletzt (Benutzer maxmuster)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
+
+    text = desktop_gemeinsam.diagnose_text("9.9.9", fehler="Traceback: aktueller Fehler")
+    assert "Version: 9.9.9" in text
+    assert "Aktueller Fehler:\nTraceback: aktueller Fehler" in text
+    assert "RuntimeError: zuletzt (Benutzer <Benutzer>)" in text
+    assert text.count("alte Zeile") < 100
+    assert "maxmuster" not in text.lower()
+    assert "~\\\\x.db" in text and "~\\klein.txt" in text and "~/vor.txt" in text
+
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", tmp_path / "fehlt.txt")
+    assert "(nicht lesbar)" in desktop_gemeinsam.diagnose_text("9.9.9")
+
+
+def test_diagnose_text_fuehrt_fehler_aus_dem_protokoll_nicht_doppelt_auf(tmp_path, monkeypatch):
+    import desktop_gemeinsam
+
+    fehler = "Traceback (most recent call last):\nRuntimeError: steht schon im Protokoll\n"
+    protokoll = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
+    protokoll.write_text("--- Start ---\nUnbehandelter Fehler:\n" + fehler, encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
+
+    text = desktop_gemeinsam.diagnose_text("9.9.9", fehler=fehler)
+    assert "Aktueller Fehler:" not in text
+    assert text.count("RuntimeError: steht schon im Protokoll") == 1
+
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", None)
+    assert "Aktueller Fehler:" in desktop_gemeinsam.diagnose_text("9.9.9", fehler=fehler)
+
+
+@pytest.fixture
+def fehlerfenster_hook(qtbot, monkeypatch):
+    """Richtet den Fehlerfenster-Hook über einem protokollierenden Ersatz-Hook ein; zeigt
+    statt eines Fensters nur einen Eintrag in `fenster`. Zustand wird danach zurückgesetzt."""
+    import desktop_gemeinsam
+
+    protokolliert, fenster = [], []
+    monkeypatch.setattr(sys, "excepthook", lambda typ, wert, tb: protokolliert.append(str(wert)))
+    monkeypatch.setattr(desktop_gemeinsam, "_gezeigte_fehler", set())
+    monkeypatch.setattr(desktop_gemeinsam, "_fehlerfenster_offen", False)
+    monkeypatch.setattr(desktop_gemeinsam, "fehlerfenster_zeigen",
+                        lambda version, fehler, parent=None: fenster.append(fehler))
+    desktop_gemeinsam.fehlerfenster_einrichten("9.9.9")
+    return protokolliert, fenster
+
+
+def _fehler_melden(fehler: BaseException, zeile: int = 0) -> None:
+    """Löst `fehler` aus und reicht ihn an sys.excepthook weiter; `zeile` wählt eine von zwei
+    Auslösestellen (für unterschiedliche Fehlerbilder)."""
+    try:
+        if zeile:
+            raise fehler
+        raise fehler
+    except BaseException:
+        sys.excepthook(*sys.exc_info())
+
+
+def test_fehlerfenster_bei_unbehandeltem_fehler_nur_einmal_gleichzeitig(fehlerfenster_hook, monkeypatch):
+    """Rückmeldung 13.10.2026: unbehandelte Fehler erscheinen zusätzlich als Fenster; der
+    bisherige Hook (Absturzprotokoll) läuft weiter zuerst, und ein Fehler während das
+    Fenster offen ist, öffnet kein zweites."""
+    import desktop_gemeinsam
+
+    protokolliert, fenster = fehlerfenster_hook
+    innen = []
+
+    def zeigen(version, fehler, parent=None):
+        fenster.append(fehler)
+        _fehler_melden(ValueError("zweiter Fehler"))
+        innen.append(desktop_gemeinsam._fehlerfenster_offen)
+
+    monkeypatch.setattr(desktop_gemeinsam, "fehlerfenster_zeigen", zeigen)
+    _fehler_melden(RuntimeError("erster Fehler"))
+
+    assert protokolliert == ["erster Fehler", "zweiter Fehler"]
+    assert len(fenster) == 1 and "RuntimeError: erster Fehler" in fenster[0]
+    assert innen == [True]
+    assert desktop_gemeinsam._fehlerfenster_offen is False
+
+
+def test_fehlerfenster_wiederkehrender_fehler_nur_einmal_je_sitzung(fehlerfenster_hook):
+    """Verifikation 13.10.2026: ein ständig wiederkehrender Fehler (z. B. im Timer) darf
+    nicht nach jedem OK das nächste Fenster öffnen; ein anderes Fehlerbild schon."""
+    protokolliert, fenster = fehlerfenster_hook
+    for _ in range(3):
+        _fehler_melden(RuntimeError("immer wieder"))
+    _fehler_melden(RuntimeError("andere Stelle"), zeile=1)
+    _fehler_melden(KeyError("anderer Typ"))
+
+    assert len(protokolliert) == 5
+    assert len(fenster) == 3
+
+
+def test_fehlerfenster_nicht_bei_abbruch_ohne_app_oder_im_nebenthread(fehlerfenster_hook, monkeypatch):
+    import threading
+
+    import desktop_gemeinsam
+
+    protokolliert, fenster = fehlerfenster_hook
+    _fehler_melden(KeyboardInterrupt())
+
+    nebenthread = threading.Thread(target=_fehler_melden, args=(RuntimeError("im Thread"),))
+    nebenthread.start()
+    nebenthread.join()
+
+    monkeypatch.setattr(QApplication, "instance", staticmethod(lambda: None))
+    assert desktop_gemeinsam._fehlerfenster_offen is False
+    _fehler_melden(RuntimeError("ohne App"))
+
+    assert len(protokolliert) == 3
+    assert fenster == []
+
+
+def test_fehlerfenster_fehler_beim_anzeigen_und_im_bisherigen_hook_werden_geschluckt(qtbot, monkeypatch):
+    import desktop_gemeinsam
+
+    def kaputter_hook(*_a):
+        raise OSError("keine Konsole")
+
+    def kaputtes_fenster(*_a, **_k):
+        raise RuntimeError("Fenster kaputt")
+
+    monkeypatch.setattr(sys, "excepthook", kaputter_hook)
+    monkeypatch.setattr(desktop_gemeinsam, "_gezeigte_fehler", set())
+    monkeypatch.setattr(desktop_gemeinsam, "fehlerfenster_zeigen", kaputtes_fenster)
+    desktop_gemeinsam.fehlerfenster_einrichten("9.9.9")
+
+    _fehler_melden(ValueError("Original"))  # darf selbst nichts auslösen
+    assert desktop_gemeinsam._fehlerfenster_offen is False
+    assert len(desktop_gemeinsam._gezeigte_fehler) == 1
+
+
+def test_fehlerfenster_kopieren_schliesst_nicht_und_fuellt_zwischenablage(qtbot, monkeypatch):
+    import desktop_gemeinsam
+
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", None)
+    beobachtet = {}
+
+    def exec_(box):
+        box.show()
+        knopf = next(b for b in box.buttons() if b.text() == "Fehlerbericht kopieren")
+        knopf.click()
+        beobachtet["sichtbar_nach_klick"] = box.isVisible()
+        beobachtet["knoepfe"] = [b.text() for b in box.buttons()]
+        beobachtet["format"] = box.textFormat()
+        box.close()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    desktop_gemeinsam.fehlerfenster_zeigen("9.9.9", "RuntimeError: <b>Name</b>")
+
+    assert beobachtet["sichtbar_nach_klick"]
+    assert "Protokoll-Ordner öffnen" not in beobachtet["knoepfe"]
+    assert beobachtet["format"] == Qt.PlainText
+    zwischenablage = QApplication.clipboard().text()
+    assert "Version: 9.9.9" in zwischenablage and "RuntimeError: <b>Name</b>" in zwischenablage
+
+
+def test_fehlerfenster_protokoll_ordner_oeffnen(qtbot, tmp_path, monkeypatch):
+    import desktop_gemeinsam
+
+    protokoll = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
+    protokoll.write_text("", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
+    gezeigt = []
+    monkeypatch.setattr(desktop_gemeinsam, "_ordner_zeigen", gezeigt.append)
+
+    def exec_(box):
+        next(b for b in box.buttons() if b.text() == "Protokoll-Ordner öffnen").click()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    desktop_gemeinsam.fehlerfenster_zeigen("9.9.9", "RuntimeError: x")
+    assert gezeigt == [str(protokoll)]
+
+
+def test_version_dialog_diagnose_kopieren_und_protokoll_ordner(qtbot, tmp_path, monkeypatch):
+    import app
+    import desktop_gemeinsam
+
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", None)
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    knoepfe = {b.text(): b for b in dialog.findChildren(QPushButton)}
+    assert not knoepfe["Protokoll-Ordner öffnen"].isEnabled()
+    knoepfe["Diagnose kopieren"].click()
+    assert QApplication.clipboard().text().startswith("SHS-Prüfungsprogramm – Diagnose")
+    assert dialog._diagnose_status.text() == "Diagnose kopiert."
+
+    protokoll = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_DATEINAME
+    protokoll.write_text("", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
+    gezeigt = []
+    monkeypatch.setattr(app, "_ordner_zeigen", gezeigt.append)
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    ordner_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Protokoll-Ordner öffnen")
+    assert ordner_btn.isEnabled()
+    ordner_btn.click()
+    assert gezeigt == [str(protokoll)]
 
 
 def test_punkte_ueber_maximum_rot_und_klartext_beim_speichern(qtbot, termin, monkeypatch):

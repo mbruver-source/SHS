@@ -1173,7 +1173,8 @@ Verband, Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfe
 Anmeldeformulars.</p>
 
 <h3>Reiter "Export"</h3>
-<p>Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
+<p>Neben jedem Knopf steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Hinweis,
+wenn die Maus kurz darauf bleibt. Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
 Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
 Zeitplan sowie
@@ -1199,6 +1200,10 @@ veröffentlicht wurde, und zeigt bei Bedarf einen Download-Button an – dafür 
 eine Internetverbindung gebraucht, ohne Internet erscheint stattdessen ein entsprechender
 Hinweis. Eine automatische Prüfung im Hintergrund beim Programmstart ist bewusst nicht
 eingebaut.</p>
+<p>Für eine Fehlermeldung legt "Diagnose kopieren" Version, System und das Ende des
+Absturzprotokolls in die Zwischenablage (dein Benutzername wird dabei ersetzt; vor dem
+Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen). "Protokoll-Ordner öffnen" zeigt die
+Datei. Bei einem unerwarteten Fehler erscheint ein Fenster mit denselben Möglichkeiten.</p>
 
 <h3>Aussehen (Menü "Ansicht")</h3>
 <p>Unter "Hintergrund" wählst du das Design: Hell (Standard), Warm / Sand, Dunkel oder Hoher
@@ -1210,7 +1215,8 @@ Fenster des Systems zum Öffnen/Speichern von Dateien unter Windows hell.</p>
 <h3>Ausführliches Handbuch</h3>
 <p>Ein ausführliches Benutzerhandbuch mit Screenshots (auch als PDF zum Ausdrucken) steht auf
 der Projektseite bei GitHub (github.com/mbruver-source/SHS, Datei docs/HANDBUCH.md). Dort
-kannst du über "Issues" auch Fehler melden oder Wünsche äußern.</p>
+kannst du über "Issues" auch Fehler melden oder Wünsche äußern – am besten mit der
+Diagnose aus dem Fenster "Version" (siehe oben).</p>
 """
 
 

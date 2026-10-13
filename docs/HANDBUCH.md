@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.46. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.47. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -663,7 +663,10 @@ Prüfungen (für das Anmeldeformular) nachträglich.
 
 ![Reiter „Export“](bilder/handbuch_export.png)
 
-Jeder Button fragt nach dem Speicherort und erzeugt ein PDF. Vorgeschlagen wird der Ordner
+Neben jedem Button steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Tooltip,
+wenn die Maus auf dem Button bleibt.
+Jeder Button fragt nach dem Speicherort und erzeugt ein PDF – nur die Teilnehmerliste ist eine
+CSV-Datei für Excel. Vorgeschlagen wird der Ordner
 `Ausdrucke\<Termin>` neben der Termin-Datei (z. B. `…\SHS-Pruefungsprogramm\Termine\Ausdrucke\2026-11-14_Verein`),
 nach einem bewusst anderen Ordner dieser. Nach dem Speichern zeigt ein Fenster, wo die Datei
 liegt, mit **„PDF öffnen“** und **„Ordner zeigen“** – praktisch, um sie z. B. an eine E-Mail
@@ -828,12 +831,14 @@ Wiederhergestellte Termine erscheinen erst beim nächsten „Anderen Termin öff
 Ja, über die Datensicherung (siehe [Kapitel 10](#10-datensicherung)). Gleichzeitig am selben
 Termin arbeiten geht mit dem Desktop-Programm nicht – dafür gibt es die Web-Version.
 
-**Das Programm hat sich plötzlich ohne Meldung beendet.**
-Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt in solchen Fällen ein
-Protokoll in die Datei `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem
-Benutzerprofil (neben dem Ordner `Termine`). Hänge sie bitte an eine Fehlermeldung an
-(siehe unten) – vorher kurz hineinschauen, ob echte Teilnehmerdaten darin stehen (auch dein
-Benutzername kann in Dateipfaden vorkommen).
+**Es erscheint „Unerwarteter Fehler“ oder das Programm hat sich ohne Meldung beendet.**
+Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt solche Fehler in die Datei
+`absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem Benutzerprofil (neben dem
+Ordner `Termine`). Für eine Fehlermeldung (siehe unten) musst du die Datei nicht suchen:
+**„Fehlerbericht kopieren“** im Fehlerfenster bzw. **„Diagnose kopieren“** im Fenster
+**„Version“** legt Version, System und das Ende des Protokolls in die Zwischenablage – zum
+Einfügen in die Meldung. Dein Benutzerordner wird dabei durch `~` ersetzt, dein Benutzername
+durch `<Benutzer>`; kurz durchsehen, ob trotzdem echte Teilnehmerdaten darin stehen. **„Protokoll-Ordner öffnen“** zeigt die Datei.
 
 **Funktioniert meine Installation vollständig?**
 Das Programm kann sich selbst prüfen, ohne deine Termine anzufassen. Unter Windows dazu im
@@ -849,14 +854,14 @@ eingeben). Unter macOS bzw. Linux im Terminal eingeben (das Ergebnis steht dann 
 - Linux (AppImage, im Ordner der Datei): `./SHS-Pruefungsprogramm-*.AppImage --selbsttest ~/shs_selbsttest.log`
 
 „ERGEBNIS: alles OK“ heißt: Termine, Auswertung, PDFs, Formular-Import,
-Datensicherung, Oberfläche und Programmsymbol funktionieren. Bei einer Fehlermeldung die Datei bitte an die
+Datensicherung, Oberfläche, Programmsymbol und Diagnose funktionieren. Bei einer Fehlermeldung die Datei bitte an die
 Fehlermeldung anhängen (siehe unten).
 
 ### Fehler melden oder Wunsch äußern
 
 Bitte über die [Issues auf GitHub](https://github.com/mbruver-source/SHS/issues/new/choose) mit
-den Vorlagen **„Fehler melden“** bzw. **„Idee / Wunsch“**. Hilfreich sind die Programmversion
-(Button „Version“), die Schritte bis zum Fehler und ein Screenshot. **Bitte keine echten
+den Vorlagen **„Fehler melden“** bzw. **„Idee / Wunsch“**. Hilfreich sind die Diagnose
+(Button „Version“ → **„Diagnose kopieren“**), die Schritte bis zum Fehler und ein Screenshot. **Bitte keine echten
 Teilnehmerdaten** in Meldungen oder Screenshots.
 
 ## 14. Die erste Prüfung Schritt für Schritt

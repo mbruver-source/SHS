@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -181,7 +182,11 @@ from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
     _Ablageort,
     absturzprotokoll_einrichten,
+    absturzprotokoll_pfad,
+    diagnose_text,
+    fehlerfenster_einrichten,
     meldungsfenster_als_klartext,
+    _ordner_zeigen,
     programmsymbol,
     _aktualisiere_veranstaltung_feld,
     _ausdrucke_ordner,
@@ -3083,8 +3088,8 @@ class ZeitplanTab(QWidget):
 
 
 class ExportTab(QWidget):
-    """PDF-Ausgabe: Ergebnislisten, Statistik und Bewertungsbögen (siehe pdf_export.py).
-    Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
+    """Reiter "Export" (Ausdrucke und Listen): PDFs wie Ergebnislisten, Statistik und
+    Bewertungsbögen (siehe pdf_export.py) sowie die Teilnehmerliste als CSV. Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
 
     def __init__(self, conn, termin_pfad: str | None = None, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
@@ -3099,10 +3104,10 @@ class ExportTab(QWidget):
             os.path.dirname(termin_pfad) if termin_pfad else str(termine_ordner())
         )
 
-        # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
-        # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
         teilnehmerliste_btn = QPushButton("Teilnehmerliste speichern (CSV, für Excel)…")
         teilnehmerliste_btn.clicked.connect(self._teilnehmerliste_exportieren)
+        # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
+        # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
         anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
         anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
 
@@ -3140,50 +3145,67 @@ class ExportTab(QWidget):
         ablageort_btn = QPushButton("Ablageort öffnen")
         ablageort_btn.clicked.connect(self._ablageort_oeffnen)
 
-        hinweis = QLabel(
-            "Das \"Anmeldeformular\" ist ein ausfüllbares PDF zum Verteilen an die "
-            "Teilnehmer: Veranstalter, Verband, Meldestelle, Datum und die ankreuzbaren "
-            "Prüfungen kommen aus den Veranstaltungsdaten im Reiter \"Verwaltung\" (dort "
-            "zuerst die angebotenen Prüfungen anhaken). Ausgefüllt zurückgeschickte "
-            "Formulare lassen sich im Reiter \"Formular-Import\" direkt einlesen. "
-            "Die Bewertungsbögen entsprechen den bisherigen Serienbrief-Vorlagen (Layout, "
-            "Verleitungs-Hinweise und Punktebänder je Leistungsklasse/Disziplin). Bereits "
-            "eingetragene Ergebnisse werden vorausgefüllt; noch offene Felder bleiben zum "
-            "handschriftlichen Ausfüllen vor Ort leer. Für EINEN einzelnen Teilnehmer geht "
-            "es schneller direkt über den Button \"Bewertungsbogen (PDF)…\" im Reiter "
-            "\"Teilnehmer\"; der Button hier erzeugt weiterhin eine Sammel-PDF und fragt "
-            "vorher ab, welche Art/Leistungsklasse(n) enthalten sein sollen (Standard: "
-            "alle) - praktisch, wenn beim doppelseitigen Druck sonst ein anderes Team auf "
-            "der Rückseite landen würde. Die \"Ergebnisliste zum Ausfüllen\" "
-            "ist ein reines Formular (Start-Nr./Name/Verein vorausgefüllt, Platz/Punkte/"
-            "Wertnote leer) - z.B. um die Ergebnisse zunächst auf Papier festzuhalten und "
-            "erst später in die Ergebniserfassung zu übertragen. Der Button \"Etiketten "
-            "(PDF)…\" erzeugt die Ergebnisse als Etiketten zum Ausschneiden (zwei Zeilen je "
-            "Teilnehmer, ohne Titel/Überschriften) zum Bedrucken von Klebe-/Etikettenpapier; "
-            "Teilnehmer ohne vollständiges Ergebnis erhalten dabei ebenfalls ein Etikett, "
-            "die Punktzahl-Felder bleiben dort zum Nachtragen leer. Das Feld „SH-R“ auf "
-            "jedem Etikett bleibt bewusst leer - Platzhalter zum Abstempeln/Unterschreiben. "
-            "Die \"Übersicht für Prüfungsleitung\" zeigt je Teilnehmer die Stammdaten und "
-            "die Prüfungsgebühr (je nach Art ED/DK). Die Spalte \"bezahlt?\" kommt aus dem "
-            "digitalen Bezahlt-Status, \"Impfpass gültig bis\" aus dem Stammdatenfeld "
-            "\"Tollwutimpfung gültig bis\" (Teilnehmer-Dialog) - fehlt das Datum oder ist "
-            "es zum Prüfungstag bereits abgelaufen, erscheint die Zelle rot. Die "
-            "\"Chipnummernliste\" ist ein kompakter Export nur mit "
-            "Start-Nr./Name/Hund/Chip-Nr., sortiert nach Startnummer - z.B. zum Abgleich "
-            "an einer Chip-Scanner-Station am Prüfungstag. Der \"Richter-Bedarf\" errechnet aus der Teilnehmerzahl "
-            "(1 ED = 1 Einheit, 1 DK = 3 Einheiten, max. 36 Einheiten je Richter) die "
-            "benötigte Richterzahl. Die \"Statistik\" zeigt unterhalb der Prädikat-Matrix "
-            "zusätzlich, wie viele der vollständig bewerteten Teilnehmer je Art/"
-            "Leistungsklasse zum Prüfungstag noch Jugendliche (unter 18 Jahre) waren - "
-            "Grundlage ist das Geburtsdatum im Teilnehmer-Dialog. Der \"Zeitplan\" fasst "
-            "den im gleichnamigen Tab geplanten Ablauf je Richter (eine Seite je Richter) "
-            "zusammen. "
-            "Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter sowie die "
-            "Prüfungsgebühr ED/DK - die im Kopf der Statistik-PDF bzw. in der Übersicht "
-            "für Prüfungsleitung erscheinen - werden jetzt im Reiter \"Verwaltung\" "
-            "gepflegt."
-        )
-        hinweis.setWordWrap(True)
+        # Rückmeldung Marco 13.10.2026: statt eines langen, unübersichtlichen Erklärtextes
+        # unter den Knöpfen steht neben jedem Knopf eine kurze Zeile; Einzelheiten zeigt der
+        # Tooltip an Knopf und Kurztext (ausführlich: Handbuch, Abschnitt "Export").
+        knoepfe = [
+            (anmeldeformular_btn,
+             "Ausfüllbares Formular zum Verschicken; Kopf und Prüfungen aus dem Reiter „Verwaltung“",
+             "Dort zuerst die angebotenen Prüfungen anhaken. Ausgefüllt zurückgeschickte "
+             "Formulare im Reiter „Formular-Import“ einlesen."),
+            (ergebnisliste_btn,
+             "Rangliste mit Wertnoten je Leistungsklasse",
+             "Platz, Start-Nr., Name, Gesamtpunkte und Wertnote. Teilnehmer, die nicht "
+             "bestanden haben, stehen ohne Platz in der Liste."),
+            (leere_ergebnisliste_btn,
+             "Leeres Formular, um Ergebnisse erst auf Papier festzuhalten",
+             "Start-Nr., Name und Verein sind vorausgefüllt, Platz, Punkte und Wertnote bleiben "
+             "leer – zum späteren Übertragen in die Ergebniserfassung."),
+            (etiketten_btn,
+             "Ergebnisse zum Aufkleben, zwei Zeilen je Teilnehmer",
+             "Für Klebe-/Etikettenpapier. Teilnehmer ohne vollständiges Ergebnis bekommen "
+             "ebenfalls ein Etikett mit leeren Punktfeldern. Das Feld „SH-R“ bleibt zum "
+             "Abstempeln bzw. Unterschreiben frei."),
+            (statistik_btn,
+             "Prädikat-Übersicht je Art/Leistungsklasse, inkl. Jugendliche",
+             "Jugendliche: vollständig bewertete Teilnehmer unter 18 Jahren am Prüfungstag, "
+             "nach dem Geburtsdatum im Teilnehmer-Dialog. Vereins-Nr., Prüfungsnummer, Richter und Prüfungsleiter im "
+             "Kopf kommen aus dem Reiter „Verwaltung“."),
+            (pruefungsleitung_btn,
+             "Stammdaten, Gebühr, bezahlt?, Impfpass",
+             "„bezahlt?“ kommt aus dem Bezahlt-Status, „Impfpass gültig bis“ aus der "
+             "Tollwutimpfung im Teilnehmer-Dialog – rot, wenn das Datum fehlt oder am "
+             "Prüfungstag abgelaufen ist. Die Gebühren ED/DK stehen im Reiter „Verwaltung“."),
+            (chipliste_btn,
+             "Start-Nr., Name, Hund, Chip-Nr. zum Abgleich am Prüfungstag",
+             "Sortiert nach Startnummer, z. B. für eine Chip-Scanner-Station."),
+            (leistungsrichter_btn,
+             "Benötigte Richterzahl aus der Teilnehmerzahl",
+             "1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je Richter."),
+            (zeitplan_btn,
+             "Ablauf aus dem Reiter „Zeitplan“, eine Seite je Richter",
+             "Prüfungsblöcke mit Start- und Endzeit je Teilnehmer sowie die Pausen, farbig "
+             "nach Art/Leistungsklasse."),
+            (boegen_btn,
+             "Sammel-PDF; vorher Auswahl der Leistungsklassen/Disziplinen. Einzelbogen: Reiter „Teilnehmer“",
+             "Bereits eingetragene Ergebnisse sind vorausgefüllt, offene Felder bleiben zum "
+             "Ausfüllen vor Ort leer. Die Auswahl hilft beim doppelseitigen Druck, damit kein "
+             "anderes Team auf der Rückseite landet."),
+            (teilnehmerliste_btn,
+             "Alle Teilnehmer mit Stammdaten, für Excel (lässt sich wieder einlesen)",
+             "Eine CSV-Datei mit Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“. Sie "
+             "öffnet sich per Doppelklick in Excel und lässt sich im Reiter „Formular-Import“ "
+             "wieder einlesen."),
+        ]
+        knopf_raster = QGridLayout()
+        knopf_raster.setColumnStretch(1, 1)
+        for zeile, (knopf, kurztext, tooltip) in enumerate(knoepfe):
+            beschreibung = QLabel(kurztext)
+            beschreibung.setWordWrap(True)
+            knopf.setToolTip(tooltip)
+            beschreibung.setToolTip(tooltip)
+            knopf_raster.addWidget(knopf, zeile, 0)
+            knopf_raster.addWidget(beschreibung, zeile, 1)
 
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
@@ -3194,27 +3216,12 @@ class ExportTab(QWidget):
         button_zeile.addStretch()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("PDF-Ausgabe"))
-        layout.addWidget(anmeldeformular_btn)
-        layout.addWidget(ergebnisliste_btn)
-        layout.addWidget(leere_ergebnisliste_btn)
-        layout.addWidget(etiketten_btn)
-        layout.addWidget(statistik_btn)
-        layout.addWidget(pruefungsleitung_btn)
-        layout.addWidget(chipliste_btn)
-        layout.addWidget(leistungsrichter_btn)
-        layout.addWidget(zeitplan_btn)
-        layout.addWidget(boegen_btn)
-        layout.addWidget(teilnehmerliste_btn)
+        layout.addWidget(QLabel("Ausdrucke und Listen"))
+        layout.addLayout(knopf_raster)
         layout.addLayout(button_zeile)
-        # UX-Test 02.10.2026, U7: Statuszeile direkt unter den Knöpfen; der lange Erklärtext
-        # scrollt, statt bei wenig Höhe mit der Statuszeile zu überlappen.
+        # UX-Test 02.10.2026, U7: Statuszeile direkt unter den Knöpfen.
         layout.addWidget(self.status_label)
-        hinweis_scroll = QScrollArea()
-        hinweis_scroll.setWidget(hinweis)
-        hinweis_scroll.setWidgetResizable(True)
-        hinweis_scroll.setFrameShape(QScrollArea.NoFrame)
-        layout.addWidget(hinweis_scroll, 1)
+        layout.addStretch()
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - wird bei jedem Export frisch aus der DB gelesen
@@ -3721,6 +3728,26 @@ class VersionDialog(QDialog):
         seite_link_btn = QPushButton("Releases-Seite im Browser öffnen")
         seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
 
+        # Rückmeldung Marco 13.10.2026: Diagnose für Fehlermeldungen zum Kopieren statt eines
+        # Dumps mit Termindaten (siehe desktop_gemeinsam.diagnose_text).
+        fehler_hinweis = QLabel(
+            "Für eine Fehlermeldung die Diagnose kopieren und einfügen – sie enthält Version, "
+            "System und das Ende des Absturzprotokolls, aber keine Termin-Datei. Vor dem "
+            "Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen (z. B. in Fehlertexten)."
+        )
+        fehler_hinweis.setWordWrap(True)
+        diagnose_btn = QPushButton("Diagnose kopieren")
+        diagnose_btn.clicked.connect(self._diagnose_kopieren)
+        protokoll_btn = QPushButton("Protokoll-Ordner öffnen")
+        protokoll_btn.clicked.connect(lambda: _ordner_zeigen(str(absturzprotokoll_pfad())))
+        protokoll_btn.setEnabled(absturzprotokoll_pfad() is not None)
+        self._diagnose_status = QLabel("")
+        diagnose_zeile = QHBoxLayout()
+        diagnose_zeile.addWidget(diagnose_btn)
+        diagnose_zeile.addWidget(protokoll_btn)
+        diagnose_zeile.addWidget(self._diagnose_status)
+        diagnose_zeile.addStretch()
+
         schliessen_btn = QPushButton("Schließen")
         schliessen_btn.clicked.connect(self.accept)
         schliessen_zeile = QHBoxLayout()
@@ -3737,7 +3764,14 @@ class VersionDialog(QDialog):
         layout.addWidget(self._ergebnis_zeile)
         layout.addWidget(self._download_btn)
         layout.addSpacing(8)
+        layout.addWidget(fehler_hinweis)
+        layout.addLayout(diagnose_zeile)
+        layout.addSpacing(8)
         layout.addLayout(schliessen_zeile)
+
+    def _diagnose_kopieren(self) -> None:
+        QApplication.clipboard().setText(diagnose_text(VERSION))
+        self._diagnose_status.setText("Diagnose kopiert.")
 
     def _updates_pruefen(self) -> None:
         # Button während der (kurzen, durch den Timeout in _neueste_version_pruefen auf
@@ -4452,6 +4486,7 @@ def main() -> int:
     app.setWindowIcon(programmsymbol())
     app.setDesktopFileName("shs-pruefungsprogramm")
     meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
+    fehlerfenster_einrichten(VERSION)  # unerwartete Fehler zusätzlich als Fenster zeigen
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
     # Reste früherer Demoprüfungen (z. B. eine beim Beenden noch geöffnete PDF) wegräumen.

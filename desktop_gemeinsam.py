@@ -1,6 +1,7 @@
 """Gemeinsame Hilfen der Desktop-Oberfläche: Ablageorte und PDF-Speicherdialoge,
 Fehlermeldungen, responsive Schriftgrößen, Tabellen-Hilfsklassen und Spaltenkonstanten
-der Ergebnistabelle.
+der Ergebnistabelle, deutsche Qt-Texte, Absturzprotokoll, Fehlerfenster bei unbehandelten
+Fehlern und die kopierbare Diagnose (ohne Benutzerpfad).
 
 Aus app.py ausgelagert (Codex-Architekturprüfung 27.09.2026); rein interne Umstellung,
 Aussehen und Verhalten sind unverändert. Die Abhängigkeiten laufen nur in eine Richtung:
@@ -574,13 +575,15 @@ ABSTURZPROTOKOLL_DATEINAME = "absturzprotokoll.txt"
 _ABSTURZPROTOKOLL_MAX_BYTES = 1_000_000
 # faulthandler schreibt im Absturzfall direkt in diese (offen gehaltene) Datei.
 _absturzprotokoll_datei = None
+# Pfad der Datei für "Diagnose kopieren" und "Protokoll-Ordner öffnen" (None: nicht eingerichtet).
+_absturzprotokoll_pfad = None
 
 
 def absturzprotokoll_einrichten(version: str, ordner=None):
     """Richtet das Absturzprotokoll ein und liefert den Pfad der Datei (oder None, wenn sie
     nicht geschrieben werden kann - das Programm startet dann trotzdem normal). `ordner`
     ist standardmäßig der Programmordner im Benutzerprofil (neben "Termine")."""
-    global _absturzprotokoll_datei
+    global _absturzprotokoll_datei, _absturzprotokoll_pfad
     import datetime
     import faulthandler
     import traceback
@@ -599,6 +602,7 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
         return None
 
     _absturzprotokoll_datei = datei
+    _absturzprotokoll_pfad = pfad
     faulthandler.enable(file=datei, all_threads=True)
 
     bisheriger_hook = sys.excepthook
@@ -617,3 +621,197 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
 
     sys.excepthook = _protokollieren
     return pfad
+
+
+def absturzprotokoll_pfad():
+    """Pfad des Absturzprotokolls dieses Programmlaufs, oder None, wenn es nicht
+    eingerichtet werden konnte."""
+    return _absturzprotokoll_pfad
+
+
+# Rückmeldung Marco 13.10.2026 ("lohnt sich ein Fehler-Dump?"): statt eines Dumps mit der
+# Termin-Datenbank (Personendaten) gibt es einen kopierbaren Diagnose-Text - Version, System
+# und das Ende des Absturzprotokolls, ohne Benutzerpfad. Nichts wird automatisch verschickt.
+_DIAGNOSE_PROTOKOLL_ZEILEN = 40
+_BENUTZER_PLATZHALTER = "<Benutzer>"
+
+
+def _kurzpfad(pfad: str) -> str | None:
+    """Windows-8.3-Kurzform eines Pfads (z. B. C:\\Users\\MAXMUS~1), sonst None."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        puffer = ctypes.create_unicode_buffer(1024)
+        if ctypes.windll.kernel32.GetShortPathNameW(pfad, puffer, len(puffer)):
+            return puffer.value
+    except (OSError, AttributeError, ValueError):
+        pass
+    return None
+
+
+def _ohne_benutzerpfad(text: str) -> str:
+    """Ersetzt den Benutzerordner durch "~" und den Benutzernamen durch "<Benutzer>" - in
+    allen üblichen Schreibweisen: mit "\\", "/" oder (aus repr() in Fehlertexten) "\\\\",
+    in beliebiger Groß-/Kleinschreibung und als Windows-Kurzpfad."""
+    import re
+    from pathlib import Path
+
+    try:
+        heim = str(Path.home())
+    except (OSError, RuntimeError):
+        return text
+    if len(heim) <= 3:  # "/", "C:\" - kein eigener Benutzerordner erkennbar
+        return text
+    formen = {heim}
+    kurz = _kurzpfad(heim)
+    if kurz:
+        formen.add(kurz)
+    for form in list(formen):
+        formen |= {form.replace("\\", "/"), form.replace("\\", "\\\\"), form.replace("/", "\\\\")}
+    # Längste Form zuerst; nur ganze Ordnernamen (danach Trenner, Anführungszeichen o. Ä.).
+    for form in sorted(formen, key=len, reverse=True):
+        text = re.sub(re.escape(form) + r"(?![\w.~-])", "~", text, flags=re.IGNORECASE)
+    namen = {Path(heim).name, os.environ.get("USERNAME", ""), os.environ.get("USER", "")}
+    if kurz:
+        namen.add(Path(kurz).name)
+    for name in sorted((n for n in namen if len(n) >= 3), key=len, reverse=True):
+        text = re.sub(r"(?<![\w~])" + re.escape(name) + r"(?![\w~])", _BENUTZER_PLATZHALTER, text,
+                      flags=re.IGNORECASE)
+    return text
+
+
+def diagnose_text(version: str, fehler: str | None = None) -> str:
+    """Kopierbarer Text für eine Fehlermeldung: Version, System, ggf. der aktuelle Fehler
+    und die letzten Zeilen des Absturzprotokolls. Löst selbst keine Exception aus - fehlt
+    eine Angabe, steht dort "(unbekannt)"."""
+    def _angabe(abfrage) -> str:
+        try:
+            return str(abfrage())
+        except Exception:  # noqa: BLE001 - die Diagnose soll im Fehlerfall immer entstehen
+            return "(unbekannt)"
+
+    def _system() -> str:
+        import platform
+
+        return platform.platform()
+
+    def _versionen() -> str:
+        import platform
+
+        from PySide6 import __version__ as pyside_version
+        from PySide6.QtCore import qVersion
+
+        return f"Python {platform.python_version()}, PySide6 {pyside_version}, Qt {qVersion()}"
+
+    zeilen = [
+        "SHS-Prüfungsprogramm – Diagnose",
+        f"Version: {version}",
+        f"System: {_angabe(_system)}",
+        _angabe(_versionen),
+        f"Installiertes Programm: {'ja' if getattr(sys, 'frozen', False) else 'nein'}",
+    ]
+    pfad = _absturzprotokoll_pfad
+    zeilen.append(f"Absturzprotokoll: {pfad if pfad is not None else '(nicht eingerichtet)'}")
+    ende = None
+    if pfad is not None:
+        try:
+            with open(pfad, encoding="utf-8", errors="replace") as datei:
+                ende = datei.read().splitlines()[-_DIAGNOSE_PROTOKOLL_ZEILEN:]
+        except (OSError, ValueError):
+            ende = ["(nicht lesbar)"]
+    # Der aktuelle Fehler steht meist schon am Ende des Protokolls (der Protokoll-Hook
+    # schreibt vorher) - nur gesondert aufführen, wenn er dort fehlt bzw. abgeschnitten ist.
+    if fehler and (ende is None or fehler.rstrip() not in "\n".join(ende)):
+        zeilen += ["", "Aktueller Fehler:", fehler.rstrip()]
+    if ende is not None:
+        zeilen += ["", f"Absturzprotokoll (letzte {_DIAGNOSE_PROTOKOLL_ZEILEN} Zeilen):", *ende]
+    return _ohne_benutzerpfad("\n".join(zeilen)) + "\n"
+
+
+def fehlerfenster_zeigen(version: str, fehler: str, parent=None) -> None:
+    """Meldung zu einem unerwarteten Fehler mit [Fehlerbericht kopieren]
+    [Protokoll-Ordner öffnen] [OK]; der Traceback steht unter "Details". Ohne `parent`
+    erscheint sie über dem aktiven Programmfenster."""
+    from PySide6.QtWidgets import QApplication
+
+    box = QMessageBox(parent if parent is not None else QApplication.activeWindow())
+    box.setTextFormat(Qt.PlainText)  # S-1: Fehlertexte können Namen enthalten
+    box.setIcon(QMessageBox.Critical)
+    box.setWindowTitle("Unerwarteter Fehler")
+    box.setText(
+        "Es ist ein unerwarteter Fehler aufgetreten. Bereits gespeicherte Daten bleiben "
+        "erhalten. Falls etwas nicht wie erwartet aussieht, den Termin neu öffnen bzw. das "
+        "Programm neu starten.\n\n"
+        "Für eine Fehlermeldung „Fehlerbericht kopieren“ und den Text einfügen – vorher kurz "
+        "prüfen, ob Teilnehmerdaten darin stehen."
+    )
+    box.setDetailedText(_ohne_benutzerpfad(fehler))
+    kopieren_btn = box.addButton("Fehlerbericht kopieren", QMessageBox.ActionRole)
+    # Kopieren soll das Fenster nicht schließen: die interne Schließ-Verbindung lösen.
+    kopieren_btn.clicked.disconnect()
+
+    def _kopieren() -> None:
+        QApplication.clipboard().setText(diagnose_text(version, fehler))
+        kopieren_btn.setText("Fehlerbericht kopiert")
+
+    kopieren_btn.clicked.connect(_kopieren)
+    ordner_btn = None
+    if _absturzprotokoll_pfad is not None:
+        ordner_btn = box.addButton("Protokoll-Ordner öffnen", QMessageBox.ActionRole)
+    box.setDefaultButton(box.addButton(QMessageBox.Ok))
+    box.exec()
+    if ordner_btn is not None and box.clickedButton() is ordner_btn:
+        _ordner_zeigen(str(_absturzprotokoll_pfad))
+
+
+_fehlerfenster_offen = False
+# Bereits gezeigte Fehlerbilder (Typ + Stelle) - ein ständig wiederkehrender Fehler (z. B. in
+# einem Timer oder beim Zeichnen) öffnet so nicht nach jedem OK sofort das nächste Fenster.
+_gezeigte_fehler: set = set()
+
+
+def _fehlerbild(typ, tb) -> tuple:
+    import traceback
+
+    stellen = traceback.extract_tb(tb) if tb is not None else []
+    stelle = stellen[-1] if stellen else None
+    return (typ.__qualname__, stelle.filename if stelle else "", stelle.lineno if stelle else 0)
+
+
+def fehlerfenster_einrichten(version: str) -> None:
+    """Zeigt bei unbehandelten Fehlern (bisher nur still im Absturzprotokoll) zusätzlich ein
+    Fenster. Nach dem Absturzprotokoll und nach dem Anlegen der QApplication aufrufen: der
+    bisherige Hook protokolliert weiterhin zuerst. Jedes Fehlerbild erscheint nur einmal je
+    Sitzung, nie zwei Fenster gleichzeitig; Fehler beim Anzeigen gehen nur ins Protokoll."""
+    import threading
+    import traceback
+
+    from PySide6.QtWidgets import QApplication
+
+    bisheriger_hook = sys.excepthook
+
+    def _melden(typ, wert, tb):
+        global _fehlerfenster_offen
+        try:
+            bisheriger_hook(typ, wert, tb)
+        except Exception:  # noqa: BLE001 - z. B. Standard-Hook ohne Konsole; Fenster trotzdem
+            pass
+        if (_fehlerfenster_offen or issubclass(typ, (KeyboardInterrupt, SystemExit))
+                or threading.current_thread() is not threading.main_thread()
+                or QApplication.instance() is None):
+            return
+        bild = _fehlerbild(typ, tb)
+        if bild in _gezeigte_fehler:
+            return
+        _gezeigte_fehler.add(bild)
+        _fehlerfenster_offen = True
+        try:
+            fehlerfenster_zeigen(version, "".join(traceback.format_exception(typ, wert, tb)))
+        except Exception:  # noqa: BLE001 - das Protokoll bleibt der Rückfallweg
+            pass
+        finally:
+            _fehlerfenster_offen = False
+
+    sys.excepthook = _melden

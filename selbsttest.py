@@ -238,3 +238,15 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         return "symbol/programmsymbol.png"
 
     schritt("Programmsymbol", symbol)
+
+    def diagnose():
+        # diagnose_text fängt fehlende Angaben selbst ab ("(unbekannt)") - im Bundle soll ein
+        # fehlendes Modul trotzdem auffallen.
+        from desktop_gemeinsam import diagnose_text
+
+        text = diagnose_text("Selbsttest")
+        if "(unbekannt)" in text:
+            raise AssertionError("Diagnose unvollständig:\n" + text)
+        return f"{len(text.splitlines())} Zeilen"
+
+    schritt("Diagnose kopieren (Fehlermeldung)", diagnose)
