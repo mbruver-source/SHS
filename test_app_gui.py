@@ -3744,7 +3744,11 @@ def test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende(tmp_path, monkeyp
     assert "RuntimeError: zuletzt (Benutzer <Benutzer>)" in text
     assert text.count("alte Zeile") < 100
     assert "maxmuster" not in text.lower()
-    assert "~\\\\x.db" in text and "~\\klein.txt" in text and "~/vor.txt" in text
+    # repr() verdoppelt unter Windows die Backslashes ('C:\\Users\\…'), unter Linux/macOS
+    # bleibt es bei "/" - erwartet wird jeweils "~" an Stelle des Heimordners.
+    repr_erwartet = repr(str(heim / "x.db"))[1:-1].replace(repr(str(heim))[1:-1], "~")
+    assert repr_erwartet.startswith("~") and repr_erwartet in text
+    assert "~\\klein.txt" in text and "~/vor.txt" in text
 
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", tmp_path / "fehlt.txt")
     assert "(nicht lesbar)" in desktop_gemeinsam.diagnose_text("9.9.9")

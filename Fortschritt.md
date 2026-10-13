@@ -5842,3 +5842,9 @@ Marcos Rückmeldung mit zwei Punkten:
 - **Nach dem Tag-Lauf:** prüfen, dass alle Jobs grün sind (auch `build-macos` 2x und
   `build-linux`).
 - Die Handbuch-Änderungen gehen mit Marcos Push zusammen mit dem Release online.
+- **Nachtrag (CI, 13.10.2026):** Nach Marcos Push schlug in der Linux-CI
+  `test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende` fehl. Der Test erwartete fest
+  die Windows-Form eines `repr()`-Pfads (`~\\x.db`). Unter Linux steht dort `~/x.db`, und
+  das war bereits korrekt geschwärzt; das Programm selbst war also nicht betroffen. Die
+  Erwartung wird jetzt aus `repr()` des jeweiligen Systems berechnet. Lokal: GUI 247 passed.
+  Den Tag `v1.0.47` erst setzen, wenn die CI für diesen Nachtrag grün ist.
