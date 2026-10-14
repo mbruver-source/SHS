@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime
 import functools
+import unicodedata
 import math
 import hashlib
 import re
@@ -2501,6 +2502,15 @@ def _termin_info_lesen(pfad: Path) -> TerminInfo:
         startnummer_bereiche=feld("startnummer_bereiche"),
         startnummer_bereichsgroesse=feld("startnummer_bereichsgroesse"),
     )
+
+
+def sortierschluessel_text(text) -> str:
+    """Sortierschlüssel für Namen und Bezeichnungen nach deutscher Gewohnheit: Umlaute
+    und Akzente wie der Grundbuchstabe (Ä wie A, Ö wie O), ohne Unterschied zwischen
+    Groß- und Kleinschreibung (Desktop-Prüfung 14.10.2026, Teil 3 Nr. 4 und Teil 6 Nr. 5).
+    Qt-frei, damit auch die PDF-Erzeugung ihn nutzen kann."""
+    zerlegt = unicodedata.normalize("NFD", "" if text is None else str(text))
+    return "".join(z for z in zerlegt if not unicodedata.combining(z)).casefold()
 
 
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:

@@ -110,6 +110,7 @@ from db import (
     leistungsklasse_label,
     liste_termine,
     list_teilnehmer,
+    sortierschluessel_text,
     list_zeitplan_richter,
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
@@ -1338,8 +1339,6 @@ class FormularImportTab(QWidget):
 # 02.10.2026, U5: das Punktefeld ließ "65" als Zwischenstand beim Tippen zu - solche
 # Werte werden deshalb sofort rot markiert und beim Speichern im Klartext abgelehnt, statt
 # erst an der Datenbank mit "CHECK constraint failed" zu scheitern.
-_SUCHE_MAX = SUCHE_MAX  # gemeinsame Konstanten aus shs_core (auch für die Web-Version)
-_ANZEIGE_MAX = ANZEIGE_MAX
 
 
 def _punkte_validator(parent) -> QRegularExpressionValidator:
@@ -1348,6 +1347,10 @@ def _punkte_validator(parent) -> QRegularExpressionValidator:
     ("45," statt Hinweis; CI-Befund 03.10.2026). Werte über dem Maximum markiert
     _aktualisiere_zeilenstatus rot, das Speichern lehnt sie im Klartext ab (U5)."""
     return QRegularExpressionValidator(QRegularExpression(r"\d{0,2}"), parent)
+
+
+# Spalten der Ergebnistabelle, deren Sortierschlüssel nur aus den Stammdaten kommt.
+_SORTIERSPALTEN_AUS_STAMMDATEN = (0, 1, 2, 3)
 
 
 class ErgebnisTab(QWidget):
@@ -1375,7 +1378,7 @@ class ErgebnisTab(QWidget):
 
         spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
-            spalten += [f"{disziplin}\nSuche (0-{_SUCHE_MAX})", f"{disziplin}\nAnzeige (0-{_ANZEIGE_MAX})"]
+            spalten += [f"{disziplin}\nSuche (0-{SUCHE_MAX})", f"{disziplin}\nAnzeige (0-{ANZEIGE_MAX})"]
         spalten += ["Disqualifiziert", "Abbruch", "Status"]
 
         self.tabelle = QTableWidget(0, len(spalten))
@@ -1393,6 +1396,15 @@ class ErgebnisTab(QWidget):
         # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
         # ebenso im Reiter "Teilnehmer" (siehe TeilnehmerTab).
         self.tabelle.verticalHeader().setVisible(False)
+        # Infospalten (Start-Nr., Name, Hund, Prüfung) sind nur Anzeige, und Tab springt
+        # von Eingabefeld zu Eingabefeld statt durch die Zellen (Desktop-Prüfung
+        # 14.10.2026, Teil 3 Nr. 3).
+        self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabelle.setTabKeyNavigation(False)
+        # Sortierpfeil wie im Teilnehmer-Reiter (Teil 3 Nr. 7) - die Richtung setzt
+        # _spalte_geklickt selbst, weil die Sortierung hier eigene Logik hat.
+        self.tabelle.horizontalHeader().setSortIndicatorShown(True)
+        self.tabelle.horizontalHeader().setSortIndicator(-1, Qt.AscendingOrder)
         # Nutzerwunsch (21.09., Rückmeldung zur Ergebniserfassung): "klappt gut, ggf. hier
         # auch Sortierungsfunktion" - Klick auf eine Spaltenüberschrift sortiert danach,
         # erneuter Klick auf dieselbe Spalte kehrt die Richtung um (wie in der
@@ -1406,6 +1418,8 @@ class ErgebnisTab(QWidget):
         # (ggf. noch nicht gespeicherten) Werte je Teilnehmer-ID sichert.
         self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
         self._sortierspalte: int | None = None
+        self._feldhoehe: int | None = None  # einmal bestimmt, siehe _zeilen_aufbauen
+        self._tabelle_pt: float | None = None  # zuletzt gesetzte Schriftgröße, siehe _spaltenbreiten_anpassen
         self._sortieraufsteigend = True
 
         self.filter_combo = QComboBox()
@@ -1434,7 +1448,15 @@ class ErgebnisTab(QWidget):
         aktualisieren_btn.clicked.connect(self._aktualisieren_mit_rueckfrage)
 
         self.status_label = QLabel("")
-        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: Meldungen immer als Klartext
+        # Eigenes Label für den Komma-Hinweis (N6): orange und fett über ein Stylesheet statt
+        # Rich Text im status_label, das seit S-1 nur Klartext zeigt (Desktop-Prüfung
+        # 14.10.2026, Teil 3 Nr. 2 - vorher stand das rohe <span…> in der Statuszeile).
+        self.hinweis_label = QLabel("")
+        self.hinweis_label.setTextFormat(Qt.PlainText)
+        self.hinweis_label.setWordWrap(True)
+        self.hinweis_label.hide()
+        self._eingabe_hinweis: str | None = None
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -1460,6 +1482,7 @@ class ErgebnisTab(QWidget):
         layout.addWidget(hinweis)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
+        layout.addWidget(self.hinweis_label)
         layout.addWidget(self.status_label)
 
         self.aktualisieren()
@@ -1493,6 +1516,13 @@ class ErgebnisTab(QWidget):
         """Gemeinsamer Kern von aktualisieren() (ohne Overrides) und
         aktualisieren_eingaben_erhalten() (mit den noch ungespeicherten Eingaben)."""
         self._teilnehmer_je_zeile = list_teilnehmer(self.conn, nur_teilnehmende=True)
+        if self._sortierspalte in _SORTIERSPALTEN_AUS_STAMMDATEN:
+            # Sortierung nach Stammdaten: vor dem Aufbau sortieren, dann nur EIN Aufbau
+            # (Desktop-Prüfung 14.10.2026, Teil 3 Nr. 6).
+            self._teilnehmer_je_zeile.sort(
+                key=lambda t: self._sortierschluessel_teilnehmer(t, self._sortierspalte),
+                reverse=not self._sortieraufsteigend,
+            )
         verworfen = self._zeilen_aufbauen(werte_override, status_override)
         # Codeprüfung 22.09., G9: list_teilnehmer() liefert immer die DB-Reihenfolge -
         # ohne erneutes Anwenden ging die per Spaltenklick gewählte Sortierung hier
@@ -1502,7 +1532,7 @@ class ErgebnisTab(QWidget):
         # Sortierschlüssel (Punkte, DQ/Abbruch, Status) aus den Zeilen-Widgets gelesen
         # werden; die Werte stammen hier frisch aus der DB (bzw. aus den Overrides), es geht
         # also nichts verloren.
-        if self._sortierspalte is not None:
+        if self._sortierspalte is not None and self._sortierspalte not in _SORTIERSPALTEN_AUS_STAMMDATEN:
             verworfen += self._sortieren_und_neu_aufbauen()
 
         # Filter-Auswahl beim Neuladen nach Möglichkeit beibehalten, statt immer auf
@@ -1536,7 +1566,8 @@ class ErgebnisTab(QWidget):
         "ungespeichert"-Vergleich (siehe _zeile_ist_ungespeichert) korrekt bleibt.
 
         Rückgabe: Teilnehmer, deren ungespeicherte Punkte verworfen wurden, weil inzwischen
-        Disqualifiziert/Abbruch gespeichert ist (für _verworfene_melden)."""
+        Disqualifiziert/Abbruch gespeichert oder die Disziplin geändert ist - je Eintrag mit
+        Grund (für _verworfene_melden)."""
         verworfen: list[str] = []
         ergebnis_rows = ergebnisse_je_teilnehmer(self.conn)
         werte_override = werte_override or {}
@@ -1556,6 +1587,14 @@ class ErgebnisTab(QWidget):
             aktuell = ergebnis_rows.get(t["id"], {})
             zutreffende_disziplinen = ALLE_DISZIPLINEN if t["art"] == "DK" else [t["disziplin"]]
             punkte_override = werte_override.get(t["id"], {})
+            nummer = f"Nr. {t['startnummer']} – " if t["startnummer"] is not None else ""
+            for disziplin in punkte_override:
+                if disziplin not in zutreffende_disziplinen:
+                    # Teil 3 Nr. 5: Disziplin inzwischen geändert - die Eingabe zur alten
+                    # Disziplin hat keinen Platz mehr und wird gemeldet statt still verworfen.
+                    verworfen.append(
+                        f"{nummer}{t['nachname']}, {t['vorname']} ({disziplin}: Disziplin inzwischen geändert)"
+                    )
 
             self.tabelle.setItem(row, 0, QTableWidgetItem(str(t["startnummer"] or "")))
             self.tabelle.setItem(row, 1, QTableWidgetItem(f"{t['nachname']}, {t['vorname']}"))
@@ -1609,10 +1648,10 @@ class ErgebnisTab(QWidget):
                 # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend
                 # schlucken, sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5).
                 suche_feld.inputRejected.connect(
-                    lambda f=suche_feld: self._eingabe_abgelehnt(f, _SUCHE_MAX)
+                    lambda f=suche_feld: self._eingabe_abgelehnt(f, SUCHE_MAX)
                 )
                 anzeige_feld.inputRejected.connect(
-                    lambda f=anzeige_feld: self._eingabe_abgelehnt(f, _ANZEIGE_MAX)
+                    lambda f=anzeige_feld: self._eingabe_abgelehnt(f, ANZEIGE_MAX)
                 )
 
                 boxen[disziplin] = (suche_feld, anzeige_feld)
@@ -1653,8 +1692,9 @@ class ErgebnisTab(QWidget):
             if punkte_override and (angezeigt_dq or angezeigt_abbruch):
                 # Ungespeicherte Punkte, aber inzwischen DQ/Abbruch in der DB - die Eingabe
                 # wird verworfen; der Aufrufer meldet das (Marco, 02.10.2026).
-                nummer = f"Nr. {t['startnummer']} – " if t["startnummer"] is not None else ""
-                verworfen.append(f"{nummer}{t['nachname']}, {t['vorname']}")
+                verworfen.append(
+                    f"{nummer}{t['nachname']}, {t['vorname']} (inzwischen „Disqualifiziert“ oder „Abbruch“ gespeichert)"
+                )
             self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
 
@@ -1691,10 +1731,13 @@ class ErgebnisTab(QWidget):
         breite = self.tabelle.viewport().width()
         pt = _responsive_schriftgroesse(breite, schmal=1000, breit=1600, pt_schmal=7.5, pt_breit=9.5)
 
-        self.tabelle.setStyleSheet(
-            f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} "
-            f"QTableWidget::item {{ font-size: {pt:.1f}pt; }}"
-        )
+        # Stylesheet nur bei geänderter Schriftgröße neu setzen (Teil 3 Nr. 6).
+        if self._tabelle_pt != round(pt, 1):
+            self._tabelle_pt = round(pt, 1)
+            self.tabelle.setStyleSheet(
+                f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} "
+                f"QTableWidget::item {{ font-size: {pt:.1f}pt; }}"
+            )
         font = self.tabelle.font()
         font.setPointSizeF(pt)
         for boxen in self._boxen_je_zeile:
@@ -1772,7 +1815,9 @@ class ErgebnisTab(QWidget):
             self.tabelle.setColumnWidth(_STATUS_SPALTE, rest)
         # UX-Test 02.10.2026, K1: Zeilen mindestens so hoch wie ein Eingabefeld - sonst
         # wurden eingetippte Punkte unten abgeschnitten.
-        feldhoehe = QLineEdit().sizeHint().height()
+        if self._feldhoehe is None:
+            self._feldhoehe = QLineEdit().sizeHint().height()
+        feldhoehe = self._feldhoehe
         kopf = self.tabelle.verticalHeader()
         if kopf.defaultSectionSize() < feldhoehe + 4:
             kopf.setDefaultSectionSize(feldhoehe + 4)
@@ -1786,22 +1831,29 @@ class ErgebnisTab(QWidget):
         else:
             self._sortierspalte = spalte
             self._sortieraufsteigend = True
+        self.tabelle.horizontalHeader().setSortIndicator(
+            spalte, Qt.AscendingOrder if self._sortieraufsteigend else Qt.DescendingOrder
+        )
         self._verworfene_melden(self._sortieren_und_neu_aufbauen())
+
+    @staticmethod
+    def _sortierschluessel_teilnehmer(t: dict, spalte: int):
+        """Schlüssel der Stammdaten-Spalten (Start-Nr., Name, Hund, Prüfung); Namen nach
+        deutscher Gewohnheit (db.sortierschluessel_text, Teil 3 Nr. 4)."""
+        if spalte == 0:
+            return t["startnummer"] if t["startnummer"] is not None else -1
+        if spalte == 1:
+            return sortierschluessel_text(f"{t['nachname']}, {t['vorname']}")
+        if spalte == 2:
+            return sortierschluessel_text(t["rufname_hund"])
+        return sortierschluessel_text(leistungsklasse_label(t))
 
     def _sortierschluessel_fuer_zeile(self, row: int, spalte: int):
         """Sortierschlüssel für Zeile `row` bezogen auf die VOR dem Sortieren gültige
         Zeilenreihenfolge (self._teilnehmer_je_zeile/_boxen_je_zeile/
         _status_boxen_je_zeile sind zu diesem Zeitpunkt noch nicht umsortiert)."""
-        if spalte == 0:
-            startnummer = self._teilnehmer_je_zeile[row]["startnummer"]
-            return startnummer if startnummer is not None else -1
-        if spalte == 1:
-            t = self._teilnehmer_je_zeile[row]
-            return f"{t['nachname']}, {t['vorname']}".lower()
-        if spalte == 2:
-            return self._teilnehmer_je_zeile[row]["rufname_hund"].lower()
-        if spalte == 3:
-            return leistungsklasse_label(self._teilnehmer_je_zeile[row]).lower()
+        if spalte in _SORTIERSPALTEN_AUS_STAMMDATEN:
+            return self._sortierschluessel_teilnehmer(self._teilnehmer_je_zeile[row], spalte)
         if spalte == _DQ_SPALTE:
             return self._status_boxen_je_zeile[row][0].isChecked()
         if spalte == _ABBRUCH_SPALTE:
@@ -1873,18 +1925,16 @@ class ErgebnisTab(QWidget):
 
     def _verworfene_melden(self, verworfen: list[str]) -> None:
         """Hinweis, wenn beim Neuaufbau ungespeicherte Punkte verworfen wurden, weil für
-        den Teilnehmer inzwischen Disqualifiziert/Abbruch gespeichert ist. Die Liste kommt
-        als Rückgabewert aus _zeilen_aufbauen (kein Zwischenzustand im Objekt)."""
+        den Teilnehmer inzwischen Disqualifiziert/Abbruch gespeichert oder die Disziplin
+        geändert ist (Grund steht je Eintrag dabei). Die Liste kommt als Rückgabewert aus
+        _zeilen_aufbauen (kein Zwischenzustand im Objekt)."""
         if not verworfen:
             return
         namen = "\n".join(dict.fromkeys(verworfen))
         QMessageBox.information(
             self,
             "Eingaben verworfen",
-            "Für folgende Teilnehmer ist inzwischen „Disqualifiziert“ oder „Abbruch“ "
-            "gespeichert. Die noch nicht gespeicherten Änderungen an ihren Punkten wurden "
-            "deshalb verworfen:\n\n"
-            + namen,
+            "Folgende noch nicht gespeicherte Punkte wurden verworfen:\n\n" + namen,
         )
 
     def _aktualisieren_mit_rueckfrage(self) -> None:
@@ -1986,19 +2036,20 @@ class ErgebnisTab(QWidget):
         hinweis = f"Nur ganze Punkte von 0 bis {maximum} eingeben (keine Kommazahlen)."
         QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
         # UX-Nachtest 03.10.2026, N6 (ersetzt den 8-Sekunden-Timer aus U5b): der Hinweis wurde
-        # leicht übersehen - er steht jetzt orange und fett in der Statuszeile, bis die nächste
-        # gültige Eingabe kommt. Die Hervorhebung steckt im Text selbst (Rich Text), damit
-        # spätere Statusmeldungen sie nicht erben.
-        self._eingabe_hinweis = (
-            f'<span style="color:{_farbe("warnung").name()}; font-weight:bold;">{hinweis}</span>'
-        )
-        self.status_label.setText(self._eingabe_hinweis)
+        # leicht übersehen - er steht orange und fett über der Statuszeile, bis die nächste
+        # gültige Eingabe kommt. Seit der Desktop-Prüfung (14.10.2026, Teil 3 Nr. 2) in einem
+        # eigenen Label als Klartext mit Stylesheet, damit Statusmeldungen davon unberührt
+        # bleiben und kein Rich Text nötig ist.
+        self._eingabe_hinweis = hinweis
+        self.hinweis_label.setStyleSheet(f"color: {_farbe('warnung').name()}; font-weight: bold;")
+        self.hinweis_label.setText(hinweis)
+        self.hinweis_label.show()
 
     def _eingabe_hinweis_ausblenden(self) -> None:
         """Nimmt den Komma-Hinweis wieder weg - nur, wenn dort noch der Hinweis steht."""
-        hinweis = getattr(self, "_eingabe_hinweis", None)
-        if hinweis is not None and self.status_label.text() == hinweis:
-            self.status_label.setText("")
+        if self._eingabe_hinweis is not None:
+            self.hinweis_label.clear()
+            self.hinweis_label.hide()
         self._eingabe_hinweis = None
 
     def _aktualisiere_zeilenstatus(self, row: int) -> None:
@@ -2010,8 +2061,8 @@ class ErgebnisTab(QWidget):
         farbe = _farbe("ungespeichert_bg" if ungespeichert else "zeile_bg")
         maximum_je_feld = {}
         for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
-            maximum_je_feld[suche_feld] = _SUCHE_MAX
-            maximum_je_feld[anzeige_feld] = _ANZEIGE_MAX
+            maximum_je_feld[suche_feld] = SUCHE_MAX
+            maximum_je_feld[anzeige_feld] = ANZEIGE_MAX
 
         for col in range(self.tabelle.columnCount()):
             widget = self.tabelle.cellWidget(row, col)
@@ -2117,7 +2168,7 @@ class ErgebnisTab(QWidget):
                         zu_hoch = [
                             f"{teil} höchstens {maximum} Punkte (eingegeben: {wert})"
                             for teil, wert, maximum in (
-                                ("Suche", suche_wert, _SUCHE_MAX), ("Anzeige", anzeige_wert, _ANZEIGE_MAX)
+                                ("Suche", suche_wert, SUCHE_MAX), ("Anzeige", anzeige_wert, ANZEIGE_MAX)
                             )
                             if wert > maximum
                         ]

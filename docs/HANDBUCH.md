@@ -583,10 +583,14 @@ gesperrt.
 - **„Disqualifiziert“** bzw. **„Abbruch“** ankreuzen leert und sperrt die Punktefelder.
 - Die Filter blenden nur aus, ungespeicherte Eingaben bleiben erhalten. **„Liste aktualisieren“**
   fragt vorher nach, wenn noch etwas ungespeichert ist.
+- Ein Klick auf einen **Spaltenkopf** sortiert nach dieser Spalte (Pfeil im Kopf), ein zweiter
+  Klick kehrt die Richtung um. Mit der **Tab-Taste** springst du von Eingabefeld zu Eingabefeld.
 
 Beim Wechsel des Reiters oder Termins fragt das Programm bei ungespeicherten Ergebnissen
 „Jetzt speichern?“. Beim **Schließen** des Programms werden ungespeicherte Ergebnisse
-automatisch gespeichert.
+automatisch gespeichert. Lässt sich die Termin-Datei nicht beschreiben (z. B. schreibgeschützter
+USB-Stick), erscheint eine Meldung, und das Programm fragt nach, bevor ungespeicherte Ergebnisse
+verloren gehen.
 
 ## 8. Auswertung und Übersicht
 

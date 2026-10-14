@@ -79,6 +79,7 @@ from db import (
     leistungsklasse_label,
     lies_datum,
     list_teilnehmer,
+    sortierschluessel_text,
     pruefungsgebuehr_fuer_art,
 )
 from shs_core import (
@@ -1180,7 +1181,10 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
     `tollwutimpfung_bis`, siehe Modulkommentar oben), rot hervorgehoben bei fehlendem
     oder zum Prüfungstag bereits abgelaufenem Datum. Sortiert nach Nachname/Vorname."""
     veranstaltung = get_veranstaltung(conn)
-    teilnehmer = sorted(list_teilnehmer(conn), key=lambda t: (t["nachname"], t["vorname"]))
+    teilnehmer = sorted(
+        list_teilnehmer(conn),
+        key=lambda t: (sortierschluessel_text(t["nachname"]), sortierschluessel_text(t["vorname"])),
+    )
     pruefungsdatum = veranstaltung.get("datum") if veranstaltung else None
 
     story: list = []

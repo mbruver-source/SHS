@@ -4463,12 +4463,66 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
         QLocale.setDefault(vorher)
 
     assert suche_feld.text() == "45"
-    assert "Nur ganze Punkte von 0 bis 60" in tab.status_label.text()
-
     # N6 (UX-Nachtest): bleibt hervorgehoben stehen, bis die nächste gültige Eingabe kommt.
-    assert "font-weight:bold" in tab.status_label.text()
+    # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 2: als Klartext in einem eigenen Label, die
+    # Hervorhebung kommt aus dessen Stylesheet (vorher stand rohes HTML in der Statuszeile).
+    assert tab.hinweis_label.text() == "Nur ganze Punkte von 0 bis 60 eingeben (keine Kommazahlen)."
+    assert tab.hinweis_label.textFormat() == Qt.PlainText
+    assert "<" not in tab.hinweis_label.text()
+    assert "font-weight: bold" in tab.hinweis_label.styleSheet()
+    assert not tab.hinweis_label.isHidden()
     suche_feld.setText("4")
-    assert tab.status_label.text() == ""
+    assert tab.hinweis_label.text() == ""
+    assert tab.hinweis_label.isHidden()
+
+
+def test_ergebnis_infozellen_nicht_editierbar_und_sortierpfeil(qtbot, conn):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 3 und 7."""
+    from PySide6.QtWidgets import QTableWidget
+
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    assert tab.tabelle.editTriggers() == QTableWidget.NoEditTriggers
+    assert not tab.tabelle.tabKeyNavigation()
+    kopf = tab.tabelle.horizontalHeader()
+    tab._spalte_geklickt(1)
+    assert kopf.sortIndicatorSection() == 1 and kopf.sortIndicatorOrder() == Qt.AscendingOrder
+    tab._spalte_geklickt(1)
+    assert kopf.sortIndicatorOrder() == Qt.DescendingOrder
+
+
+def test_ergebnis_sortierung_nach_name_mit_umlauten(qtbot, conn):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 4: „Ötzi“ gehört nicht hinter „Zorn“."""
+    for nummer, name in enumerate(("Zorn", "Ötzi", "ebert", "Adler", "Älter"), start=1):
+        _teilnehmer_anlegen(conn, nachname=name, startnummer=nummer)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab._spalte_geklickt(1)
+    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
+    tab.aktualisieren()  # Sortierung bleibt beim Neuladen (nur ein Aufbau)
+    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
+
+
+def test_ergebnis_meldet_verworfene_eingabe_nach_disziplinwechsel(qtbot, conn, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 5: ungespeicherte Punkte zur alten Disziplin
+    verschwanden nach einem Disziplinwechsel ohne Hinweis."""
+    tid = _teilnehmer_anlegen(conn, nachname="Wechsel", startnummer=3, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
+    conn.commit()
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+
+    tab.aktualisieren_eingaben_erhalten()
+
+    assert len(hinweise) == 1
+    assert "Nr. 3 – Wechsel, Max (Flächensuche: Disziplin inzwischen geändert)" in hinweise[0]
+    assert not tab.hat_ungespeicherte_aenderungen()
 
 
 def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):

@@ -6067,3 +6067,34 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Tests:** Schließen und Abmelden mit Schreibfehler, Reiterwechsel, beide Dialoge, neuer Termin
   (Erfolg, vorhandene Datei, fehlender Ordner), Mindestabstand, Zeitplan, CSV-Import, Klartext,
   Rollback bei Startnummerntausch und Zeitplan-Verschieben.
+
+### A5 Ergebniserfassung (14.10.2026, Desktop-Prüfung Teil 3 und Teil 6 Nr. 5)
+
+- **Komma-Hinweis (Teil 3 Nr. 2, mittel):** In der Statuszeile stand seit 1.0.41 wörtlich
+  `<span style=…>`, weil die Statuszeile nach S-1 nur Klartext zeigt. Damit war N6 wirkungslos. Der
+  Hinweis steht jetzt in einem eigenen Label (`hinweis_label`, Klartext, orange und fett per
+  Stylesheet). Der Test prüft Klartext, Format und Stil.
+- **Infospalten nicht mehr editierbar (Nr. 3):** Start-Nr., Name, Hund und Prüfung lassen sich
+  nicht mehr überschreiben (`NoEditTriggers`). Tab springt von Eingabefeld zu Eingabefeld statt
+  durch die Zellen.
+- **Sortierung mit Umlauten (Nr. 4, Teil 6 Nr. 5):** Der neue Schlüssel `db.sortierschluessel_text`
+  zerlegt die Zeichen per NFD, lässt Akzente weg und ignoriert Groß-/Kleinschreibung. Er gilt im
+  Reiter Ergebniserfassung und in der „Übersicht für die Prüfungsleitung“ (PDF). Damit steht
+  „Ötzi“ nicht mehr hinter „Zorn“.
+- **Disziplin geändert (Nr. 5):** Ungespeicherte Punkte zu einer inzwischen geänderten Disziplin
+  stehen jetzt in der Meldung „Eingaben verworfen“. Die Meldung nennt den Grund je Eintrag.
+- **Leistung (Nr. 6):**
+  - Die Stylesheets der Tabelle und des `ResponsiveSchriftMixin` werden nur noch bei geänderter
+    Schriftgröße neu gesetzt.
+  - Die Feldhöhe wird einmal bestimmt.
+  - Bei Sortierung nach Start-Nr., Name, Hund oder Prüfung wird die Tabelle beim Neuladen nur noch
+    einmal aufgebaut.
+  - Die `setFont`-Schleife läuft weiter je Größenänderung, weil sie auch neu aufgebaute Felder
+    erfassen muss; sie ist billig.
+- **Sortierpfeil (Nr. 7)** im Spaltenkopf wie im Teilnehmer-Reiter.
+- **Wartbarkeit (Nr. 8):** Aliase `_SUCHE_MAX`/`_ANZEIGE_MAX` entfernt, `_eingabe_hinweis` in
+  `__init__` angelegt, Kommentar zur Statuszeile korrigiert.
+- **Handbuch Kap. 7:** Sortieren per Spaltenkopf, Tab-Taste, Verhalten bei schreibgeschützter
+  Datei. Ein neuer Screenshot ist nicht nötig, weil ohne Sortierung kein Pfeil erscheint.
+- **Bekannt, nicht geändert:** Hat jemand Eingaben zu einer alten Disziplin und zusätzlich
+  DQ/Abbruch, steht er zweimal in der Meldung, einmal je Grund.

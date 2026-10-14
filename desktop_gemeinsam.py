@@ -325,7 +325,12 @@ class ResponsiveSchriftMixin:
         self._schriftgroesse_anwenden()
 
     def _schriftgroesse_anwenden(self) -> None:
-        pt = _responsive_schriftgroesse(self.width())
+        pt = round(_responsive_schriftgroesse(self.width()), 1)
+        # Nur bei geänderter Schriftgröße neu setzen - jedes setStyleSheet stößt ein
+        # Neu-Polieren aller Kind-Widgets an (Desktop-Prüfung 14.10.2026, Teil 3 Nr. 6).
+        if getattr(self, "_schrift_pt", None) == pt:
+            return
+        self._schrift_pt = pt
         self.setStyleSheet(f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} QLabel {{ font-size: {pt:.1f}pt; }}")
 
 

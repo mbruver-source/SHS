@@ -62,6 +62,7 @@ from db import (
     liste_benutzer,
     liste_termine,
     oeffne_termin_lesend,
+    sortierschluessel_text,
     liste_termine_postgres,
     list_teilnehmer,
     list_zeitplan_eintraege,
@@ -2844,6 +2845,16 @@ class TestTerminuebersicht(unittest.TestCase):
         liste_termine(self.ordner)
         self.assertEqual(pfad.read_bytes(), inhalt)
         self.assertEqual(pfad.stat().st_mtime_ns, zeit)
+
+
+class TestSortierschluessel(unittest.TestCase):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 4 und Teil 6 Nr. 5."""
+
+    def test_umlaute_wie_grundbuchstabe_und_ohne_gross_klein(self):
+        namen = ["Zorn", "von Berg", "Özdemir", "Ärmel", "Adler", "Bauer"]
+        self.assertEqual(sorted(namen, key=sortierschluessel_text),
+                         ["Adler", "Ärmel", "Bauer", "Özdemir", "von Berg", "Zorn"])
+        self.assertEqual(sortierschluessel_text(None), "")
 
 
 class TestDatumsfelder(unittest.TestCase):

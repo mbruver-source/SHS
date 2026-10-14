@@ -214,6 +214,18 @@ class TestPdfExport(unittest.TestCase):
     def _pfad(self, name: str) -> str:
         return os.path.join(self.tmpdir, name)
 
+    def test_uebersicht_sortiert_umlaute_nach_deutscher_gewohnheit(self):
+        """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 5."""
+        for nr, name in enumerate(("Zorn", "Özdemir", "Adler", "Ärmel"), start=1):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=name, vorname="V", rufname_hund="Rex", art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr))
+        ziel = self._pfad("uebersicht_sortierung.pdf")
+        pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, ziel)
+        text = _text(ziel)
+        positionen = [text.index(name) for name in ("Adler", "Ärmel", "Özdemir", "Zorn")]
+        self.assertEqual(positionen, sorted(positionen))
+
     def test_lange_namen_brechen_in_ergebnislisten_um(self):
         """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner
         String in die Nachbarspalte. Als Paragraph brechen sie um - die Namensspalte endet
