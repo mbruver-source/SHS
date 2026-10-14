@@ -5910,3 +5910,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   (1 mittel, 2 niedrig, 6 optional), ein weiterer als Ergänzung zu Teil 1 geführt, kein
   Sicherheitsbefund. Bericht in `_unveroeffentlicht/desktop-pruefung/teil-05.md`. Die Befunde
   sind noch nicht mit Marco besprochen und noch nicht umgesetzt.
+- **Teil 6 (Export und PDF) am 14.10.2026 durchgeführt** (Commit 0d65aff): 12 bestätigte
+  Befunde (1 mittel, 4 niedrig, 7 optional), darunter ein Sicherheitsbefund (Details folgen nach
+  dem Release). Bericht in `_unveroeffentlicht/desktop-pruefung/teil-06.md`. Die Befunde sind
+  noch nicht mit Marco besprochen und noch nicht umgesetzt.
