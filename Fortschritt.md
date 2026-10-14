@@ -5918,3 +5918,8 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   12 bestätigte Befunde (6 niedrig, 6 optional), darunter ein Sicherheitsbefund (Details folgen
   nach dem Release). Bericht in `_unveroeffentlicht/desktop-pruefung/teil-07.md`. Die Befunde
   sind noch nicht mit Marco besprochen und noch nicht umgesetzt.
+- **Teil 10 (Demoprüfung) am 14.10.2026 durchgeführt** (Commit 17f9176): 11 bestätigte Befunde
+  (1 mittel, 6 niedrig, 4 optional), kein Sicherheitsbefund. Bericht in
+  `_unveroeffentlicht/desktop-pruefung/teil-10.md`. Als Cloud-Probelauf geplant; die
+  Cloud-Ausführung griff nicht, Prüfung und Gegenprüfung liefen lokal. Die Befunde sind noch
+  nicht mit Marco besprochen und noch nicht umgesetzt.
