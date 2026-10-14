@@ -5902,3 +5902,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   Befunde (2 mittel, 3 niedrig, 4 optional), kein Sicherheitsbefund. Bericht in
   `_unveroeffentlicht/desktop-pruefung/teil-03.md`. Die Befunde sind noch nicht mit Marco
   besprochen und noch nicht umgesetzt.
+- **Teil 4 (Auswertung, Übersicht und Zeitplan) am 14.10.2026 durchgeführt** (Commit 3d14c51):
+  9 bestätigte Befunde (5 niedrig, 4 optional), kein Sicherheitsbefund. Bericht in
+  `_unveroeffentlicht/desktop-pruefung/teil-04.md`. Die Befunde sind noch nicht mit Marco
+  besprochen und noch nicht umgesetzt.
