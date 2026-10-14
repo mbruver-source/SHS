@@ -5914,3 +5914,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   Befunde (1 mittel, 4 niedrig, 7 optional), darunter ein Sicherheitsbefund (Details folgen nach
   dem Release). Bericht in `_unveroeffentlicht/desktop-pruefung/teil-06.md`. Die Befunde sind
   noch nicht mit Marco besprochen und noch nicht umgesetzt.
+- **Teil 7 (Datensicherung, Start und Termine) am 14.10.2026 durchgeführt** (Commit 04881ed):
+  12 bestätigte Befunde (6 niedrig, 6 optional), darunter ein Sicherheitsbefund (Details folgen
+  nach dem Release). Bericht in `_unveroeffentlicht/desktop-pruefung/teil-07.md`. Die Befunde
+  sind noch nicht mit Marco besprochen und noch nicht umgesetzt.
