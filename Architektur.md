@@ -139,7 +139,8 @@ flowchart TB
     Windows-Gerätenamen ab.
   - Namen erscheinen in Qt nie als HTML: Meldungsfenster sind global auf reinen Text
     umgestellt (`meldungsfenster_als_klartext`), Rich-Text-Stellen nutzen `html.escape`. In
-    PDFs geht jeder Nutzertext über `_p_wert`.
+    PDFs geht jeder Nutzertext über `_p_wert` (`_datum_kurz` und `_euro_text` liefern schon
+    maskiert, weil ihr Ergebnis immer in einen Paragraph geht).
   - Web:
     - Die Session ist an eine Konto-Kennung gebunden (`db._konto_kennung`).
     - Schutz-Header werden zentral in `after_request` gesetzt.

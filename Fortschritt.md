@@ -5996,3 +5996,14 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - `Architektur.md` (Zeile zu `desktop_darstellung.py`) ist angepasst.
 - **Vor dem nächsten Build:** Die Screenshots ändern sich, weil „Hell“ jetzt eine eigene Palette
   hat (Auswahlfarbe, Scrollflächen). Sie müssen neu aufgenommen werden.
+
+### A2 PDF-Ausgabe (14.10.2026, Desktop-Prüfung Teil 6 und Teil 2)
+
+- **Sicherheitskorrektur in der PDF-Erzeugung (Teil 6 Nr. 1, mit Teil 2 Nr. 8b), Details folgen
+  nach dem Release.** Der Test zur Sicherheitsprüfung S-4 ist erweitert.
+- **Lange Namen (Teil 6 Nr. 4):** In der Ergebnisliste und in der leeren Ergebnisliste
+  („Formular zum Ausfüllen“) stehen die Namen jetzt als umbrechender Absatz (`_TABELLE_ZELLE`).
+  Lange Doppelnamen ragen nicht mehr in die Nachbarspalte. Neuer Test
+  `test_lange_namen_brechen_in_ergebnislisten_um` prüft das Spaltenende geometrisch.
+- `Architektur.md` ist ergänzt (Maskierung von `_datum_kurz` und `_euro_text`). Die Änderung wird
+  nicht vorab separat gepusht, sondern erst mit dem Release.

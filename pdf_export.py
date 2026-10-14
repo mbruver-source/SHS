@@ -114,6 +114,9 @@ _STAT_KOPF_WERT = ParagraphStyle("SHSStatKopfWert", parent=_STYLES["Normal"], fo
 # einzeilig passt.
 _STAT_MATRIX_KOPF = ParagraphStyle("SHSStatMatrixKopf", parent=_STYLES["Normal"], fontSize=6.5, fontName="Helvetica-Bold", alignment=1, leading=8)
 _STAT_MATRIX_ZELLE = ParagraphStyle("SHSStatMatrixZelle", parent=_STYLES["Normal"], fontSize=9, alignment=1)
+# Namen in Ergebnislisten als Paragraph, damit lange Doppelnamen umbrechen statt in die
+# Nachbarspalte zu ragen (Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4).
+_TABELLE_ZELLE = ParagraphStyle("SHSTabelleZelle", parent=_STYLES["Normal"], fontSize=9, leading=11)
 
 _WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 _MONATE = [
@@ -140,8 +143,10 @@ def _datum_kurz(iso_datum: str | None) -> str:
     """Formatiert ein Datum im Format JJJJ-MM-TT kompakt als TT.MM.JJJJ - für Tabellen-
     spalten, in denen der ausgeschriebene Langtext (_datum_lang) zu breit wäre (siehe
     Impfpass-Spalte in erstelle_pruefungsleitung_uebersicht_pdf). Ist der Wert leer oder
-    nicht als Datum erkennbar, wird er wie bei _datum_lang unverändert zurückgegeben."""
-    return datum_anzeige(iso_datum)
+    nicht als Datum erkennbar, wird er wie bei _datum_lang ohne Umformatierung übernommen.
+    Das Ergebnis ist immer XML-maskiert (wie _p_wert), weil alle Aufrufer es in einen
+    Paragraph einbetten."""
+    return _xml_escape(datum_anzeige(iso_datum))
 
 
 def _schriftgroesse_fuer_breite(
@@ -223,11 +228,12 @@ def _p_wert(v) -> str:
 
 def _euro_text(wert: str | None) -> str:
     """Formatiert eine hinterlegte Prüfungsgebühr (z. B. "12,00") mit Euro-Zeichen, oder
-    "", wenn (noch) keine hinterlegt ist."""
+    "", wenn (noch) keine hinterlegt ist. Das Ergebnis ist XML-maskiert (wie _p_wert),
+    weil die Gebühr in einen Paragraph geht."""
     if not wert:
         return ""
     wert = str(wert).strip()
-    return wert if wert.endswith("€") else f"{wert} €"
+    return _xml_escape(wert if wert.endswith("€") else f"{wert} €")
 
 
 def _wertungsnoten_tabelle_ed() -> Table:
@@ -334,7 +340,7 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     Zeile mit der Positions-Skizze der Disziplin. `mit_wertungsnoten=False` lässt die
     Punkte-Band-Tabelle am Ende weg (DK-Seite 2: nur einmal unter der Behältnisstrecke,
     wie in der Vorlage)."""
-    elemente: list = [Paragraph(f"Bewertung {disziplin}", _ABSCHNITT)]
+    elemente: list = [Paragraph(f"Bewertung {_p_wert(disziplin)}", _ABSCHNITT)]
     hinweis = _VERLEITUNGEN[(disziplin, stufe)]
     if hinweis:
         elemente.append(Paragraph(hinweis, _HINWEIS))
@@ -431,7 +437,7 @@ def _dk_folgeseiten_kopf(t: dict) -> Table:
     # großen "LK x", lange Namen brechen so praktisch nie um und schieben Seite 2 nicht
     # auf eine dritte Seite (Verifikation 24.09.).
     kopf = Table(
-        [[Paragraph(f"LK {t['stufe']}", _LK_TITEL),
+        [[Paragraph(f"LK {_p_wert(t['stufe'])}", _LK_TITEL),
           [Paragraph(f"<b>HF:</b> {_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TEXT),
            Paragraph(f"<b>Hund:</b> {hund_text}", _TEXT)]]],
         colWidths=[25 * mm, 145 * mm],
@@ -456,14 +462,14 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
 
     if t["art"] == "DK":
         lk_zeile = Table(
-            [[Paragraph(f"LK {t['stufe']}", _LK_TITEL),
+            [[Paragraph(f"LK {_p_wert(t['stufe'])}", _LK_TITEL),
               Paragraph(f"<b>{_SUCHGEGENSTAENDE_TEXT[t['stufe']]}</b><br/><b>Dreikampf:</b> Trümmer, Fläche, Behältnisstrecke", _TEXT)]],
             colWidths=[30 * mm, 140 * mm],
         )
         story.append(lk_zeile)
     else:
-        story.append(Paragraph(f"ED - LK {t['stufe']}", _LK_TITEL))
-        story.append(Paragraph(f"<b>Einzeldisziplin: {t['disziplin']} – ein Suchgegenstand</b>", _TEXT))
+        story.append(Paragraph(f"ED - LK {_p_wert(t['stufe'])}", _LK_TITEL))
+        story.append(Paragraph(f"<b>Einzeldisziplin: {_p_wert(t['disziplin'])} – ein Suchgegenstand</b>", _TEXT))
 
     story.append(Spacer(1, 3 * mm))
     story.append(_stammdaten_tabelle(t))
@@ -477,7 +483,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         gegenstand_zeilen = []
         for i, feld in enumerate(_GEGENSTAND_FELDER, start=1):
             zugeordnete_disziplin = t.get(f"{feld}_disziplin")
-            zusatz = f" ({zugeordnete_disziplin})" if zugeordnete_disziplin else ""
+            zusatz = f" ({_p_wert(zugeordnete_disziplin)})" if zugeordnete_disziplin else ""
             gegenstand_zeilen.append(
                 Paragraph(f"{i}. zu suchender Gegenstand: {_p_wert(t[feld]) or '.....'}{zusatz}", _TEXT)
             )
@@ -504,7 +510,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
     fusszeile = [
         Spacer(1, 4 * mm),
-        Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {_p_wert(datum)}", _TEXT),
+        Paragraph(f"austragender Verein: {_p_wert(verein)} &nbsp;&nbsp;&nbsp; Datum: {datum}", _TEXT),
     ]
 
     status_abk = _status_abkuerzung(ergebnis)
@@ -646,7 +652,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
 
     for lk in leistungsklassen:
-        story.append(Paragraph(lk, _ABSCHNITT_MIT_FOLGE))
+        story.append(Paragraph(_p_wert(lk), _ABSCHNITT_MIT_FOLGE))
         gruppe = sorted(
             (t for t in fertig if t.leistungsklasse == lk),
             key=lambda t: (t.platzierung is None, t.platzierung or 0),
@@ -659,7 +665,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
             # Bei Disqualifiziert/Abbruch "–" statt einer irreführenden "0" (wie im
             # Auswertungs-Tab der Desktop-App).
             punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
-            daten.append([platz, _wert(startnummer_je_id.get(t.id)), t.name, punkte, f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
+            daten.append([platz, _wert(startnummer_je_id.get(t.id)), Paragraph(_p_wert(t.name), _TABELLE_ZELLE), punkte, f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
         if len(daten) > 1:
             tabelle = Table(daten, colWidths=[40 * mm, 18 * mm, 46 * mm, 27 * mm, 39 * mm], repeatRows=1)
             tabelle.setStyle(TableStyle([
@@ -738,9 +744,9 @@ _ETIKETT_DISZIPLIN_KURZ = {
 
 def _etikett_art_lk_text(t: dict) -> str:
     if t["art"] == "DK":
-        return f"DK LK {t['stufe']}"
+        return f"DK LK {_p_wert(t['stufe'])}"
     kurz = _ETIKETT_DISZIPLIN_KURZ.get(t["disziplin"], t["disziplin"])
-    return f"ED LK {t['stufe']} {kurz}"
+    return f"ED LK {_p_wert(t['stufe'])} {_p_wert(kurz)}"
 
 
 def _disziplin_gesamt_text(ergebnis: dict, disziplin: str) -> str:
@@ -776,7 +782,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     zum späteren handschriftlichen Nachtragen, statt Werte zu zeigen."""
     veranstaltung = get_veranstaltung(conn)
     austragender_verein = _p_wert(veranstaltung["verein"]) if veranstaltung else ""
-    datum = _p_wert(_datum_kurz(veranstaltung["datum"])) if veranstaltung else ""
+    datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
 
     fertig, _ausstehend = berechne_auswertung(conn)
     fertig_je_id = {erg.id: erg for erg in fertig}
@@ -893,7 +899,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
             (t for t in teilnehmer if leistungsklasse_label(t) == label),
             key=lambda t: (t["startnummer"] is None, t["startnummer"] or 0),
         )
-        story.append(Paragraph(label, _ABSCHNITT))
+        story.append(Paragraph(_p_wert(label), _ABSCHNITT))
         verein_spalte_breite = 40 * mm
         # Nutzerwunsch (21.09., Screenshot DK LK2/LK3): lange Vereinsnamen ragten bei
         # fester Schriftgröße 9 in die Nachbarspalte "Gesamtpunkte" hinein - die
@@ -908,7 +914,8 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
         daten = [["Platz", "Start-Nr.", "Name", "Verein", "Gesamtpunkte", "Wertnote"]]
         for zeile, t in enumerate(gruppe, start=1):
             verein_text = _wert(t["verein"])
-            daten.append(["", _wert(t["startnummer"]), f"{t['nachname']}, {t['vorname']}", verein_text, "", ""])
+            name = Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TABELLE_ZELLE)
+            daten.append(["", _wert(t["startnummer"]), name, verein_text, "", ""])
             if verein_text and stringWidth(verein_text, "Helvetica", 9) > verein_spalte_breite - _VEREIN_PADDING_PT:
                 groesse = _schriftgroesse_fuer_breite(
                     verein_text, verein_spalte_breite - _VEREIN_PADDING_PT, start_groesse=9, min_groesse=5.5,
@@ -1199,7 +1206,7 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
         for t in teilnehmer:
             gebuehr = _euro_text(pruefungsgebuehr_fuer_art(veranstaltung, t["art"]))
             impfung_iso = t["tollwutimpfung_bis"]
-            lk_text = leistungsklasse_label(t)
+            lk_text = _p_wert(leistungsklasse_label(t))
             if t.get("keine_teilnahme"):
                 # Nutzerwunsch 02.10.2026: nicht erschienene Teilnehmer bleiben hier (die
                 # Gebühr kann trotzdem fällig sein), aber mit sichtbarem Vermerk.
@@ -1448,7 +1455,8 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
     ]
     for i, zeile in enumerate(plan["zeilen"], start=1):
         zeit_text = f"{zeile['start'].strftime('%H:%M')} – {zeile['ende'].strftime('%H:%M')}"
-        art_text = f"{zeile.get('art', '')} LK {zeile.get('stufe', '')} – {zeile.get('disziplin', '')}" if zeile["typ"] != "pause" else ""
+        art_text = (f"{_p_wert(zeile.get('art'))} LK {_p_wert(zeile.get('stufe'))} – {_p_wert(zeile.get('disziplin'))}"
+                    if zeile["typ"] != "pause" else "")
         if zeile["typ"] == "pause":
             daten.append([
                 Paragraph(zeit_text, _ZEITPLAN_ZEIT),

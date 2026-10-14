@@ -214,6 +214,37 @@ class TestPdfExport(unittest.TestCase):
     def _pfad(self, name: str) -> str:
         return os.path.join(self.tmpdir, name)
 
+    def test_lange_namen_brechen_in_ergebnislisten_um(self):
+        """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner
+        String in die Nachbarspalte. Als Paragraph brechen sie um - die Namensspalte endet
+        bei 18 mm Rand + 40 + 18 + 46 mm (Ergebnisliste) bzw. 18 + 16 + 18 + 46 mm (leere
+        Liste); kein Textstück des Namens darf darüber hinausreichen."""
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Schmidt-Hohenstein-Lüdenscheidt", vorname="Anna-Katharina-Maria",
+            rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", 50, 30)
+        for name, erzeugen, spalten_ende in (
+            ("ergebnisliste", pdf_export.erstelle_ergebnisliste_pdf, (18 + 40 + 18 + 46) * mm),
+            ("leere_liste", pdf_export.erstelle_leere_ergebnisliste_pdf, (18 + 16 + 18 + 46) * mm),
+        ):
+            with self.subTest(pdf=name):
+                ziel = self._pfad(f"lang_{name}.pdf")
+                erzeugen(self.conn, ziel)
+                stuecke = []
+
+                def merken(text, _cm, tm, _font, groesse):
+                    if any(teil in text for teil in ("Schmidt", "Hohenstein", "Katharina", "Maria")):
+                        stuecke.append((text, tm[4] + stringWidth(text.strip(), "Helvetica", groesse * tm[0])))
+
+                PdfReader(ziel).pages[0].extract_text(visitor_text=merken)
+                self.assertTrue(stuecke)
+                for text, ende in stuecke:
+                    self.assertLessEqual(ende, spalten_ende, text)
+                self.assertIn("Maria", _text(ziel))
+
     def test_alle_pdfs_maskieren_markup_in_allen_feldern(self):
         """Sicherheitsprüfung 03.10.2026, S-4 (Codex-Nachweis): reportlab-Markup in
         Vereins-, Richter- oder Teilnehmerdaten (z. B. aus einer fremden Termin-Datei) darf
@@ -222,11 +253,21 @@ class TestPdfExport(unittest.TestCase):
 
         from pypdf import PdfReader
 
+        import struct
+        import zlib
+
+        def _chunk(art: bytes, daten: bytes) -> bytes:
+            return struct.pack(">I", len(daten)) + art + daten + struct.pack(">I", zlib.crc32(art + daten))
+
+        # Gültiges 1x1-PNG (Desktop-Prüfung 14.10.2026).
         bild = os.path.join(self.tmpdir, "marker.png")
-        with open(bild, "wb") as datei:  # 1x1-PNG
-            datei.write(bytes.fromhex(
-                "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-                "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"))
+        with open(bild, "wb") as datei:
+            datei.write(b"\x89PNG\r\n\x1a\n"
+                        + _chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+                        + _chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff"))
+                        + _chunk(b"IEND", b""))
+        from reportlab.lib.utils import ImageReader
+        self.assertEqual(ImageReader(bild).getSize(), (1, 1))
         markup = f'<img src="{bild}" width="5" height="5"/>&<font color="kaputt">X</font>'
         textfelder = ["verein", "ort", "vereins_nr", "pruefungsnummer", "pruefungsleiter",
                       "verband", "meldestelle"] + [f"wertungsrichter_{i}" for i in range(1, 6)]
@@ -246,6 +287,16 @@ class TestPdfExport(unittest.TestCase):
         richter = add_zeitplan_richter(self.conn, f"Richterin {markup}")
         add_zeitplan_pruefungsblock(self.conn, richter, "ED", 1, "Trümmerfeld", 10)
         add_zeitplan_pause(self.conn, richter, 15, f"Pause {markup}")
+        # Desktop-Prüfung 14.10.2026: weitere Felder, direkt in der Datenbank gesetzt.
+        self.conn.execute("PRAGMA ignore_check_constraints = ON")
+        self.conn.execute("UPDATE veranstaltung SET datum = ?, pruefungsgebuehr_ed = ?, pruefungsgebuehr_dk = ?",
+                          (f"datum {markup}", f"12,00 {markup}", f"15,00 {markup}"))
+        self.conn.execute("UPDATE teilnehmer SET tollwutimpfung_bis = ?, gegenstand_1_disziplin = ?",
+                          (f"impfung {markup}", f"zuordnung {markup}"))
+        self.conn.execute("UPDATE zeitplan_eintrag SET disziplin = ? WHERE typ = 'pruefung'",
+                          (f"Trümmerfeld {markup}",))
+        self.conn.commit()
+        self.conn.execute("PRAGMA ignore_check_constraints = OFF")
 
         ausgaben = {
             "ergebnisliste": lambda p: pdf_export.erstelle_ergebnisliste_pdf(self.conn, p),
@@ -267,6 +318,20 @@ class TestPdfExport(unittest.TestCase):
                 erzeugen(ziel)
                 bilder = [b for seite in PdfReader(ziel).pages for b in seite.images]
                 self.assertEqual(bilder, [], f"{name}: eingebettetes Bild aus Markup")
+        # Die maskierten Werte erscheinen als lesbarer Text (z. B. Gebühr und Impfdatum).
+        uebersicht = _text(self._pfad("markup_uebersicht.pdf"))
+        self.assertIn("12,00", uebersicht)
+        self.assertIn("kaputt", uebersicht)
+        # Auch Prüfungsangaben des Teilnehmers (nur Exporte ohne Nachschlagen in festen Tabellen).
+        self.conn.execute("PRAGMA ignore_check_constraints = ON")
+        self.conn.execute("UPDATE teilnehmer SET disziplin = ? WHERE id = ?", (f"Trümmerfeld {markup}", ed))
+        self.conn.commit()
+        self.conn.execute("PRAGMA ignore_check_constraints = OFF")
+        for name in ("leere_liste", "uebersicht"):
+            with self.subTest(pdf=f"{name} mit disziplin"):
+                ziel = self._pfad(f"markup_disziplin_{name}.pdf")
+                ausgaben[name](ziel)
+                self.assertEqual([b for seite in PdfReader(ziel).pages for b in seite.images], [])
 
     def _anwesend_und_fehlend(self):
         """Nutzerwunsch 02.10.2026: ein anwesender und ein als "keine Teilnahme"
