@@ -5927,3 +5927,8 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   (Commit 0aa00df): 10 bestätigte Befunde (2 niedrig, 8 optional), kein Sicherheitsbefund.
   Bericht in `_unveroeffentlicht/desktop-pruefung/teil-08.md`. Die Befunde sind noch nicht mit
   Marco besprochen und noch nicht umgesetzt.
+- **Teil 9 (Darstellung, Hilfe und Fehlerbehandlung) am 14.10.2026 durchgeführt**
+  (Commit d903ee0): 12 bestätigte Befunde (1 hoch, 1 mittel, 3 niedrig, 7 optional), darunter
+  ein Sicherheitsbefund (Details folgen nach dem Release). Bericht in
+  `_unveroeffentlicht/desktop-pruefung/teil-09.md`. Damit sind alle 10 Teile geprüft. Die
+  Befunde sind noch nicht mit Marco besprochen und noch nicht umgesetzt.
