@@ -841,6 +841,14 @@ Leistungsklasse genau einen Gegenstand (siehe [Kapitel 4](#suchgegenstände)).
 **Ich sehe den Termin nach einer Wiederherstellung nicht.**
 Wiederhergestellte Termine erscheinen erst beim nächsten „Anderen Termin öffnen…“.
 
+**Ein Termin lässt sich nicht öffnen – was nun?**
+Das Programm prüft eine Termin-Datei vor dem Öffnen und nennt den Grund. Ist sie
+**schreibgeschützt** (z. B. auf einem schreibgeschützten USB-Stick), kopiere sie an einen
+beschreibbaren Ort (z. B. in den Termine-Ordner) und öffne sie dort. Ist sie **keine Termin-Datei**
+oder **beschädigt**, stelle den Termin aus deiner letzten Datensicherung wieder her. Nach einem
+Absturz oder Stromausfall mitten im Speichern stellt das Programm beim Öffnen den zuletzt
+gespeicherten Stand selbst wieder her.
+
 **Kann ich auf mehreren Rechnern arbeiten?**
 Ja, über die Datensicherung (siehe [Kapitel 10](#10-datensicherung)). Gleichzeitig am selben
 Termin arbeiten geht mit dem Desktop-Programm nicht – dafür gibt es die Web-Version.

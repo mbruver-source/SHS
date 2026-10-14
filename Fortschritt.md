@@ -6179,3 +6179,44 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Offen bzw. hingenommen:** Wer im Startdialog die Demo wählt, wird vorher schon beim
   Terminwechsel nach ungespeicherten Ergebnissen gefragt und in Schritt 2 noch einmal. Die erste
   Frage kommt vor der Auswahl im Startdialog, da ist noch nicht bekannt, dass die Demo folgt.
+
+### A8 Termin öffnen und Lebenszyklus des Hauptfensters (14.10.2026, Desktop-Prüfung Teil 7, 8, 2 und 9)
+
+- **Öffnen abgesichert (Teil 7 Nr. 4):** Neue Funktion `db.termin_oeffnen` für den Start und den
+  Terminwechsel, mit verständlicher Meldung über `_termin_oeffnen_mit_meldung`. Statt eines
+  Absturzes bzw. „Unerwarteter Fehler“ bleibt der bisherige Termin geöffnet, beim Start geht es
+  zurück zum Startdialog. Geprüft wird:
+  - nur lesend vor dem Schreiben: SQLite-Datei, Termin-Tabellen (fremde Datenbanken bekommen nicht
+    mehr ungefragt das Schema), keine berechneten Spalten, `quick_check`;
+  - danach Schreibprobe per `PRAGMA user_version` (Marcos Entscheidung; ein schreibgeschützter
+    Termin fällt sofort auf);
+  - danach Spalten und Wertebereiche (Prüfungsart, Leistungsklasse, Disziplinen,
+    Gegenstand-Zuordnung, Punkte, Zeitplan-Einträge, Typen der Stammdaten), binär und mit
+    Typprüfung verglichen.
+
+  Das ist zugleich die zweite Absicherung zu einer Sicherheitskorrektur aus A2, Details folgen nach
+  dem Release.
+- **Absturz mitten im Speichern:** Ein liegengebliebenes Rollback-Journal wird vor dem Öffnen und
+  in der Terminliste zurückgespielt. Der zuletzt gespeicherte Stand bleibt öffenbar, statt als
+  „beschädigt“ oder „nicht lesbar“ zu gelten.
+- **Reiter (Teil 7 Nr. 4c und Nr. 9):** `_termin_setzen` baut erst alle neuen Reiter und den
+  Titel auf und tauscht erst dann aus. Scheitert der Aufbau, bleibt alles wie es war, und die neue
+  Verbindung wird geschlossen. Alte Reiter werden per `deleteLater` gelöscht, statt bei jedem
+  Wechsel liegen zu bleiben.
+- **Fenstertitel (Teil 8 Nr. 3, Teil 2 Nr. 5):** `_fenstertitel` nimmt ohne Verein den Dateinamen
+  statt „None ()“. Nach „Veranstaltungsdaten bearbeiten…“ wird der Titel über das Signal
+  `VerwaltungTab.veranstaltung_geaendert` aktualisiert.
+- **Fehler in `main` (Teil 9 Nr. 7):** Das Fehlerfenster sagt jetzt „Das Programm wird beendet“
+  (`fehlerfenster_zeigen(programm_endet=True)`), der Fehler steht im Absturzprotokoll (neue
+  Funktion `fehler_protokollieren`, wird in A9 ausgebaut).
+- **Migration:** `gegenstand_N_disziplin` bekommt beim Nachrüsten älterer Dateien denselben CHECK
+  wie im Schema.
+- **Handbuch:** FAQ „Ein Termin lässt sich nicht öffnen – was nun?“.
+- **Tests:**
+  - Keine SQLite-Datei, fremde Datenbank bleibt unverändert, unbekannte Werte (auch in Zeitplan,
+    Punkten und Datum), fremde Sortierregeln, berechnete und fehlende Spalten, Schreibschutz.
+  - Liegengebliebenes Journal; alle 15 Altversionen.
+  - Terminwechsel zu kaputter Datei und bei Fehler im Reiteraufbau; alte Reiter gelöscht, Titel
+    ohne „None“, Titel nach dem Bearbeiten.
+- **Bekannt, nicht geändert:** Eine sehr große fremde Datei wird beim `quick_check` ganz gelesen;
+  das verzögert nur das eigene Programm.

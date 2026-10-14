@@ -39,8 +39,9 @@ import os
 import re
 import sqlite3
 import sys
+import traceback
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QItemSelectionModel, QRegularExpression, QUrl, Qt
+from PySide6.QtCore import QAbstractNativeEventFilter, QItemSelectionModel, QRegularExpression, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -111,6 +112,8 @@ from db import (
     liste_termine,
     list_teilnehmer,
     sortierschluessel_text,
+    termin_oeffnen,
+    TerminNichtOeffenbar,
     list_zeitplan_richter,
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
@@ -182,6 +185,9 @@ from desktop_darstellung import (
 )
 from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
+    _klartext_fehler,
+    fehler_protokollieren,
+    fehlerfenster_zeigen,
     _Ablageort,
     absturzprotokoll_einrichten,
     absturzprotokoll_pfad,
@@ -2230,6 +2236,31 @@ class ErgebnisTab(QWidget):
             )
 
 
+def _fenstertitel(conn, pfad: str | None, demo: bool) -> str:
+    """Titel aus Verein und Datum, ohne Verein der Dateiname (Teil 8 Nr. 3)."""
+    praefix = "DEMO – " if demo else ""
+    veranstaltung = get_veranstaltung(conn) or {}
+    name = str(veranstaltung.get("verein") or os.path.basename(pfad or "") or "Termin")
+    datum = datum_anzeige(str(veranstaltung["datum"])) if veranstaltung.get("datum") else ""
+    return f"{praefix}SHS Prüfungsprogramm – {name}" + (f" ({datum})" if datum else "")
+
+
+def _termin_oeffnen_mit_meldung(parent, pfad: str):
+    """Öffnet einen Termin über db.termin_oeffnen; lässt er sich nicht öffnen (keine
+    Termin-Datei, beschädigt, schreibgeschützt, unbekannte Werte), erscheint eine
+    verständliche Meldung und das Ergebnis ist None - der bisherige Termin bzw. der
+    Startdialog bleibt (Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4)."""
+    try:
+        return termin_oeffnen(pfad)
+    except TerminNichtOeffenbar as exc:
+        meldung = str(exc)
+    except (sqlite3.Error, OSError) as exc:
+        fehler_protokollieren(exc)
+        meldung = _klartext_fehler(exc)
+    QMessageBox.warning(parent, "Termin lässt sich nicht öffnen", f"„{os.path.basename(pfad)}“:\n\n{meldung}")
+    return None
+
+
 def _fremdobjekte_melden(parent) -> None:
     """Sicherheitsprüfung 03.10.2026, H-1: Hinweis, wenn init_db() aus der gerade geöffneten
     Termin-Datei fremde Datenbank-Regeln (Trigger/Views) entfernt hat."""
@@ -3547,6 +3578,9 @@ class VerwaltungTab(QWidget):
     Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
     deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
 
+    # Nach dem Speichern der Veranstaltungsdaten - das Hauptfenster aktualisiert den Titel.
+    veranstaltung_geaendert = Signal()
+
     def __init__(self, conn, parent=None):
         super().__init__(parent)
         self.conn = conn
@@ -3593,6 +3627,7 @@ class VerwaltungTab(QWidget):
         if dialog.exec() != QDialog.Accepted:
             return
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
+        self.veranstaltung_geaendert.emit()
 
 
 class DatensicherungTab(QWidget):
@@ -4305,65 +4340,84 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 manager.release()
 
     def _termin_setzen(self, conn, pfad: str, demo: bool = False) -> None:
-        """Verbindet das Fenster mit einem (neuen oder anfänglichen) Termin: setzt Titel
-        und baut alle Tabs für diesen Termin neu auf. `demo`: Termin der Demoprüfung -
+        """Verbindet das Fenster mit einem (neuen oder anfänglichen) Termin: baut alle Tabs
+        für diesen Termin neu auf und setzt den Titel. `demo`: Termin der Demoprüfung -
         Titel mit "DEMO", Reiter "Datensicherung" gesperrt (arbeitet auf den echten
-        Terminen)."""
-        self.conn = conn
-        self.pfad = pfad
-        praefix = "DEMO – " if demo else ""
-        self.setWindowTitle(f"{praefix}SHS Prüfungsprogramm – {pfad}")
+        Terminen).
 
-        veranstaltung = get_veranstaltung(conn)
-        if veranstaltung:
-            self.setWindowTitle(
-                f"{praefix}SHS Prüfungsprogramm – {veranstaltung['verein']} ({datum_anzeige(veranstaltung['datum'])})"
-            )
-
-        self._tabs.blockSignals(True)
-        while self._tabs.count():
-            self._tabs.removeTab(0)
-
+        Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4 und 9: Erst werden die neuen Reiter
+        vollständig aufgebaut und der Titel berechnet; scheitert das, bleibt das Fenster
+        unverändert (Ausnahme an den Aufrufer). Erst danach wird ausgetauscht, und die alten Reiter werden gelöscht statt
+        bei jedem Terminwechsel liegen zu bleiben."""
         # Ein gemeinsames _Ablageort-Objekt für die Tabs "Zeitplan" und "Export", damit ein
         # in einem der beiden Tabs bewusst gewählter Speicherort auch im jeweils anderen
         # als neuer Standard gilt (siehe _Ablageort oben).
         # UX-Test 02.10.2026, U7: PDFs standardmäßig in "Ausdrucke/<Termin>" statt
         # zwischen den Termin-Dateien.
         ablageort = _Ablageort(_ausdrucke_ordner(pfad) if pfad else str(termine_ordner()))
+        fabriken = [
+            ("teilnehmer_tab", "Teilnehmer", lambda: TeilnehmerTab(conn, pfad=pfad, ablageort=ablageort)),
+            ("formular_import_tab", "Formular-Import", lambda: FormularImportTab(conn)),
+            ("zeitplan_tab", "Zeitplan", lambda: ZeitplanTab(conn, ablageort)),
+            ("ergebnis_tab", "Ergebniserfassung", lambda: ErgebnisTab(conn)),
+            ("auswertung_tab", "Auswertung", lambda: AuswertungTab(conn, ablageort)),
+            ("teilnehmer_uebersicht_tab", "Übersicht", lambda: TeilnehmerUebersichtTab(conn)),
+            ("verwaltung_tab", "Verwaltung", lambda: VerwaltungTab(conn)),
+            ("export_tab", "Export", lambda: ExportTab(conn, pfad, ablageort)),
+            # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
+            # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
+            # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
+            # aktueller_pfad wird nur mitgegeben, damit ein Wiederherstellen den gerade
+            # geöffneten Termin nicht versehentlich überschreibt (siehe DatensicherungTab).
+            ("datensicherung_tab", "Datensicherung", lambda: DatensicherungTab(aktueller_pfad=pfad, conn=conn)),
+        ]
+        neue: list[tuple[str, str, QWidget]] = []
+        try:
+            for attribut, titel, fabrik in fabriken:
+                neue.append((attribut, titel, fabrik()))
+        except BaseException:
+            for _attribut, _titel, widget in neue:
+                widget.deleteLater()
+            raise
 
-        self.teilnehmer_tab = TeilnehmerTab(conn, pfad=pfad, ablageort=ablageort)
-        self.formular_import_tab = FormularImportTab(conn)
-        self.zeitplan_tab = ZeitplanTab(conn, ablageort)
-        self.ergebnis_tab = ErgebnisTab(conn)
-        self.auswertung_tab = AuswertungTab(conn, ablageort)
-        self.teilnehmer_uebersicht_tab = TeilnehmerUebersichtTab(conn)
-        self.verwaltung_tab = VerwaltungTab(conn)
-        self.export_tab = ExportTab(conn, pfad, ablageort)
-        # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
-        # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
-        # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
-        # aktueller_pfad wird nur mitgegeben, damit ein Wiederherstellen den gerade
-        # geöffneten Termin nicht versehentlich überschreibt (siehe DatensicherungTab).
-        self.datensicherung_tab = DatensicherungTab(aktueller_pfad=pfad, conn=conn)
+        try:
+            fenstertitel = _fenstertitel(conn, pfad, demo)
+        except BaseException:
+            for _attribut, _titel, widget in neue:
+                widget.deleteLater()
+            raise
 
-        self._tabs.addTab(self.teilnehmer_tab, "Teilnehmer")
-        self._tabs.addTab(self.formular_import_tab, "Formular-Import")
-        self._tabs.addTab(self.zeitplan_tab, "Zeitplan")
-        self._tabs.addTab(self.ergebnis_tab, "Ergebniserfassung")
-        self._tabs.addTab(self.auswertung_tab, "Auswertung")
-        self._tabs.addTab(self.teilnehmer_uebersicht_tab, "Übersicht")
-        self._tabs.addTab(self.verwaltung_tab, "Verwaltung")
-        self._tabs.addTab(self.export_tab, "Export")
-        self._tabs.addTab(self.datensicherung_tab, "Datensicherung")
-        if demo:
-            index = self._tabs.indexOf(self.datensicherung_tab)
-            self._tabs.setTabEnabled(index, False)
-            self._tabs.setTabToolTip(
-                index, "Während der Demoprüfung gesperrt – dieser Reiter arbeitet mit deinen echten Terminen."
-            )
-        self._tabs.blockSignals(False)
+        # Ab hier nur noch Austausch.
+        self.conn = conn
+        self.pfad = pfad
+        self._demo_termin = demo
+        self._tabs.blockSignals(True)
+        try:
+            while self._tabs.count():
+                alt = self._tabs.widget(0)
+                self._tabs.removeTab(0)
+                alt.deleteLater()
+            for attribut, titel, widget in neue:
+                setattr(self, attribut, widget)
+                self._tabs.addTab(widget, titel)
+            if demo:
+                index = self._tabs.indexOf(self.datensicherung_tab)
+                self._tabs.setTabEnabled(index, False)
+                self._tabs.setTabToolTip(
+                    index, "Während der Demoprüfung gesperrt – dieser Reiter arbeitet mit deinen echten Terminen."
+                )
+        finally:
+            self._tabs.blockSignals(False)
+        self.verwaltung_tab.veranstaltung_geaendert.connect(self._titel_aktualisieren)
+        self.setWindowTitle(fenstertitel)
 
         self._vorheriger_tab_index = 0
+
+    def _titel_aktualisieren(self) -> None:
+        """Fenstertitel aus Verein und Datum; fehlt der Verein (fremde Datei), der Dateiname
+        statt „None“ (Desktop-Prüfung 14.10.2026, Teil 8 Nr. 3). Auch nach „Veranstaltungs-
+        daten bearbeiten…“ aufgerufen (Teil 2 Nr. 5)."""
+        self.setWindowTitle(_fenstertitel(self.conn, self.pfad, getattr(self, "_demo_termin", False)))
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
@@ -4384,10 +4438,24 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         if not dialog.pfad:
             return
 
-        neue_verbindung = init_db(dialog.pfad)
+        neue_verbindung = _termin_oeffnen_mit_meldung(self, dialog.pfad)
+        if neue_verbindung is None:
+            return  # bisheriger Termin bleibt geöffnet
         _fremdobjekte_melden(self)
         alte_verbindung = self.conn
-        self._termin_setzen(neue_verbindung, dialog.pfad)
+        try:
+            self._termin_setzen(neue_verbindung, dialog.pfad)
+        except Exception as exc:  # noqa: BLE001
+            # Aufbau der Reiter gescheitert: _termin_setzen hat noch nichts ausgetauscht.
+            neue_verbindung.close()
+            fehler_protokollieren(exc)
+            QMessageBox.warning(
+                self, "Termin lässt sich nicht öffnen",
+                f"„{os.path.basename(dialog.pfad)}“ ließ sich nicht anzeigen - die Datei enthält "
+                "Angaben, die das Programm nicht verarbeiten kann. Der bisherige Termin bleibt "
+                "geöffnet. (Details stehen im Absturzprotokoll, siehe Version → Diagnose kopieren.)",
+            )
+            return
         alte_verbindung.close()
 
     def _rueckfrage_ungespeichert(self, verwerfen: bool) -> str:
@@ -4734,18 +4802,28 @@ def main() -> int:
     # Reste früherer Demoprüfungen (z. B. eine beim Beenden noch geöffnete PDF) wegräumen.
     demo_reste_aufraeumen()
 
-    pfad = _startdialog_schleife()
-    if not pfad:
-        return 0
+    try:
+        while True:
+            pfad = _startdialog_schleife()
+            if not pfad:
+                return 0
+            conn = _termin_oeffnen_mit_meldung(None, pfad)
+            if conn is not None:
+                break  # sonst zurück zum Startdialog
+        _fremdobjekte_melden(None)
 
-    conn = init_db(pfad)
-    _fremdobjekte_melden(None)
-
-    fenster = HauptFenster(conn, pfad)
-    sitzungsende_einrichten(app, fenster)
-    # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
-    # Zeitplan-Spalten zu wenig Platz.
-    fenster.showMaximized()
+        fenster = HauptFenster(conn, pfad)
+        sitzungsende_einrichten(app, fenster)
+        # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
+        # Zeitplan-Spalten zu wenig Platz.
+        fenster.showMaximized()
+    except Exception as exc:  # noqa: BLE001 - Desktop-Prüfung 14.10.2026, Teil 9 Nr. 7
+        fehler_protokollieren(exc)
+        fehlerfenster_zeigen(
+            VERSION, "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            programm_endet=True,
+        )
+        return 1
     return app.exec()
 
 

@@ -63,6 +63,9 @@ from db import (
     liste_termine,
     oeffne_termin_lesend,
     sortierschluessel_text,
+    SCHEMA,
+    termin_oeffnen,
+    TerminNichtOeffenbar,
     liste_termine_postgres,
     list_teilnehmer,
     list_zeitplan_eintraege,
@@ -2921,6 +2924,153 @@ class TestTerminuebersicht(unittest.TestCase):
         liste_termine(self.ordner)
         self.assertEqual(pfad.read_bytes(), inhalt)
         self.assertEqual(pfad.stat().st_mtime_ns, zeit)
+
+
+class TestTerminOeffnen(unittest.TestCase):
+    """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4: db.termin_oeffnen prüft vor dem Schreiben."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.ordner = pathlib.Path(self._tmpdir.name)
+
+    def tearDown(self):
+        for datei in self.ordner.iterdir():
+            os.chmod(datei, 0o666)
+        self._tmpdir.cleanup()
+
+    def _termin(self, name="t.sqlite"):
+        pfad = self.ordner / name
+        conn = init_db(str(pfad))
+        set_veranstaltung(conn, verein="SGV", datum="2026-11-14", ort="X")
+        conn.close()
+        return pfad
+
+    def test_normaler_und_neuer_termin_oeffnen(self):
+        with closing(termin_oeffnen(str(self._termin()))) as conn:
+            self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
+        with closing(termin_oeffnen(str(self.ordner / "neu.sqlite"))) as conn:
+            self.assertIsNone(get_veranstaltung(conn))
+
+    def test_keine_sqlite_datei(self):
+        pfad = self.ordner / "kaputt.sqlite"
+        pfad.write_bytes(b"das ist keine Datenbank" * 10)
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(pfad))
+
+    def test_fremde_datenbank_bleibt_unveraendert(self):
+        pfad = self.ordner / "fremd.sqlite"
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute("CREATE TABLE kunden (id INTEGER)")
+            conn.commit()
+        vorher = pfad.read_bytes()
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(pfad))
+        self.assertEqual(pfad.read_bytes(), vorher)
+
+    def test_unbekannte_werte_werden_abgelehnt(self):
+        for spalte, wert in (("art", "XX"), ("stufe", 7), ("disziplin", "Wasser"), ("gegenstand_1_disziplin", "x")):
+            with self.subTest(spalte=spalte):
+                pfad = self._termin(f"{spalte}.sqlite")
+                with closing(init_db(str(pfad))) as conn:
+                    add_teilnehmer(conn, NeuerTeilnehmer(nachname="A", vorname="B", rufname_hund="H",
+                                                         art="ED", stufe=1, disziplin="Trümmerfeld"))
+                    conn.execute("PRAGMA ignore_check_constraints = ON")
+                    conn.execute(f"UPDATE teilnehmer SET {spalte} = ?", (wert,))
+                    conn.commit()
+                with self.assertRaises(TerminNichtOeffenbar):
+                    termin_oeffnen(str(pfad))
+
+    def test_alle_altversionen_lassen_sich_oeffnen(self):
+        import shutil
+        altdaten = sorted((pathlib.Path(__file__).resolve().parent / "testdaten" / "altversionen").glob("*/termin.sqlite"))
+        if not altdaten:
+            self.skipTest("testdaten/altversionen fehlt")
+        for quelle in altdaten:
+            with self.subTest(version=quelle.parent.name):
+                ziel = self.ordner / f"{quelle.parent.name}.sqlite"
+                shutil.copy(quelle, ziel)
+                with closing(termin_oeffnen(str(ziel))) as conn:
+                    self.assertTrue(list_teilnehmer(conn))
+
+    def test_liegengebliebenes_journal_wird_zurueckgespielt(self):
+        """Absturz mitten im Speichern: die zuletzt gespeicherten Daten bleiben öffenbar."""
+        import subprocess
+        import sys
+        pfad = self._termin()
+        skript = (
+            "import os, sqlite3, sys; c = sqlite3.connect(sys.argv[1]); "
+            "c.execute(\"PRAGMA journal_mode=DELETE\"); c.execute('BEGIN'); "
+            "c.execute(\"UPDATE veranstaltung SET verein = 'halb'\"); "
+            "c.execute(\"INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe) "
+            "SELECT 'x', 'y', 'z', 'DK', 1 FROM (WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n "
+            "WHERE i < 3000) SELECT i FROM n)\"); os._exit(0)"
+        )
+        subprocess.run([sys.executable, "-c", skript, str(pfad)], check=False)
+        if not os.path.exists(f"{pfad}-journal"):
+            self.skipTest("kein Journal entstanden (Cache groß genug)")
+        with closing(termin_oeffnen(str(pfad))) as conn:
+            self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
+
+    def test_fremde_sortierregeln_und_typen_werden_abgelehnt(self):
+        for name, ddl, wert in (
+            ("nocase", "art TEXT COLLATE NOCASE", "ed"),
+            ("rtrim", "art TEXT COLLATE RTRIM", "ED  "),
+        ):
+            with self.subTest(name=name):
+                pfad = self.ordner / f"{name}.sqlite"
+                with closing(sqlite3.connect(str(pfad))) as conn:
+                    conn.executescript(SCHEMA.replace("art TEXT NOT NULL CHECK (art IN ('ED', 'DK'))", ddl, 1))
+                    conn.execute("INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe, disziplin) "
+                                 "VALUES ('A', 'B', 'H', ?, 1, 'Trümmerfeld')", (wert,))
+                    conn.commit()
+                with self.assertRaises(TerminNichtOeffenbar):
+                    termin_oeffnen(str(pfad))
+
+    def test_ungueltige_zeitplan_und_punktwerte_werden_abgelehnt(self):
+        faelle = (
+            ("UPDATE zeitplan_eintrag SET stufe = 9", "zeitplan"),
+            ("UPDATE zeitplan_eintrag SET dauer_minuten = 'x'", "dauer"),
+            ("UPDATE ergebnisse SET suche_truemmerfeld = 999", "punkte"),
+            ("UPDATE veranstaltung SET datum = x'41'", "datum"),
+        )
+        for sql, name in faelle:
+            with self.subTest(name=name):
+                pfad = self._termin(f"{name}.sqlite")
+                with closing(init_db(str(pfad))) as conn:
+                    tid = add_teilnehmer(conn, NeuerTeilnehmer(nachname="A", vorname="B", rufname_hund="H",
+                                                               art="ED", stufe=1, disziplin="Trümmerfeld"))
+                    eintragen_ergebnis(conn, tid, "Trümmerfeld", 50, 30)
+                    richter = add_zeitplan_richter(conn, "R")
+                    add_zeitplan_pruefungsblock(conn, richter, "ED", 1, "Trümmerfeld", 10)
+                    conn.execute("PRAGMA ignore_check_constraints = ON")
+                    conn.execute(sql)
+                    conn.commit()
+                with self.assertRaises(TerminNichtOeffenbar):
+                    termin_oeffnen(str(pfad))
+
+    def test_berechnete_spalte_und_fehlende_spalten_werden_abgelehnt(self):
+        pfad = self.ordner / "berechnet.sqlite"
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.executescript(SCHEMA)
+            conn.execute("CREATE TABLE extra (a, b TEXT GENERATED ALWAYS AS (upper(a)) VIRTUAL)")
+            conn.commit()
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(pfad))
+        pfad = self.ordner / "ohne_spalten.sqlite"
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute("CREATE TABLE veranstaltung (id INTEGER PRIMARY KEY, verein TEXT, datum TEXT)")
+            conn.execute("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, nachname TEXT, vorname TEXT, "
+                         "rufname_hund TEXT, art TEXT, stufe INTEGER, disziplin TEXT)")
+            conn.commit()
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(pfad))
+
+    def test_schreibgeschuetzter_termin_faellt_beim_oeffnen_auf(self):
+        pfad = self._termin()
+        os.chmod(pfad, 0o444)
+        with self.assertRaises(TerminNichtOeffenbar) as kontext:
+            termin_oeffnen(str(pfad))
+        self.assertIn("schreibgeschützt", str(kontext.exception))
 
 
 class TestSortierschluessel(unittest.TestCase):

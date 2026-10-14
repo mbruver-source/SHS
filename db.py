@@ -29,12 +29,13 @@ from __future__ import annotations
 
 import datetime
 import functools
-import unicodedata
-import math
 import hashlib
+import math
+import os
 import re
 import secrets
 import sqlite3
+import unicodedata
 from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -483,9 +484,9 @@ def _migriere_veranstaltung_spalten(conn) -> None:
 
 _TEILNEHMER_NEUE_SPALTEN = [
     ("bezahlt", "INTEGER NOT NULL DEFAULT 0"),
-    ("gegenstand_1_disziplin", "TEXT"),
-    ("gegenstand_2_disziplin", "TEXT"),
-    ("gegenstand_3_disziplin", "TEXT"),
+    ("gegenstand_1_disziplin", "TEXT CHECK (gegenstand_1_disziplin IN ('Trümmerfeld', 'Flächensuche', 'Behältnisstrecke'))"),
+    ("gegenstand_2_disziplin", "TEXT CHECK (gegenstand_2_disziplin IN ('Trümmerfeld', 'Flächensuche', 'Behältnisstrecke'))"),
+    ("gegenstand_3_disziplin", "TEXT CHECK (gegenstand_3_disziplin IN ('Trümmerfeld', 'Flächensuche', 'Behältnisstrecke'))"),
     ("verband", "TEXT"),
     ("mitgliedsnummer", "TEXT"),
     ("wurftag", "TEXT"),
@@ -2513,6 +2514,150 @@ def sortierschluessel_text(text) -> str:
     return "".join(z for z in zerlegt if not unicodedata.combining(z)).casefold()
 
 
+class TerminNichtOeffenbar(Exception):
+    """Die Datei lässt sich nicht als Termin öffnen; der Text ist für den Nutzer bestimmt."""
+
+
+def _journal_zurueckspielen(pfad) -> None:
+    """Liegt neben der Datei noch ein Rollback-Journal (Absturz oder Stromausfall mitten im
+    Speichern), lässt sich die Datei nur lesend nicht öffnen. Ein kurzes Öffnen mit
+    Schreibrecht lässt SQLite den angefangenen Vorgang zurückrollen - dabei läuft kein Code
+    aus der Datei. Danach sind die zuletzt gespeicherten Daten wieder lesbar
+    (Desktop-Prüfung 14.10.2026)."""
+    if not os.path.exists(f"{pfad}-journal"):
+        return
+    try:
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute("PRAGMA schema_version").fetchone()
+    except sqlite3.Error:
+        pass
+
+
+def _soll_spalten() -> dict[str, set[str]]:
+    """Spalten, die eine aktuelle Termin-Datei je Tabelle hat (aus SCHEMA + Migrationen)."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(SCHEMA)
+        tabellen = [z[0] for z in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        return {
+            tabelle: {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
+            for tabelle in tabellen if not tabelle.startswith("sqlite_")
+        }
+
+
+_UNBEKANNTE_WERTE_TEXT = (
+    "Die Termin-Datei enthält Werte, die das Programm nicht kennt (z. B. eine unbekannte "
+    "Prüfungsart, Leistungsklasse oder Punktzahl) oder ihr fehlen Spalten. Sie stammt "
+    "vermutlich nicht aus diesem Programm oder wurde verändert und wird deshalb nicht geöffnet."
+)
+
+
+def _termin_werte_pruefen(conn: sqlite3.Connection) -> None:
+    """Plausibilitätsprüfung beim Öffnen (Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4 und
+    Einordnung): fehlende Spalten oder Werte außerhalb der erlaubten Bereiche ließen sonst
+    den Aufbau der Reiter oder einzelne Ausgaben mitten drin scheitern. Vergleiche immer
+    binär und mit Typprüfung, damit fremde Spaltendefinitionen (Sortierregel, Datentyp)
+    nichts durchlassen."""
+    for tabelle, soll in _soll_spalten().items():
+        ist = {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
+        if not soll <= ist:
+            raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
+    disz = "(" + ", ".join(f"'{d}'" for d in ALLE_DISZIPLINEN) + ")"
+
+    def text_in(spalte: str, liste: str) -> str:
+        return f"(typeof({spalte}) = 'text' AND ({spalte} COLLATE BINARY) IN {liste})"
+
+    def stufe_ok(spalte: str) -> str:
+        return f"(typeof({spalte}) IN ('integer', 'real') AND {spalte} IN (1, 2, 3))"
+
+    def text_oder_null(spalte: str) -> str:
+        return f"(typeof({spalte}) IN ('text', 'null'))"
+
+    gegenstaende = " AND ".join(
+        f"(gegenstand_{i}_disziplin IS NULL OR {text_in(f'gegenstand_{i}_disziplin', disz)})" for i in (1, 2, 3)
+    )
+    punkte = " AND ".join(
+        f"({spalte} IS NULL OR (typeof({spalte}) = 'integer' AND {spalte} BETWEEN 0 AND {maximum}))"
+        for suche, anzeige in DISZIPLIN_SPALTEN.values()
+        for spalte, maximum in ((suche, SUCHE_MAX), (anzeige, ANZEIGE_MAX))
+    )
+    namen = " AND ".join(text_oder_null(s) for s in ("nachname", "vorname", "rufname_hund", "verein"))
+    arten, pause, pruefung = "('ED', 'DK')", "('pause')", "('pruefung')"
+    abfragen = [
+        "SELECT COUNT(*) FROM teilnehmer WHERE NOT ("
+        f"{text_in('art', arten)} AND {stufe_ok('stufe')} "
+        f"AND (disziplin IS NULL OR {text_in('disziplin', disz)}) "
+        f"AND (art COLLATE BINARY <> 'ED' OR disziplin IS NOT NULL) AND {gegenstaende} AND {namen})",
+        f"SELECT COUNT(*) FROM ergebnisse WHERE NOT ({punkte})",
+        "SELECT COUNT(*) FROM zeitplan_eintrag WHERE NOT ("
+        f"(typeof(dauer_minuten) = 'integer' AND dauer_minuten > 0) AND ("
+        f"({text_in('typ', pause)}) OR ({text_in('typ', pruefung)} "
+        f"AND {text_in('art', arten)} AND {stufe_ok('stufe')} AND {text_in('disziplin', disz)})))",
+        f"SELECT COUNT(*) FROM veranstaltung WHERE NOT ({text_oder_null('verein')} AND {text_oder_null('datum')})",
+    ]
+    for abfrage in abfragen:
+        if conn.execute(abfrage).fetchone()[0]:
+            raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
+
+
+def termin_oeffnen(pfad: str) -> sqlite3.Connection:
+    """Öffnet einen Termin für das Hauptfenster - mit Prüfungen (Desktop-Prüfung 14.10.2026,
+    Teil 7 Nr. 4). Die ersten laufen nur lesend, bevor die Datei beschrieben wird; die
+    Wertebereiche werden nach init_db geprüft (eine dann abgelehnte Datei hat also schon das
+    aktuelle Schema):
+    - keine SQLite-Datei oder beschädigt -> TerminNichtOeffenbar;
+    - SQLite-Datei eines anderen Programms (ohne Termin-Tabellen) -> TerminNichtOeffenbar,
+      statt ihr ungefragt das Schema hinzuzufügen; eine leere Datei ist erlaubt (neuer Termin);
+    - berechnete Spalten werden nicht übernommen;
+    - nach init_db eine Schreibprobe (PRAGMA user_version), damit ein schreibgeschützter
+      Termin sofort auffällt und nicht erst beim ersten Speichern (Marcos Entscheidung
+      14.10.2026; der Änderungszeitstempel der Datei ändert sich dabei);
+    - Plausibilitätsprüfung der Wertebereiche."""
+    if os.path.exists(pfad) and os.path.getsize(pfad) > 0:
+        _journal_zurueckspielen(pfad)
+        try:
+            with closing(oeffne_termin_lesend(pfad)) as pruef:
+                lesen_begrenzen(pruef)
+                tabellen = [z[0] for z in pruef.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+                if tabellen:
+                    pruefe_termin_aufbau(pruef)
+                    for tabelle in tabellen:
+                        if any(z[6] in (2, 3) for z in pruef.execute(f'PRAGMA table_xinfo("{tabelle}")')):
+                            raise sqlite3.DatabaseError("berechnete Spalte")
+                if pruef.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                    raise sqlite3.DatabaseError("quick_check")
+        except sqlite3.DatabaseError as exc:
+            raise TerminNichtOeffenbar(
+                "Die Datei ist keine Termin-Datei des SHS-Prüfungsprogramms oder sie ist beschädigt."
+            ) from exc
+    try:
+        conn = init_db(pfad)
+    except sqlite3.Error as exc:
+        if "readonly" in str(exc).lower():
+            raise TerminNichtOeffenbar(
+                "Die Termin-Datei ist schreibgeschützt (z. B. schreibgeschützter USB-Stick oder "
+                "Dateieigenschaften „Schreibgeschützt“) und müsste beim Öffnen angepasst werden. "
+                "Bitte die Datei an einen beschreibbaren Ort kopieren und dort öffnen."
+            ) from exc
+        raise
+    try:
+        version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+        conn.execute(f"PRAGMA user_version = {version}")
+        _termin_werte_pruefen(conn)
+    except sqlite3.OperationalError as exc:
+        conn.close()
+        if "readonly" in str(exc).lower():
+            raise TerminNichtOeffenbar(
+                "Die Termin-Datei ist schreibgeschützt (z. B. schreibgeschützter USB-Stick oder "
+                "Dateieigenschaften „Schreibgeschützt“). Ergebnisse ließen sich nicht speichern - "
+                "bitte die Datei an einen beschreibbaren Ort kopieren und dort öffnen."
+            ) from exc
+        raise
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
     """Listet alle Termin-Dateien (*.sqlite) in `ordner` (Standard: termine_ordner())
     mit ihren Stammdaten, neueste zuerst. Eine beschädigte oder fremde Datei lässt die
@@ -2521,6 +2666,7 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
     ordner = ordner or termine_ordner()
     ergebnisse: list[TerminInfo] = []
     for pfad in sorted(ordner.glob("*.sqlite")):
+        _journal_zurueckspielen(pfad)
         try:
             ergebnisse.append(_termin_info_lesen(pfad))
         except (sqlite3.Error, IndexError, KeyError, TypeError, ValueError, OverflowError):

@@ -25,6 +25,7 @@ import os
 import sys
 
 import pytest
+from contextlib import closing
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
@@ -3634,6 +3635,101 @@ def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_
     monkeypatch.setattr(_StartDialogAttrappe, "geoeffnet", 0)
     monkeypatch.setattr("app.StartDialog", _StartDialogAttrappe)
     return fenster, fragen
+
+
+class _StartDialogMitPfad:
+    """Startdialog-Attrappe, die einen festen Pfad wählt."""
+    pfad_vorgabe = None
+
+    def __init__(self, *a, **k):
+        self.demo_angefordert = False
+        self.pfad = _StartDialogMitPfad.pfad_vorgabe
+
+    def exec(self):
+        return QDialog.Accepted
+
+
+def test_terminwechsel_zu_kaputter_datei_behaelt_den_termin(qtbot, termin, monkeypatch, tmp_path):
+    """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4: eine nicht öffenbare Datei ergibt eine
+    Meldung, der bisherige Termin bleibt samt Reitern verbunden."""
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="Alt", datum="2026-11-14")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    kaputt = tmp_path / "kaputt.sqlite"
+    kaputt.write_bytes(b"keine Datenbank" * 20)
+    _StartDialogMitPfad.pfad_vorgabe = str(kaputt)
+    monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[1]))
+
+    fenster._termin_wechseln()
+
+    assert meldungen == ["Termin lässt sich nicht öffnen"]
+    assert fenster.conn is conn and fenster.pfad == pfad
+    assert fenster._tabs.count() == 9
+    assert "Alt" in fenster.windowTitle()
+
+
+def test_terminwechsel_bei_fehler_im_reiteraufbau_bleibt_alles_wie_es_war(qtbot, termin, monkeypatch, tmp_path):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    alter_reiter = fenster.ergebnis_tab
+    ziel = tmp_path / "neu.sqlite"
+    with closing(init_db(str(ziel))) as neu:
+        set_veranstaltung(neu, verein="Neu", datum="2026-12-01")
+    _StartDialogMitPfad.pfad_vorgabe = str(ziel)
+    monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: None)
+
+    def kaputt(*_a, **_k):
+        raise KeyError("XX")
+
+    monkeypatch.setattr("app.TeilnehmerUebersichtTab", kaputt)
+    fenster._termin_wechseln()
+
+    assert fenster.conn is conn
+    assert fenster.ergebnis_tab is alter_reiter
+    assert not fenster._tabs.signalsBlocked()
+    conn.execute("SELECT 1")  # alte Verbindung noch offen
+
+
+def test_terminwechsel_loescht_alte_reiter_und_setzt_titel(qtbot, termin, monkeypatch, tmp_path):
+    """Teil 7 Nr. 9 und Teil 8 Nr. 3: alte Reiter bleiben nicht liegen; ohne Verein steht
+    der Dateiname im Titel statt „None“."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    ziel = tmp_path / "ohne_verein.sqlite"
+    init_db(str(ziel)).close()
+    _StartDialogMitPfad.pfad_vorgabe = str(ziel)
+    monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
+    for _ in range(3):
+        fenster._termin_wechseln()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert len(fenster.findChildren(ErgebnisTab)) == 1
+    assert "None" not in fenster.windowTitle()
+    assert "ohne_verein.sqlite" in fenster.windowTitle()
+
+
+def test_titel_nach_veranstaltung_bearbeiten(qtbot, termin, monkeypatch):
+    """Teil 2 Nr. 5."""
+    conn, pfad = termin
+    set_veranstaltung(conn, verein="Alt", datum="2026-11-14", verband="V", meldestelle="M")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    def _exec(dialog):
+        dialog.verein.setText("Neuer Verein")
+        dialog._pruefen_und_akzeptieren()
+        return dialog.result()
+
+    monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec)
+    fenster.verwaltung_tab._veranstaltung_bearbeiten()
+    assert "Neuer Verein" in fenster.windowTitle()
 
 
 def test_terminwechsel_abbrechen_bleibt_im_termin(qtbot, termin, monkeypatch):

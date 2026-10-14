@@ -661,6 +661,24 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
     return pfad
 
 
+def fehler_protokollieren(exc: BaseException) -> None:
+    """Schreibt einen abgefangenen Fehler samt Traceback ins Absturzprotokoll (sofern
+    eingerichtet) - für Stellen, die einen Fehler selbst melden, damit er trotzdem in
+    „Diagnose kopieren“ auftaucht."""
+    import datetime
+    import traceback
+
+    datei = _absturzprotokoll_datei
+    if datei is None:
+        return
+    try:
+        datei.write(f"Abgefangener Fehler {datetime.datetime.now():%Y-%m-%d %H:%M:%S}:\n")
+        datei.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        datei.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def absturzprotokoll_pfad():
     """Pfad des Absturzprotokolls dieses Programmlaufs, oder None, wenn es nicht
     eingerichtet werden konnte."""
@@ -768,7 +786,7 @@ def diagnose_text(version: str, fehler: str | None = None) -> str:
     return _ohne_benutzerpfad("\n".join(zeilen)) + "\n"
 
 
-def fehlerfenster_zeigen(version: str, fehler: str, parent=None) -> None:
+def fehlerfenster_zeigen(version: str, fehler: str, parent=None, programm_endet: bool = False) -> None:
     """Meldung zu einem unerwarteten Fehler mit [Fehlerbericht kopieren]
     [Protokoll-Ordner öffnen] [OK]; der Traceback steht unter "Details". Ohne `parent`
     erscheint sie über dem aktiven Programmfenster."""
@@ -778,10 +796,16 @@ def fehlerfenster_zeigen(version: str, fehler: str, parent=None) -> None:
     box.setTextFormat(Qt.PlainText)  # S-1: Fehlertexte können Namen enthalten
     box.setIcon(QMessageBox.Critical)
     box.setWindowTitle("Unerwarteter Fehler")
+    # programm_endet: Fehler in main(), nach dem das Programm sich ohnehin beendet - dann nicht
+    # zum Weiterarbeiten auffordern (Desktop-Prüfung 14.10.2026, Teil 9 Nr. 7).
+    weiter = (
+        "Das Programm wird beendet. Bitte erneut starten."
+        if programm_endet else
+        "Falls etwas nicht wie erwartet aussieht, den Termin neu öffnen bzw. das Programm neu starten."
+    )
     box.setText(
         "Es ist ein unerwarteter Fehler aufgetreten. Bereits gespeicherte Daten bleiben "
-        "erhalten. Falls etwas nicht wie erwartet aussieht, den Termin neu öffnen bzw. das "
-        "Programm neu starten.\n\n"
+        f"erhalten. {weiter}\n\n"
         "Für eine Fehlermeldung „Fehlerbericht kopieren“ und den Text einfügen – vorher kurz "
         "prüfen, ob Teilnehmerdaten darin stehen."
     )
