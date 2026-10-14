@@ -3686,7 +3686,7 @@ class VersionDialog(QDialog):
     von bump_version.py bei jedem Release automatisch erzeugt) sowie einen Button, der
     per GitHub-API prüft, ob eine neuere Version veröffentlicht wurde (siehe
     _neueste_version_pruefen oben). Wird über den Version-Button im Hauptfenster
-    geöffnet, direkt neben "Hilfe" (siehe HauptFenster._version_anzeigen)."""
+    geöffnet, in der Kopfzeile oben rechts (siehe HauptFenster._version_anzeigen)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)

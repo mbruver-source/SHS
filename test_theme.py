@@ -59,6 +59,15 @@ class TestDesigns(unittest.TestCase):
                 with self.subTest(theme=theme, design=design):
                     self.assertNotIn("@@", desktop_darstellung._erzeuge_qss(theme, design))
 
+    def test_haken_url_in_anfuehrungszeichen_und_listen_kaestchen(self):
+        # Desktop-Prüfung 14.10.2026, Teil 9 Nr. 2 und 9.
+        for design in ("sand", "dunkel", "kontrast"):
+            with self.subTest(design=design):
+                qss = desktop_darstellung._erzeuge_qss("blau", design)
+                self.assertIn('image: url("', qss)
+                self.assertIn("QAbstractItemView::indicator", qss)
+        self.assertEqual(desktop_darstellung._qss_url('a\\b"c'), 'a\\\\b\\"c')
+
     def test_alle_designs_haben_dieselben_schluessel(self):
         erwartet = set(desktop_darstellung._DESIGNS["hell"].keys())
         for name, design in desktop_darstellung._DESIGNS.items():

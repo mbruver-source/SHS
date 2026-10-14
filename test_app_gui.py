@@ -3482,7 +3482,7 @@ def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
 
 
 @pytest.fixture
-def darstellung_speicher(monkeypatch):
+def darstellung_speicher(monkeypatch, tmp_path_factory):
     """Ersetzt die QSettings-Zugriffe durch einen Speicher im Arbeitsspeicher (keine
     Schreibzugriffe in Registry/~/.config) und stellt danach den Zustand der
     QApplication (Stil, Palette, Stylesheet) sowie die Modul-Zustände von app.py wieder
@@ -3498,8 +3498,12 @@ def darstellung_speicher(monkeypatch):
     vorher_stil = qapp.style().name()
     qapp.setStyleSheet(vorher_stylesheet)
     vorher_palette = QPalette(qapp.palette())
-    for name in ("_aktives_design", "_ursprung_stil", "_ursprung_palette", "_aktueller_stil"):
+    hinweise = qapp.styleHints()
+    for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil", "_haken_geschrieben"):
         monkeypatch.setattr(darstellung, name, getattr(darstellung, name))
+    # Häkchen-Bild nicht ins echte Benutzerprofil schreiben.
+    haken = tmp_path_factory.mktemp("haken") / "haken.png"
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(haken).replace("\\", "/"))
 
     speicher = {"theme": "blau", "design": "hell"}
     for modul in (app_modul, darstellung):
@@ -3508,6 +3512,8 @@ def darstellung_speicher(monkeypatch):
         monkeypatch.setattr(modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
         monkeypatch.setattr(modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
     yield speicher
+    if hasattr(Qt, "ColorScheme") and hasattr(hinweise, "setColorScheme"):
+        hinweise.setColorScheme(Qt.ColorScheme.Unknown)  # wieder dem System folgen
     qapp.setStyle(vorher_stil)
     qapp.setPalette(vorher_palette)
     qapp.setStyleSheet(vorher_stylesheet)
@@ -3595,7 +3601,7 @@ def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_sp
     assert qapp.style().name().lower() == "windows"
 
 
-def test_design_ohne_beschreibbaren_tempordner_startet_trotzdem(darstellung_speicher, monkeypatch, tmp_path):
+def test_design_ohne_beschreibbaren_hakenordner_startet_trotzdem(darstellung_speicher, monkeypatch, tmp_path):
     """Kann das Häkchen-Bild nicht geschrieben werden, darf das weder den Start noch den
     Designwechsel abbrechen."""
     import desktop_darstellung as darstellung
@@ -3609,6 +3615,103 @@ def test_design_ohne_beschreibbaren_tempordner_startet_trotzdem(darstellung_spei
 
     assert darstellung._aktives_design == "dunkel"
     assert QApplication.instance().styleSheet() == _erzeuge_qss("blau", "dunkel")
+
+
+def test_hell_bleibt_hell_bei_dunklem_systemschema(darstellung_speicher):
+    """Desktop-Prüfung 14.10.2026, Teil 9 Nr. 1: Bei dunklem System-Farbschema ("Apps:
+    dunkel") lieferte "hell" dunkle Scrollbereiche/Listen mit fast schwarzer Schrift. "hell"
+    setzt jetzt eine feste helle Palette, egal welche Palette vorher galt."""
+    import desktop_darstellung as darstellung
+    from PySide6.QtGui import QColor
+
+    qapp = QApplication.instance()
+    dunkel = QPalette()
+    for rolle, farbe in ((QPalette.Window, "#1e1e1e"), (QPalette.Base, "#2d2d2d"),
+                         (QPalette.WindowText, "#ffffff"), (QPalette.Text, "#ffffff")):
+        dunkel.setColor(rolle, QColor(farbe))
+    qapp.setPalette(dunkel)
+    darstellung_speicher["design"] = "hell"
+
+    darstellung._darstellung_anwenden(qapp)
+
+    palette = qapp.palette()
+    assert palette.color(QPalette.Window).lightness() > 200
+    assert palette.color(QPalette.Base).lightness() > 200
+    assert palette.color(QPalette.WindowText).lightness() < 100
+    assert palette.color(QPalette.Text).lightness() < 100
+    hinweise = qapp.styleHints()
+    if hasattr(Qt, "ColorScheme") and hasattr(hinweise, "setColorScheme"):
+        darstellung_speicher["design"] = "dunkel"
+        darstellung._darstellung_anwenden(qapp)
+        assert qapp.palette().color(QPalette.Base).lightness() < 100
+
+
+def test_stylesheet_parst_mit_sonderzeichen_im_hakenpfad(qtbot, darstellung_speicher, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 9 Nr. 2: Ein Umlaut oder Apostroph im Pfad des
+    Häkchen-Bildes ließ Qt ohne Anführungszeichen das ganze Stylesheet verwerfen ("Could not
+    parse application stylesheet") - für alle 12 Kombinationen prüfen."""
+    import desktop_darstellung as darstellung
+    from PySide6.QtCore import qInstallMessageHandler
+    from PySide6.QtWidgets import QCheckBox, QListWidget, QListWidgetItem
+
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: "C:/Users/Jürgen O'Brien (x)/SHS/haken.png")
+    meldungen = []
+    alter_handler = qInstallMessageHandler(lambda _art, _kontext, text: meldungen.append(text))
+    qapp = QApplication.instance()
+    try:
+        for theme in darstellung._THEMES:
+            for design in darstellung._DESIGNS:
+                qapp.setStyleSheet(darstellung._erzeuge_qss(theme, design))
+                box = QCheckBox("x")
+                liste = QListWidget()
+                eintrag = QListWidgetItem("y", liste)
+                eintrag.setCheckState(Qt.Checked)
+                qtbot.addWidget(box)
+                qtbot.addWidget(liste)
+                box.ensurePolished()
+                liste.ensurePolished()
+                assert not [m for m in meldungen if "Could not parse" in m], (theme, design, meldungen)
+    finally:
+        qInstallMessageHandler(alter_handler)
+
+
+def test_haken_bild_wird_je_lauf_neu_geschrieben(darstellung_speicher, monkeypatch, tmp_path):
+    """Desktop-Prüfung 14.10.2026, Teil 9 Nr. 3: eine schon vorhandene Datei wird nicht
+    ungeprüft übernommen, sondern beim ersten Bedarf im Lauf ersetzt."""
+    import desktop_darstellung as darstellung
+    from PySide6.QtGui import QImage
+
+    ziel = tmp_path / "SHS" / "haken.png"
+    ziel.parent.mkdir()
+    ziel.write_bytes(b"fremd")
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(ziel).replace("\\", "/"))
+    monkeypatch.setattr(darstellung, "_haken_geschrieben", False)
+
+    darstellung._haken_bild_bereitstellen()
+
+    bild = QImage(str(ziel))
+    assert not bild.isNull() and bild.width() == 32
+    assert list(ziel.parent.iterdir()) == [ziel]
+    assert darstellung._haken_geschrieben
+
+
+def test_haken_bild_fehlschlag_hinterlaesst_keine_zwischendatei(darstellung_speicher, monkeypatch, tmp_path):
+    """Scheitert das Ersetzen, bleibt keine .tmp-Datei liegen und der nächste Designwechsel
+    versucht es erneut."""
+    import desktop_darstellung as darstellung
+
+    ziel = tmp_path / "haken.png"
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(ziel).replace("\\", "/"))
+    monkeypatch.setattr(darstellung, "_haken_geschrieben", False)
+
+    def ersetzen_scheitert(_quelle, _ziel):
+        raise OSError("gesperrt")
+
+    monkeypatch.setattr(darstellung.os, "replace", ersetzen_scheitert)
+    darstellung._haken_bild_bereitstellen()
+
+    assert list(tmp_path.iterdir()) == []
+    assert not darstellung._haken_geschrieben
 
 
 def test_standardknoepfe_deutsch(qapp):

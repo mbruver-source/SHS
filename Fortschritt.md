@@ -5968,3 +5968,31 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   - Beim Öffnen eines Termins gibt es eine Schreibprobe. Dass sich dabei der Zeitstempel ändert,
     ist akzeptiert.
   - Zweiter Programmstart: Rückfrage, keine Sperre.
+
+### A1 Darstellung und Stylesheet (14.10.2026, Desktop-Prüfung Teil 9)
+
+- **Design „Hell“ bei dunklem System-Farbschema (Teil 9 Nr. 1, hoch):** „Hell“ setzt jetzt wie
+  die anderen Designs eine feste helle Palette. Ab Qt 6.8 fordert jedes Design zusätzlich das
+  passende Farbschema an (hell bzw. dunkel). **Die Festlegung vom 13.09. („Die Palette wird beim
+  Start in Hell nicht mehr explizit gesetzt … So folgt Hell weiter dem Windows-Farbschema“) ist
+  damit nach Marcos Entscheidung vom 14.10.2026 aufgehoben.** Grund: Bei „Apps: dunkel“ waren
+  Scrollbereiche, Listen, Hilfetext und Menüs dunkel mit fast schwarzer Schrift. Die Palette
+  setzt jetzt auch die Rolle `Accent` (ab Qt 6.6). Noch offen ist eine kurze Kontrolle am echten
+  Rechner mit „Apps: dunkel“.
+- **Stylesheet bei Sonderzeichen im Pfad (Nr. 2):** Das Häkchen-Bild wird jetzt in Anführungszeichen
+  eingebunden (`url("…")`, maskiert über `_qss_url`). Vorher verwarf Qt bei einem Umlaut oder
+  Apostroph im Pfad das ganze Stylesheet der Designs Sand, Dunkel und Hoher Kontrast.
+- **Sicherheitskorrektur zum Häkchen-Bild (Nr. 3), Details folgen nach dem Release.** Das Bild liegt
+  jetzt im Programmordner `~/SHS-Pruefungsprogramm` und wird je Programmlauf neu geschrieben.
+- **Kästchen in Listen (Nr. 9):** `QAbstractItemView::indicator` bekommt dieselben Regeln wie die
+  Checkboxen, z. B. im Termin-Import und in der Bewertungsbogen-Auswahl.
+- **Texte (Nr. 11):** Kopfkommentar und Schlüsselbeschreibung in `desktop_darstellung.py`, der
+  Hilfetext zur Lage des Knopfs „Version“ und der Docstring des `VersionDialog` sind angepasst.
+- **Tests (Nr. 12):** Parse-Test aller 12 Kombinationen mit „ü“, „'“ und Leerzeichen im Pfad
+  (`qInstallMessageHandler`); „Hell“ bei dunkler Ausgangspalette; Neuschreiben des Bildes und
+  Fehlerpfad ohne liegengebliebene Zwischendatei; `test_theme` prüft Anführungszeichen und
+  Listen-Kästchen. Die Fixture `darstellung_speicher` lenkt das Häkchen-Bild in einen Temp-Ordner
+  um und stellt danach das System-Farbschema wieder her.
+- `Architektur.md` (Zeile zu `desktop_darstellung.py`) ist angepasst.
+- **Vor dem nächsten Build:** Die Screenshots ändern sich, weil „Hell“ jetzt eine eigene Palette
+  hat (Auswahlfarbe, Scrollflächen). Sie müssen neu aufgenommen werden.

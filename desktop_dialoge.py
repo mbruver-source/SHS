@@ -1194,7 +1194,8 @@ importiert oder übersprungen werden soll. Ein vergessenes Passwort lässt sich 
 wiederherstellen – gut aufbewahren.</p>
 
 <h3>Versionsanzeige</h3>
-<p>Der Button "Version" neben "Hilfe" zeigt die aktuell installierte Version. "Nach
+<p>Der Button "Version" oben rechts (zwischen "Anderen Termin öffnen…" und
+"Demoprüfung") zeigt die aktuell installierte Version. "Nach
 Updates suchen" prüft dort per Klick automatisch (über GitHub), ob eine neuere Version
 veröffentlicht wurde, und zeigt bei Bedarf einen Download-Button an – dafür wird kurz
 eine Internetverbindung gebraucht, ohne Internet erscheint stattdessen ein entsprechender

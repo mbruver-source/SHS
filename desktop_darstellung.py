@@ -10,7 +10,6 @@ pdf_export); keines dieser Module importiert app.
 from __future__ import annotations
 
 import os
-import tempfile
 
 from PySide6.QtCore import QPointF, QSettings, Qt
 from PySide6.QtGui import (
@@ -35,7 +34,8 @@ hier nicht, da das Stylesheet selbst voller literaler {}-Blockklammern ist). Die
 Platzhalter dieser Art (Hintergrund, Flächen, Rahmen, Schrift) kommen aus dem gewählten
 Hintergrund-Design (_DESIGNS unten); "hell" entspricht dem bisherigen Aussehen. Ruhige
 Flächen statt vieler Rahmen/Schatten. Global über QApplication.setStyleSheet() gesetzt
-(siehe main() unten) - HauptFenster & Dialoge setzen zusätzlich per ResponsiveSchriftMixin
+(siehe _darstellung_anwenden(), aufgerufen aus main() in app.py) - HauptFenster &
+Dialoge setzen zusätzlich per ResponsiveSchriftMixin
 eine eigene, nähere QHeaderView::section-/QLabel-Regel NUR für font-size bei
 Größenänderung; das überschreibt hier absichtlich nichts anderes, da beide Regelsätze
 unterschiedliche Eigenschaften des Selektors setzen. */
@@ -218,26 +218,26 @@ _DESIGN_DEFAULT = "hell"
 # schaltet allerdings das native Häkchen ab - deshalb das weiße Häkchen als Bild
 # (@@HAKEN@@, erzeugt von _haken_bild_bereitstellen()).
 _QSS_CHECKBOX_ZUSATZ = """
-QCheckBox::indicator {
+QCheckBox::indicator, QAbstractItemView::indicator {
     width: 14px;
     height: 14px;
     border: 1px solid @@TEXT_GEDAEMPFT@@;
     border-radius: 3px;
     background: @@FLAECHE@@;
 }
-QCheckBox::indicator:hover {
+QCheckBox::indicator:hover, QAbstractItemView::indicator:hover {
     border-color: @@AKZENT@@;
 }
-QCheckBox::indicator:checked {
+QCheckBox::indicator:checked, QAbstractItemView::indicator:checked {
     background: @@AKZENT@@;
     border-color: @@AKZENT@@;
-    image: url(@@HAKEN@@);
+    image: url("@@HAKEN@@");
 }
-QCheckBox::indicator:disabled {
+QCheckBox::indicator:disabled, QAbstractItemView::indicator:disabled {
     background: @@FLAECHE_DISABLED@@;
     border-color: @@RAND_DISABLED@@;
 }
-QCheckBox::indicator:checked:disabled {
+QCheckBox::indicator:checked:disabled, QAbstractItemView::indicator:checked:disabled {
     background: @@TEXT_DISABLED@@;
     border-color: @@TEXT_DISABLED@@;
 }
@@ -245,17 +245,34 @@ QCheckBox::indicator:checked:disabled {
 
 
 def _haken_pfad() -> str:
-    """Ablageort des Häkchen-Bildes (Vorwärtsschrägstriche, wie QSS-url() sie erwartet)."""
-    return os.path.join(tempfile.gettempdir(), "SHS-Pruefungsprogramm", "haken.png").replace("\\", "/")
+    """Ablageort des Häkchen-Bildes: der benutzereigene Programmordner (derselbe wie
+    termine_ordner().parent, dort liegt auch das Absturzprotokoll) - nicht der unter
+    Linux gemeinsam genutzte Temp-Ordner. Vorwärtsschrägstriche, wie QSS-url() sie
+    erwartet."""
+    return os.path.join(os.path.expanduser("~"), "SHS-Pruefungsprogramm", "haken.png").replace("\\", "/")
+
+
+def _qss_url(pfad: str) -> str:
+    """Pfad für url("...") im Stylesheet: Umlaute, Apostroph und Leerzeichen sind in
+    Anführungszeichen unkritisch, nur Backslash und Anführungszeichen selbst werden
+    maskiert. Ohne Anführungszeichen verwirft Qt sonst das ganze Stylesheet."""
+    return pfad.replace("\\", "\\\\").replace('"', '\\"')
+
+
+# Wurde das Häkchen in diesem Programmlauf schon geschrieben? Es wird je Lauf einmal neu
+# erzeugt, statt eine schon vorhandene Datei ungeprüft zu übernehmen.
+_haken_geschrieben = False
 
 
 def _haken_bild_bereitstellen() -> None:
-    """Zeichnet das weiße Häkchen für _QSS_CHECKBOX_ZUSATZ einmalig als PNG. Scheitert
-    das (Temp-Ordner nicht beschreibbar), bleibt die angehakte Box nur akzentfarbig
-    gefüllt - kein Grund, den Programmstart oder den Designwechsel abzubrechen."""
-    pfad = _haken_pfad()
-    if os.path.isfile(pfad) and os.path.getsize(pfad) > 0:
+    """Zeichnet das weiße Häkchen für _QSS_CHECKBOX_ZUSATZ einmal je Programmlauf neu als
+    PNG (erst in eine Temp-Datei, dann per os.replace an seinen Platz). Scheitert das
+    (Ordner nicht beschreibbar), bleibt die angehakte Box nur akzentfarbig gefüllt - kein
+    Grund, den Programmstart oder den Designwechsel abzubrechen."""
+    global _haken_geschrieben
+    if _haken_geschrieben:
         return
+    pfad = _haken_pfad()
     try:
         os.makedirs(os.path.dirname(pfad), exist_ok=True)
     except OSError:
@@ -270,16 +287,31 @@ def _haken_bild_bereitstellen() -> None:
     maler.setPen(stift)
     maler.drawPolyline([QPointF(7, 17), QPointF(13, 23), QPointF(25, 9)])
     maler.end()
-    bild.save(pfad)
+    zwischen = f"{pfad}.{os.getpid()}.tmp"
+    try:
+        if bild.save(zwischen, "PNG"):
+            os.replace(zwischen, pfad)
+            _haken_geschrieben = True
+    except OSError:
+        pass
+    finally:
+        if os.path.exists(zwischen):
+            try:
+                os.remove(zwischen)
+            except OSError:
+                pass
 
 
 # Hintergrund-Designs (unabhängig von der Akzentfarbe in _THEMES frei kombinierbar, siehe
 # Menü Ansicht -> Hintergrund). Die Großbuchstaben-Schlüssel füllen die gleichnamigen
 # @@...@@-Platzhalter in _QSS_TEMPLATE; "hell" entspricht bit-für-bit dem bisherigen
-# Aussehen (siehe test_theme.py). Die Kleinbuchstaben-Schlüssel sind semantische Farben für
-# Stellen, an denen der Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über
-# _farbe(). "dunkel": True schaltet zusätzlich den Fusion-Stil samt dunkler QPalette ein
+# Aussehen (siehe test_theme.py). Die Kleinbuchstaben-Farbschlüssel (ok, warnung, fehler,
+# gedaempft, ungespeichert_bg, zeile_bg) sind semantische Farben für Stellen, an denen der
+# Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über _farbe(); fehler und
+# zeile_bg fließen außerdem in _design_palette() ein. "anzeigename" ist der Menütext.
+# "dunkel": True schaltet zusätzlich den Fusion-Stil ein, fordert das dunkle Farbschema an
 # und mischt die Auswahlfarbe aus Akzent und Hintergrund (siehe _darstellung_anwenden()).
+# Jedes Design - auch "hell" - setzt seine eigene QPalette.
 _DESIGNS: dict[str, dict] = {
     "hell": {
         "anzeigename": "Hell (Standard)",
@@ -428,7 +460,7 @@ def _erzeuge_qss(theme_name: str, design_name: str = _DESIGN_DEFAULT) -> str:
     design = _DESIGNS.get(design_name, _DESIGNS[_DESIGN_DEFAULT])
     text = _QSS_TEMPLATE
     if design_name in _DESIGNS and design_name != _DESIGN_DEFAULT:
-        text += _QSS_CHECKBOX_ZUSATZ.replace("@@HAKEN@@", _haken_pfad())
+        text += _QSS_CHECKBOX_ZUSATZ.replace("@@HAKEN@@", _qss_url(_haken_pfad()))
     text = text.replace("@@AKZENT_HOVER@@", theme["akzent_hover"])
     text = text.replace("@@AKZENT_PRESSED@@", theme["akzent_pressed"])
     text = text.replace("@@AKZENT_HELL@@", _auswahlfarbe(theme, design))
@@ -473,10 +505,9 @@ def _design_speichern(design_name: str) -> None:
     QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_KEY_DESIGN, design_name)
 
 
-# Stil und Palette, mit denen die Anwendung gestartet ist - beim ersten
-# _darstellung_anwenden() gemerkt, damit "hell" exakt das bisherige Aussehen behält.
+# Stil, mit dem die Anwendung gestartet ist - beim ersten _darstellung_anwenden()
+# gemerkt, damit "hell" den nativen Stil des Systems behält (nur die Palette ist fest).
 _ursprung_stil: str | None = None
-_ursprung_palette: QPalette | None = None
 # Zuletzt per setStyle() gesetzter Stil - selbst mitgeführt, weil app.style() bei aktivem
 # Stylesheet den internen Stylesheet-Stil (ohne Namen) liefert.
 _aktueller_stil: str | None = None
@@ -507,6 +538,9 @@ def _design_palette(theme: dict, design: dict) -> QPalette:
         QPalette.Dark: design["RAND"],
         QPalette.Shadow: "#000000",
     }
+    # Accent gibt es erst ab Qt 6.6; ohne eigene Farbe käme sie aus der Systempalette.
+    if hasattr(QPalette, "Accent"):
+        rollen[QPalette.Accent] = theme["akzent"]
     for rolle, wert in rollen.items():
         palette.setColor(rolle, QColor(wert))
     for rolle in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
@@ -516,7 +550,7 @@ def _design_palette(theme: dict, design: dict) -> QPalette:
 
 def _darstellung_anwenden(app: QApplication) -> None:
     """Wendet gespeicherte Akzentfarbe + Hintergrund-Design auf die ganze Anwendung an."""
-    global _aktives_design, _ursprung_stil, _ursprung_palette, _aktueller_stil
+    global _aktives_design, _ursprung_stil, _aktueller_stil
     theme_name = _gespeichertes_theme_lesen()
     design_name = _gespeichertes_design_lesen()
     theme = _THEMES[theme_name]
@@ -528,7 +562,6 @@ def _darstellung_anwenden(app: QApplication) -> None:
         app.setStyleSheet("")
         _ursprung_stil = app.style().name()
         _aktueller_stil = _ursprung_stil
-        _ursprung_palette = QPalette(app.palette())
         app.setStyleSheet(stylesheet)
 
     # Native Windows-Stile ignorieren eine dunkle Palette bei Menüs/Popups teilweise,
@@ -538,12 +571,18 @@ def _darstellung_anwenden(app: QApplication) -> None:
         app.setStyle(ziel_stil)
         _aktueller_stil = ziel_stil
 
+    # Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 1, Marcos Entscheidung): auch "hell" bekommt
+    # eine feste helle Palette. Vorher folgte "hell" dem System-Farbschema; bei "Apps:
+    # dunkel" (Windows 11, macOS) wurden Scrollbereiche, Listen, Hilfetext und Menüs dunkel,
+    # die Stylesheet-Schrift blieb aber fast schwarz - unlesbar. Das Farbschema wird
+    # zusätzlich passend zum Design angefordert (ab Qt 6.8), damit native Stile wie
+    # windows11 nicht doch dunkel zeichnen.
+    schema = getattr(Qt, "ColorScheme", None)
+    hinweise = app.styleHints()
+    if schema is not None and hasattr(hinweise, "setColorScheme"):
+        hinweise.setColorScheme(schema.Dark if design["dunkel"] else schema.Light)
+    app.setPalette(_design_palette(theme, design))
     if design_name != _DESIGN_DEFAULT:
-        app.setPalette(_design_palette(theme, design))
         _haken_bild_bereitstellen()
-    elif _aktives_design != _DESIGN_DEFAULT:
-        # Nur beim Rückweg zu "hell" - beim Start in "hell" bleibt die Palette ganz
-        # unangetastet, damit sie weiter dem Windows-Farbschema folgen kann.
-        app.setPalette(_ursprung_palette)
     _aktives_design = design_name
     app.setStyleSheet(_erzeuge_qss(theme_name, design_name))
