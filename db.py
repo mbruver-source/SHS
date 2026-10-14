@@ -28,6 +28,7 @@ nur der Dokumentation des ursprünglichen Anwendungsfalls.
 from __future__ import annotations
 
 import datetime
+import functools
 import math
 import hashlib
 import re
@@ -661,8 +662,26 @@ def init_db_postgres(dsn: str) -> _PostgresConnection:
     return conn
 
 
+def _mit_rollback(funktion):
+    """Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 7, Teil 4 Nr. 5): Scheitert eine schreibende
+    Funktion (z. B. schreibgeschützte, gesperrte oder nicht mehr erreichbare Datei), wird die
+    angefangene Transaktion zurückgerollt. Sonst bliebe sie offen, und der nächste Commit
+    einer harmlosen Aktion würde einen halben Vorgang speichern."""
+    @functools.wraps(funktion)
+    def mit_rollback(conn, *args, **kwargs):
+        try:
+            return funktion(conn, *args, **kwargs)
+        except BaseException:
+            with suppress(Exception):
+                conn.rollback()
+            raise
+    return mit_rollback
+
+
 # --- Veranstaltung -----------------------------------------------------
 
+
+@_mit_rollback
 def set_veranstaltung(
     conn: sqlite3.Connection,
     verein: str,
@@ -793,6 +812,7 @@ class NeuerTeilnehmer:
     halter_lu_nr: str | None = None
 
 
+@_mit_rollback
 def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
     cur = conn.execute(
         """
@@ -1033,6 +1053,7 @@ def get_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+@_mit_rollback
 def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeilnehmer) -> None:
     conn.execute(
         """
@@ -1095,6 +1116,7 @@ def fehlende_startnummern_je_pruefung(conn: sqlite3.Connection) -> list[tuple[st
     return sorted(anzahl.items(), key=lambda e: (reihenfolge.get(e[0], len(reihenfolge)), e[0]))
 
 
+@_mit_rollback
 def tausche_startnummern(conn: sqlite3.Connection, teilnehmer_id_a: int, teilnehmer_id_b: int) -> None:
     """Tauscht die Startnummern zweier Teilnehmer atomar - über eine kurzzeitige NULL-
     Zwischenstufe, da 'startnummer INTEGER UNIQUE' ein direktes Vertauschen sonst als
@@ -1115,6 +1137,7 @@ def tausche_startnummern(conn: sqlite3.Connection, teilnehmer_id_a: int, teilneh
     conn.commit()
 
 
+@_mit_rollback
 def setze_bezahlt(conn: sqlite3.Connection, teilnehmer_id: int, bezahlt: bool) -> None:
     """Setzt/entfernt die Bezahlt-Markierung eines Teilnehmers, ohne die übrigen
     Stammdaten anzufassen - für den schnellen Umschalten-Button in der Teilnehmerliste
@@ -1123,6 +1146,7 @@ def setze_bezahlt(conn: sqlite3.Connection, teilnehmer_id: int, bezahlt: bool) -
     conn.commit()
 
 
+@_mit_rollback
 def setze_keine_teilnahme(conn: sqlite3.Connection, teilnehmer_id: int, keine_teilnahme: bool) -> None:
     """Markiert einen Teilnehmer als nicht erschienen bzw. nimmt die Markierung zurück
     (Nutzerwunsch 02.10.2026). Bereits erfasste Ergebnisse bleiben bewusst unangetastet:
@@ -1133,6 +1157,7 @@ def setze_keine_teilnahme(conn: sqlite3.Connection, teilnehmer_id: int, keine_te
     conn.commit()
 
 
+@_mit_rollback
 def delete_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> None:
     conn.execute("DELETE FROM teilnehmer WHERE id = ?", (teilnehmer_id,))
     conn.commit()
@@ -1250,6 +1275,7 @@ def pruefe_ergebnis_eingabe(suche: int | None, anzeige: int | None) -> str | Non
     return None
 
 
+@_mit_rollback
 def eintragen_ergebnis(
     conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int | None, anzeige: int | None
 ) -> None:
@@ -1269,6 +1295,7 @@ def eintragen_ergebnis(
     conn.commit()
 
 
+@_mit_rollback
 def setze_ergebnis_status(
     conn: sqlite3.Connection, teilnehmer_id: int, disqualifiziert: bool, abbruch: bool
 ) -> None:
@@ -1286,6 +1313,7 @@ def setze_ergebnis_status(
     conn.commit()
 
 
+@_mit_rollback
 def setze_stechen_sieger(conn: sqlite3.Connection, sieger_id: int | None, gruppe_ids: list[int]) -> None:
     """S1 (Marco 03.10.2026): legt den Sieger eines Stechens fest - alle `gruppe_ids` (die
     Punktgleichen auf Platz 1) verlieren die Markierung, `sieger_id` bekommt sie. Mit
@@ -1732,6 +1760,7 @@ def list_zeitplan_richter(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@_mit_rollback
 def add_zeitplan_richter(conn: sqlite3.Connection, name: str | None = None) -> int:
     """Legt einen neuen Richter (Zeitplan-Spur) an und hängt ihn ans Ende an.
     Ohne Namen wird automatisch 'Richter N' vergeben (frei umbenennbar)."""
@@ -1762,11 +1791,13 @@ def zeitplan_richter_aus_veranstaltung_anlegen(conn: sqlite3.Connection) -> int:
     return len(namen)
 
 
+@_mit_rollback
 def umbenennen_zeitplan_richter(conn: sqlite3.Connection, richter_id: int, name: str) -> None:
     conn.execute("UPDATE zeitplan_richter SET name = ? WHERE id = ?", (name, richter_id))
     conn.commit()
 
 
+@_mit_rollback
 def loesche_zeitplan_richter(conn: sqlite3.Connection, richter_id: int) -> None:
     """Löscht einen Richter samt aller seiner Zeitplan-Einträge (ON DELETE CASCADE)
     und rückt die reihenfolge der verbliebenen Richter lückenlos nach."""
@@ -1779,6 +1810,7 @@ def loesche_zeitplan_richter(conn: sqlite3.Connection, richter_id: int) -> None:
     conn.commit()
 
 
+@_mit_rollback
 def verschiebe_zeitplan_richter(conn: sqlite3.Connection, richter_id: int, richtung: int) -> None:
     """Vertauscht die Reihenfolge mit dem Nachbarn (richtung: -1 = nach vorn, +1 = nach
     hinten). Am Rand (kein Nachbar in die Richtung) passiert nichts."""
@@ -1803,6 +1835,7 @@ def list_zeitplan_eintraege(conn: sqlite3.Connection, richter_id: int) -> list[d
     return [dict(r) for r in rows]
 
 
+@_mit_rollback
 def add_zeitplan_pruefungsblock(
     conn: sqlite3.Connection, richter_id: int, art: str, stufe: int, disziplin: str, dauer_minuten: int,
 ) -> int:
@@ -1821,6 +1854,7 @@ def add_zeitplan_pruefungsblock(
     return cur.lastrowid
 
 
+@_mit_rollback
 def add_zeitplan_pause(
     conn: sqlite3.Connection, richter_id: int, dauer_minuten: int, bezeichnung: str | None = None,
     nach_eintrag_id: int | None = None,
@@ -1884,6 +1918,7 @@ def add_zeitplan_pause_bei_allen(
     return [startzeiten[eintrag_id] for eintrag_id in eingefuegt if eintrag_id in startzeiten]
 
 
+@_mit_rollback
 def aktualisiere_zeitplan_eintrag(
     conn: sqlite3.Connection, eintrag_id: int, dauer_minuten: int | None = None, bezeichnung: str | None = None,
 ) -> None:
@@ -1896,6 +1931,7 @@ def aktualisiere_zeitplan_eintrag(
     conn.commit()
 
 
+@_mit_rollback
 def loesche_zeitplan_eintrag(conn: sqlite3.Connection, eintrag_id: int) -> None:
     row = conn.execute("SELECT richter_id FROM zeitplan_eintrag WHERE id = ?", (eintrag_id,)).fetchone()
     if row is None:
@@ -1910,6 +1946,7 @@ def loesche_zeitplan_eintrag(conn: sqlite3.Connection, eintrag_id: int) -> None:
     conn.commit()
 
 
+@_mit_rollback
 def verschiebe_zeitplan_eintrag(conn: sqlite3.Connection, eintrag_id: int, richtung: int) -> None:
     """Vertauscht die Reihenfolge mit dem Nachbarn innerhalb derselben Richter-Spur
     (richtung: -1 = nach vorn, +1 = nach hinten)."""

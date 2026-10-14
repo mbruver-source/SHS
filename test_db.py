@@ -1663,6 +1663,37 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(get_teilnehmer(self.conn, a)["startnummer"], 2)
         self.assertEqual(get_teilnehmer(self.conn, b)["startnummer"], 1)
 
+    def test_tausche_startnummern_rollt_bei_fehler_zurueck(self):
+        """Desktop-Prüfung 14.10.2026, Teil 1 Nr. 7: scheitert der Tausch mitten drin (z. B.
+        Ein-/Ausgabefehler), darf ein späterer Commit keinen halben Tausch speichern."""
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="A", vorname="A", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="B", vorname="B", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2))
+        echte = self.conn
+
+        class _ZweitesUpdateScheitert:
+            def __init__(self):
+                self.updates = 0
+
+            def execute(self, sql, *args):
+                if sql.lstrip().upper().startswith("UPDATE"):
+                    self.updates += 1
+                    if self.updates == 2:
+                        raise sqlite3.OperationalError("disk I/O error")
+                return echte.execute(sql, *args)
+
+            def __getattr__(self, name):
+                return getattr(echte, name)
+
+        with self.assertRaises(sqlite3.OperationalError):
+            tausche_startnummern(_ZweitesUpdateScheitert(), a, b)
+        self.conn.commit()  # die nächste harmlose Aktion
+        self.assertEqual(get_teilnehmer(self.conn, a)["startnummer"], 1)
+        self.assertEqual(get_teilnehmer(self.conn, b)["startnummer"], 2)
+
     def test_tausche_startnummern_funktioniert_wenn_einer_noch_keine_hat(self):
         # Regression/Nutzerwunsch (20.09.): das darf NICHT an der UNIQUE-Constraint
         # scheitern, auch wenn einer der beiden (oder beide) noch gar keine Startnummer
@@ -2015,6 +2046,40 @@ class TestZeitplan(unittest.TestCase):
 
     # Siehe TestDatenbank oben - von TestZeitplanPostgres (Dateiende) überschrieben.
     IntegrityErrorTyp = sqlite3.IntegrityError
+
+    def test_verschieben_rollt_bei_fehler_zurueck(self):
+        """Desktop-Prüfung 14.10.2026, Teil 4 Nr. 5: ein gescheitertes Verschieben darf nicht
+        mit der nächsten harmlosen Aktion halb gespeichert werden."""
+        richter = add_zeitplan_richter(self.conn, "Anna")
+        erster = add_zeitplan_pruefungsblock(self.conn, richter, "ED", 1, "Trümmerfeld", 10)
+        zweiter = add_zeitplan_pruefungsblock(self.conn, richter, "ED", 1, "Flächensuche", 10)
+        echte = self.conn
+
+        def reihenfolge():
+            return [z[0] for z in echte.execute(
+                "SELECT id FROM zeitplan_eintrag WHERE richter_id = ? ORDER BY reihenfolge", (richter,))]
+
+        vorher = reihenfolge()
+
+        class _ZweitesUpdateScheitert:
+            def __init__(self):
+                self.updates = 0
+
+            def execute(self, sql, *args):
+                if sql.lstrip().upper().startswith("UPDATE"):
+                    self.updates += 1
+                    if self.updates == 2:
+                        raise sqlite3.OperationalError("disk I/O error")
+                return echte.execute(sql, *args)
+
+            def __getattr__(self, name):
+                return getattr(echte, name)
+
+        with self.assertRaises(sqlite3.OperationalError):
+            verschiebe_zeitplan_eintrag(_ZweitesUpdateScheitert(), zweiter, -1)
+        umbenennen_zeitplan_richter(self.conn, richter, "Berta")  # harmlose Folgeaktion
+        self.assertEqual(reihenfolge(), vorher)
+        self.assertEqual(vorher, [erster, zweiter])
 
     def setUp(self):
         fd, self.pfad = tempfile.mkstemp(suffix=".sqlite")

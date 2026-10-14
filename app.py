@@ -32,6 +32,7 @@ dort unabhängig von der Oberfläche getestet - dieses Fenster ruft sie nur auf.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import html
 import os
@@ -254,7 +255,11 @@ def _fehlende_startnummern_vergeben_mit_meldung(
             "eintragen, z. B. DK-LK 1: 1 bis 20.",
         )
         return
-    ergebnis = fehlende_startnummern_vergeben(conn, pruefung)
+    try:
+        ergebnis = fehlende_startnummern_vergeben(conn, pruefung)
+    except sqlite3.Error as exc:
+        _db_fehler_anzeigen(parent, exc)
+        return
 
     def namen(liste):
         return "\n".join(f"{t['vorname']} {t['nachname']} – {leistungsklasse_label(t)}" for t in liste)
@@ -292,6 +297,15 @@ def _startnummern_nach_import_anbieten(parent, conn) -> None:
         _fehlende_startnummern_vergeben_mit_meldung(parent, conn)
 
 
+def _import_db_fehler_melden(parent, exc: sqlite3.Error) -> None:
+    """Schreibfehler der Termin-Datei mitten in einem Import (Desktop-Prüfung 14.10.2026):
+    die bis dahin übernommenen Teilnehmer bleiben gespeichert (Commit je Zeile)."""
+    _db_fehler_anzeigen(
+        parent, exc, "Der Import wurde abgebrochen. Bereits übernommene Teilnehmer bleiben "
+        "gespeichert - bitte die Teilnehmerliste prüfen, bevor die Datei erneut eingelesen wird.",
+    )
+
+
 def _teilnehmerliste_importieren(parent, conn) -> None:
     """CSV-/Excel-Teilnehmerliste einlesen - gemeinsam für den Reiter "Formular-Import" und
     den Knopf im Reiter "Teilnehmer" (UX-Test 02.10.2026, U10)."""
@@ -303,6 +317,9 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
         ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
     except OSError as exc:
         QMessageBox.warning(parent, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+        return
+    except sqlite3.Error as exc:
+        _import_db_fehler_melden(parent, exc)
         return
     text = f"{ergebnis.importiert} Teilnehmer importiert."
     if ergebnis.uebersprungen:
@@ -620,13 +637,11 @@ class TeilnehmerTab(QWidget):
             vergebene_nummern=vergebene_startnummern(self.conn),
             namen_je_startnummer=self._namen_je_startnummer(),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
+            # Gespeichert wird im Dialog vor dem Schließen - scheitert es, bleiben die
+            # Eingaben stehen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1).
+            speichern=lambda d: add_teilnehmer(self.conn, d.ergebnis()),
         )
         if dialog.exec() == QDialog.Accepted:
-            try:
-                add_teilnehmer(self.conn, dialog.ergebnis())
-            except sqlite3.IntegrityError as exc:
-                _fehler_anzeigen(self, exc)
-                return
             self.aktualisieren()
 
     def _teilnehmer_bearbeiten(self) -> None:
@@ -640,13 +655,9 @@ class TeilnehmerTab(QWidget):
             vergebene_nummern=vergebene_startnummern(self.conn, ausser_teilnehmer_id=teilnehmer_id),
             namen_je_startnummer=self._namen_je_startnummer(ausser_teilnehmer_id=teilnehmer_id),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
+            speichern=lambda d: update_teilnehmer(self.conn, teilnehmer_id, d.ergebnis()),
         )
         if dialog.exec() == QDialog.Accepted:
-            try:
-                update_teilnehmer(self.conn, teilnehmer_id, dialog.ergebnis())
-            except sqlite3.IntegrityError as exc:
-                _fehler_anzeigen(self, exc)
-                return
             self.aktualisieren()
 
     def _startnummer_tauschen(self) -> None:
@@ -680,6 +691,9 @@ class TeilnehmerTab(QWidget):
                 except sqlite3.IntegrityError as exc:
                     _fehler_anzeigen(self, exc)
                     return
+                except sqlite3.Error as exc:
+                    _db_fehler_anzeigen(self, exc)
+                    return
                 self.aktualisieren()
 
     def _zwei_markierte_tauschen(self, id_a: int, id_b: int) -> None:
@@ -711,6 +725,9 @@ class TeilnehmerTab(QWidget):
             tausche_startnummern(self.conn, id_a, id_b)
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
+            return
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
             return
         self.aktualisieren()
 
@@ -876,8 +893,11 @@ class TeilnehmerTab(QWidget):
             )
         antwort = QMessageBox.question(self, "Teilnehmer löschen", frage)
         if antwort == QMessageBox.Yes:
-            for t in teilnehmer:
-                delete_teilnehmer(self.conn, t["id"])
+            try:
+                for t in teilnehmer:
+                    delete_teilnehmer(self.conn, t["id"])
+            except sqlite3.Error as exc:
+                _db_fehler_anzeigen(self, exc, "Nicht alle Teilnehmer konnten gelöscht werden.")
             self.aktualisieren()
 
     def _bezahlt_umschalten(self) -> None:
@@ -894,6 +914,8 @@ class TeilnehmerTab(QWidget):
                 setze_bezahlt(self.conn, t["id"], neu_bezahlt)
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
         self.aktualisieren()
 
     def _teilnahme_umschalten(self) -> None:
@@ -929,6 +951,8 @@ class TeilnehmerTab(QWidget):
                 setze_keine_teilnahme(self.conn, t["id"], neu_keine_teilnahme)
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
         self.aktualisieren()
 
     def aktualisieren(self) -> None:
@@ -1259,6 +1283,10 @@ class FormularImportTab(QWidget):
         except OSError as exc:
             QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
             return
+        except sqlite3.Error as exc:
+            _import_db_fehler_melden(self, exc)
+            self.aktualisieren()
+            return
         text = f"{ergebnis.importiert} Teilnehmer importiert."
         if ergebnis.uebersprungen:
             text += (
@@ -1283,9 +1311,14 @@ class FormularImportTab(QWidget):
         if not pfade:
             return
         _import_ordner_merken(pfade[0])
-        # Kein try/except nötig: der Import fängt Lesefehler je Datei selbst ab und meldet
-        # sie in ergebnis.fehler (Verifikation 28.09.2026, Befund 7a).
-        ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
+        # Lesefehler je Datei fängt der Import selbst ab und meldet sie in ergebnis.fehler
+        # (Verifikation 28.09.2026, Befund 7a); hier bleiben nur Schreibfehler der Termin-Datei.
+        try:
+            ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
+        except sqlite3.Error as exc:
+            _import_db_fehler_melden(self, exc)
+            self.aktualisieren()
+            return
         text = f"{ergebnis.importiert} Teilnehmer importiert."
         if ergebnis.uebersprungen:
             text += (
@@ -2043,76 +2076,98 @@ class ErgebnisTab(QWidget):
         gespeichert = 0
         fehler: list[str] = []
 
-        for row, t in enumerate(self._teilnehmer_je_zeile):
-            name = f"{t['nachname']}, {t['vorname']}"
-            boxen = self._boxen_je_zeile[row]
-            geladen = self._geladen_je_zeile[row]
-            dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-            status_wert = (dq_box.isChecked(), abbruch_box.isChecked())
-            punkte_gesperrt = status_wert[0] or status_wert[1]
+        # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 1: Ein Schreibfehler der Datenbank
+        # (schreibgeschützt, gesperrt, Stick abgezogen) bricht beim ersten Mal ab - die
+        # übrigen Eingaben bleiben als ungespeichert stehen, sodass die Nachfrage beim
+        # Beenden bzw. Terminwechsel greift, statt dass eine Ausnahme sie überspringt.
+        db_fehler: sqlite3.Error | None = None
+        try:
+            for row, t in enumerate(self._teilnehmer_je_zeile):
+                name = f"{t['nachname']}, {t['vorname']}"
+                boxen = self._boxen_je_zeile[row]
+                geladen = self._geladen_je_zeile[row]
+                dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+                status_wert = (dq_box.isChecked(), abbruch_box.isChecked())
+                punkte_gesperrt = status_wert[0] or status_wert[1]
 
-            if not punkte_gesperrt:
-                for disziplin, (suche_feld, anzeige_feld) in boxen.items():
-                    suche_wert, anzeige_wert = self._feldwert(suche_feld), self._feldwert(anzeige_feld)
-                    if (suche_wert, anzeige_wert) == geladen[disziplin]:
-                        continue  # unverändert - nichts zu tun
+                if not punkte_gesperrt:
+                    for disziplin, (suche_feld, anzeige_feld) in boxen.items():
+                        suche_wert, anzeige_wert = self._feldwert(suche_feld), self._feldwert(anzeige_feld)
+                        if (suche_wert, anzeige_wert) == geladen[disziplin]:
+                            continue  # unverändert - nichts zu tun
 
-                    if suche_wert is None and anzeige_wert is None:
-                        # Beide Felder wurden geleert - vorher eingetragenes Ergebnis wird
-                        # als gelöscht gespeichert (NULL in der DB), statt nur in der
-                        # Tabelle leer auszusehen, aber beim nächsten Laden wieder
-                        # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
-                        # bleiben.
-                        eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
-                        geladen[disziplin] = (None, None)
+                        if suche_wert is None and anzeige_wert is None:
+                            # Beide Felder wurden geleert - vorher eingetragenes Ergebnis wird
+                            # als gelöscht gespeichert (NULL in der DB), statt nur in der
+                            # Tabelle leer auszusehen, aber beim nächsten Laden wieder
+                            # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
+                            # bleiben.
+                            eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
+                            geladen[disziplin] = (None, None)
+                            gespeichert += 1
+                            continue
+
+                        # Codeprüfung 22.09., G6: gemeinsame Eingaberegel mit dem Web-Frontend
+                        # (db.pruefe_ergebnis_eingabe) statt eigener Prüfung - eine halb
+                        # ausgefüllte Disziplin wird weiterhin abgelehnt und bleibt ungespeichert.
+                        eingabe_fehler = pruefe_ergebnis_eingabe(suche_wert, anzeige_wert)
+                        if eingabe_fehler is not None:
+                            fehler.append(f"{name} – {disziplin}: {eingabe_fehler}")
+                            continue
+                        zu_hoch = [
+                            f"{teil} höchstens {maximum} Punkte (eingegeben: {wert})"
+                            for teil, wert, maximum in (
+                                ("Suche", suche_wert, _SUCHE_MAX), ("Anzeige", anzeige_wert, _ANZEIGE_MAX)
+                            )
+                            if wert > maximum
+                        ]
+                        if zu_hoch:
+                            fehler.append(f"{name} – {disziplin}: " + ", ".join(zu_hoch))
+                            continue
+
+                        try:
+                            eintragen_ergebnis(self.conn, t["id"], disziplin, suche_wert, anzeige_wert)
+                        except sqlite3.IntegrityError as exc:
+                            fehler.append(f"{name} – {disziplin}: {exc}")
+                            continue
+
+                        geladen[disziplin] = (suche_wert, anzeige_wert)
                         gespeichert += 1
-                        continue
+                # Ist die Zeile gesperrt (Disqualifiziert/Abbruch), werden die (geleerten)
+                # Punkte-Felder beim Speichern bewusst NICHT ausgewertet: eine ggf. weiterhin
+                # in der DB stehende Punktzahl bleibt unangetastet (siehe
+                # db.setze_ergebnis_status()-Docstring) - vorher wurden hier fälschlich beide
+                # Felder als "geleert" erkannt und die echten Punkte dauerhaft gelöscht.
 
-                    # Codeprüfung 22.09., G6: gemeinsame Eingaberegel mit dem Web-Frontend
-                    # (db.pruefe_ergebnis_eingabe) statt eigener Prüfung - eine halb
-                    # ausgefüllte Disziplin wird weiterhin abgelehnt und bleibt ungespeichert.
-                    eingabe_fehler = pruefe_ergebnis_eingabe(suche_wert, anzeige_wert)
-                    if eingabe_fehler is not None:
-                        fehler.append(f"{name} – {disziplin}: {eingabe_fehler}")
-                        continue
-                    zu_hoch = [
-                        f"{teil} höchstens {maximum} Punkte (eingegeben: {wert})"
-                        for teil, wert, maximum in (
-                            ("Suche", suche_wert, _SUCHE_MAX), ("Anzeige", anzeige_wert, _ANZEIGE_MAX)
-                        )
-                        if wert > maximum
-                    ]
-                    if zu_hoch:
-                        fehler.append(f"{name} – {disziplin}: " + ", ".join(zu_hoch))
-                        continue
-
-                    try:
-                        eintragen_ergebnis(self.conn, t["id"], disziplin, suche_wert, anzeige_wert)
-                    except sqlite3.IntegrityError as exc:
-                        fehler.append(f"{name} – {disziplin}: {exc}")
-                        continue
-
-                    geladen[disziplin] = (suche_wert, anzeige_wert)
+                if status_wert != self._status_geladen_je_zeile[row]:
+                    setze_ergebnis_status(self.conn, t["id"], status_wert[0], status_wert[1])
+                    self._status_geladen_je_zeile[row] = status_wert
                     gespeichert += 1
-            # Ist die Zeile gesperrt (Disqualifiziert/Abbruch), werden die (geleerten)
-            # Punkte-Felder beim Speichern bewusst NICHT ausgewertet: eine ggf. weiterhin
-            # in der DB stehende Punktzahl bleibt unangetastet (siehe
-            # db.setze_ergebnis_status()-Docstring) - vorher wurden hier fälschlich beide
-            # Felder als "geleert" erkannt und die echten Punkte dauerhaft gelöscht.
 
-            if status_wert != self._status_geladen_je_zeile[row]:
-                setze_ergebnis_status(self.conn, t["id"], status_wert[0], status_wert[1])
-                self._status_geladen_je_zeile[row] = status_wert
-                gespeichert += 1
-
+                self._aktualisiere_zeilenstatus(row)
+        except sqlite3.Error as exc:
+            db_fehler = exc
             self._aktualisiere_zeilenstatus(row)
 
-        if gespeichert:
+        if db_fehler is not None:
+            self.status_label.setText(
+                f"Speichern abgebrochen – {gespeichert} Ergebnis(se) gespeichert, die übrigen nicht."
+            )
+            einleitung = (
+                "Die Ergebnisse konnten nicht (vollständig) gespeichert werden. Bereits gespeicherte "
+                "Zeilen bleiben erhalten, die übrigen Eingaben stehen weiter in der Tabelle."
+            )
+            if fehler:
+                # Eine einzige Meldung (Desktop-Prüfung 14.10.2026): Eingabefehler, die vor dem
+                # Abbruch auffielen, gehören mit hinein.
+                einleitung += "\n\nAußerdem fehlerhafte Eingaben:\n" + "\n".join(fehler)
+            _db_fehler_anzeigen(self, db_fehler, einleitung)
+        elif gespeichert:
             self.status_label.setText(f"{gespeichert} Ergebnis(se) gespeichert.")
         elif not fehler:
             self.status_label.setText("Keine Änderungen zu speichern.")
 
-        if fehler:
+        if fehler and db_fehler is None:
             QMessageBox.warning(
                 self,
                 "Nicht alle Ergebnisse gespeichert",
@@ -2269,7 +2324,11 @@ class AuswertungTab(QWidget):
         if not ok:
             return
         lk, sieger = zuordnung[auswahl]
-        setze_stechen_sieger(self.conn, sieger, [int(t.id) for t in gruppen[lk]])
+        try:
+            setze_stechen_sieger(self.conn, sieger, [int(t.id) for t in gruppen[lk]])
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _gewaehlte_leistungsklasse(self) -> str | None:
@@ -2576,6 +2635,9 @@ class ZeitplanTab(QWidget):
             "den Hund und Wegezeit zwischen den Disziplinen)."
         )
         self.mindestabstand.setValue(dk_mindestabstand(veranstaltung))
+        # Erst nach Abschluss der Eingabe speichern, nicht bei jedem Tastendruck
+        # (Desktop-Prüfung 14.10.2026, Teil 4 Nr. 7).
+        self.mindestabstand.setKeyboardTracking(False)
         self.mindestabstand.valueChanged.connect(self._mindestabstand_speichern)
 
         richter_hinzufuegen_btn = QPushButton("Richter hinzufügen")
@@ -2667,7 +2729,15 @@ class ZeitplanTab(QWidget):
         super().showEvent(event)
         if not self._richter_uebernahme_erfolgt:
             self._richter_uebernahme_erfolgt = True
-            if zeitplan_richter_aus_veranstaltung_anlegen(self.conn):
+            try:
+                angelegt = zeitplan_richter_aus_veranstaltung_anlegen(self.conn)
+            except sqlite3.Error as exc:
+                _db_fehler_anzeigen(
+                    self, exc, "Die Richter aus den Veranstaltungsdaten konnten nicht in den "
+                    "Zeitplan übernommen werden.",
+                )
+                return
+            if angelegt:
                 self.aktualisieren()
 
     def aktualisieren(self) -> None:
@@ -2711,7 +2781,16 @@ class ZeitplanTab(QWidget):
         self._offene_starts_aktualisieren(konflikte, namen_je_richter)
 
     def _mindestabstand_speichern(self, wert: int) -> None:
-        _aktualisiere_veranstaltung_feld(self.conn, dk_mindestabstand=str(wert))
+        try:
+            _aktualisiere_veranstaltung_feld(self.conn, dk_mindestabstand=str(wert))
+        except sqlite3.Error as exc:
+            # Feld auf den gespeicherten Wert zurücksetzen, damit Anzeige und Datei
+            # übereinstimmen (Desktop-Prüfung 14.10.2026, Teil 4 Nr. 4).
+            self.mindestabstand.blockSignals(True)
+            self.mindestabstand.setValue(dk_mindestabstand(get_veranstaltung(self.conn)))
+            self.mindestabstand.blockSignals(False)
+            _db_fehler_anzeigen(self, exc)
+            return
         self.aktualisieren()
 
     def _offene_starts_aktualisieren(self, konflikte: list | None = None, namen_je_richter: dict | None = None) -> None:
@@ -2902,7 +2981,11 @@ class ZeitplanTab(QWidget):
                 "Bitte die Zeitplan-Startzeit im Format HH:MM angeben (z.B. 09:00).",
             )
             return
-        _aktualisiere_veranstaltung_feld(self.conn, zeitplan_start=text)
+        try:
+            _aktualisiere_veranstaltung_feld(self.conn, zeitplan_start=text)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         self.status_label.setText("Zeitplan-Startzeit gespeichert.")
         self.aktualisieren()
 
@@ -3424,13 +3507,16 @@ class VerwaltungTab(QWidget):
 
     def _veranstaltung_bearbeiten(self) -> None:
         aktuell = get_veranstaltung(self.conn) or {}
-        dialog = VeranstaltungsDialog(self, vorbelegung=aktuell, bearbeiten=True)
-        if dialog.exec() != QDialog.Accepted:
-            return
         # Über den gemeinsamen Helfer statt direkt set_veranstaltung, damit das vom
         # Zeitplan-Tab gepflegte Feld zeitplan_start dabei erhalten bleibt (dieser Dialog
-        # hat dafür bewusst kein eigenes Feld, siehe ZeitplanTab).
-        _aktualisiere_veranstaltung_feld(self.conn, **dialog.veranstaltung_werte())
+        # hat dafür bewusst kein eigenes Feld, siehe ZeitplanTab). Gespeichert wird im
+        # Dialog vor dem Schließen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1).
+        dialog = VeranstaltungsDialog(
+            self, vorbelegung=aktuell, bearbeiten=True,
+            speichern=lambda d: _aktualisiere_veranstaltung_feld(self.conn, **d.veranstaltung_werte()),
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
 
 
@@ -4264,6 +4350,28 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             widget.aktualisieren()
 
 
+def _termin_datei_anlegen(dialog) -> None:
+    """Rückruf für VeranstaltungsDialog beim Anlegen: legt die Termin-Datei an, solange
+    sie noch nicht existiert (sonst fragt StartDialog._neuer_termin danach, ob sie geöffnet
+    werden soll). Scheitert das Anlegen (z. B. Ordner fehlt, Datenträger schreibgeschützt),
+    wird eine halb angelegte Datei wieder entfernt und der Fehler an den Dialog gemeldet,
+    der dann mit allen Eingaben offen bleibt (Desktop-Prüfung 14.10.2026)."""
+    pfad = dialog.pfad_feld.text().strip()
+    if os.path.exists(pfad):
+        return
+    try:
+        conn = init_db(pfad)
+        try:
+            set_veranstaltung(conn, **dialog.veranstaltung_werte())
+        finally:
+            conn.close()
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(pfad)
+        raise
+    dialog.termin_angelegt = True
+
+
 class StartDialog(ResponsiveSchriftMixin, QDialog):
     """Startdialog: Übersicht aller vorhandenen Termine aus dem Standard-Ordner (siehe
     db.termine_ordner) zum Öffnen/Löschen, sowie neuen Termin anlegen oder eine
@@ -4392,12 +4500,12 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 # Marco 09.10.2026: die Standardgröße der Bereiche ebenso.
                 "startnummer_bereichsgroesse": letzter.startnummer_bereichsgroesse,
             }
-        dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung)
+        dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung, speichern=_termin_datei_anlegen)
         if dialog.exec() != QDialog.Accepted:
             return
         pfad = dialog.pfad_feld.text().strip()
 
-        if os.path.exists(pfad):
+        if not getattr(dialog, "termin_angelegt", False) and os.path.exists(pfad):
             antwort = QMessageBox.question(
                 self,
                 "Datei existiert bereits",
@@ -4409,9 +4517,6 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             self.accept()
             return
 
-        conn = init_db(pfad)
-        set_veranstaltung(conn, **dialog.veranstaltung_werte())
-        conn.close()
         self.pfad = pfad
         self.accept()
 

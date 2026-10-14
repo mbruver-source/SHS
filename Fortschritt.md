@@ -6031,3 +6031,39 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   `anderer.sqlite` im Arbeitsverzeichnis an; das passiert nicht mehr.
 - Nachtrag aus der Sicherheitsprüfung: Die Terminliste und der Import-Dialog prüfen den Aufbau der
   Datei über `db.pruefe_termin_aufbau` und begrenzen das Lesen über `db.lesen_begrenzen`.
+
+### A4 Schreibfehler, Rollback und Klartext (14.10.2026, Desktop-Prüfung Teil 1–5 und 7)
+
+- **Ergebnisse gehen bei Schreibfehlern nicht mehr verloren (Teil 3 Nr. 1, mittel):** Ist die
+  Termin-Datei schreibgeschützt, gesperrt oder nicht mehr erreichbar, bricht „Alle Ergebnisse
+  speichern“ beim ersten Fehler ab und zeigt eine einzige Meldung. Die übrigen Eingaben bleiben als
+  ungespeichert stehen. Beim Schließen, beim Terminwechsel und beim Windows-Abmelden greift damit
+  die vorhandene Nachfrage. Vorher flog die Ausnahme aus `closeEvent`, und das Fenster schloss ohne
+  Rückfrage.
+- **Dialoge speichern vor dem Schließen (Teil 2 Nr. 1):** `TeilnehmerDialog` und
+  `VeranstaltungsDialog` bekommen einen Rückruf `speichern` und speichern vor `accept()`. Scheitert
+  das, sei es an einer Fachregel oder an der Datei, bleibt der Dialog mit allen Eingaben offen. In
+  der Demoprüfung (ohne Rückruf) ändert sich nichts. Beim Anlegen eines Termins räumt
+  `_termin_datei_anlegen` eine halb angelegte Datei wieder weg, z. B. wenn der Ordner fehlt.
+- **Rollback (Teil 1 Nr. 7, Teil 4 Nr. 5):** Neuer Decorator `db._mit_rollback` auf allen
+  schreibenden Funktionen der Desktop-Oberfläche. Eine gescheiterte Änderung wird zurückgerollt,
+  statt mit der nächsten harmlosen Aktion halb gespeichert zu werden.
+- **Weitere Schreibstellen (Teil 4 Nr. 4 und Bezug aus Teil 5):** Diese Stellen fangen jetzt
+  `sqlite3.Error` ab:
+  - Zeitplan: Richter-Übernahme beim ersten Anzeigen, Mindestabstand, Startzeit;
+  - Stechen-Sieger;
+  - CSV-, OMA- und PDF-Import;
+  - Startnummern tauschen bzw. fehlende vergeben;
+  - bezahlt, „keine Teilnahme“, Teilnehmer löschen.
+
+  Der Mindestabstand speichert erst nach Abschluss der Eingabe (`setKeyboardTracking(False)`,
+  Teil 4 Nr. 7) und zeigt bei einem Fehler wieder den gespeicherten Wert.
+- **Klartext:** `_klartext_fehler` erklärt typische SQLite-Fehler (schreibgeschützt, gesperrt,
+  Datenträger voll, nicht erreichbar bzw. nicht anlegbar) und nennt den technischen Text in
+  Klammern. `_db_fehler_anzeigen` nimmt eine eigene Einleitung an. Die Erweiterung für
+  Dateifehler folgt mit A9.
+- **Offen:** Nach einem abgebrochenen Import nennt die Meldung nicht die Zahl der schon übernommenen
+  Teilnehmer, weil die Ausnahme sie nicht liefert. Vermerkt für A12 bzw. A18.
+- **Tests:** Schließen und Abmelden mit Schreibfehler, Reiterwechsel, beide Dialoge, neuer Termin
+  (Erfolg, vorhandene Datei, fehlender Ordner), Mindestabstand, Zeitplan, CSV-Import, Klartext,
+  Rollback bei Startnummerntausch und Zeitplan-Verschieben.

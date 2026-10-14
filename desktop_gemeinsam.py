@@ -12,6 +12,7 @@ pdf_export); keines dieser Module importiert app.
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 
 from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
@@ -337,15 +338,43 @@ def _fehler_anzeigen(parent, exc: Exception) -> None:
     )
 
 
-def _db_fehler_anzeigen(parent, exc: Exception) -> None:
+# Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 6, Grundbaustein): typische SQLite-Fehlertexte und
+# ihre Erklärung in Klartext. Erweiterung für Datei-Fehler folgt mit Aufgabe A9.
+_SQLITE_KLARTEXT = (
+    (("readonly",), "Die Termin-Datei ist schreibgeschützt (z. B. schreibgeschützter USB-Stick "
+                    "oder Dateieigenschaften „Schreibgeschützt“)."),
+    (("locked", "busy"), "Die Termin-Datei ist gerade von einem anderen Programm gesperrt (z. B. "
+                         "Synchronisierung, Virenscanner oder ein zweites Programmfenster). Bitte "
+                         "kurz warten und es erneut versuchen."),
+    (("disk is full",), "Der Datenträger ist voll."),
+    (("disk i/o error",), "Die Termin-Datei ist nicht erreichbar (z. B. USB-Stick abgezogen oder "
+                          "Netzlaufwerk getrennt)."),
+    (("unable to open",), "Die Termin-Datei lässt sich nicht öffnen bzw. anlegen (z. B. Ordner "
+                          "fehlt, USB-Stick abgezogen oder Netzlaufwerk getrennt)."),
+)
+
+
+def _klartext_fehler(exc: BaseException) -> str:
+    """Verständliche Beschreibung eines erwartbaren Fehlers; der technische Text steht in
+    Klammern dahinter. Unbekannte Fehler bleiben beim technischen Text."""
+    technisch = str(exc) or type(exc).__name__
+    if isinstance(exc, sqlite3.Error):
+        klein = technisch.lower()
+        for stichworte, erklaerung in _SQLITE_KLARTEXT:
+            if any(wort in klein for wort in stichworte):
+                return f"{erklaerung}\n\n(Technisch: {technisch})"
+    return technisch
+
+
+def _db_fehler_anzeigen(parent, exc: Exception,
+                        einleitung: str = "Die Änderung konnte nicht gespeichert werden.") -> None:
     """Zeigt einen unerwarteten Datenbankfehler (z.B. gesperrte Datei, voller Datenträger) als
-    Dialog statt die App abstürzen zu lassen - für einfache Aktionen ohne eigene
-    Fachregel-Prüfung (Richter/Zeitplan verwalten u.ä.), bei denen ein sqlite3.Error bisher
-    unbehandelt durchschlug."""
+    Dialog statt die App abstürzen zu lassen - für Aktionen ohne eigene Fachregel-Prüfung
+    (Richter/Zeitplan verwalten u.ä.) und für Schreibfehler beim Speichern."""
     QMessageBox.critical(
         parent,
         "Datenbankfehler",
-        f"Die Änderung konnte nicht gespeichert werden:\n\n{exc}",
+        f"{einleitung}\n\n{_klartext_fehler(exc)}",
     )
 
 

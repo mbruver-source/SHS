@@ -67,6 +67,8 @@ from db_sicherung import (
     eindeutigen_dateinamen_finden,
 )
 from desktop_gemeinsam import (
+    _db_fehler_anzeigen,
+    _fehler_anzeigen,
     _gegenstand_zeile,
     _GEGENSTAND_ZUORDNUNG_FREI,
     _GESCHLECHT_UNBEKANNT,
@@ -82,6 +84,26 @@ _TEILNEHMER_DIALOG_GROESSE = (1040, 720)
 _MINDESTBREITE_TEXTFELD = 170
 
 
+def _speichern_vor_dem_schliessen(dialog: QDialog, speichern) -> bool:
+    """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1: Speichert über den Rückruf des Aufrufers,
+    BEVOR der Dialog schließt. Scheitert das (Fachregel oder z. B. schreibgeschützte bzw.
+    gesperrte Termin-Datei), erscheint eine Meldung und der Dialog bleibt mit allen Eingaben
+    offen. Ohne Rückruf (z. B. in der Demoprüfung) schließt er wie bisher sofort."""
+    if speichern is None:
+        return True
+    try:
+        speichern(dialog)
+    except sqlite3.IntegrityError as exc:
+        _fehler_anzeigen(dialog, exc)
+        return False
+    except sqlite3.Error as exc:
+        _db_fehler_anzeigen(
+            dialog, exc, "Die Eingaben wurden nicht gespeichert, sie bleiben im Fenster stehen."
+        )
+        return False
+    return True
+
+
 class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     """Formular zur Neuanlage eines Teilnehmers."""
 
@@ -89,9 +111,12 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self, parent=None, vorhandener: dict | None = None, vergebene_nummern: set[int] | None = None,
         namen_je_startnummer: dict[int, str] | None = None,
         bereiche: dict[str, tuple[int, int]] | None = None,
+        speichern=None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Teilnehmer bearbeiten" if vorhandener else "Teilnehmer erfassen")
+        # Rückruf speichern(dialog), siehe _speichern_vor_dem_schliessen.
+        self._speichern = speichern
         # Bereits vergebene Startnummern (beim Bearbeiten ohne die eigene) - für
         # die Dubletten-Prüfung beim Speichern.
         self._vergebene_nummern = vergebene_nummern or set()
@@ -539,6 +564,8 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 "gleichen Text in mehrere Gegenstand-Felder eintragen und dort jeweils eine "
                 "andere Disziplin zuordnen.",
             )
+            return
+        if not _speichern_vor_dem_schliessen(self, self._speichern):
             return
         self.accept()
 
@@ -1304,9 +1331,12 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     im ausfüllbaren Anmeldeformular (siehe pdf_export.erstelle_anmeldeformular_pdf) - nur
     die hier angehakten Prüfungen sind dort ankreuzbar."""
 
-    def __init__(self, parent=None, vorbelegung: dict | None = None, bearbeiten: bool = False):
+    def __init__(self, parent=None, vorbelegung: dict | None = None, bearbeiten: bool = False,
+                 speichern=None):
         super().__init__(parent)
         self._bearbeiten = bearbeiten
+        # Rückruf speichern(dialog), siehe _speichern_vor_dem_schliessen.
+        self._speichern = speichern
         self.setWindowTitle("Veranstaltungsdaten bearbeiten" if bearbeiten else "Neuen Termin anlegen")
         vorbelegung = vorbelegung or {}
 
@@ -1646,4 +1676,6 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             if antwort != QMessageBox.Yes:
                 (self.verband if "Verband" in fehlend else self.meldestelle).setFocus()
                 return
+        if not _speichern_vor_dem_schliessen(self, self._speichern):
+            return
         self.accept()

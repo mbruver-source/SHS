@@ -1479,7 +1479,9 @@ def test_veranstaltung_bearbeiten_speichert_anmeldeformular_felder(qtbot, conn, 
         dialog.meldestelle.setPlainText("Erika Muster\nmeldung@example.org")
         dialog.pruefung_checkboxen["DK2"].setChecked(True)
         dialog.pruefung_checkboxen["ED1-Flächensuche"].setChecked(True)
-        return QDialog.Accepted
+        # Gespeichert wird beim OK im Dialog selbst (Rückruf), also OK auslösen.
+        dialog._pruefen_und_akzeptieren()
+        return dialog.result()
 
     monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec_mit_eingaben)
     tab = VerwaltungTab(conn)
@@ -1803,6 +1805,248 @@ def test_schliessen_fragt_nach_wenn_speichern_zeilen_uebrig_laesst_und_bricht_be
     fenster.close()
 
     assert fenster.isVisible()
+
+
+def _schreibfehler(*_a, **_k):
+    import sqlite3 as _sqlite3
+    raise _sqlite3.OperationalError("attempt to write a readonly database")
+
+
+def test_schliessen_bei_schreibfehler_fragt_nach_statt_still_zu_verwerfen(qtbot, termin, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 1: scheitert das Speichern an der Datei
+    (schreibgeschützt, gesperrt), flog die Ausnahme aus closeEvent und das Fenster schloss
+    ohne Nachfrage - die Ergebnisse waren verloren. Jetzt: eine Meldung, danach die
+    vorhandene Nachfrage; bei "Nein" bleibt das Fenster offen."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    tab = fenster.ergebnis_tab
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+
+    meldungen = []
+    monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+
+    fenster.close()
+
+    assert fenster.isVisible()
+    assert meldungen == ["attempt to write a readonly database"]
+    assert tab.hat_ungespeicherte_aenderungen()
+    assert not conn.in_transaction
+
+
+def test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen(qtbot, termin, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 1: Beim Windows-Abmelden flog die Ausnahme vor
+    manager.cancel() heraus, das Abmelden lief weiter und die Ergebnisse waren verloren."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    suche_feld, anzeige_feld = fenster.ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+    monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+    # Für das Schließen beim Aufräumen des Tests: verwerfen statt modal zu warten.
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    manager = _FakeSitzungsManager(interaktion=False)
+
+    fenster._sitzungsende_pruefen(manager)
+
+    assert manager.abgebrochen is True
+
+
+def test_klartext_fuer_typische_datenbankfehler():
+    import sqlite3 as _sqlite3
+
+    from desktop_gemeinsam import _klartext_fehler
+
+    assert "schreibgeschützt" in _klartext_fehler(_sqlite3.OperationalError("attempt to write a readonly database"))
+    assert "gesperrt" in _klartext_fehler(_sqlite3.OperationalError("database is locked"))
+    assert "voll" in _klartext_fehler(_sqlite3.OperationalError("database or disk is full"))
+    assert "Ordner fehlt" in _klartext_fehler(_sqlite3.OperationalError("unable to open database file"))
+    assert "(Technisch: database is locked)" in _klartext_fehler(_sqlite3.OperationalError("database is locked"))
+    assert _klartext_fehler(_sqlite3.OperationalError("no such table: x")) == "no such table: x"
+    assert _klartext_fehler(ValueError("readonly")) == "readonly"
+
+
+def test_zeitplan_schreibfehler_beim_anzeigen_und_startzeit(qtbot, conn, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 4 Nr. 4: Richter-Übernahme beim ersten Anzeigen und
+    „Startzeit speichern“ melden Schreibfehler statt des allgemeinen Fehlerfensters."""
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", wertungsrichter_1="Anna")
+    meldungen = []
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    monkeypatch.setattr("app.zeitplan_richter_aus_veranstaltung_anlegen", _schreibfehler)
+    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.zeitplan_start.setText("10:00")
+    tab._start_speichern()
+
+    assert meldungen == ["attempt to write a readonly database"] * 2
+    assert tab.status_label.text() != "Zeitplan-Startzeit gespeichert."
+
+
+def test_csv_import_meldet_schreibfehler(qtbot, conn, monkeypatch, tmp_path):
+    import app as app_modul
+
+    datei = tmp_path / "liste.csv"
+    datei.write_text("x", encoding="utf-8")
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(datei), ""))
+    monkeypatch.setattr("app._import_ordner_merken", lambda *a: None)
+    monkeypatch.setattr("app.importiere_teilnehmer_aus_csv", _schreibfehler)
+    meldungen = []
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+
+    app_modul._teilnehmerliste_importieren(None, conn)
+
+    assert meldungen == ["attempt to write a readonly database"]
+
+
+def test_neuer_termin_legt_datei_an_und_fragt_bei_vorhandener(qtbot, tmp_path, monkeypatch):
+    from contextlib import closing
+
+    import desktop_dialoge
+
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
+    ziel = tmp_path / "termin.sqlite"
+
+    def _exec(dialog):
+        dialog.verein.setText("SGV")
+        dialog.datum.setText("14.11.2026")
+        dialog.verband.setText("HSVRM")
+        dialog.meldestelle.setPlainText("x")
+        dialog.pfad_feld.setText(str(ziel))
+        dialog._pruefen_und_akzeptieren()
+        return dialog.result()
+
+    monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec)
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.Yes)
+
+    start = StartDialog()
+    qtbot.addWidget(start)
+    start._neuer_termin()
+    assert start.pfad == str(ziel)
+    with closing(init_db(str(ziel))) as gelesen:
+        assert get_veranstaltung(gelesen)["verein"] == "SGV"
+    assert fragen == []
+
+    zweiter = StartDialog()
+    qtbot.addWidget(zweiter)
+    zweiter._neuer_termin()
+    assert fragen == ["Datei existiert bereits"]
+
+
+def test_reiterwechsel_bei_schreibfehler_wechselt_trotzdem(qtbot, termin, monkeypatch):
+    """Der Reiterwechsel läuft trotz Schreibfehler weiter; die Eingaben bleiben ungespeichert
+    stehen (vorher blieb _vorheriger_tab_index stehen und der neue Reiter lud nicht neu)."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.ergebnis_tab
+    fenster._tabs.setCurrentWidget(tab)
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("58")
+    anzeige_feld.setText("38")
+    monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+
+    fenster._tabs.setCurrentIndex(0)
+
+    assert fenster._vorheriger_tab_index == 0
+    assert tab.hat_ungespeicherte_aenderungen()
+
+
+def test_teilnehmer_dialog_bleibt_bei_schreibfehler_offen(qtbot, conn, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1: gespeichert wird vor dem Schließen; scheitert
+    es, bleiben Dialog und Eingaben erhalten."""
+    meldungen = []
+    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    dialog = TeilnehmerDialog(None, speichern=_schreibfehler)
+    qtbot.addWidget(dialog)
+    dialog.nachname.setText("Neu")
+    dialog.vorname.setText("Anna")
+    dialog.rufname_hund.setText("Rex")
+
+    dialog._pruefen_und_akzeptieren()
+
+    assert dialog.result() != QDialog.Accepted
+    assert meldungen == ["attempt to write a readonly database"]
+    assert dialog.nachname.text() == "Neu"
+
+
+def test_veranstaltung_bearbeiten_bleibt_bei_schreibfehler_offen(qtbot, conn, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", verband="HSVRM", meldestelle="x")
+    meldungen = []
+    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+
+    def _exec(dialog):
+        dialog.verein.setText("Neuer Verein")
+        dialog._pruefen_und_akzeptieren()
+        return dialog.result()
+
+    monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec)
+    tab = VerwaltungTab(conn)
+    qtbot.addWidget(tab)
+    tab._veranstaltung_bearbeiten()
+
+    assert meldungen == ["attempt to write a readonly database"]
+    assert get_veranstaltung(conn)["verein"] == "SGV"
+    assert tab.status_label.text() != "Veranstaltungsdaten gespeichert."
+
+
+def test_neuer_termin_in_fehlendem_ordner_meldet_fehler_und_legt_nichts_an(qtbot, tmp_path, monkeypatch):
+    import desktop_dialoge
+
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
+    meldungen = []
+    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    ziel = tmp_path / "fehlt" / "termin.sqlite"
+
+    def _exec(dialog):
+        dialog.verein.setText("SGV")
+        dialog.datum.setText("14.11.2026")
+        dialog.verband.setText("HSVRM")
+        dialog.meldestelle.setPlainText("x")
+        dialog.pfad_feld.setText(str(ziel))
+        dialog._pruefen_und_akzeptieren()
+        return dialog.result()
+
+    monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec)
+    start = StartDialog()
+    qtbot.addWidget(start)
+    start._neuer_termin()
+
+    assert meldungen
+    assert start.result() != QDialog.Accepted
+    assert not ziel.exists()
+
+
+def test_mindestabstand_bei_schreibfehler_zeigt_gespeicherten_wert(qtbot, conn, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", dk_mindestabstand="20")
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+
+    tab.mindestabstand.setValue(35)
+
+    assert tab.mindestabstand.value() == 20
+    assert not tab.mindestabstand.keyboardTracking()
 
 
 def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, termin, monkeypatch):
@@ -2610,7 +2854,7 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
         """Ersetzt VeranstaltungsDialog: zeichnet nur die übergebene Vorbelegung auf und
         bricht sofort ab, statt einen echten (blockierenden) Dialog zu öffnen."""
 
-        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False):
+        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False, speichern=None):
             aufgezeichnete_vorbelegung.update(vorbelegung or {})
 
         def exec(self):
@@ -2643,7 +2887,7 @@ def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, mon
     aufgezeichnete_vorbelegung = {"noch_nicht_aufgerufen": True}
 
     class _AbbrechenderDialogStub:
-        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False):
+        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False, speichern=None):
             aufgezeichnete_vorbelegung.clear()
             aufgezeichnete_vorbelegung.update(vorbelegung or {})
 
