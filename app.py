@@ -4163,8 +4163,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         if self._demo_tour is not None:
             self._demo_tour.panel_zeigen()
             return
-        if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem die Demoprüfung starten"):
-            return
+        # Keine Rückfrage beim Start (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 8): verworfen
+        # wird erst beim Umschalten auf den Demo-Termin in Schritt 2, und dort fragt die Demo
+        # nach (desktop_demo, Verifikation 04.10.2026, Befund 5).
         DemoTour(fenster=self).starten()
 
     def _demo_sperren(self, aktiv: bool) -> None:
@@ -4187,12 +4188,12 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         wurde und ohne dass der Nutzer noch die Möglichkeit gehabt hätte, sie zu
         korrigieren. Nach dem Speicherversuch wird deshalb erneut geprüft: bleiben
         Änderungen ungespeichert übrig, wird - genau wie bei
-        _ungespeicherte_ergebnisse_klaeren (Terminwechsel, Demoprüfung) - nachgefragt, ob trotzdem beendet (und diese Änderungen
+        _ungespeicherte_ergebnisse_klaeren (Terminwechsel, Demoprüfung) - nachgefragt, ob
+        trotzdem beendet (und diese Änderungen
         verworfen) oder das Schließen abgebrochen werden soll, damit die fehlerhafte
         Zeile noch korrigiert werden kann. Vorbelegter Standard ist "Nein" (nicht
-        schließen) - anders als bei den übrigen Ja/Nein-Rückfragen in diesem Fenster, wo
-        der übliche Fall (Speichern) vorbelegt ist, ist hier der sicherere Standard das
-        NICHT versehentliche Verwerfen von Daten.
+        schließen), wie bei allen Rückfragen, die Änderungen verwerfen würden; bei der
+        ersten Rückfrage "Speichern/Verwerfen/Abbrechen" ist "Speichern" vorbelegt.
 
         H-4: Hat _sitzungsende_pruefen das Beenden durch Windows/Setup gerade erlaubt
         (Qt ruft closeEvent erst danach über quit() auf), wird ohne zweite Prüfung
@@ -4202,6 +4203,11 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         freigegeben = self._beenden_freigegeben
         self._beenden_freigegeben = False
         if freigegeben:
+            # Desktop-Prüfung 14.10.2026, Teil 8 Nr. 10: Unter X11 kann das Abmelden nach der
+            # Freigabe doch abgebrochen werden; inzwischen getippte Ergebnisse dann still
+            # mitspeichern statt sie zu verlieren (unter Windows ist das ein No-op).
+            if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
+                self.ergebnis_tab.alle_speichern()
             event.accept()
             return
         if self._beenden_vorbereiten():
@@ -4342,18 +4348,42 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._termin_setzen(neue_verbindung, dialog.pfad)
         alte_verbindung.close()
 
+    def _rueckfrage_ungespeichert(self, verwerfen: bool) -> str:
+        """Gemeinsame Rückfrage bei ungespeicherten Ergebnissen (Desktop-Prüfung 14.10.2026,
+        Teil 8 Nr. 2): "speichern", "weiter" (ohne Speichern) oder "abbrechen". Esc und das
+        Fenster-X bedeuten Abbrechen. `verwerfen`: ob "ohne Speichern" die Eingaben verliert
+        (Termin-/Demowechsel) oder sie nur ungespeichert stehen bleiben (Reiterwechsel) - das
+        steht ausdrücklich im Text, weil derselbe Knopf sonst Verschiedenes bedeutet."""
+        if verwerfen:
+            text = (
+                "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\n"
+                "„Speichern“ speichert sie jetzt. „Verwerfen“ wechselt ohne Speichern – die "
+                "Änderungen gehen dann verloren. „Abbrechen“ bleibt im aktuellen Termin."
+            )
+            knoepfe = QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+        else:
+            text = (
+                "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\n"
+                "Jetzt speichern? Bei „Nein“ bleiben sie ungespeichert in der Tabelle stehen. "
+                "„Abbrechen“ bleibt in der Ergebniserfassung."
+            )
+            knoepfe = QMessageBox.Save | QMessageBox.No | QMessageBox.Cancel
+        antwort = QMessageBox.question(self, "Ungespeicherte Ergebnisse", text, knoepfe, QMessageBox.Save)
+        # Yes/No zusätzlich, damit ältere Ja/Nein-Attrappen in Tests weiter passen.
+        if antwort in (QMessageBox.Save, QMessageBox.Yes):
+            return "speichern"
+        if antwort in (QMessageBox.Discard, QMessageBox.No):
+            return "weiter"
+        return "abbrechen"
+
     def _ungespeicherte_ergebnisse_klaeren(self, verwerfen_frage: str) -> bool:
         """Vor dem Verlassen des Termins (Terminwechsel, Demoprüfung): bei ungespeicherten
         Ergebnissen nachfragen und ggf. speichern. False = Vorgang abbrechen."""
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-            antwort = QMessageBox.question(
-                self,
-                "Ungespeicherte Ergebnisse",
-                "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\nJetzt speichern?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-            if antwort == QMessageBox.Yes:
+            antwort = self._rueckfrage_ungespeichert(verwerfen=True)
+            if antwort == "abbrechen":
+                return False
+            if antwort == "speichern":
                 self.ergebnis_tab.alle_speichern()
                 # Codeprüfung 22.09., G3: wie in closeEvent - alle_speichern() kann nicht
                 # jede Zeile speichern (z. B. nur Suche ODER Anzeige eingetragen). Ohne
@@ -4379,14 +4409,14 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # nachfragen, statt sie stillschweigend zu verwerfen.
         voriges_widget = self._tabs.widget(self._vorheriger_tab_index)
         if voriges_widget is self.ergebnis_tab and self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-            antwort = QMessageBox.question(
-                self,
-                "Ungespeicherte Ergebnisse",
-                "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\nJetzt speichern?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-            if antwort == QMessageBox.Yes:
+            antwort = self._rueckfrage_ungespeichert(verwerfen=False)
+            if antwort == "abbrechen":
+                # In der Ergebniserfassung bleiben (ohne erneute Rückfrage).
+                self._tabs.blockSignals(True)
+                self._tabs.setCurrentIndex(self._vorheriger_tab_index)
+                self._tabs.blockSignals(False)
+                return
+            if antwort == "speichern":
                 self.ergebnis_tab.alle_speichern()
 
         self._vorheriger_tab_index = index

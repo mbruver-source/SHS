@@ -6098,3 +6098,24 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   Datei. Ein neuer Screenshot ist nicht nötig, weil ohne Sortierung kein Pfeil erscheint.
 - **Bekannt, nicht geändert:** Hat jemand Eingaben zu einer alten Disziplin und zusätzlich
   DQ/Abbruch, steht er zweimal in der Meldung, einmal je Grund.
+
+### A10 Rückfrage bei ungespeicherten Ergebnissen (14.10.2026, Desktop-Prüfung Teil 8 und 10)
+
+- **Terminwechsel (Teil 8 Nr. 2):** Die Rückfrage bietet jetzt „Speichern“, „Verwerfen“ und
+  „Abbrechen“; vorbelegt ist „Speichern“. Esc und das Fenster-X brechen ab, statt wie bisher als
+  „Nein“ zu verwerfen. Der Text sagt ausdrücklich, dass „Verwerfen“ die Änderungen verliert. Dass
+  „Nein“ bzw. „Verwerfen“ beim Terminwechsel verwirft, bleibt so (Fortschritt.md:48).
+- **Reiterwechsel:** Dieselbe Hilfsfunktion `_rueckfrage_ungespeichert` mit „Speichern“, „Nein“
+  (Eingaben bleiben ungespeichert stehen) und „Abbrechen“ (zurück in die Ergebniserfassung, ohne
+  erneute Rückfrage).
+- **Demo-Start (Teil 10 Nr. 8):** Die irreführende Startfrage „… starten und verwerfen?“ ist
+  entfallen. Gefragt wird nur noch in Schritt 2 beim Umschalten auf den Demo-Termin. Bei
+  „Abbrechen“ hält die Demo mit einem passenden Hinweis an. Lassen sich eigene Eingaben während
+  der Demo nicht speichern, wechselt `_reiter_zeigen` den Reiter ohne Rückfrage; die Eingaben
+  bleiben ungespeichert stehen.
+- **Linux/X11 (Teil 8 Nr. 10):** Wurde das Abmelden nach der Freigabe doch abgebrochen, speichert
+  `closeEvent` inzwischen eingegebene Ergebnisse still mit, statt sie zu verlieren.
+- **Docstring von `closeEvent` (Teil 8 Nr. 8)** korrigiert.
+- **Handbuch:** Kap. „Demoprüfung“ und Kap. 7 nachgezogen. Tests: Abbrechen beim Termin- und
+  Reiterwechsel, Knöpfe und Texte der Rückfrage, stilles Speichern nach Freigabe, Demo-Schritt 2
+  mit „Abbrechen“ bzw. „Verwerfen“ und ohne Startfrage.

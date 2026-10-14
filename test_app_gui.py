@@ -3629,6 +3629,70 @@ def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_
     return fenster, fragen
 
 
+def test_terminwechsel_abbrechen_bleibt_im_termin(qtbot, termin, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 8 Nr. 2: Esc bzw. "Abbrechen" (QMessageBox.Cancel)
+    bricht den Terminwechsel ab, statt wie früher als "Nein" zu verwerfen."""
+    fenster, fragen = _terminwechsel_vorbereiten(
+        qtbot, termin, monkeypatch, [QMessageBox.Cancel], speichern_gelingt=True
+    )
+
+    fenster._termin_wechseln()
+
+    assert fragen == ["Ungespeicherte Ergebnisse"]
+    assert _StartDialogAttrappe.geoeffnet == 0
+
+
+def test_terminwechsel_rueckfrage_bietet_speichern_verwerfen_abbrechen(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    aufrufe = []
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a, **k: aufrufe.append(a) or QMessageBox.Cancel)
+
+    assert fenster._rueckfrage_ungespeichert(verwerfen=True) == "abbrechen"
+    assert fenster._rueckfrage_ungespeichert(verwerfen=False) == "abbrechen"
+    (_p, _titel, text_termin, knoepfe_termin, vorgabe), (_p2, _t2, text_reiter, knoepfe_reiter, _v2) = aufrufe
+    assert knoepfe_termin == QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+    assert vorgabe == QMessageBox.Save
+    assert "gehen dann verloren" in text_termin
+    assert knoepfe_reiter == QMessageBox.Save | QMessageBox.No | QMessageBox.Cancel
+    assert "ungespeichert in der Tabelle stehen" in text_reiter
+
+
+def test_reiterwechsel_abbrechen_bleibt_in_der_ergebniserfassung(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Cancel)
+
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+
+    assert fenster._tabs.currentWidget() is fenster.ergebnis_tab
+    assert fenster._tabs.widget(fenster._vorheriger_tab_index) is fenster.ergebnis_tab
+
+
+def test_schliessen_nach_freigabe_speichert_neue_eingaben_still(qtbot, termin, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 8 Nr. 10 (Linux/X11)."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    zustand = {"ungespeichert": True, "gespeichert": 0}
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen",
+                        lambda self: zustand["ungespeichert"])
+
+    def _speichern(self):
+        zustand["gespeichert"] += 1
+        zustand["ungespeichert"] = False
+
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", _speichern)
+    fenster._beenden_freigegeben = True
+    fenster.close()
+    assert zustand["gespeichert"] == 1
+
+
 def test_terminwechsel_bricht_ab_wenn_speichern_zeilen_uebrig_laesst_und_nein(qtbot, termin, monkeypatch):
     fenster, fragen = _terminwechsel_vorbereiten(
         qtbot, termin, monkeypatch, [QMessageBox.Yes, QMessageBox.No], speichern_gelingt=False
@@ -5600,7 +5664,7 @@ def test_demo_haelt_in_schritt_2_an_wenn_ergebnisse_im_eigenen_termin_nicht_spei
 
     assert fragen == ["Ungespeicherte Ergebnisse", "Nicht alle Ergebnisse gespeichert"]
     assert not tour._panel.weiter_btn.isEnabled()
-    assert "nicht weitermachen" in tour._panel.hinweis_label.text()
+    assert "Die Demo hält hier an" in tour._panel.hinweis_label.text()
     assert fenster.conn is conn  # noch nicht auf den Demo-Termin umgeschaltet
 
     tour.beenden()
@@ -5608,6 +5672,39 @@ def test_demo_haelt_in_schritt_2_an_wenn_ergebnisse_im_eigenen_termin_nicht_spei
     assert fenster.conn is conn
     assert fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()  # Eingabe nicht verloren
     assert fenster.demo_btn.isEnabled() and fenster.wechseln_btn.isEnabled()
+
+
+@pytest.mark.parametrize("antwort, angehalten", [(QMessageBox.Cancel, True), (QMessageBox.Discard, False)])
+def test_demo_schritt_2_abbrechen_oder_verwerfen(qtbot, termin, demo_umgebung, monkeypatch, antwort, angehalten):
+    """Desktop-Prüfung 14.10.2026, Teil 8 Nr. 2 / Teil 10 Nr. 8: Beim Demo-Start wird nicht
+    mehr gefragt; in Schritt 2 hält „Abbrechen“ die Demo an, „Verwerfen“ schaltet ohne
+    Speichern auf den Demo-Termin um."""
+    conn, pfad = termin
+    tid = add_teilnehmer(conn, NeuerTeilnehmer(
+        nachname="Echt", vorname="Erika", rufname_hund="Bello", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
+    felder["Trümmerfeld"][0].setText("50")
+    felder["Trümmerfeld"][1].setText("30")
+    fragen = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[1]) or antwort)
+
+    fenster._demo_starten()
+    assert fragen == []  # keine Rückfrage beim Start
+    tour = fenster._demo_tour
+    _demo_bis(tour, "1.")
+    tour.weiter()
+
+    assert fragen == ["Ungespeicherte Ergebnisse"]
+    if angehalten:
+        assert fenster.conn is conn
+        assert "Die Demo hält hier an" in tour._panel.hinweis_label.text()
+    else:
+        assert fenster.conn is not conn
+    tour.beenden()
+    assert get_ergebnis(conn, tid)["suche_truemmerfeld"] is None  # nie gespeichert
 
 
 def test_demo_beenden_gibt_knoepfe_auch_nach_fehler_frei(qtbot, termin, demo_umgebung, monkeypatch):

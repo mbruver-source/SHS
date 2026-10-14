@@ -666,10 +666,21 @@ class DemoTour(QObject):
 
     def _reiter_zeigen(self, widget: QWidget) -> None:
         """Wechselt den Reiter - vorher ungespeicherte Ergebnisse speichern, damit die
-        Rückfrage „Jetzt speichern?“ beim Verlassen der Ergebniserfassung nicht erscheint."""
+        Rückfrage beim Verlassen der Ergebniserfassung nicht erscheint. Bleibt trotzdem
+        etwas ungespeichert (eigene, nicht speicherbare Eingabe), wird ohne Rückfrage
+        gewechselt; die Eingaben bleiben ungespeichert stehen (sonst könnte ein „Abbrechen“
+        die Demo auf dem falschen Reiter weiterlaufen lassen)."""
         fenster = self._fenster
         if fenster.ergebnis_tab.hat_ungespeicherte_aenderungen():
             fenster.ergebnis_tab.alle_speichern()
+        if fenster.ergebnis_tab.hat_ungespeicherte_aenderungen():
+            fenster._tabs.blockSignals(True)
+            fenster._tabs.setCurrentWidget(widget)
+            fenster._tabs.blockSignals(False)
+            fenster._vorheriger_tab_index = fenster._tabs.currentIndex()
+            if widget is not fenster.ergebnis_tab and hasattr(widget, "aktualisieren"):
+                widget.aktualisieren()
+            return
         fenster._tabs.setCurrentWidget(widget)
 
     def _dialog_zeigen(self, dialog: QDialog) -> None:
@@ -949,9 +960,9 @@ class DemoTour(QObject):
                 "Trotzdem mit der Demoprüfung weitermachen"
             ):
                 raise DemoFehler(
-                    "Die Demo kann hier nicht weitermachen: In deinem Termin gibt es Ergebnisse, "
-                    "die sich nicht speichern ließen. Nach „Beenden“ bist du wieder in deinem "
-                    "Termin, die Eingaben sind noch da und lassen sich korrigieren."
+                    "Die Demo hält hier an: In deinem Termin gibt es noch nicht gespeicherte "
+                    "Ergebnisse. Nach „Beenden“ bist du wieder in deinem Termin, die Eingaben "
+                    "sind noch da und lassen sich speichern oder korrigieren."
                 )
             set_veranstaltung(self.conn, **dialog.veranstaltung_werte())
             self._dialog_schliessen()

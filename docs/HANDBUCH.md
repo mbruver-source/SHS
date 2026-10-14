@@ -201,8 +201,8 @@ bei deinen Terminen, und wird am Ende samt PDF gelöscht. Ist die Ergebnisliste 
 einem PDF-Programm geöffnet, räumt das Programm sie beim nächsten Start weg. Deine echten Termine bleiben
 unberührt. Der Reiter **„Datensicherung“** ist während der Demo gesperrt, weil er immer mit
 deinen echten Terminen arbeitet. Startest du die Demo aus dem Hauptfenster, bist du danach
-wieder in deinem vorherigen Termin. Gibt es dort noch nicht gespeicherte Ergebnisse, fragt das
-Programm vorher wie beim Terminwechsel nach.
+wieder in deinem vorherigen Termin. Gibt es dort noch nicht gespeicherte Ergebnisse, fragt die
+Demo in Schritt 2 vor dem Umschalten auf den Demo-Termin wie beim Terminwechsel nach.
 
 ### Neuen Termin anlegen
 
@@ -586,8 +586,10 @@ gesperrt.
 - Ein Klick auf einen **Spaltenkopf** sortiert nach dieser Spalte (Pfeil im Kopf), ein zweiter
   Klick kehrt die Richtung um. Mit der **Tab-Taste** springst du von Eingabefeld zu Eingabefeld.
 
-Beim Wechsel des Reiters oder Termins fragt das Programm bei ungespeicherten Ergebnissen
-„Jetzt speichern?“. Beim **Schließen** des Programms werden ungespeicherte Ergebnisse
+Beim Wechsel des **Reiters** fragt das Programm bei ungespeicherten Ergebnissen „Jetzt
+speichern?“. Bei „Nein“ bleiben sie ungespeichert in der Tabelle stehen, „Abbrechen“ bleibt in
+der Ergebniserfassung. Beim Wechsel des **Termins** stehen „Speichern“, „Verwerfen“ (die
+Änderungen gehen verloren) und „Abbrechen“ (im Termin bleiben) zur Wahl. Beim **Schließen** des Programms werden ungespeicherte Ergebnisse
 automatisch gespeichert. Lässt sich die Termin-Datei nicht beschreiben (z. B. schreibgeschützter
 USB-Stick), erscheint eine Meldung, und das Programm fragt nach, bevor ungespeicherte Ergebnisse
 verloren gehen.
