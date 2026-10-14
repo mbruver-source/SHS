@@ -5932,3 +5932,39 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   ein Sicherheitsbefund (Details folgen nach dem Release). Bericht in
   `_unveroeffentlicht/desktop-pruefung/teil-09.md`. Damit sind alle 10 Teile geprüft. Die
   Befunde sind noch nicht mit Marco besprochen und noch nicht umgesetzt.
+
+## Briefing (14.10.2026): Automatische Abarbeitung aller Befunde der Desktop-Prüfung
+
+Marco hat am 14.10.2026 das Go für **alle** Befunde der Desktop-Prüfung gegeben. Sie werden
+automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als eine Aufgabe.
+
+- **Maßgebliche Aufgabenliste:** `_unveroeffentlicht/desktop-pruefung/aufgaben.md` (19 Aufgaben
+  A1–A19). Dort stehen auch Marcos Entscheidungen, der Ablauf je Aufgabe, der Status und die
+  Rückfragen. Die Liste liegt bewusst nicht im Repo, weil sie Sicherheitsbefunde enthält.
+- **Ablauf je Aufgabe:**
+  1. Nutzungslimit prüfen; mindestens 3 % Reserve.
+  2. Explore-Subagent lokalisiert die Stellen.
+  3. Umsetzen und testen (Testbefehl wie in `CLAUDE.md`, mit
+     `C:\Users\mbruv\anaconda3\python.exe`, dazu die GUI-Tests mit pytest).
+  4. Subagent `verifikation` prüft gegen.
+  5. Eintrag hier und Status in `aufgaben.md`.
+  6. Lokaler Commit mit Attribution-Footer.
+- **Grenzen:** Kein Push, Tag, Versionsbump oder Build. Sicherheitsfunde stehen bis zum Release
+  nur allgemein in diesem Dokument und in den Commits.
+- **Gestartet** wird mit `/loop` (siehe `aufgaben.md`, Abschnitt „Einrichtung“).
+- **Entscheidungen von Marco ohne Sicherheitsbezug:**
+  - Nicht angebotene Prüfungen: beim Import aus einem anderen Termin ein Hinweis, bei der
+    Erfassung von Hand eine Rückfrage.
+  - Stechen: Je LK und Disziplin gibt es nur ein Stechen, und das erst am Ende. Eine wachsende
+    Stechen-Gruppe (Teil 4 Nr. 1) ist damit fachlich ausgeschlossen. Kein Code.
+  - Telefonnummern mit „+“/„-“ ohne Leerzeichen: Der CSV-Export stellt „'“ voran.
+  - Excel: Warnung beim Import und Hinweise im Programm und im Handbuch, kein xlsx-Export.
+  - Design „Hell“ setzt künftig immer eine feste helle Palette. Das hebt die Festlegung vom
+    13.09. auf (siehe oben: „folgt weiter dem Windows-Farbschema“).
+  - PDFs bekommen eine Unicode-Schrift (DejaVu Sans).
+  - „Termin löschen“: Vorgabe „Nein“, die Datei geht in den Papierkorb.
+  - Sicherung: Liegt der geöffnete Termin außerhalb des Termine-Ordners, wird gefragt, ob er
+    mitgesichert werden soll.
+  - Beim Öffnen eines Termins gibt es eine Schreibprobe. Dass sich dabei der Zeitstempel ändert,
+    ist akzeptiert.
+  - Zweiter Programmstart: Rückfrage, keine Sperre.
