@@ -6150,3 +6150,32 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   - Der Excel-Verdacht kann bei Ortsnummern ohne Vorwahl („123456“) oder Nummern wie „1E5“
     fälschlich anschlagen. Es ist nur ein Hinweis, nichts wird abgelehnt.
   - Die Hinweisliste ist unbegrenzt, das Kürzen langer Listen folgt mit A12.
+
+### A7 Demoprüfung (14.10.2026, Desktop-Prüfung Teil 10)
+
+- **Erklärfenster unter dem Bildschirmrand (Nr. 1, mittel):** In Schritt 13 bis 15 wuchs das
+  Fenster nach unten und die Knopfzeile lag hinter der Taskleiste. Die Unterkante ist jetzt
+  verankert (`_im_bildschirm_halten`, auch bei jeder Größenänderung), und zwar auf dem Bildschirm,
+  auf dem das Fenster gerade steht. Eine Sichtprüfung am echten Windows mit Taskleiste steht noch
+  aus.
+- **Springen (Nr. 2):** Das Fenster weicht nur noch aus, wenn die andere Ecke das Ziel nicht
+  ebenfalls verdeckt. „Weiter“ führt einen fertigen Schritt nicht erneut aus.
+- **Schritt 4 (Nr. 3):** Eigene Eingaben im Demo-Dialog werden wie beim echten OK geprüft.
+  Unvollständige Angaben oder eine geänderte Prüfung halten die Demo mit Hinweis an. Die ID steht
+  immer unter dem Demonamen.
+- **Reiter (Nr. 4):** Die Schritte 4, 5, 6, 9, 10 und 12 holen ihren Reiter nach vorn.
+- **Startfehler (Nr. 5):** Im Hauptfenster-, Terminwechsel- und Startdialog-Weg erscheint jetzt die
+  Meldung „Demoprüfung nicht möglich“. Aus dem Startdialog geht es danach zurück zum Startdialog,
+  statt das Programm zu beenden. „Demoprüfung beendet“ erscheint nur, wenn die Demo lief.
+- **Demo-Knopf (Nr. 9):** Er bleibt während der Demo aktiv als „🎓 Erklärfenster zeigen“, mit
+  passendem Tooltip, und holt das Erklärfenster zurück. Der Hinweis zum Fenster im Handbuch ist
+  ergänzt.
+- **Doppelte Logik (Nr. 10):** Das Stechen in der Demo gilt je Leistungsklasse
+  (`shs_core.stechen_gruppen`). Die Zeitplan-Verteilung nutzt den gemeinsamen Kern
+  `ZeitplanTab.verteilen_ohne_rueckfrage`.
+- **„Durchsuchen…“ (Nr. 11)** ist in der Demo gesperrt (`VeranstaltungsDialog.durchsuchen_btn`).
+- **Tests (Nr. 7):** Lage und Springen des Fensters, Schritt 4 mit unvollständiger Eingabe,
+  Reiter nach vorn, Startfehler in beiden Wegen, Knopf „Erklärfenster zeigen“.
+- **Offen bzw. hingenommen:** Wer im Startdialog die Demo wählt, wird vorher schon beim
+  Terminwechsel nach ungespeicherten Ergebnissen gefragt und in Schritt 2 noch einmal. Die erste
+  Frage kommt vor der Auswahl im Startdialog, da ist noch nicht bekannt, dass die Demo folgt.

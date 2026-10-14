@@ -5446,7 +5446,9 @@ def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_
     assert tour is not None
     demo_ordner = os.path.dirname(tour.pfad)
     assert os.path.dirname(demo_ordner) == str(temp)
-    assert not fenster.demo_btn.isEnabled() and not fenster.wechseln_btn.isEnabled()
+    # Teil 10 Nr. 9: Der Demo-Knopf holt während der Demo das Erklärfenster zurück.
+    assert not fenster.wechseln_btn.isEnabled()
+    assert "Erklärfenster" in fenster.demo_btn.text()
     gesehen = []
 
     def pruefen(titel):
@@ -5724,6 +5726,139 @@ def test_demo_schritt_2_abbrechen_oder_verwerfen(qtbot, termin, demo_umgebung, m
         assert fenster.conn is not conn
     tour.beenden()
     assert get_ergebnis(conn, tid)["suche_truemmerfeld"] is None  # nie gespeichert
+
+
+def test_demo_erklaerfenster_bleibt_im_bildschirm_und_springt_nicht_doppelt(
+    qtbot, termin, demo_umgebung, monkeypatch
+):
+    """Desktop-Prüfung 14.10.2026, Teil 10 Nr. 1 und 2: in jedem Schritt vollständig im
+    verfügbaren Bildschirmbereich, und je „Weiter“ höchstens ein Ortswechsel."""
+    import desktop_demo
+    from PySide6.QtWidgets import QWidget
+
+    verschiebungen = []
+
+    def zaehlen(panel, *args):
+        verschiebungen.append(args)
+        QWidget.move(panel, *args)
+
+    monkeypatch.setattr(desktop_demo.DemoPanel, "move", zaehlen)
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    while not tour.ist_beendet and tour._index + 1 < len(tour._schritte):
+        verschiebungen.clear()
+        tour.weiter()
+        titel = tour._schritte[tour._index].titel
+        panel = tour._panel
+        bildschirm = panel.screen().availableGeometry()
+        assert panel.frameGeometry().bottom() <= bildschirm.bottom(), titel
+        assert panel.frameGeometry().top() >= bildschirm.top(), titel
+        assert len(verschiebungen) <= 2, (titel, verschiebungen)  # höchstens Ausweichen + Verankern
+    tour.beenden()
+
+
+def test_demo_schritt_4_prueft_eigene_eingaben(qtbot, termin, demo_umgebung, monkeypatch):
+    """Teil 10 Nr. 3: unvollständige eigene Eingaben im Demo-Dialog halten die Demo mit
+    Hinweis an, statt einen Teilnehmer ohne Pflichtangaben zu speichern."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "3.")
+    tour._alles_sofort()
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+    tour._dialog.vorname.setText("")
+    tour.weiter()
+    assert "lassen sich so nicht übernehmen" in tour._panel.hinweis_label.text()
+    assert not tour._panel.weiter_btn.isEnabled()
+    tour.beenden()
+
+
+def test_demo_holt_den_reiter_nach_vorn(qtbot, termin, demo_umgebung):
+    """Teil 10 Nr. 4: hat der Anwender zwischendurch den Reiter gewechselt, zeigt der
+    nächste Schritt wieder den richtigen."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    _demo_bis(tour, "3.")
+    tour._alles_sofort()
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    tour.weiter()  # Schritt 4 "Weitere Meldungen"
+    assert fenster._tabs.currentWidget() is fenster.teilnehmer_tab
+    tour.beenden()
+
+
+def test_demo_knopf_holt_erklaerfenster_zurueck(qtbot, termin, demo_umgebung, monkeypatch):
+    """Teil 10 Nr. 9."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    tour._panel.hide()
+    fenster.demo_btn.click()
+    assert tour._panel.isVisible()
+    tour.beenden()
+    assert fenster.demo_btn.text() == "🎓 Demoprüfung"
+
+
+def test_demo_startfehler_im_startdialog_weg_fuehrt_zurueck(qtbot, monkeypatch):
+    """Teil 10 Nr. 5: Startfehler aus dem Startdialog beendet nicht mehr das Programm."""
+    import app as app_modul
+
+    aufrufe = []
+
+    class _Start:
+        def __init__(self):
+            aufrufe.append("start")
+            self.demo_angefordert = len(aufrufe) == 1
+            self.pfad = None
+
+        def exec(self):
+            return QDialog.Accepted if len(aufrufe) == 1 else QDialog.Rejected
+
+    def kaputt(_fabrik):
+        raise OSError(28, "No space left on device")
+
+    meldungen = []
+    monkeypatch.setattr(app_modul, "StartDialog", _Start)
+    monkeypatch.setattr(app_modul, "demo_ohne_termin_ausfuehren", kaputt)
+    monkeypatch.setattr(app_modul.QMessageBox, "warning", lambda *a, **k: meldungen.append(a[1]))
+
+    assert app_modul._startdialog_schleife() is None
+    assert meldungen == ["Demoprüfung nicht möglich"]
+    assert aufrufe == ["start", "start"]
+
+
+def test_demo_startfehler_meldet_und_behaelt_den_termin(qtbot, termin, demo_umgebung, monkeypatch):
+    """Teil 10 Nr. 5: Startfehler ergibt eine Meldung, keine Statusmeldung „beendet“."""
+    import desktop_demo
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    def kaputt(*_a, **_k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(desktop_demo, "init_db", kaputt)
+    meldungen = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: meldungen.append(a[1]))
+    fenster._demo_starten()
+    assert meldungen == ["Demoprüfung nicht möglich"]
+    assert fenster.conn is conn
+    assert "Demoprüfung beendet" not in fenster.statusBar().currentMessage()
+    assert fenster.wechseln_btn.isEnabled()
 
 
 def test_demo_beenden_gibt_knoepfe_auch_nach_fehler_frei(qtbot, termin, demo_umgebung, monkeypatch):

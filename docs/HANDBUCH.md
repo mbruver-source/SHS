@@ -200,7 +200,8 @@ Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem temporären O
 bei deinen Terminen, und wird am Ende samt PDF gelöscht. Ist die Ergebnisliste dann noch in
 einem PDF-Programm geöffnet, räumt das Programm sie beim nächsten Start weg. Deine echten Termine bleiben
 unberührt. Der Reiter **„Datensicherung“** ist während der Demo gesperrt, weil er immer mit
-deinen echten Terminen arbeitet. Startest du die Demo aus dem Hauptfenster, bist du danach
+deinen echten Terminen arbeitet. Ist das Erklärfenster verdeckt oder verschoben, holt der Knopf
+**„🎓 Erklärfenster zeigen“** (sonst „Demoprüfung“) es wieder nach vorn. Startest du die Demo aus dem Hauptfenster, bist du danach
 wieder in deinem vorherigen Termin. Gibt es dort noch nicht gespeicherte Ergebnisse, fragt die
 Demo in Schritt 2 vor dem Umschalten auf den Demo-Termin wie beim Terminwechsel nach.
 

@@ -1485,11 +1485,11 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             self.datum.textChanged.connect(self._pfad_vorschlagen)
             self._pfad_vorschlagen()
 
-            durchsuchen_btn = QPushButton("Durchsuchen…")
-            durchsuchen_btn.clicked.connect(self._durchsuchen)
+            self.durchsuchen_btn = QPushButton("Durchsuchen…")
+            self.durchsuchen_btn.clicked.connect(self._durchsuchen)
             pfad_zeile = QHBoxLayout()
             pfad_zeile.addWidget(self.pfad_feld)
-            pfad_zeile.addWidget(durchsuchen_btn)
+            pfad_zeile.addWidget(self.durchsuchen_btn)
             form.addRow("Speicherort*", pfad_zeile)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)

@@ -56,7 +56,6 @@ import pdf_export
 from db import (
     NeuerTeilnehmer,
     add_teilnehmer,
-    automatische_zeitplan_verteilung,
     berechne_auswertung,
     dateiname_vorschlagen,
     fehlende_startnummern_vergeben,
@@ -71,6 +70,7 @@ from db import (
     zeitplan_richter_aus_veranstaltung_anlegen,
 )
 from desktop_dialoge import TeilnehmerDialog, VeranstaltungsDialog
+from shs_core import stechen_gruppen
 from desktop_gemeinsam import _ausdrucke_ordner, _export_dateiname, _pfad_anzeige
 
 #: Präfix der Temp-Ordner - alte Reste (z. B. nach einem Absturz) werden beim nächsten
@@ -251,6 +251,7 @@ class DemoPanel(QWidget):
         if not self._positioniert:
             self._positioniert = True
             self._in_ecke_setzen(rechts=True)
+        self._im_bildschirm_halten()
         self.show()
         self.raise_()
 
@@ -282,20 +283,47 @@ class DemoPanel(QWidget):
 
     def ausweichen(self, ziel: QWidget | None) -> None:
         """Rückt das Fenster in die andere untere Ecke, wenn es das markierte Element
-        verdeckt."""
+        verdeckt - aber nur, wenn es dort das Element NICHT ebenfalls verdeckt (sonst
+        sprang es bei großen Zielen wie Tabellen bei jedem Schritt hin und her,
+        Desktop-Prüfung 14.10.2026, Teil 10 Nr. 2)."""
         if not _lebt(ziel) or not ziel.isVisible() or not self.isVisible():
             return
         ziel_rechteck = QRect(ziel.mapToGlobal(QPoint(0, 0)), ziel.size())
-        if self.frameGeometry().intersects(ziel_rechteck):
-            bildschirm = self.screen().availableGeometry()
-            self._in_ecke_setzen(rechts=self.frameGeometry().center().x() < bildschirm.center().x())
+        if not self.frameGeometry().intersects(ziel_rechteck):
+            return
+        bildschirm = self.screen().availableGeometry()
+        rechts = self.frameGeometry().center().x() < bildschirm.center().x()
+        andere_ecke = QRect(self._ecke(rechts), self.frameGeometry().size())
+        if not andere_ecke.intersects(ziel_rechteck):
+            self._in_ecke_setzen(rechts=rechts)
 
-    def _in_ecke_setzen(self, rechts: bool) -> None:
+    def _ecke(self, rechts: bool) -> QPoint:
         bildschirm = (self.parentWidget() or self).screen().availableGeometry()
         groesse = self.frameGeometry().size()
         x = bildschirm.right() - groesse.width() - 24 if rechts else bildschirm.left() + 24
         y = bildschirm.bottom() - groesse.height() - 48
-        self.move(max(bildschirm.left(), x), max(bildschirm.top(), y))
+        return QPoint(max(bildschirm.left(), x), max(bildschirm.top(), y))
+
+    def _im_bildschirm_halten(self) -> None:
+        """Unterkante verankern: wächst das Fenster (längerer Text, „Gespeichert unter …“),
+        rückt es nach oben, statt unter den Bildschirmrand bzw. die Taskleiste zu rutschen
+        (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 1)."""
+        if not self._positioniert:
+            return
+        # Bildschirm, auf dem das Erklärfenster gerade steht (ggf. vom Anwender auf einen
+        # zweiten Monitor gezogen).
+        bildschirm = self.screen().availableGeometry()
+        rahmen = self.frameGeometry()
+        unten_max = bildschirm.bottom() - 48
+        if rahmen.bottom() > unten_max:
+            self.move(self.x(), max(bildschirm.top(), unten_max - rahmen.height()))
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._im_bildschirm_halten()
+
+    def _in_ecke_setzen(self, rechts: bool) -> None:
+        self.move(self._ecke(rechts))
 
     def _extra_ausfuehren(self) -> None:
         if self._extra_aktion is not None:
@@ -352,6 +380,7 @@ class DemoTour(QObject):
         self._fenster_fabrik = fenster_fabrik
         self.eigenes_fenster = fenster is None
         self._ordner: Path | None = None
+        self._gestartet = False  # erst nach erfolgreichem Start (Statusmeldung beim Beenden)
         self.pfad: str | None = None
         self.conn = None
         self._alt_conn = None
@@ -417,6 +446,7 @@ class DemoTour(QObject):
         QApplication.instance().installEventFilter(self)
         self._schritte = self._schritte_aufbauen()
         self._schritt_zeigen(0)
+        self._gestartet = True
 
     def panel_zeigen(self) -> None:
         if _lebt(self._panel):
@@ -428,8 +458,11 @@ class DemoTour(QObject):
         if self.ist_beendet:
             return
         self._countdown_stoppen()
-        # Läuft der aktuelle Schritt noch, wird er sofort zu Ende geführt.
-        self._alles_sofort()
+        # Läuft der aktuelle Schritt noch, wird er sofort zu Ende geführt. Ist er schon fertig,
+        # nichts erneut ausführen (sonst sprang das Erklärfenster vor jedem Schritt doppelt,
+        # Teil 10 Nr. 2).
+        if self._offen:
+            self._alles_sofort()
         if self.ist_beendet or (self._panel is not None and not self._panel.weiter_btn.isEnabled()):
             return
         if self._index + 1 >= len(self._schritte):
@@ -479,7 +512,8 @@ class DemoTour(QObject):
                 shutil.rmtree(self._ordner, ignore_errors=True)
                 # Z. B. eine noch im PDF-Programm geöffnete Ergebnisliste (Windows sperrt sie).
                 rest_geblieben = self._ordner.exists()
-            if fenster is not None and not self.eigenes_fenster and _lebt(fenster):
+            if fenster is not None and not self.eigenes_fenster and _lebt(fenster) and self._gestartet:
+                # Nur wenn die Demo wirklich lief (Teil 10 Nr. 5).
                 fenster.statusBar().showMessage(
                     "Demoprüfung beendet – der Demo-Termin wurde gelöscht."
                     + (" Eine noch geöffnete Datei wird beim nächsten Programmstart aufgeräumt." if rest_geblieben else ""),
@@ -671,6 +705,8 @@ class DemoTour(QObject):
         gewechselt; die Eingaben bleiben ungespeichert stehen (sonst könnte ein „Abbrechen“
         die Demo auf dem falschen Reiter weiterlaufen lassen)."""
         fenster = self._fenster
+        if fenster._tabs.currentWidget() is widget:
+            return
         if fenster.ergebnis_tab.hat_ungespeicherte_aenderungen():
             fenster.ergebnis_tab.alle_speichern()
         if fenster.ergebnis_tab.hat_ungespeicherte_aenderungen():
@@ -916,6 +952,7 @@ class DemoTour(QObject):
         dialog._pfad_manuell_geaendert = True
         dialog.pfad_feld.setText(_pfad_anzeige(self.pfad))
         dialog.pfad_feld.setReadOnly(True)
+        dialog.durchsuchen_btn.setEnabled(False)  # gespeichert wird immer im Demo-Ordner (Teil 10 Nr. 11)
         self._dialog_zeigen(dialog)
 
         werte = demo_daten.VERANSTALTUNG
@@ -1007,15 +1044,31 @@ class DemoTour(QObject):
 
     def _aktionen_weitere_teilnehmer(self) -> list[Callable[[], None]]:
         tab = self._fenster.teilnehmer_tab
+        self._reiter_zeigen(tab)
+        demo = demo_daten.TEILNEHMER[0]["daten"]
 
         def ersten_speichern() -> None:
             dialog = self._dialog
             if _lebt(dialog) and isinstance(dialog, TeilnehmerDialog):
+                # Eigene Eingaben im Demo-Dialog sind erlaubt - geprüft wird wie beim echten
+                # OK (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 3).
+                dialog._pruefen_und_akzeptieren()
+                if dialog.result() != QDialog.Accepted:
+                    raise DemoFehler(
+                        "Die Angaben im Fenster „Teilnehmer erfassen“ lassen sich so nicht "
+                        "übernehmen (siehe Meldung) – die Demo kann hier nicht weitermachen."
+                    )
                 neu = dialog.ergebnis()
-            else:  # Dialog wurde vom Anwender geschlossen - mit den Demodaten weiter
-                neu = NeuerTeilnehmer(**demo_daten.TEILNEHMER[0]["daten"])
+                if (neu.art, neu.stufe, neu.disziplin) != (demo["art"], demo["stufe"], demo.get("disziplin")):
+                    raise DemoFehler(
+                        "Die Prüfung im Fenster „Teilnehmer erfassen“ wurde geändert – für die "
+                        "weiteren Schritte muss sie bleiben, wie die Demo sie eingetragen hat."
+                    )
+            else:  # Dialog ist nicht mehr da (praktisch nicht erreichbar) - mit den Demodaten weiter
+                neu = NeuerTeilnehmer(**demo)
             self._dialog_schliessen()
-            self._ids[neu.nachname] = add_teilnehmer(self.conn, neu)
+            # Immer unter dem Demonamen merken - spätere Schritte suchen ihn darunter.
+            self._ids[demo["nachname"]] = add_teilnehmer(self.conn, neu)
             tab.aktualisieren()
             self._markieren(tab.tabelle)
 
@@ -1028,6 +1081,7 @@ class DemoTour(QObject):
         return [ersten_speichern] + [anlegen(t["daten"]) for t in demo_daten.TEILNEHMER[1:]]
 
     def _aktionen_startnummern(self) -> list[Callable[[], None]]:
+        self._reiter_zeigen(self._fenster.teilnehmer_tab)  # Teil 10 Nr. 4
         tab = self._fenster.teilnehmer_tab
 
         def vergeben() -> None:
@@ -1040,6 +1094,7 @@ class DemoTour(QObject):
         return [lambda: self._markieren(tab.vergeben_btn), vergeben]
 
     def _aktionen_bezahlt(self) -> list[Callable[[], None]]:
+        self._reiter_zeigen(self._fenster.teilnehmer_tab)  # Teil 10 Nr. 4
         tab = self._fenster.teilnehmer_tab
 
         def markieren_und_umschalten() -> None:
@@ -1071,14 +1126,10 @@ class DemoTour(QObject):
 
         def verteilen() -> None:
             # Direkt statt über den Knopf - bei schon vorhandenem Plan käme eine Rückfrage.
-            richter = list_zeitplan_richter(self.conn)
-            if not richter:
+            if not list_zeitplan_richter(self.conn):
                 raise DemoFehler("Im Zeitplan sind keine Richter angelegt.")
-            automatische_zeitplan_verteilung(
-                self.conn, [r["id"] for r in richter], standard_dauer_minuten=tab.standard_dauer.value(),
-            )
-            tab.status_label.setText("Automatischer Zeitplan-Vorschlag erstellt.")
-            tab.aktualisieren()
+            if not tab.verteilen_ohne_rueckfrage():
+                raise DemoFehler("Der Zeitplan-Vorschlag ließ sich nicht erstellen.")
 
         return [zeigen, verteilen]
 
@@ -1119,6 +1170,7 @@ class DemoTour(QObject):
         return aktionen
 
     def _aktionen_disqualifikation(self) -> list[Callable[[], None]]:
+        self._reiter_zeigen(self._fenster.ergebnis_tab)  # Teil 10 Nr. 4
         def aktion() -> None:
             nachname = next(t["daten"]["nachname"] for t in demo_daten.TEILNEHMER if t.get("status") == "dq")
             felder = self._fenster.ergebnis_tab.eingabefelder(self._ids[nachname])
@@ -1130,6 +1182,7 @@ class DemoTour(QObject):
         return [aktion]
 
     def _aktionen_speichern(self) -> list[Callable[[], None]]:
+        self._reiter_zeigen(self._fenster.ergebnis_tab)  # Teil 10 Nr. 4
         tab = self._fenster.ergebnis_tab
 
         def speichern() -> None:
@@ -1150,14 +1203,20 @@ class DemoTour(QObject):
         return [zeigen]
 
     def _aktionen_stechen(self) -> list[Callable[[], None]]:
+        self._reiter_zeigen(self._fenster.auswertung_tab)  # Teil 10 Nr. 4
         tab = self._fenster.auswertung_tab
 
         def festlegen() -> None:
             # Direkt statt über den Knopf - der fragt den Sieger in einem Dialog ab.
             fertig, _ausstehend = berechne_auswertung(self.conn)
-            gruppe = [int(t.id) for t in fertig if t.stechen == "offen"]
             sieger = self._ids.get(demo_daten.STECHEN_SIEGER)
-            if sieger not in gruppe:
+            # Wie in der Auswertung je Leistungsklasse (shs_core.stechen_gruppen), Teil 10 Nr. 10.
+            gruppe = next(
+                ([int(t.id) for t in g] for g in stechen_gruppen(fertig).values()
+                 if any(int(t.id) == sieger and t.stechen == "offen" for t in g)),
+                [],
+            )
+            if not gruppe:
                 raise DemoFehler("In der Auswertung ist kein offenes Stechen zu finden.")
             setze_stechen_sieger(self.conn, sieger, gruppe)
             tab.aktualisieren()

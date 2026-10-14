@@ -3086,6 +3086,23 @@ class ZeitplanTab(QWidget):
             return
         self.aktualisieren()
 
+    def verteilen_ohne_rueckfrage(self) -> bool:
+        """Kern von „Automatisch verteilen…“ ohne Rückfragen - auch von der Demoprüfung
+        genutzt (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 10). True = Vorschlag erstellt."""
+        richter = list_zeitplan_richter(self.conn)
+        if not richter:
+            return False
+        try:
+            automatische_zeitplan_verteilung(
+                self.conn, [r["id"] for r in richter], standard_dauer_minuten=self.standard_dauer.value(),
+            )
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return False
+        self.status_label.setText("Automatischer Zeitplan-Vorschlag erstellt.")
+        self.aktualisieren()
+        return True
+
     def _automatisch_verteilen(self) -> None:
         richter = list_zeitplan_richter(self.conn)
         if not richter:
@@ -3105,15 +3122,7 @@ class ZeitplanTab(QWidget):
             )
             if antwort != QMessageBox.Yes:
                 return
-        try:
-            automatische_zeitplan_verteilung(
-                self.conn, [r["id"] for r in richter], standard_dauer_minuten=self.standard_dauer.value(),
-            )
-        except sqlite3.Error as exc:
-            _db_fehler_anzeigen(self, exc)
-            return
-        self.status_label.setText("Automatischer Zeitplan-Vorschlag erstellt.")
-        self.aktualisieren()
+        self.verteilen_ohne_rueckfrage()
 
     # --- Aktionen: Einträge ------------------------------------------------
 
@@ -4176,17 +4185,31 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         """Startet die Demoprüfung (desktop_demo.DemoTour) im Temp-Ordner; der geöffnete
         Termin wird am Ende wiederhergestellt."""
         if self._demo_tour is not None:
+            # Während der Demo holt der Knopf das Erklärfenster zurück (Teil 10 Nr. 9).
             self._demo_tour.panel_zeigen()
             return
         # Keine Rückfrage beim Start (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 8): verworfen
         # wird erst beim Umschalten auf den Demo-Termin in Schritt 2, und dort fragt die Demo
         # nach (desktop_demo, Verifikation 04.10.2026, Befund 5).
-        DemoTour(fenster=self).starten()
+        try:
+            DemoTour(fenster=self).starten()
+        except Exception as exc:  # noqa: BLE001 - z. B. Temp-Ordner voll/nicht beschreibbar
+            # Desktop-Prüfung 14.10.2026, Teil 10 Nr. 5: verständliche Meldung statt des
+            # allgemeinen Fehlerfensters; starten() hat schon aufgeräumt.
+            QMessageBox.warning(self, "Demoprüfung nicht möglich",
+                                f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
 
     def _demo_sperren(self, aktiv: bool) -> None:
-        """Während der Demo kein Terminwechsel und kein zweiter Demo-Start."""
-        self.demo_btn.setEnabled(not aktiv)
+        """Während der Demo kein Terminwechsel und kein zweiter Demo-Start; der Demo-Knopf
+        holt stattdessen das Erklärfenster zurück, falls es verdeckt oder verschoben ist
+        (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 9)."""
         self.wechseln_btn.setEnabled(not aktiv)
+        if not hasattr(self, "_demo_tooltip"):
+            self._demo_tooltip = self.demo_btn.toolTip()
+        self.demo_btn.setText("🎓 Erklärfenster zeigen" if aktiv else "🎓 Demoprüfung")
+        self.demo_btn.setToolTip(
+            "Holt das Erklärfenster der laufenden Demoprüfung wieder nach vorn." if aktiv else self._demo_tooltip
+        )
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Speichert automatisch noch nicht gespeicherte Ergebnisse, bevor das Programm
@@ -4352,7 +4375,11 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         if dialog.exec() != QDialog.Accepted:
             return
         if dialog.demo_angefordert:
-            DemoTour(fenster=self).starten()
+            try:
+                DemoTour(fenster=self).starten()
+            except Exception as exc:  # noqa: BLE001 - wie in _demo_starten (Teil 10 Nr. 5)
+                QMessageBox.warning(self, "Demoprüfung nicht möglich",
+                                    f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
             return
         if not dialog.pfad:
             return
@@ -4673,7 +4700,13 @@ def _startdialog_schleife() -> str | None:
         if start.exec() != QDialog.Accepted:
             return None
         if start.demo_angefordert:
-            demo_ohne_termin_ausfuehren(HauptFenster)
+            try:
+                demo_ohne_termin_ausfuehren(HauptFenster)
+            except Exception as exc:  # noqa: BLE001
+                # Teil 10 Nr. 5: Startfehler der Demo beendet nicht mehr das ganze Programm,
+                # es geht zurück zum Startdialog.
+                QMessageBox.warning(None, "Demoprüfung nicht möglich",
+                                    f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
             continue
         return start.pfad or None
 
