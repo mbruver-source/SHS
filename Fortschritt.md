@@ -6007,3 +6007,27 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   `test_lange_namen_brechen_in_ergebnislisten_um` prüft das Spaltenende geometrisch.
 - `Architektur.md` ist ergänzt (Maskierung von `_datum_kurz` und `_euro_text`). Die Änderung wird
   nicht vorab separat gepusht, sondern erst mit dem Release.
+
+### A3 Terminliste und Termin-Import (14.10.2026, Desktop-Prüfung Teil 1, 5 und 7)
+
+- **Sicherheitskorrektur in der Terminliste (Teil 7 Nr. 3), Details folgen nach dem Release.**
+- **Eigener Termin im Dialog „Aus anderem Termin importieren“ (Teil 1 Nr. 1, mittel):** Wurde der
+  Termin über „Andere Datei öffnen…“ oder „Durchsuchen“ geöffnet, lieferte Qt den Pfad mit „/“,
+  `liste_termine()` mit „\“. Der eigene Termin stand dann vorausgewählt in der Liste, und ein OK
+  hätte alle Teilnehmer doppelt angelegt. Der Vergleich nutzt jetzt `normcase(abspath)`
+  (`_gleiche_datei`).
+- **Quelle nur lesend (Teil 1 Nr. 2, mit dem Hinweis aus Teil 5):** Der Dialog öffnet den anderen
+  Termin über die neue Funktion `db.oeffne_termin_lesend` statt über `init_db`. Es gibt also keine
+  Migration und kein Schreiben mehr in fremde Dateien. Auch schreibgeschützte Dateien älterer
+  Versionen funktionieren; die Verifikation hat das mit allen 15 Altversionen geprüft. Kann die
+  Quelle nicht gelesen werden, steht ein Hinweis in der Liste und OK ist gesperrt. Ein
+  Datenbankfehler mitten im Import erscheint als Meldung.
+- **„#“ und „%“ im Pfad (Teil 7 Nr. 6):** Termin-Dateien und Ordner mit diesen Zeichen galten als
+  „nicht lesbar“, und SQLite legte dabei eine fremde Datei an. Der Pfad geht jetzt korrekt kodiert
+  als `file:`-URI an SQLite, auch für UNC-Pfade (`file:////server/...`).
+- **Tests:** Sonderzeichen im Datei- und Ordnernamen, UNC-Pfad (nur Windows), fremd aufgebaute
+  Dateien, Dateien bleiben unverändert, Pfad mit anderer Schreibweise, schreibgeschützte Altdatei,
+  nicht lesbare Quelle, Datenbankfehler beim Import. Der alte Dialogtest legte bisher die Datei
+  `anderer.sqlite` im Arbeitsverzeichnis an; das passiert nicht mehr.
+- Nachtrag aus der Sicherheitsprüfung: Die Terminliste und der Import-Dialog prüfen den Aufbau der
+  Datei über `db.pruefe_termin_aufbau` und begrenzen das Lesen über `db.lesen_begrenzen`.

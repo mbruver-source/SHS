@@ -61,6 +61,7 @@ from db import (
     kopiere_termin_daten,
     liste_benutzer,
     liste_termine,
+    oeffne_termin_lesend,
     liste_termine_postgres,
     list_teilnehmer,
     list_zeitplan_eintraege,
@@ -2691,6 +2692,93 @@ class TestTerminuebersicht(unittest.TestCase):
     def test_liste_termine_ignoriert_andere_dateitypen(self):
         (self.ordner / "notizen.txt").write_text("nicht relevant")
         self.assertEqual(liste_termine(self.ordner), [])
+
+    def _gueltiger_termin(self, pfad: pathlib.Path, verein: str = "SGV") -> None:
+        conn = init_db(str(pfad))
+        set_veranstaltung(conn, verein=verein, datum="2026-11-14", ort="X")
+        conn.close()
+
+    def _fremde_datei(self, name: str, *sql: str) -> None:
+        with closing(sqlite3.connect(str(self.ordner / name))) as conn:
+            for befehl in sql:
+                conn.execute(befehl)
+            conn.commit()
+
+    def test_liste_termine_sonderzeichen_im_pfad(self):
+        """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 6: "#" und "%xx" in Datei- oder Ordnernamen
+        wurden als URI-Bestandteile gelesen - Termin "nicht lesbar", SQLite legte sogar eine
+        fremde Datei an."""
+        unterordner = self.ordner / "a#b"
+        unterordner.mkdir()
+        for name in ("Termin #2.sqlite", "Prüfung 50%41.sqlite"):
+            self._gueltiger_termin(unterordner / name)
+        vorher = sorted(p.name for p in self.ordner.rglob("*"))
+        termine = liste_termine(unterordner)
+        self.assertEqual(sorted(t.dateiname for t in termine), ["Prüfung 50%41.sqlite", "Termin #2.sqlite"])
+        self.assertTrue(all(t.lesbar and t.verein == "SGV" for t in termine))
+        self.assertEqual(sorted(p.name for p in self.ordner.rglob("*")), vorher)
+
+    def test_liste_termine_fremde_datei_blockiert_die_uebrigen_nicht(self):
+        """Desktop-Prüfung 14.10.2026: ungewöhnlich aufgebaute Dateien erscheinen als
+        "nicht lesbar", die übrigen Termine bleiben sichtbar."""
+        self._gueltiger_termin(self.ordner / "gut.sqlite")
+        self._fremde_datei("nur_id.sqlite",
+                           "CREATE TABLE veranstaltung (id INTEGER)", "INSERT INTO veranstaltung VALUES (1)",
+                           "CREATE TABLE teilnehmer (id INTEGER)")
+        self._fremde_datei("datum_zahl.sqlite",
+                           "CREATE TABLE veranstaltung (id, verein, vereins_nr, ort, datum)",
+                           "INSERT INTO veranstaltung VALUES (1, 'Zahl', NULL, NULL, 20261114)",
+                           "CREATE TABLE teilnehmer (id INTEGER)")
+        self._fremde_datei("ohne_tabellen.sqlite", "CREATE TABLE kunden (id INTEGER)")
+        self._fremde_datei("berechnet.sqlite",
+                           "CREATE TABLE veranstaltung (id, vereins_nr, ort, datum, "
+                           "verein TEXT GENERATED ALWAYS AS (upper(ort)) VIRTUAL)",
+                           "INSERT INTO veranstaltung (id, ort) VALUES (1, 'x')",
+                           "CREATE TABLE teilnehmer (id INTEGER)")
+        self._fremde_datei(
+            "endlos.sqlite",
+            "CREATE TABLE veranstaltung (id, verein, vereins_nr, ort, datum)",
+            "INSERT INTO veranstaltung VALUES (1, 'Endlos', NULL, NULL, '2026-01-01')",
+            "CREATE VIEW teilnehmer AS WITH RECURSIVE z(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM z) "
+            "SELECT n AS id FROM z",
+        )
+        import time
+        start = time.monotonic()
+        termine = {t.dateiname: t for t in liste_termine(self.ordner)}
+        self.assertLess(time.monotonic() - start, 10)
+        self.assertEqual(set(termine), {"gut.sqlite", "nur_id.sqlite", "datum_zahl.sqlite",
+                                        "ohne_tabellen.sqlite", "endlos.sqlite", "berechnet.sqlite"})
+        self.assertFalse(termine["berechnet.sqlite"].lesbar)
+        self.assertTrue(termine["gut.sqlite"].lesbar)
+        self.assertEqual(termine["datum_zahl.sqlite"].datum, "20261114")
+        self.assertTrue(termine["nur_id.sqlite"].lesbar)
+        self.assertIsNone(termine["nur_id.sqlite"].verein)
+        self.assertFalse(termine["ohne_tabellen.sqlite"].lesbar)
+        self.assertFalse(termine["endlos.sqlite"].lesbar)
+
+    @unittest.skipUnless(os.name == "nt", "UNC-Pfade nur unter Windows")
+    def test_oeffne_termin_lesend_mit_unc_pfad(self):
+        pfad = self.ordner / "Termin #3.sqlite"
+        self._gueltiger_termin(pfad)
+        aufgeloest = str(pfad.resolve())
+        unc = pathlib.Path("\\\\127.0.0.1\\" + aufgeloest[0] + "$" + aufgeloest[2:])
+        try:
+            vorhanden = unc.exists()
+        except OSError:
+            vorhanden = False
+        if not vorhanden:
+            self.skipTest("Administrative Freigabe nicht erreichbar")
+        with closing(oeffne_termin_lesend(unc)) as conn:
+            self.assertEqual(conn.execute("SELECT verein FROM veranstaltung").fetchone()[0], "SGV")
+
+    def test_liste_termine_veraendert_dateien_nicht(self):
+        pfad = self.ordner / "termin.sqlite"
+        self._gueltiger_termin(pfad)
+        inhalt = pfad.read_bytes()
+        zeit = pfad.stat().st_mtime_ns
+        liste_termine(self.ordner)
+        self.assertEqual(pfad.read_bytes(), inhalt)
+        self.assertEqual(pfad.stat().st_mtime_ns, zeit)
 
 
 class TestDatumsfelder(unittest.TestCase):

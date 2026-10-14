@@ -3057,6 +3057,125 @@ def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypa
     assert "Anderer" in dialog.termin_combo.itemText(0)
 
 
+def _termin_mit_teilnehmer(pfad, verein, datum, nachname):
+    conn = init_db(str(pfad))
+    set_veranstaltung(conn, verein=verein, datum=datum, ort="X")
+    add_teilnehmer(conn, NeuerTeilnehmer(
+        nachname=nachname, vorname="V", rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    conn.close()
+
+
+def test_termin_import_dialog_schliesst_eigenen_termin_bei_anderer_schreibweise_aus(qtbot, monkeypatch, tmp_path):
+    """Desktop-Prüfung 14.10.2026, Teil 1 Nr. 1: Qt liefert "/", liste_termine() "\\" - der
+    eigene Termin erschien vorausgewählt im Dialog."""
+    import db
+
+    eigen = tmp_path / "eigen.sqlite"
+    _termin_mit_teilnehmer(tmp_path / "alt.sqlite", "Alt", "2026-01-01", "Alt")
+    _termin_mit_teilnehmer(eigen, "Eigen", "2026-12-01", "Eigen")
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: db.liste_termine(tmp_path))
+    aktueller_pfad = str(eigen).replace("\\", "/")
+    if os.name == "nt":
+        aktueller_pfad = aktueller_pfad.upper()
+
+    dialog = TerminImportDialog(None, aktueller_pfad=aktueller_pfad)
+    qtbot.addWidget(dialog)
+
+    assert dialog.termin_combo.count() == 1
+    assert "Alt" in dialog.termin_combo.itemText(0)
+    dialog.schliesse_quelle()
+
+
+def test_termin_import_dialog_liest_schreibgeschuetzte_altdatei(qtbot, monkeypatch, tmp_path):
+    """Desktop-Prüfung 14.10.2026, Teil 1 Nr. 2: die Quelle wird nur gelesen - auch eine
+    schreibgeschützte Datei einer älteren Version, die init_db migrieren müsste, lässt sich
+    verwenden, und die Datei bleibt unverändert."""
+    import shutil
+    import stat
+    from pathlib import Path
+
+    import db
+
+    altdaten = sorted((Path(__file__).resolve().parent / "testdaten" / "altversionen").glob("*/termin.sqlite"))
+    if not altdaten:
+        pytest.skip("testdaten/altversionen fehlt")
+    quelle = tmp_path / "alt.sqlite"
+    shutil.copy(altdaten[0], quelle)
+    inhalt = quelle.read_bytes()
+    os.chmod(quelle, stat.S_IREAD)
+    try:
+        monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: db.liste_termine(tmp_path))
+        dialog = TerminImportDialog(None, aktueller_pfad=None)
+        qtbot.addWidget(dialog)
+        assert dialog.termin_combo.count() == 1
+        assert dialog.teilnehmer_liste.count() > 0
+        assert dialog.ausgewaehlte_ids()
+        assert dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+        dialog.schliesse_quelle()
+    finally:
+        os.chmod(quelle, stat.S_IREAD | stat.S_IWRITE)
+    assert quelle.read_bytes() == inhalt
+
+
+def test_termin_import_dialog_meldet_nicht_lesbare_quelle(qtbot, monkeypatch, tmp_path):
+    """Kann die gewählte Quelle nicht gelesen werden, erscheint ein Hinweis in der Liste und
+    OK ist gesperrt - statt eines allgemeinen Fehlerfensters."""
+    weg = TerminInfo(
+        pfad=str(tmp_path / "weg.sqlite"), dateiname="weg.sqlite", verein="Weg", vereins_nr=None,
+        ort="Y", datum="2026-01-02", anzahl_teilnehmer=1, lesbar=True,
+    )
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [weg])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    assert dialog.teilnehmer_liste.count() == 1
+    assert "nicht gelesen" in dialog.teilnehmer_liste.item(0).text()
+    assert dialog.ausgewaehlte_ids() == []
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    assert dialog.quelle_conn() is None
+    assert not (tmp_path / "weg.sqlite").exists()
+
+
+def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monkeypatch):
+    """Ein Lese- oder Schreibfehler mitten im Import endet in einer Meldung statt im
+    allgemeinen Fehlerfenster; die Liste wird trotzdem aktualisiert."""
+    import sqlite3 as _sqlite3
+
+    class _Stub:
+        def __init__(self, parent, aktueller_pfad):
+            self.geschlossen = False
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def quelle_conn(self):
+            return object()
+
+        def ausgewaehlte_ids(self):
+            return [1]
+
+        def schliesse_quelle(self):
+            pass
+
+    def scheitert(*_a, **_k):
+        raise _sqlite3.OperationalError("database is locked")
+
+    gemeldet = []
+    monkeypatch.setattr("app.TerminImportDialog", _Stub)
+    monkeypatch.setattr("app.importiere_teilnehmer_stammdaten", scheitert)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc: gemeldet.append(str(exc)))
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    aktualisiert = []
+    monkeypatch.setattr(tab, "aktualisieren", lambda: aktualisiert.append(True))
+
+    tab._aus_anderem_termin_importieren()
+
+    assert gemeldet == ["database is locked"]
+    assert aktualisiert
+
+
 def test_termin_import_dialog_ohne_anderen_termin_deaktiviert_ok(qtbot, monkeypatch):
     monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [])
 

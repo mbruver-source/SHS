@@ -804,15 +804,23 @@ class TeilnehmerTab(QWidget):
                 quelle = dialog.quelle_conn()
                 ausgewaehlt = dialog.ausgewaehlte_ids()
                 if quelle is None:
-                    # Praktisch nur erreichbar, wenn die gewählte Quell-Termin-Datei
-                    # zwischenzeitlich nicht mehr geöffnet werden konnte - statt
-                    # kommentarlos abzubrechen, den Nutzer darüber informieren.
+                    # Rückfallebene: Der Dialog sperrt OK bereits, wenn die Quelle nicht
+                    # gelesen werden konnte - statt kommentarlos abzubrechen, trotzdem
+                    # informieren.
                     QMessageBox.warning(
                         self, "Import nicht möglich",
                         "Die gewählte Quell-Termin-Datei konnte nicht geöffnet werden."
                     )
                 elif ausgewaehlt:
-                    anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
+                    try:
+                        anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
+                    except sqlite3.Error as exc:
+                        # Lese- oder Schreibfehler mitten im Import: bereits übernommene
+                        # Teilnehmer bleiben (Commit je Teilnehmer) und sind nach dem
+                        # Aktualisieren sichtbar.
+                        self.aktualisieren()
+                        _db_fehler_anzeigen(self, exc)
+                        return
                     self.aktualisieren()
                     QMessageBox.information(
                         self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert."

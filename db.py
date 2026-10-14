@@ -36,6 +36,7 @@ import sqlite3
 from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 
 from shs_core import (
     ABBRUCH_ABK,
@@ -2382,35 +2383,100 @@ class TerminInfo:
     startnummer_bereichsgroesse: str | None = None
 
 
+# Schrittgrenze (in Einheiten von _LESE_SCHRITTWEITE SQLite-Arbeitsschritten) für das
+# Lesen der Stammdaten einer Termin-Datei in liste_termine(); ein normaler Termin braucht
+# nur einen Bruchteil davon.
+_LESE_SCHRITTWEITE = 1000
+_LESE_HOECHSTSCHRITTE = 1000
+
+
+def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
+    """Öffnet eine Termin-Datei nur lesend (ohne init_db: keine Migration, kein Schreiben).
+    Der Pfad wird als korrekt kodierte file:-URI übergeben, damit Zeichen wie "#" oder "%"
+    im Datei- oder Ordnernamen nicht als URI-Bestandteile gelesen werden. Bewusst ohne
+    Authority-Teil (nicht Path.as_uri()), weil SQLite "file://server/..." ablehnt -
+    UNC-Pfade (\\\\server\\freigabe\\...) werden als "file:////server/..." übergeben."""
+    posix = str(Path(pfad).absolute()).replace("\\", "/")
+    if posix.startswith("//"):
+        posix = "//" + posix
+    elif not posix.startswith("/"):
+        posix = "/" + posix
+    uri = "file:" + quote(posix, safe="/:") + "?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _text_oder_none(wert) -> str | None:
+    return None if wert is None else str(wert)
+
+
+def lesen_begrenzen(conn: sqlite3.Connection) -> None:
+    """Begrenzt die Arbeit, die SQLite auf dieser (fremden) Verbindung leisten darf - danach
+    bricht die laufende Abfrage mit sqlite3.OperationalError ab. Mit
+    conn.set_progress_handler(None, 0) wieder aufheben."""
+    schritte = [0]
+
+    def _begrenzen() -> int:
+        schritte[0] += 1
+        return 1 if schritte[0] > _LESE_HOECHSTSCHRITTE else 0
+
+    conn.set_progress_handler(_begrenzen, _LESE_SCHRITTWEITE)
+
+
+def pruefe_termin_aufbau(conn: sqlite3.Connection) -> None:
+    """Wirft sqlite3.DatabaseError, wenn die Datei nicht wie eine Termin-Datei aufgebaut
+    ist: veranstaltung und teilnehmer müssen gewöhnliche Tabellen ohne berechnete
+    Spalten sein."""
+    tabellen = {
+        zeile[0] for zeile in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('veranstaltung', 'teilnehmer')"
+        )
+    }
+    if tabellen != {"veranstaltung", "teilnehmer"}:
+        raise sqlite3.DatabaseError("keine Termin-Datei")
+    for tabelle in ("veranstaltung", "teilnehmer"):
+        # Spalte "hidden" in table_xinfo: 2/3 = berechnete (GENERATED) Spalte.
+        if any(zeile[6] in (2, 3) for zeile in conn.execute(f"PRAGMA table_xinfo({tabelle})")):
+            raise sqlite3.DatabaseError("keine Termin-Datei")
+
+
+def _termin_info_lesen(pfad: Path) -> TerminInfo:
+    with closing(oeffne_termin_lesend(pfad)) as conn:
+        lesen_begrenzen(conn)
+        pruefe_termin_aufbau(conn)
+        v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
+        anzahl = int(conn.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0])
+
+    def feld(name: str) -> str | None:
+        return _text_oder_none(v[name]) if v is not None and name in v.keys() else None
+
+    return TerminInfo(
+        pfad=str(pfad),
+        dateiname=pfad.name,
+        verein=feld("verein"),
+        vereins_nr=feld("vereins_nr"),
+        ort=feld("ort"),
+        datum=feld("datum"),
+        anzahl_teilnehmer=anzahl,
+        lesbar=True,
+        verband=feld("verband"),
+        startnummer_bereiche=feld("startnummer_bereiche"),
+        startnummer_bereichsgroesse=feld("startnummer_bereichsgroesse"),
+    )
+
+
 def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
     """Listet alle Termin-Dateien (*.sqlite) in `ordner` (Standard: termine_ordner())
-    mit ihren Stammdaten, neueste zuerst. Eine beschädigte/fremde Datei lässt die
-    Übersicht nicht abstürzen, sondern taucht mit lesbar=False auf."""
+    mit ihren Stammdaten, neueste zuerst. Eine beschädigte oder fremde Datei lässt die
+    Übersicht nicht abstürzen, sondern taucht mit lesbar=False auf - jede Datei wird für
+    sich und nur lesend geöffnet (Desktop-Prüfung 14.10.2026)."""
     ordner = ordner or termine_ordner()
     ergebnisse: list[TerminInfo] = []
     for pfad in sorted(ordner.glob("*.sqlite")):
         try:
-            with closing(sqlite3.connect(f"file:{pfad}?mode=ro", uri=True)) as conn:
-                conn.row_factory = sqlite3.Row
-                v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
-                anzahl = conn.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0]
-            ergebnisse.append(TerminInfo(
-                pfad=str(pfad),
-                dateiname=pfad.name,
-                verein=v["verein"] if v else None,
-                vereins_nr=v["vereins_nr"] if v else None,
-                ort=v["ort"] if v else None,
-                datum=v["datum"] if v else None,
-                anzahl_teilnehmer=anzahl,
-                lesbar=True,
-                verband=v["verband"] if v and "verband" in v.keys() else None,
-                startnummer_bereiche=v["startnummer_bereiche"] if v and "startnummer_bereiche" in v.keys() else None,
-                startnummer_bereichsgroesse=(
-                    v["startnummer_bereichsgroesse"]
-                    if v and "startnummer_bereichsgroesse" in v.keys() else None
-                ),
-            ))
-        except sqlite3.DatabaseError:
+            ergebnisse.append(_termin_info_lesen(pfad))
+        except (sqlite3.Error, IndexError, KeyError, TypeError, ValueError, OverflowError):
             ergebnisse.append(TerminInfo(
                 pfad=str(pfad), dateiname=pfad.name, verein=None, vereins_nr=None, ort=None,
                 datum=None, anzahl_teilnehmer=0, lesbar=False,

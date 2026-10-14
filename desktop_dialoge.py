@@ -10,6 +10,7 @@ pdf_export); keines dieser Module importiert app.
 from __future__ import annotations
 
 import datetime
+import os
 import sqlite3
 
 from PySide6.QtCore import Qt
@@ -47,12 +48,14 @@ from db import (
     bereiche_automatisch_berechnen,
     dateiname_vorschlagen,
     datum_anzeige,
-    init_db,
     leistungsklasse_label,
+    lesen_begrenzen,
     liste_termine,
     list_teilnehmer,
     normalisiere_datum,
+    oeffne_termin_lesend,
     pruefe_startnummer_bereiche,
+    pruefe_termin_aufbau,
     pruefungen_als_text,
     startnummer_bereiche,
     startnummer_bereiche_als_text,
@@ -647,6 +650,14 @@ class StartnummerTauschenDialog(QDialog):
         return self.partner_combo.currentData()
 
 
+def _gleiche_datei(pfad_a: str | None, pfad_b: str | None) -> bool:
+    """Vergleicht zwei Pfade unabhängig von "/" bzw. "\\" und (unter Windows) von der
+    Groß-/Kleinschreibung."""
+    if not pfad_a or not pfad_b:
+        return False
+    return os.path.normcase(os.path.abspath(pfad_a)) == os.path.normcase(os.path.abspath(pfad_b))
+
+
 class TerminImportDialog(QDialog):
     """Übernimmt ausgewählte Teilnehmer-STAMMDATEN aus einem anderen Termin in den aktuell
     geöffneten (Nutzerwunsch 20.09., Anmerkung zum Programm: 'Teilnehmer müssen wieder
@@ -665,7 +676,11 @@ class TerminImportDialog(QDialog):
         self.setWindowTitle("Teilnehmer aus anderem Termin importieren")
         self.resize(560, 480)
         self._quelle_conn: sqlite3.Connection | None = None
-        self._termine = [t for t in liste_termine() if t.lesbar and t.pfad != aktueller_pfad]
+        # Desktop-Prüfung 14.10.2026, Teil 1 Nr. 1: Qt liefert Pfade mit "/", liste_termine()
+        # mit "\" - der geöffnete Termin muss trotzdem sicher ausgeschlossen sein.
+        self._termine = [
+            t for t in liste_termine() if t.lesbar and not _gleiche_datei(t.pfad, aktueller_pfad)
+        ]
 
         self.termin_combo = QComboBox()
         for t in self._termine:
@@ -712,16 +727,38 @@ class TerminImportDialog(QDialog):
             self._quelle_conn.close()
             self._quelle_conn = None
         self.teilnehmer_liste.clear()
+        ok_knopf = self.buttons.button(QDialogButtonBox.Ok)
         if not (0 <= index < len(self._termine)):
             return
-        self._quelle_conn = init_db(self._termine[index].pfad)
-        for t in list_teilnehmer(self._quelle_conn):
-            text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"
+        # Die Quelle wird nur gelesen (Desktop-Prüfung 14.10.2026, Teil 1 Nr. 2): kein
+        # init_db, also keine Migration und kein Schreiben in den anderen Termin - auch
+        # schreibgeschützte Dateien älterer Versionen lassen sich so verwenden.
+        try:
+            self._quelle_conn = oeffne_termin_lesend(self._termine[index].pfad)
+            pruefe_termin_aufbau(self._quelle_conn)
+            lesen_begrenzen(self._quelle_conn)
+            eintraege = []
+            for t in list_teilnehmer(self._quelle_conn):
+                text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"
+                eintraege.append((text, t["id"]))
+            self._quelle_conn.set_progress_handler(None, 0)
+        except (sqlite3.Error, KeyError, IndexError, TypeError, ValueError) as exc:
+            self.schliesse_quelle()
+            hinweis = QListWidgetItem(
+                f"Die Teilnehmer dieses Termins konnten nicht gelesen werden ({exc}). "
+                "Bitte einen anderen Termin wählen."
+            )
+            hinweis.setFlags(Qt.NoItemFlags)
+            self.teilnehmer_liste.addItem(hinweis)
+            ok_knopf.setEnabled(False)
+            return
+        for text, teilnehmer_id in eintraege:
             item = QListWidgetItem(text)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked)
-            item.setData(Qt.UserRole, t["id"])
+            item.setData(Qt.UserRole, teilnehmer_id)
             self.teilnehmer_liste.addItem(item)
+        ok_knopf.setEnabled(True)
 
     def _alle_umschalten(self, zustand) -> None:
         for row in range(self.teilnehmer_liste.count()):
