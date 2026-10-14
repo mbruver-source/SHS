@@ -5894,3 +5894,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   Befunde (1 mittel, 5 niedrig, 2 optional), kein Sicherheitsbefund. Bericht in
   `_unveroeffentlicht/desktop-pruefung/teil-01.md`. Die Befunde sind noch nicht mit Marco
   besprochen und noch nicht umgesetzt.
+- **Teil 2 (Teilnehmer-Dialog und Veranstaltung) am 14.10.2026 durchgeführt** (Commit 485f258):
+  15 bestätigte Befunde (7 niedrig, 8 optional), kein Sicherheitsbefund. Bericht in
+  `_unveroeffentlicht/desktop-pruefung/teil-02.md`. Die Befunde sind noch nicht mit Marco
+  besprochen und noch nicht umgesetzt.
