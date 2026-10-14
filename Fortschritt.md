@@ -5923,3 +5923,7 @@ Funktionen der Desktopversion in Teile zerlegt, die sich einzeln nacheinander st
   `_unveroeffentlicht/desktop-pruefung/teil-10.md`. Als Cloud-Probelauf geplant; die
   Cloud-Ausführung griff nicht, Prüfung und Gegenprüfung liefen lokal. Die Befunde sind noch
   nicht mit Marco besprochen und noch nicht umgesetzt.
+- **Teil 8 (Hauptfenster, Lebenszyklus, Version und Update) am 14.10.2026 durchgeführt**
+  (Commit 0aa00df): 10 bestätigte Befunde (2 niedrig, 8 optional), kein Sicherheitsbefund.
+  Bericht in `_unveroeffentlicht/desktop-pruefung/teil-08.md`. Die Befunde sind noch nicht mit
+  Marco besprochen und noch nicht umgesetzt.
