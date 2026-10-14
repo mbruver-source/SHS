@@ -13,6 +13,7 @@ import io
 import os
 import re
 import sqlite3
+import unicodedata
 from dataclasses import dataclass, field
 
 from db import (
@@ -71,6 +72,10 @@ class CsvImportErgebnis:
     # Allgemeine Hinweise zum Import (nicht an eine Zeile gebunden), z. B. dass mangels
     # hinterlegter angebotener Prüfungen nicht geprüft werden konnte (UX-Test U4).
     hinweise: list[str] = field(default_factory=list)
+    # Grund, wenn der Import gar nicht erst begonnen hat (z. B. falsche Kopfzeile) - die
+    # Oberfläche zeigt dann eine Warnung statt "Import abgeschlossen" (Desktop-Prüfung
+    # 14.10.2026, Teil 5 Nr. 2).
+    abbruch: str | None = None
 
 
 # UX-Test 02.10.2026, U4/K8: CSV- und OMA-Import lehnen wie der PDF-Import Meldungen für
@@ -133,13 +138,14 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
 
 
 def _csv_wert(zeile: dict, spalte: str) -> str | None:
-    wert = (zeile.get(spalte) or "").strip()
-    # Gegenstück zu _csv_zelle_absichern (Export): das vorangestellte "'" vor einem
-    # Formelzeichen wieder entfernen, damit Export -> Import verlustfrei bleibt.
-    if len(wert) > 1 and wert[0] == "'":
-        kern = wert[1:].lstrip()
-        if kern[:1] in _FORMEL_ZEICHEN or (kern[:1] == "'" and kern[1:2] in _FORMEL_ZEICHEN):
-            wert = wert[1:].strip()
+    # NFC: "Mu" + kombinierendes Trema und "Mü" sind derselbe Name (Desktop-Prüfung
+    # 14.10.2026, Teil 5 Nr. 6) - wie beim PDF-Import.
+    wert = unicodedata.normalize("NFC", zeile.get(spalte) or "").strip()
+    # Gegenstück zu _csv_zelle_absichern (Export): das vorangestellte "'" wieder entfernen -
+    # genau dann, wenn der Export es gesetzt hätte (gemeinsame Regel _braucht_schutz), damit
+    # Export -> Import verlustfrei bleibt.
+    if len(wert) > 1 and wert[0] == "'" and _braucht_schutz(wert[1:]):
+        wert = wert[1:].strip()
     return wert or None
 
 
@@ -222,16 +228,52 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     )
 
 
+# Desktop-Prüfung 14.10.2026, Teil 5 Nr. 1 (Marcos Entscheidung: übernehmen und je Zeile
+# warnen): Excel zeigt lange Ziffernfolgen als "2,76098E+14" und speichert sie so in der CSV
+# - die übrigen Ziffern sind unwiederbringlich verloren. Telefonnummern verlieren die
+# führende 0. PLZ werden bewusst nicht ergänzt (AT/CH haben 4 Stellen).
+_EXCEL_EXPONENT = re.compile(r"\d+([.,]\d+)?[eE][+-]?\d+")
+_EXCEL_NUMMERNSPALTEN = {
+    "chip_nr": "Chip-Nr.", "plz": "PLZ", "mitgliedsnummer": "Mitgliedsnummer",
+    "telefon": "Telefon", "halter_plz": "PLZ des Halters",
+    "halter_mitgliedsnummer": "Mitgliedsnummer des Halters", "halter_lu_nr": "LU-Nr. des Halters",
+}
+_EXCEL_HINWEIS = "Spalte in Excel vor dem Eintragen als „Text“ formatieren und den Wert neu eintragen"
+
+
+def _excel_verdacht(zeile: dict, bezeichnung: str) -> list[str]:
+    hinweise = []
+    for spalte, name in _EXCEL_NUMMERNSPALTEN.items():
+        wert = _csv_wert(zeile, spalte)
+        if wert is None:
+            continue
+        if _EXCEL_EXPONENT.fullmatch(wert):
+            hinweise.append(f"{bezeichnung}: {name} „{wert}“ wurde von Excel gekürzt – {_EXCEL_HINWEIS}.")
+        elif spalte == "telefon" and wert.isdigit() and len(wert) >= 6 and not wert.startswith("0"):
+            hinweise.append(
+                f"{bezeichnung}: Telefon „{wert}“ hat keine führende 0 – vermutlich von Excel "
+                f"entfernt; {_EXCEL_HINWEIS}."
+            )
+    return hinweise
+
+
+# Teil 5 Nr. 2: ohne diese Spalten kann keine Zeile gelingen - dann klarer Abbruch statt
+# "Zeile N: Nachname/Vorname/Rufname des Hundes fehlt" für jede Zeile.
+CSV_PFLICHTSPALTEN = ["nachname", "vorname", "rufname_hund", "art", "stufe"]
+
+
 def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImportErgebnis:
-    """Liest eine CSV-Datei (Kopfzeile mit Spaltennamen aus CSV_IMPORT_SPALTEN - fehlende
-    oder zusätzliche Spalten werden toleriert) und legt daraus Teilnehmer an, siehe
+    """Liest eine CSV-Datei (Kopfzeile mit Spaltennamen aus CSV_IMPORT_SPALTEN - zusätzliche
+    oder fehlende optionale Spalten werden toleriert, fehlen Pflichtspalten
+    (CSV_PFLICHTSPALTEN), bricht der Import mit `abbruch` ab) und legt daraus Teilnehmer an, siehe
     FormularImportTab in app.py. Eine einzelne fehlerhafte Zeile bricht den Import nicht
     ab, sondern wird übersprungen und im Ergebnis aufgeführt - der Rest der Datei wird
     trotzdem importiert. 'utf-8-sig' statt 'utf-8', damit ein von Excel/Windows-Tools
     gespeichertes BOM am Dateianfang nicht versehentlich Teil des ersten Spaltennamens
     wird (sonst würde 'nachname' der ersten Spalte nicht erkannt).
 
-    Kodierung und Trennzeichen (UX-Test 02.10.2026, U10/N1): UTF-8 (mit/ohne BOM), sonst
+    Kodierung und Trennzeichen (UX-Test 02.10.2026, U10/N1; Desktop-Prüfung 14.10.2026):
+    UTF-16 mit BOM (Excel „Unicode-Text“, dann meist Tabulator-getrennt), UTF-8 (mit/ohne BOM), sonst
     Windows-1252 wie bei Excel "CSV (Trennzeichen-getrennt)"; Komma oder Semikolon wird an
     der Kopfzeile erkannt. add_teilnehmer() committet pro Zeile einzeln."""
     fehler: list[str] = []
@@ -250,18 +292,39 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
     # statt mit "nicht UTF-8-kodiert" abzubrechen (wie beim OMA-Import).
     with open(pfad, "rb") as datei:
         rohdaten = datei.read()
-    try:
-        text = rohdaten.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = rohdaten.decode("cp1252", errors="replace")
+    if rohdaten[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        # Excel "Unicode-Text" speichert UTF-16 (Teil 5 Nr. 2 d).
+        text = rohdaten.decode("utf-16", errors="replace")
+    else:
+        try:
+            text = rohdaten.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = rohdaten.decode("cp1252", errors="replace")
     # Leerzeilen vor der Kopfzeile überspringen (Zeilennummern in Meldungen bleiben die der Datei).
     rest = text.lstrip("\r\n")
     fuehrende_leerzeilen = len(re.findall(r"\r\n|\r|\n", text[: len(text) - len(rest)]))
     text = rest
     kopfzeile = text.splitlines()[0] if text else ""
-    trennzeichen = ";" if kopfzeile.count(";") > kopfzeile.count(",") else ","
+    # Semikolon, Komma oder Tabulator - je nachdem, was die Kopfzeile am häufigsten enthält.
+    trennzeichen = max((",", ";", "\t"), key=kopfzeile.count)
     reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=trennzeichen)
+    if reader.fieldnames:
+        # Spaltennamen ohne Leerzeichen und unabhängig von Groß-/Kleinschreibung
+        # vergleichen (z. B. "Nachname; Vorname" oder "nachname, vorname").
+        reader.fieldnames = [(name or "").strip().casefold() for name in reader.fieldnames]
+        fehlend = [spalte for spalte in CSV_PFLICHTSPALTEN if spalte not in reader.fieldnames]
+        if fehlend:
+            gefunden = ", ".join(name for name in reader.fieldnames if name) or "(keine)"
+            meldung = (
+                "Die Datei hat nicht die erwarteten Spalten (fehlend: " + ", ".join(fehlend)
+                + f"; gefunden: {gefunden[:200]}). Bitte die leere Vorlage verwenden. "
+                "Es wurde nichts importiert."
+            )
+            if "starter_nachname" in text[:2000].casefold():
+                meldung += " Die Datei sieht aus wie ein OMA-Export – dafür bitte den Knopf „OMA-Export importieren…“ verwenden."
+            return CsvImportErgebnis(importiert=0, fehler=[], abbruch=meldung)
     iterator = enumerate(reader, start=2 + fuehrende_leerzeilen)
+    excel_hinweise: list[str] = []
     letzte_zeile += fuehrende_leerzeilen
     while True:
         try:
@@ -279,6 +342,12 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
             )
             break
         letzte_zeile = zeilennummer
+        werte = [wert for schluessel, wert in zeile.items() if schluessel is not None]
+        werte += zeile.get(None) or []  # überzählige Felder einer zu langen Zeile
+        if not any((wert or "").strip() for wert in werte if isinstance(wert, str)):
+            # Nur Trennzeichen (";;;;") - z. B. eine in Excel nur formatierte Zeile; wie eine
+            # Leerzeile still überspringen (Teil 5 Nr. 3).
+            continue
         bezeichnung = _zeilen_bezeichnung(zeilennummer, _csv_wert(zeile, "vorname"), _csv_wert(zeile, "nachname"))
         try:
             teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
@@ -296,12 +365,13 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
             continue
         vorhandene.add(schluessel)
         importiert += 1
+        excel_hinweise += _excel_verdacht(zeile, bezeichnung)
     hinweise = [_KEINE_ANGEBOTE_HINWEIS] if not angebotene and (importiert or fehler) else []
     if not importiert and not fehler and not uebersprungen:
         hinweise.append("Die Datei enthält keine Teilnehmerzeilen - es wurde nichts importiert.")
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+        hinweise=_hinweise_ergaenzen(fehler, hinweise) + excel_hinweise,
     )
 
 
@@ -370,9 +440,9 @@ def _oma_zeile_zu_csv_zeile(werte: list[str], kopf_index: dict[str, int]) -> dic
 
 
 def _meldungs_schluessel(nachname, vorname, rufname_hund, art, stufe, disziplin) -> tuple:
-    """Vergleichsschlüssel für die Dublettenerkennung beim OMA-Import."""
+    """Vergleichsschlüssel für die Dublettenerkennung beim CSV-, OMA- und PDF-Import."""
     def norm(text):
-        return (text or "").strip().casefold()
+        return unicodedata.normalize("NFC", text or "").strip().casefold()
     return (norm(nachname), norm(vorname), norm(rufname_hund), art, int(stufe), disziplin)
 
 
@@ -388,10 +458,14 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
     Zeilennummern in den Meldungen beziehen sich auf die Datei (inkl. Metazeile/Kopf)."""
     with open(pfad, "rb") as datei:
         rohdaten = datei.read()
-    try:
-        text = rohdaten.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = rohdaten.decode("cp1252", errors="replace")
+    if rohdaten[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        # Excel "Unicode-Text" speichert UTF-16 (Teil 5 Nr. 2 d).
+        text = rohdaten.decode("utf-16", errors="replace")
+    else:
+        try:
+            text = rohdaten.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = rohdaten.decode("cp1252", errors="replace")
 
     # Bewusst zeilenweise mit split("\t") statt csv.reader (Verifikation 25.09.): der
     # OMA-Export kennt keine Anführungszeichen, und so gibt es weder das Feldgrößen-Limit
@@ -754,25 +828,32 @@ CSV_EXPORT_SPALTEN = ["startnummer", *CSV_IMPORT_SPALTEN, "bezahlt", "keine_teil
 # Sicherheitsbefund der Verifikation (Marco 03.10.2026: absichern): Teilnehmerdaten stammen
 # von Dritten (Anmelde-PDFs). Ein Wert wie "=HYPERLINK(...)" würde in Excel als Formel
 # ausgeführt (CSV-Injection). Solche Werte bekommen ein "'" vorangestellt - Excel zeigt sie
-# dann als Text; der Import entfernt es wieder (siehe _csv_wert). "+"/"-" nur, wenn der
-# Wert keine Telefonnummer/Zahl ist ("+49 170 …" bleibt unverändert).
+# dann als Text; der Import entfernt es wieder (siehe _csv_wert). "+"/"-" bleiben nur
+# unverändert, wenn der Wert eine Telefonnummer mit Leerzeichen ist ("+49 170 …") oder genau
+# "-": ohne Leerzeichen rechnet Excel "+43-1-5551234" aus (Desktop-Prüfung 14.10.2026, Teil 6
+# Nr. 3, Marcos Entscheidung: dann ebenfalls "'" voranstellen, Excel zeigt es sichtbar).
 _FORMEL_ZEICHEN = ("=", "@", "+", "-", "\t", "\r")
 _ZAHL_ODER_TELEFON = re.compile(r"[+-]?[\d\s()/.-]+")
 
 
+def _braucht_schutz(wert: str) -> bool:
+    """Gemeinsame Regel für Export (_csv_zelle_absichern) und Import (_csv_wert): Würde Excel
+    den Wert als Formel lesen? Führende Leerzeichen zählen nicht. Ein Wert, der schon mit
+    "'" beginnt, wird ebenfalls geschützt, wenn der Rest geschützt werden müsste - sonst hielte
+    der Import ein echtes "'" für das eigene Schutzzeichen (Verifikation N1; Desktop-Prüfung
+    14.10.2026, Teil 6 Nr. 10: auch "' =x" und "''=x" verlustfrei)."""
+    kern = wert.lstrip()
+    while kern[:1] == "'":
+        kern = kern[1:].lstrip()
+    if not kern or kern[0] not in _FORMEL_ZEICHEN:
+        return False
+    if kern.rstrip() == "-":
+        return False
+    return not (kern[0] in "+-" and " " in kern.strip() and _ZAHL_ODER_TELEFON.fullmatch(kern))
+
+
 def _csv_zelle_absichern(wert: str) -> str:
-    kern = wert.lstrip()  # führende Leerzeichen ändern nichts an der Formel-Erkennung
-    if not kern:
-        return wert
-    if kern[0] == "'" and len(kern) > 1 and kern[1] in _FORMEL_ZEICHEN:
-        # Echter Wert, der schon mit "'=" beginnt: ebenfalls schützen, sonst würde der
-        # Import das "'" für das eigene Schutzzeichen halten (Verifikation N1).
-        return "'" + wert
-    if kern[0] not in _FORMEL_ZEICHEN:
-        return wert
-    if kern[0] in "+-" and _ZAHL_ODER_TELEFON.fullmatch(kern):
-        return wert
-    return "'" + wert
+    return "'" + wert if _braucht_schutz(wert) else wert
 
 
 _CSV_DATUMSSPALTEN = {"tollwutimpfung_bis", "geburtsdatum", "wurftag"}

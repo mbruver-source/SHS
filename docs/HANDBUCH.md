@@ -452,7 +452,14 @@ Knopf gibt es auch im Reiter „Teilnehmer“).
 3. Die Datei mit **„Teilnehmerliste einlesen (Excel/CSV)…“** auswählen.
 
 Pflicht sind Nachname, Vorname, Rufname des Hundes, Art (ED oder DK), Leistungsklasse (1–3) und
-bei ED die Disziplin (Trümmerfeld, Flächensuche oder Behältnisstrecke). Eine mit
+bei ED die Disziplin (Trümmerfeld, Flächensuche oder Behältnisstrecke).
+
+**Wichtig bei Excel:** Excel zeigt lange Nummern als „2,76E+14“ und entfernt führende Nullen –
+beim Speichern sind die Ziffern dann verloren. Formatiere die Spalten `chip_nr`, `plz`,
+`telefon` und `mitgliedsnummer` deshalb **vor dem Ausfüllen als „Text“** (Spalte markieren →
+rechte Maustaste → Zellen formatieren → Text). Erkennt der Import solche Werte, übernimmt er die
+Zeile trotzdem und nennt sie in der Meldung, damit du sie prüfen kannst. Fehlen in der Datei die
+nötigen Spalten (z. B. andere Überschriften), bricht der Import mit einem Hinweis ab. Eine mit
 **„Teilnehmerliste speichern (CSV, für Excel)…“** (Reiter „Export“) gespeicherte Liste lässt sich ebenso
 wieder einlesen.
 
@@ -690,7 +697,7 @@ anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimana
 | **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
 | **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. |
-| **Teilnehmerliste speichern (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick in Excel und lässt sich auch wieder einlesen. |
+| **Teilnehmerliste speichern (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick bzw. über **„In Excel öffnen“** in Excel und lässt sich auch wieder einlesen. Excel kürzt beim Speichern aber lange Nummern (Chip-Nr.) und entfernt führende Nullen; wer die Liste in Excel bearbeiten will, lädt sie über Daten → Aus Text/CSV und legt diese Spalten als Text fest. Telefonnummern wie „+43-1-5551234“ stehen mit vorangestelltem „'“ in der Datei, damit Excel sie nicht ausrechnet. |
 
 Den Bewertungsbogen eines **einzelnen** Teilnehmers erzeugst du schneller im Reiter
 „Teilnehmer“ mit **„Bewertungsbogen (PDF)…“**.

@@ -1268,6 +1268,21 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
 
+    def test_csv_formelschutz_telefon_und_symmetrie(self):
+        """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 3 und 10."""
+        from db_import import _csv_wert, _csv_zelle_absichern
+
+        self.assertEqual(_csv_zelle_absichern("+43-1-5551234"), "'+43-1-5551234")
+        self.assertEqual(_csv_zelle_absichern("+49/170/1234567"), "'+49/170/1234567")
+        self.assertEqual(_csv_zelle_absichern("+491701234567"), "'+491701234567")
+        self.assertEqual(_csv_zelle_absichern("-1-1"), "'-1-1")
+        self.assertEqual(_csv_zelle_absichern("+49 170 1234567"), "+49 170 1234567")
+        self.assertEqual(_csv_zelle_absichern("-"), "-")
+        for wert in ("+43-1-5551234", "+49/170/1234567", "' =x", "''=x", "' '=x", "'=x", "'\t=x",
+                     "-", "+49 170 1234567", "'normal"):
+            with self.subTest(wert=wert):
+                self.assertEqual(_csv_wert({"x": _csv_zelle_absichern(wert)}, "x"), wert.strip())
+
     def test_csv_export_entschaerft_formeln_und_reimport_ist_verlustfrei(self):
         # Sicherheitsbefund N1 (Marco 03.10.2026: absichern): Werte, die Excel als Formel
         # ausführen würde, bekommen ein "'" vorangestellt; Telefonnummern bleiben; der
@@ -1295,6 +1310,60 @@ class TestDatenbank(unittest.TestCase):
             ziel.close()
         finally:
             os.remove(pfad)
+
+    def _csv_import(self, inhalt, kodierung="utf-8"):
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            with open(pfad, "w", encoding=kodierung, newline="") as datei:
+                datei.write(inhalt)
+            return importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+
+    def test_csv_import_erkennt_von_excel_verstuemmelte_nummern(self):
+        """Desktop-Prüfung 14.10.2026, Teil 5 Nr. 1: übernehmen, aber je Zeile warnen."""
+        ergebnis = self._csv_import(
+            "nachname;vorname;rufname_hund;art;stufe;disziplin;chip_nr;plz;telefon\n"
+            "Meyer;Mia;Rex;DK;1;;2,76098E+14;1067;1701234567\n"
+            "Ok;Otto;Bello;DK;1;;276098765432101;61440;06171 1234\n"
+        )
+        self.assertEqual(ergebnis.importiert, 2)
+        excel = [h for h in ergebnis.hinweise if "Excel" in h]
+        self.assertEqual(len(excel), 2, excel)
+        self.assertIn("Chip-Nr. „2,76098E+14“ wurde von Excel gekürzt", excel[0])
+        self.assertIn("Telefon „1701234567“ hat keine führende 0", excel[1])
+
+    def test_csv_import_prueft_die_kopfzeile(self):
+        """Teil 5 Nr. 2: falsche Spaltennamen ergeben einen klaren Abbruch statt Fehlern je Zeile."""
+        ergebnis = self._csv_import("Name;Vorname;Hund\nMeyer;Mia;Rex\n")
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler), (0, []))
+        self.assertIn("nicht die erwarteten Spalten (fehlend: nachname, rufname_hund, art, stufe", ergebnis.abbruch)
+        oma = self._csv_import("OMA-Export,Verein,2026\nStarter_Nachname\tStarter_Vorname\nA\tB\n")
+        self.assertIn("OMA-Export importieren", oma.abbruch)
+        # Großschreibung und Leerzeichen in der Kopfzeile sind kein Problem.
+        ok = self._csv_import("Nachname, Vorname, Rufname_Hund, Art, Stufe, Disziplin\nMeyer, Mia, Rex, DK, 1,\n")
+        self.assertEqual((ok.importiert, ok.fehler), (1, []))
+
+    def test_csv_import_ueberspringt_leere_excel_zeilen_und_liest_utf16(self):
+        """Teil 5 Nr. 3 und Nr. 2 d."""
+        ergebnis = self._csv_import(
+            "nachname;vorname;rufname_hund;art;stufe\nMeyer;Mia;Rex;DK;1\n;;;;\n;;;;\n", kodierung="utf-16"
+        )
+        self.assertEqual((ergebnis.importiert, ergebnis.fehler), (1, []))
+        tabulator = self._csv_import("nachname\tvorname\trufname_hund\tart\tstufe\nTab\tTina\tRex\tDK\t1\n",
+                                     kodierung="utf-16")
+        self.assertEqual((tabulator.importiert, tabulator.fehler, tabulator.abbruch), (1, [], None))
+        nur_leer = self._csv_import("nachname;vorname;rufname_hund;art;stufe\n;;;;\n;;;;;;;;\n")
+        self.assertEqual(nur_leer.fehler, [])
+        self.assertIn("keine Teilnehmerzeilen", " ".join(nur_leer.hinweise))
+
+    def test_csv_import_erkennt_dublette_trotz_anderer_unicode_form(self):
+        """Teil 5 Nr. 6: "Müller" (NFC) und "Mu\u0308ller" (NFD) sind dieselbe Meldung."""
+        ergebnis = self._csv_import(
+            "nachname;vorname;rufname_hund;art;stufe\nMüller;Mia;Rex;DK;1\nMu\u0308ller;Mia;Rex;DK;1\n"
+        )
+        self.assertEqual((ergebnis.importiert, len(ergebnis.uebersprungen)), (1, 1))
 
     def test_csv_import_leere_datei_und_fuehrende_leerzeilen(self):
         fd, pfad = tempfile.mkstemp(suffix=".csv")
@@ -2024,7 +2093,14 @@ class TestCsvMeldungen(unittest.TestCase):
         with self.assertRaises(ValueError) as k:
             _csv_zeile_zu_teilnehmer({**basis, "stufe": "4", "disziplin": "Trümmerfeld"})
         self.assertIn("Leistungsklasse „4“ ist ungültig – bitte 1, 2 oder 3", str(k.exception))
-        for text in (str(k.exception),):
+        # Desktop-Prüfung 14.10.2026, Teil 5 Nr. 10: alle Meldungen prüfen, nicht nur die letzte.
+        meldungen = []
+        for zeile in (basis, {**basis, "disziplin": "Trümmer"}, {**basis, "art": "", "disziplin": "Trümmerfeld"},
+                      {**basis, "stufe": "4", "disziplin": "Trümmerfeld"}):
+            with self.assertRaises(ValueError) as k:
+                _csv_zeile_zu_teilnehmer(zeile)
+            meldungen.append(str(k.exception))
+        for text in meldungen:
             self.assertNotIn("None", text)
             self.assertNotIn("[", text)
 

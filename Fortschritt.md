@@ -6119,3 +6119,34 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Handbuch:** Kap. „Demoprüfung“ und Kap. 7 nachgezogen. Tests: Abbrechen beim Termin- und
   Reiterwechsel, Knöpfe und Texte der Rückfrage, stilles Speichern nach Freigabe, Demo-Schritt 2
   mit „Abbrechen“ bzw. „Verwerfen“ und ohne Startfrage.
+
+### A6 CSV-Import, CSV-Export und Excel (14.10.2026, Desktop-Prüfung Teil 5 und 6)
+
+- **Von Excel verstümmelte Nummern (Teil 5 Nr. 1, mittel; Marcos Entscheidung):** Der CSV-Import
+  erkennt Exponentenschreibweise (z. B. Chip-Nr. „2,76098E+14“) in Chip-Nr., PLZ, Mitgliedsnummer,
+  Telefon und den Halter-Nummern sowie Telefonnummern ohne führende 0. Er übernimmt die Zeile und
+  nennt sie je Zeile im Hinweis. Nach dem CSV-Export erklärt die Meldung, wie Excel Nummern
+  verändert und wie man das vermeidet; ebenso das Handbuch in Kap. 5 und 9. Kein xlsx-Export.
+- **Kopfzeile (Teil 5 Nr. 2):**
+  - Fehlen Pflichtspalten, bricht der Import mit der Warnung „Import nicht möglich“ ab und nennt
+    die fehlenden und gefundenen Spalten; bei einem OMA-Export mit Verweis auf dessen Knopf
+    (neues Feld `CsvImportErgebnis.abbruch`).
+  - Spaltennamen werden ohne Leerzeichen und unabhängig von Groß-/Kleinschreibung verglichen.
+  - UTF-16 („Unicode-Text“) wird erkannt, auch im OMA-Import. Tabulator gilt als drittes
+    Trennzeichen, der Dateifilter lässt `.txt` zu.
+- **Leere Excel-Zeilen (Nr. 3):** Zeilen nur aus Trennzeichen werden still übersprungen.
+- **NFC (Nr. 6):** Gleiche Namen in unterschiedlicher Unicode-Form gelten als Dublette.
+- **Telefonnummern (Teil 6 Nr. 3; Marcos Entscheidung):** „+“/„-“-Werte ohne Leerzeichen
+  (z. B. „+43-1-5551234“) bekommen im CSV-Export ein „'“, damit Excel sie nicht ausrechnet. Der
+  Import entfernt es wieder.
+- **Formelschutz symmetrisch (Teil 6 Nr. 10):** Export und Import nutzen dieselbe Regel
+  `_braucht_schutz`. „' =x“, „''=x“ und „' '=x“ kommen verlustfrei zurück.
+- **Tests (Teil 5 Nr. 10):** Die Meldungsschleife prüft alle Meldungen. Neue Tests für Nr. 1, 2,
+  3 und 6 sowie Formelschutz und Rundreise. GUI-Test für den Excel-Hinweis nach dem Export.
+- **Bewusst hingenommen (aus der Verifikation):**
+  - Zwei theoretische Sonderfälle aus Exporten vor dieser Version bleiben beim Einlesen mit einem
+    „'“ zu viel stehen: ein echter Wert „'+49 170 …“ (Telefonnummer mit Leerzeichen und
+    vorangestelltem „'“) und genau „'-“.
+  - Der Excel-Verdacht kann bei Ortsnummern ohne Vorwahl („123456“) oder Nummern wie „1E5“
+    fälschlich anschlagen. Es ist nur ein Hinweis, nichts wird abgelehnt.
+  - Die Hinweisliste ist unbegrenzt, das Kürzen langer Listen folgt mit A12.

@@ -310,7 +310,7 @@ def _import_db_fehler_melden(parent, exc: sqlite3.Error) -> None:
 def _teilnehmerliste_importieren(parent, conn) -> None:
     """CSV-/Excel-Teilnehmerliste einlesen - gemeinsam für den Reiter "Formular-Import" und
     den Knopf im Reiter "Teilnehmer" (UX-Test 02.10.2026, U10)."""
-    pfad, _ = QFileDialog.getOpenFileName(parent, "Teilnehmerliste einlesen", _import_startordner(), "CSV-Datei (*.csv)")
+    pfad, _ = QFileDialog.getOpenFileName(parent, "Teilnehmerliste einlesen", _import_startordner(), "CSV- oder Textdatei (*.csv *.txt)")
     if not pfad:
         return
     _import_ordner_merken(pfad)
@@ -321,6 +321,9 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
         return
     except sqlite3.Error as exc:
         _import_db_fehler_melden(parent, exc)
+        return
+    if ergebnis.abbruch:
+        QMessageBox.warning(parent, "Import nicht möglich", ergebnis.abbruch)
         return
     text = f"{ergebnis.importiert} Teilnehmer importiert."
     if ergebnis.uebersprungen:
@@ -3229,6 +3232,15 @@ class ZeitplanTab(QWidget):
         _zeitplan_pdf_exportieren(self, self.conn, self._ablageort, self.status_label)
 
 
+# Desktop-Prüfung 14.10.2026 (Teil 5 Nr. 1 / Teil 6, Marcos Entscheidung): Hinweis nach dem
+# CSV-Export, weil Excel beim Speichern Ziffernfolgen verändert.
+_EXCEL_CSV_HINWEIS = (
+    "Excel kürzt beim Speichern lange Nummern (Chip-Nr.) und entfernt führende Nullen (PLZ, "
+    "Telefon). Zum Bearbeiten die Datei in Excel über Daten → Aus Text/CSV laden und diese "
+    "Spalten dabei als Text festlegen."
+)
+
+
 class ExportTab(QWidget):
     """Reiter "Export" (Ausdrucke und Listen): PDFs wie Ergebnislisten, Statistik und
     Bewertungsbögen (siehe pdf_export.py) sowie die Teilnehmerliste als CSV. Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
@@ -3428,7 +3440,10 @@ class ExportTab(QWidget):
             return
         self._ablageort.pfad = os.path.dirname(pfad)
         self.status_label.setText(f"Teilnehmerliste ({anzahl} Teilnehmer) gespeichert: {_pfad_anzeige(pfad)}")
-        _datei_gespeichert_melden(self, pfad, "Teilnehmerliste gespeichert", datei_oeffnen_text="In Excel öffnen")
+        _datei_gespeichert_melden(
+            self, pfad, "Teilnehmerliste gespeichert", datei_oeffnen_text="In Excel öffnen",
+            hinweis=_EXCEL_CSV_HINWEIS,
+        )
 
     def _anmeldeformular_exportieren(self) -> None:
         # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf

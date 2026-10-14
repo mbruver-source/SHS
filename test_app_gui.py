@@ -80,6 +80,10 @@ from desktop_darstellung import _erzeuge_qss
 from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
 
 
+# Hinweistexte der letzten Speichermeldungen (siehe gespeichert_meldungen).
+meldungen_hinweise: list = []
+
+
 @pytest.fixture(autouse=True)
 def gespeichert_meldungen(monkeypatch):
     """UX-Test U7: Nach jedem Speichern erscheint ein modales Meldungsfenster - in den Tests
@@ -88,8 +92,11 @@ def gespeichert_meldungen(monkeypatch):
 
     meldungen = []
 
-    def _aufzeichnen(parent, pfad, titel, datei_oeffnen_text="PDF öffnen"):
+    def _aufzeichnen(parent, pfad, titel, datei_oeffnen_text="PDF öffnen", hinweis=None):
         meldungen.append((str(pfad), titel, datei_oeffnen_text))
+        meldungen_hinweise.append(hinweis)
+
+    meldungen_hinweise[:] = []
 
     monkeypatch.setattr(desktop_gemeinsam, "_datei_gespeichert_melden", _aufzeichnen)
     monkeypatch.setattr("app._datei_gespeichert_melden", _aufzeichnen)
@@ -4139,6 +4146,18 @@ def test_haken_bild_fehlschlag_hinterlaesst_keine_zwischendatei(darstellung_spei
 
     assert list(tmp_path.iterdir()) == []
     assert not darstellung._haken_geschrieben
+
+
+def test_csv_export_meldung_warnt_vor_excel(qtbot, conn, monkeypatch, tmp_path):
+    """Desktop-Prüfung 14.10.2026, Teil 5 Nr. 1 / Teil 6: Hinweis nach dem CSV-Export."""
+    _teilnehmer_anlegen(conn, nachname="Meyer")
+    ziel = tmp_path / "liste.csv"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab._teilnehmerliste_exportieren()
+    assert ziel.exists()
+    assert meldungen_hinweise and "Excel kürzt" in meldungen_hinweise[-1]
 
 
 def test_standardknoepfe_deutsch(qapp):

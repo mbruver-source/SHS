@@ -116,7 +116,9 @@ def _ordner_zeigen(pfad: str) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(pfad) if os.path.isfile(pfad) else pfad))
 
 
-def _datei_gespeichert_melden(parent, pfad: str, titel: str, datei_oeffnen_text: str | None = "PDF öffnen") -> None:
+def _datei_gespeichert_melden(
+    parent, pfad: str, titel: str, datei_oeffnen_text: str | None = "PDF öffnen", hinweis: str | None = None,
+) -> None:
     """Meldung nach dem Speichern mit den nächsten Schritten [PDF öffnen] [Ordner zeigen]
     [OK] - statt nur einer leicht übersehenen Statuszeile."""
     box = QMessageBox(parent)
@@ -124,6 +126,8 @@ def _datei_gespeichert_melden(parent, pfad: str, titel: str, datei_oeffnen_text:
     box.setIcon(QMessageBox.Information)
     box.setWindowTitle(titel)
     box.setText(f"Gespeichert unter:\n{_pfad_anzeige(pfad)}")
+    if hinweis:
+        box.setInformativeText(hinweis)
     oeffnen_btn = box.addButton(datei_oeffnen_text, QMessageBox.ActionRole) if datei_oeffnen_text else None
     ordner_btn = box.addButton("Ordner zeigen", QMessageBox.ActionRole)
     box.setDefaultButton(box.addButton(QMessageBox.Ok))
