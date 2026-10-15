@@ -6508,3 +6508,15 @@ Condensed) und mehrere Sicherheitskorrekturen (Details folgen nach dem Release).
   (aus A4) durchlief den Cursor direkt - der PostgreSQL-Wrapper kann nur `fetchall()` - und
   griff mit `z[0]` zu; PostgreSQL liefert Zeilen als dict, deshalb jetzt `z["id"]` (zweiter
   CI-Lauf). Nur der Test korrigiert, kein Programmcode; kein neues Release nötig.
+
+### Berichte der Desktop-Prüfung veröffentlicht (15.10.2026)
+
+Release 1.0.48 mit allen Korrekturen ist veröffentlicht (CI grün, Installer und Image
+verfügbar). Marcos Freigabe: die Berichte aus `_unveroeffentlicht/desktop-pruefung/` liegen jetzt
+im Repo unter `Desktop-Pruefung-2026-10/` (`teil-01.md` bis `teil-10.md`, `uebersicht.md`,
+`aufgaben.md` mit Commits, Verbrauch und Restpunkten). Damit sind die bisher allgemein
+gehaltenen Sicherheitskorrekturen nachlesbar: Teil 6 Nr. 1 (A2), Teil 7 Nr. 3 (A3), Teil 9
+Nr. 3 (A1) und der Befund N-1 der Abschluss-QS (A19a, in `aufgaben.md`). Die Kommentare im Code
+mit „Desktop-Prüfung 14.10.2026, Teil x Nr. y“ verweisen auf diese Berichte. Zurückgestellte
+Sicherheitspunkte gab es keine. Neue Prüfberichte entstehen weiter zuerst in
+`_unveroeffentlicht/` (Skill `desktop-pruefung`).
