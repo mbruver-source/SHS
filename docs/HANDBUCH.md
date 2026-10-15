@@ -120,7 +120,11 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
   installieren – deine Termine bleiben erhalten. Unter macOS die App im Ordner „Programme“
   ersetzen, beim AppImage die alte Datei durch die neue. Eine automatische Suche im
-  Hintergrund gibt es bewusst nicht.
+  Hintergrund gibt es bewusst nicht. Antwortet GitHub nicht innerhalb von 15 Sekunden, meldet
+  das Fenster das.
+- **Programm schon geöffnet:** Startest du das Programm ein zweites Mal, fragt es, ob wirklich
+  ein weiteres Fenster aufgehen soll. Arbeiten zwei Fenster am selben Termin, können sich
+  Änderungen gegenseitig überschreiben.
 - **Vor dem Update das Programm schließen.** Beim Schließen werden offene Ergebnisse wie
   gewohnt gespeichert. Ab Version 1.0.44 erkennt das Setup ein noch laufendes Programm und
   bittet, es zu schließen. Meldet das Setup „Fehler beim Ersetzen einer vorhandenen Datei …

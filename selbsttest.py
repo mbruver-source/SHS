@@ -27,6 +27,9 @@ import traceback
 from pathlib import Path
 
 
+SELBSTTEST_ZEITGRENZE_S = 300
+
+
 def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
     protokoll = Path(protokoll_pfad or Path(tempfile.gettempdir()) / "shs_selbsttest.log")
     zeilen: list[str] = []
@@ -52,6 +55,10 @@ def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
         absturz_datei.write("Selbsttest läuft - steht nur das hier, ist das Programm abgestürzt.\n")
         absturz_datei.flush()
         faulthandler.enable(file=absturz_datei)
+        # Desktop-Prüfung 14.10.2026 (Teil 8 Nr. 7): hängt ein Schritt (z. B. eine modale Box
+        # offscreen), beendet faulthandler den Test nach SELBSTTEST_ZEITGRENZE_S mit Stapel im
+        # Protokoll, statt die CI bis zu ihrer eigenen Grenze warten zu lassen.
+        faulthandler.dump_traceback_later(SELBSTTEST_ZEITGRENZE_S, exit=True, file=absturz_datei)
     except OSError:
         absturz_datei = None
     try:
@@ -64,6 +71,7 @@ def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
         zeilen.append("FEHLER  Start\n" + traceback.format_exc())
     finally:
         if absturz_datei is not None:
+            faulthandler.cancel_dump_traceback_later()
             faulthandler.disable()
             absturz_datei.close()
             if faulthandler_vorher and sys.stderr is not None:  # z. B. unter pytest
@@ -250,3 +258,14 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         return f"{len(text.splitlines())} Zeilen"
 
     schritt("Diagnose kopieren (Fehlermeldung)", diagnose)
+
+    def zertifikate():
+        # Teil 8 Nr. 5: ohne CA-Zertifikate (etwa ein Bundle ohne certifi) scheitert die
+        # Update-Prüfung per HTTPS. Bewusst nur ein Hinweis, kein Fehler - die Prüfung am
+        # echten Mac steht noch aus.
+        import ssl
+
+        anzahl = ssl.create_default_context().cert_store_stats().get("x509_ca", 0)
+        return f"{anzahl} CA-Zertifikate" if anzahl else "HINWEIS: keine CA-Zertifikate gefunden"
+
+    schritt("Zertifikate für die Update-Prüfung (HTTPS)", zertifikate)

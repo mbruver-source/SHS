@@ -1,12 +1,6 @@
 """
-Erste Eingabemaske (Prototyp) für das SHS-Prüfungsprogramm.
-
-Hinweis: Diese Datei benötigt PySide6 (`pip install pyside6`). In der
-Sandbox, in der dieser Prototyp entstanden ist, ließ sich PySide6 nicht
-installieren (kein Zugriff auf das Paket über den dortigen Paketindex) -
-der Code ist deshalb sorgfältig nach Qt-Vorbild geschrieben, konnte hier
-aber nicht selbst gestartet und geklickt werden. Bitte beim ersten Start
-in einer normalen Umgebung mit Internetzugang kurz gegentesten.
+Desktop-Oberfläche (PySide6) des SHS-Prüfungsprogramms: Hauptfenster mit allen Reitern,
+Startdialog, Versionsfenster und Programmstart (`main`). Überblick siehe Architektur.md.
 
 Deckt einen ersten End-to-End-Ablauf ab:
   1. Termin anlegen oder öffnen (eine .sqlite-Datei pro Veranstaltung)
@@ -41,7 +35,7 @@ import sqlite3
 import sys
 import traceback
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QFile, QItemSelectionModel, QRegularExpression, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QFile, QItemSelectionModel, QObject, QRegularExpression, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -4040,10 +4034,12 @@ def _neueste_version_pruefen() -> tuple[str | None, str | None]:
     Version - liefert (Versionsnummer-Text ohne führendes 'v', None) bei Erfolg bzw.
     (None, verständlicher Fehlertext) bei jedem Problem (kein Internet - z. B. im
     Vereinsnetz am Prüfungstag typischerweise ohne Internetzugang -, GitHub nicht
-    erreichbar, noch kein Release vorhanden usw.), damit VersionDialog._updates_pruefen
-    dem Nutzer in jedem Fall eine verständliche Rückmeldung zeigen kann, statt dass das
-    Programm an dieser Stelle abstürzt."""
+    erreichbar, noch kein Release vorhanden usw.), damit VersionDialog (Abfrage im
+    Hintergrund-Thread, siehe _updates_pruefen) dem Nutzer in jedem Fall eine verständliche
+    Rückmeldung zeigen kann, statt dass das Programm an dieser Stelle abstürzt."""
+    import http.client
     import json
+    import ssl
     import urllib.error
     import urllib.request
 
@@ -4057,23 +4053,37 @@ def _neueste_version_pruefen() -> tuple[str | None, str | None]:
         if exc.code == 404:
             return None, "Es wurde noch kein Release veröffentlicht."
         return None, f"GitHub antwortete mit Fehler {exc.code}."
-    except (urllib.error.URLError, OSError):
+    except (urllib.error.URLError, OSError) as exc:
+        # Desktop-Prüfung 14.10.2026 (Teil 8 Nr. 5): ein Zertifikatsfehler ist kein fehlender
+        # Internetzugang.
+        if isinstance(exc, ssl.SSLError) or isinstance(getattr(exc, "reason", None), ssl.SSLError):
+            return None, ("Die sichere Verbindung zu GitHub ließ sich nicht prüfen (Zertifikatsfehler, "
+                          "z. B. falsche Uhrzeit am Rechner oder ein Firmen-Proxy).")
         return None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?)."
-    except (ValueError, KeyError):
+    except (http.client.HTTPException, ValueError):
+        # Teil 8 Nr. 1: abgebrochene/kaputte Antwort (IncompleteRead u. Ä.) bzw. kein JSON.
         return None, "Die Antwort von GitHub konnte nicht gelesen werden."
 
+    if not isinstance(daten, dict):
+        return None, "Die Antwort von GitHub konnte nicht gelesen werden."
     tag = str(daten.get("tag_name", "")).strip()
     if not tag:
         return None, "GitHub hat keine Versionsnummer geliefert."
     return tag.lstrip("vV"), None
 
 
+class _UpdateBote(QObject):
+    """Überbringt das Ergebnis der Update-Prüfung aus dem Hintergrund-Thread an das Fenster."""
+    ergebnis = Signal(int, object)
+
+
 class VersionDialog(QDialog):
     """Zeigt die aktuell laufende Programmversion (siehe VERSION oben, aus version.py -
     von bump_version.py bei jedem Release automatisch erzeugt) sowie einen Button, der
     per GitHub-API prüft, ob eine neuere Version veröffentlicht wurde (siehe
-    _neueste_version_pruefen oben). Wird über den Version-Button im Hauptfenster
-    geöffnet, in der Kopfzeile oben rechts (siehe HauptFenster._version_anzeigen)."""
+    _neueste_version_pruefen oben; im Hintergrund-Thread mit Gesamtzeitgrenze). Wird über
+    den Version-Button im Hauptfenster geöffnet, in der Kopfzeile oben rechts (siehe
+    HauptFenster._version_anzeigen)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -4097,6 +4107,9 @@ class VersionDialog(QDialog):
         )
         hinweis.setWordWrap(True)
 
+        self._update_lauf = 0
+        self._update_bote = _UpdateBote(self)
+        self._update_bote.ergebnis.connect(self._update_ergebnis)
         self._updates_btn = QPushButton("Nach Updates suchen")
         self._updates_btn.clicked.connect(self._updates_pruefen)
 
@@ -4160,37 +4173,68 @@ class VersionDialog(QDialog):
         QApplication.clipboard().setText(diagnose_text(VERSION))
         self._diagnose_status.setText("Diagnose kopiert.")
 
+    # Desktop-Prüfung 14.10.2026 (Teil 8 Nr. 5): die Abfrage läuft in einem Hintergrund-Thread
+    # (DNS und Verbindungsaufbau haben unter urllib keine Gesamtzeitgrenze und froren sonst das
+    # Fenster ein); nach UPDATE_ZEITGRENZE_MS gilt sie als gescheitert, eine spätere Antwort
+    # wird verworfen.
+    UPDATE_ZEITGRENZE_MS = 15000
+
     def _updates_pruefen(self) -> None:
-        # Button während der (kurzen, durch den Timeout in _neueste_version_pruefen auf
-        # wenige Sekunden begrenzten) Abfrage deaktivieren und "wird geprüft" anzeigen,
-        # mit einem expliziten processEvents() dazwischen - ohne das bliebe die
-        # Oberfläche bis zur Antwort optisch eingefroren, da die Abfrage selbst
-        # synchron/blockierend läuft (kein eigener Hintergrund-Thread, für eine einzelne
-        # kurze Anfrage auf Klick hin bewusst nicht nötig).
+        import threading
+
         self._updates_btn.setEnabled(False)
         self._updates_btn.setText("Wird geprüft…")
         self._download_btn.hide()
         self._ergebnis_zeile.setText("")
         self._ergebnis_zeile.hide()
-        QApplication.processEvents()
+        self._update_lauf += 1
+        lauf = self._update_lauf
+        bote = self._update_bote
 
-        neueste_version, fehler = _neueste_version_pruefen()
+        def abfragen() -> None:
+            try:
+                ergebnis = _neueste_version_pruefen()
+            except Exception as exc:  # noqa: BLE001 - jede Antwort soll im Fenster ankommen
+                ergebnis = (None, f"Die Update-Prüfung ist fehlgeschlagen ({type(exc).__name__}).")
+            try:
+                bote.ergebnis.emit(lauf, ergebnis)
+            except RuntimeError:  # Fenster inzwischen geschlossen
+                pass
 
-        self._updates_btn.setEnabled(True)
-        self._updates_btn.setText("Nach Updates suchen")
-        self._ergebnis_zeile.show()
+        threading.Thread(target=abfragen, daemon=True).start()
+        # Mit dem Fenster als Kontext: schließt es vorher, verfällt der Timer.
+        QTimer.singleShot(self.UPDATE_ZEITGRENZE_MS, self, lambda: self._update_ergebnis(
+            lauf, (None, "GitHub hat nicht rechtzeitig geantwortet. Bitte später erneut versuchen.")))
 
+    def _update_ergebnis(self, lauf: int, ergebnis) -> None:
+        if lauf != self._update_lauf or self._updates_btn.isEnabled():
+            return  # veraltet bzw. schon beantwortet (Zeitgrenze oder Antwort)
+        neueste_version, fehler = ergebnis
+        try:
+            self._ergebnis_anzeigen(neueste_version, fehler)
+        finally:
+            # Teil 8 Nr. 1: der Knopf wird in jedem Fall wieder frei.
+            self._updates_btn.setEnabled(True)
+            self._updates_btn.setText("Nach Updates suchen")
+            self._ergebnis_zeile.show()
+
+    def _ergebnis_anzeigen(self, neueste_version: str | None, fehler: str | None) -> None:
         if fehler is not None:
             self._ergebnis_zeile.setText(fehler)
             return
-
         aktuell = _version_tupel(VERSION)
         neueste = _version_tupel(neueste_version)
-        if aktuell is not None and neueste is not None and neueste > aktuell:
-            self._ergebnis_zeile.setText(f"Neue Version {neueste_version} verfügbar (installiert: {VERSION}).")
-            self._download_btn.show()
+        if aktuell is not None and neueste is not None:
+            if neueste > aktuell:
+                self._ergebnis_zeile.setText(f"Neue Version {neueste_version} verfügbar (installiert: {VERSION}).")
+                self._download_btn.show()
+            else:
+                self._ergebnis_zeile.setText("Du hast bereits die neueste Version.")
         else:
-            self._ergebnis_zeile.setText("Du hast bereits die neueste Version.")
+            # Teil 8 Nr. 4: nicht vergleichbare Versionsnummer - neutral statt „neueste“.
+            self._ergebnis_zeile.setText(
+                f"Neueste veröffentlichte Version: {neueste_version} (installiert: {VERSION}).")
+            self._download_btn.show()
 
     def _releases_seite_oeffnen(self) -> None:
         _url_oeffnen(self, QUrl(GITHUB_RELEASES_URL), GITHUB_RELEASES_URL)
@@ -4234,6 +4278,40 @@ LAUF_MUTEX_NAME = "SHS-Pruefungsprogramm-Laufend"
 # eine laufende App in einer anderen Windows-Sitzung (Empfehlung der Inno-Setup-Doku).
 LAUF_MUTEX_NAMEN = (LAUF_MUTEX_NAME, "Global\\" + LAUF_MUTEX_NAME)
 _lauf_mutex: list = []  # Handles bleiben bis Programmende offen
+
+
+# Desktop-Prüfung 14.10.2026 (Teil 8 Nr. 6, Marcos Entscheidung): ein zweiter Programmstart
+# wird erkannt (QLockFile, auf allen Systemen) und nur nach Rückfrage zugelassen - zwei
+# Fenster am selben Termin überschreiben sich sonst gegenseitig.
+ZWEITSTART_SPERRDATEI = "programm.lock"
+_zweitstart_sperre: list = []
+
+
+def zweitstart_pruefen(ordner=None) -> bool:
+    """True, wenn das Programm starten soll (kein anderes Fenster offen oder Rückfrage mit
+    „Ja“ beantwortet). Braucht eine QApplication. Lässt sich die Sperrdatei nicht anlegen
+    (Ordner schreibgeschützt), startet das Programm ohne Rückfrage."""
+    from PySide6.QtCore import QLockFile
+
+    try:
+        basis = ordner if ordner is not None else termine_ordner().parent
+    except OSError:
+        return True
+    pfad = os.path.join(str(basis), ZWEITSTART_SPERRDATEI)
+    sperre = QLockFile(pfad)
+    sperre.setStaleLockTime(0)  # nur ein beendetes Programm gibt die Sperre frei, keine Zeitgrenze
+    if sperre.tryLock(0):
+        _zweitstart_sperre.append(sperre)  # bleibt bis zum Programmende gesperrt
+        return True
+    if sperre.error() != QLockFile.LockFailedError:
+        return True
+    antwort = QMessageBox.question(
+        None, "Programm läuft bereits",
+        "Das SHS-Prüfungsprogramm ist schon geöffnet. Arbeiten zwei Fenster am selben Termin, "
+        "können sich Änderungen gegenseitig überschreiben.\n\nTrotzdem ein weiteres Fenster öffnen?",
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+    )
+    return antwort == QMessageBox.Yes
 
 
 def laufkennung_setzen() -> bool:
@@ -4292,7 +4370,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # optisch in der Nähe der nativen Minimieren/Maximieren/Schließen-Schaltflächen
         # des Betriebssystems. Ein Button lässt sich in Qt nicht direkt IN die native
         # Titelleiste selbst setzen (die gehört dem Betriebssystem). Hinweis: ein Ecken-
-        # Widget auf der (hier ungenutzten, leeren) QMenuBar wurde zunächst versucht,
+        # Widget auf der (damals noch leeren) QMenuBar wurde zunächst versucht,
         # blieb aber unsichtbar, weil eine Menüleiste ohne eigene Menüeinträge auf
         # vielen Windows-Stilen auf Höhe 0 kollabiert. Die Kopfzeile hier ist Teil des
         # normalen zentralen Layouts und daher zuverlässig sichtbar.
@@ -5014,6 +5092,8 @@ def main() -> int:
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
     # Reste früherer Demoprüfungen (z. B. eine beim Beenden noch geöffnete PDF) wegräumen.
+    if not zweitstart_pruefen():
+        return 0
     demo_reste_aufraeumen()
 
     try:

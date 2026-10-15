@@ -6359,3 +6359,23 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   Vereinheitlichung, ungültige Zeit vor PDF/Verteilen, verzögerter Neuaufbau.
 - **Bekannt, nicht geändert:** `_aktueller_eintrag` berechnet weiter den ganzen Blockplan, und
   `PauseDialog` legt seine Felder auch beim Bearbeiten an (beides ohne Wirkung auf das Ergebnis).
+
+### A15 Update-Prüfung, Selbsttest und Zweitstart (15.10.2026, Desktop-Prüfung Teil 8)
+
+- **Update-Prüfung (Nr. 1, 4, 5):** Abgebrochene oder kaputte Antworten (`HTTPException`,
+  JSON ohne Objekt) ergeben eine Meldung statt „Unerwarteter Fehler“ mit gesperrtem Knopf;
+  Zertifikatsfehler werden eigens genannt. Die Abfrage läuft im Hintergrund-Thread mit
+  Gesamtzeitgrenze von 15 s (vorher konnte DNS/Verbindungsaufbau das Fenster einfrieren), der
+  Knopf wird in jedem Fall wieder frei, eine verspätete Antwort verworfen. Eine nicht
+  vergleichbare Versionsnummer ergibt eine neutrale Meldung statt „bereits die neueste“.
+- **Zweiter Programmstart (Nr. 6, Marcos Entscheidung):** Rückfrage über `QLockFile`
+  (`~/SHS-Pruefungsprogramm/programm.lock`, auf allen Systemen), keine Sperre. Nach einem
+  Absturz gibt die Prozessprüfung die Sperre frei.
+- **Selbsttest (Nr. 5, 7):** Zeitgrenze 300 s über `faulthandler.dump_traceback_later`
+  (Stapel im Protokoll), neuer Schritt zählt die CA-Zertifikate (nur Hinweis, kein Fehler);
+  `timeout-minutes: 60` im Windows-Build-Job.
+- **Kommentare (Nr. 8)** und **Tests (Nr. 9):** Antworten von GitHub mit gepatchtem `urlopen`
+  (404, 403, kaputt, unvollständig, ohne Tag, Zertifikat, offline), `_version_tupel`,
+  Zeitgrenze, veraltete Antwort, Ausnahme, Zweitstart. Handbuch und `Architektur.md` ergänzt.
+- **Offen, für den Mac-Rückmeldungstest:** Am echten Mac prüfen, ob die Update-Prüfung über
+  HTTPS funktioniert (CA-Zertifikate im Bundle; der Selbsttest-Schritt zeigt die Anzahl).

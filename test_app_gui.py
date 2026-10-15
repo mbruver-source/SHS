@@ -1716,6 +1716,136 @@ def test_version_button_ist_sichtbar_und_oeffnet_versiondialog(qtbot, termin, mo
     assert geoeffnet.get("ja") is True
 
 
+class _Antwort:
+    def __init__(self, daten=None, fehler=None):
+        self._daten, self._fehler = daten, fehler
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        if self._fehler is not None:
+            raise self._fehler
+        return self._daten
+
+
+@pytest.mark.parametrize("antwort, erwartet", [
+    (b'{"tag_name": "v1.2.3"}', ("1.2.3", None)),
+    (b"[]", (None, "Die Antwort von GitHub konnte nicht gelesen werden.")),
+    (b"null", (None, "Die Antwort von GitHub konnte nicht gelesen werden.")),
+    (b"{kaputt", (None, "Die Antwort von GitHub konnte nicht gelesen werden.")),
+    ("unvollstaendig", (None, "Die Antwort von GitHub konnte nicht gelesen werden.")),
+    ("ssl", (None, "Zertifikatsfehler")),
+    ("offline", (None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?).")),
+    (404, (None, "Es wurde noch kein Release veröffentlicht.")),
+    (403, (None, "GitHub antwortete mit Fehler 403.")),
+    (b'{"name": "ohne Tag"}', (None, "GitHub hat keine Versionsnummer geliefert.")),
+])
+def test_neueste_version_pruefen_faengt_alle_antworten_ab(monkeypatch, antwort, erwartet):
+    """Desktop-Prüfung 14.10.2026, Teil 8 Nr. 1, 5 und 9: jede Antwort ergibt eine Meldung."""
+    import app
+
+    import http.client
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    def urlopen(_anfrage, timeout):
+        if antwort == "unvollstaendig":
+            return _Antwort(fehler=http.client.IncompleteRead(b"{"))
+        if antwort == "ssl":
+            raise urllib.error.URLError(ssl.SSLCertVerificationError("certificate verify failed"))
+        if antwort == "offline":
+            raise urllib.error.URLError(OSError("getaddrinfo failed"))
+        if isinstance(antwort, int):
+            raise urllib.error.HTTPError("https://api.github.com", antwort, "Fehler", {}, None)
+        return _Antwort(antwort)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    version, fehler = app._neueste_version_pruefen()
+    assert version == erwartet[0]
+    assert (fehler is None) == (erwartet[1] is None)
+    if erwartet[1]:
+        assert erwartet[1] in fehler
+
+
+def test_version_tupel_und_neutrale_meldung(qtbot, monkeypatch):
+    """Teil 8 Nr. 4: nicht vergleichbare Versionen ergeben eine neutrale Meldung."""
+    import app
+
+    assert app._version_tupel("v1.0.47") == (1, 0, 47)
+    for text in ("1.1", "2.0.0-rc1", "dev"):
+        assert app._version_tupel(text) is None
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: ("2.0.0-rc1", None))
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog._updates_pruefen()
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    assert dialog._ergebnis_zeile.text().startswith("Neueste veröffentlichte Version: 2.0.0-rc1")
+    assert not dialog._download_btn.isHidden()
+
+
+def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monkeypatch):
+    """Teil 8 Nr. 1 und 5: hängt die Abfrage, meldet das Fenster nach der Zeitgrenze; eine
+    spätere Antwort wird verworfen. Eine Ausnahme gibt den Knopf ebenfalls frei."""
+    import app
+
+    import threading
+
+    freigabe = threading.Event()
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
+    monkeypatch.setattr(VersionDialog, "UPDATE_ZEITGRENZE_MS", 100)
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog._updates_pruefen()
+    assert not dialog._updates_btn.isEnabled()
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    assert "nicht rechtzeitig" in dialog._ergebnis_zeile.text()
+    freigabe.set()
+    qtbot.wait(200)
+    assert "nicht rechtzeitig" in dialog._ergebnis_zeile.text()
+
+    def kaputt():
+        raise AttributeError("x")
+
+    monkeypatch.setattr(app, "_neueste_version_pruefen", kaputt)
+    monkeypatch.setattr(VersionDialog, "UPDATE_ZEITGRENZE_MS", 15000)
+    dialog._updates_pruefen()
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    assert "fehlgeschlagen (AttributeError)" in dialog._ergebnis_zeile.text()
+
+    # Eine Antwort aus einem früheren Lauf wird verworfen, auch wenn gerade wieder geprüft wird.
+    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
+    freigabe.clear()
+    dialog._updates_pruefen()
+    dialog._update_ergebnis(dialog._update_lauf - 1, ("8.8.8", None))
+    assert not dialog._updates_btn.isEnabled() and "8.8.8" not in dialog._ergebnis_zeile.text()
+    freigabe.set()
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+
+
+@pytest.mark.parametrize("antwort", [QMessageBox.No, QMessageBox.Yes])
+def test_zweitstart_fragt_nach(qtbot, tmp_path, monkeypatch, antwort):
+    """Teil 8 Nr. 6 (Marcos Entscheidung): ein zweiter Start fragt, sperrt aber nicht."""
+    import app
+
+    monkeypatch.setattr(app, "_zweitstart_sperre", [])
+    assert app.zweitstart_pruefen(tmp_path) is True
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[4])) or antwort)
+    assert app.zweitstart_pruefen(tmp_path) is (antwort == QMessageBox.Yes)
+    assert fragen == [("Programm läuft bereits", QMessageBox.No)]
+    for sperre in app._zweitstart_sperre:
+        sperre.unlock()
+
+    # Lässt sich keine Sperrdatei anlegen (z. B. Datei statt Ordner), startet es ohne Rückfrage.
+    (tmp_path / "datei").write_text("x")
+    assert app.zweitstart_pruefen(tmp_path / "datei") is True and len(fragen) == 1
+
+
 def test_versiondialog_zeigt_aktuelle_version(qtbot):
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
@@ -1744,6 +1874,7 @@ def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qt
     update_buttons = [b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen"]
     assert len(update_buttons) == 1
     qtbot.mouseClick(update_buttons[0], Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
 
     assert neuere_version in dialog._ergebnis_zeile.text()
     assert dialog._download_btn.isVisible()
@@ -1764,6 +1895,7 @@ def test_versiondialog_update_button_zeigt_hinweis_wenn_aktuell(qtbot, monkeypat
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
     qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
 
     assert "bereits die neueste Version" in dialog._ergebnis_zeile.text()
     assert not dialog._download_btn.isVisible()
@@ -1784,6 +1916,7 @@ def test_versiondialog_update_button_zeigt_fehler_ohne_internet(qtbot, monkeypat
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
     qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
 
     assert "Keine Verbindung" in dialog._ergebnis_zeile.text()
     assert not dialog._download_btn.isVisible()

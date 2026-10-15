@@ -43,6 +43,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 60  # Desktop-Prüfung Teil 8 Nr. 7: ein hängender Selbsttest bricht ab
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
