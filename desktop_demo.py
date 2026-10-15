@@ -957,6 +957,7 @@ class DemoTour(QObject):
         dialog._pfad_manuell_geaendert = True
         dialog.pfad_feld.setText(_pfad_anzeige(self.pfad))
         dialog.pfad_feld.setReadOnly(True)
+        dialog.pfad_pruefen = False  # der Demo-Termin existiert schon (siehe _starten)
         dialog.durchsuchen_btn.setEnabled(False)  # gespeichert wird immer im Demo-Ordner (Teil 10 Nr. 11)
         self._dialog_zeigen(dialog)
 
@@ -1023,7 +1024,8 @@ class DemoTour(QObject):
             self._markieren(tab.hinzufuegen_btn)
 
         def dialog_zeigen() -> None:
-            # Dieselben Angaben wie TeilnehmerTab._teilnehmer_hinzufuegen.
+            # Dieselben Angaben wie TeilnehmerTab._teilnehmer_hinzufuegen, ohne `angebotene`:
+            # die Demo-Teilnehmer stehen immer in angebotenen Prüfungen.
             dialog = TeilnehmerDialog(
                 tab,
                 vergebene_nummern=vergebene_startnummern(self.conn),

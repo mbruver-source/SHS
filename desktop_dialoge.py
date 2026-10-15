@@ -61,6 +61,7 @@ from db import (
     startnummer_bereiche_als_text,
     startnummer_bereichsgroesse,
     termine_ordner,
+    pruefung_nach_kuerzel,
     pruefungs_kuerzel,
 )
 from db_sicherung import (
@@ -85,6 +86,28 @@ _TEILNEHMER_DIALOG_GROESSE = (1040, 720)
 _MINDESTBREITE_TEXTFELD = 170
 
 
+def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int) -> None:
+    """Startgröße, begrenzt auf den verfügbaren Bildschirm (UX-Test 02.10.2026, U3), damit
+    OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben - gemeinsam für Teilnehmer- und
+    Veranstaltungsdialog (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 7)."""
+    bildschirm = dialog.screen() or QApplication.primaryScreen()
+    if bildschirm is not None:
+        frei = bildschirm.availableGeometry()
+        breite = min(breite, int(frei.width() * 0.95))
+        hoehe = min(hoehe, int(frei.height() * 0.9))
+    dialog.resize(breite, hoehe)
+
+
+def _scrollflaeche(inhalt) -> QScrollArea:
+    """Scrollfläche um den Formularinhalt, die selbst keinen Fokus nimmt (Teil 2 Nr. 6:
+    sonst ging sofortiges Tippen beim Öffnen ins Leere)."""
+    scroll = QScrollArea()
+    scroll.setWidget(inhalt)
+    scroll.setWidgetResizable(True)
+    scroll.setFocusPolicy(Qt.NoFocus)
+    return scroll
+
+
 def _speichern_vor_dem_schliessen(dialog: QDialog, speichern) -> bool:
     """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1: Speichert über den Rückruf des Aufrufers,
     BEVOR der Dialog schließt. Scheitert das (Fachregel oder z. B. schreibgeschützte bzw.
@@ -106,16 +129,19 @@ def _speichern_vor_dem_schliessen(dialog: QDialog, speichern) -> bool:
 
 
 class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
-    """Formular zur Neuanlage eines Teilnehmers."""
+    """Formular zum Erfassen und Bearbeiten eines Teilnehmers."""
 
     def __init__(
         self, parent=None, vorhandener: dict | None = None, vergebene_nummern: set[int] | None = None,
         namen_je_startnummer: dict[int, str] | None = None,
         bereiche: dict[str, tuple[int, int]] | None = None,
         speichern=None,
+        angebotene: set[str] | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Teilnehmer bearbeiten" if vorhandener else "Teilnehmer erfassen")
+        # Kürzel der im Termin angebotenen Prüfungen (leer/None: keine Rückfrage), Teil 2 Nr. 13.
+        self._angebotene = angebotene or set()
         # Rückruf speichern(dialog), siehe _speichern_vor_dem_schliessen.
         self._speichern = speichern
         # Bereits vergebene Startnummern (beim Bearbeiten ohne die eigene) - für
@@ -155,6 +181,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         for auswahl in (self.art, self.stufe, self.disziplin):
             auswahl.currentTextChanged.connect(self._vorschlag_nachfuehren)
         self._schriftgroesse_anwenden()
+        self.nachname.setFocus()  # Teil 2 Nr. 6
 
     def _felder_erstellen(self) -> None:
         """Legt alle Eingabe-Widgets als Attribute an (noch ohne Layout/Vorbelegung -
@@ -348,9 +375,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         inhalt_container = QWidget()
         inhalt_container.setLayout(inhalt_layout)
 
-        inhalt_scroll = QScrollArea()
-        inhalt_scroll.setWidget(inhalt_container)
-        inhalt_scroll.setWidgetResizable(True)
+        inhalt_scroll = _scrollflaeche(inhalt_container)
 
         layout = QVBoxLayout(self)
         layout.addWidget(inhalt_scroll, 1)
@@ -366,13 +391,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         # UX-Test 02.10.2026, U3: größere Startgröße (vorher 780x640), begrenzt auf den
         # verfügbaren Bildschirm, damit OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben.
-        breite, hoehe = _TEILNEHMER_DIALOG_GROESSE
-        bildschirm = self.screen() or QApplication.primaryScreen()
-        if bildschirm is not None:
-            frei = bildschirm.availableGeometry()
-            breite = min(breite, int(frei.width() * 0.95))
-            hoehe = min(hoehe, int(frei.height() * 0.9))
-        self.resize(breite, hoehe)
+        _groesse_auf_bildschirm_begrenzen(self, *_TEILNEHMER_DIALOG_GROESSE)
 
     def _vorbelegung_uebernehmen(self, vorhandener: dict) -> None:
         """Übernimmt beim Bearbeiten eines vorhandenen Teilnehmers dessen Werte in die
@@ -497,8 +516,10 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self._gegenstand_1_fest_zugeordnet = ist_ed
 
     def _pruefen_und_akzeptieren(self) -> None:
-        if not self.nachname.text().strip() or not self.vorname.text().strip() or not self.rufname_hund.text().strip():
+        leer = [feld for feld in (self.nachname, self.vorname, self.rufname_hund) if not feld.text().strip()]
+        if leer:
             QMessageBox.warning(self, "Fehlende Angaben", "Nachname, Vorname und Rufname des Hundes sind Pflichtfelder.")
+            leer[0].setFocus()
             return
         # Codeprüfung 22.09. (M5): Datumsfelder prüfen, bevor ergebnis() sie umwandelt -
         # TT.MM.JJJJ und JJJJ-MM-TT sind erlaubt, alles andere bleibt im Dialog stehen.
@@ -512,6 +533,20 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 QMessageBox.warning(self, "Ungültiges Datum", f"{bezeichnung}: {fehler}")
                 feld.setFocus()
                 return
+        # Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 12): Tippfehler wie 2085 statt 2005 ergäben
+        # ein negatives Alter (und zählten in der Statistik als jugendlich) - Rückfrage.
+        heute = datetime.date.today().isoformat()
+        for bezeichnung, feld in (("Geburtsdatum", self.geburtsdatum), ("Wurftag", self.wurftag)):
+            wert = normalisiere_datum(feld.text())
+            if wert and wert > heute:
+                antwort = QMessageBox.question(
+                    self, "Datum in der Zukunft",
+                    f"{bezeichnung} {datum_anzeige(wert)} liegt in der Zukunft. Trotzdem speichern?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+                )
+                if antwort != QMessageBox.Yes:
+                    feld.setFocus()
+                    return
         if not self.startnummer_unbekannt.isChecked() and self.startnummer.value() in self._vergebene_nummern:
             nummer = self.startnummer.value()
             inhaber = self._namen_je_startnummer.get(nummer)
@@ -537,6 +572,20 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Bei ED greift die Prüfung nicht: dort zählt nur Gegenstand 1 mit fester
         # Zuordnung, Gegenstand 2/3 werden gar nicht gespeichert (Abstimmung 23.09.).
         ist_ed = self.art.currentText() == "ED"
+        # Teil 2 Nr. 13 (Marcos Entscheidung): nicht angebotene Prüfung nur nach Rückfrage.
+        kuerzel = pruefungs_kuerzel(self.art.currentText(), int(self.stufe.currentText()),
+                                    self.disziplin.currentText() if ist_ed else None)
+        if self._angebotene and kuerzel not in self._angebotene:
+            pruefung = pruefung_nach_kuerzel(kuerzel)
+            antwort = QMessageBox.question(
+                self, "Prüfung nicht angeboten",
+                f"„{pruefung.bezeichnung if pruefung else kuerzel}“ wird in diesem Termin nicht "
+                "angeboten (Veranstaltungsdaten). Trotzdem speichern?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if antwort != QMessageBox.Yes:
+                self.stufe.setFocus()
+                return
         if ist_ed and (self.gegenstand_2.text().strip() or self.gegenstand_3.text().strip()):
             antwort = QMessageBox.question(
                 self, "Nur ein Gegenstand bei ED",
@@ -546,13 +595,14 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             )
             if antwort != QMessageBox.Yes:
                 return
+        # Teil 2 Nr. 4: nur Gegenstände mit Text zählen - wie in db.gegenstand_fuer_disziplin.
         vergebene_disziplinen = [] if ist_ed else [
-            d for d in (
-                self.gegenstand_1_disziplin.currentText(),
-                self.gegenstand_2_disziplin.currentText(),
-                self.gegenstand_3_disziplin.currentText(),
+            zuordnung.currentText() for text_feld, zuordnung in (
+                (self.gegenstand_1, self.gegenstand_1_disziplin),
+                (self.gegenstand_2, self.gegenstand_2_disziplin),
+                (self.gegenstand_3, self.gegenstand_3_disziplin),
             )
-            if d != _GEGENSTAND_ZUORDNUNG_FREI
+            if text_feld.text().strip() and zuordnung.currentText() != _GEGENSTAND_ZUORDNUNG_FREI
         ]
         doppelt_vergeben = sorted({d for d in vergebene_disziplinen if vergebene_disziplinen.count(d) > 1})
         if doppelt_vergeben:
@@ -583,9 +633,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             gegenstand_1=self.gegenstand_1.text().strip() or None,
             gegenstand_2=self.gegenstand_2.text().strip() or None,
             gegenstand_3=self.gegenstand_3.text().strip() or None,
-            gegenstand_1_disziplin=_zuordnung_oder_none(self.gegenstand_1_disziplin),
-            gegenstand_2_disziplin=_zuordnung_oder_none(self.gegenstand_2_disziplin),
-            gegenstand_3_disziplin=_zuordnung_oder_none(self.gegenstand_3_disziplin),
+            gegenstand_1_disziplin=_zuordnung_oder_none(self.gegenstand_1_disziplin) if self.gegenstand_1.text().strip() else None,
+            gegenstand_2_disziplin=_zuordnung_oder_none(self.gegenstand_2_disziplin) if self.gegenstand_2.text().strip() else None,
+            gegenstand_3_disziplin=_zuordnung_oder_none(self.gegenstand_3_disziplin) if self.gegenstand_3.text().strip() else None,
         )
 
     def ergebnis(self) -> NeuerTeilnehmer:
@@ -1317,6 +1367,10 @@ class HilfeDialog(QDialog):
 _STANDARD_PRUEFUNGSGEBUEHR = "12,00"
 
 
+def _mit_sqlite_endung(pfad: str) -> str:
+    return pfad if not pfad or pfad.lower().endswith(".sqlite") else pfad + ".sqlite"
+
+
 class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     """Abfrage der Veranstaltungs-Stammdaten - entweder beim Neuanlegen eines Termins
     (inklusive Speicherort, der aus Verein + Datum vorgeschlagen wird und sich anpasst,
@@ -1346,7 +1400,9 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             return QLineEdit(vorbelegung.get(name) or "")
 
         def geld_feld(name: str) -> QLineEdit:
-            return QLineEdit(vorbelegung.get(name) or _STANDARD_PRUEFUNGSGEBUEHR)
+            # Teil 2 Nr. 8a: Standardgebühr nur beim Anlegen - ein bewusst geleertes Feld
+            # bleibt beim Bearbeiten leer.
+            return QLineEdit(vorbelegung.get(name) or ("" if bearbeiten else _STANDARD_PRUEFUNGSGEBUEHR))
 
         self.verein = feld("verein")
         self.ort = feld("ort")
@@ -1479,6 +1535,10 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow(self.gruppe_pruefungen)
         form.addRow(self.gruppe_bereiche)
 
+        # Teil 2 Nr. 2: Speicherort vor dem Anlegen prüfen; die Demo schaltet das ab (ihr
+        # Termin liegt fest im Demo-Ordner und existiert schon).
+        self.pfad_pruefen = True
+        self.bestehenden_oeffnen = False
         if not bearbeiten:
             self.pfad_feld = QLineEdit()
             self._pfad_manuell_geaendert = False
@@ -1506,15 +1566,14 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         inhalt_layout.addStretch()  # überschüssige Höhe nicht auf die Prüfungsauswahl verteilen
         inhalt_container = QWidget()
         inhalt_container.setLayout(inhalt_layout)
-        inhalt_scroll = QScrollArea()
-        inhalt_scroll.setWidget(inhalt_container)
-        inhalt_scroll.setWidgetResizable(True)
+        inhalt_scroll = _scrollflaeche(inhalt_container)
 
         layout = QVBoxLayout(self)
         layout.addWidget(inhalt_scroll, 1)
         layout.addWidget(buttons)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
-        self.resize(620, 700)
+        _groesse_auf_bildschirm_begrenzen(self, 620, 700)
+        self.verein.setFocus()
         self._schriftgroesse_anwenden()
 
     def veranstaltung_werte(self) -> dict:
@@ -1606,8 +1665,17 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             if not von and not bis:
                 continue
             if not von or not bis:
+                self._bereich_fehler_feld = bis_feld if von else von_feld
                 raise ValueError(f"{beschriftung.text()}: bitte „von“ UND „bis“ eintragen oder beide leer lassen.")
-            bereiche[kuerzel] = (int(von), int(bis))
+            # Teil 2 Nr. 3: Zwischeneingaben wie „20.“ ergaben sonst eine englische Meldung.
+            werte = []
+            for text, nummer_feld in ((von, von_feld), (bis, bis_feld)):
+                try:
+                    werte.append(int(text))
+                except ValueError:
+                    self._bereich_fehler_feld = nummer_feld
+                    raise ValueError(f"{beschriftung.text()}: „{text}“ ist keine Startnummer (1–999).") from None
+            bereiche[kuerzel] = (werte[0], werte[1])
         return bereiche
 
     def startnummer_bereiche_text(self) -> str | None:
@@ -1632,18 +1700,54 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             datum = normalisiere_datum(self.datum.text()) or ""
         except ValueError:
             datum = self.datum.text().strip()
-        name = dateiname_vorschlagen(self.verein.text().strip(), datum)
-        self.pfad_feld.setText(str(termine_ordner() / name))
+        ordner = termine_ordner()
+        # Teil 2 Nr. 2: bei gleichem Verein und Datum nicht die vorhandene Datei vorschlagen.
+        name = eindeutigen_dateinamen_finden(ordner, dateiname_vorschlagen(self.verein.text().strip(), datum))
+        self.pfad_feld.setText(str(ordner / name))
 
     def _durchsuchen(self) -> None:
-        pfad, _ = QFileDialog.getSaveFileName(self, "Speicherort wählen", self.pfad_feld.text(), "SHS-Termin (*.sqlite)")
+        # Ob eine vorhandene Datei gemeint ist, fragt _pruefen_und_akzeptieren (eine Frage statt
+        # zwei sich widersprechender).
+        pfad, _ = QFileDialog.getSaveFileName(self, "Speicherort wählen", self.pfad_feld.text(),
+                                              "SHS-Termin (*.sqlite)", options=QFileDialog.DontConfirmOverwrite)
         if pfad:
-            self.pfad_feld.setText(pfad)
+            self.pfad_feld.setText(_mit_sqlite_endung(pfad))
             self._pfad_manuell_geaendert = True
+
+    def _speicherort_pruefen(self) -> bool:
+        """Teil 2 Nr. 2: Pfad absolut, Ordner vorhanden, Endung .sqlite (sonst erscheint der
+        Termin nie im Startdialog), Datei noch nicht vorhanden - gibt es sie schon, wird
+        gefragt, ob stattdessen dieser Termin geöffnet werden soll."""
+        eingabe = self.pfad_feld.text().strip()
+        pfad = _mit_sqlite_endung(eingabe)
+        self.pfad_feld.setText(pfad)
+        if eingabe.endswith(("/", "\\")) or os.path.isdir(pfad):
+            QMessageBox.warning(self, "Speicherort", "Bitte zum Ordner auch einen Dateinamen angeben.")
+        elif not os.path.isabs(pfad):
+            QMessageBox.warning(self, "Speicherort", "Bitte einen vollständigen Speicherort angeben, "
+                                "z. B. über „Durchsuchen…“.")
+        elif not os.path.isdir(os.path.dirname(pfad)):
+            QMessageBox.warning(self, "Speicherort", f"Den Ordner gibt es nicht:\n{os.path.dirname(pfad)}")
+        elif os.path.exists(pfad):
+            antwort = QMessageBox.question(
+                self, "Datei existiert bereits",
+                f"Die Datei „{pfad}“ existiert bereits.\n\nStattdessen als bestehenden Termin öffnen? "
+                "(„Nein“: zurück, um einen anderen Speicherort zu wählen.)",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if antwort == QMessageBox.Yes:
+                self.bestehenden_oeffnen = True
+                self.accept()
+                return False
+        else:
+            return True
+        self.pfad_feld.setFocus()
+        return False
 
     def _pruefen_und_akzeptieren(self) -> None:
         if not self.verein.text().strip() or not self.datum.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte Verein und Datum angeben.")
+            (self.verein if not self.verein.text().strip() else self.datum).setFocus()
             return
         try:
             normalisiere_datum(self.datum.text())
@@ -1653,13 +1757,19 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             return
         if not self._bearbeiten and not self.pfad_feld.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte einen Speicherort angeben.")
+            self.pfad_feld.setFocus()
             return
+        if not self._bearbeiten and self.pfad_pruefen and not self._speicherort_pruefen():
+            return
+        self._bereich_fehler_feld = None
         try:
             bereich_fehler = pruefe_startnummer_bereiche(self._startnummer_bereiche_lesen())
         except ValueError as fehler:
             bereich_fehler = str(fehler)
         if bereich_fehler:
             QMessageBox.warning(self, "Startnummern-Bereiche", bereich_fehler)
+            if self._bereich_fehler_feld is not None:
+                self._bereich_fehler_feld.setFocus()
             return
         # UX-Test 02.10.2026, K6: Beim Anlegen darauf hinweisen, dass leere Angaben auf dem
         # Anmeldeformular fehlen - Speichern bleibt trotzdem möglich.

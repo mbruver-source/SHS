@@ -45,32 +45,18 @@ import pdf_export
 def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
     """Aktualisiert einzelne Veranstaltungs-Felder, ohne die übrigen (z.B. von einem
     anderen Tab gepflegten) Felder zu überschreiben - set_veranstaltung ersetzt sonst bei
-    jedem Aufruf den kompletten Datensatz, da es keine partiellen Updates kennt."""
+    jedem Aufruf den kompletten Datensatz, da es keine partiellen Updates kennt.
+
+    Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 11): die Felder kommen aus der Signatur von
+    set_veranstaltung statt aus einer Liste von Hand - eine neue Spalte ginge sonst bei
+    jeder Änderung von Zeitplan-Start oder Mindestabstand still verloren."""
+    import inspect
+
     aktuell = get_veranstaltung(conn) or {}
-    werte = {
-        "verein": aktuell.get("verein") or "",
-        "datum": aktuell.get("datum") or "",
-        "ort": aktuell.get("ort"),
-        "vereins_nr": aktuell.get("vereins_nr"),
-        "pruefungsnummer": aktuell.get("pruefungsnummer"),
-        "wertungsrichter_1": aktuell.get("wertungsrichter_1"),
-        "wertungsrichter_2": aktuell.get("wertungsrichter_2"),
-        "wertungsrichter_3": aktuell.get("wertungsrichter_3"),
-        "wertungsrichter_4": aktuell.get("wertungsrichter_4"),
-        "wertungsrichter_5": aktuell.get("wertungsrichter_5"),
-        "pruefungsleiter": aktuell.get("pruefungsleiter"),
-        "pruefungsgebuehr_ed": aktuell.get("pruefungsgebuehr_ed"),
-        "pruefungsgebuehr_dk": aktuell.get("pruefungsgebuehr_dk"),
-        "zeitplan_start": aktuell.get("zeitplan_start"),
-        # Nutzerwunsch 28.09.2026 (Anmeldeformular) - sonst gingen diese Felder bei jeder
-        # Änderung aus einem anderen Tab (z. B. Zeitplan-Start) verloren.
-        "verband": aktuell.get("verband"),
-        "meldestelle": aktuell.get("meldestelle"),
-        "angebotene_pruefungen": aktuell.get("angebotene_pruefungen"),
-        "startnummer_bereiche": aktuell.get("startnummer_bereiche"),  # UX-Test U1
-        "dk_mindestabstand": aktuell.get("dk_mindestabstand"),  # UX-Test U2
-        "startnummer_bereichsgroesse": aktuell.get("startnummer_bereichsgroesse"),  # Marco 09.10.2026
-    }
+    felder = [name for name in inspect.signature(set_veranstaltung).parameters if name != "conn"]
+    werte = {name: aktuell.get(name) for name in felder}
+    werte["verein"] = werte["verein"] or ""
+    werte["datum"] = werte["datum"] or ""
     werte.update(overrides)
     set_veranstaltung(conn, **werte)
 

@@ -93,6 +93,7 @@ from db import (
     alle_leistungsklassen,
     angebotene_pruefungen,
     automatische_zeitplan_verteilung,
+    dateiname_slug,
     behaeltnis_bedarf_zeilentexte,
     berechne_auswertung,
     berechne_behaeltnis_bedarf,
@@ -707,6 +708,7 @@ class TeilnehmerTab(QWidget):
             vergebene_nummern=vergebene_startnummern(self.conn),
             namen_je_startnummer=self._namen_je_startnummer(),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
+            angebotene={p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))},
             # Gespeichert wird im Dialog vor dem Schließen - scheitert es, bleiben die
             # Eingaben stehen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1).
             speichern=lambda d: add_teilnehmer(self.conn, d.ergebnis()),
@@ -728,6 +730,7 @@ class TeilnehmerTab(QWidget):
             vergebene_nummern=vergebene_startnummern(self.conn, ausser_teilnehmer_id=teilnehmer_id),
             namen_je_startnummer=self._namen_je_startnummer(ausser_teilnehmer_id=teilnehmer_id),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
+            angebotene={p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))},
             speichern=lambda d: update_teilnehmer(self.conn, teilnehmer_id, d.ergebnis()),
         )
         if dialog.exec() == QDialog.Accepted:
@@ -3649,13 +3652,14 @@ class VerwaltungTab(QWidget):
         veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
 
         hinweis = QLabel(
-            "Über \"Veranstaltungsdaten bearbeiten…\" lassen sich Verein, Ort und Datum "
+            "Über „Veranstaltungsdaten bearbeiten…“ lassen sich Verein, Ort und Datum "
             "sowie Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
-            "\"Export\") und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
+            "„Export“) und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
             "Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des "
-            "Anmeldeformulars (Reiter \"Export\")."
+            "Anmeldeformulars (Reiter „Export“), die Startnummern-Bereiche die Vergabe der "
+            "Startnummern."
         )
         hinweis.setWordWrap(True)
 
@@ -3745,12 +3749,9 @@ class DatensicherungTab(QWidget):
         veranstaltung = get_veranstaltung(self.conn) if self.conn is not None and mit_termin else None
         if not veranstaltung:
             return f"SHS-Sicherung_{heute}.zip"
-        verein = veranstaltung["verein"] or ""
-        for umlaut, ersatz in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
-            verein = verein.replace(umlaut, ersatz)
         teile = [
             re.sub(r"[^0-9-]", "", veranstaltung["datum"] or ""),
-            re.sub(r"[^A-Za-z0-9]+", "-", verein).strip("-")[:40].strip("-"),
+            dateiname_slug(veranstaltung["verein"] or ""),
         ]
         mitte = "_".join(t for t in teile if t)
         return f"SHS-Sicherung_{mitte + '_' if mitte else ''}erstellt-{heute}.zip"
@@ -4670,8 +4671,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
 def _termin_datei_anlegen(dialog) -> None:
     """Rückruf für VeranstaltungsDialog beim Anlegen: legt die Termin-Datei an, solange
-    sie noch nicht existiert (sonst fragt StartDialog._neuer_termin danach, ob sie geöffnet
-    werden soll). Scheitert das Anlegen (z. B. Ordner fehlt, Datenträger schreibgeschützt),
+    sie noch nicht existiert (ob eine vorhandene Datei geöffnet werden soll, hat der Dialog
+    schon gefragt; entsteht sie erst danach, wird nichts angelegt und nichts geöffnet). Scheitert das Anlegen (z. B. Ordner fehlt, Datenträger schreibgeschützt),
     wird eine halb angelegte Datei wieder entfernt und der Fehler an den Dialog gemeldet,
     der dann mit allen Eingaben offen bleibt (Desktop-Prüfung 14.10.2026)."""
     pfad = dialog.pfad_feld.text().strip()
@@ -4833,20 +4834,12 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             return
         pfad = dialog.pfad_feld.text().strip()
 
-        if not getattr(dialog, "termin_angelegt", False) and os.path.exists(pfad):
-            antwort = QMessageBox.question(
-                self,
-                "Datei existiert bereits",
-                f"Die Datei „{pfad}“ existiert bereits.\n\nStattdessen als bestehenden Termin öffnen?",
-            )
-            if antwort != QMessageBox.Yes:
-                return
+        # Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 2): ob eine vorhandene Datei geöffnet werden
+        # soll, hat der Dialog schon gefragt - bei „Nein“ bleiben dort die Eingaben stehen.
+        # Geöffnet wird nur der angelegte bzw. der bewusst gewählte vorhandene Termin.
+        if dialog.bestehenden_oeffnen or getattr(dialog, "termin_angelegt", False):
             self.pfad = pfad
             self.accept()
-            return
-
-        self.pfad = pfad
-        self.accept()
 
     def _termin_oeffnen(self) -> None:
         termin = self._ausgewaehlter_termin()

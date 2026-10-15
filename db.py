@@ -1559,8 +1559,8 @@ def _dk_gegenstand_status(teilnehmer: dict, stufe: int) -> str:
       Mindestanzahl unterschiedlicher zugeordneter Texte. Ein solcher Mischfall ist nur
       ein Hinweis, kein Fehler.
     Nutzt aus, dass eine Disziplin nie zwei Gegenstand-Feldern zugleich zugeordnet sein
-    kann (wird beim Speichern in TeilnehmerDialog._pruefen_und_akzeptieren, app.py,
-    verhindert).
+    kann (wird beim Speichern in TeilnehmerDialog._pruefen_und_akzeptieren,
+    desktop_dialoge.py, verhindert).
 
     Liefert "ok", "fehlt" (zu wenig unterschiedliche Gegenstand-Texte - echter Fehler)
     oder "nicht_zugeordnet" (genug Texte, aber die begonnene Disziplin-Zuordnung ist
@@ -2401,8 +2401,8 @@ class TerminInfo:
     """Eintrag für die Terminübersicht im Startdialog. `vereins_nr` steht zusätzlich zu
     den in der Tabelle angezeigten Spalten bereit, damit sich beim Anlegen eines neuen
     Termins Verein/Vereins-Nr./Ort des zuletzt angelegten Termins vorschlagen lassen
-    (Nutzerwunsch 20.09., siehe VeranstaltungsDialog/StartDialog._neuer_termin in
-    app.py) - erspart die erneute Eingabe, wenn ohnehin derselbe Verein gemeint ist."""
+    (Nutzerwunsch 20.09., siehe VeranstaltungsDialog in desktop_dialoge.py und
+    StartDialog._neuer_termin in app.py) - erspart die erneute Eingabe, wenn ohnehin derselbe Verein gemeint ist."""
     pfad: str
     dateiname: str
     verein: str | None
@@ -2678,10 +2678,21 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
     return ergebnisse
 
 
+_UMSCHRIFT = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss"})
+
+
+def dateiname_slug(text: str, max_laenge: int = 40) -> str:
+    """Text (z. B. Vereinsname) als Teil eines Dateinamens: Umlaute umgeschrieben, alles
+    außer Buchstaben/Ziffern als „-“, höchstens `max_laenge` Zeichen. Gemeinsam für den
+    Termin- und den Sicherungs-Dateinamen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 10)."""
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", (text or "").translate(_UMSCHRIFT)).strip("-")
+    return slug[:max_laenge].strip("-")
+
+
 def dateiname_vorschlagen(verein: str, datum: str) -> str:
     """Schlägt einen Dateinamen für einen neuen Termin aus Verein + Datum vor,
-    z. B. '2026-09-19_SGV-Koeppern-eV.sqlite'."""
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", verein or "").strip("-") or "Termin"
+    z. B. '2026-09-19_SGV-Koeppern-e-V.sqlite' für „SGV Köppern e.V.“."""
+    slug = dateiname_slug(verein) or "Termin"
     datum_teil = re.sub(r"[^0-9-]", "", datum or "") or "ohne-datum"
     return f"{datum_teil}_{slug}.sqlite"
 

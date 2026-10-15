@@ -2020,6 +2020,8 @@ def test_neuer_termin_legt_datei_an_und_fragt_bei_vorhandener(qtbot, tmp_path, m
     qtbot.addWidget(zweiter)
     zweiter._neuer_termin()
     assert fragen == ["Datei existiert bereits"]
+    # Teil 2 Nr. 2: „Ja“ öffnet den vorhandenen Termin.
+    assert zweiter.pfad == str(ziel) and zweiter.result() == QDialog.Accepted
 
 
 def test_reiterwechsel_bei_schreibfehler_wechselt_trotzdem(qtbot, termin, monkeypatch):
@@ -2083,6 +2085,167 @@ def test_veranstaltung_bearbeiten_bleibt_bei_schreibfehler_offen(qtbot, conn, mo
     assert tab.status_label.text() != "Veranstaltungsdaten gespeichert."
 
 
+def _neuer_termin_dialog(qtbot, tmp_path, monkeypatch):
+    monkeypatch.setattr("desktop_dialoge.termine_ordner", lambda: tmp_path)
+    dialog = VeranstaltungsDialog(vorbelegung={"verein": "SGV Köppern", "datum": "2026-11-14",
+                                               "verband": "HSVRM", "meldestelle": "x"})
+    qtbot.addWidget(dialog)
+    return dialog
+
+
+def test_neuer_termin_speicherort_wird_geprueft(qtbot, tmp_path, monkeypatch):
+    """Teil 2 Nr. 2: relativ, fehlende Endung, vorhandene Datei (eine Frage, bei „Nein“
+    bleiben die Eingaben stehen), eindeutiger Vorschlag, Durchsuchen ohne Ersetzen-Frage."""
+    (tmp_path / "2026-11-14_SGV-Koeppern.sqlite").write_bytes(b"")
+    dialog = _neuer_termin_dialog(qtbot, tmp_path, monkeypatch)
+    assert dialog.pfad_feld.text() == str(tmp_path / "2026-11-14_SGV-Koeppern (2).sqlite")
+    warnungen, fragen = [], []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[2]))
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.No)
+
+    dialog.pfad_feld.setText("termin.sqlite")
+    dialog._pruefen_und_akzeptieren()
+    assert "vollständigen Speicherort" in warnungen[-1] and dialog.result() == 0
+
+    dialog.pfad_feld.setText(str(tmp_path) + os.sep)
+    dialog._pruefen_und_akzeptieren()
+    assert "Dateinamen" in warnungen[-1] and dialog.focusWidget() in (None, dialog.pfad_feld)
+
+    dialog.pfad_feld.setText(str(tmp_path / "2026-11-14_SGV-Koeppern"))
+    dialog._pruefen_und_akzeptieren()
+    assert dialog.pfad_feld.text().endswith(".sqlite")
+    assert fragen == ["Datei existiert bereits"] and dialog.result() == 0
+    assert not dialog.bestehenden_oeffnen and dialog.verein.text() == "SGV Köppern"
+
+    from PySide6.QtWidgets import QFileDialog
+
+    optionen = []
+
+    def speichern_dialog(*a, **k):
+        optionen.append(k.get("options"))
+        return str(tmp_path / "neu"), ""
+    monkeypatch.setattr("desktop_dialoge.QFileDialog.getSaveFileName", speichern_dialog)
+    dialog._durchsuchen()
+    assert dialog.pfad_feld.text() == str(tmp_path / "neu.sqlite")
+    assert optionen == [QFileDialog.DontConfirmOverwrite]
+
+
+def test_veranstaltungsdialog_zwischeneingabe_im_bereich(qtbot, monkeypatch):
+    """Teil 2 Nr. 3: „20.“ ergibt eine deutsche Meldung mit Fokus auf dem Feld."""
+    dialog = VeranstaltungsDialog(
+        vorbelegung={"verein": "HSV", "datum": "2026-11-14", "angebotene_pruefungen": "DK1"}, bearbeiten=True)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    _beschriftung, von_feld, bis_feld = dialog.bereich_felder["DK1"]
+    von_feld.setText("20.")
+    bis_feld.setText("40")
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    dialog._pruefen_und_akzeptieren()
+    assert "„20.“ ist keine Startnummer (1–999)" in meldungen[0] and "invalid literal" not in meldungen[0]
+    assert dialog.focusWidget() is von_feld and dialog.result() == 0
+
+
+def test_dialoge_fokus_und_groesse(qtbot, tmp_path, monkeypatch):
+    """Teil 2 Nr. 6 und 7: Fokus im ersten Eingabefeld (auch nach der Pflichtfeld-Meldung),
+    Veranstaltungsdialog auf den Bildschirm begrenzt."""
+    teilnehmer = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(teilnehmer)
+    teilnehmer.show()
+    assert teilnehmer.focusWidget() is teilnehmer.nachname
+    teilnehmer.nachname.setText("Muster")
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: None)
+    teilnehmer._pruefen_und_akzeptieren()
+    assert teilnehmer.focusWidget() is teilnehmer.vorname
+
+    veranstaltung = _neuer_termin_dialog(qtbot, tmp_path, monkeypatch)
+    veranstaltung.show()
+    assert veranstaltung.focusWidget() is veranstaltung.verein
+    frei = veranstaltung.screen().availableGeometry()
+    assert veranstaltung.height() <= int(frei.height() * 0.9) + 1
+
+
+def test_veranstaltungsdialog_gebuehr_standard_nur_beim_anlegen(qtbot, tmp_path, monkeypatch):
+    """Teil 2 Nr. 8a: ein geleertes Gebührfeld bleibt beim Bearbeiten leer."""
+    bearbeiten = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14",
+                                                   "pruefungsgebuehr_ed": None, "pruefungsgebuehr_dk": "15,00"},
+                                      bearbeiten=True)
+    qtbot.addWidget(bearbeiten)
+    assert bearbeiten.pruefungsgebuehr_ed.text() == "" and bearbeiten.pruefungsgebuehr_dk.text() == "15,00"
+    neu = _neuer_termin_dialog(qtbot, tmp_path, monkeypatch)
+    assert neu.pruefungsgebuehr_ed.text() == "12,00"
+
+
+def _teilnehmer_dialog_ausgefuellt(qtbot, **kwargs):
+    dialog = TeilnehmerDialog(vergebene_nummern=set(), **kwargs)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.nachname.setText("Muster")
+    dialog.vorname.setText("Max")
+    dialog.rufname_hund.setText("Bello")
+    return dialog
+
+
+def test_dk_zuordnung_ohne_gegenstand_text_zaehlt_nicht(qtbot, monkeypatch):
+    """Teil 2 Nr. 4: eine Zuordnung ohne Gegenstand-Text blockiert nicht und wird nicht gespeichert."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1.setText("Socke")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    dialog.gegenstand_3_disziplin.setCurrentText("Trümmerfeld")
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: pytest.fail("keine Warnung erwartet"))
+    dialog._pruefen_und_akzeptieren()
+    assert dialog.result() == QDialog.Accepted
+    assert dialog.ergebnis().gegenstand_3_disziplin is None
+
+
+@pytest.mark.parametrize("antwort", [QMessageBox.No, QMessageBox.Yes])
+def test_teilnehmer_datum_in_der_zukunft_fragt(qtbot, monkeypatch, antwort):
+    """Teil 2 Nr. 12: Rückfrage (Vorgabe „Nein“), keine Sperre."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    dialog.geburtsdatum.setText("01.01.2085")
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[4])) or antwort)
+    dialog._pruefen_und_akzeptieren()
+    assert fragen == [("Datum in der Zukunft", QMessageBox.No)]
+    assert (dialog.result() == QDialog.Accepted) == (antwort == QMessageBox.Yes)
+
+
+@pytest.mark.parametrize("angebotene, gefragt", [({"DK1"}, True), ({"ED1-Trümmerfeld"}, False), (None, False)])
+def test_teilnehmer_nicht_angebotene_pruefung_fragt(qtbot, monkeypatch, angebotene, gefragt):
+    """Teil 2 Nr. 13 (Marcos Entscheidung): „wird nicht angeboten, trotzdem speichern?“."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, angebotene=angebotene)
+    dialog.art.setCurrentText("ED")
+    dialog.stufe.setCurrentText("1")
+    dialog.disziplin.setCurrentText("Trümmerfeld")
+    fragen = []
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    if gefragt:
+        assert "wird in diesem Termin nicht angeboten" in fragen[0] and dialog.result() == 0
+    else:
+        assert fragen == [] and dialog.result() == QDialog.Accepted
+
+
+def test_aktualisiere_veranstaltung_feld_behaelt_alle_felder(conn):
+    """Teil 2 Nr. 11: jede Spalte aus set_veranstaltung bleibt bei einer Einzeländerung erhalten."""
+    import inspect
+
+    import db
+
+    felder = [n for n in inspect.signature(db.set_veranstaltung).parameters if n != "conn"]
+    werte = {n: f"wert-{n}" for n in felder}
+    werte.update(datum="2026-11-14", angebotene_pruefungen="DK1", startnummer_bereiche="DK1=1-20",
+                 dk_mindestabstand="15", startnummer_bereichsgroesse="20", zeitplan_start="08:00")
+    db.set_veranstaltung(conn, **werte)
+    _aktualisiere_veranstaltung_feld(conn, zeitplan_start="10:00")
+    gespeichert = get_veranstaltung(conn)
+    assert gespeichert["zeitplan_start"] == "10:00"
+    for name in felder:
+        if name != "zeitplan_start":
+            assert gespeichert[name] == werte[name], name
+
+
 def test_neuer_termin_in_fehlendem_ordner_meldet_fehler_und_legt_nichts_an(qtbot, tmp_path, monkeypatch):
     import desktop_dialoge
 
@@ -2090,7 +2253,8 @@ def test_neuer_termin_in_fehlendem_ordner_meldet_fehler_und_legt_nichts_an(qtbot
     monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
     monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
     meldungen = []
-    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    # Teil 2 Nr. 2: der fehlende Ordner fällt jetzt schon im Dialog auf.
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
     ziel = tmp_path / "fehlt" / "termin.sqlite"
 
     def _exec(dialog):
@@ -2910,7 +3074,8 @@ def test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht(qtbot, conn)
     assert ergebnis["anzeige_flaechensuche"] == 38
 
 
-def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch):
+def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     # Nutzerwunsch (20.09., Anmerkung "Anlage neuer Termin nachdem bereits Anlagen
     # erfolgt sind"): das Programm soll sich merken, welcher Verein gemeint ist, damit
     # die oberen 3 Eingaben (Verein/Vereins-Nr./Ort) beim Anlegen eines weiteren Termins
@@ -2955,7 +3120,8 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
     }
 
 
-def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, monkeypatch):
+def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     # Gegenprobe: ohne bereits vorhandene Termine (z. B. allererster Start) darf nichts
     # vorbelegt werden.
     monkeypatch.setattr("app.liste_termine", lambda: [])
@@ -5282,9 +5448,10 @@ def test_zeitplan_uebernimmt_richter_einmalig(qtbot, termin):
 
 def test_neuer_termin_hinweis_bei_leerem_verband_und_meldestelle(qtbot, monkeypatch, tmp_path):
     """UX-Test 02.10.2026, K6: nur beim Anlegen, Speichern bleibt möglich."""
+    monkeypatch.setattr("desktop_dialoge.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     dialog = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14"})
     qtbot.addWidget(dialog)
-    dialog.pfad_feld.setText(str(tmp_path / "t.db"))
+    dialog.pfad_feld.setText(str(tmp_path / "t.sqlite"))
     fragen = []
     antwort = [QMessageBox.No]
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[2]) or antwort[0])
@@ -5962,7 +6129,8 @@ def test_demo_button_im_hauptfenster_startet_demo(qtbot, termin, monkeypatch):
     assert gestartet == [fenster, "gestartet"]
 
 
-def test_demo_button_im_startdialog(qtbot, monkeypatch):
+def test_demo_button_im_startdialog(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     monkeypatch.setattr("app.liste_termine", lambda: [])
     dialog = StartDialog()
     qtbot.addWidget(dialog)

@@ -6308,3 +6308,32 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   zusammengeführt, Kommentare korrigiert.
 - **Tests:** Vorgabe „Nein“, Kürzung mit Details, Anzahl nach Abbruch, Dateiname, Hinweis auf
   nicht angebotene Prüfungen.
+
+### A13 Teilnehmer- und Veranstaltungsdialog (15.10.2026, Desktop-Prüfung Teil 2)
+
+- **Speicherort beim Anlegen (Nr. 2):** Geprüft wird vor dem Speichern: vollständiger Pfad,
+  Ordner vorhanden, Dateiname angegeben, Endung `.sqlite` (wird ergänzt). Gibt es die Datei
+  schon, fragt nur noch der Dialog „stattdessen öffnen?“ (Vorgabe „Nein“; dann bleiben alle
+  Eingaben stehen) – vorher fragten „Durchsuchen“ und Startdialog widersprüchlich. Der
+  Vorschlag hängt bei vorhandener Datei „(2)“ an. Die Demo schaltet die Prüfung ab, ihr
+  Termin existiert schon.
+- **Startnummern-Bereiche (Nr. 3):** „20.“ ergibt eine deutsche Meldung mit Fokus auf dem Feld.
+- **DK-Zuordnung (Nr. 4):** Nur Gegenstände mit Text zählen bei „doppelt vergeben“; ohne Text
+  wird keine Zuordnung gespeichert.
+- **Fokus und Größe (Nr. 6, 7):** Fokus beim Öffnen im ersten Feld und nach Pflichtfeld-Meldungen
+  im ersten leeren; die Scrollfläche nimmt keinen Fokus. Beide Dialoge sind über eine gemeinsame
+  Hilfe auf den Bildschirm begrenzt.
+- **Gebühr (Nr. 8a):** Der Standard 12,00 gilt nur noch beim Anlegen; ein geleertes Feld bleibt
+  beim Bearbeiten leer.
+- **Dateinamen (Nr. 10):** `db.dateiname_slug` schreibt Umlaute um und begrenzt auf 40 Zeichen,
+  gemeinsam für Termin- und Sicherungsnamen.
+- **Veranstaltungsfelder (Nr. 11):** `_aktualisiere_veranstaltung_feld` leitet die Felder aus
+  der Signatur von `set_veranstaltung` ab; ein Test prüft, dass keines verloren geht.
+- **Rückfragen (Nr. 12, 13, Marcos Entscheidung zu 13):** Geburtsdatum oder Wurftag in der
+  Zukunft und eine im Termin nicht angebotene Prüfung führen zu einer Rückfrage (Vorgabe
+  „Nein“), keine Sperre. Ohne hinterlegte Angebote wird nicht gefragt.
+- **Texte (Nr. 14)** und **Tests (Nr. 15):** Docstrings und Verwaltungshinweis korrigiert; Tests
+  legen keinen Termine-Ordner im echten Profil mehr an. `db_import` nutzt `db.pruefungs_kuerzel`
+  statt einer Kopie aus A12. Handbuch (Speicherort, Rückfragen) ergänzt.
+- **Bekannt, nicht geändert:** Das Zukunftsdatum wird mit heute verglichen, nicht mit dem
+  Prüfungsdatum.

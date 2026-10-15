@@ -2763,9 +2763,11 @@ class TestTerminuebersicht(unittest.TestCase):
 
     def test_dateiname_vorschlagen_ersetzt_sonderzeichen(self):
         name = dateiname_vorschlagen("SGV Köppern e.V.", "2026-09-19")
-        self.assertTrue(name.startswith("2026-09-19_"))
-        self.assertTrue(name.endswith(".sqlite"))
-        self.assertNotIn(" ", name)
+        # Desktop-Prüfung 14.10.2026, Teil 2 Nr. 10: Umlaute umgeschrieben, Länge begrenzt.
+        self.assertEqual(name, "2026-09-19_SGV-Koeppern-e-V.sqlite")
+        lang = dateiname_vorschlagen("Hundesportverein " * 20, "2026-09-19")
+        self.assertLessEqual(len(lang), len("2026-09-19_") + 40 + len(".sqlite"))
+        self.assertFalse(lang.removesuffix(".sqlite").endswith("-"))
 
     def test_dateiname_vorschlagen_mit_leeren_angaben(self):
         name = dateiname_vorschlagen("", "")

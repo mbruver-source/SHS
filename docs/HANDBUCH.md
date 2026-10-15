@@ -237,9 +237,10 @@ kannst du einzelne von Hand ändern. Die „Anzahl“ geht dabei mit, und leerst
 „bis“, steht sie auf „keine“. Die Standardgröße wird gespeichert und beim nächsten
 Termin vorgeschlagen.
 
-Der **Speicherort\*** wird automatisch als `JJJJ-MM-TT_Verein.sqlite` vorgeschlagen. Behalte
-den Vorschlag möglichst bei: Nur Termine im Standardordner erscheinen im Startbildschirm und
-werden von der Datensicherung erfasst.
+Der **Speicherort\*** wird automatisch als `JJJJ-MM-TT_Verein.sqlite` vorgeschlagen (gibt es
+die Datei schon, mit „(2)“ usw.). Behalte den Vorschlag möglichst bei: Nur Termine im
+Standardordner erscheinen im Startbildschirm und werden von der Datensicherung erfasst. Wählst
+du eine vorhandene Datei, fragt das Programm, ob es stattdessen diesen Termin öffnen soll.
 
 ## 4. Teilnehmer
 
@@ -251,7 +252,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 
 | Button | Wirkung |
 |---|---|
-| **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die Startnummer bleibt zunächst offen (siehe unten). |
+| **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die Startnummer bleibt zunächst offen (siehe unten). Beim Speichern fragt das Programm nach, wenn die Prüfung im Termin nicht angeboten wird oder Geburtsdatum bzw. Wurftag in der Zukunft liegen. |
 | **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer – ebenso ein Doppelklick auf die Zeile. |
 | **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. |
 | **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
