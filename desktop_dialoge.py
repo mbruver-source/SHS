@@ -728,7 +728,7 @@ class StartnummerTauschenDialog(QDialog):
         return self.partner_combo.currentData()
 
 
-def _gleiche_datei(pfad_a: str | None, pfad_b: str | None) -> bool:
+def _gleicher_pfad(pfad_a: str | None, pfad_b: str | None) -> bool:
     """Vergleicht zwei Pfade unabhängig von "/" bzw. "\\" und (unter Windows) von der
     Groß-/Kleinschreibung."""
     if not pfad_a or not pfad_b:
@@ -757,7 +757,7 @@ class TerminImportDialog(QDialog):
         # Desktop-Prüfung 14.10.2026, Teil 1 Nr. 1: Qt liefert Pfade mit "/", liste_termine()
         # mit "\" - der geöffnete Termin muss trotzdem sicher ausgeschlossen sein.
         self._termine = [
-            t for t in liste_termine() if t.lesbar and not _gleiche_datei(t.pfad, aktueller_pfad)
+            t for t in liste_termine() if t.lesbar and not _gleicher_pfad(t.pfad, aktueller_pfad)
         ]
 
         self.termin_combo = QComboBox()
@@ -813,8 +813,8 @@ class TerminImportDialog(QDialog):
         # schreibgeschützte Dateien älterer Versionen lassen sich so verwenden.
         try:
             self._quelle_conn = oeffne_termin_lesend(self._termine[index].pfad)
+            lesen_begrenzen(self._quelle_conn)  # vor der Aufbauprüfung, wie in db.liste_termine
             pruefe_termin_aufbau(self._quelle_conn)
-            lesen_begrenzen(self._quelle_conn)
             eintraege = []
             for t in list_teilnehmer(self._quelle_conn):
                 text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"

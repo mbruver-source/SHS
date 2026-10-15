@@ -1018,6 +1018,7 @@ class TeilnehmerTab(QWidget):
                 f"{wer} bereits Ergebnisse erfasst. Sie bleiben gespeichert, "
                 f"werden aber nicht mehr gewertet, solange {subjekt} als "
                 "„keine Teilnahme“ markiert ist.\n\nTrotzdem markieren?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if antwort != QMessageBox.Yes:
                 return
@@ -2347,6 +2348,7 @@ def _stechen_offen_bestaetigen(parent, conn, leistungsklasse: str | None = None)
         "In " + ", ".join(offen) + " sind mehrere punktgleich auf Platz 1 – das Stechen ist noch "
         "nicht eingetragen (Reiter „Auswertung“ → „Stechen-Sieger festlegen…“).\n\n"
         "Die Ergebnisliste trotzdem jetzt speichern? Dort steht dann „Stechen offen“.",
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
     )
     return antwort == QMessageBox.Yes
 
@@ -3934,10 +3936,11 @@ class DatensicherungTab(QWidget):
                 wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)
         except TeilweiseWiederhergestelltError as exc:
             # QS-Prüfung 07.10.2026, Befund 3: nennen, was schon ersetzt ist.
+            ursache = _klartext_fehler(exc.ursache) if isinstance(exc.ursache, BaseException) else exc.ursache
             QMessageBox.critical(
                 self, "Wiederherstellen unvollständig",
                 "Die Sicherung wurde nur teilweise wiederhergestellt:\n\n"
-                f"{_klartext_fehler(exc.ursache) if isinstance(exc.ursache, BaseException) else exc.ursache}\n\n"
+                f"{ursache}\n\n"
                 "Diese Termine sind bereits aus der Sicherung übernommen:\n"
                 + "\n".join(f"  • {name}" for name in exc.geschrieben),
             )

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import errno
+import inspect
 import os
 import sqlite3
 import sys
@@ -52,8 +54,6 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
     Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 11): die Felder kommen aus der Signatur von
     set_veranstaltung statt aus einer Liste von Hand - eine neue Spalte ginge sonst bei
     jeder Änderung von Zeitplan-Start oder Mindestabstand still verloren."""
-    import inspect
-
     aktuell = get_veranstaltung(conn) or {}
     felder = [name for name in inspect.signature(set_veranstaltung).parameters if name != "conn"]
     werte = {name: aktuell.get(name) for name in felder}
@@ -261,6 +261,7 @@ def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_labe
             f"Im Zeitplan gibt es {len(konflikte)} Überschneidung(en): Teams stehen gleichzeitig "
             "bzw. ohne Mindestabstand an zwei Stellen (im Reiter „Zeitplan“ rot markiert).\n\n"
             "Trotzdem als PDF speichern?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if antwort != QMessageBox.Yes:
             return
@@ -424,8 +425,6 @@ _SQLITE_KLARTEXT = (
 
 def _datei_klartext(exc: OSError) -> str | None:
     """Erklärung zu den erwartbaren Dateifehlern (Teil 9 Nr. 6, Teil 5 Nr. 4)."""
-    import errno
-
     if exc.errno == errno.ENOSPC:
         return "Der Datenträger ist voll."
     if isinstance(exc, PermissionError):
@@ -439,8 +438,9 @@ def _datei_klartext(exc: OSError) -> str | None:
 
 
 def _technischer_text(exc: BaseException) -> str:
-    # str(OSError) zeigt den Pfad als repr() - unter Windows mit doppelten Backslashes
-    # (Teil 5 Nr. 4); deshalb Fehlertext und Pfad einzeln.
+    """Technischer Fehlertext für die Klammer „(Technisch: …)“. str(OSError) zeigt den Pfad
+    als repr() - unter Windows mit doppelten Backslashes (Teil 5 Nr. 4); deshalb Fehlertext
+    und Pfad einzeln."""
     if isinstance(exc, OSError) and exc.strerror:
         if isinstance(exc.filename, (str, bytes, os.PathLike)):
             return f"{exc.strerror}: {_pfad_anzeige(os.fsdecode(exc.filename))}"
@@ -1061,7 +1061,6 @@ def fehlerfenster_einrichten(version: str) -> None:
     Fenster. Nach dem Absturzprotokoll und nach dem Anlegen der QApplication aufrufen: der
     bisherige Hook protokolliert weiterhin zuerst. Jedes Fehlerbild erscheint nur einmal je
     Sitzung, nie zwei Fenster gleichzeitig; Fehler beim Anzeigen gehen nur ins Protokoll."""
-    import threading
     import traceback
 
     from PySide6.QtWidgets import QApplication

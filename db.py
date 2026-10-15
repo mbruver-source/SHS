@@ -2447,6 +2447,7 @@ def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
 
 
 def _text_oder_none(wert) -> str | None:
+    """Wert aus einer fremden Termin-Datei für die Terminübersicht als Text (None bleibt None)."""
     return None if wert is None else str(wert)
 
 

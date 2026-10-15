@@ -3087,6 +3087,7 @@ class TestTerminOeffnen(unittest.TestCase):
         with self.assertRaises(TerminNichtOeffenbar):
             termin_oeffnen(str(pfad))
 
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "als root wirkt der Schreibschutz nicht")
     def test_schreibgeschuetzter_termin_faellt_beim_oeffnen_auf(self):
         pfad = self._termin()
         os.chmod(pfad, 0o444)

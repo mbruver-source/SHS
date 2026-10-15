@@ -6450,3 +6450,26 @@ Die Abschluss-QS (`qs-korrektheit`) über alle Commits fand Wechselwirkungen zwi
 - **Stechen:** gleichlautende Einträge (gleicher Name und Hund, ohne Start-Nr.) bekommen einen
   Zähler „[n]“, damit die Auswahl eindeutig zugeordnet wird.
 - **Tests:** zu allen vier Punkten.
+
+### A19c Befunde der Abschluss-QS Wartbarkeit (15.10.2026)
+
+Die Abschluss-QS (`qs-wartbarkeit`) fand keine Fehler, nur Stilpunkte. Umgesetzt:
+- Rückfragen „Trotzdem …?“ einheitlich mit Vorgabe „Nein“ („Keine Teilnahme“ trotz Ergebnissen,
+  Ergebnisliste mit offenem Stechen, Zeitplan-PDF trotz Überschneidungen).
+- Termin-Import-Dialog: Lesebegrenzung vor der Aufbauprüfung wie in `db.liste_termine`;
+  `_gleiche_datei` im Dialog heißt jetzt `_gleicher_pfad` (Pfadvergleich, anders als die
+  gleichnamige Funktion in `db_sicherung` mit `samefile`).
+- Docstrings (`_technischer_text`, `_text_oder_none`), lokale Importe nach oben, doppelter
+  `threading`-Import entfernt, Hilfsvariable statt verschachteltem Ausdruck in der Meldung
+  „Wiederherstellen unvollständig“.
+- Test „schreibgeschützter Termin“ wird als root (Container) übersprungen.
+- Zeilenzahlen in `CLAUDE.md`/`AGENTS.md` aktualisiert.
+
+**Zurückgestellt (für Marco, größerer Umbau ohne Fehlerwirkung):**
+- Kommentare verweisen oft auf „Desktop-Prüfung 14.10.2026, Teil x Nr. y“ bzw. „aus A4“ – die
+  Berichte liegen bis zum Release in `_unveroeffentlicht/`; nach dem Release mit den Berichten
+  ins Repo, dann sind die Verweise auflösbar.
+- `app.py` (rund 5100 Zeilen) weiter aufteilen: Meldungs-/Import-Helfer nach
+  `desktop_gemeinsam`, Absturzprotokoll/Diagnose in ein eigenes Modul.
+- Gemeinsame Testattrappen in `test_app_gui.py`; Zeitgrenzen der `waitUntil` bündeln.
+- Ein gemeinsamer Helfer für Ja/Nein-Rückfragen und für das Öffnen fremder Termin-Dateien.
