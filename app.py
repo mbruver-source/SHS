@@ -1187,7 +1187,8 @@ def _formular_import_prompt() -> str:
         "- Pro Formular genau eine Datenzeile. Mehrere Formulare ergeben mehrere Zeilen "
         "untereinander in derselben CSV.\n"
         "- nachname, vorname und rufname_hund sind Pflicht (rufname_hund = 'Rufname des "
-        "Hundes' auf dem Formular). Ein Formular ohne diese Angaben bitte auslassen.\n"
+        "Hundes' auf dem Formular). Fehlt eine davon, das Formular trotzdem als Zeile "
+        "ausgeben (das Feld leer) - der Import meldet dann, was fehlt.\n"
         "- art/stufe/disziplin ergeben sich aus dem angekreuzten Kästchen oben auf dem "
         "Formular: 'DK-LK 1/2/3' -> art=DK, stufe=1/2/3, disziplin LEER lassen. "
         "'Trümmer LK n' -> art=ED, stufe=n, disziplin=Trümmerfeld. "
@@ -1205,11 +1206,12 @@ def _formular_import_prompt() -> str:
         "ALLE halter_*-Spalten in dieser Zeile leer lassen (halter_mitgliedsverein = "
         "'Mitgliedsverein' und halter_mitgliedsnummer = 'Mitgl.-Nr.' im Halter-"
         "Abschnitt).\n"
-        "- Ein Feld ohne erkennbare Angabe auf dem Formular bleibt in der CSV leer - "
-        "nicht raten oder freilassen mit einem Platzhalter wie 'unbekannt' füllen.\n"
-        "- startnummer, gegenstand_1/2/3, gegenstand_1/2/3_disziplin und bezahlt stehen "
-        "NICHT auf dem Meldeformular - diese Spalten entweder ganz weglassen oder leer "
-        "lassen, sie werden im Programm separat vergeben.\n\n"
+        "- chip_nr = Chip- bzw. Tätowiernummer; ist nur 'Tätowierung' angekreuzt, 'Täto ' "
+        "vor die Nummer setzen (z. B. 'Täto ABC123').\n"
+        "- Ein Feld ohne erkennbare Angabe auf dem Formular bleibt in der CSV leer - nicht "
+        "raten und keinen Platzhalter wie 'unbekannt' eintragen.\n"
+        "- startnummer und bezahlt vergibt das Programm selbst; Gegenstände werden über "
+        "diesen Weg nicht übernommen (im Programm nachtragen).\n\n"
         "Gib NUR die CSV-Datei aus, ohne einleitenden oder abschließenden Text drumherum."
     )
 
@@ -1346,7 +1348,7 @@ class FormularImportTab(QWidget):
 
     def _oma_importieren(self) -> None:
         """Übernimmt Meldungen aus einem OMA-Export (siehe importiere_teilnehmer_aus_oma in
-        db.py) - ohne Umweg über den KI-Prompt."""
+        db_import.py) - ohne Umweg über den KI-Prompt."""
         pfad, _ = QFileDialog.getOpenFileName(
             self, "OMA-Export importieren", _import_startordner(), "OMA-Export (*.csv *.txt);;Alle Dateien (*)"
         )

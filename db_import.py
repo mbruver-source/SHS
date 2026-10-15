@@ -60,7 +60,7 @@ CSV_IMPORT_SPALTEN = [
 
 @dataclass
 class CsvImportErgebnis:
-    """Rückgabe von importiere_teilnehmer_aus_csv(): wie viele Zeilen tatsächlich als
+    """Rückgabe des CSV-, OMA- und Anmeldeformular-Imports: wie viele Zeilen tatsächlich als
     Teilnehmer angelegt wurden, sowie eine Liste menschenlesbarer Fehlertexte ("Zeile N:
     ...") für übersprungene Zeilen - der Import bricht bei einer fehlerhaften Zeile NICHT
     komplett ab, sondern importiert die übrigen trotzdem (siehe FormularImportTab)."""
@@ -102,10 +102,15 @@ _NICHT_ANGEBOTEN_HINWEIS = (
 )
 
 
-def _hinweise_ergaenzen(fehler: list[str], hinweise: list[str]) -> list[str]:
+class NichtAngebotenError(ValueError):
+    """Die Prüfung wird im Termin nicht angeboten. Eigene Klasse, damit der Freischalt-Hinweis
+    nicht am Meldungstext erkannt werden muss (Desktop-Prüfung 14.10.2026, Teil 5 Nr. 9)."""
+
+
+def _hinweise_ergaenzen(hinweise: list[str], nicht_angeboten: bool) -> list[str]:
     """Hängt den Freischalt-Hinweis einmal an, wenn mindestens eine Zeile/Datei wegen einer
     nicht angebotenen Prüfung abgelehnt wurde (N5)."""
-    if any("nicht angeboten" in f for f in fehler):
+    if nicht_angeboten:
         hinweise.append(_NICHT_ANGEBOTEN_HINWEIS)
     return hinweise
 
@@ -137,7 +142,7 @@ def nicht_angebotene(conn: sqlite3.Connection, teilnehmer: list[dict]) -> list[d
 
 
 def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
-    """Wirft ValueError, wenn die Prüfung des Teilnehmers nicht unter `angebotene`
+    """Wirft NichtAngebotenError, wenn die Prüfung des Teilnehmers nicht unter `angebotene`
     (Kürzel, siehe db.ALLE_PRUEFUNGEN) ist. Leeres `angebotene` = nicht prüfen."""
     if not angebotene:
         return
@@ -145,7 +150,7 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
     if kuerzel not in angebotene:
         pruefung = pruefung_nach_kuerzel(kuerzel)
         bezeichnung = pruefung.bezeichnung if pruefung else f"{teilnehmer.art} LK {teilnehmer.stufe}"
-        raise ValueError(_nicht_angeboten_text(bezeichnung))
+        raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung))
 
 
 def _csv_wert(zeile: dict, spalte: str) -> str | None:
@@ -288,6 +293,7 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
     Windows-1252 wie bei Excel "CSV (Trennzeichen-getrennt)"; Komma oder Semikolon wird an
     der Kopfzeile erkannt. add_teilnehmer() committet pro Zeile einzeln."""
     fehler: list[str] = []
+    nicht_angeboten = False
     uebersprungen: list[str] = []
     importiert = 0
     letzte_zeile = 1  # Zeile 1 = Kopfzeile
@@ -373,6 +379,7 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
             add_teilnehmer(conn, teilnehmer)
         except (ValueError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{bezeichnung}: {exc}")
+            nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
         vorhandene.add(schluessel)
         importiert += 1
@@ -382,7 +389,7 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
         hinweise.append("Die Datei enthält keine Teilnehmerzeilen - es wurde nichts importiert.")
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(fehler, hinweise) + excel_hinweise,
+        hinweise=_hinweise_ergaenzen(hinweise, nicht_angeboten) + excel_hinweise,
     )
 
 
@@ -508,6 +515,7 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
     }
     angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
     fehler: list[str] = []
+    nicht_angeboten = False
     uebersprungen: list[str] = []
     importiert = 0
     pflicht_bis = max(kopf_index[spalte] for spalte in OMA_PFLICHTSPALTEN)
@@ -538,13 +546,14 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
             add_teilnehmer(conn, teilnehmer)
         except (ValueError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{bezeichnung}: {exc}")
+            nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
         vorhandene.add(schluessel)
         importiert += 1
     hinweise = [_KEINE_ANGEBOTE_HINWEIS] if not angebotene and (importiert or fehler) else []
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+        hinweise=_hinweise_ergaenzen(hinweise, nicht_angeboten),
     )
 
 
@@ -635,11 +644,31 @@ def _pdf_angekreuzt(werte: dict, feldname: str) -> bool:
     return (None if wert is None else str(wert).strip()) not in _PDF_HAKEN_AUS
 
 
-def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> tuple[NeuerTeilnehmer, list[str]]:
-    """Setzt die Feldwerte eines ausgefüllten Anmeldeformulars in einen NeuerTeilnehmer um.
-    `angebotene` sind die Kürzel der im geöffneten Termin angebotenen Prüfungen. Wirft
-    ValueError mit einer für den Nutzer verständlichen Begründung. Liefert zusätzlich die
-    bei ED nicht übernommenen Gegenstände (UX-Test U11)."""
+def _formular_angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
+    """Verifikation 28.09.2026, Befund 1 (Marco: umsetzen): ein Formular eines anderen
+    Termins (z. B. vom Vorjahr) oder der Import in die falsche Termin-Datei fällt so auf,
+    statt eine hier gar nicht angebotene Prüfung stillschweigend zu übernehmen. Läuft erst
+    nach der Dublettenprüfung (Desktop-Prüfung 14.10.2026, Teil 5 Nr. 7: wie bei CSV und OMA -
+    eine schon übernommene Meldung heißt sonst „nicht angeboten“ statt „bereits gemeldet“)."""
+    if not angebotene:
+        # Zweite Verifikation 28.09.2026, N1: eigene Meldung statt der Vermutung "Formular
+        # eines anderen Termins?", wenn im Termin noch gar nichts hinterlegt ist.
+        raise ValueError(
+            "in diesem Termin sind noch keine angebotenen Prüfungen hinterlegt (Reiter "
+            "„Verwaltung“ → „Veranstaltungsdaten bearbeiten…“)"
+        )
+    kuerzel = pruefungs_kuerzel(teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
+    if kuerzel not in angebotene:
+        pruefung = pruefung_nach_kuerzel(kuerzel)
+        bezeichnung = pruefung.bezeichnung if pruefung else kuerzel
+        raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung, formular=True))
+
+
+def _anmeldeformular_zu_teilnehmer(werte: dict) -> tuple[NeuerTeilnehmer, list[str]]:
+    """Setzt die Feldwerte eines ausgefüllten Anmeldeformulars in einen NeuerTeilnehmer um
+    (das Angebot prüft danach _formular_angebot_pruefen). Wirft ValueError mit einer für den
+    Nutzer verständlichen Begründung. Liefert zusätzlich die bei ED nicht übernommenen
+    Gegenstände (UX-Test U11)."""
     if not any(feld in werte for feld in ANMELDEFORMULAR_TEXTFELDER):
         raise ValueError("die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)")
 
@@ -660,19 +689,6 @@ def _anmeldeformular_zu_teilnehmer(werte: dict, angebotene: set[str]) -> tuple[N
     pruefung = pruefung_nach_kuerzel(angekreuzt[0])
     if pruefung is None:
         raise ValueError(f"unbekannte Prüfung {angekreuzt[0]!r} angekreuzt")
-    # Verifikation 28.09.2026, Befund 1 (Marco: umsetzen): ein Formular eines anderen
-    # Termins (z. B. vom Vorjahr) oder der Import in die falsche Termin-Datei fällt so auf,
-    # statt eine hier gar nicht angebotene Prüfung stillschweigend zu übernehmen.
-    if not angebotene:
-        # Zweite Verifikation 28.09.2026, N1: eigene Meldung statt der Vermutung "Formular
-        # eines anderen Termins?", wenn im Termin noch gar nichts hinterlegt ist.
-        raise ValueError(
-            "in diesem Termin sind noch keine angebotenen Prüfungen hinterlegt (Reiter "
-            "„Verwaltung“ → „Veranstaltungsdaten bearbeiten…“)"
-        )
-    if pruefung.kuerzel not in angebotene:
-        raise ValueError(_nicht_angeboten_text(pruefung.bezeichnung, formular=True))
-
     zeile = {spalte: _pdf_text(werte, feld) for feld, spalte in ANMELDEFORMULAR_TEXTFELDER.items()}
     zeile["art"], zeile["stufe"], zeile["disziplin"] = pruefung.art, str(pruefung.stufe), pruefung.disziplin or ""
 
@@ -730,6 +746,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
     }
     angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
     fehler: list[str] = []
+    nicht_angeboten = False
     uebersprungen: list[str] = []
     hinweise: list[str] = []
     importiert = 0
@@ -755,7 +772,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             fehler.append(f"{name}: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)")
             continue
         try:
-            teilnehmer, verworfen = _anmeldeformular_zu_teilnehmer(werte, angebotene)
+            teilnehmer, verworfen = _anmeldeformular_zu_teilnehmer(werte)
             schluessel = _meldungs_schluessel(
                 teilnehmer.nachname, teilnehmer.vorname, teilnehmer.rufname_hund,
                 teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
@@ -766,9 +783,11 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
                     f"{teilnehmer.rufname_hund} ist bereits gemeldet"
                 )
                 continue
+            _formular_angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
         except (ValueError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{name}: {exc}")
+            nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
         vorhandene.add(schluessel)
         importiert += 1
@@ -779,7 +798,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             )
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(fehler, hinweise),
+        hinweise=_hinweise_ergaenzen(hinweise, nicht_angeboten),
     )
 
 
@@ -789,9 +808,9 @@ def importiere_teilnehmer_stammdaten(
     """Übernimmt die ausgewählten Teilnehmer (per ID in quelle_conn) als NEUE Teilnehmer in
     ziel_conn - für 'Teilnehmer aus anderem Termin importieren' (Nutzerwunsch 20.09.,
     Anmerkung zum Programm: 'Teilnehmer müssen wieder einzeln eingegeben werden [...] ist
-    Option möglich, von anderem Termin importieren?'). Siehe TerminImportDialog in app.py.
+    Option möglich, von anderem Termin importieren?'). Siehe TerminImportDialog in desktop_dialoge.py.
 
-    Anders als kopiere_termin_daten() weiter unten (die für die Web-Sync einen KOMPLETTEN
+    Anders als db.kopiere_termin_daten() (die für die Web-Sync einen KOMPLETTEN
     Termin 1:1 überträgt, inkl. Startnummer/Gegenstand-Zuordnung/Bezahlt-Status/Ergebnis)
     werden hier bewusst NUR die über mehrere Prüfungstage hinweg gültigen Stammdaten
     übernommen (Absprache mit dem Nutzer) - Startnummer, Gegenstand-Zuordnung, Bezahlt-

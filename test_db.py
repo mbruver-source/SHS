@@ -3818,6 +3818,21 @@ class TestAnmeldeformularImport(unittest.TestCase):
         self.assertEqual(len(ergebnis.fehler), 1)
         self.assertIn("alt.pdf: Trümmer LK 2 wird in diesem Termin nicht angeboten", ergebnis.fehler[0])
         self.assertEqual(list_teilnehmer(self.conn), [])
+        self.assertTrue(any("Veranstaltungsdaten bearbeiten" in h for h in ergebnis.hinweise))
+
+    def test_erneut_eingelesenes_formular_ist_dublette_auch_wenn_nicht_mehr_angeboten(self):
+        """Desktop-Prüfung 14.10.2026, Teil 5 Nr. 7: wie bei CSV und OMA zuerst die Dublette -
+        eine schon übernommene Meldung heißt „bereits gemeldet“, nicht „nicht angeboten“."""
+        pfad = self._pdf("nachzuegler.pdf", haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",))
+        self.assertEqual(importiere_anmeldeformular_pdf(self.conn, [pfad]).importiert, 1)
+        set_veranstaltung(self.conn, verein="HSV Musterstadt", datum="2026-11-14",
+                          angebotene_pruefungen=pruefungen_als_text(["DK2"]))
+        ergebnis = importiere_anmeldeformular_pdf(self.conn, [pfad])
+        self.assertEqual(ergebnis.fehler, [])
+        self.assertEqual(len(ergebnis.uebersprungen), 1)
+        self.assertIn("bereits gemeldet", ergebnis.uebersprungen[0])
+        # Der Freischalt-Hinweis kommt nur bei einer tatsächlich abgelehnten Prüfung (Nr. 9).
+        self.assertFalse(any("Veranstaltungsdaten bearbeiten" in h for h in ergebnis.hinweise))
 
     def test_zerlegte_umlaute_werden_normalisiert_und_als_dublette_erkannt(self):
         # Verifikation 28.09.2026, Befund 2: "Mu" + kombinierendes Trema (NFD) statt "Mü".

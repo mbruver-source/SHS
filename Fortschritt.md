@@ -6413,3 +6413,16 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Wartecursor (Teil 6 Nr. 7):** `_wartecursor()` (mit `try/finally`) um PDF- und CSV-Export
   sowie Sicherung erstellen und wiederherstellen; Meldungen erscheinen erst danach.
 - **Tests:** Freigabe nach dem Schließen (Hilfe und Versionsfenster), Cursor nach einem Fehler.
+
+### A18 Import-Rest (15.10.2026, Desktop-Prüfung Teil 5)
+
+- **PDF-Import (Nr. 7):** Wie bei CSV und OMA zuerst die Dublette, dann das Angebot
+  (`_formular_angebot_pruefen`): ein erneut eingelesenes Formular heißt „bereits gemeldet“,
+  auch wenn die Prüfung inzwischen nicht mehr angeboten wird.
+- **KI-Prompt (Nr. 8):** Unvollständige Formulare als Zeile ausgeben (der Import meldet, was
+  fehlt) statt still auslassen; Täto-Regel wie beim PDF-Import; Gegenstände „werden nicht
+  übernommen“ statt der überholten Aussage; Satz geglättet.
+- **Nicht angeboten (Nr. 9):** eigene Ausnahme `NichtAngebotenError(ValueError)` statt
+  Textabgleich auf „nicht angeboten“ für den Freischalt-Hinweis; Docstrings korrigiert.
+- **Tests:** erneut eingelesenes Formular nach geändertem Angebot, Freischalt-Hinweis nur bei
+  echter Ablehnung.
