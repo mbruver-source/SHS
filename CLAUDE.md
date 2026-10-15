@@ -35,7 +35,14 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    Agenten-Typ `desktop-pruefer` (Opus 5.5, Effort hoch). Der Skill `desktop-pruefung`
    startet ihn je Funktionsbereich in 10 einzeln startbaren Teilen samt Gegenprüfung
    (13.10.2026).
-4. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
+4. **Viele Aufgaben automatisch abarbeiten (Projektstandard, Marco 15.10.2026).** Gibt Marco
+   eine größere Menge Befunde "zur automatischen Abarbeitung", gilt der Skill
+   `aufgaben-abarbeitung` (`.claude/skills/aufgaben-abarbeitung/`): Rückfragen vorab, Aufgaben
+   bündeln und als S/M/L schätzen, Limit über die Statuszeile (`statusline-shs.ps1`, schreibt
+   `shs-limit.json`) prüfen mit der Regel Nutzung + Schätzung + 3 % ≤ 100 %, je Aufgabe Explore →
+   Umsetzen → Tests mit Gegenprobe → Verifikation → `Fortschritt.md` → lokaler Commit, Loop mit
+   `ScheduleWakeup` über Limit-Pausen hinweg.
+5. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
    fertig gemeldet wird, prüft zusätzlich zum eigenen Testlauf ein separater Subagent Diff
    und Tests gegen - besonders bei sicherheitsrelevanten Änderungen. Dafür den
    Agenten-Typ `verifikation` aus `.claude/agents/` nutzen.
