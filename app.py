@@ -209,6 +209,7 @@ from desktop_gemeinsam import (
     _import_ordner_merken,
     _import_startordner,
     _NumerischSortierbaresItem,
+    _datei_exportieren,
     _pdf_exportieren,
     _ausfuehren,
     _wartecursor,
@@ -3555,27 +3556,15 @@ class ExportTab(QWidget):
                          self._export_dateiname(dateiname_praefix), export_fn, status_text)
 
     def _teilnehmerliste_exportieren(self) -> None:
-        """Nutzerwunsch 02.10.2026 (UX-Test, N1): alle Teilnehmer als Excel-freundliche CSV."""
-        try:
-            os.makedirs(self._ablageort.pfad, exist_ok=True)
-        except OSError:
-            pass
-        vorschlag = os.path.join(self._ablageort.pfad, self._export_dateiname("Teilnehmerliste").replace(".pdf", ".csv"))
-        pfad, _ = QFileDialog.getSaveFileName(self, "Teilnehmerliste speichern", vorschlag, "CSV-Datei (*.csv)")
-        if not pfad:
-            return
-        try:
-            with _wartecursor():
-                anzahl = exportiere_teilnehmer_csv(self.conn, pfad)
-        except OSError as exc:
-            QMessageBox.critical(self, "Speichern fehlgeschlagen",
-                                 f"Die Teilnehmerliste konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}")
-            return
-        self._ablageort.pfad = os.path.dirname(pfad)
-        self.status_label.setText(f"Teilnehmerliste ({anzahl} Teilnehmer) gespeichert: {_pfad_anzeige(pfad)}")
-        _datei_gespeichert_melden(
-            self, pfad, "Teilnehmerliste gespeichert", datei_oeffnen_text="In Excel öffnen",
-            hinweis=_EXCEL_CSV_HINWEIS,
+        """Nutzerwunsch 02.10.2026 (UX-Test, N1): alle Teilnehmer als Excel-freundliche CSV -
+        über den gemeinsamen Exportablauf (H3, 15.10.2026)."""
+        vorschlag = os.path.splitext(self._export_dateiname("Teilnehmerliste"))[0] + ".csv"
+        _datei_exportieren(
+            self, self._ablageort, self.status_label, "Teilnehmerliste speichern", vorschlag,
+            lambda pfad: exportiere_teilnehmer_csv(self.conn, pfad),
+            lambda anzahl: f"Teilnehmerliste ({anzahl} Teilnehmer) gespeichert",
+            dateifilter="CSV-Datei (*.csv)", datei_art="CSV", datei_oeffnen_text="In Excel öffnen",
+            hinweis=_EXCEL_CSV_HINWEIS, meldung_titel="Teilnehmerliste gespeichert",
         )
 
     def _anmeldeformular_exportieren(self) -> None:

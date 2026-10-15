@@ -747,7 +747,7 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     # Rückfrage vor dem Druck; "Nein" bricht ab, bevor ein Dateifenster kommt.
     fragen = []
     monkeypatch.setattr("app.QMessageBox.question", lambda *x, **k: fragen.append(x[2]) or QMessageBox.No)
-    monkeypatch.setattr("desktop_gemeinsam._pdf_speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
+    monkeypatch.setattr("desktop_gemeinsam._speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
     tab._rangliste_drucken()
     assert "Stechen" in fragen[0]
 
@@ -2172,11 +2172,11 @@ def test_pdf_exportfehler_unterscheidet_datei_und_programmfehler(qtbot, monkeypa
     monkeypatch.setattr(desktop_gemeinsam.QMessageBox, "critical", lambda *a, **k: meldungen.append(a[2]))
     monkeypatch.setattr(desktop_gemeinsam, "fehler_protokollieren", protokolliert.append)
 
-    desktop_gemeinsam._pdf_export_fehler_anzeigen(None, PermissionError(13, "Permission denied", "x.pdf"))
+    desktop_gemeinsam._export_fehler_anzeigen(None, PermissionError(13, "Permission denied", "x.pdf"))
     assert "konnte nicht gespeichert werden" in meldungen[-1] and "anderen Programm" in meldungen[-1]
     assert protokolliert == []
 
-    desktop_gemeinsam._pdf_export_fehler_anzeigen(None, KeyError("Albers"))
+    desktop_gemeinsam._export_fehler_anzeigen(None, KeyError("Albers"))
     assert "Programmfehler (KeyError: 'Albers')" in meldungen[-1]
     assert "anderen Programm" not in meldungen[-1] and len(protokolliert) == 1
 
@@ -3571,7 +3571,7 @@ def test_bewertungsbogen_direktexport_erzeugt_pdf_fuer_ausgewaehlten_teilnehmer(
                  if get_teilnehmer(conn, tab.tabelle.item(row, 0).data(Qt.UserRole))["nachname"].startswith("Meier"))
     tab.tabelle.selectRow(zeile)
     vorschlaege = []
-    monkeypatch.setattr("desktop_gemeinsam._pdf_speicherort_waehlen", lambda _p, _a, _t, vorschlag: vorschlaege.append(vorschlag))
+    monkeypatch.setattr("desktop_gemeinsam._speicherort_waehlen", lambda _p, _a, _t, vorschlag, *_f: vorschlaege.append(vorschlag))
     qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
     assert vorschlaege == ["Bewertungsbogen_2_Meier-Schulz-Zwei.pdf"]
     assert "gespeichert" in tab.status_label.text()
@@ -3694,9 +3694,9 @@ def test_pdf_exportieren_meldet_fehler_ohne_statusmeldung(qtbot, tmp_path, monke
     import desktop_gemeinsam
     from PySide6.QtWidgets import QLabel
 
-    monkeypatch.setattr(desktop_gemeinsam, "_pdf_speicherort_waehlen", lambda *a: str(tmp_path / "x.pdf"))
+    monkeypatch.setattr(desktop_gemeinsam, "_speicherort_waehlen", lambda *a: str(tmp_path / "x.pdf"))
     fehler = []
-    monkeypatch.setattr(desktop_gemeinsam, "_pdf_export_fehler_anzeigen", lambda _p, exc: fehler.append(exc))
+    monkeypatch.setattr(desktop_gemeinsam, "_export_fehler_anzeigen", lambda _p, exc, *_a: fehler.append(exc))
     status = QLabel("alt")
 
     def kaputt(_pfad):
@@ -5191,6 +5191,44 @@ def test_csv_export_meldung_warnt_vor_excel(qtbot, conn, monkeypatch, tmp_path):
     tab._teilnehmerliste_exportieren()
     assert ziel.exists()
     assert meldungen_hinweise and "Excel kürzt" in meldungen_hinweise[-1]
+
+
+def test_csv_export_nutzt_gemeinsamen_ablauf(qtbot, conn, monkeypatch, tmp_path, gespeichert_meldungen):
+    """H3 (15.10.2026, Teil 6 Nr. 11/12): Der CSV-Export läuft über _datei_exportieren -
+    CSV-Filter und -Vorschlag, Ablageort gemerkt, „In Excel öffnen“; ein Programmfehler wird
+    gemeldet und protokolliert, ohne Statusmeldung."""
+    import desktop_gemeinsam
+
+    _teilnehmer_anlegen(conn, nachname="Meyer", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Schulz", startnummer=2)
+    ordner = tmp_path / "anderswo"
+    ordner.mkdir()
+    dialoge = []
+
+    def speichern(_parent, _titel, vorschlag, dateifilter):
+        dialoge.append((vorschlag, dateifilter))
+        return str(ordner / "liste.csv"), ""
+
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", speichern)
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab._teilnehmerliste_exportieren()
+    assert dialoge[-1][0].endswith(".csv") and ".pdf" not in dialoge[-1][0]
+    assert dialoge[-1][1] == "CSV-Datei (*.csv)"
+    assert tab._ablageort.pfad == str(ordner)
+    assert gespeichert_meldungen[-1][1:] == ("Teilnehmerliste gespeichert", "In Excel öffnen")
+    assert tab.status_label.text().startswith("Teilnehmerliste (2 Teilnehmer) gespeichert:")
+
+    fehler, protokolliert = [], []
+    monkeypatch.setattr("app.exportiere_teilnehmer_csv", lambda *a: {}["kaputt"])
+    monkeypatch.setattr(desktop_gemeinsam.QMessageBox, "critical", lambda *a, **k: fehler.append((a[1], a[2])))
+    monkeypatch.setattr(desktop_gemeinsam, "fehler_protokollieren", protokolliert.append)
+    tab.status_label.setText("alt")
+    anzahl_meldungen = len(gespeichert_meldungen)
+    tab._teilnehmerliste_exportieren()
+    assert fehler[-1][0] == "CSV-Datei konnte nicht erstellt werden"
+    assert "Programmfehler (KeyError" in fehler[-1][1] and len(protokolliert) == 1
+    assert tab.status_label.text() == "alt" and len(gespeichert_meldungen) == anzahl_meldungen
 
 
 def test_standardknoepfe_deutsch(qapp):

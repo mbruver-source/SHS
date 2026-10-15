@@ -6575,3 +6575,24 @@ Entscheidungen vorab abgestimmt.
   lesend, begrenzt, schließt bei Fehler), Import-Dialog mit halb geschriebener Datei samt Journal
   (nicht lesbar, Datei und Journal unverändert). Die Gegenprobe ist rot auf dem alten Stand. GUI
   344 passed (dieselben zwei Umgebungsfälle rot), Unittests OK.
+### H3 CSV-Export über den gemeinsamen Ablauf
+
+- `desktop_gemeinsam._datei_exportieren` ist der gemeinsame Exportablauf für PDF und CSV.
+  Parameter: Dateifilter, Dateiart für die Fehlertexte, Text des Öffnen-Knopfs, Hinweis und
+  Meldungstitel. `_pdf_exportieren` bleibt als Hülle mit unveränderter Signatur; die vier
+  PDF-Aufrufer sind unverändert. Umbenannt: `_pdf_speicherort_waehlen` → `_speicherort_waehlen`,
+  `_pdf_export_fehler_anzeigen` → `_export_fehler_anzeigen` (Skill `desktop-pruefung` und
+  `Architektur.md` nachgezogen).
+- Der Export der Teilnehmerliste (CSV, Export-Reiter) läuft jetzt darüber. Programmfehler werden
+  gemeldet und protokolliert (vorher fing er nur Dateifehler). Der Ablageort wird wie beim PDF
+  schon bei der Auswahl gemerkt. Der Dateiname wird sauber über die Endung gebildet statt mit
+  `.replace(".pdf", ".csv")`. Status mit Teilnehmerzahl, Meldung „Teilnehmerliste gespeichert“
+  mit „In Excel öffnen“ und dem Excel-Hinweis bleiben.
+- Fehlertexte vereinheitlicht: „Die PDF-/CSV-Datei konnte nicht gespeichert werden.“ bei
+  Dateifehlern, „… konnte nicht erstellt werden.“ bei Programmfehlern; Fenstertitel
+  „PDF-Datei/CSV-Datei konnte nicht erstellt werden“. Kein Test und kein Dokument erwartete den
+  alten Wortlaut.
+- Die CSV-Vorlage im Teilnehmer-Reiter bleibt beim eigenen Ablauf (Marcos Entscheidung).
+- Tests: CSV-Filter und -Vorschlag, Ablageort, Meldung, Status, Programmfehler ohne
+  Statusmeldung (Teil 6 Nr. 12); Gegenprobe rot auf dem alten Stand. GUI 345 passed (dieselben
+  zwei Umgebungsfälle rot), Unittests OK.

@@ -209,7 +209,8 @@ def _import_ordner_merken(pfad: str) -> None:
         _letzter_import_ordner = os.path.dirname(pfad)
 
 
-def _pdf_speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschlag_dateiname: str) -> str | None:
+def _speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschlag_dateiname: str,
+                         dateifilter: str = "PDF-Datei (*.pdf)") -> str | None:
     try:
         # Der Ausdrucke-Ordner (siehe _ausdrucke_ordner) entsteht erst hier - sonst würde
         # der Dialog bei einem fehlenden Ordner an einer anderen Stelle starten.
@@ -217,7 +218,7 @@ def _pdf_speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschla
     except OSError:
         pass
     vorschlag_pfad = os.path.join(ablageort.pfad, vorschlag_dateiname)
-    pfad, _ = QFileDialog.getSaveFileName(parent, titel, vorschlag_pfad, "PDF-Datei (*.pdf)")
+    pfad, _ = QFileDialog.getSaveFileName(parent, titel, vorschlag_pfad, dateifilter)
     if not pfad:
         return None
     # Merkt sich den zuletzt gewählten Ordner (siehe _Ablageort oben), damit sowohl der
@@ -227,35 +228,45 @@ def _pdf_speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschla
     return pfad
 
 
-def _pdf_export_fehler_anzeigen(parent, exc: Exception) -> None:
+def _export_fehler_anzeigen(parent, exc: Exception, datei_art: str = "PDF") -> None:
     """Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 5): Nur ein Dateifehler liegt am Zielpfad bzw.
     an einer geöffneten Datei; jeder andere Fehler ist ein Programmfehler und kommt ins
-    Absturzprotokoll (siehe _fehlertext)."""
+    Absturzprotokoll (siehe _fehlertext). `datei_art`: „PDF“ oder „CSV“."""
     if isinstance(exc, OSError):
-        text = f"Die PDF-Datei konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}"
+        text = f"Die {datei_art}-Datei konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}"
     else:
-        text = f"Das PDF konnte nicht erstellt werden.\n\n{_fehlertext(exc)}"
-    QMessageBox.critical(parent, "PDF konnte nicht erstellt werden", text)
+        text = f"Die {datei_art}-Datei konnte nicht erstellt werden.\n\n{_fehlertext(exc)}"
+    QMessageBox.critical(parent, f"{datei_art}-Datei konnte nicht erstellt werden", text)
 
 
-def _pdf_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, titel: str,
-                     vorschlag: str, export_fn, status_text) -> None:
-    """Gemeinsamer Ablauf aller PDF-Exporte (Desktop-Prüfung 14.10.2026, Teil 6 Nr. 11):
-    Speicherort wählen, export_fn(pfad) aufrufen, Fehler melden, Status setzen und die Meldung
-    „gespeichert“ zeigen. `status_text` ist ein fester Text oder eine Funktion
-    Ergebnis -> Text (z. B. „N Bewertungsbögen gespeichert“)."""
-    pfad = _pdf_speicherort_waehlen(parent, ablageort, titel, vorschlag)
+def _datei_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, titel: str,
+                       vorschlag: str, export_fn, status_text, *, dateifilter: str = "PDF-Datei (*.pdf)",
+                       datei_art: str = "PDF", datei_oeffnen_text: str = "PDF öffnen",
+                       hinweis: str | None = None, meldung_titel: str | None = None) -> None:
+    """Gemeinsamer Ablauf aller Exporte (Desktop-Prüfung 14.10.2026, Teil 6 Nr. 11; CSV seit
+    15.10.2026, H3): Speicherort wählen, export_fn(pfad) aufrufen, Fehler melden, Status setzen
+    und die Meldung „gespeichert“ zeigen. `status_text` ist ein fester Text oder eine Funktion
+    Ergebnis -> Text (z. B. „N Bewertungsbögen gespeichert“); er ist auch Titel der Meldung,
+    außer `meldung_titel` ist angegeben."""
+    pfad = _speicherort_waehlen(parent, ablageort, titel, vorschlag, dateifilter)
     if not pfad:
         return
     try:
         with _wartecursor():
             ergebnis = export_fn(pfad)
-    except Exception as exc:  # noqa: BLE001 - Unterscheidung in _pdf_export_fehler_anzeigen
-        _pdf_export_fehler_anzeigen(parent, exc)
+    except Exception as exc:  # noqa: BLE001 - Unterscheidung in _export_fehler_anzeigen
+        _export_fehler_anzeigen(parent, exc, datei_art)
         return
     text = status_text(ergebnis) if callable(status_text) else status_text
     status_label.setText(f"{text}: {_pfad_anzeige(pfad)}")
-    _datei_gespeichert_melden(parent, pfad, text)
+    _datei_gespeichert_melden(parent, pfad, meldung_titel or text, datei_oeffnen_text=datei_oeffnen_text,
+                              hinweis=hinweis)
+
+
+def _pdf_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, titel: str,
+                     vorschlag: str, export_fn, status_text) -> None:
+    """PDF-Export über den gemeinsamen Ablauf _datei_exportieren."""
+    _datei_exportieren(parent, ablageort, status_label, titel, vorschlag, export_fn, status_text)
 
 
 def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
