@@ -24,7 +24,9 @@ Zielpfad, unter dem die PDF-Datei geschrieben wird.
 from __future__ import annotations
 
 import math
+import os
 import sqlite3
+import sys
 from typing import NamedTuple
 from xml.sax.saxutils import escape as _xml_escape
 
@@ -34,8 +36,11 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import simpleSplit
+from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as rl_canvas
+from reportlab.platypus.tables import CellStyle
 from reportlab.platypus import (
     HRFlowable,
     KeepTogether,
@@ -92,9 +97,49 @@ from shs_core import (
     platz_text,
 )
 
+# --- Schrift ------------------------------------------------------------------
+
+# Desktop-Prüfung 14.10.2026 (Teil 6 Nr. 2, Marcos Entscheidung): Die Standardschrift
+# Helvetica kennt nur westeuropäische Zeichen - „Paweł“ oder „Łódź“ erschienen als „■“. Deshalb
+# DejaVu Sans, in der schmalen Form „Condensed“ (fast so breit wie Helvetica - mit der
+# normalen Breite brachen Namen und Chip-Nummern in den Tabellen mitten im Wort um); Normal,
+# Fett, Kursiv; Lizenz in fonts/LICENSE-DejaVu.txt; mitgeliefert im Ordner fonts/ (im Bundle
+# über sys._MEIPASS). Fehlen die Dateien, bleibt es bei Helvetica.
+# Ausnahme: Formularfelder des Anmeldeformulars - reportlab erlaubt dort nur Standardschriften.
+_SCHRIFT_ORDNER = os.path.join(getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__)), "fonts")
+
+
+def _schriften_registrieren() -> tuple[str, str, str]:
+    dateien = {
+        "DejaVuSans": "DejaVuSansCondensed.ttf",
+        "DejaVuSans-Bold": "DejaVuSansCondensed-Bold.ttf",
+        "DejaVuSans-Oblique": "DejaVuSansCondensed-Oblique.ttf",
+    }
+    try:
+        for name, datei in dateien.items():
+            pdfmetrics.registerFont(TTFont(name, os.path.join(_SCHRIFT_ORDNER, datei)))
+    except Exception:  # noqa: BLE001 - TTFError/OSError: Schrift fehlt -> Standardschrift
+        return "Helvetica", "Helvetica-Bold", "Helvetica-Oblique"
+    # Fett-kursiv gibt es nicht (nicht mitgeliefert): erscheint fett und aufrecht - heute
+    # nirgends benutzt.
+    pdfmetrics.registerFontFamily("DejaVuSans", normal="DejaVuSans", bold="DejaVuSans-Bold",
+                                  italic="DejaVuSans-Oblique", boldItalic="DejaVuSans-Bold")
+    return "DejaVuSans", "DejaVuSans-Bold", "DejaVuSans-Oblique"
+
+
+_SCHRIFT, _SCHRIFT_FETT, _SCHRIFT_KURSIV = _schriften_registrieren()
+# Tabellenzellen mit reinem Text nutzen sonst die reportlab-Standardschrift. Gilt für den
+# ganzen Prozess - reportlab-Tabellen gibt es nur hier.
+CellStyle.fontname = _SCHRIFT
+
 # --- Gemeinsame Stile -------------------------------------------------------
 
 _STYLES = getSampleStyleSheet()
+_SCHRIFT_ERSATZ = {"Helvetica": _SCHRIFT, "Helvetica-Bold": _SCHRIFT_FETT,
+                   "Helvetica-Oblique": _SCHRIFT_KURSIV, "Helvetica-BoldOblique": _SCHRIFT_FETT}
+for _stil in _STYLES.byName.values():
+    if hasattr(_stil, "fontName"):
+        _stil.fontName = _SCHRIFT_ERSATZ.get(_stil.fontName, _stil.fontName)
 _TITEL = ParagraphStyle("SHSTitel", parent=_STYLES["Heading1"], fontSize=14, spaceAfter=2 * mm)
 _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20, spaceAfter=0)
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
@@ -102,9 +147,9 @@ _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize
 _ABSCHNITT_MIT_FOLGE = ParagraphStyle("SHSAbschnittMitFolge", parent=_ABSCHNITT, keepWithNext=1)
 _HINWEIS = ParagraphStyle("SHSHinweis", parent=_STYLES["Normal"], fontSize=8, alignment=1, spaceAfter=2 * mm)
 _TEXT = ParagraphStyle("SHSText", parent=_STYLES["Normal"], fontSize=9.5)
-_TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold")
+_TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT)
 _STAT_TITEL = ParagraphStyle("SHSStatTitel", parent=_STYLES["Heading1"], fontSize=16, alignment=1, spaceAfter=0)
-_STAT_KOPF_LABEL = ParagraphStyle("SHSStatKopfLabel", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold")
+_STAT_KOPF_LABEL = ParagraphStyle("SHSStatKopfLabel", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT)
 _STAT_KOPF_WERT = ParagraphStyle("SHSStatKopfWert", parent=_STYLES["Normal"], fontSize=9.5)
 # Nutzerwunsch (21.09., "Kosmetik"): die Spaltenüberschriften der Prädikat-Matrix
 # (insbesondere "Behältnisstrecke"/"Flächensuche"/"Trümmerfeld") brachen bei der
@@ -113,6 +158,8 @@ _STAT_KOPF_WERT = ParagraphStyle("SHSStatKopfWert", parent=_STYLES["Normal"], fo
 # Spalten verbreitern UND Kopfschrift leicht verkleinern (statt Wörter abzukürzen), siehe
 # _stat_spalte_breite() unten - beides zusammen sorgt dafür, dass jede Überschrift
 # einzeilig passt.
+# Bewusst Helvetica-Bold: nur feste Texte (Disziplin, LK), und die Spaltenbreiten unten sind
+# darauf abgestimmt - mit DejaVu würde die Matrix breiter als die Seite (Teil 6 Nr. 2).
 _STAT_MATRIX_KOPF = ParagraphStyle("SHSStatMatrixKopf", parent=_STYLES["Normal"], fontSize=6.5, fontName="Helvetica-Bold", alignment=1, leading=8)
 _STAT_MATRIX_ZELLE = ParagraphStyle("SHSStatMatrixZelle", parent=_STYLES["Normal"], fontSize=9, alignment=1)
 # Namen in Ergebnislisten als Paragraph, damit lange Doppelnamen umbrechen statt in die
@@ -151,7 +198,7 @@ def _datum_kurz(iso_datum: str | None) -> str:
 
 
 def _schriftgroesse_fuer_breite(
-    text: str, max_breite_pt: float, start_groesse: float, min_groesse: float, font: str = "Helvetica",
+    text: str, max_breite_pt: float, start_groesse: float, min_groesse: float, font: str = _SCHRIFT,
 ) -> float:
     """Ermittelt die größte Schriftgröße (zwischen `min_groesse` und `start_groesse`, in
     0,5-Schritten), bei der `text` in genau EINER Zeile innerhalb `max_breite_pt` Punkt
@@ -254,8 +301,8 @@ def _wertungsnoten_tabelle_ed() -> Table:
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
         ("BACKGROUND", (0, 3), (-1, 3), colors.whitesmoke),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, 3), (0, 3), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
+        ("FONTNAME", (0, 3), (0, 3), _SCHRIFT_FETT),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     return tabelle
@@ -272,7 +319,7 @@ def _wertungsnoten_tabelle_dk() -> Table:
         ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     return tabelle
@@ -330,7 +377,7 @@ def _skizze_behaeltnisse(anzahl: int) -> Drawing:
         zeichnung.add(Rect(x, 1, breite, hoehe, rx=1.5 * mm, ry=1.5 * mm, strokeWidth=0.8, fillColor=colors.white))
         zeichnung.add(Ellipse(x + breite / 2, 1 + hoehe, breite / 2, deckel, strokeWidth=0.8, fillColor=colors.white))
         zeichnung.add(String(x + breite / 2, 1 + hoehe / 2 - 4, str(i + 1),
-                             fontName="Helvetica-Bold", fontSize=11, textAnchor="middle"))
+                             fontName=_SCHRIFT_FETT, fontSize=11, textAnchor="middle"))
     return zeichnung
 
 
@@ -550,7 +597,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         gesamt_tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
             ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ]))
@@ -571,7 +618,7 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         status_tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
             ("BACKGROUND", (0, 0), (0, 0), colors.whitesmoke),
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, -1), _SCHRIFT_FETT),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ]))
@@ -603,9 +650,9 @@ def erstelle_alle_bewertungsboegen_pdf(
     Rückseite ein anderes Team habe. [...] ggf. auch nur Auswählbar, welche LK/Disziplin
     ich gedruckt haben will?") schränkt die Sammel-PDF optional auf die genannten Art/LK-
     Labels ein (wie leistungsklasse_label() sie liefert, z. B. "DK LK 1", "ED LK 2
-    Trümmerfeld" - siehe BewertungsbogenAuswahlDialog in app.py). None (Standard, auch bei
-    einem leeren Set gälte sonst 'nichts auswählen') bedeutet weiterhin ALLE Teilnehmer,
-    identisch zum bisherigen Verhalten."""
+    Trümmerfeld" - siehe BewertungsbogenAuswahlDialog in desktop_dialoge.py). None
+    (Standard) bedeutet ALLE Teilnehmer; ein leeres Set bedeutet keine (der Dialog lässt OK
+    dann gar nicht zu, Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6)."""
     teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     if erlaubte_labels is not None:
         teilnehmer = [t for t in teilnehmer if leistungsklasse_label(t) in erlaubte_labels]
@@ -672,7 +719,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
             tabelle.setStyle(TableStyle([
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
             ]))
             story.append(tabelle)
@@ -725,6 +772,7 @@ _ETIKETT_SPALTEN = [30 * mm, 29 * mm, 24 * mm, 21 * mm, 25 * mm, 23 * mm, 18 * m
 assert math.isclose(sum(_ETIKETT_SPALTEN), ETIKETT_BREITE_MM * mm)
 _ETIKETT_ZEILEN = [ETIKETT_HOEHE_MM / 2 * mm, ETIKETT_HOEHE_MM / 2 * mm]
 _ETIKETT_TEXT = ParagraphStyle("SHSEtikettText", parent=_STYLES["Normal"], fontSize=8.5, leading=10)
+# Bewusst Helvetica-Bold: feste Texte (Disziplin + Punkte), Spalten auf einzeilig abgestimmt (Teil 6 Nr. 2).
 _ETIKETT_FELD = ParagraphStyle("SHSEtikettFeld", parent=_STYLES["Normal"], fontSize=8.5, fontName="Helvetica-Bold", leading=10)
 # "Gesamt: DISQ"/"Gesamt: ABBR" ist in 8,5 pt breiter als das Gesamt-Feld (Codeprüfung
 # 22.09., M3) - nur dieser Fall bekommt eine kleinere Schrift (Marcos Entscheidung).
@@ -917,7 +965,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
             verein_text = _wert(t["verein"])
             name = Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TABELLE_ZELLE)
             daten.append(["", _wert(t["startnummer"]), name, verein_text, "", ""])
-            if verein_text and stringWidth(verein_text, "Helvetica", 9) > verein_spalte_breite - _VEREIN_PADDING_PT:
+            if verein_text and stringWidth(verein_text, _SCHRIFT, 9) > verein_spalte_breite - _VEREIN_PADDING_PT:
                 groesse = _schriftgroesse_fuer_breite(
                     verein_text, verein_spalte_breite - _VEREIN_PADDING_PT, start_groesse=9, min_groesse=5.5,
                 )
@@ -928,7 +976,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
         tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             # Extra Innenabstand in den Datenzeilen, damit von Hand genug Platz zum
             # Schreiben bleibt (reine Kopfzeile bleibt kompakt).
@@ -1154,11 +1202,11 @@ def erstelle_statistik_pdf(conn: sqlite3.Connection, pfad: str) -> None:
 # ersatzlos entfernt.
 
 _UEBERSICHT_KOPF = ParagraphStyle(
-    "SHSUebersichtKopf", parent=_STYLES["Normal"], fontSize=8, fontName="Helvetica-Bold", leading=9.5,
+    "SHSUebersichtKopf", parent=_STYLES["Normal"], fontSize=8, fontName=_SCHRIFT_FETT, leading=9.5,
 )
 _UEBERSICHT_ZELLE = ParagraphStyle("SHSUebersichtZelle", parent=_STYLES["Normal"], fontSize=8.5, leading=10)
 _UEBERSICHT_ZELLE_ROT = ParagraphStyle(
-    "SHSUebersichtZelleRot", parent=_UEBERSICHT_ZELLE, textColor=colors.red, fontName="Helvetica-Bold",
+    "SHSUebersichtZelleRot", parent=_UEBERSICHT_ZELLE, textColor=colors.red, fontName=_SCHRIFT_FETT,
 )
 
 
@@ -1260,7 +1308,7 @@ def erstelle_pruefungsleitung_uebersicht_pdf(conn: sqlite3.Connection, pfad: str
 # naheliegendere Sortierung ist.
 
 _CHIPLISTE_KOPF = ParagraphStyle(
-    "SHSChiplisteKopf", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold", leading=11,
+    "SHSChiplisteKopf", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT, leading=11,
 )
 _CHIPLISTE_ZELLE = ParagraphStyle("SHSChiplisteZelle", parent=_STYLES["Normal"], fontSize=10, leading=12)
 
@@ -1360,7 +1408,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
         tabelle.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
             ("FONTSIZE", (0, 0), (-1, -1), 9.5),
             ("ALIGN", (1, 0), (-1, -1), "CENTER"),
             ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
@@ -1391,7 +1439,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     behaeltnis_tabelle.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
         ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         # Kopfzeile etwas kleiner, damit "mit Gegenstand"/"Material-Verleitung" mit
         # Innenabstand in ihre Spalten passen (Nutzerwunsch 25.09.).
@@ -1422,8 +1470,8 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
 # gleich eingefärbt bleiben, statt je nach Disziplin zu wechseln.
 
 _ZEITPLAN_ZEILE = ParagraphStyle("SHSZeitplanZeile", parent=_STYLES["Normal"], fontSize=9, leading=11)
-_ZEITPLAN_ZEIT = ParagraphStyle("SHSZeitplanZeit", parent=_STYLES["Normal"], fontSize=9.5, fontName="Helvetica-Bold", leading=11)
-_ZEITPLAN_PAUSE_TEXT = ParagraphStyle("SHSZeitplanPauseText", parent=_STYLES["Normal"], fontSize=9, fontName="Helvetica-Oblique", leading=11)
+_ZEITPLAN_ZEIT = ParagraphStyle("SHSZeitplanZeit", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT, leading=11)
+_ZEITPLAN_PAUSE_TEXT = ParagraphStyle("SHSZeitplanPauseText", parent=_STYLES["Normal"], fontSize=9, fontName=_SCHRIFT_KURSIV, leading=11)
 
 #: Feste Farbe je Art/Leistungsklasse-Kombination - es gibt höchstens sechs (ED/DK × LK
 #: 1-3, siehe CHECK-Constraints in db.SCHEMA), daher reicht eine feste Zuordnung ohne
@@ -1451,7 +1499,7 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
     stil = [
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
         ("FONTSIZE", (0, 0), (-1, 0), 9),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 1.8 * mm),
@@ -1575,7 +1623,7 @@ _AF_ERKLAERUNG_FETT = (
     "Tierschutz-Hundeverordnung habe und diese beachte."
 )
 _AF_ERKLAERUNG_STIL = ParagraphStyle(
-    "SHSAnmeldeErklaerung", parent=_STYLES["Normal"], fontName="Helvetica", fontSize=8, leading=9.8,
+    "SHSAnmeldeErklaerung", parent=_STYLES["Normal"], fontName=_SCHRIFT, fontSize=8, leading=9.8,
 )
 
 
@@ -1599,7 +1647,7 @@ class _Text(NamedTuple):
 
 
 def _af_textbreite(text: str, fett: bool = False) -> float:
-    return stringWidth(text, "Helvetica-Bold" if fett else "Helvetica", _AF_SCHRIFT)
+    return stringWidth(text, _SCHRIFT_FETT if fett else _SCHRIFT, _AF_SCHRIFT)
 
 
 def _af_hart_umbrechen(zeilen: list[str], max_breite_pt: float) -> list[str]:
@@ -1609,9 +1657,9 @@ def _af_hart_umbrechen(zeilen: list[str], max_breite_pt: float) -> list[str]:
     (zweite Verifikation 28.09.2026, N2)."""
     ergebnis: list[str] = []
     for zeile in zeilen:
-        while stringWidth(zeile, "Helvetica", _AF_SCHRIFT) > max_breite_pt and len(zeile) > 1:
+        while stringWidth(zeile, _SCHRIFT, _AF_SCHRIFT) > max_breite_pt and len(zeile) > 1:
             laenge = len(zeile) - 1
-            while laenge > 1 and stringWidth(zeile[:laenge], "Helvetica", _AF_SCHRIFT) > max_breite_pt:
+            while laenge > 1 and stringWidth(zeile[:laenge], _SCHRIFT, _AF_SCHRIFT) > max_breite_pt:
                 laenge -= 1
             ergebnis.append(zeile[:laenge])
             zeile = zeile[laenge:]
@@ -1643,7 +1691,7 @@ class _AnmeldeformularZeichner:
     # -- Grundbausteine --
 
     def text(self, x: float, y: float, text: str, groesse: float = _AF_SCHRIFT, fett: bool = False) -> None:
-        self.c.setFont("Helvetica-Bold" if fett else "Helvetica", groesse)
+        self.c.setFont(_SCHRIFT_FETT if fett else _SCHRIFT, groesse)
         self.c.drawString(x, y, text)
 
     def textfeld(self, name: str, x: float, y_unten: float, breite: float, hinweis: str) -> None:
@@ -1731,7 +1779,7 @@ class _AnmeldeformularZeichner:
         titel = "Anmeldeformular SHS-Wettkampf"
         self.text(_AF_RAND, self.y - 16, titel, groesse=17, fett=True)
         self.c.setLineWidth(1)
-        self.c.line(_AF_RAND, self.y - 19, _AF_RAND + stringWidth(titel, "Helvetica-Bold", 17), self.y - 19)
+        self.c.line(_AF_RAND, self.y - 19, _AF_RAND + stringWidth(titel, _SCHRIFT_FETT, 17), self.y - 19)
         self.y -= 30
 
         # Kopfkasten: links Veranstalter/Meldestelle, rechts Verband/Datum - nur Text,
@@ -1748,7 +1796,7 @@ class _AnmeldeformularZeichner:
         meldestelle: list[str] = []
         for absatz in (veranstaltung.get("meldestelle") or "").strip().splitlines():
             meldestelle += _af_hart_umbrechen(
-                simpleSplit(absatz.strip(), "Helvetica", _AF_SCHRIFT, wert_breite_links) or [""],
+                simpleSplit(absatz.strip(), _SCHRIFT, _AF_SCHRIFT, wert_breite_links) or [""],
                 wert_breite_links,
             )
         # Bis 5 Zeilen in normaler Größe; eine noch längere Meldestelle wird enger und
@@ -1760,7 +1808,7 @@ class _AnmeldeformularZeichner:
             # Zweite Verifikation 28.09.2026, N3: so weit kürzen, dass " …" noch in die
             # Breite passt, statt über den Kasten hinauszuragen.
             letzte = meldestelle[-1].rstrip()
-            while letzte and stringWidth(letzte + " …", "Helvetica", _AF_SCHRIFT) > wert_breite_links:
+            while letzte and stringWidth(letzte + " …", _SCHRIFT, _AF_SCHRIFT) > wert_breite_links:
                 letzte = letzte[:-1].rstrip()
             meldestelle[-1] = letzte + " …"
         zeilenabstand = min(11, 5 * 11 / max(len(meldestelle), 1))

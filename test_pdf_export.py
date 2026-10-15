@@ -226,6 +226,47 @@ class TestPdfExport(unittest.TestCase):
         positionen = [text.index(name) for name in ("Adler", "Ärmel", "Özdemir", "Zorn")]
         self.assertEqual(positionen, sorted(positionen))
 
+    def test_sonderzeichen_ausserhalb_westeuropas_erscheinen_im_pdf(self):
+        """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 2: mit der mitgelieferten DejaVu-Schrift
+        erscheinen „Paweł“ und „Łódź“ statt „■“."""
+        self.assertEqual(pdf_export._SCHRIFT, "DejaVuSans")
+        set_veranstaltung(self.conn, verein="Klub Łódź", datum="2026-09-19")
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Dvořák", vorname="Paweł", rufname_hund="Żaba", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, verein="Klub Łódź"))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", 50, 30)
+        for name, erzeugen in (
+            ("chipliste.pdf", pdf_export.erstelle_chipnummernliste_pdf),
+            ("bogen.pdf", lambda conn, ziel: pdf_export.erstelle_bewertungsbogen_pdf(conn, tid, ziel)),
+            ("ergebnis.pdf", pdf_export.erstelle_ergebnisliste_pdf),
+        ):
+            with self.subTest(name=name):
+                ziel = self._pfad(name)
+                erzeugen(self.conn, ziel)
+                text = _text(ziel)
+                self.assertIn("Paweł", text)
+                self.assertIn("Łódź", text)
+
+    def test_ohne_schriftdateien_bleibt_es_bei_helvetica(self):
+        """Teil 6 Nr. 2: fehlt fonts/, fällt die Registrierung auf Helvetica zurück."""
+        from unittest.mock import patch
+
+        with patch.object(pdf_export, "_SCHRIFT_ORDNER", os.path.join(self.tmpdir, "fehlt")):
+            self.assertEqual(pdf_export._schriften_registrieren(),
+                             ("Helvetica", "Helvetica-Bold", "Helvetica-Oblique"))
+
+    def test_sammel_bewertungsboegen_nur_erlaubte_labels(self):
+        """Teil 6 Nr. 6 und 12: `erlaubte_labels` schränkt ein, ein leeres Set bedeutet keine."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Dk", vorname="A", rufname_hund="R",
+                                                  art="DK", stufe=1, startnummer=1))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="B", rufname_hund="S", art="ED",
+                                                  stufe=1, disziplin="Trümmerfeld", startnummer=2))
+        ziel = self._pfad("auswahl.pdf")
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, erlaubte_labels={"DK LK 1"}), 1)
+        self.assertIn("Dk", _text(ziel))
+        self.assertNotIn("Ed, B", _text(ziel))
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, erlaubte_labels=set()), 0)
+
     def test_lange_namen_brechen_in_ergebnislisten_um(self):
         """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner
         String in die Nachbarspalte. Als Paragraph brechen sie um - die Namensspalte endet
@@ -249,7 +290,7 @@ class TestPdfExport(unittest.TestCase):
 
                 def merken(text, _cm, tm, _font, groesse):
                     if any(teil in text for teil in ("Schmidt", "Hohenstein", "Katharina", "Maria")):
-                        stuecke.append((text, tm[4] + stringWidth(text.strip(), "Helvetica", groesse * tm[0])))
+                        stuecke.append((text, tm[4] + stringWidth(text.strip(), pdf_export._SCHRIFT, groesse * tm[0])))
 
                 PdfReader(ziel).pages[0].extract_text(visitor_text=merken)
                 self.assertTrue(stuecke)
@@ -1467,7 +1508,7 @@ class TestAnmeldeformular(unittest.TestCase):
         self.assertGreater(len(zeilen), 1)
         self.assertEqual("".join(zeilen), wort)
         for zeile in zeilen:
-            self.assertLessEqual(stringWidth(zeile, "Helvetica", pdf_export._AF_SCHRIFT), 150)
+            self.assertLessEqual(stringWidth(zeile, pdf_export._SCHRIFT, pdf_export._AF_SCHRIFT), 150)
         self._veranstaltung(["DK1"], meldestelle=f"Erika Muster\n{wort}")
         reader = PdfReader(self._erzeugen("langes_wort.pdf"))
         self.assertEqual(len(reader.pages), 1)

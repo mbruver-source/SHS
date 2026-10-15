@@ -697,7 +697,7 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     # Rückfrage vor dem Druck; "Nein" bricht ab, bevor ein Dateifenster kommt.
     fragen = []
     monkeypatch.setattr("app.QMessageBox.question", lambda *x, **k: fragen.append(x[2]) or QMessageBox.No)
-    monkeypatch.setattr("app._pdf_speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
+    monkeypatch.setattr("desktop_gemeinsam._pdf_speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
     tab._rangliste_drucken()
     assert "Stechen" in fragen[0]
 
@@ -3521,7 +3521,7 @@ def test_bewertungsbogen_direktexport_erzeugt_pdf_fuer_ausgewaehlten_teilnehmer(
                  if get_teilnehmer(conn, tab.tabelle.item(row, 0).data(Qt.UserRole))["nachname"].startswith("Meier"))
     tab.tabelle.selectRow(zeile)
     vorschlaege = []
-    monkeypatch.setattr("app._pdf_speicherort_waehlen", lambda _p, _a, _t, vorschlag: vorschlaege.append(vorschlag))
+    monkeypatch.setattr("desktop_gemeinsam._pdf_speicherort_waehlen", lambda _p, _a, _t, vorschlag: vorschlaege.append(vorschlag))
     qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
     assert vorschlaege == ["Bewertungsbogen_2_Meier-Schulz-Zwei.pdf"]
     assert "gespeichert" in tab.status_label.text()
@@ -3630,6 +3630,45 @@ def test_bewertungsbogen_auswahl_dialog_standardmaessig_alle_angehakt(qtbot):
 
     dialog.liste.item(0).setCheckState(Qt.Unchecked)
     assert dialog.ausgewaehlte_labels() == {"ED LK 2 Trümmerfeld"}
+
+    # Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6: OK nur mit mindestens einem Haken.
+    ok = dialog.buttons.button(QDialogButtonBox.Ok)
+    dialog._alle_umschalten(Qt.Unchecked)
+    assert not ok.isEnabled()
+    dialog.liste.item(1).setCheckState(Qt.Checked)
+    assert ok.isEnabled()
+
+
+def test_pdf_exportieren_meldet_fehler_ohne_statusmeldung(qtbot, tmp_path, monkeypatch, gespeichert_meldungen):
+    """Teil 6 Nr. 11/12: der gemeinsame Ablauf meldet einen Fehler und setzt keinen Status."""
+    import desktop_gemeinsam
+    from PySide6.QtWidgets import QLabel
+
+    monkeypatch.setattr(desktop_gemeinsam, "_pdf_speicherort_waehlen", lambda *a: str(tmp_path / "x.pdf"))
+    fehler = []
+    monkeypatch.setattr(desktop_gemeinsam, "_pdf_export_fehler_anzeigen", lambda _p, exc: fehler.append(exc))
+    status = QLabel("alt")
+
+    def kaputt(_pfad):
+        raise PermissionError(13, "Permission denied")
+
+    desktop_gemeinsam._pdf_exportieren(None, None, status, "Titel", "x.pdf", kaputt, "gespeichert")
+    assert len(fehler) == 1 and status.text() == "alt" and not gespeichert_meldungen
+    desktop_gemeinsam._pdf_exportieren(None, None, status, "Titel", "x.pdf", lambda _p: 3, lambda n: f"{n} Bögen")
+    assert status.text().startswith("3 Bögen:") and gespeichert_meldungen[-1][1] == "3 Bögen"
+
+
+def test_ordner_zeigen_markiert_datei_mit_komma(tmp_path, monkeypatch):
+    """Teil 6 Nr. 9: Pfad in Anführungszeichen, sonst trennt der Explorer am Komma."""
+    import desktop_gemeinsam
+
+    datei = tmp_path / "Liste,final.pdf"
+    datei.write_bytes(b"")
+    aufrufe = []
+    monkeypatch.setattr(desktop_gemeinsam.sys, "platform", "win32")
+    monkeypatch.setattr("subprocess.Popen", lambda befehl, *a, **k: aufrufe.append(befehl))
+    desktop_gemeinsam._ordner_zeigen(str(datei))
+    assert aufrufe == [f'explorer /select,"{os.path.normpath(str(datei))}"']
 
 
 def test_bewertungsbogen_auswahl_dialog_ohne_teilnehmer_deaktiviert_ok(qtbot):

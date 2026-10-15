@@ -6379,3 +6379,25 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   Zeitgrenze, veraltete Antwort, Ausnahme, Zweitstart. Handbuch und `Architektur.md` ergänzt.
 - **Offen, für den Mac-Rückmeldungstest:** Am echten Mac prüfen, ob die Update-Prüfung über
   HTTPS funktioniert (CA-Zertifikate im Bundle; der Selbsttest-Schritt zeigt die Anzahl).
+
+### A16 PDF-Export: Schrift und Rest (15.10.2026, Desktop-Prüfung Teil 6)
+
+- **Unicode-Schrift (Nr. 2, Marcos Entscheidung):** Die PDFs nutzen DejaVu Sans, mitgeliefert
+  in `fonts/` (Normal, Fett, Kursiv, Lizenz `LICENSE-DejaVu.txt`; `build.spec` nimmt sie ins
+  Bundle). „Paweł“, „Łódź“, „Dvořák“ erscheinen jetzt statt „■“. **Abweichung:** die schmale
+  Form „Condensed“ - die normale Breite ist rund 12 % breiter als Helvetica, damit brachen Namen
+  und Chip-Nummern in den Tabellen mitten im Wort um; Condensed ist fast so breit wie
+  Helvetica. Kursiv kam für einen Zeitplan-Stil dazu. Bewusst Helvetica bleiben: Kopf der
+  Statistik-Matrix und Punktfelder der Etiketten (feste Texte, Breiten darauf abgestimmt) sowie
+  die ausfüllbaren Felder des Anmeldeformulars (reportlab erlaubt dort nur Standardschriften).
+  Fehlt `fonts/`, fällt das Programm auf Helvetica zurück; der Selbsttest meldet das im Bundle.
+- **Sammel-Bewertungsbögen (Nr. 6):** OK nur mit mindestens einem Haken.
+- **„Ordner zeigen“ (Nr. 9):** `explorer /select,"…"` - Dateinamen mit Komma werden markiert.
+- **Exportablauf (Nr. 11):** gemeinsame Funktion `_pdf_exportieren` in `desktop_gemeinsam`
+  für Export-Reiter, Rangliste, Bewertungsbogen und Zeitplan; Kommentare zum gemeinsamen
+  Ablageort korrigiert.
+- **Tests (Nr. 12):** Sonderzeichen in Chipliste, Bewertungsbogen und Ergebnisliste,
+  Rückfall ohne Schriften, `erlaubte_labels`, Dialog, Explorer-Aufruf, Fehlerzweig des Exports.
+- **Zurückgestellt:** Der CSV-Export behält seinen eigenen Ablauf; „In Excel öffnen“ öffnet das
+  Standardprogramm für CSV (meist Excel).
+- **Vor dem Build:** PDFs einmal ansehen (andere Schrift), Screenshots mit PDFs ggf. erneuern.

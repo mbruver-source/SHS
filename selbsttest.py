@@ -269,3 +269,11 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         return f"{anzahl} CA-Zertifikate" if anzahl else "HINWEIS: keine CA-Zertifikate gefunden"
 
     schritt("Zertifikate für die Update-Prüfung (HTTPS)", zertifikate)
+
+    def pdf_schrift():
+        # Teil 6 Nr. 2: fehlt fonts/ im Bundle, fiele pdf_export still auf Helvetica zurück.
+        if pdf_export._SCHRIFT != "DejaVuSans":
+            raise AssertionError(f"PDF-Schrift fehlt: {pdf_export._SCHRIFT_ORDNER}")
+        return "DejaVu Sans"
+
+    schritt("PDF-Schrift (Sonderzeichen)", pdf_schrift)

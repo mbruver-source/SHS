@@ -50,7 +50,14 @@ a = Analysis(
     # Einträge hier nötig.
     # Das Programmsymbol (Fenster/Dock/Taskleiste) liest desktop_gemeinsam.programmsymbol()
     # zur Laufzeit; der Selbsttest prüft, dass es im Bundle liegt.
-    datas=[("symbol/programmsymbol.png", "symbol")],
+    datas=[
+        ("symbol/programmsymbol.png", "symbol"),
+        # Desktop-Prüfung Teil 6 Nr. 2: Unicode-Schrift für die PDFs (siehe pdf_export).
+        ("fonts/DejaVuSansCondensed.ttf", "fonts"),
+        ("fonts/DejaVuSansCondensed-Bold.ttf", "fonts"),
+        ("fonts/DejaVuSansCondensed-Oblique.ttf", "fonts"),
+        ("fonts/LICENSE-DejaVu.txt", "fonts"),
+    ],
     # pyzipper (Datensicherung, siehe db_sicherung.py) importiert pycryptodomex für die
     # AES-Verschlüsselung - PyInstaller bringt dafür über pyinstaller-hooks-contrib
     # normalerweise einen eigenen Hook mit und erkennt es automatisch wie reportlab;

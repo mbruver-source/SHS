@@ -1021,8 +1021,10 @@ class BewertungsbogenAuswahlDialog(QDialog):
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
-        if not labels:
-            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        # Desktop-Prüfung 14.10.2026 (Teil 6 Nr. 6): OK nur mit mindestens einem Haken - sonst
+        # entstand ein leeres PDF mit „0 Bewertungsbögen gespeichert“.
+        self.liste.itemChanged.connect(lambda _item: self._ok_aktualisieren())
+        self._ok_aktualisieren()
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(
@@ -1037,6 +1039,9 @@ class BewertungsbogenAuswahlDialog(QDialog):
     def _alle_umschalten(self, zustand) -> None:
         for row in range(self.liste.count()):
             self.liste.item(row).setCheckState(zustand)
+
+    def _ok_aktualisieren(self) -> None:
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(self.ausgewaehlte_labels()))
 
     def ausgewaehlte_labels(self) -> set[str]:
         return {

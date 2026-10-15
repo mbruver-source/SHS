@@ -62,8 +62,8 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
 
 
 class _Ablageort:
-    """Gemeinsamer, veränderlicher Ablageort für alle PDF-Export-Buttons EINES Termins
-    (Tabs "Zeitplan" und "Export", seit 23.09. auch der Druck-Button im Tab "Auswertung")
+    """Gemeinsamer, veränderlicher Ablageort für alle Export-Buttons EINES Termins
+    (Reiter "Teilnehmer", "Auswertung", "Zeitplan" und "Export")
     - ein einzelnes, von allen diesen Tabs geteiltes Objekt statt
     je ein eigener String pro Tab. Wählt der Nutzer beim Speichern bewusst einen anderen
     Ordner, gilt dieser dadurch sofort auch als neuer Standard-Speicherort im jeweils
@@ -124,7 +124,9 @@ def _ordner_zeigen(pfad: str, parent=None) -> None:
         import subprocess
 
         try:
-            subprocess.Popen(["explorer", "/select,", _pfad_anzeige(pfad)])
+            # Desktop-Prüfung 14.10.2026 (Teil 6 Nr. 9): Pfad selbst in Anführungszeichen - die
+            # Listenform quotet nur bei Leerzeichen, und der Explorer trennt sonst am Komma.
+            subprocess.Popen(f'explorer /select,"{_pfad_anzeige(pfad)}"')
             return
         except OSError:
             pass  # Rückfall: den Ordner über Qt öffnen
@@ -201,6 +203,25 @@ def _pdf_export_fehler_anzeigen(parent, exc: Exception) -> None:
     QMessageBox.critical(parent, "PDF konnte nicht erstellt werden", text)
 
 
+def _pdf_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, titel: str,
+                     vorschlag: str, export_fn, status_text) -> None:
+    """Gemeinsamer Ablauf aller PDF-Exporte (Desktop-Prüfung 14.10.2026, Teil 6 Nr. 11):
+    Speicherort wählen, export_fn(pfad) aufrufen, Fehler melden, Status setzen und die Meldung
+    „gespeichert“ zeigen. `status_text` ist ein fester Text oder eine Funktion
+    Ergebnis -> Text (z. B. „N Bewertungsbögen gespeichert“)."""
+    pfad = _pdf_speicherort_waehlen(parent, ablageort, titel, vorschlag)
+    if not pfad:
+        return
+    try:
+        ergebnis = export_fn(pfad)
+    except Exception as exc:  # noqa: BLE001 - Unterscheidung in _pdf_export_fehler_anzeigen
+        _pdf_export_fehler_anzeigen(parent, exc)
+        return
+    text = status_text(ergebnis) if callable(status_text) else status_text
+    status_label.setText(f"{text}: {_pfad_anzeige(pfad)}")
+    _datei_gespeichert_melden(parent, pfad, text)
+
+
 def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
     """Gemeinsame Umsetzung für den Zeitplan-PDF-Export - vorher wortgleich in
     ZeitplanTab._pdf_exportieren und ExportTab._zeitplan_exportieren dupliziert."""
@@ -216,16 +237,8 @@ def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_labe
         )
         if antwort != QMessageBox.Yes:
             return
-    pfad = _pdf_speicherort_waehlen(parent, ablageort, "Zeitplan speichern", _export_dateiname(conn, "Zeitplan"))
-    if not pfad:
-        return
-    try:
-        pdf_export.erstelle_zeitplan_pdf(conn, pfad)
-    except Exception as exc:
-        _pdf_export_fehler_anzeigen(parent, exc)
-        return
-    status_label.setText(f"Zeitplan gespeichert: {_pfad_anzeige(pfad)}")
-    _datei_gespeichert_melden(parent, pfad, "Zeitplan gespeichert")
+    _pdf_exportieren(parent, ablageort, status_label, "Zeitplan speichern", _export_dateiname(conn, "Zeitplan"),
+                     lambda pfad: pdf_export.erstelle_zeitplan_pdf(conn, pfad), "Zeitplan gespeichert")
 
 
 def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900, pt_schmal: float = 8.0, pt_breit: float = 10.0) -> float:

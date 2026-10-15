@@ -208,8 +208,7 @@ from desktop_gemeinsam import (
     _import_ordner_merken,
     _import_startordner,
     _NumerischSortierbaresItem,
-    _pdf_export_fehler_anzeigen,
-    _pdf_speicherort_waehlen,
+    _pdf_exportieren,
     _pfad_anzeige,
     _responsive_schriftgroesse,
     _url_oeffnen,
@@ -416,8 +415,7 @@ class TeilnehmerTab(QWidget):
         # Nur für TerminImportDialog: der eigene Dateipfad wird aus der Terminauswahl dort
         # ausgeschlossen, damit man nicht "aus sich selbst" importieren kann.
         self._pfad = pfad
-        # Gemeinsamer Ablageort mit den Tabs "Zeitplan"/"Export" (siehe _Ablageort weiter
-        # oben) - der Direkt-Export-Button "Bewertungsbogen (PDF)…" unten nutzt denselben
+        # Gemeinsamer Ablageort mit den übrigen Reitern (siehe _Ablageort) - der Direkt-Export-Button "Bewertungsbogen (PDF)…" unten nutzt denselben
         # zuletzt gewählten Ordner wie die übrigen PDF-Exporte.
         self._ablageort = ablageort if ablageort is not None else _Ablageort(
             os.path.dirname(pfad) if pfad else str(termine_ordner())
@@ -943,16 +941,9 @@ class TeilnehmerTab(QWidget):
             return
         start_teil = str(aktuell["startnummer"]) if aktuell["startnummer"] is not None else "ohne-Nr"
         vorschlag = f"Bewertungsbogen_{start_teil}_{_dateiname_teil(aktuell['nachname'])}.pdf"
-        pfad = _pdf_speicherort_waehlen(self, self._ablageort, "Bewertungsbogen speichern", vorschlag)
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_bewertungsbogen_pdf(self.conn, teilnehmer_id, pfad)
-        except Exception as exc:
-            _pdf_export_fehler_anzeigen(self, exc)
-            return
-        self.status_label.setText(f"Bewertungsbogen gespeichert: {_pfad_anzeige(pfad)}")
-        _datei_gespeichert_melden(self, pfad, "Bewertungsbogen gespeichert")
+        _pdf_exportieren(self, self._ablageort, self.status_label, "Bewertungsbogen speichern", vorschlag,
+                         lambda pfad: pdf_export.erstelle_bewertungsbogen_pdf(self.conn, teilnehmer_id, pfad),
+                         "Bewertungsbogen gespeichert")
 
     def _teilnehmer_loeschen(self) -> None:
         # K7-Verifikation: Namen aus den IDs statt aus currentRow() - bei Mehrfachmarkierung
@@ -2492,18 +2483,10 @@ class AuswertungTab(QWidget):
         if not _stechen_offen_bestaetigen(self, self.conn, leistungsklasse):
             return
         praefix = "Ergebnisliste" if leistungsklasse is None else f"Ergebnisliste_{leistungsklasse.replace(' ', '_')}"
-        pfad = _pdf_speicherort_waehlen(
-            self, self._ablageort, "Rangliste speichern", _export_dateiname(self.conn, praefix)
-        )
-        if not pfad:
-            return
-        try:
-            pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, leistungsklasse)
-        except Exception as exc:
-            _pdf_export_fehler_anzeigen(self, exc)
-            return
-        self.status_label.setText(f"Rangliste gespeichert: {_pfad_anzeige(pfad)}")
-        _datei_gespeichert_melden(self, pfad, "Rangliste gespeichert")
+        _pdf_exportieren(self, self._ablageort, self.status_label, "Rangliste speichern",
+                         _export_dateiname(self.conn, praefix),
+                         lambda pfad: pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, leistungsklasse),
+                         "Rangliste gespeichert")
 
     def aktualisieren(self) -> None:
         """Berechnet die Auswertung aus der Datenbank neu und aktualisiert den Filter."""
@@ -3398,12 +3381,10 @@ class ExportTab(QWidget):
     def __init__(self, conn, termin_pfad: str | None = None, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
         self.conn = conn
-        # Ablageort für Exporte: standardmäßig derselbe Ordner wie die Termin-Datei
-        # (damit die Ausgaben beim jeweiligen Termin liegen); wählt der Nutzer beim
-        # Speichern einen anderen Ordner, wird dieser für die nächsten Exporte übernommen.
-        # Wird ein `ablageort` übergeben (siehe HauptFenster), ist es dasselbe Objekt wie
-        # im Tab "Zeitplan" - ein dort gewählter Ordner gilt dann auch hier als Standard,
-        # und umgekehrt.
+        # Ablageort für Exporte: im Hauptfenster das gemeinsame Objekt aller Reiter
+        # (Standard "Ausdrucke/<Termin>", siehe HauptFenster); wählt der Nutzer beim
+        # Speichern einen anderen Ordner, gilt dieser für die nächsten Exporte in allen
+        # Reitern. Der Rückfall auf den Ordner der Termin-Datei greift nur ohne Hauptfenster.
         self._ablageort = ablageort if ablageort is not None else _Ablageort(
             os.path.dirname(termin_pfad) if termin_pfad else str(termine_ordner())
         )
@@ -3533,9 +3514,6 @@ class ExportTab(QWidget):
     def _export_dateiname(self, praefix: str) -> str:
         return _export_dateiname(self.conn, praefix)
 
-    def _speicherort_waehlen(self, titel: str, vorschlag: str) -> str | None:
-        return _pdf_speicherort_waehlen(self, self._ablageort, titel, vorschlag)
-
     def _ablageort_oeffnen(self) -> None:
         if os.path.basename(os.path.dirname(self._ablageort.pfad)) == "Ausdrucke":
             try:
@@ -3546,32 +3524,16 @@ class ExportTab(QWidget):
             QMessageBox.warning(
                 self,
                 "Ordner nicht gefunden",
-                f"Der Ablageort „{self._ablageort.pfad}“ existiert nicht (mehr).",
+                f"Der Ablageort „{_pfad_anzeige(self._ablageort.pfad)}“ existiert nicht (mehr).",
             )
             return
         _url_oeffnen(self, QUrl.fromLocalFile(self._ablageort.pfad), _pfad_anzeige(self._ablageort.pfad))
 
-    def _export_fehler_anzeigen(self, exc: Exception) -> None:
-        _pdf_export_fehler_anzeigen(self, exc)
-
     def _pdf_export_ausfuehren(self, titel: str, dateiname_praefix: str, export_fn, status_text) -> None:
-        """Gemeinsamer Ablauf für die PDF-Export-Buttons dieses Tabs: Speicherort wählen,
-        export_fn(pfad) aufrufen, Fehler behandeln, Status setzen - vorher wortgleich in
-        >8 fast identischen Methoden dieser Klasse dupliziert. `export_fn` bekommt den
-        gewählten Pfad und darf optional ein Ergebnis zurückgeben (z.B. eine Anzahl);
-        `status_text` ist entweder ein fester String oder eine Funktion
-        Ergebnis -> String, für Fälle wie "N Bewertungsbögen gespeichert"."""
-        pfad = self._speicherort_waehlen(titel, self._export_dateiname(dateiname_praefix))
-        if not pfad:
-            return
-        try:
-            ergebnis = export_fn(pfad)
-        except Exception as exc:
-            self._export_fehler_anzeigen(exc)
-            return
-        text = status_text(ergebnis) if callable(status_text) else status_text
-        self.status_label.setText(f"{text}: {_pfad_anzeige(pfad)}")
-        _datei_gespeichert_melden(self, pfad, text)
+        """PDF-Export dieses Tabs mit dem Dateinamen-Präfix des Termins - der Ablauf selbst
+        steht in desktop_gemeinsam._pdf_exportieren (gemeinsam für alle Reiter)."""
+        _pdf_exportieren(self, self._ablageort, self.status_label, titel,
+                         self._export_dateiname(dateiname_praefix), export_fn, status_text)
 
     def _teilnehmerliste_exportieren(self) -> None:
         """Nutzerwunsch 02.10.2026 (UX-Test, N1): alle Teilnehmer als Excel-freundliche CSV."""
@@ -4610,9 +4572,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         vollständig aufgebaut und der Titel berechnet; scheitert das, bleibt das Fenster
         unverändert (Ausnahme an den Aufrufer). Erst danach wird ausgetauscht, und die alten Reiter werden gelöscht statt
         bei jedem Terminwechsel liegen zu bleiben."""
-        # Ein gemeinsames _Ablageort-Objekt für die Tabs "Zeitplan" und "Export", damit ein
-        # in einem der beiden Tabs bewusst gewählter Speicherort auch im jeweils anderen
-        # als neuer Standard gilt (siehe _Ablageort oben).
+        # Ein gemeinsames _Ablageort-Objekt für alle Reiter mit Exporten (Teilnehmer,
+        # Auswertung, Zeitplan, Export), damit ein bewusst gewählter Speicherort überall als
+        # neuer Standard gilt (siehe _Ablageort).
         # UX-Test 02.10.2026, U7: PDFs standardmäßig in "Ausdrucke/<Termin>" statt
         # zwischen den Termin-Dateien.
         ablageort = _Ablageort(_ausdrucke_ordner(pfad) if pfad else str(termine_ordner()))
