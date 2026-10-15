@@ -6473,3 +6473,15 @@ Die Abschluss-QS (`qs-wartbarkeit`) fand keine Fehler, nur Stilpunkte. Umgesetzt
   `desktop_gemeinsam`, Absturzprotokoll/Diagnose in ein eigenes Modul.
 - Gemeinsame Testattrappen in `test_app_gui.py`; Zeitgrenzen der `waitUntil` bündeln.
 - Ein gemeinsamer Helfer für Ja/Nein-Rückfragen und für das Öffnen fremder Termin-Dateien.
+
+### A19 Abschluss der Desktop-Prüfung (15.10.2026)
+
+- Abschluss-QS über alle Commits mit `qs-sicherheit`, `qs-korrektheit` und `qs-wartbarkeit`
+  nacheinander; Befunde als A19a (Sicherheitskorrektur, Details folgen nach dem Release),
+  A19b (drei Wechselwirkungen zwischen den Aufgaben) und A19c (Stil) umgesetzt.
+- `Architektur.md` nachgezogen (sicheres Öffnen eines Termins, `_ausfuehren`, `_wartecursor`,
+  `_pdf_exportieren`, `NichtAngebotenError`); `README*.md` brauchten keine Änderung.
+- Vor dem nächsten Build (Checkliste `shs-build`): Screenshots neu aufnehmen (Design „Hell“,
+  Demoprüfung, Startdialog/Datensicherung, PDFs mit neuer Schrift), PDFs einmal ansehen,
+  Sichtprüfungen am echten Windows (Design „Hell“ bei „Apps: dunkel“, Erklärfenster der Demo über
+  der Taskleiste, Löschen in den Papierkorb) und am Mac (Update-Prüfung über HTTPS).
