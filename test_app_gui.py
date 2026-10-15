@@ -639,6 +639,54 @@ def test_stechen_gleiche_person_mit_zwei_hunden_und_vorgabe_offen(qtbot, conn, m
     assert gewonnen == {"Ali"}
 
 
+def test_eindeutige_texte_fuer_die_stechen_auswahl():
+    """Abschluss-QS 15.10.2026: auch drei gleichlautende Einträge werden eindeutig."""
+    import app
+
+    assert app._eindeutige_texte(["A", "B", "A", "A"]) == ["A [1]", "B", "A [2]", "A [3]"]
+    assert app._eindeutige_texte(["A", "B"]) == ["A", "B"]
+
+
+def test_pause_nach_startzeit_eingabe_geht_nicht_verloren(qtbot, conn, monkeypatch):
+    """Abschluss-QS 15.10.2026 (K-1): Startzeit tippen und direkt „Pause hinzufügen…“ - der
+    verzögerte Neuaufbau wartet auf den Dialog, und die Pause landet hinter der markierten
+    Zeile."""
+    from PySide6.QtWidgets import QApplication
+
+    from db import add_zeitplan_richter, list_zeitplan_eintraege
+
+    richter_id = add_zeitplan_richter(conn, "R1")
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    aufgebaut = []
+    original = tab.aktualisieren
+    monkeypatch.setattr(tab, "aktualisieren", lambda: (aufgebaut.append(True), original())[1])
+    # Fokuswechsel durch den Klick: modaler Dialog offen -> noch kein Neuaufbau.
+    modal = [object()]
+    monkeypatch.setattr(QApplication, "activeModalWidget", lambda: modal[0])
+    tab.zeitplan_start.setText("10:00")
+    tab.zeitplan_start.editingFinished.emit()
+    qtbot.wait(150)
+    assert aufgebaut == []
+    modal[0] = None
+    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=2000)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k):
+            self.fuer_alle = type("C", (), {"isChecked": lambda _s: False})()
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def werte(self):
+            return {"dauer_minuten": 15, "bezeichnung": "Pause"}
+
+    monkeypatch.setattr("app.PauseDialog", _Dialog)
+    tab._pause_hinzufuegen(richter_id, None)
+    assert [e["typ"] for e in list_zeitplan_eintraege(conn, richter_id)] == ["pause"]
+
+
 def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, monkeypatch):
     """Teil 4 Nr. 3 und 6: Enter bzw. Verlassen des Feldes speichert, „9:5“ wird „09:05“;
     eine ungültige Eingabe verhindert PDF und Verteilen."""

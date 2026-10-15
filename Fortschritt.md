@@ -6433,3 +6433,20 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   Sicherheitskorrekturen der Desktop-Prüfung als vollständig. Ein neuer, niedrig eingestufter
   Punkt beim Öffnen fremder Termin-Dateien ist behoben (Sicherheitskorrektur, Details folgen
   nach dem Release), mit Test.
+
+### A19b Befunde der Abschluss-QS Korrektheit (15.10.2026)
+
+Die Abschluss-QS (`qs-korrektheit`) über alle Commits fand Wechselwirkungen zwischen den Aufgaben:
+- **K-1 (mittel):** Startzeit eintippen und direkt „Pause hinzufügen…“ – der verzögerte
+  Neuaufbau aus A14 lief im modalen Dialog, danach griff der Aufrufer auf die gelöschte Spalte zu
+  (Fehlerfenster, Pause fehlte). Jetzt wartet der Neuaufbau auch auf offene modale Dialoge (Timer
+  mit dem Reiter als Kontext, geschlossene Verbindung nach Terminwechsel abgefangen), und die
+  markierte Zeile wird vor dem Dialog gelesen.
+- **K-2:** Der Import aus einem anderen Termin übernahm BLOB-Werte (z. B. in einem Namensfeld)
+  unverändert; der eigene Termin ließ sich danach wegen der Wertebereichsprüfung aus A8 nicht mehr
+  öffnen. BLOBs werden jetzt als Text (UTF-8) übernommen.
+- **K-3:** `termin_oeffnen` legte eine inzwischen gelöschte/verschobene Datei still als leeren
+  Termin neu an; jetzt kommt die Meldung „nicht gefunden“ (neue Termine legt der Startdialog an).
+- **Stechen:** gleichlautende Einträge (gleicher Name und Hund, ohne Start-Nr.) bekommen einen
+  Zähler „[n]“, damit die Auswahl eindeutig zugeordnet wird.
+- **Tests:** zu allen vier Punkten.

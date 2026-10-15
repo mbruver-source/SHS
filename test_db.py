@@ -2947,10 +2947,16 @@ class TestTerminOeffnen(unittest.TestCase):
         conn.close()
         return pfad
 
-    def test_normaler_und_neuer_termin_oeffnen(self):
+    def test_normaler_leerer_und_fehlender_termin(self):
         with closing(termin_oeffnen(str(self._termin()))) as conn:
             self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
-        with closing(termin_oeffnen(str(self.ordner / "neu.sqlite"))) as conn:
+        # Abschluss-QS 15.10.2026 (K-3): eine fehlende Datei wird nicht still angelegt; eine
+        # leere (frisch angelegte) Datei lässt sich öffnen.
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(self.ordner / "fehlt.sqlite"))
+        self.assertFalse((self.ordner / "fehlt.sqlite").exists())
+        (self.ordner / "leer.sqlite").write_bytes(b"")
+        with closing(termin_oeffnen(str(self.ordner / "leer.sqlite"))) as conn:
             self.assertIsNone(get_veranstaltung(conn))
 
     def test_keine_sqlite_datei(self):
@@ -3572,6 +3578,20 @@ class TestTerminImportStammdaten(unittest.TestCase):
         for pfad in (self.quelle_pfad, self.ziel_pfad):
             if os.path.exists(pfad):
                 os.remove(pfad)
+
+    def test_blob_werte_der_quelle_halten_den_eigenen_termin_oeffenbar(self):
+        """Abschluss-QS 15.10.2026 (K-2): ein BLOB in einem Namensfeld der Quelle wird als Text
+        übernommen - der eigene Termin bleibt danach öffenbar."""
+        a = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1))
+        self.quelle.execute("UPDATE teilnehmer SET vorname = X'C3A46263' WHERE id = ?", (a,))
+        self.quelle.commit()
+        self.assertEqual(importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [a]), 1)
+        self.assertEqual(list_teilnehmer(self.ziel)[0]["vorname"], "äbc")
+        self.ziel.close()
+        with closing(termin_oeffnen(self.ziel_pfad)) as conn:
+            self.assertEqual(len(list_teilnehmer(conn)), 1)
+        self.ziel = init_db(self.ziel_pfad)
 
     def test_importiert_nur_ausgewaehlte_teilnehmer_mit_stammdaten(self):
         a = add_teilnehmer(self.quelle, NeuerTeilnehmer(

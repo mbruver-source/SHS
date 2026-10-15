@@ -802,6 +802,11 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
     )
 
 
+def _als_text(wert):
+    """BLOB-Werte als Text (UTF-8, Unlesbares ersetzt); alles andere unverändert."""
+    return wert.decode("utf-8", "replace") if isinstance(wert, bytes) else wert
+
+
 def importiere_teilnehmer_stammdaten(
     quelle_conn: sqlite3.Connection, ziel_conn: sqlite3.Connection, teilnehmer_ids: list[int]
 ) -> int:
@@ -830,6 +835,10 @@ def importiere_teilnehmer_stammdaten(
         alt = get_teilnehmer(quelle_conn, teilnehmer_id)
         if alt is None:
             continue
+        # Abschluss-QS 15.10.2026 (K-2): die Quelle ist eine fremde Datei - BLOB-Werte (z. B. in
+        # einem Namensfeld) als Text übernehmen; sonst ließe sich der
+        # eigene Termin danach nicht mehr öffnen (Wertebereichsprüfung in db.termin_oeffnen).
+        alt = {schluessel: _als_text(wert) for schluessel, wert in alt.items()}
         neu = NeuerTeilnehmer(
             nachname=alt["nachname"], vorname=alt["vorname"], rufname_hund=alt["rufname_hund"],
             art=alt["art"], stufe=alt["stufe"], disziplin=alt["disziplin"],

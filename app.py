@@ -2351,6 +2351,20 @@ def _stechen_offen_bestaetigen(parent, conn, leistungsklasse: str | None = None)
     return antwort == QMessageBox.Yes
 
 
+def _eindeutige_texte(texte: list[str]) -> list[str]:
+    """Hängt an mehrfach vorkommende Texte einen Zähler an („A [1]“, „A [2]“), damit eine
+    Auswahl per Text eindeutig zugeordnet werden kann (Abschluss-QS 15.10.2026)."""
+    gezaehlt: dict[str, int] = {}
+    ergebnis = []
+    for text in texte:
+        if texte.count(text) > 1:
+            gezaehlt[text] = gezaehlt.get(text, 0) + 1
+            ergebnis.append(f"{text} [{gezaehlt[text]}]")
+        else:
+            ergebnis.append(text)
+    return ergebnis
+
+
 class AuswertungTab(QWidget):
     def __init__(self, conn, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
@@ -2448,8 +2462,8 @@ class AuswertungTab(QWidget):
             return
         offen_text = "Stechen noch offen"
         # Desktop-Prüfung 14.10.2026 (Teil 4 Nr. 2): Einträge mit Hund und Start-Nr. (eine Person
-        # mit zwei Hunden stand sonst zweimal gleich da) und Zuordnung über die Position statt
-        # über den Text; ohne Sieger ist „noch offen“ vorgewählt.
+        # mit zwei Hunden stand sonst zweimal gleich da), jeder Text eindeutig; ohne Sieger ist
+        # „noch offen“ vorgewählt.
         eintraege, zuordnung = [], []
         aktuell = None
         for lk, gruppe in gruppen.items():
@@ -2462,6 +2476,9 @@ class AuswertungTab(QWidget):
                 aktuell = len(eintraege)
             eintraege.append(f"{lk}: {offen_text}")
             zuordnung.append((lk, None))
+        # QInputDialog liefert nur den Text - gleichlautende Einträge (gleicher Name und Hund,
+        # ohne Start-Nr.) bekommen deshalb einen Zähler (Abschluss-QS 15.10.2026).
+        eintraege = _eindeutige_texte(eintraege)
         auswahl, ok = QInputDialog.getItem(
             self, "Stechen-Sieger festlegen",
             "Wer hat das Stechen gewonnen? Er wird 1., die anderen Punktgleichen werden 2.",
@@ -3161,10 +3178,18 @@ class ZeitplanTab(QWidget):
         return True
 
     def _nach_mausklick_aktualisieren(self) -> None:
-        if QApplication.mouseButtons() != Qt.NoButton:
-            QTimer.singleShot(50, self._nach_mausklick_aktualisieren)
+        # Abschluss-QS 15.10.2026 (K-1): auch warten, solange der Klick einen modalen Dialog
+        # geöffnet hat (z. B. „Pause hinzufügen…“) - dessen Aufrufer greift danach noch auf
+        # seine Spalte zu.
+        if QApplication.mouseButtons() != Qt.NoButton or QApplication.activeModalWidget() is not None:
+            # Mit dem Reiter als Kontext: wird er inzwischen (Terminwechsel) gelöscht, verfällt
+            # der Timer.
+            QTimer.singleShot(50, self, self._nach_mausklick_aktualisieren)
             return
-        self.aktualisieren()
+        try:
+            self.aktualisieren()
+        except sqlite3.ProgrammingError:
+            pass  # Verbindung schon geschlossen (Terminwechsel) - der neue Reiter baut selbst auf
 
     def _richter_hinzufuegen(self) -> None:
         try:
@@ -3263,10 +3288,13 @@ class ZeitplanTab(QWidget):
         self.aktualisieren()
 
     def _pause_hinzufuegen(self, richter_id: int, liste: QListWidget | None = None) -> None:
+        # Markierte Zeile vor dem Dialog lesen - die Spalte kann währenddessen neu aufgebaut
+        # werden (Abschluss-QS 15.10.2026, K-1).
+        markiert_item = liste.currentItem() if liste is not None else None
+        nach_id = markiert_item.data(Qt.UserRole) if markiert_item is not None else None
         dialog = PauseDialog(self, neu=True)
         if _ausfuehren(dialog) != QDialog.Accepted:
             return
-        markiert = liste.currentItem() if liste is not None else None
         try:
             if dialog.fuer_alle.isChecked():
                 # Teil 4 Nr. 6: „9:20“ wie „09:20“ (die Prüfung im Dialog lässt beides zu).
@@ -3286,7 +3314,7 @@ class ZeitplanTab(QWidget):
                 self.status_label.setText(f"Pause bei {len(eingefuegt)} Richter(n) eingefügt.")
             else:
                 # UX-Test 02.10.2026, U9: nach der markierten Zeile statt immer am Ende.
-                nach = markiert.data(Qt.UserRole) if markiert is not None else None
+                nach = nach_id
                 self._markierter_eintrag_id = add_zeitplan_pause(
                     self.conn, richter_id, nach_eintrag_id=nach, **dialog.werte()
                 )

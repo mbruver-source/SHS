@@ -2601,7 +2601,8 @@ def _termin_werte_pruefen(conn: sqlite3.Connection) -> None:
 
 def termin_oeffnen(pfad: str) -> sqlite3.Connection:
     """Öffnet einen Termin für das Hauptfenster - mit Prüfungen (Desktop-Prüfung 14.10.2026,
-    Teil 7 Nr. 4). Die ersten laufen nur lesend, bevor die Datei beschrieben wird; die
+    Teil 7 Nr. 4; eine fehlende Datei ergibt TerminNichtOeffenbar statt eines neuen, leeren
+    Termins). Die ersten laufen nur lesend, bevor die Datei beschrieben wird; die
     Wertebereiche werden nach init_db geprüft (eine dann abgelehnte Datei hat also schon das
     aktuelle Schema):
     - keine SQLite-Datei oder beschädigt -> TerminNichtOeffenbar;
@@ -2612,7 +2613,11 @@ def termin_oeffnen(pfad: str) -> sqlite3.Connection:
       Termin sofort auffällt und nicht erst beim ersten Speichern (Marcos Entscheidung
       14.10.2026; der Änderungszeitstempel der Datei ändert sich dabei);
     - Plausibilitätsprüfung der Wertebereiche."""
-    if os.path.exists(pfad) and os.path.getsize(pfad) > 0:
+    if not os.path.exists(pfad):
+        # Abschluss-QS 15.10.2026 (K-3): eine inzwischen gelöschte/verschobene Datei nicht still
+        # als leeren Termin neu anlegen - neue Termine legt StartDialog._neuer_termin an.
+        raise TerminNichtOeffenbar("Die Termin-Datei wurde nicht gefunden (gelöscht oder verschoben?).")
+    if os.path.getsize(pfad) > 0:
         _journal_zurueckspielen(pfad)
         try:
             with closing(oeffne_termin_lesend(pfad)) as pruef:
