@@ -65,9 +65,8 @@ class CsvImportErgebnis:
     komplett ab, sondern importiert die übrigen trotzdem (siehe FormularImportTab)."""
     importiert: int
     fehler: list[str]
-    # Nur beim OMA- und Anmeldeformular-Import (importiere_teilnehmer_aus_oma,
-    # importiere_anmeldeformular_pdf) befüllt: Zeilen bzw. Dateien, die als bereits
-    # vorhandene Meldung erkannt und deshalb bewusst nicht erneut angelegt wurden.
+    # Beim CSV-, OMA- und Anmeldeformular-Import befüllt: Zeilen bzw. Dateien, die als
+    # bereits vorhandene Meldung erkannt und deshalb bewusst nicht erneut angelegt wurden.
     uebersprungen: list[str] = field(default_factory=list)
     # Allgemeine Hinweise zum Import (nicht an eine Zeile gebunden), z. B. dass mangels
     # hinterlegter angebotener Prüfungen nicht geprüft werden konnte (UX-Test U4).
@@ -125,12 +124,27 @@ def _csv_feld_fehler(feld: str, wert: str | None, erlaubt: str, fehlt_zusatz: st
     return f"{feld} „{wert}“ ist ungültig – bitte {erlaubt} eintragen"
 
 
+def _pruefungs_kuerzel(art: str, stufe, disziplin) -> str:
+    return f"DK{stufe}" if art == "DK" else f"ED{stufe}-{disziplin}"
+
+
+def nicht_angebotene(conn: sqlite3.Connection, teilnehmer: list[dict]) -> list[dict]:
+    """Die Teilnehmer aus `teilnehmer`, deren Prüfung im Termin `conn` nicht angeboten wird
+    (leer, wenn dort keine Angebote hinterlegt sind). Desktop-Prüfung 14.10.2026 (Teil 1
+    Nr. 6, Marcos Entscheidung): der Import aus einem anderen Termin übernimmt solche
+    Teilnehmer bewusst - Art/LK lassen sich danach anpassen - und weist nur darauf hin."""
+    angebotene = {p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(conn))}
+    if not angebotene:
+        return []
+    return [t for t in teilnehmer if _pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]) not in angebotene]
+
+
 def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
     """Wirft ValueError, wenn die Prüfung des Teilnehmers nicht unter `angebotene`
     (Kürzel, siehe db.ALLE_PRUEFUNGEN) ist. Leeres `angebotene` = nicht prüfen."""
     if not angebotene:
         return
-    kuerzel = f"DK{teilnehmer.stufe}" if teilnehmer.art == "DK" else f"ED{teilnehmer.stufe}-{teilnehmer.disziplin}"
+    kuerzel = _pruefungs_kuerzel(teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
     if kuerzel not in angebotene:
         pruefung = pruefung_nach_kuerzel(kuerzel)
         bezeichnung = pruefung.bezeichnung if pruefung else f"{teilnehmer.art} LK {teilnehmer.stufe}"

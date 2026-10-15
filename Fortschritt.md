@@ -6284,3 +6284,27 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Bekannt, nicht geändert:** Der geöffnete Termin wird wie bisher als Datei kopiert, während
   er geöffnet ist (eine offene Schreibtransaktion wäre nicht enthalten; das Programm speichert
   sofort, kein WAL-Modus).
+
+### A12 Teilnehmerliste (15.10.2026, Desktop-Prüfung Teil 1 und 5)
+
+- **Teilnehmer löschen (Teil 1 Nr. 3):** Vorgabe „Nein“ – vorher löschte Strg+A, „Löschen“, Enter
+  alle sichtbaren Teilnehmer.
+- **Lange Namenslisten (Teil 1 Nr. 4, Teil 5 Nr. 5):** Neue Hilfen `_meldung_mit_listen` und
+  `_import_ergebnis_melden` für CSV-, OMA- und Anmeldeformular-Import, Startnummernvergabe und
+  Import aus einem anderen Termin: höchstens 15 Namen je Liste, die vollständige Liste unter
+  „Details“. Der Hinweis-Abschnitt steht jetzt bei allen Importen als „Hinweis:“ mit einer
+  Zeile je Hinweis.
+- **Abgebrochener Import (aus A4):** Die Meldung nennt die Zahl der schon übernommenen
+  Teilnehmer (Vergleich der Teilnehmerzahl vor und nach dem Import).
+- **Bewertungsbogen (Teil 1 Nr. 5):** Der vorgeschlagene Dateiname ersetzt Zeichen, die Windows
+  nicht erlaubt bzw. als Ordnertrenner liest (`_dateiname_teil`); vorher machte „Meier/Schulz“
+  daraus Ordner plus Datei und verlegte den Ablageort.
+- **Nicht angebotene Prüfungen beim Import aus einem anderen Termin (Teil 1 Nr. 6, Marcos
+  Entscheidung):** Übernommen wird weiter alles; danach nennt die Meldung die Teilnehmer in hier
+  nicht angebotenen Prüfungen mit Leistungsklasse und bittet, sie anzupassen
+  (`db_import.nicht_angebotene`). `Architektur.md` und Handbuch angepasst.
+- **Aufräumen (Teil 1 Nr. 8):** `_teilnehmer_ids` entfernt, `next(...)` durch `get_teilnehmer`
+  ersetzt (ein inzwischen gelöschter Teilnehmer warf `StopIteration`), Text „Nichts zu tauschen“
+  zusammengeführt, Kommentare korrigiert.
+- **Tests:** Vorgabe „Nein“, Kürzung mit Details, Anzahl nach Abbruch, Dateiname, Hinweis auf
+  nicht angebotene Prüfungen.

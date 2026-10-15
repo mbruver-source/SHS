@@ -152,6 +152,7 @@ from db_import import (
     importiere_teilnehmer_aus_csv,
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
+    nicht_angebotene,
     exportiere_teilnehmer_csv,
     schreibe_csv_vorlage,
 )
@@ -206,6 +207,7 @@ from desktop_gemeinsam import (
     _DQ_SPALTE,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
+    _dateiname_teil,
     _export_dateiname,
     _fehler_anzeigen,
     _import_ordner_merken,
@@ -272,15 +274,69 @@ def _fehlende_startnummern_vergeben_mit_meldung(
         return
 
     def namen(liste):
-        return "\n".join(f"{t['vorname']} {t['nachname']} – {leistungsklasse_label(t)}" for t in liste)
+        return [f"{t['vorname']} {t['nachname']} – {leistungsklasse_label(t)}" for t in liste]
 
     wo = f" in „{bezeichnung}“" if bezeichnung else ""
-    text = f"{len(ergebnis.vergeben)} Startnummer(n){wo} vergeben."
-    if ergebnis.ohne_bereich:
-        text += "\n\nKeine Nummer, weil für die Prüfung kein Bereich eingetragen ist:\n" + namen(ergebnis.ohne_bereich)
-    if ergebnis.bereich_voll:
-        text += "\n\nKeine Nummer, weil der Bereich der Prüfung voll ist:\n" + namen(ergebnis.bereich_voll)
-    QMessageBox.information(parent, "Startnummern vergeben", text)
+    _meldung_mit_listen(parent, "Startnummern vergeben", f"{len(ergebnis.vergeben)} Startnummer(n){wo} vergeben.", [
+        ("Keine Nummer, weil für die Prüfung kein Bereich eingetragen ist:", namen(ergebnis.ohne_bereich)),
+        ("Keine Nummer, weil der Bereich der Prüfung voll ist:", namen(ergebnis.bereich_voll)),
+    ])
+
+
+# Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 4, Teil 5 Nr. 5): lange Namenslisten machten die
+# Meldung höher als den Bildschirm (OK-Knopf nicht mehr sichtbar) - jetzt höchstens so viele
+# Einträge je Liste, die vollständige Liste steht unter „Details“.
+_MELDUNG_LISTE_MAX = 15
+
+
+def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tuple[str, list[str]]]) -> None:
+    """Informationsmeldung aus `einleitung` und Abschnitten (Überschrift, Einträge); leere
+    Abschnitte entfallen. Ist eine Liste länger als _MELDUNG_LISTE_MAX, wird sie gekürzt
+    und die vollständige Fassung über „Details“ angeboten."""
+    kurz = voll = einleitung
+    gekuerzt = False
+    for ueberschrift, eintraege in abschnitte:
+        if not eintraege:
+            continue
+        zeilen = list(eintraege[:_MELDUNG_LISTE_MAX])
+        if len(eintraege) > _MELDUNG_LISTE_MAX:
+            zeilen.append(f"… und {len(eintraege) - _MELDUNG_LISTE_MAX} weitere (siehe „Details“)")
+            gekuerzt = True
+        kurz += f"\n\n{ueberschrift}\n" + "\n".join(zeilen)
+        voll += f"\n\n{ueberschrift}\n" + "\n".join(eintraege)
+    if not gekuerzt:
+        QMessageBox.information(parent, titel, kurz)
+        return
+    box = QMessageBox(parent)
+    box.setTextFormat(Qt.PlainText)
+    box.setIcon(QMessageBox.Information)
+    box.setWindowTitle(titel)
+    box.setText(kurz)
+    box.setDetailedText(voll)
+    box.setStandardButtons(QMessageBox.Ok)
+    box.exec()
+
+
+def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(n) übersprungen:") -> None:
+    """Gemeinsame Abschlussmeldung für CSV-, OMA- und Anmeldeformular-Import (Teil 5 Nr. 5)."""
+    _meldung_mit_listen(parent, "Import abgeschlossen", f"{ergebnis.importiert} Teilnehmer importiert.", [
+        # UX-Nachtest 03.10.2026, N1: bereits vorhandene Meldungen werden nicht doppelt angelegt.
+        (f"{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:",
+         ergebnis.uebersprungen),
+        (f"{len(ergebnis.fehler)} {fehler_ueberschrift}", ergebnis.fehler),
+        ("Hinweis:", ergebnis.hinweise),
+    ])
+
+
+_NICHTS_ZU_TAUSCHEN = ("Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
+                       "mit „Fehlende Startnummern vergeben…“ oder über „Bearbeiten…“.")
+
+
+def _teilnehmerzahl(conn) -> int | None:
+    try:
+        return len(list_teilnehmer(conn))
+    except sqlite3.Error:
+        return None
 
 
 def _startnummern_nach_import_anbieten(parent, conn) -> None:
@@ -307,12 +363,21 @@ def _startnummern_nach_import_anbieten(parent, conn) -> None:
         _fehlende_startnummern_vergeben_mit_meldung(parent, conn)
 
 
-def _import_db_fehler_melden(parent, exc: sqlite3.Error) -> None:
+def _import_db_fehler_melden(parent, exc: sqlite3.Error, conn=None, vorher: int | None = None,
+                             einleitung: str = "Der Import wurde abgebrochen.") -> None:
     """Schreibfehler der Termin-Datei mitten in einem Import (Desktop-Prüfung 14.10.2026):
-    die bis dahin übernommenen Teilnehmer bleiben gespeichert (Commit je Zeile)."""
+    die bis dahin übernommenen Teilnehmer bleiben gespeichert (Commit je Zeile). Mit `conn`
+    und `vorher` (Teilnehmerzahl vor dem Import) nennt die Meldung, wie viele es sind (aus A4)."""
+    nachher = _teilnehmerzahl(conn) if conn is not None and vorher is not None else None
+    if nachher is not None:
+        n = nachher - vorher
+        anzahl = (f"{n} Teilnehmer wurde bis dahin übernommen und bleibt gespeichert" if n == 1 else
+                  f"{n} Teilnehmer wurden bis dahin übernommen und bleiben gespeichert")
+    else:
+        anzahl = "Bereits übernommene Teilnehmer bleiben gespeichert"
     _db_fehler_anzeigen(
-        parent, exc, "Der Import wurde abgebrochen. Bereits übernommene Teilnehmer bleiben "
-        "gespeichert - bitte die Teilnehmerliste prüfen, bevor die Datei erneut eingelesen wird.",
+        parent, exc, f"{einleitung} {anzahl} - bitte die Teilnehmerliste prüfen, bevor die Datei "
+        "erneut eingelesen wird.",
     )
 
 
@@ -323,6 +388,7 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
     if not pfad:
         return
     _import_ordner_merken(pfad)
+    vorher = _teilnehmerzahl(conn)
     try:
         ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
     except OSError as exc:
@@ -330,23 +396,12 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
                             f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
         return
     except sqlite3.Error as exc:
-        _import_db_fehler_melden(parent, exc)
+        _import_db_fehler_melden(parent, exc, conn, vorher)
         return
     if ergebnis.abbruch:
         QMessageBox.warning(parent, "Import nicht möglich", ergebnis.abbruch)
         return
-    text = f"{ergebnis.importiert} Teilnehmer importiert."
-    if ergebnis.uebersprungen:
-        # UX-Nachtest 03.10.2026, N1: bereits vorhandene Meldungen werden nicht doppelt angelegt.
-        text += (
-            f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
-            + "\n".join(ergebnis.uebersprungen)
-        )
-    if ergebnis.fehler:
-        text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
-    if ergebnis.hinweise:
-        text += "\n\nHinweis: " + "\n".join(ergebnis.hinweise)
-    QMessageBox.information(parent, "Import abgeschlossen", text)
+    _import_ergebnis_melden(parent, ergebnis)
     if ergebnis.importiert:
         _startnummern_nach_import_anbieten(parent, conn)
 
@@ -372,8 +427,9 @@ class TeilnehmerTab(QWidget):
         self._ablageort = ablageort if ablageort is not None else _Ablageort(
             os.path.dirname(pfad) if pfad else str(termine_ordner())
         )
-        self._teilnehmer_ids: list[int] = []  # Zeile -> Teilnehmer-ID, parallel zur Tabelle
-        self._teilnehmer_je_zeile: list[dict] = []  # Zeile -> Teilnehmer-Datensatz, für den Filter
+        # Teilnehmer in DB-Reihenfolge (die Tabelle ist sortierbar - die ID einer Zeile steht
+        # in deren UserRole); der Filter nutzt _teilnehmer_je_id.
+        self._teilnehmer_je_zeile: list[dict] = []
 
         self.tabelle = QTableWidget(0, 8)
         self.tabelle.setHorizontalHeaderLabels(
@@ -662,7 +718,10 @@ class TeilnehmerTab(QWidget):
         teilnehmer_id = self._ausgewaehlte_id()
         if teilnehmer_id is None:
             return
-        aktuelle_daten = next(t for t in list_teilnehmer(self.conn) if t["id"] == teilnehmer_id)
+        aktuelle_daten = get_teilnehmer(self.conn, teilnehmer_id)
+        if aktuelle_daten is None:  # inzwischen gelöscht
+            self.aktualisieren()
+            return
         dialog = TeilnehmerDialog(
             self,
             vorhandener=aktuelle_daten,
@@ -682,9 +741,11 @@ class TeilnehmerTab(QWidget):
         teilnehmer_id = self._ausgewaehlte_id()
         if teilnehmer_id is None:
             return
-        alle = list_teilnehmer(self.conn)
-        aktuell = next(t for t in alle if t["id"] == teilnehmer_id)
-        andere = [t for t in alle if t["id"] != teilnehmer_id]
+        aktuell = get_teilnehmer(self.conn, teilnehmer_id)
+        if aktuell is None:  # inzwischen gelöscht
+            self.aktualisieren()
+            return
+        andere = [t for t in list_teilnehmer(self.conn) if t["id"] != teilnehmer_id]
         if not andere:
             return
         dialog = StartnummerTauschenDialog(self, aktuell, andere)
@@ -693,11 +754,7 @@ class TeilnehmerTab(QWidget):
             partner = next((t for t in andere if t["id"] == partner_id), None)
             if partner is not None and aktuell["startnummer"] is None and partner["startnummer"] is None:
                 # UX-Test 02.10.2026, U1: vorher schloss der Dialog ohne Wirkung und Hinweis.
-                QMessageBox.information(
-                    self, "Nichts zu tauschen",
-                    "Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
-                    "mit „Fehlende Startnummern vergeben…“ oder über „Bearbeiten…“.",
-                )
+                QMessageBox.information(self, "Nichts zu tauschen", _NICHTS_ZU_TAUSCHEN)
                 return
             if partner_id is not None:
                 try:
@@ -718,11 +775,7 @@ class TeilnehmerTab(QWidget):
             self.aktualisieren()
             return
         if a["startnummer"] is None and b["startnummer"] is None:
-            QMessageBox.information(
-                self, "Nichts zu tauschen",
-                "Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
-                "mit „Fehlende Startnummern vergeben…“ oder über „Bearbeiten…“.",
-            )
+            QMessageBox.information(self, "Nichts zu tauschen", _NICHTS_ZU_TAUSCHEN)
             return
 
         def beschreibung(t):
@@ -843,23 +896,34 @@ class TeilnehmerTab(QWidget):
                         "Die gewählte Quell-Termin-Datei konnte nicht geöffnet werden."
                     )
                 elif ausgewaehlt:
+                    vorher = _teilnehmerzahl(self.conn)
                     try:
+                        # Vor dem Import lesen: so gilt ein Lesefehler hier noch als Abbruch.
+                        uebernommen = [t for t in (get_teilnehmer(quelle, i) for i in ausgewaehlt) if t is not None]
                         anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
                     except sqlite3.Error as exc:
                         # Lese- oder Schreibfehler mitten im Import: bereits übernommene
                         # Teilnehmer bleiben (Commit je Teilnehmer) und sind nach dem
                         # Aktualisieren sichtbar.
                         self.aktualisieren()
-                        _db_fehler_anzeigen(
-                            self, exc,
-                            einleitung="Der Import aus dem anderen Termin wurde abgebrochen. Bereits "
-                                       "übernommene Teilnehmer bleiben erhalten.",
+                        _import_db_fehler_melden(
+                            self, exc, self.conn, vorher,
+                            einleitung="Der Import aus dem anderen Termin wurde abgebrochen.",
                         )
                         return
                     self.aktualisieren()
-                    QMessageBox.information(
-                        self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert."
-                    )
+                    # Teil 1 Nr. 6 (Marcos Entscheidung): übernehmen, aber auf hier nicht
+                    # angebotene Prüfungen hinweisen.
+                    try:
+                        fremde = nicht_angebotene(self.conn, uebernommen)
+                    except sqlite3.Error:
+                        fremde = []  # nur der Hinweis entfällt, der Import ist gespeichert
+                    _meldung_mit_listen(self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert.", [
+                        (f"{len(fremde)} Teilnehmer in hier nicht angebotenen Prüfungen – bitte die "
+                         "Leistungsklasse anpassen („Bearbeiten…“) oder die Prüfung in den "
+                         "Veranstaltungsdaten anbieten:",
+                         [f"{t['nachname']}, {t['vorname']} – {leistungsklasse_label(t)}" for t in fremde]),
+                    ])
                     if anzahl:
                         _startnummern_nach_import_anbieten(self, self.conn)
                         self.aktualisieren()
@@ -881,7 +945,7 @@ class TeilnehmerTab(QWidget):
         if aktuell is None:
             return
         start_teil = str(aktuell["startnummer"]) if aktuell["startnummer"] is not None else "ohne-Nr"
-        vorschlag = f"Bewertungsbogen_{start_teil}_{aktuell['nachname']}.pdf"
+        vorschlag = f"Bewertungsbogen_{start_teil}_{_dateiname_teil(aktuell['nachname'])}.pdf"
         pfad = _pdf_speicherort_waehlen(self, self._ablageort, "Bewertungsbogen speichern", vorschlag)
         if not pfad:
             return
@@ -909,7 +973,10 @@ class TeilnehmerTab(QWidget):
                 f"Diese {len(namen)} Teilnehmer inklusive erfasster Ergebnisse wirklich "
                 f"unwiderruflich löschen?\n\n{liste}"
             )
-        antwort = QMessageBox.question(self, "Teilnehmer löschen", frage)
+        # Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 3): Vorgabe „Nein“ - sonst löschte
+        # Strg+A, „Löschen“, Enter alle sichtbaren Teilnehmer.
+        antwort = QMessageBox.question(self, "Teilnehmer löschen", frage,
+                                       QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if antwort == QMessageBox.Yes:
             try:
                 for t in teilnehmer:
@@ -977,7 +1044,6 @@ class TeilnehmerTab(QWidget):
         gemerkte_auswahl = set(self._ausgewaehlte_ids())
         self.tabelle.clearSelection()
         teilnehmer = list_teilnehmer(self.conn)
-        self._teilnehmer_ids = [t["id"] for t in teilnehmer]
         self._teilnehmer_je_zeile = teilnehmer
         # Für _filter_anwenden(): Zuordnung Teilnehmer-ID -> Datensatz, damit der Filter
         # über die tatsächliche (ggf. sortierte) Zeilenreihenfolge der Tabelle arbeiten
@@ -1297,6 +1363,7 @@ class FormularImportTab(QWidget):
         if not pfad:
             return
         _import_ordner_merken(pfad)
+        vorher = _teilnehmerzahl(self.conn)
         try:
             ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         except OSError as exc:
@@ -1304,20 +1371,10 @@ class FormularImportTab(QWidget):
                                 f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
             return
         except sqlite3.Error as exc:
-            _import_db_fehler_melden(self, exc)
+            _import_db_fehler_melden(self, exc, self.conn, vorher)
             self.aktualisieren()
             return
-        text = f"{ergebnis.importiert} Teilnehmer importiert."
-        if ergebnis.uebersprungen:
-            text += (
-                f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
-                + "\n".join(ergebnis.uebersprungen)
-            )
-        if ergebnis.fehler:
-            text += f"\n\n{len(ergebnis.fehler)} Zeile(n) übersprungen:\n" + "\n".join(ergebnis.fehler)
-        if ergebnis.hinweise:
-            text += "\n\nHinweis: " + "\n".join(ergebnis.hinweise)
-        QMessageBox.information(self, "Import abgeschlossen", text)
+        _import_ergebnis_melden(self, ergebnis)
         if ergebnis.importiert:
             _startnummern_nach_import_anbieten(self, self.conn)
 
@@ -1333,23 +1390,14 @@ class FormularImportTab(QWidget):
         _import_ordner_merken(pfade[0])
         # Lesefehler je Datei fängt der Import selbst ab und meldet sie in ergebnis.fehler
         # (Verifikation 28.09.2026, Befund 7a); hier bleiben nur Schreibfehler der Termin-Datei.
+        vorher = _teilnehmerzahl(self.conn)
         try:
             ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
         except sqlite3.Error as exc:
-            _import_db_fehler_melden(self, exc)
+            _import_db_fehler_melden(self, exc, self.conn, vorher)
             self.aktualisieren()
             return
-        text = f"{ergebnis.importiert} Teilnehmer importiert."
-        if ergebnis.uebersprungen:
-            text += (
-                f"\n\n{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:\n"
-                + "\n".join(ergebnis.uebersprungen)
-            )
-        if ergebnis.fehler:
-            text += f"\n\n{len(ergebnis.fehler)} Datei(en) nicht importiert:\n" + "\n".join(ergebnis.fehler)
-        if ergebnis.hinweise:
-            text += "\n\nHinweis:\n" + "\n".join(ergebnis.hinweise)
-        QMessageBox.information(self, "Import abgeschlossen", text)
+        _import_ergebnis_melden(self, ergebnis, "Datei(en) nicht importiert:")
         if ergebnis.importiert:
             _startnummern_nach_import_anbieten(self, self.conn)
 

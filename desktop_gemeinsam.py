@@ -88,6 +88,15 @@ class _Ablageort:
         self.pfad = pfad
 
 
+def _dateiname_teil(text: str) -> str:
+    """Nutzertext als Teil eines Dateinamens (Desktop-Prüfung 14.10.2026, Teil 1 Nr. 5): ohne
+    Zeichen, die Windows im Dateinamen nicht erlaubt bzw. als Ordnertrenner liest - sonst
+    machte „Meier/Schulz“ den Vorschlag zu Ordner plus Datei."""
+    import re
+
+    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", text or "").strip(" .-") or "Teilnehmer"
+
+
 def _export_dateiname(conn, praefix: str) -> str:
     veranstaltung = get_veranstaltung(conn)
     datum = (veranstaltung or {}).get("datum") or ""

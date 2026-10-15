@@ -471,9 +471,12 @@ def test_loeschen_nennt_markierten_statt_aktuellen_teilnehmer(qtbot, conn, monke
     _zeilen_markieren(tab, 0)
     assert tab.tabelle.currentRow() == 1 and tab._ausgewaehlte_id() == a
     fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a_, **k: fragen.append(a_[2]) or QMessageBox.No)
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a_, **k: fragen.append((a_[2], a_[4])) or QMessageBox.No)
     tab._teilnehmer_loeschen()
-    assert "„A, Max“" in fragen[0]
+    assert "„A, Max“" in fragen[0][0]
+    # Desktop-Prüfung 14.10.2026, Teil 1 Nr. 3: Vorgabe „Nein“.
+    assert fragen[0][1] == QMessageBox.No
 
 
 def test_mehrere_markierte_loeschen_und_zwei_markierte_tauschen(qtbot, conn, monkeypatch):
@@ -3103,7 +3106,7 @@ def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monke
 
     monkeypatch.setattr("app.StartnummerTauschenDialog", _AkzeptierenderTauschDialogStub)
 
-    zeile_a = next(row for row, tid in enumerate(tab._teilnehmer_ids) if tid == id_a)
+    zeile_a = next(row for row in range(tab.tabelle.rowCount()) if tab.tabelle.item(row, 0).data(Qt.UserRole) == id_a)
     tab.tabelle.selectRow(zeile_a)
     tab._startnummer_tauschen()
 
@@ -3145,6 +3148,20 @@ def test_bewertungsbogen_direktexport_erzeugt_pdf_fuer_ausgewaehlten_teilnehmer(
     qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
 
     assert ziel_pfad.exists()
+
+    # Teil 1 Nr. 5: Sonderzeichen im Nachnamen ergeben einen flachen, gültigen Dateinamen.
+    conn.execute("UPDATE teilnehmer SET nachname = 'Meier/Schulz: Zwei' WHERE nachname = 'Zwei'")
+    conn.commit()
+    tab.aktualisieren()
+    from db import get_teilnehmer
+
+    zeile = next(row for row in range(tab.tabelle.rowCount())
+                 if get_teilnehmer(conn, tab.tabelle.item(row, 0).data(Qt.UserRole))["nachname"].startswith("Meier"))
+    tab.tabelle.selectRow(zeile)
+    vorschlaege = []
+    monkeypatch.setattr("app._pdf_speicherort_waehlen", lambda _p, _a, _t, vorschlag: vorschlaege.append(vorschlag))
+    qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+    assert vorschlaege == ["Bewertungsbogen_2_Meier-Schulz-Zwei.pdf"]
     assert "gespeichert" in tab.status_label.text()
     assert str(ziel_pfad) in tab.status_label.text()
 
@@ -3481,6 +3498,7 @@ def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monk
     gemeldet = []
     monkeypatch.setattr("app.TerminImportDialog", _Stub)
     monkeypatch.setattr("app.importiere_teilnehmer_stammdaten", scheitert)
+    monkeypatch.setattr("app.get_teilnehmer", lambda *a: None)  # Quelle ist hier nur eine Attrappe
     monkeypatch.setattr("app._db_fehler_anzeigen",
                         lambda parent, exc, einleitung="": gemeldet.append((str(exc), einleitung)))
     tab = TeilnehmerTab(conn)
@@ -3539,6 +3557,96 @@ def test_aus_anderem_termin_importieren_uebernimmt_ausgewaehlte_teilnehmer(qtbot
 
     namen = {t["nachname"] for t in list_teilnehmer(conn)}
     assert "Import" in namen
+
+
+def test_aus_anderem_termin_importieren_weist_auf_nicht_angebotene_pruefung_hin(qtbot, conn, tmp_path, monkeypatch):
+    """Teil 1 Nr. 6 (Marcos Entscheidung): übernehmen, danach Hinweis mit Name und LK."""
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14", angebotene_pruefungen="DK1")
+    quelle_conn = init_db(str(tmp_path / "quelle.sqlite"))
+    ids = [
+        add_teilnehmer(quelle_conn, NeuerTeilnehmer(nachname="Angeboten", vorname="A", rufname_hund="Rex",
+                                                    art="DK", stufe=1)),
+        add_teilnehmer(quelle_conn, NeuerTeilnehmer(nachname="Fremd", vorname="F", rufname_hund="Bello",
+                                                    art="ED", stufe=1, disziplin="Trümmerfeld")),
+    ]
+
+    class _Stub:
+        def __init__(self, parent, aktueller_pfad):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def quelle_conn(self):
+            return quelle_conn
+
+        def ausgewaehlte_ids(self):
+            return ids
+
+        def schliesse_quelle(self):
+            quelle_conn.close()
+
+    meldungen = []
+    monkeypatch.setattr("app.TerminImportDialog", _Stub)
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[2]))
+    monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda *a: None)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab._aus_anderem_termin_importieren()
+
+    assert {t["nachname"] for t in list_teilnehmer(conn)} == {"Angeboten", "Fremd"}
+    assert meldungen[0].startswith("2 Teilnehmer importiert.")
+    assert "1 Teilnehmer in hier nicht angebotenen Prüfungen" in meldungen[0]
+    assert "Fremd, F – ED LK 1 Trümmerfeld" in meldungen[0] and "Angeboten" not in meldungen[0]
+
+
+def test_lange_namenslisten_werden_gekuerzt_mit_details(qtbot, monkeypatch):
+    """Teil 1 Nr. 4, Teil 5 Nr. 5: höchstens 15 Namen je Liste, alles unter „Details“."""
+    import app as app_modul
+    from db_import import CsvImportErgebnis
+
+    gezeigt = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: gezeigt.append((box.text(), box.detailedText())) or 0)
+    ergebnis = CsvImportErgebnis(importiert=0, fehler=["Zeile 2: kaputt"],
+                                 uebersprungen=[f"Name {n}" for n in range(1, 61)], hinweise=["Achtung"])
+    app_modul._import_ergebnis_melden(None, ergebnis)
+
+    kurz, voll = gezeigt[0]
+    assert "Name 15" in kurz and "Name 16" not in kurz and "… und 45 weitere" in kurz
+    assert "Zeile 2: kaputt" in kurz and "Hinweis:\nAchtung" in kurz
+    assert "Name 60" in voll
+    assert kurz.count("\n") < 30
+
+    # Kurze Listen: wie bisher eine einfache Meldung ohne Details.
+    einfach = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: einfach.append(a[2]))
+    app_modul._import_ergebnis_melden(None, CsvImportErgebnis(importiert=2, fehler=[]))
+    assert einfach == ["2 Teilnehmer importiert."]
+
+
+def test_abgebrochener_import_nennt_anzahl_der_uebernommenen(qtbot, conn, monkeypatch, tmp_path):
+    """Aus A4: die Meldung nennt, wie viele Teilnehmer schon übernommen sind."""
+    import sqlite3
+
+    import app as app_modul
+
+    datei = tmp_path / "liste.csv"
+    datei.write_text("x", encoding="utf-8")
+
+    def teilweise(conn_, _pfad):
+        _teilnehmer_anlegen(conn_, nachname="Erster", startnummer=11)
+        _teilnehmer_anlegen(conn_, nachname="Zweiter", startnummer=12)
+        raise sqlite3.OperationalError("database or disk is full")
+
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(datei), ""))
+    monkeypatch.setattr("app._import_ordner_merken", lambda *a: None)
+    monkeypatch.setattr("app.importiere_teilnehmer_aus_csv", teilweise)
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: meldungen.append(a[2]))
+
+    app_modul._teilnehmerliste_importieren(None, conn)
+
+    assert "2 Teilnehmer wurden bis dahin übernommen" in meldungen[0]
 
 
 # --- Sortierung durch Klick auf Spaltenüberschrift (20.09.) ------------------------

@@ -377,7 +377,12 @@ solltest du vor dem Prüfungstag beheben; **Hinweise** (klein) sind nur Erinneru
 Teilnehmer mit Häkchen (**„Alle auswählen“** / **„Keine auswählen“**). Übernommen werden nur die
 **Stammdaten** einschließlich Art, Leistungsklasse und Disziplin – nicht Startnummer,
 Gegenstände, Bezahlt-Status und Ergebnis. Es gibt keine Dublettenprüfung: Wer schon im Termin
-steht, wird bei erneutem Import ein zweites Mal angelegt.
+steht, wird bei erneutem Import ein zweites Mal angelegt. Teilnehmer in Prüfungen, die der neue
+Termin nicht anbietet, werden trotzdem übernommen; die Meldung danach nennt sie, damit du die
+Leistungsklasse mit „Bearbeiten…“ anpassen kannst.
+
+Meldungen nach einem Import oder der Startnummernvergabe zeigen je Liste höchstens 15 Namen; die
+vollständige Liste steht unter **„Details“**.
 
 ## 5. Formular-Import
 
