@@ -12,6 +12,7 @@ pdf_export); keines dieser Module importiert app.
 from __future__ import annotations
 
 import atexit
+import contextlib
 import os
 import sqlite3
 import sys
@@ -21,6 +22,7 @@ from pathlib import Path
 from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -104,6 +106,30 @@ def _pfad_anzeige(pfad: str) -> str:
     return os.path.normpath(pfad)
 
 
+def _ausfuehren(dialog) -> int:
+    """Zeigt einen Dialog bzw. eine Meldung modal und gibt ihn danach zum Löschen frei.
+    Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 9, Teil 6 Nr. 8, Teil 7, Teil 8): Dialoge mit
+    Elternfenster blieben sonst bis zum Programmende als Kinder liegen - samt Inhalt (z. B.
+    eingegebener Passwörter). Gelöscht wird erst beim Rücklauf in die Ereignisschleife, der
+    Aufrufer kann also danach noch Werte auslesen."""
+    ergebnis = dialog.exec()
+    loeschen = getattr(dialog, "deleteLater", None)  # Testattrappen haben keins
+    if loeschen is not None:
+        loeschen()
+    return ergebnis
+
+
+@contextlib.contextmanager
+def _wartecursor():
+    """Wartecursor für längere Arbeiten (PDF- und CSV-Export, Sicherung), sicher wieder
+    zurückgesetzt (Teil 6 Nr. 7)."""
+    QApplication.setOverrideCursor(Qt.WaitCursor)
+    try:
+        yield
+    finally:
+        QApplication.restoreOverrideCursor()
+
+
 def _url_oeffnen(parent, url: QUrl, anzeige: str) -> bool:
     """Öffnet `url` mit dem Standardprogramm. Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 10):
     QDesktopServices.openUrl meldet einen Fehlschlag nur über den Rückgabewert (z. B. Linux
@@ -149,7 +175,7 @@ def _datei_gespeichert_melden(
     oeffnen_btn = box.addButton(datei_oeffnen_text, QMessageBox.ActionRole) if datei_oeffnen_text else None
     ordner_btn = box.addButton("Ordner zeigen", QMessageBox.ActionRole)
     box.setDefaultButton(box.addButton(QMessageBox.Ok))
-    box.exec()
+    _ausfuehren(box)
     if oeffnen_btn is not None and box.clickedButton() is oeffnen_btn:
         _url_oeffnen(parent, QUrl.fromLocalFile(pfad), _pfad_anzeige(pfad))
     elif box.clickedButton() is ordner_btn:
@@ -213,7 +239,8 @@ def _pdf_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, tite
     if not pfad:
         return
     try:
-        ergebnis = export_fn(pfad)
+        with _wartecursor():
+            ergebnis = export_fn(pfad)
     except Exception as exc:  # noqa: BLE001 - Unterscheidung in _pdf_export_fehler_anzeigen
         _pdf_export_fehler_anzeigen(parent, exc)
         return
@@ -649,7 +676,7 @@ def meldungsfenster_als_klartext() -> None:
             box.setTextFormat(Qt.PlainText)
             if defaultButton != QMessageBox.StandardButton.NoButton:
                 box.setDefaultButton(defaultButton)
-            return QMessageBox.StandardButton(box.exec())
+            return QMessageBox.StandardButton(_ausfuehren(box))
         return staticmethod(meldung)
 
     ok = QMessageBox.StandardButton.Ok
@@ -1010,7 +1037,7 @@ def fehlerfenster_zeigen(version: str, fehler: str, parent=None, programm_endet:
     if _absturzprotokoll_pfad is not None:
         ordner_btn = box.addButton("Protokoll-Ordner öffnen", QMessageBox.ActionRole)
     box.setDefaultButton(box.addButton(QMessageBox.Ok))
-    box.exec()
+    _ausfuehren(box)
     if ordner_btn is not None and box.clickedButton() is ordner_btn:
         _ordner_zeigen(str(_absturzprotokoll_pfad), parent)
 

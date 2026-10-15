@@ -6401,3 +6401,15 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
 - **Zurückgestellt:** Der CSV-Export behält seinen eigenen Ablauf; „In Excel öffnen“ öffnet das
   Standardprogramm für CSV (meist Excel).
 - **Vor dem Build:** PDFs einmal ansehen (andere Schrift), Screenshots mit PDFs ggf. erneuern.
+
+### A17 Liegengebliebene Dialoge und Wartecursor (15.10.2026, Desktop-Prüfung Teil 2, 6, 7, 8)
+
+- **Dialoge (Teil 2 Nr. 9, Teil 6 Nr. 8, Teil 7, Teil 8):** Neue Hilfe `_ausfuehren(dialog)` in
+  `desktop_gemeinsam` – zeigt modal und gibt den Dialog danach mit `deleteLater` frei. Alle
+  Dialoge und Meldungsfenster in `app.py` und `desktop_gemeinsam` (auch die Standardmeldungen
+  aus `meldungsfenster_als_klartext`) laufen darüber; vorher blieben sie bis zum Programmende als
+  Kinder liegen, der Sicherungsdialog samt eingegebenem Passwort. Werte werden wie bisher direkt
+  nach dem Schließen ausgelesen (gelöscht wird erst beim Rücklauf in die Ereignisschleife).
+- **Wartecursor (Teil 6 Nr. 7):** `_wartecursor()` (mit `try/finally`) um PDF- und CSV-Export
+  sowie Sicherung erstellen und wiederherstellen; Meldungen erscheinen erst danach.
+- **Tests:** Freigabe nach dem Schließen (Hilfe und Versionsfenster), Cursor nach einem Fehler.

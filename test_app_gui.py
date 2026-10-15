@@ -3658,6 +3658,35 @@ def test_pdf_exportieren_meldet_fehler_ohne_statusmeldung(qtbot, tmp_path, monke
     assert status.text().startswith("3 Bögen:") and gespeichert_meldungen[-1][1] == "3 Bögen"
 
 
+def test_dialoge_werden_nach_exec_freigegeben_und_wartecursor_zurueckgesetzt(qtbot, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 9, Teil 6 Nr. 7/8: Dialoge bleiben nicht als
+    Kinder liegen; der Wartecursor wird auch bei einem Fehler zurückgesetzt."""
+    import app
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    import desktop_gemeinsam
+
+    eltern = QWidget()
+    qtbot.addWidget(eltern)
+    dialog = QDialog(eltern)
+    monkeypatch.setattr(dialog, "exec", lambda: QDialog.Accepted)
+    assert desktop_gemeinsam._ausfuehren(dialog) == QDialog.Accepted
+    qtbot.waitUntil(lambda: not eltern.findChildren(QDialog), timeout=2000)
+
+    # Echte Aufrufstelle: das Versionsfenster bleibt nicht als Kind des Hauptfensters liegen.
+    monkeypatch.setattr(VersionDialog, "exec", lambda self: QDialog.Rejected)
+    fenster = QWidget()
+    qtbot.addWidget(fenster)
+    app.HauptFenster._version_anzeigen(fenster)
+    qtbot.waitUntil(lambda: not fenster.findChildren(VersionDialog), timeout=2000)
+
+    with pytest.raises(RuntimeError):
+        with desktop_gemeinsam._wartecursor():
+            assert QApplication.overrideCursor() is not None
+            raise RuntimeError("Export kaputt")
+    assert QApplication.overrideCursor() is None
+
+
 def test_ordner_zeigen_markiert_datei_mit_komma(tmp_path, monkeypatch):
     """Teil 6 Nr. 9: Pfad in Anführungszeichen, sonst trennt der Explorer am Komma."""
     import desktop_gemeinsam

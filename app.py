@@ -209,6 +209,8 @@ from desktop_gemeinsam import (
     _import_startordner,
     _NumerischSortierbaresItem,
     _pdf_exportieren,
+    _ausfuehren,
+    _wartecursor,
     _pfad_anzeige,
     _responsive_schriftgroesse,
     _url_oeffnen,
@@ -308,7 +310,7 @@ def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tu
     box.setText(kurz)
     box.setDetailedText(voll)
     box.setStandardButtons(QMessageBox.Ok)
-    box.exec()
+    _ausfuehren(box)
 
 
 def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(n) übersprungen:") -> None:
@@ -705,7 +707,7 @@ class TeilnehmerTab(QWidget):
             # Eingaben stehen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1).
             speichern=lambda d: add_teilnehmer(self.conn, d.ergebnis()),
         )
-        if dialog.exec() == QDialog.Accepted:
+        if _ausfuehren(dialog) == QDialog.Accepted:
             self.aktualisieren()
 
     def _teilnehmer_bearbeiten(self) -> None:
@@ -725,7 +727,7 @@ class TeilnehmerTab(QWidget):
             angebotene={p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))},
             speichern=lambda d: update_teilnehmer(self.conn, teilnehmer_id, d.ergebnis()),
         )
-        if dialog.exec() == QDialog.Accepted:
+        if _ausfuehren(dialog) == QDialog.Accepted:
             self.aktualisieren()
 
     def _startnummer_tauschen(self) -> None:
@@ -744,7 +746,7 @@ class TeilnehmerTab(QWidget):
         if not andere:
             return
         dialog = StartnummerTauschenDialog(self, aktuell, andere)
-        if dialog.exec() == QDialog.Accepted:
+        if _ausfuehren(dialog) == QDialog.Accepted:
             partner_id = dialog.ausgewaehlte_partner_id()
             partner = next((t for t in andere if t["id"] == partner_id), None)
             if partner is not None and aktuell["startnummer"] is None and partner["startnummer"] is None:
@@ -879,7 +881,7 @@ class TeilnehmerTab(QWidget):
     def _aus_anderem_termin_importieren(self) -> None:
         dialog = TerminImportDialog(self, self._pfad)
         try:
-            if dialog.exec() == QDialog.Accepted:
+            if _ausfuehren(dialog) == QDialog.Accepted:
                 quelle = dialog.quelle_conn()
                 ausgewaehlt = dialog.ausgewaehlte_ids()
                 if quelle is None:
@@ -3249,7 +3251,7 @@ class ZeitplanTab(QWidget):
 
     def _pruefungsblock_hinzufuegen(self, richter_id: int) -> None:
         dialog = PruefungsblockDialog(self, standard_dauer_minuten=self.standard_dauer.value())
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         try:
             add_zeitplan_pruefungsblock(self.conn, richter_id, **dialog.werte())
@@ -3260,7 +3262,7 @@ class ZeitplanTab(QWidget):
 
     def _pause_hinzufuegen(self, richter_id: int, liste: QListWidget | None = None) -> None:
         dialog = PauseDialog(self, neu=True)
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         markiert = liste.currentItem() if liste is not None else None
         try:
@@ -3326,7 +3328,7 @@ class ZeitplanTab(QWidget):
         try:
             if eintrag["typ"] == "pause":
                 dialog = PauseDialog(self, dauer_minuten=eintrag["dauer_minuten"], bezeichnung=eintrag["bezeichnung"] or "")
-                if dialog.exec() != QDialog.Accepted:
+                if _ausfuehren(dialog) != QDialog.Accepted:
                     return
                 werte = dialog.werte()
                 aktualisiere_zeitplan_eintrag(self.conn, eintrag_id, dauer_minuten=werte["dauer_minuten"], bezeichnung=werte["bezeichnung"] or "Pause")
@@ -3546,7 +3548,8 @@ class ExportTab(QWidget):
         if not pfad:
             return
         try:
-            anzahl = exportiere_teilnehmer_csv(self.conn, pfad)
+            with _wartecursor():
+                anzahl = exportiere_teilnehmer_csv(self.conn, pfad)
         except OSError as exc:
             QMessageBox.critical(self, "Speichern fehlgeschlagen",
                                  f"Die Teilnehmerliste konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}")
@@ -3634,7 +3637,7 @@ class ExportTab(QWidget):
         # BewertungsbogenAuswahlDialog oben) - Standard bleibt "alle" (Dialog startet mit
         # allen Einträgen angehakt), Abbrechen bricht den kompletten Export ab.
         auswahl_dialog = BewertungsbogenAuswahlDialog(self, alle_leistungsklassen(self.conn))
-        if auswahl_dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(auswahl_dialog) != QDialog.Accepted:
             return
         erlaubte_labels = auswahl_dialog.ausgewaehlte_labels()
 
@@ -3698,7 +3701,7 @@ class VerwaltungTab(QWidget):
             self, vorbelegung=aktuell, bearbeiten=True,
             speichern=lambda d: _aktualisiere_veranstaltung_feld(self.conn, **d.veranstaltung_werte()),
         )
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         self.status_label.setText("Veranstaltungsdaten gespeichert.")
         self.veranstaltung_geaendert.emit()
@@ -3797,7 +3800,7 @@ class DatensicherungTab(QWidget):
         ohne_btn = box.addButton("Ohne ihn fortfahren", QMessageBox.ActionRole)
         box.addButton("Abbrechen", QMessageBox.RejectRole)
         box.setDefaultButton(mit_btn)
-        box.exec()
+        _ausfuehren(box)
         if box.clickedButton() is mit_btn:
             return [self._aktueller_pfad]
         if box.clickedButton() is ohne_btn:
@@ -3809,7 +3812,7 @@ class DatensicherungTab(QWidget):
         if zusaetzliche is None:
             return
         dialog = SicherungErstellenDialog(self)
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         passwort = dialog.passwort()
 
@@ -3820,7 +3823,8 @@ class DatensicherungTab(QWidget):
             return
 
         try:
-            anzahl = sicherung_erstellen(pfad, passwort=passwort, zusaetzliche=zusaetzliche)
+            with _wartecursor():
+                anzahl = sicherung_erstellen(pfad, passwort=passwort, zusaetzliche=zusaetzliche)
         except ValueError as exc:
             QMessageBox.warning(self, "Sicherung nicht möglich", str(exc))
             return
@@ -3896,7 +3900,8 @@ class DatensicherungTab(QWidget):
             return
 
         try:
-            wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)
+            with _wartecursor():
+                wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)
         except TeilweiseWiederhergestelltError as exc:
             # QS-Prüfung 07.10.2026, Befund 3: nennen, was schon ersetzt ist.
             QMessageBox.critical(
@@ -3955,7 +3960,7 @@ class DatensicherungTab(QWidget):
         kopie_btn = box.addButton("Als Kopie importieren", QMessageBox.ActionRole)
         ueberspringen_btn = box.addButton("Überspringen", QMessageBox.RejectRole)
         box.setDefaultButton(ueberspringen_btn)
-        box.exec()
+        _ausfuehren(box)
 
         geklickt = box.clickedButton()
         if ueberschreiben_btn is not None and geklickt is ueberschreiben_btn:
@@ -4434,10 +4439,10 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.ergebnis_tab.farben_auffrischen()
 
     def _hilfe_anzeigen(self) -> None:
-        HilfeDialog(self).exec()
+        _ausfuehren(HilfeDialog(self))
 
     def _version_anzeigen(self) -> None:
-        VersionDialog(self).exec()
+        _ausfuehren(VersionDialog(self))
 
     def _demo_starten(self) -> None:
         """Startet die Demoprüfung (desktop_demo.DemoTour) im Temp-Ordner; der geöffnete
@@ -4649,7 +4654,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             return
 
         dialog = StartDialog(self, aktueller_pfad=self.pfad)
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         if dialog.demo_angefordert:
             try:
@@ -4925,7 +4930,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 "startnummer_bereichsgroesse": letzter.startnummer_bereichsgroesse,
             }
         dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung, speichern=_termin_datei_anlegen)
-        if dialog.exec() != QDialog.Accepted:
+        if _ausfuehren(dialog) != QDialog.Accepted:
             return
         pfad = dialog.pfad_feld.text().strip()
 
@@ -5018,7 +5023,7 @@ def _startdialog_schleife() -> str | None:
     Startdialog wieder."""
     while True:
         start = StartDialog()
-        if start.exec() != QDialog.Accepted:
+        if _ausfuehren(start) != QDialog.Accepted:
             return None
         if start.demo_angefordert:
             try:
