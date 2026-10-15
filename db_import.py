@@ -729,6 +729,11 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
         except ImportError:
             fehler.append(f"{name}: das Einlesen von PDF-Formularen ist nicht verfügbar (pypdf fehlt)")
             continue
+        except OSError as exc:
+            # Desktop-Prüfung 14.10.2026 (Teil 5 Nr. 4): Datei weg, gesperrt, Netzlaufwerk
+            # getrennt - das ist kein Fehler im PDF.
+            fehler.append(f"{name}: Datei konnte nicht gelesen werden ({exc.strerror or exc})")
+            continue
         except Exception as exc:  # noqa: BLE001
             # Bewusst breit: pypdf wirft bei beschädigten/fremden Dateien je nach Defekt
             # PdfReadError, aber auch ValueError/KeyError/TypeError u. a. - eine einzelne

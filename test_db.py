@@ -3977,7 +3977,8 @@ class TestAnmeldeformularImport(unittest.TestCase):
             "ohne.pdf: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)",
         )
         self.assertTrue(ergebnis.fehler[1].startswith("kaputt.pdf: Datei ist keine lesbare PDF-Datei"))
-        self.assertTrue(ergebnis.fehler[2].startswith("gibt_es_nicht.pdf: Datei ist keine lesbare PDF-Datei"))
+        # Desktop-Prüfung 14.10.2026 (Teil 5 Nr. 4): eine fehlende Datei ist kein Fehler im PDF.
+        self.assertTrue(ergebnis.fehler[2].startswith("gibt_es_nicht.pdf: Datei konnte nicht gelesen werden"))
 
     def test_fremdes_formular_wird_abgelehnt(self):
         pfad = os.path.join(self.ordner, "fremd.pdf")

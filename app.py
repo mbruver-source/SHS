@@ -185,9 +185,11 @@ from desktop_darstellung import (
 )
 from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
+    _fehlertext,
     _klartext_fehler,
     fehler_protokollieren,
     fehlerfenster_zeigen,
+    qt_meldungen_protokollieren,
     _Ablageort,
     absturzprotokoll_einrichten,
     absturzprotokoll_pfad,
@@ -213,6 +215,7 @@ from desktop_gemeinsam import (
     _pdf_speicherort_waehlen,
     _pfad_anzeige,
     _responsive_schriftgroesse,
+    _url_oeffnen,
     ResponsiveSchriftMixin,
     _STATUS_SPALTE,
     _zeitplan_pdf_exportieren,
@@ -323,7 +326,8 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
     try:
         ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
     except OSError as exc:
-        QMessageBox.warning(parent, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+        QMessageBox.warning(parent, "Import fehlgeschlagen",
+                            f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
         return
     except sqlite3.Error as exc:
         _import_db_fehler_melden(parent, exc)
@@ -846,7 +850,11 @@ class TeilnehmerTab(QWidget):
                         # Teilnehmer bleiben (Commit je Teilnehmer) und sind nach dem
                         # Aktualisieren sichtbar.
                         self.aktualisieren()
-                        _db_fehler_anzeigen(self, exc)
+                        _db_fehler_anzeigen(
+                            self, exc,
+                            einleitung="Der Import aus dem anderen Termin wurde abgebrochen. Bereits "
+                                       "übernommene Teilnehmer bleiben erhalten.",
+                        )
                         return
                     self.aktualisieren()
                     QMessageBox.information(
@@ -1271,7 +1279,8 @@ class FormularImportTab(QWidget):
         try:
             schreibe_csv_vorlage(pfad)
         except OSError as exc:
-            QMessageBox.warning(self, "Speichern fehlgeschlagen", f"Die Vorlage konnte nicht gespeichert werden:\n{exc}")
+            QMessageBox.warning(self, "Speichern fehlgeschlagen",
+                                f"Die Vorlage konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}")
             return
         _datei_gespeichert_melden(self, pfad, "Vorlage gespeichert", datei_oeffnen_text="Datei öffnen")
 
@@ -1291,7 +1300,8 @@ class FormularImportTab(QWidget):
         try:
             ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         except OSError as exc:
-            QMessageBox.warning(self, "Import fehlgeschlagen", f"Die Datei konnte nicht gelesen werden:\n{exc}")
+            QMessageBox.warning(self, "Import fehlgeschlagen",
+                                f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
             return
         except sqlite3.Error as exc:
             _import_db_fehler_melden(self, exc)
@@ -3439,7 +3449,7 @@ class ExportTab(QWidget):
                 f"Der Ablageort „{self._ablageort.pfad}“ existiert nicht (mehr).",
             )
             return
-        QDesktopServices.openUrl(QUrl.fromLocalFile(self._ablageort.pfad))
+        _url_oeffnen(self, QUrl.fromLocalFile(self._ablageort.pfad), _pfad_anzeige(self._ablageort.pfad))
 
     def _export_fehler_anzeigen(self, exc: Exception) -> None:
         _pdf_export_fehler_anzeigen(self, exc)
@@ -3476,7 +3486,8 @@ class ExportTab(QWidget):
         try:
             anzahl = exportiere_teilnehmer_csv(self.conn, pfad)
         except OSError as exc:
-            QMessageBox.critical(self, "Speichern fehlgeschlagen", f"Die Teilnehmerliste konnte nicht gespeichert werden:\n\n{exc}")
+            QMessageBox.critical(self, "Speichern fehlgeschlagen",
+                                 f"Die Teilnehmerliste konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}")
             return
         self._ablageort.pfad = os.path.dirname(pfad)
         self.status_label.setText(f"Teilnehmerliste ({anzahl} Teilnehmer) gespeichert: {_pfad_anzeige(pfad)}")
@@ -3714,7 +3725,7 @@ class DatensicherungTab(QWidget):
         except Exception as exc:  # breiter Fänger, z.B. Zielordner nicht beschreibbar
             QMessageBox.critical(
                 self, "Sicherung fehlgeschlagen",
-                f"Die Sicherung konnte nicht erstellt werden:\n\n{exc}",
+                f"Die Sicherung konnte nicht erstellt werden.\n\n{_fehlertext(exc)}",
             )
             return
 
@@ -3774,7 +3785,7 @@ class DatensicherungTab(QWidget):
             QMessageBox.critical(
                 self, "Wiederherstellen unvollständig",
                 "Die Sicherung wurde nur teilweise wiederhergestellt:\n\n"
-                f"{exc.ursache}\n\n"
+                f"{_klartext_fehler(exc.ursache) if isinstance(exc.ursache, BaseException) else exc.ursache}\n\n"
                 "Diese Termine sind bereits aus der Sicherung übernommen:\n"
                 + "\n".join(f"  • {name}" for name in exc.geschrieben),
             )
@@ -3783,9 +3794,17 @@ class DatensicherungTab(QWidget):
             )
             return
         except Exception as exc:
+            # Teil 9 Nr. 5: ins Absturzprotokoll - außer bei erwartbaren Datei- und
+            # Prüffehlern. Eine beschädigte Sicherung ist dabei kein Programmfehler, deshalb
+            # ohne den Hinweis aus _fehlertext.
+            if not isinstance(exc, (OSError, sqlite3.Error, ValueError)):
+                fehler_protokollieren(exc)
+                beschreibung = f"{type(exc).__name__}: {exc}"
+            else:
+                beschreibung = _klartext_fehler(exc)
             QMessageBox.critical(
                 self, "Wiederherstellen fehlgeschlagen",
-                f"Die Sicherung konnte nicht wiederhergestellt werden:\n\n{exc}",
+                f"Die Sicherung konnte nicht wiederhergestellt werden.\n\n{beschreibung}",
             )
             return
 
@@ -3943,7 +3962,7 @@ class VersionDialog(QDialog):
         diagnose_btn = QPushButton("Diagnose kopieren")
         diagnose_btn.clicked.connect(self._diagnose_kopieren)
         protokoll_btn = QPushButton("Protokoll-Ordner öffnen")
-        protokoll_btn.clicked.connect(lambda: _ordner_zeigen(str(absturzprotokoll_pfad())))
+        protokoll_btn.clicked.connect(lambda: _ordner_zeigen(str(absturzprotokoll_pfad()), self))
         protokoll_btn.setEnabled(absturzprotokoll_pfad() is not None)
         self._diagnose_status = QLabel("")
         diagnose_zeile = QHBoxLayout()
@@ -4010,7 +4029,7 @@ class VersionDialog(QDialog):
             self._ergebnis_zeile.setText("Du hast bereits die neueste Version.")
 
     def _releases_seite_oeffnen(self) -> None:
-        QDesktopServices.openUrl(QUrl(GITHUB_RELEASES_URL))
+        _url_oeffnen(self, QUrl(GITHUB_RELEASES_URL), GITHUB_RELEASES_URL)
 
 
 _WM_ENDSESSION = 0x0016
@@ -4232,7 +4251,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             # Desktop-Prüfung 14.10.2026, Teil 10 Nr. 5: verständliche Meldung statt des
             # allgemeinen Fehlerfensters; starten() hat schon aufgeräumt.
             QMessageBox.warning(self, "Demoprüfung nicht möglich",
-                                f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
+                                f"Die Demoprüfung konnte nicht gestartet werden.\n\n{_fehlertext(exc)}")
 
     def _demo_sperren(self, aktiv: bool) -> None:
         """Während der Demo kein Terminwechsel und kein zweiter Demo-Start; der Demo-Knopf
@@ -4433,7 +4452,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 DemoTour(fenster=self).starten()
             except Exception as exc:  # noqa: BLE001 - wie in _demo_starten (Teil 10 Nr. 5)
                 QMessageBox.warning(self, "Demoprüfung nicht möglich",
-                                    f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
+                                    f"Die Demoprüfung konnte nicht gestartet werden.\n\n{_fehlertext(exc)}")
             return
         if not dialog.pfad:
             return
@@ -4744,7 +4763,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         try:
             os.remove(termin.pfad)
         except OSError as exc:
-            QMessageBox.critical(self, "Löschen fehlgeschlagen", str(exc))
+            QMessageBox.critical(self, "Löschen fehlgeschlagen",
+                                 f"Der Termin konnte nicht gelöscht werden.\n\n{_klartext_fehler(exc)}")
             return
         self._aktualisieren()
 
@@ -4774,7 +4794,7 @@ def _startdialog_schleife() -> str | None:
                 # Teil 10 Nr. 5: Startfehler der Demo beendet nicht mehr das ganze Programm,
                 # es geht zurück zum Startdialog.
                 QMessageBox.warning(None, "Demoprüfung nicht möglich",
-                                    f"Die Demoprüfung konnte nicht gestartet werden:\n\n{exc}")
+                                    f"Die Demoprüfung konnte nicht gestartet werden.\n\n{_fehlertext(exc)}")
             continue
         return start.pfad or None
 
@@ -4797,6 +4817,7 @@ def main() -> int:
     app.setDesktopFileName("shs-pruefungsprogramm")
     meldungsfenster_als_klartext()  # S-1: Namen in Meldungen nie als HTML
     fehlerfenster_einrichten(VERSION)  # unerwartete Fehler zusätzlich als Fenster zeigen
+    qt_meldungen_protokollieren()
     deutsche_qt_texte_laden(app)
     _darstellung_anwenden(app)
     # Reste früherer Demoprüfungen (z. B. eine beim Beenden noch geöffnete PDF) wegräumen.

@@ -71,7 +71,7 @@ from db import (
 )
 from desktop_dialoge import TeilnehmerDialog, VeranstaltungsDialog
 from shs_core import stechen_gruppen
-from desktop_gemeinsam import _ausdrucke_ordner, _export_dateiname, _pfad_anzeige
+from desktop_gemeinsam import _ausdrucke_ordner, _export_dateiname, _fehlertext, _pfad_anzeige, _url_oeffnen
 
 #: Präfix der Temp-Ordner - alte Reste (z. B. nach einem Absturz) werden beim nächsten
 #: Start aufgeräumt, siehe demo_reste_aufraeumen.
@@ -570,7 +570,12 @@ class DemoTour(QObject):
         self._offen.clear()
         self._timer.stop()
         self._countdown_stoppen()
-        text = str(exc) if isinstance(exc, DemoFehler) else f"Dieser Schritt ließ sich nicht vorführen: {exc}"
+        if isinstance(exc, DemoFehler):
+            text = str(exc)
+        else:
+            # Desktop-Prüfung 14.10.2026 (Teil 10 Nr. 6): Datei-/Datenbankfehler in Klartext,
+            # Programmfehler samt Traceback ins Absturzprotokoll und mit ihrem Typ.
+            text = f"Dieser Schritt ließ sich nicht vorführen.\n\n{_fehlertext(exc)}"
         if _lebt(self._panel):
             self._panel.fehler(text + "\n\nBitte „Beenden“ drücken – der Demo-Termin wird dabei gelöscht.")
 
@@ -653,7 +658,7 @@ class DemoTour(QObject):
     def _pdf_oeffnen(self, ziel: str) -> None:
         # Beim Anschauen der PDF soll die Demo nicht weiterlaufen.
         self._countdown_anhalten()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(ziel))
+        _url_oeffnen(self._panel if _lebt(self._panel) else None, QUrl.fromLocalFile(ziel), _pfad_anzeige(ziel))
 
     def eventFilter(self, obj, event) -> bool:  # type: ignore[override]
         """Tippt oder klickt der Anwender selbst in einen Dialog der Demo (Termin in

@@ -1683,7 +1683,7 @@ def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qt
     assert dialog._download_btn.isVisible()
 
     geoeffnete_urls = []
-    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()))
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()) or True)
     qtbot.mouseClick(dialog._download_btn, Qt.MouseButton.LeftButton)
     assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
 
@@ -1736,7 +1736,7 @@ def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugrif
     aufgerufen = {}
     monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: aufgerufen.setdefault("ja", True))
     geoeffnete_urls = []
-    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()))
+    monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()) or True)
 
     seite_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Releases-Seite im Browser öffnen")
     qtbot.mouseClick(seite_btn, Qt.MouseButton.LeftButton)
@@ -1881,6 +1881,71 @@ def test_klartext_fuer_typische_datenbankfehler():
     assert "(Technisch: database is locked)" in _klartext_fehler(_sqlite3.OperationalError("database is locked"))
     assert _klartext_fehler(_sqlite3.OperationalError("no such table: x")) == "no such table: x"
     assert _klartext_fehler(ValueError("readonly")) == "readonly"
+
+
+def test_klartext_fuer_typische_dateifehler():
+    """Teil 9 Nr. 6, Teil 5 Nr. 4: Dateifehler in Klartext, Pfad ohne doppelte Backslashes."""
+    import errno
+
+    from desktop_gemeinsam import _klartext_fehler
+
+    pfad = os.path.join("C:" + os.sep, "Ordner", "liste.csv")
+    gesperrt = _klartext_fehler(PermissionError(errno.EACCES, "Permission denied", pfad))
+    assert "in einem anderen Programm geöffnet" in gesperrt
+    assert f"(Technisch: Permission denied: {os.path.normpath(pfad)})" in gesperrt
+    assert "\\\\" not in gesperrt
+    assert "nicht gefunden" in _klartext_fehler(FileNotFoundError(errno.ENOENT, "No such file", pfad))
+    assert _klartext_fehler(OSError(errno.ENOSPC, "No space left on device")).startswith("Der Datenträger ist voll.")
+    assert _klartext_fehler(OSError(errno.EIO, "I/O error")) == "I/O error"
+
+
+def test_fehlertext_protokolliert_nur_programmfehler(monkeypatch):
+    """Teil 9 Nr. 5: breite Fänger nennen bei Programmfehlern den Typ und schreiben sie ins
+    Protokoll; Datei- und Datenbankfehler sind erwartbar."""
+    import desktop_gemeinsam
+
+    protokolliert = []
+    monkeypatch.setattr(desktop_gemeinsam, "fehler_protokollieren", protokolliert.append)
+    programmfehler = KeyError("Albers")
+    text = desktop_gemeinsam._fehlertext(programmfehler)
+    assert "KeyError: 'Albers'" in text and "Diagnose kopieren" in text
+    assert protokolliert == [programmfehler]
+
+    assert "anderen Programm" in desktop_gemeinsam._fehlertext(PermissionError(13, "Permission denied"))
+    assert protokolliert == [programmfehler]
+
+
+def test_pdf_exportfehler_unterscheidet_datei_und_programmfehler(qtbot, monkeypatch):
+    """Teil 9 Nr. 5: nur ein Dateifehler wird auf Zielpfad/geöffnete Datei geschoben."""
+    import desktop_gemeinsam
+
+    meldungen, protokolliert = [], []
+    monkeypatch.setattr(desktop_gemeinsam.QMessageBox, "critical", lambda *a, **k: meldungen.append(a[2]))
+    monkeypatch.setattr(desktop_gemeinsam, "fehler_protokollieren", protokolliert.append)
+
+    desktop_gemeinsam._pdf_export_fehler_anzeigen(None, PermissionError(13, "Permission denied", "x.pdf"))
+    assert "konnte nicht gespeichert werden" in meldungen[-1] and "anderen Programm" in meldungen[-1]
+    assert protokolliert == []
+
+    desktop_gemeinsam._pdf_export_fehler_anzeigen(None, KeyError("Albers"))
+    assert "Programmfehler (KeyError: 'Albers')" in meldungen[-1]
+    assert "anderen Programm" not in meldungen[-1] and len(protokolliert) == 1
+
+
+def test_url_oeffnen_meldet_fehlschlag(qtbot, monkeypatch):
+    """Teil 9 Nr. 10: liefert openUrl False, kommt eine Meldung mit dem Pfad."""
+    import desktop_gemeinsam
+
+    meldungen = []
+    monkeypatch.setattr(desktop_gemeinsam.QMessageBox, "warning", lambda *a, **k: meldungen.append(a[2]))
+    monkeypatch.setattr(desktop_gemeinsam.QDesktopServices, "openUrl", lambda url: False)
+    assert desktop_gemeinsam._url_oeffnen(None, desktop_gemeinsam.QUrl("https://example.org"),
+                                          "https://example.org") is False
+    assert meldungen and "https://example.org" in meldungen[0]
+
+    monkeypatch.setattr(desktop_gemeinsam.QDesktopServices, "openUrl", lambda url: True)
+    assert desktop_gemeinsam._url_oeffnen(None, desktop_gemeinsam.QUrl("https://example.org"), "x") is True
+    assert len(meldungen) == 1
 
 
 def test_zeitplan_schreibfehler_beim_anzeigen_und_startzeit(qtbot, conn, monkeypatch):
@@ -3416,7 +3481,8 @@ def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monk
     gemeldet = []
     monkeypatch.setattr("app.TerminImportDialog", _Stub)
     monkeypatch.setattr("app.importiere_teilnehmer_stammdaten", scheitert)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc: gemeldet.append(str(exc)))
+    monkeypatch.setattr("app._db_fehler_anzeigen",
+                        lambda parent, exc, einleitung="": gemeldet.append((str(exc), einleitung)))
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
     aktualisiert = []
@@ -3424,7 +3490,8 @@ def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monk
 
     tab._aus_anderem_termin_importieren()
 
-    assert gemeldet == ["database is locked"]
+    assert [exc for exc, _ in gemeldet] == ["database is locked"]
+    assert "Import aus dem anderen Termin wurde abgebrochen" in gemeldet[0][1]
     assert aktualisiert
 
 
@@ -4336,6 +4403,9 @@ def test_absturzprotokoll_schreibt_start_und_unbehandelte_fehler(tmp_path, monke
 
     pfad = desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=tmp_path)
     assert pfad == alt
+    # Teil 9 Nr. 4: die zu große Datei wird zur .alt-Datei statt geleert zu werden.
+    rotiert = tmp_path / desktop_gemeinsam.ABSTURZPROTOKOLL_ALT_DATEINAME
+    assert rotiert.read_text(encoding="utf-8") == "x" * 500
     assert aktiviert["file"] is desktop_gemeinsam._absturzprotokoll_datei
 
     try:
@@ -4348,6 +4418,83 @@ def test_absturzprotokoll_schreibt_start_und_unbehandelte_fehler(tmp_path, monke
     assert "x" * 500 not in inhalt
     assert "Version 9.9.9" in inhalt
     assert "RuntimeError: Testfehler P1" in inhalt
+
+    # "Diagnose kopieren" nimmt kurz nach der Rotation das Ende der alten Datei mit.
+    assert "x" * 500 in desktop_gemeinsam.diagnose_text("9.9.9")
+
+
+def test_absturzprotokoll_zaehlt_wiederholungen_und_begrenzt_den_lauf(tmp_path, monkeypatch):
+    """Teil 9 Nr. 4: ein wiederkehrender gleicher Fehler steht nur einmal im Protokoll (beim
+    Programmende mit Anzahl), und ein Lauf schreibt höchstens _PROTOKOLL_LAUF_MAX_BYTES."""
+    import desktop_gemeinsam
+
+    datei = open(tmp_path / "protokoll.txt", "w", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", datei)
+    for _ in range(250):
+        desktop_gemeinsam.fehler_protokollieren(KeyError("Albers"))
+    desktop_gemeinsam._protokoll_eintrag("Qt-Meldung", "QPainter::begin: Paint device returned engine == 0")
+    desktop_gemeinsam._wiederholungen_schreiben(datei)
+
+    monkeypatch.setattr(desktop_gemeinsam, "_PROTOKOLL_LAUF_MAX_ZEICHEN", 2000)
+    for nummer in range(100):
+        desktop_gemeinsam._protokoll_eintrag("Qt-Meldung", f"Warnung {nummer} " + "y" * 50)
+    datei.close()
+
+    inhalt = (tmp_path / "protokoll.txt").read_text(encoding="utf-8")
+    assert inhalt.count("KeyError: 'Albers'") == 2  # Eintrag + Zeile in der Zusammenfassung
+    assert "249× wiederholt: KeyError: 'Albers'" in inhalt
+    assert "QPainter::begin" in inhalt
+    assert "Protokoll für diesen Programmlauf voll, weitere Einträge" in inhalt
+    assert "Warnung 99" not in inhalt and len(inhalt) < 3000
+
+
+def test_absturzprotokoll_qt_meldungen_eigene_grenze_und_kein_selbstblock(tmp_path, monkeypatch):
+    """Verifikation A9: Qt-Meldungen verdrängen keinen späteren Fehler, und ein Eintrag, der
+    während des Schreibens im selben Thread entsteht, blockiert nicht."""
+    import desktop_gemeinsam
+
+    datei = open(tmp_path / "protokoll.txt", "w", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", datei)
+    monkeypatch.setattr(desktop_gemeinsam, "_PROTOKOLL_QT_MAX_ZEICHEN", 500)
+    for nummer in range(50):
+        desktop_gemeinsam._protokoll_eintrag("Qt-Meldung", f"Warnung {nummer}", qt_meldung=True)
+
+    class _Schreiber:
+        """Simuliert eine Qt-Warnung, die beim Schreiben im selben Thread entsteht."""
+        def write(self, text):
+            desktop_gemeinsam._protokoll_eintrag("Qt-Meldung", "verschachtelt", qt_meldung=True)
+            datei.write(text)
+
+        def flush(self):
+            datei.flush()
+
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", _Schreiber())
+    desktop_gemeinsam.fehler_protokollieren(RuntimeError("später echter Fehler"))
+    datei.close()
+    inhalt = (tmp_path / "protokoll.txt").read_text(encoding="utf-8")
+    assert "weitere Qt-Meldungen entfallen" in inhalt and "Warnung 49" not in inhalt
+    assert "RuntimeError: später echter Fehler" in inhalt and "verschachtelt" not in inhalt
+
+
+def test_qt_warnungen_landen_im_absturzprotokoll(qtbot, tmp_path, monkeypatch):
+    """Teil 9 Nr. 8: Qt-Warnungen gehen im installierten Programm nicht mehr verloren;
+    Debug-Meldungen bleiben draußen."""
+    from PySide6.QtCore import qDebug, qInstallMessageHandler, qWarning
+
+    import desktop_gemeinsam
+
+    datei = open(tmp_path / "protokoll.txt", "w", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_datei", datei)
+    alter_handler = desktop_gemeinsam.qt_meldungen_protokollieren()
+    try:
+        qWarning("Could not parse application stylesheet")
+        qDebug("nur Debug")
+    finally:
+        qInstallMessageHandler(alter_handler)
+    datei.close()
+    inhalt = (tmp_path / "protokoll.txt").read_text(encoding="utf-8")
+    assert "Qt-Meldung" in inhalt and "Could not parse application stylesheet" in inhalt
+    assert "nur Debug" not in inhalt
 
 
 def test_absturzprotokoll_ohne_schreibrecht_startet_trotzdem(tmp_path):
@@ -4550,7 +4697,7 @@ def test_fehlerfenster_protokoll_ordner_oeffnen(qtbot, tmp_path, monkeypatch):
     protokoll.write_text("", encoding="utf-8")
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
     gezeigt = []
-    monkeypatch.setattr(desktop_gemeinsam, "_ordner_zeigen", gezeigt.append)
+    monkeypatch.setattr(desktop_gemeinsam, "_ordner_zeigen", lambda pfad, parent=None: gezeigt.append(pfad))
 
     def exec_(box):
         next(b for b in box.buttons() if b.text() == "Protokoll-Ordner öffnen").click()
@@ -4578,7 +4725,7 @@ def test_version_dialog_diagnose_kopieren_und_protokoll_ordner(qtbot, tmp_path, 
     protokoll.write_text("", encoding="utf-8")
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
     gezeigt = []
-    monkeypatch.setattr(app, "_ordner_zeigen", gezeigt.append)
+    monkeypatch.setattr(app, "_ordner_zeigen", lambda pfad, parent=None: gezeigt.append(pfad))
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     ordner_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Protokoll-Ordner öffnen")
@@ -5314,6 +5461,16 @@ def test_formular_import_ki_weg_eingeklappt_und_vorlage(qtbot, conn, monkeypatch
     assert ziel.read_text(encoding="utf-8-sig").strip() == ";".join(CSV_IMPORT_SPALTEN)
     assert gespeichert_meldungen[-1][1] == "Vorlage gespeichert"
 
+    # Teil 5 Nr. 4: in Excel geöffnete Datei -> Hinweis auf das andere Programm.
+    def gesperrt(pfad):
+        raise PermissionError(13, "Permission denied", pfad)
+
+    warnungen = []
+    monkeypatch.setattr("app.schreibe_csv_vorlage", gesperrt)
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[2]))
+    next(b for b in tab.findChildren(QPushButton) if b.text() == "Leere Vorlage (CSV) speichern…").click()
+    assert "in einem anderen Programm geöffnet" in warnungen[0] and "\\\\" not in warnungen[0]
+
 
 def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(qtbot, termin, monkeypatch, tmp_path, gespeichert_meldungen):
     """UX-Test 02.10.2026, N1 + U10: Export im Reiter "Export" (Excel-freundlich) und
@@ -5330,6 +5487,15 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
     assert ziel.read_bytes().startswith(b"\xef\xbb\xbf")
     assert "Müller" in ziel.read_text(encoding="utf-8-sig")
     assert gespeichert_meldungen[-1][1] == "Teilnehmerliste gespeichert"
+
+    def gesperrt(*_a):
+        raise PermissionError(13, "Permission denied", str(ziel))
+
+    fehler = []
+    monkeypatch.setattr("app.exportiere_teilnehmer_csv", gesperrt)
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: fehler.append(a[2]))
+    next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste speichern (CSV, für Excel)…").click()
+    assert "in einem anderen Programm geöffnet" in fehler[0]
 
     # Dieselbe Datei im Reiter "Teilnehmer" wieder einlesen -> wird erkannt, kein zweiter
     # Müller (UX-Nachtest N1), und die Meldung nennt ihn als bereits vorhanden.
@@ -6060,7 +6226,14 @@ def test_demo_kein_countdown_im_letzten_schritt_und_nach_fehler(qtbot, termin, d
     tour.beenden()
 
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
-    tour._fehler_zeigen(RuntimeError("Testfehler"))
+    protokolliert, angezeigt = [], []
+    monkeypatch.setattr("desktop_gemeinsam.fehler_protokollieren", protokolliert.append)
+    panel_fehler = tour._panel.fehler
+    monkeypatch.setattr(tour._panel, "fehler", lambda text: (angezeigt.append(text), panel_fehler(text)))
+    fehler = KeyError("Albers")
+    tour._fehler_zeigen(fehler)
+    # Teil 10 Nr. 6: unerwartete Fehler mit Typ anzeigen und ins Protokoll.
+    assert protokolliert == [fehler] and "KeyError: 'Albers'" in angezeigt[0]
     assert not tour._countdown.isActive() and not tour._panel.weiter_btn.isEnabled()
     tour._panel.auto_box.setChecked(False)
     tour._panel.auto_box.setChecked(True)

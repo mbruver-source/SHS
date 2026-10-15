@@ -11,9 +11,12 @@ pdf_export); keines dieser Module importiert app.
 
 from __future__ import annotations
 
+import atexit
 import os
 import sqlite3
 import sys
+import threading
+from pathlib import Path
 
 from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
@@ -106,14 +109,32 @@ def _pfad_anzeige(pfad: str) -> str:
     return os.path.normpath(pfad)
 
 
-def _ordner_zeigen(pfad: str) -> None:
+def _url_oeffnen(parent, url: QUrl, anzeige: str) -> bool:
+    """Öffnet `url` mit dem Standardprogramm. Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 10):
+    QDesktopServices.openUrl meldet einen Fehlschlag nur über den Rückgabewert (z. B. Linux
+    ohne xdg-open, keine Anwendung für .pdf/.csv) - dann jetzt eine Meldung mit `anzeige`
+    (Pfad bzw. Adresse) zum Öffnen von Hand, statt dass einfach nichts passiert."""
+    if QDesktopServices.openUrl(url):
+        return True
+    QMessageBox.warning(
+        parent, "Öffnen nicht möglich",
+        f"Es ließ sich kein Programm zum Öffnen starten. Bitte von Hand öffnen:\n\n{anzeige}",
+    )
+    return False
+
+
+def _ordner_zeigen(pfad: str, parent=None) -> None:
     """Öffnet den Explorer mit markierter Datei (Windows) bzw. den Ordner."""
     if sys.platform == "win32" and os.path.isfile(pfad):
         import subprocess
 
-        subprocess.Popen(["explorer", "/select,", _pfad_anzeige(pfad)])
-    else:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(pfad) if os.path.isfile(pfad) else pfad))
+        try:
+            subprocess.Popen(["explorer", "/select,", _pfad_anzeige(pfad)])
+            return
+        except OSError:
+            pass  # Rückfall: den Ordner über Qt öffnen
+    ordner = os.path.dirname(pfad) if os.path.isfile(pfad) else pfad
+    _url_oeffnen(parent, QUrl.fromLocalFile(ordner), _pfad_anzeige(ordner))
 
 
 def _datei_gespeichert_melden(
@@ -133,9 +154,9 @@ def _datei_gespeichert_melden(
     box.setDefaultButton(box.addButton(QMessageBox.Ok))
     box.exec()
     if oeffnen_btn is not None and box.clickedButton() is oeffnen_btn:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(pfad))
+        _url_oeffnen(parent, QUrl.fromLocalFile(pfad), _pfad_anzeige(pfad))
     elif box.clickedButton() is ordner_btn:
-        _ordner_zeigen(pfad)
+        _ordner_zeigen(pfad, parent)
 
 
 # Startordner der Import-Dialoge: zuerst "Downloads" (dort landen per E-Mail empfangene
@@ -175,11 +196,14 @@ def _pdf_speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschla
 
 
 def _pdf_export_fehler_anzeigen(parent, exc: Exception) -> None:
-    QMessageBox.critical(
-        parent, "PDF konnte nicht erstellt werden",
-        f"Der Export ist fehlgeschlagen (z.B. Zielpfad nicht schreibbar oder Datei "
-        f"gerade in einem anderen Programm geöffnet):\n\n{exc}",
-    )
+    """Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 5): Nur ein Dateifehler liegt am Zielpfad bzw.
+    an einer geöffneten Datei; jeder andere Fehler ist ein Programmfehler und kommt ins
+    Absturzprotokoll (siehe _fehlertext)."""
+    if isinstance(exc, OSError):
+        text = f"Die PDF-Datei konnte nicht gespeichert werden.\n\n{_klartext_fehler(exc)}"
+    else:
+        text = f"Das PDF konnte nicht erstellt werden.\n\n{_fehlertext(exc)}"
+    QMessageBox.critical(parent, "PDF konnte nicht erstellt werden", text)
 
 
 def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
@@ -347,8 +371,8 @@ def _fehler_anzeigen(parent, exc: Exception) -> None:
     )
 
 
-# Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 6, Grundbaustein): typische SQLite-Fehlertexte und
-# ihre Erklärung in Klartext. Erweiterung für Datei-Fehler folgt mit Aufgabe A9.
+# Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 6): typische SQLite-Fehlertexte und ihre Erklärung
+# in Klartext.
 _SQLITE_KLARTEXT = (
     (("readonly",), "Die Termin-Datei ist schreibgeschützt (z. B. schreibgeschützter USB-Stick "
                     "oder Dateieigenschaften „Schreibgeschützt“)."),
@@ -363,16 +387,60 @@ _SQLITE_KLARTEXT = (
 )
 
 
+def _datei_klartext(exc: OSError) -> str | None:
+    """Erklärung zu den erwartbaren Dateifehlern (Teil 9 Nr. 6, Teil 5 Nr. 4)."""
+    import errno
+
+    if exc.errno == errno.ENOSPC:
+        return "Der Datenträger ist voll."
+    if isinstance(exc, PermissionError):
+        return ("Die Datei ist schreibgeschützt oder gerade in einem anderen Programm geöffnet "
+                "(z. B. Excel oder eine PDF-Anzeige). Bitte die Datei dort schließen und es "
+                "erneut versuchen.")
+    if isinstance(exc, FileNotFoundError):
+        return ("Die Datei bzw. der Ordner wurde nicht gefunden (z. B. USB-Stick abgezogen, "
+                "Netzlaufwerk getrennt oder Datei verschoben).")
+    return None
+
+
+def _technischer_text(exc: BaseException) -> str:
+    # str(OSError) zeigt den Pfad als repr() - unter Windows mit doppelten Backslashes
+    # (Teil 5 Nr. 4); deshalb Fehlertext und Pfad einzeln.
+    if isinstance(exc, OSError) and exc.strerror:
+        if isinstance(exc.filename, (str, bytes, os.PathLike)):
+            return f"{exc.strerror}: {_pfad_anzeige(os.fsdecode(exc.filename))}"
+        return exc.strerror
+    return str(exc) or type(exc).__name__
+
+
 def _klartext_fehler(exc: BaseException) -> str:
-    """Verständliche Beschreibung eines erwartbaren Fehlers; der technische Text steht in
-    Klammern dahinter. Unbekannte Fehler bleiben beim technischen Text."""
-    technisch = str(exc) or type(exc).__name__
+    """Verständliche Beschreibung eines erwartbaren Datei- oder Datenbankfehlers; der
+    technische Text steht in Klammern dahinter. Unbekannte Fehler bleiben beim technischen
+    Text."""
+    technisch = _technischer_text(exc)
+    erklaerung = None
     if isinstance(exc, sqlite3.Error):
         klein = technisch.lower()
-        for stichworte, erklaerung in _SQLITE_KLARTEXT:
-            if any(wort in klein for wort in stichworte):
-                return f"{erklaerung}\n\n(Technisch: {technisch})"
+        erklaerung = next((e for stichworte, e in _SQLITE_KLARTEXT
+                           if any(wort in klein for wort in stichworte)), None)
+    elif isinstance(exc, OSError):
+        erklaerung = _datei_klartext(exc)
+    if erklaerung:
+        return f"{erklaerung}\n\n(Technisch: {technisch})"
     return technisch
+
+
+def _fehlertext(exc: BaseException) -> str:
+    """Text für die Meldung eines breiten Fängers (`except Exception`). Desktop-Prüfung
+    14.10.2026 (Teil 9 Nr. 5, Teil 10 Nr. 6): Datei- und Datenbankfehler sind erwartbar und
+    erscheinen in Klartext; alles andere ist ein Programmfehler - der kommt samt Traceback
+    ins Absturzprotokoll und erscheint mit seinem Typ (bei KeyError stünde sonst nur der
+    Schlüssel da)."""
+    if isinstance(exc, (OSError, sqlite3.Error)):
+        return _klartext_fehler(exc)
+    fehler_protokollieren(exc)
+    return (f"Programmfehler ({type(exc).__name__}: {exc}). Bitte über den Knopf „Version“ → "
+            "„Diagnose kopieren“ melden.")
 
 
 def _db_fehler_anzeigen(parent, exc: Exception,
@@ -610,7 +678,17 @@ def deutsche_qt_texte_laden(app) -> bool:
 # sys.excepthook, harte Abstürze (z. B. Speicherfehler in Qt) über faulthandler. Bei jedem
 # Start eine kurze Startzeile, damit sich ein späterer Absturz zeitlich zuordnen lässt.
 ABSTURZPROTOKOLL_DATEINAME = "absturzprotokoll.txt"
+# Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 4): Ist das Protokoll beim Start größer, wird es zur
+# ".alt"-Datei (statt geleert zu werden) - die Ursache bleibt so für "Diagnose kopieren"
+# erhalten. Im laufenden Programm schreibt ein Lauf höchstens _PROTOKOLL_LAUF_MAX_ZEICHEN
+# (Qt-Meldungen eigens höchstens _PROTOKOLL_QT_MAX_ZEICHEN, damit sie keinen späteren
+# Fehler verdrängen), und ein wiederkehrender gleicher Eintrag (Fehler in paintEvent/Timer,
+# Qt-Warnung) wird nur gezählt.
+ABSTURZPROTOKOLL_ALT_DATEINAME = "absturzprotokoll.alt.txt"
 _ABSTURZPROTOKOLL_MAX_BYTES = 1_000_000
+_PROTOKOLL_LAUF_MAX_ZEICHEN = 1_000_000
+_PROTOKOLL_QT_MAX_ZEICHEN = 200_000
+_PROTOKOLL_MAX_EINTRAGSARTEN = 1000
 # faulthandler schreibt im Absturzfall direkt in diese (offen gehaltene) Datei.
 _absturzprotokoll_datei = None
 # Pfad der Datei für "Diagnose kopieren" und "Protokoll-Ordner öffnen" (None: nicht eingerichtet).
@@ -631,9 +709,15 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
 
     try:
         pfad = Path(ordner if ordner is not None else termine_ordner().parent) / ABSTURZPROTOKOLL_DATEINAME
-        # Größe begrenzen: wird die Datei zu groß, beginnt sie von vorn.
-        modus = "w" if pfad.exists() and pfad.stat().st_size > _ABSTURZPROTOKOLL_MAX_BYTES else "a"
-        datei = open(pfad, modus, encoding="utf-8")
+        if pfad.exists() and pfad.stat().st_size > _ABSTURZPROTOKOLL_MAX_BYTES:
+            try:
+                os.replace(pfad, pfad.with_name(ABSTURZPROTOKOLL_ALT_DATEINAME))
+            except OSError:
+                # Lässt sich nicht umbenennen (unter Windows z. B., weil ein zweites
+                # Programmfenster die Datei offen hält): weiter anhängen statt die Einträge
+                # des anderen Fensters zu löschen.
+                pass
+        datei = open(pfad, "a", encoding="utf-8")
         datei.write(f"--- Start {datetime.datetime.now():%Y-%m-%d %H:%M:%S}, Version {version} ---\n")
         datei.flush()
     except OSError:
@@ -642,16 +726,12 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
     _absturzprotokoll_datei = datei
     _absturzprotokoll_pfad = pfad
     faulthandler.enable(file=datei, all_threads=True)
+    atexit.register(_wiederholungen_schreiben, datei)
 
     bisheriger_hook = sys.excepthook
 
     def _protokollieren(typ, wert, tb):
-        try:
-            datei.write(f"Unbehandelter Fehler {datetime.datetime.now():%Y-%m-%d %H:%M:%S}:\n")
-            datei.write("".join(traceback.format_exception(typ, wert, tb)))
-            datei.flush()
-        except (OSError, ValueError):
-            pass
+        _protokoll_eintrag("Unbehandelter Fehler", "".join(traceback.format_exception(typ, wert, tb)))
         try:
             bisheriger_hook(typ, wert, tb)
         except Exception:  # noqa: BLE001 - ohne Konsole (sys.stderr None) darf das nicht stören
@@ -661,22 +741,111 @@ def absturzprotokoll_einrichten(version: str, ordner=None):
     return pfad
 
 
-def fehler_protokollieren(exc: BaseException) -> None:
-    """Schreibt einen abgefangenen Fehler samt Traceback ins Absturzprotokoll (sofern
-    eingerichtet) - für Stellen, die einen Fehler selbst melden, damit er trotzdem in
-    „Diagnose kopieren“ auftaucht."""
+# Zustand des Protokolls im laufenden Programm (gehört zu der Datei in "datei"; wechselt
+# sie, beginnt die Zählung neu): geschriebene Zeichen (getrennt für Qt-Meldungen) und je
+# Eintrag die Zahl der ausgelassenen Wiederholungen. Die Sperre ist wiederbetretbar, und
+# "aktiv" verwirft einen Eintrag, der im selben Thread während des Schreibens entsteht
+# (z. B. eine Qt-Warnung aus einem Destruktor, den die Speicherbereinigung gerade auslöst) -
+# sonst blockierte sich der Thread selbst.
+_protokoll_sperre = threading.RLock()
+_protokoll_zustand: dict = {"datei": None, "zeichen": {}, "eintraege": {}, "aktiv": False}
+
+
+def _protokoll_eintrag(kopf: str, inhalt: str, *, qt_meldung: bool = False) -> None:
+    """Schreibt einen Eintrag ins Absturzprotokoll (sofern eingerichtet). Ein bereits
+    geschriebener gleicher Eintrag wird nur gezählt (siehe _wiederholungen_schreiben), und
+    ist das Höchstmaß je Lauf erreicht, entfällt der Rest (Teil 9 Nr. 4)."""
     import datetime
-    import traceback
 
     datei = _absturzprotokoll_datei
     if datei is None:
         return
+    with _protokoll_sperre:
+        zustand = _protokoll_zustand
+        if zustand["aktiv"]:
+            return
+        zustand["aktiv"] = True
+        try:
+            if zustand["datei"] is not datei:
+                zustand.update(datei=datei, zeichen={}, eintraege={})
+            eintraege = zustand["eintraege"]
+            if inhalt in eintraege:
+                eintraege[inhalt] += 1
+                return
+            if len(eintraege) < _PROTOKOLL_MAX_EINTRAGSARTEN:
+                eintraege[inhalt] = 0
+            grenze = _PROTOKOLL_QT_MAX_ZEICHEN if qt_meldung else _PROTOKOLL_LAUF_MAX_ZEICHEN
+            bisher = zustand["zeichen"].get(qt_meldung, 0)
+            if bisher >= grenze:
+                return
+            text = f"{kopf} {datetime.datetime.now():%Y-%m-%d %H:%M:%S}:\n{inhalt}"
+            if not text.endswith("\n"):
+                text += "\n"
+            if bisher + len(text) > grenze:
+                art = "Qt-Meldungen" if qt_meldung else "Einträge"
+                text = f"--- Protokoll für diesen Programmlauf voll, weitere {art} entfallen ---\n"
+                zustand["zeichen"][qt_meldung] = grenze
+            else:
+                zustand["zeichen"][qt_meldung] = bisher + len(text)
+            try:
+                datei.write(text)
+                datei.flush()
+            except (OSError, ValueError):
+                pass
+        finally:
+            zustand["aktiv"] = False
+
+
+def _wiederholungen_schreiben(datei) -> None:
+    """Beim Programmende: wie oft sich welche Einträge wiederholt haben."""
+    with _protokoll_sperre:
+        zustand = _protokoll_zustand
+        if zustand["datei"] is not datei:
+            return
+        wiederholt = [(n, inhalt) for inhalt, n in zustand["eintraege"].items() if n]
+        zustand["eintraege"] = {}
+    if not wiederholt:
+        return
+    zeilen = ["Wiederholte Einträge in diesem Programmlauf:"]
+    for anzahl, inhalt in sorted(wiederholt, reverse=True)[:20]:
+        letzte = (inhalt.strip().splitlines() or [""])[-1]
+        zeilen.append(f"  {anzahl}× wiederholt: {letzte}")
     try:
-        datei.write(f"Abgefangener Fehler {datetime.datetime.now():%Y-%m-%d %H:%M:%S}:\n")
-        datei.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        datei.write("\n".join(zeilen) + "\n")
         datei.flush()
     except (OSError, ValueError):
         pass
+
+
+def fehler_protokollieren(exc: BaseException) -> None:
+    """Schreibt einen abgefangenen Fehler samt Traceback ins Absturzprotokoll (sofern
+    eingerichtet) - für Stellen, die einen Fehler selbst melden, damit er trotzdem in
+    „Diagnose kopieren“ auftaucht."""
+    import traceback
+
+    _protokoll_eintrag("Abgefangener Fehler",
+                       "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+
+
+def qt_meldungen_protokollieren():
+    """Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 8): Qt-Warnungen und -Fehler (z. B. „Could not
+    parse application stylesheet“) gehen im installierten Programm ohne Konsole sonst
+    verloren - jetzt landen sie im Absturzprotokoll (Wiederholungen nur gezählt) und, falls
+    vorhanden, weiter auf der Konsole."""
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    protokollieren = (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg)
+
+    def _qt_meldung(art, _kontext, text) -> None:
+        if art in protokollieren:
+            _protokoll_eintrag("Qt-Meldung", text, qt_meldung=True)
+        if sys.stderr is not None:
+            try:
+                print(text, file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+
+    return qInstallMessageHandler(_qt_meldung)
 
 
 def absturzprotokoll_pfad():
@@ -777,6 +946,16 @@ def diagnose_text(version: str, fehler: str | None = None) -> str:
                 ende = datei.read().splitlines()[-_DIAGNOSE_PROTOKOLL_ZEILEN:]
         except (OSError, ValueError):
             ende = ["(nicht lesbar)"]
+        else:
+            # Ist die aktuelle Datei noch kurz (etwa nach der Rotation, Teil 9 Nr. 4), mit dem
+            # Ende der alten Datei auffüllen.
+            if len(ende) < _DIAGNOSE_PROTOKOLL_ZEILEN:
+                try:
+                    with open(Path(pfad).with_name(ABSTURZPROTOKOLL_ALT_DATEINAME),
+                              encoding="utf-8", errors="replace") as alt:
+                        ende = (alt.read().splitlines() + ende)[-_DIAGNOSE_PROTOKOLL_ZEILEN:]
+                except (OSError, ValueError):
+                    pass
     # Der aktuelle Fehler steht meist schon am Ende des Protokolls (der Protokoll-Hook
     # schreibt vorher) - nur gesondert aufführen, wenn er dort fehlt bzw. abgeschnitten ist.
     if fehler and (ende is None or fehler.rstrip() not in "\n".join(ende)):
@@ -825,7 +1004,7 @@ def fehlerfenster_zeigen(version: str, fehler: str, parent=None, programm_endet:
     box.setDefaultButton(box.addButton(QMessageBox.Ok))
     box.exec()
     if ordner_btn is not None and box.clickedButton() is ordner_btn:
-        _ordner_zeigen(str(_absturzprotokoll_pfad))
+        _ordner_zeigen(str(_absturzprotokoll_pfad), parent)
 
 
 _fehlerfenster_offen = False

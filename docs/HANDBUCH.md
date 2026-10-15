@@ -856,7 +856,7 @@ Termin arbeiten geht mit dem Desktop-Programm nicht – dafür gibt es die Web-V
 **Es erscheint „Unerwarteter Fehler“ oder das Programm hat sich ohne Meldung beendet.**
 Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt solche Fehler in die Datei
 `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem Benutzerprofil (neben dem
-Ordner `Termine`). Für eine Fehlermeldung (siehe unten) musst du die Datei nicht suchen:
+Ordner `Termine`); wird sie zu groß, heißt die ältere Fassung `absturzprotokoll.alt.txt`. Für eine Fehlermeldung (siehe unten) musst du die Datei nicht suchen:
 **„Fehlerbericht kopieren“** im Fehlerfenster bzw. **„Diagnose kopieren“** im Fenster
 **„Version“** legt Version, System und das Ende des Protokolls in die Zwischenablage – zum
 Einfügen in die Meldung. Dein Benutzerordner wird dabei durch `~` ersetzt, dein Benutzername

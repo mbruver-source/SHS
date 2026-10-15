@@ -69,6 +69,7 @@ from db_sicherung import (
 from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _fehler_anzeigen,
+    _klartext_fehler,
     _gegenstand_zeile,
     _GEGENSTAND_ZUORDNUNG_FREI,
     _GESCHLECHT_UNBEKANNT,
@@ -769,10 +770,11 @@ class TerminImportDialog(QDialog):
                 text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"
                 eintraege.append((text, t["id"]))
             self._quelle_conn.set_progress_handler(None, 0)
-        except (sqlite3.Error, KeyError, IndexError, TypeError, ValueError) as exc:
+        except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
             self.schliesse_quelle()
             hinweis = QListWidgetItem(
-                f"Die Teilnehmer dieses Termins konnten nicht gelesen werden ({exc}). "
+                "Die Teilnehmer dieses Termins konnten nicht gelesen werden. "
+                f"{_klartext_fehler(exc).replace(chr(10) * 2, ' ')}\n"
                 "Bitte einen anderen Termin wählen."
             )
             hinweis.setFlags(Qt.NoItemFlags)

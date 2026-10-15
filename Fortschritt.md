@@ -6220,3 +6220,37 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
     ohne „None“, Titel nach dem Bearbeiten.
 - **Bekannt, nicht geändert:** Eine sehr große fremde Datei wird beim `quick_check` ganz gelesen;
   das verzögert nur das eigene Programm.
+
+### A9 Fehlerprotokoll und Klartext für Dateien (15.10.2026, Desktop-Prüfung Teil 9, 10 und 5)
+
+- **Klartext für Dateifehler (Teil 9 Nr. 6, Teil 5 Nr. 4):** `_klartext_fehler` erklärt jetzt
+  auch `PermissionError` („schreibgeschützt oder in einem anderen Programm geöffnet, z. B. Excel
+  oder eine PDF-Anzeige“), `FileNotFoundError` und einen vollen Datenträger. Der Pfad erscheint
+  ohne doppelte Backslashes. Genutzt beim CSV-/OMA-Import, beim Speichern der Vorlage, beim
+  CSV-Export, bei Sicherung und Wiederherstellung (auch „teilweise wiederhergestellt“), beim
+  Löschen eines Termins, bei Demo-Startfehlern und im Termin-Import-Dialog. Der PDF-Import meldet
+  eine nicht lesbare Datei nicht mehr als „keine lesbare PDF-Datei“.
+- **Breite Fänger (Teil 9 Nr. 5, Teil 10 Nr. 6):** Neues `_fehlertext`. Datei- und
+  Datenbankfehler kommen in Klartext; alles andere gilt als Programmfehler, kommt samt Traceback
+  ins Absturzprotokoll und erscheint mit seinem Typ (bei `KeyError` stand sonst nur der
+  Schlüssel da) und dem Hinweis auf „Version“ → „Diagnose kopieren“. Die PDF-Meldung schiebt nur
+  noch Dateifehler auf Zielpfad bzw. geöffnete Datei. Die Demo nutzt dasselbe für Fehler in
+  einem Schritt.
+- **Absturzprotokoll (Teil 9 Nr. 4):** Über 1 MB wird es beim Start zu
+  `absturzprotokoll.alt.txt` statt geleert zu werden; „Diagnose kopieren“ füllt mit deren Ende
+  auf. Hält ein zweites Programmfenster die Datei offen, wird weiter angehängt. Im Lauf steht
+  ein gleicher Eintrag nur einmal da (Anzahl beim Programmende), die Menge je Lauf ist begrenzt,
+  für Qt-Meldungen eigens kleiner. Eine wiederbetretbare Sperre plus Merker verhindert, dass ein
+  beim Schreiben entstehender Eintrag den Thread blockiert (Verifikation).
+- **Qt-Warnungen (Teil 9 Nr. 8):** `qt_meldungen_protokollieren` leitet Warnungen und Fehler
+  von Qt ins Protokoll (und weiter auf die Konsole, falls vorhanden).
+- **Öffnen mit Rückmeldung (Teil 9 Nr. 10):** `_url_oeffnen` meldet, wenn sich kein Programm
+  starten ließ, mit Pfad bzw. Adresse zum Öffnen von Hand. Gilt für „PDF öffnen“, „Ordner
+  zeigen“, Ablageort, Releases-Seite und Demo.
+- **Termin-Import (aus Verifikation A3):** Lesefehler der Quelle nennen jetzt „Der Import aus
+  dem anderen Termin wurde abgebrochen …“ statt „Die Änderung konnte nicht gespeichert werden“.
+- **Tests:** Dateifehler-Klartext, `_fehlertext`, PDF-Fehlermeldung, `_url_oeffnen`, Rotation und
+  Diagnose, Wiederholungen und Grenzen, Qt-Meldungen, keine Selbstblockade, Vorlage und
+  CSV-Export bei gesperrter Datei, Demo-Fehler, Termin-Import-Einleitung.
+- **Bekannt, nicht geändert:** „Sicherung auswählen“ fängt kein `OSError` (folgt mit A11).
+  Bei `KeyError` u. Ä. im Termin-Import-Dialog steht weiter nur der Schlüssel im Hinweis.
