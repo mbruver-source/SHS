@@ -6596,3 +6596,9 @@ Entscheidungen vorab abgestimmt.
 - Tests: CSV-Filter und -Vorschlag, Ablageort, Meldung, Status, Programmfehler ohne
   Statusmeldung (Teil 6 Nr. 12); Gegenprobe rot auf dem alten Stand. GUI 345 passed (dieselben
   zwei Umgebungsfälle rot), Unittests OK.
+### Abschluss-QS H1–H3 (15.10.2026)
+
+- `qs-pruefung` über `7023736..HEAD`: Sicherheit und Korrektheit ohne Befund. Wartbarkeit fand
+  einen optionalen Punkt, den die Gegenprüfung bestätigt hat: Modul-Docstring von
+  `desktop_gemeinsam` und Docstring von `_ausdrucke_ordner` nannten nur PDF. Auf Marcos „mach
+  weiter“ korrigiert, nur Kommentare.

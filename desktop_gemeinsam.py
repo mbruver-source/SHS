@@ -1,4 +1,4 @@
-"""Gemeinsame Hilfen der Desktop-Oberfläche: Ablageorte und PDF-Speicherdialoge,
+"""Gemeinsame Hilfen der Desktop-Oberfläche: Ablageorte und Speicherdialoge für PDF und CSV,
 Fehlermeldungen, responsive Schriftgrößen, Tabellen-Hilfsklassen und Spaltenkonstanten
 der Ergebnistabelle, deutsche Qt-Texte, Absturzprotokoll, Fehlerfenster bei unbehandelten
 Fehlern und die kopierbare Diagnose (ohne Benutzerpfad).
@@ -95,8 +95,9 @@ def _export_dateiname(conn, praefix: str) -> str:
 # Termin-Dateien, nach dem Speichern gab es nur eine kleine Statuszeile ("Wo ist das jetzt
 # hin?"), und Importe starteten nicht dort, wo heruntergeladene Dateien liegen.
 def _ausdrucke_ordner(termin_pfad: str) -> str:
-    """Standard-Ablageort für PDFs eines Termins: Unterordner "Ausdrucke/<Termin>" neben
-    der Termin-Datei (Marcos Entscheidung 03.10.2026). Wird erst beim Speichern angelegt."""
+    """Standard-Ablageort für PDFs und Exporte (z. B. die CSV-Teilnehmerliste) eines Termins:
+    Unterordner "Ausdrucke/<Termin>" neben der Termin-Datei (Marcos Entscheidung 03.10.2026).
+    Wird erst beim Speichern angelegt."""
     ordner, dateiname = os.path.split(os.path.abspath(termin_pfad))
     return os.path.join(ordner, "Ausdrucke", os.path.splitext(dateiname)[0])
 
