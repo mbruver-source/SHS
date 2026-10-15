@@ -6337,3 +6337,25 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   statt einer Kopie aus A12. Handbuch (Speicherort, Rückfragen) ergänzt.
 - **Bekannt, nicht geändert:** Das Zukunftsdatum wird mit heute verglichen, nicht mit dem
   Prüfungsdatum.
+
+### A14 Auswertung und Zeitplan (15.10.2026, Desktop-Prüfung Teil 4)
+
+- **Stechen bei nachträglich gewachsener Gruppe (Nr. 1):** kein Code. Marcos Entscheidung
+  (14.10.2026): Je Leistungsklasse und Disziplin gibt es nur ein Stechen, und das erst ganz am
+  Ende – danach kann niemand mehr dazukommen. Der Fall ist damit fachlich ausgeschlossen.
+- **Stechen-Auswahl (Nr. 2):** Einträge und Hinweis nennen Hund und Start-Nr. (eine Person mit
+  zwei Hunden stand sonst zweimal gleich da, gespeichert wurde der falsche); die Auswahl wird
+  über die Position zugeordnet. Ohne Sieger ist „Stechen noch offen“ vorgewählt.
+- **Zeitplan-Startzeit (Nr. 3):** Enter und das Verlassen des Feldes speichern eine gültige
+  Eingabe; vor PDF und automatischer Verteilung wird sie übernommen, eine ungültige verhindert
+  beides mit Meldung. Der Neuaufbau nach dem stillen Speichern wartet, bis die Maustaste
+  losgelassen ist (Verifikation: sonst ging der Klick auf einen Knopf einer Richter-Spalte
+  verloren).
+- **Uhrzeiten (Nr. 6):** Startzeit und Pausen-Wunschzeit werden als HH:MM vereinheitlicht
+  („9:5“ → „09:05“; „9:20“ meldete sonst eine Abweichung, die keine war).
+- **Kleinigkeiten (Nr. 8):** Teilnehmer nur einmal gelesen, Stechen-Gruppen nur einmal berechnet,
+  `_konflikt_hinweise` in `__init__`.
+- **Tests (Nr. 9):** zwei Hunde derselben Person, Vorgabe „offen“, Startzeit per Enter/Verlassen,
+  Vereinheitlichung, ungültige Zeit vor PDF/Verteilen, verzögerter Neuaufbau.
+- **Bekannt, nicht geändert:** `_aktueller_eintrag` berechnet weiter den ganzen Blockplan, und
+  `PauseDialog` legt seine Felder auch beim Bearbeiten an (beides ohne Wirkung auf das Ergebnis).

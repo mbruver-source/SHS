@@ -41,7 +41,7 @@ import sqlite3
 import sys
 import traceback
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QFile, QItemSelectionModel, QRegularExpression, QUrl, Qt, Signal
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QFile, QItemSelectionModel, QRegularExpression, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -2440,6 +2440,17 @@ class AuswertungTab(QWidget):
 
         self.aktualisieren()
 
+    def _stechen_bezeichnung(self, t) -> str:
+        """Name mit Hund und Start-Nr. (Teil 4 Nr. 2), z. B. „Max Muster mit Ali (Nr. 1)“."""
+        text = _vorname_nachname(t.name)
+        hund = self._rufname_hund_je_id.get(str(t.id))
+        nummer = self._startnummer_je_id.get(str(t.id))
+        if hund:
+            text += f" mit {hund}"
+        if nummer is not None:
+            text += f" (Nr. {nummer})"
+        return text
+
     def _stechen_sieger_festlegen(self) -> None:
         """S1: je Gleichstand um Platz 1 den Stechen-Sieger wählen (oder offen lassen)."""
         gruppen = stechen_gruppen(self._fertig)
@@ -2447,21 +2458,21 @@ class AuswertungTab(QWidget):
             QMessageBox.information(self, "Kein Stechen", "Es gibt keinen Gleichstand um Platz 1.")
             return
         offen_text = "Stechen noch offen"
-        eintraege, zuordnung = [], {}
+        # Desktop-Prüfung 14.10.2026 (Teil 4 Nr. 2): Einträge mit Hund und Start-Nr. (eine Person
+        # mit zwei Hunden stand sonst zweimal gleich da) und Zuordnung über die Position statt
+        # über den Text; ohne Sieger ist „noch offen“ vorgewählt.
+        eintraege, zuordnung = [], []
+        aktuell = None
         for lk, gruppe in gruppen.items():
             for t in gruppe:
-                text = f"{lk}: {_vorname_nachname(t.name)} ({t.gesamtpunkte} Punkte)"
-                eintraege.append(text)
-                zuordnung[text] = (lk, int(t.id))
-            text = f"{lk}: {offen_text}"
-            eintraege.append(text)
-            zuordnung[text] = (lk, None)
-        aktuell = next(
-            (i for i, e in enumerate(eintraege)
-             if zuordnung[e][1] is not None and any(
-                 t.stechen == "gewonnen" and int(t.id) == zuordnung[e][1] for g in gruppen.values() for t in g)),
-            0,
-        )
+                if t.stechen == "gewonnen":
+                    aktuell = len(eintraege)
+                eintraege.append(f"{lk}: {self._stechen_bezeichnung(t)} ({t.gesamtpunkte} Punkte)")
+                zuordnung.append((lk, int(t.id)))
+            if aktuell is None:
+                aktuell = len(eintraege)
+            eintraege.append(f"{lk}: {offen_text}")
+            zuordnung.append((lk, None))
         auswahl, ok = QInputDialog.getItem(
             self, "Stechen-Sieger festlegen",
             "Wer hat das Stechen gewonnen? Er wird 1., die anderen Punktgleichen werden 2.",
@@ -2469,7 +2480,7 @@ class AuswertungTab(QWidget):
         )
         if not ok:
             return
-        lk, sieger = zuordnung[auswahl]
+        lk, sieger = zuordnung[eintraege.index(auswahl)]
         try:
             setze_stechen_sieger(self.conn, sieger, [int(t.id) for t in gruppen[lk]])
         except sqlite3.Error as exc:
@@ -2505,8 +2516,9 @@ class AuswertungTab(QWidget):
         self._fertig, self._ausstehend = berechne_auswertung(self.conn)
         # Teilnehmerergebnis (shs_core) kennt keine Startnummer - für die Anzeige/den
         # Filter hier separat aus den Stammdaten nachschlagen.
-        self._startnummer_je_id = {str(t["id"]): t["startnummer"] for t in list_teilnehmer(self.conn)}
-        self._rufname_hund_je_id = {str(t["id"]): t["rufname_hund"] for t in list_teilnehmer(self.conn)}
+        stammdaten = list_teilnehmer(self.conn)
+        self._startnummer_je_id = {str(t["id"]): t["startnummer"] for t in stammdaten}
+        self._rufname_hund_je_id = {str(t["id"]): t["rufname_hund"] for t in stammdaten}
 
         alle_labels = sorted({t.leistungsklasse for t in self._fertig} | {leistungsklasse_label(t) for t in self._ausstehend})
         bisherige_auswahl = self.filter_combo.currentText()
@@ -2603,11 +2615,12 @@ class AuswertungTab(QWidget):
         ]
         # S1 (Marco 03.10.2026): Gleichstand um Platz 1 -> Stechen.
         sichtbare_lk = set(von_je_lk)
-        gruppen = {lk: g for lk, g in stechen_gruppen(self._fertig).items() if lk in sichtbare_lk}
-        self.stechen_btn.setEnabled(bool(stechen_gruppen(self._fertig)))
+        alle_gruppen = stechen_gruppen(self._fertig)
+        gruppen = {lk: g for lk, g in alle_gruppen.items() if lk in sichtbare_lk}
+        self.stechen_btn.setEnabled(bool(alle_gruppen))
         von_hinweise = [
             f"Stechen nötig in {lk}: "
-            + ", ".join(_vorname_nachname(t.name) for t in g)
+            + ", ".join(self._stechen_bezeichnung(t) for t in g)
             + f" ({g[0].gesamtpunkte} Punkte) – danach „Stechen-Sieger festlegen…“."
             for lk, g in gruppen.items() if all(t.stechen == "offen" for t in g)
         ] + von_hinweise
@@ -2764,6 +2777,12 @@ class ZeitplanTab(QWidget):
         self.zeitplan_start.setMaximumWidth(70)
         start_speichern_btn = QPushButton("Startzeit speichern")
         start_speichern_btn.clicked.connect(self._start_speichern)
+        # Desktop-Prüfung 14.10.2026 (Teil 4 Nr. 3): Enter speichert, und eine gültige Eingabe
+        # wird beim Verlassen des Feldes übernommen - sonst setzte der nächste Neuaufbau sie
+        # still zurück bzw. das PDF begann zur alten Zeit.
+        self.zeitplan_start.returnPressed.connect(self._start_speichern)
+        self.zeitplan_start.editingFinished.connect(lambda: self._start_uebernehmen(still=True))
+        self._konflikt_hinweise: dict[tuple, str] = {}
 
         self.standard_dauer = QSpinBox()
         self.standard_dauer.setRange(1, 240)
@@ -3104,7 +3123,7 @@ class ZeitplanTab(QWidget):
             text = f"      {zeit}  Nr. {startnr}  {t['nachname']}, {t['vorname']} ({t['rufname_hund']})"
         hinweis = None
         if zeile["typ"] == "pruefung" and zeile.get("teilnehmer") is not None:
-            hinweis = getattr(self, "_konflikt_hinweise", {}).get((zeile["eintrag_id"], zeile["teilnehmer"]["id"]))
+            hinweis = self._konflikt_hinweise.get((zeile["eintrag_id"], zeile["teilnehmer"]["id"]))
         if hinweis:
             text = "⚠ " + text
         item = QListWidgetItem(text)
@@ -3118,21 +3137,52 @@ class ZeitplanTab(QWidget):
     # --- Aktionen: Richter -----------------------------------------------------
 
     def _start_speichern(self) -> None:
+        self._start_uebernehmen(still=False)
+
+    def _start_uebernehmen(self, still: bool) -> bool:
+        """Speichert die Startzeit aus dem Feld, falls sie von der gespeicherten abweicht, in
+        einheitlicher Schreibweise HH:MM (Teil 4 Nr. 6: „9:5“ wurde sonst so gespeichert).
+        Liefert False bei ungültiger Eingabe; `still`: dann ohne Meldung (beim Verlassen des
+        Feldes)."""
         text = self.zeitplan_start.text().strip()
         try:
-            datetime.datetime.strptime(text, "%H:%M")
+            zeit = datetime.datetime.strptime(text, "%H:%M").strftime("%H:%M")
         except ValueError:
-            QMessageBox.warning(
-                self, "Ungültige Uhrzeit",
-                "Bitte die Zeitplan-Startzeit im Format HH:MM angeben (z.B. 09:00).",
-            )
-            return
+            if not still:
+                QMessageBox.warning(
+                    self, "Ungültige Uhrzeit",
+                    "Bitte die Zeitplan-Startzeit im Format HH:MM angeben (z.B. 09:00).",
+                )
+                self.zeitplan_start.setFocus()
+            return False
         try:
-            _aktualisiere_veranstaltung_feld(self.conn, zeitplan_start=text)
+            gespeichert = (get_veranstaltung(self.conn) or {}).get("zeitplan_start") or "09:00"
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
-            return
+            return False
+        if zeit == gespeichert and text == zeit:
+            if not still:
+                self.status_label.setText("Zeitplan-Startzeit gespeichert.")
+            return True
+        try:
+            _aktualisiere_veranstaltung_feld(self.conn, zeitplan_start=zeit)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return False
+        self.zeitplan_start.setText(zeit)
         self.status_label.setText("Zeitplan-Startzeit gespeichert.")
+        if still:
+            # Verifikation A14: Das Feld verliert den Fokus meist durch einen Mausklick - ein
+            # sofortiger Neuaufbau löschte den gerade gedrückten Knopf einer Richter-Spalte.
+            self._nach_mausklick_aktualisieren()
+        else:
+            self.aktualisieren()
+        return True
+
+    def _nach_mausklick_aktualisieren(self) -> None:
+        if QApplication.mouseButtons() != Qt.NoButton:
+            QTimer.singleShot(50, self._nach_mausklick_aktualisieren)
+            return
         self.aktualisieren()
 
     def _richter_hinzufuegen(self) -> None:
@@ -3196,6 +3246,8 @@ class ZeitplanTab(QWidget):
         return True
 
     def _automatisch_verteilen(self) -> None:
+        if not self._start_uebernehmen(still=False):  # Teil 4 Nr. 3: zur eingetippten Startzeit
+            return
         richter = list_zeitplan_richter(self.conn)
         if not richter:
             QMessageBox.information(
@@ -3236,7 +3288,8 @@ class ZeitplanTab(QWidget):
         markiert = liste.currentItem() if liste is not None else None
         try:
             if dialog.fuer_alle.isChecked():
-                wunsch = dialog.uhrzeit.text().strip()
+                # Teil 4 Nr. 6: „9:20“ wie „09:20“ (die Prüfung im Dialog lässt beides zu).
+                wunsch = datetime.datetime.strptime(dialog.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
                 eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte())
                 abweichend = [(name, zeit) for name, zeit in eingefuegt if zeit != wunsch]
                 if abweichend:
@@ -3330,6 +3383,8 @@ class ZeitplanTab(QWidget):
     # --- Export --------------------------------------------------------------
 
     def _pdf_exportieren(self) -> None:
+        if not self._start_uebernehmen(still=False):  # Teil 4 Nr. 3: zur eingetippten Startzeit
+            return
         _zeitplan_pdf_exportieren(self, self.conn, self._ablageort, self.status_label)
 
 

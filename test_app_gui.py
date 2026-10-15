@@ -614,6 +614,68 @@ def test_altversion_oeffnet_im_hauptfenster_mit_allen_reitern(qtbot, tmp_path, v
         conn.close()
 
 
+def test_stechen_gleiche_person_mit_zwei_hunden_und_vorgabe_offen(qtbot, conn, monkeypatch):
+    """Desktop-Prüfung 14.10.2026, Teil 4 Nr. 2: Einträge unterscheidbar, gespeichert wird der
+    gewählte Hund, und ohne Sieger ist „Stechen noch offen“ vorgewählt."""
+    ali = _teilnehmer_anlegen(conn, rufname_hund="Ali", disziplin="Trümmerfeld", startnummer=1)
+    bello = _teilnehmer_anlegen(conn, rufname_hund="Bello", disziplin="Trümmerfeld", startnummer=2)
+    eintragen_ergebnis(conn, ali, "Trümmerfeld", 58, 37)
+    eintragen_ergebnis(conn, bello, "Trümmerfeld", 55, 40)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.aktualisieren()
+    angezeigt = {}
+
+    def waehlen(_p, _t, _l, eintraege, index, _e):
+        angezeigt.update(eintraege=eintraege, index=index)
+        return next(e for e in eintraege if "mit Ali" in e), True
+
+    monkeypatch.setattr("app.QInputDialog.getItem", waehlen)
+    tab._stechen_sieger_festlegen()
+    assert len(set(angezeigt["eintraege"])) == len(angezeigt["eintraege"]) == 3
+    assert angezeigt["eintraege"][angezeigt["index"]].endswith("Stechen noch offen")
+    gewonnen = {r[0] for r in conn.execute(
+        "SELECT t.rufname_hund FROM teilnehmer t JOIN ergebnisse e ON e.teilnehmer_id = t.id WHERE e.stechen_sieger = 1")}
+    assert gewonnen == {"Ali"}
+
+
+def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, monkeypatch):
+    """Teil 4 Nr. 3 und 6: Enter bzw. Verlassen des Feldes speichert, „9:5“ wird „09:05“;
+    eine ungültige Eingabe verhindert PDF und Verteilen."""
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.zeitplan_start.setText("9:5")
+    qtbot.keyClick(tab.zeitplan_start, Qt.Key_Return)
+    assert get_veranstaltung(conn)["zeitplan_start"] == "09:05" and tab.zeitplan_start.text() == "09:05"
+
+    tab.zeitplan_start.setText("10:30")
+    tab.zeitplan_start.editingFinished.emit()
+    assert get_veranstaltung(conn)["zeitplan_start"] == "10:30"
+
+    # Verifikation A14: bei gedrückter Maustaste (Fokuswechsel durch Klick) erst nach dem
+    # Loslassen neu aufbauen, sonst wäre der geklickte Knopf schon gelöscht.
+    aufgebaut = []
+    monkeypatch.setattr(tab, "aktualisieren", lambda: aufgebaut.append(True))
+    gedrueckt = [Qt.LeftButton, Qt.NoButton]
+    monkeypatch.setattr("app.QApplication.mouseButtons", lambda: gedrueckt.pop(0) if len(gedrueckt) > 1 else gedrueckt[0])
+    tab.zeitplan_start.setText("11:00")
+    tab.zeitplan_start.editingFinished.emit()
+    assert aufgebaut == [] and get_veranstaltung(conn)["zeitplan_start"] == "11:00"
+    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=2000)
+    monkeypatch.undo()
+
+    tab.zeitplan_start.setText("25:99")
+    tab.zeitplan_start.editingFinished.emit()  # still: keine Meldung, nichts gespeichert
+    assert get_veranstaltung(conn)["zeitplan_start"] == "11:00"
+    warnungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
+    monkeypatch.setattr("app._zeitplan_pdf_exportieren", lambda *a: pytest.fail("kein PDF erwartet"))
+    tab._pdf_exportieren()
+    tab._automatisch_verteilen()
+    assert warnungen == ["Ungültige Uhrzeit", "Ungültige Uhrzeit"]
+
+
 def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypatch):
     """S1 (Marco 03.10.2026): Gleichstand um Platz 1 -> Hinweis + "Stechen offen", Sieger
     über "Stechen-Sieger festlegen…", Rückfrage vor der Rangliste solange offen."""
@@ -628,7 +690,8 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     platz_spalte = tab.tabelle.columnCount() - 1
     plaetze = {tab.tabelle.item(r, 2).text(): tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
     assert set(plaetze.values()) == {"1. von 2 (Stechen offen)"}
-    assert "Stechen nötig in ED LK 1 Trümmerfeld: A Anna, B Ben (95 Punkte)" in tab.ausstehend_label.text()
+    assert ("Stechen nötig in ED LK 1 Trümmerfeld: A Anna mit Bello (Nr. 1), B Ben mit Bello (Nr. 2) (95 Punkte)"
+            in tab.ausstehend_label.text())
     assert tab.stechen_btn.isEnabled()
 
     # Rückfrage vor dem Druck; "Nein" bricht ab, bevor ein Dateifenster kommt.
