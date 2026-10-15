@@ -33,8 +33,12 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
   nicht, Marco fragen, statt ohne zu bauen. Bei Änderungen an `handbuch_zeitplan.png` die
   `og:image`-Angaben der Website prüfen.
 - `Architektur.md`, `README*.md`.
-- `RELEASE_NOTES.md`: Abschnitt „Was ist neu in X.Y.Z“ für die kommende Version, in
-  verständlicher Sprache für Vereinsmitglieder.
+- `RELEASE_NOTES.md` **ganz neu schreiben**: Die Datei enthält nur den Abschnitt „Was ist neu
+  in X.Y.Z“ der kommenden Version, in verständlicher Sprache für Vereinsmitglieder. Den Abschnitt
+  der Vorversion löschen, nicht darunter stehen lassen. Der Workflow übernimmt die ganze Datei
+  als Text des GitHub-Release, sonst stehen dort auch die Vorversionen (so geschehen bei 1.0.47
+  und 1.0.48, Marco 15.10.2026). Frühere Fassungen bleiben in der Git-Historie und auf den
+  jeweiligen Release-Seiten.
 
 ## 3. Version und Handbuch-PDF
 

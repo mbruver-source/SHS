@@ -6641,3 +6641,16 @@ umschaltbar über einen Knopf. **Entscheidung: vorerst nur Schätzung, nichts um
   1. Glossar abstimmen.
   2. Probe: Grundgerüst und Startdialog (ca. 0,5–0,7 Fenster), um die Schätzung zu prüfen.
   3. Danach Paket für Paket über den Skill `aufgaben-abarbeitung`.
+## Release-Notes enthielten Vorversionen (15.10.2026)
+
+Marco hat bemerkt: Die Release-Seite von 1.0.47 enthielt auch „Was ist neu in 1.0.46“, die von
+1.0.48 zusätzlich 1.0.47 und 1.0.46.
+- **Ursache:** Der Workflow (`build-installer.yml`, `body_path`) übernimmt die ganze Datei
+  `RELEASE_NOTES.md`. Sie sollte vor jedem Build neu geschrieben werden (`README_INSTALLER.md`).
+  Seit 1.0.46 kam stattdessen jeweils ein Abschnitt oben dazu. Auslöser war die mehrdeutige
+  Zeile im Skill `shs-build` („Abschnitt … für die kommende Version“).
+- **Behebung (Marcos Entscheidung):** Die Datei enthält wieder nur die aktuelle Version, jetzt
+  auf 1.0.48 gekürzt. Der Skill `shs-build` (und die Codex-Kopie) sagt jetzt ausdrücklich „ganz
+  neu schreiben, Vorversion löschen“. Am Workflow ändert sich nichts.
+- **Veröffentlichte Releases 1.0.47 und 1.0.48:** Sie sollen auf den eigenen Abschnitt plus die
+  automatische Zeile „Full Changelog“ gekürzt werden. Der Stand dazu steht im folgenden Nachtrag.
