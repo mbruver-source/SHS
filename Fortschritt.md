@@ -6485,3 +6485,22 @@ Die Abschluss-QS (`qs-wartbarkeit`) fand keine Fehler, nur Stilpunkte. Umgesetzt
   Demoprüfung, Startdialog/Datensicherung, PDFs mit neuer Schrift), PDFs einmal ansehen,
   Sichtprüfungen am echten Windows (Design „Hell“ bei „Apps: dunkel“, Erklärfenster der Demo über
   der Taskleiste, Löschen in den Papierkorb) und am Mac (Update-Prüfung über HTTPS).
+
+## Version 1.0.48 (15.10.2026, Build auf Marcos Wunsch „test durch. neues build“)
+
+Bündelt die Abarbeitung der Desktop-Prüfung (Abschnitte A1–A19c oben): verständlichere
+Meldungen, sicheres Öffnen von Termin-Dateien, Rückfragen mit Vorgabe „Nein“, Papierkorb,
+Zweitstart-Rückfrage, Update-Prüfung im Hintergrund, Unicode-Schrift in den PDFs (DejaVu Sans
+Condensed) und mehrere Sicherheitskorrekturen (Details folgen nach dem Release).
+
+- Marco hat die Demo-Version (Klick-Test, `SHS-Demo-vor-Build`) vor dem Build durchgetestet.
+- Offene Punkte vor dem Build mit Marco geklärt: alle acht bewusst offenen Punkte (größere
+  Umbauten aus A19c, CSV-Exportablauf, Zukunftsdatum gegen heute, CSV-Sonderfälle mit „'“,
+  doppelte Nennung DQ/Abbruch, `quick_check` bei sehr großen Dateien, Kopie des geöffneten
+  Termins beim Sichern, Effizienz im Zeitplan) bleiben zurückgestellt.
+- Screenshots mit `tools/screenshots.py` neu (15 Bilder). `handbuch_anmeldeformular` und
+  `bewertungsbogen` zeigen noch die alte PDF-Schrift – Marcos Entscheidung: so lassen.
+- `RELEASE_NOTES.md`, `docs/HANDBUCH.pdf`, Version 1.0.48.
+- Tests lokal: Unittests OK, GUI 342 passed.
+- **Push erst zusammen mit dem Release:** die Commits enthalten Tests zu den
+  Sicherheitskorrekturen.
