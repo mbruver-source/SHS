@@ -6504,3 +6504,6 @@ Condensed) und mehrere Sicherheitskorrekturen (Details folgen nach dem Release).
 - Tests lokal: Unittests OK, GUI 342 passed.
 - **Push erst zusammen mit dem Release:** die Commits enthalten Tests zu den
   Sicherheitskorrekturen.
+- **Nachtrag (CI nach dem Push):** `TestZeitplanPostgres.test_verschieben_rollt_bei_fehler_zurueck`
+  (aus A4) durchlief den Cursor direkt - der PostgreSQL-Wrapper kann nur `fetchall()`. Nur der
+  Test korrigiert, kein Programmcode; kein neues Release nötig.

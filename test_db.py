@@ -2136,8 +2136,9 @@ class TestZeitplan(unittest.TestCase):
         echte = self.conn
 
         def reihenfolge():
+            # fetchall(): der PostgreSQL-Cursor lässt sich nicht direkt durchlaufen (CI).
             return [z[0] for z in echte.execute(
-                "SELECT id FROM zeitplan_eintrag WHERE richter_id = ? ORDER BY reihenfolge", (richter,))]
+                "SELECT id FROM zeitplan_eintrag WHERE richter_id = ? ORDER BY reihenfolge", (richter,)).fetchall()]
 
         vorher = reihenfolge()
 
