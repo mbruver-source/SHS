@@ -6505,5 +6505,6 @@ Condensed) und mehrere Sicherheitskorrekturen (Details folgen nach dem Release).
 - **Push erst zusammen mit dem Release:** die Commits enthalten Tests zu den
   Sicherheitskorrekturen.
 - **Nachtrag (CI nach dem Push):** `TestZeitplanPostgres.test_verschieben_rollt_bei_fehler_zurueck`
-  (aus A4) durchlief den Cursor direkt - der PostgreSQL-Wrapper kann nur `fetchall()`. Nur der
-  Test korrigiert, kein Programmcode; kein neues Release nötig.
+  (aus A4) durchlief den Cursor direkt - der PostgreSQL-Wrapper kann nur `fetchall()` - und
+  griff mit `z[0]` zu; PostgreSQL liefert Zeilen als dict, deshalb jetzt `z["id"]` (zweiter
+  CI-Lauf). Nur der Test korrigiert, kein Programmcode; kein neues Release nötig.
