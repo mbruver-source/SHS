@@ -6602,3 +6602,42 @@ Entscheidungen vorab abgestimmt.
   einen optionalen Punkt, den die Gegenprüfung bestätigt hat: Modul-Docstring von
   `desktop_gemeinsam` und Docstring von `_ausdrucke_ordner` nannten nur PDF. Auf Marcos „mach
   weiter“ korrigiert, nur Kommentare.
+## Idee: Englische Sprachumschaltung (Schätzung 15.10.2026)
+
+Marco fragte, wie viel Aufwand es wäre, das Programm zusätzlich auf Englisch anzubieten,
+umschaltbar über einen Knopf. **Entscheidung: vorerst nur Schätzung, nichts umsetzen.**
+
+- **Ausgangslage:** Es gibt keine Übersetzungs-Infrastruktur, alle Texte stehen fest im Code. Nur
+  die Qt-Standardknöpfe werden übersetzt (`desktop_gemeinsam`). Grobe Zählung (±30 %):
+  - Desktop-Oberfläche ~920 Texte (`app.py`, `desktop_*.py`, Demo-Tour);
+  - Meldungen der Datenlogik ~370 (`db.py`, `db_import.py`, `db_sicherung.py`, `shs_core.py`);
+  - PDFs ~180;
+  - Web ~200;
+  - dazu Handbuch (853 Zeilen), Screenshots und Website.
+- **Erschwernisse:**
+  - Fachbegriffe brauchen ein abgestimmtes Glossar (ca. 40 Begriffe, wohl ohne offizielle
+    englische Entsprechung).
+  - In der Datenbank gespeicherte Werte bleiben deutsch, übersetzt wird nur die Anzeige.
+  - Logik am angezeigten Text (z. B. Filter → `_gefilterte_pruefung`) müsste auf Kennungen
+    umgestellt werden.
+  - CSV-/PDF-Import und KI-Prompt bleiben als Austauschformat deutsch.
+  - Ob die Verbandsformulare (PDF) englisch gebraucht werden, ist eine fachliche Frage.
+  - Tests prüfen deutsche Texte; Deutsch bliebe Standard.
+- **Schätzung in 5-h-Fenstern:**
+
+  | Paket | Aufwand |
+  |---|---|
+  | Grundgerüst (`t()`, Einstellung, Menü „Sprache“, Neuaufbau ohne Neustart) | ~0,5 |
+  | Desktop-Oberfläche | ~3–4 |
+  | Meldungen und Fachbegriffe | ~1–1,5 |
+  | PDFs | ~1–1,5 |
+  | Web | ~1 |
+  | Handbuch, Screenshots, Website | ~2 |
+
+  Nur Desktop: etwa **5–6 Fenster**; alles: etwa **9–11 Fenster**, jeweils plus Verifikation und
+  QS. Laufend kostet jede künftige Textänderung ca. 15–25 % mehr, dazu englische Screenshots und
+  das englische Handbuch vor jedem Build.
+- **Empfohlener Weg, falls später gewünscht:**
+  1. Glossar abstimmen.
+  2. Probe: Grundgerüst und Startdialog (ca. 0,5–0,7 Fenster), um die Schätzung zu prüfen.
+  3. Danach Paket für Paket über den Skill `aufgaben-abarbeitung`.
