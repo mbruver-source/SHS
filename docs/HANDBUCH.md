@@ -154,8 +154,8 @@ steht oben.
 | Button | Wirkung |
 |---|---|
 | **„Neuen Termin anlegen…“** | Öffnet die Eingabe der Veranstaltungsdaten (siehe unten). Verein, Vereins-Nr., Ort und Verband werden vom neuesten Termin übernommen. |
-| **„Öffnen“** (oder Doppelklick) | Öffnet den markierten Termin. |
-| **„Löschen…“** | Löscht den markierten Termin nach Rückfrage **unwiderruflich**, mit allen Teilnehmer- und Ergebnisdaten. Der gerade geöffnete Termin lässt sich nicht löschen. Bereits erzeugte PDFs im Ordner `Ausdrucke` bleiben bewusst erhalten – bei Bedarf dort von Hand löschen. |
+| **„Öffnen“** (oder Doppelklick bzw. Enter) | Öffnet den markierten Termin. |
+| **„Löschen…“** | Verschiebt den markierten Termin nach Rückfrage mit allen Teilnehmer- und Ergebnisdaten in den **Papierkorb**. Geht das nicht (z. B. auf einem USB-Stick oder Netzlaufwerk), fragt das Programm, ob der Termin **endgültig** gelöscht werden soll. Der gerade geöffnete Termin lässt sich nicht löschen. Bereits erzeugte PDFs im Ordner `Ausdrucke` bleiben bewusst erhalten – bei Bedarf dort von Hand löschen. |
 | **„Andere Termin-Datei öffnen…“** | Öffnet eine Termin-Datei (`*.sqlite`) von einem anderen Ort, z. B. einem USB-Stick. |
 | **„🎓 Demoprüfung“** (oben rechts) | Spielt einen kompletten Prüfungstag mit erfundenen Daten vor, siehe [Demoprüfung](#demoprüfung). |
 
@@ -716,7 +716,8 @@ Behältnisstrecke.
 ![Reiter „Datensicherung“](bilder/handbuch_datensicherung.png)
 
 Gesichert werden immer **alle** Termine aus dem Termine-Ordner in einer einzigen
-Sicherungsdatei (Endung `.zip`). Die PDFs im
+Sicherungsdatei (Endung `.zip`). Liegt der geöffnete Termin woanders (z. B. auf einem
+USB-Stick), fragt das Programm, ob er mitgesichert werden soll. Die PDFs im
 Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erzeugen.
 
 - **„Sicherung erstellen…“:** Auf Wunsch **„Mit Passwort schützen“** (die Sicherungsdatei wird dann verschlüsselt), danach
@@ -727,7 +728,8 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
 - **„Sicherung wiederherstellen…“:** Fragt bei Bedarf nach dem Passwort. Für jeden Termin,
   den es schon gibt, wählst du **„Überschreiben“**, **„Als Kopie importieren“** oder
   **„Überspringen“**. Den gerade geöffneten Termin kann man nicht überschreiben.
-  Wiederhergestellte Termine erscheinen beim nächsten „Anderen Termin öffnen…“.
+  Am Ende nennt eine Meldung, wie viele Termine wiederhergestellt sind. Sie erscheinen
+  beim nächsten „Anderen Termin öffnen…“.
   Scheitert das Wiederherstellen, bevor der erste Termin übernommen ist, bleibt alles
   unverändert. Scheitert es erst danach, zum Beispiel weil unter Windows eine Termin-Datei
   gerade in einem anderen Programm geöffnet ist, meldet das Programm **„Wiederherstellen

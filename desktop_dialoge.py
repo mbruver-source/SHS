@@ -1062,7 +1062,7 @@ class SicherungErstellenDialog(QDialog):
 
 def _wiederherstellungsziele_planen(namen, vorhandene, ordner, aktion_fuer) -> tuple[dict[str, str], int]:
     """Legt für jede Termin-Datei einer Sicherung den Zieldateinamen fest und liefert
-    (entscheidungen, anzahl_uebersprungen) für db.sicherung_wiederherstellen().
+    (entscheidungen, anzahl_uebersprungen) für db_sicherung.sicherung_wiederherstellen().
     `aktion_fuer(name)` wird nur bei einem Namenskonflikt aufgerufen und liefert
     "ueberschreiben", "kopie" oder "ueberspringen" (siehe DatensicherungTab._konflikt_abfragen).
 

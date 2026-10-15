@@ -6254,3 +6254,33 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   CSV-Export bei gesperrter Datei, Demo-Fehler, Termin-Import-Einleitung.
 - **Bekannt, nicht geändert:** „Sicherung auswählen“ fängt kein `OSError` (folgt mit A11).
   Bei `KeyError` u. Ä. im Termin-Import-Dialog steht weiter nur der Schlüssel im Hinweis.
+
+### A11 Startdialog und Datensicherung (15.10.2026, Desktop-Prüfung Teil 7 und 1)
+
+- **Termin außerhalb des Termine-Ordners (Teil 7 Nr. 1, Marcos Entscheidung):** Vor dem Sichern
+  fragt das Programm „Mitsichern / Ohne ihn fortfahren / Abbrechen“. Mitgesichert wird über den
+  neuen Parameter `zusaetzliche` von `sicherung_erstellen`; ein schon vergebener Name bekommt
+  einen Zähler, eine andere Endung wird zu `.sqlite`. Ohne ihn nennt der vorgeschlagene
+  Dateiname weder Datum noch Verein. Beim Wiederherstellen gilt eine gleichnamige Datei im
+  Ordner nur dann als der geöffnete Termin, wenn er dort auch liegt.
+- **Passwort (Teil 7 Nr. 2 und 11):** Einmal ohne, dann drei Passwörter – das dritte wurde
+  vorher nie geprüft. Eine leere Eingabe kostet keinen Versuch. Nicht lesbare Sicherungen
+  (Datei weg, fremdes Komprimierungsverfahren) ergeben eine verständliche Meldung. Nach dem
+  Wiederherstellen erscheint ein Meldungsfenster.
+- **Termin löschen (Teil 7 Nr. 5 mit Teil 1 Nr. 3, Marcos Entscheidung):** Vorgabe „Nein“, der
+  Termin geht in den Papierkorb (`QFile.moveToTrash`). Geht das nicht, folgt eine zweite
+  Rückfrage zum endgültigen Löschen (ebenfalls Vorgabe „Nein“). Danach ist nichts mehr markiert.
+  Die Verifikation fand, dass PySide6 6.11 hier ein reines `bool` liefert statt eines Tupels –
+  ausgewertet wird jetzt beides.
+- **Startdialog (Teil 7 Nr. 8 und 11):** Enter öffnet den markierten Termin statt „Neuen Termin
+  anlegen…“. Ein Termin ohne Verein zeigt den Dateinamen.
+- **Dateinamen aus Sicherungen (Teil 7 Nr. 10):** Unter Windows ungültige Zeichen und
+  Steuerzeichen werden abgelehnt.
+- **Veraltete Verweise (Teil 7 Nr. 12)** korrigiert, Handbuch (Startbildschirm, Kap. 10)
+  angepasst.
+- **Tests:** Mitsichern (drei Knöpfe), Pfadvergleich, Passwortschleife, nicht lesbare
+  Sicherung, Löschen mit und ohne Papierkorb, Rückgabe von `moveToTrash`, Enter, Dateinamen,
+  `zusaetzliche`, nicht unterstütztes Verfahren.
+- **Bekannt, nicht geändert:** Der geöffnete Termin wird wie bisher als Datei kopiert, während
+  er geöffnet ist (eine offene Schreibtransaktion wäre nicht enthalten; das Programm speichert
+  sofort, kein WAL-Modus).

@@ -110,7 +110,14 @@ def _ist_sicherer_dateiname(name: str) -> bool:
     # S-8: Windows-Gerätenamen (auch mit Endung oder Leerzeichen vor dem Punkt).
     if name.split(".")[0].rstrip(" ").upper() in _WINDOWS_GERAETENAMEN:
         return False
+    # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 10): unter Windows ungültige Zeichen und
+    # Steuerzeichen ablehnen.
+    if any(zeichen in _UNGUELTIGE_ZEICHEN or ord(zeichen) < 32 for zeichen in name):
+        return False
     return True
+
+
+_UNGUELTIGE_ZEICHEN = frozenset(':*?"<>|')
 
 
 def eindeutigen_dateinamen_finden(
@@ -118,7 +125,8 @@ def eindeutigen_dateinamen_finden(
 ) -> str:
     """Hängt bei einem im Ordner bereits vergebenen Dateinamen einen Zähler an (z.B.
     'Termin (2).sqlite'), bis ein noch freier Name gefunden ist - für die Option "als
-    Kopie importieren" beim Wiederherstellen einer Sicherung (siehe app.py).
+    Kopie importieren" beim Wiederherstellen einer Sicherung (siehe
+    desktop_dialoge._wiederherstellungsziele_planen).
 
     `bereits_vergeben`: Namen, die noch nicht auf der Platte liegen, aber im selben
     Vorgang schon als Ziel eingeplant sind (Codeprüfung 22.09., G5: enthielt eine
@@ -142,12 +150,16 @@ def eindeutigen_dateinamen_finden(
 
 
 def sicherung_erstellen(
-    ziel_pfad: str, passwort: str | None = None, nur_dateien: list[str] | None = None, ordner: Path | None = None
+    ziel_pfad: str, passwort: str | None = None, nur_dateien: list[str] | None = None, ordner: Path | None = None,
+    zusaetzliche: list[str] | None = None,
 ) -> int:
     """Erstellt ein ZIP-Backup der Termin-Dateien aus `ordner` (Standard: termine_ordner()).
 
     nur_dateien: optionale Liste von Dateinamen (nicht volle Pfade) - falls angegeben,
     werden nur diese gesichert, sonst ALLE *.sqlite-Dateien im Ordner.
+    zusaetzliche: volle Pfade weiterer Termin-Dateien außerhalb von `ordner` (der geöffnete
+    Termin, Desktop-Prüfung 14.10.2026, Teil 7 Nr. 1). Ist ihr Name im ZIP schon vergeben,
+    bekommen sie einen Zähler wie beim Import als Kopie.
     passwort: falls angegeben (nicht leer), wird das ZIP AES-256-verschlüsselt.
     Gibt die Anzahl der gesicherten Termin-Dateien zurück.
     Wirft ValueError, falls es nichts zu sichern gibt.
@@ -163,7 +175,16 @@ def sicherung_erstellen(
     if nur_dateien is not None:
         gewaehlt = set(nur_dateien)
         dateien = [p for p in dateien if p.name in gewaehlt]
-    if not dateien:
+    eintraege = [(datei, datei.name) for datei in dateien]
+    vergeben = {datei.name for datei in dateien}
+    for pfad in zusaetzliche or []:
+        pfad = Path(pfad)
+        if any(_gleiche_datei(pfad, datei) for datei in dateien):
+            continue
+        name = eindeutigen_dateinamen_finden(ordner, _zip_name_fuer(pfad.name), bereits_vergeben=vergeben)
+        vergeben.add(name)
+        eintraege.append((pfad, name))
+    if not eintraege:
         raise ValueError("Es gibt keine Termine zum Sichern.")
 
     ziel = Path(ziel_pfad)
@@ -176,18 +197,37 @@ def sicherung_erstellen(
                 tmp_pfad_str, "w", compression=pyzipper.ZIP_LZMA, encryption=pyzipper.WZ_AES
             ) as zf:
                 zf.setpassword(passwort.encode("utf-8"))
-                for datei in dateien:
-                    zf.write(datei, arcname=datei.name)
+                for datei, name in eintraege:
+                    zf.write(datei, arcname=name)
         else:
             with zipfile.ZipFile(tmp_pfad_str, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for datei in dateien:
-                    zf.write(datei, arcname=datei.name)
+                for datei, name in eintraege:
+                    zf.write(datei, arcname=name)
         os.replace(tmp_pfad_str, ziel)
     except BaseException:
         with suppress(FileNotFoundError):
             os.remove(tmp_pfad_str)
         raise
-    return len(dateien)
+    return len(eintraege)
+
+
+def _zip_name_fuer(name: str) -> str:
+    """Name im ZIP für einen mitgesicherten Termin: endet auf .sqlite und besteht
+    _ist_sicherer_dateiname - sonst böte das Wiederherstellen ihn nicht an."""
+    if not name.lower().endswith(".sqlite"):
+        name += ".sqlite"
+    if not _ist_sicherer_dateiname(name):
+        name = "".join("_" if z in _UNGUELTIGE_ZEICHEN or ord(z) < 32 else z for z in name)
+        if not _ist_sicherer_dateiname(name):
+            name = "Termin.sqlite"
+    return name
+
+
+def _gleiche_datei(a: Path, b: Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 _BESCHAEDIGT = (
@@ -214,6 +254,14 @@ def _zip_oeffnen(zip_pfad: str, passwort: str | None):
                 zf.setpassword(passwort.encode("utf-8"))
             _zip_grenzen_pruefen(zf)
             yield zf
+    except NotImplementedError as exc:
+        # Teil 7 Nr. 11: Komprimierungs- bzw. Verschlüsselungsverfahren, das zipfile/pyzipper
+        # nicht lesen (ZIP aus einem fremden Programm). Vor RuntimeError, deren Unterklasse
+        # NotImplementedError ist.
+        raise ValueError(
+            "Die Sicherung nutzt ein Komprimierungs- oder Verschlüsselungsverfahren, das hier "
+            f"nicht unterstützt wird ({exc})."
+        ) from exc
     except RuntimeError as exc:
         if "password" in str(exc).lower():
             raise PasswortFalschError(

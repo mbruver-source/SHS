@@ -66,6 +66,58 @@ class TestSicherungErstellen(unittest.TestCase):
     def tearDown(self):
         self._tmpdir.cleanup()
 
+    def test_zusaetzlicher_termin_ausserhalb_wird_mitgesichert(self):
+        """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 1: der geöffnete Termin vom USB-Stick;
+        ein gleichnamiger Termin im Ordner bleibt erhalten, derselbe nicht doppelt."""
+        _termin_anlegen(self.ordner, "a.sqlite")
+        stick = self.ziel_ordner / "stick"
+        stick.mkdir()
+        _termin_anlegen(stick, "a.sqlite")
+        _termin_anlegen(stick, "b.sqlite")
+        ziel = str(self.ziel_ordner / "sicherung.zip")
+
+        anzahl = sicherung_erstellen(
+            ziel, ordner=self.ordner,
+            zusaetzliche=[str(stick / "a.sqlite"), str(stick / "b.sqlite"), str(self.ordner / "a.sqlite")],
+        )
+
+        self.assertEqual(anzahl, 3)
+        with zipfile.ZipFile(ziel) as zf:
+            self.assertEqual(sorted(zf.namelist()), ["a (2).sqlite", "a.sqlite", "b.sqlite"])
+
+    def test_zusaetzlicher_termin_bekommt_wiederherstellbaren_namen(self):
+        """Verifikation A11: andere Endung bzw. Gerätename -> Name, den das Wiederherstellen
+        auch anbietet."""
+        stick = self.ziel_ordner / "stick"
+        stick.mkdir()
+        _termin_anlegen(stick, "termin.db")
+        _termin_anlegen(stick, "CON.x")
+        ziel = str(self.ziel_ordner / "sicherung.zip")
+        sicherung_erstellen(ziel, ordner=self.ordner,
+                            zusaetzliche=[str(stick / "termin.db"), str(stick / "CON.x")])
+        self.assertEqual(sicherung_inhalt(ziel), ["Termin.sqlite", "termin.db.sqlite"])
+
+    def test_nur_zusaetzlicher_termin_bei_leerem_ordner(self):
+        stick = self.ziel_ordner / "stick"
+        stick.mkdir()
+        _termin_anlegen(stick, "x.sqlite")
+        ziel = str(self.ziel_ordner / "sicherung.zip")
+        self.assertEqual(sicherung_erstellen(ziel, ordner=self.ordner, zusaetzliche=[str(stick / "x.sqlite")]), 1)
+
+    def test_nicht_unterstuetztes_verfahren_wird_zu_valueerror(self):
+        """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 11: NotImplementedError beim Lesen eines
+        Eintrags (fremdes Komprimierungsverfahren) ergibt eine verständliche Meldung."""
+        _termin_anlegen(self.ordner, "a.sqlite")
+        ziel = str(self.ziel_ordner / "sicherung.zip")
+        sicherung_erstellen(ziel, ordner=self.ordner)
+
+        def nicht_unterstuetzt(*_a, **_k):
+            raise NotImplementedError("That compression method is not supported")
+
+        with patch.object(pyzipper.AESZipFile, "read", nicht_unterstuetzt):
+            with self.assertRaisesRegex(ValueError, "nicht unterstützt"):
+                sicherung_inhalt(ziel)
+
     def test_ohne_passwort_erzeugt_normales_lesbares_zip(self):
         _termin_anlegen(self.ordner, "a.sqlite")
         _termin_anlegen(self.ordner, "b.sqlite")
@@ -509,6 +561,13 @@ class TestIstSichererDateiname(unittest.TestCase):
         for name in ("CONTROL.sqlite", "Konzert.sqlite", "COM10.sqlite", "Nulltest.sqlite"):
             with self.subTest(name=name):
                 self.assertTrue(_ist_sicherer_dateiname(name))
+
+    def test_unter_windows_ungueltige_zeichen_sind_unsicher(self):
+        """Desktop-Prüfung 14.10.2026, Teil 7 Nr. 10."""
+        for name in ("ab:x.sqlite", "x.sqlite:y.sqlite", "a*.sqlite", "a?.sqlite", 'a".sqlite',
+                     "a<b.sqlite", "a>b.sqlite", "a|b.sqlite", "a\x01.sqlite", "a\tb.sqlite"):
+            with self.subTest(name=name):
+                self.assertFalse(_ist_sicherer_dateiname(name))
 
 
 class TestZipGrenzen(unittest.TestCase):

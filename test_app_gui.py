@@ -4008,6 +4008,212 @@ def test_q1_offener_termin_wird_erkannt(qtbot, tmp_path, monkeypatch):
     assert abgefragt == [("pruefung.sqlite", True)]
 
 
+def test_wiederherstellen_offener_termin_ausserhalb_des_ordners_ist_kein_konflikt_mit_sich(qtbot, tmp_path, monkeypatch):
+    """Teil 7 Nr. 1: eine gleichnamige Datei im Termine-Ordner ist nicht der geöffnete
+    Termin vom USB-Stick - „Überschreiben“ bleibt also erlaubt."""
+    ordner = tmp_path / "Termine"
+    ordner.mkdir()
+    (ordner / "Pruefung.sqlite").write_bytes(b"")
+    stick = tmp_path / "Stick"
+    stick.mkdir()
+    monkeypatch.setattr("app.termine_ordner", lambda: ordner)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
+    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
+    tab = DatensicherungTab(aktueller_pfad=str(stick / "Pruefung.sqlite"))
+    qtbot.addWidget(tab)
+    abgefragt = []
+    monkeypatch.setattr(
+        tab, "_konflikt_abfragen",
+        lambda name, ist_offener_termin=False: abgefragt.append((name, ist_offener_termin)) or "ueberspringen",
+    )
+    tab._sicherung_wiederherstellen()
+    assert abgefragt == [("pruefung.sqlite", False)]
+
+
+@pytest.mark.parametrize("eingaben, gefunden", [
+    (["", "falsch1", "falsch2", "richtig"], True),
+    (["falsch1", "falsch2", "falsch3"], False),
+])
+def test_wiederherstellen_passwortschleife_prueft_drei_passwoerter(qtbot, tmp_path, monkeypatch, eingaben, gefunden):
+    """Teil 7 Nr. 2 und Nr. 11: einmal ohne, dann drei Passwörter - auch das dritte wird
+    geprüft; eine leere Eingabe kostet keinen Versuch. Danach ein Meldungsfenster."""
+    from db_sicherung import PasswortFalschError
+
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
+    geprueft = []
+
+    def inhalt(_pfad, passwort=None):
+        geprueft.append(passwort)
+        if passwort != "richtig":
+            raise PasswortFalschError("falsch")
+        return ["neu.sqlite"]
+
+    abfragen = list(eingaben)
+    monkeypatch.setattr("app.sicherung_inhalt", inhalt)
+    monkeypatch.setattr("app.QInputDialog.getText", lambda *a, **k: (abfragen.pop(0), True))
+    monkeypatch.setattr("app.sicherung_wiederherstellen", lambda *a, **k: ["neu.sqlite"])
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[1]))
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[1]))
+    tab = DatensicherungTab()
+    qtbot.addWidget(tab)
+
+    tab._sicherung_wiederherstellen()
+
+    if gefunden:
+        assert geprueft == [None, "falsch1", "falsch2", "richtig"]
+        assert meldungen == ["Wiederherstellen abgeschlossen"]
+    else:
+        assert geprueft == [None, "falsch1", "falsch2", "falsch3"]
+        assert meldungen == ["Passwort falsch"]
+    assert abfragen == []
+
+
+def test_wiederherstellen_nicht_lesbare_sicherung_meldet_klartext(qtbot, monkeypatch):
+    """Verifikation A9 / Teil 7 Nr. 11: Datei inzwischen weg -> Meldung statt Fehlerfenster."""
+    def weg(*_a, **_k):
+        raise FileNotFoundError(2, "No such file or directory", "sicherung.zip")
+
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
+    monkeypatch.setattr("app.sicherung_inhalt", weg)
+    meldungen = []
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    tab = DatensicherungTab()
+    qtbot.addWidget(tab)
+    tab._sicherung_wiederherstellen()
+    assert "nicht gefunden" in meldungen[0]
+
+
+@pytest.mark.parametrize("knopf, erwartet", [
+    ("Mitsichern", "mit"), ("Ohne ihn fortfahren", "ohne"), ("Abbrechen", None),
+])
+def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path, monkeypatch, knopf, erwartet):
+    """Teil 7 Nr. 1 (Marcos Entscheidung): Rückfrage Mitsichern / Ohne ihn / Abbrechen;
+    ohne ihn nennt der Dateiname weder Datum noch Verein des Termins."""
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14")
+    ordner = tmp_path / "Termine"
+    ordner.mkdir()
+    termin_pfad = tmp_path / "Stick" / "termin.sqlite"
+    termin_pfad.parent.mkdir()
+    termin_pfad.write_bytes(b"")
+    monkeypatch.setattr("app.termine_ordner", lambda: ordner)
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: 0)
+    monkeypatch.setattr(QMessageBox, "clickedButton",
+                        lambda box: next(b for b in box.buttons() if b.text() == knopf))
+
+    class _Dialog:
+        def __init__(self, _parent):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def passwort(self):
+            return None
+
+    vorschlaege, aufrufe = [], []
+    monkeypatch.setattr("app.SicherungErstellenDialog", _Dialog)
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName",
+                        lambda _p, _t, vorschlag, _f: vorschlaege.append(vorschlag) or (str(tmp_path / "s.zip"), ""))
+    monkeypatch.setattr("app.sicherung_erstellen", lambda pfad, **k: aufrufe.append(k) or 1)
+    monkeypatch.setattr("app._datei_gespeichert_melden", lambda *a, **k: None)
+    tab = DatensicherungTab(aktueller_pfad=str(termin_pfad), conn=conn)
+    qtbot.addWidget(tab)
+
+    tab._sicherung_erstellen()
+
+    if erwartet is None:
+        assert aufrufe == []
+        return
+    assert aufrufe[0]["zusaetzliche"] == ([str(termin_pfad)] if erwartet == "mit" else [])
+    assert ("HSV" in os.path.basename(vorschlaege[0])) == (erwartet == "mit")
+
+
+def test_sicherung_ohne_rueckfrage_wenn_termin_im_ordner(qtbot, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    (tmp_path / "termin.sqlite").write_bytes(b"")
+    tab = DatensicherungTab(aktueller_pfad=str(tmp_path / "termin.sqlite"))
+    qtbot.addWidget(tab)
+    assert tab._mitsichern_abfragen() == []
+
+
+def _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    termine = []
+    for name, verein in (("a.sqlite", "Verein A"), ("b.sqlite", "")):
+        (tmp_path / name).write_bytes(b"")
+        termine.append(SimpleNamespace(pfad=str(tmp_path / name), dateiname=name, datum="2026-11-14",
+                                       verein=verein, ort="", anzahl_teilnehmer=0, lesbar=True))
+    monkeypatch.setattr("app.liste_termine", lambda: [t for t in termine if os.path.exists(t.pfad)])
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    start = StartDialog()
+    qtbot.addWidget(start)
+    return start
+
+
+@pytest.mark.parametrize("papierkorb", [True, False])
+def test_termin_loeschen_vorgabe_nein_papierkorb_und_auswahl_leer(qtbot, tmp_path, monkeypatch, papierkorb):
+    """Teil 7 Nr. 5 (Marcos Entscheidung): Vorgabe „Nein“, Papierkorb; ohne Papierkorb erst
+    nach eigener Rückfrage endgültig; danach ist nichts mehr markiert."""
+    start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
+    # Teil 7 Nr. 11: ohne Verein steht der Dateiname da.
+    assert start.tabelle.item(1, 1).text() == "b.sqlite"
+    fragen, papierkorb_pfade = [], []
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a, **k: fragen.append((a[1], a[4])) or QMessageBox.Yes)
+
+    def in_papierkorb(pfad):
+        papierkorb_pfade.append(pfad)
+        if papierkorb:
+            os.remove(pfad)
+        return papierkorb  # PySide6 6.11 liefert ein reines bool
+
+    monkeypatch.setattr("app.QFile.moveToTrash", in_papierkorb)
+    start.tabelle.selectRow(0)
+
+    start._termin_loeschen()
+
+    assert not (tmp_path / "a.sqlite").exists()
+    assert papierkorb_pfade == [str(tmp_path / "a.sqlite")]
+    erwartet = [("Termin löschen", QMessageBox.No)] + ([] if papierkorb else [("Kein Papierkorb", QMessageBox.No)])
+    assert fragen == erwartet
+    assert start.tabelle.currentRow() == -1 and not start.loeschen_btn.isEnabled()
+
+
+def test_in_papierkorb_wertet_bool_und_tupel_aus(tmp_path, monkeypatch):
+    """Verifikation A11: QFile.moveToTrash liefert je nach PySide6-Version bool oder Tupel."""
+    (tmp_path / "a.sqlite").write_bytes(b"")
+    for rueckgabe, erwartet in ((True, True), (False, False), ((True, "x"), True), ((False, ""), False)):
+        monkeypatch.setattr("app.QFile.moveToTrash", lambda _p, r=rueckgabe: r)
+        assert StartDialog._in_papierkorb(str(tmp_path / "a.sqlite")) is erwartet
+    with pytest.raises(FileNotFoundError):
+        StartDialog._in_papierkorb(str(tmp_path / "fehlt.sqlite"))
+
+
+def test_termin_loeschen_nein_behaelt_datei(qtbot, tmp_path, monkeypatch):
+    start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    monkeypatch.setattr("app.QFile.moveToTrash", lambda pfad: pytest.fail("darf nicht löschen"))
+    start.tabelle.selectRow(0)
+    start._termin_loeschen()
+    assert (tmp_path / "a.sqlite").exists()
+
+
+def test_startdialog_enter_oeffnet_markierten_termin(qtbot, tmp_path, monkeypatch):
+    """Teil 7 Nr. 8: Enter in der Liste öffnet den markierten Termin statt „Neuen Termin
+    anlegen…“."""
+    start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
+    neu = []
+    monkeypatch.setattr(start, "_neuer_termin", lambda: neu.append(True))
+    start.show()
+    start.tabelle.selectRow(1)
+    start.tabelle.setFocus()
+    qtbot.keyClick(start.tabelle, Qt.Key_Return)
+    assert start.pfad == str(tmp_path / "b.sqlite") and neu == []
+
+
 def test_wiederherstellen_unvollstaendig_nennt_ersetzte_termine(qtbot, tmp_path, monkeypatch):
     """QS-Prüfung 07.10.2026, Befund 3: Bricht das Wiederherstellen nach dem ersten
     ersetzten Termin ab, nennt das Meldungsfenster die schon ersetzten Termine."""

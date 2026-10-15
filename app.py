@@ -41,7 +41,7 @@ import sqlite3
 import sys
 import traceback
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QItemSelectionModel, QRegularExpression, QUrl, Qt, Signal
+from PySide6.QtCore import QAbstractNativeEventFilter, QEvent, QFile, QItemSelectionModel, QRegularExpression, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -3688,12 +3688,13 @@ class DatensicherungTab(QWidget):
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner
 
-    def _dateiname_vorschlag(self) -> str:
+    def _dateiname_vorschlag(self, mit_termin: bool = True) -> str:
         """UX-Test 02.10.2026, K10: Name mit Prüfungsdatum und Verein des geöffneten Termins,
         damit man die Sicherung später einer Prüfung zuordnen kann, z. B.
-        "SHS-Sicherung_2026-11-14_Hundefreunde-Testhausen_erstellt-2026-10-03.zip"."""
+        "SHS-Sicherung_2026-11-14_Hundefreunde-Testhausen_erstellt-2026-10-03.zip".
+        `mit_termin=False`: der geöffnete Termin ist nicht in der Sicherung (Teil 7 Nr. 1)."""
         heute = datetime.date.today().isoformat()
-        veranstaltung = get_veranstaltung(self.conn) if self.conn is not None else None
+        veranstaltung = get_veranstaltung(self.conn) if self.conn is not None and mit_termin else None
         if not veranstaltung:
             return f"SHS-Sicherung_{heute}.zip"
         verein = veranstaltung["verein"] or ""
@@ -3706,19 +3707,60 @@ class DatensicherungTab(QWidget):
         mitte = "_".join(t for t in teile if t)
         return f"SHS-Sicherung_{mitte + '_' if mitte else ''}erstellt-{heute}.zip"
 
+    def _offener_termin_im_ordner(self) -> bool:
+        """Liegt der geöffnete Termin im Termine-Ordner (bzw. ist keiner geöffnet)?"""
+        if not self._aktueller_pfad:
+            return True
+        ordner = os.path.dirname(os.path.abspath(self._aktueller_pfad))
+        try:
+            return os.path.samefile(ordner, termine_ordner())
+        except OSError:
+            return os.path.normcase(ordner) == os.path.normcase(os.path.abspath(termine_ordner()))
+
+    def _mitsichern_abfragen(self) -> list[str] | None:
+        """Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 1, Marcos Entscheidung): Liegt der geöffnete
+        Termin außerhalb des Termine-Ordners (z. B. auf einem USB-Stick), wäre er nicht in der
+        Sicherung - deshalb fragen. Liefert die zusätzlich zu sichernden Pfade ([] = ohne ihn)
+        oder None bei Abbruch."""
+        if self._offener_termin_im_ordner() or not os.path.isfile(self._aktueller_pfad):
+            return []
+        box = QMessageBox(self)
+        box.setTextFormat(Qt.PlainText)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Geöffneter Termin außerhalb des Termine-Ordners")
+        box.setText(
+            "Der geöffnete Termin liegt nicht im Termine-Ordner und wäre deshalb nicht in der "
+            f"Sicherung:\n{_pfad_anzeige(self._aktueller_pfad)}\n\nTermine-Ordner: "
+            f"{_pfad_anzeige(str(termine_ordner()))}"
+        )
+        mit_btn = box.addButton("Mitsichern", QMessageBox.AcceptRole)
+        ohne_btn = box.addButton("Ohne ihn fortfahren", QMessageBox.ActionRole)
+        box.addButton("Abbrechen", QMessageBox.RejectRole)
+        box.setDefaultButton(mit_btn)
+        box.exec()
+        if box.clickedButton() is mit_btn:
+            return [self._aktueller_pfad]
+        if box.clickedButton() is ohne_btn:
+            return []
+        return None
+
     def _sicherung_erstellen(self) -> None:
+        zusaetzliche = self._mitsichern_abfragen()
+        if zusaetzliche is None:
+            return
         dialog = SicherungErstellenDialog(self)
         if dialog.exec() != QDialog.Accepted:
             return
         passwort = dialog.passwort()
 
-        vorschlag = os.path.join(os.path.expanduser("~"), self._dateiname_vorschlag())
+        mit_termin = self._offener_termin_im_ordner() or bool(zusaetzliche)
+        vorschlag = os.path.join(os.path.expanduser("~"), self._dateiname_vorschlag(mit_termin))
         pfad, _ = QFileDialog.getSaveFileName(self, "Sicherung speichern", vorschlag, "ZIP-Datei (*.zip)")
         if not pfad:
             return
 
         try:
-            anzahl = sicherung_erstellen(pfad, passwort=passwort)
+            anzahl = sicherung_erstellen(pfad, passwort=passwort, zusaetzliche=zusaetzliche)
         except ValueError as exc:
             QMessageBox.warning(self, "Sicherung nicht möglich", str(exc))
             return
@@ -3745,20 +3787,32 @@ class DatensicherungTab(QWidget):
 
         passwort: str | None = None
         namen: list[str] | None = None
-        for versuch in range(3):
+        # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 2): einmal ohne und dreimal mit Passwort -
+        # vorher wurde das dritte eingegebene Passwort nie geprüft.
+        for versuch in range(4):
             try:
                 namen = sicherung_inhalt(zip_pfad, passwort=passwort)
                 break
             except PasswortFalschError:
+                if versuch == 3:
+                    break
                 titel = "Passwort erforderlich" if passwort is None else "Passwort falsch"
                 text = "Diese Sicherung ist passwortgeschützt. Bitte Passwort eingeben:" if passwort is None \
                     else "Das Passwort war falsch. Bitte erneut eingeben:"
-                eingabe, ok = QInputDialog.getText(self, titel, text, QLineEdit.Password)
-                if not ok:
-                    return
+                eingabe = ""
+                while not eingabe:
+                    eingabe, ok = QInputDialog.getText(self, titel, text, QLineEdit.Password)
+                    if not ok:
+                        return
+                    # Teil 7 Nr. 11: leere Eingabe kostet keinen Versuch.
+                    titel, text = "Passwort fehlt", "Bitte ein Passwort eingeben:"
                 passwort = eingabe
             except ValueError as exc:
                 QMessageBox.warning(self, "Sicherung nicht lesbar", str(exc))
+                return
+            except OSError as exc:
+                QMessageBox.warning(self, "Sicherung nicht lesbar",
+                                    f"Die Sicherung konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
                 return
         if namen is None:
             QMessageBox.warning(self, "Passwort falsch", "Das Passwort war auch beim dritten Versuch falsch. Abgebrochen.")
@@ -3766,8 +3820,11 @@ class DatensicherungTab(QWidget):
 
         ordner = termine_ordner()
         vorhandene = {p.name for p in ordner.glob("*.sqlite")}
-        # Sicherheitskorrektur Q-1 (07.10.2026), Details folgen.
-        offener_name = os.path.basename(self._aktueller_pfad).casefold() if self._aktueller_pfad else None
+        # Sicherheitskorrektur Q-1 (07.10.2026), Details folgen. Teil 7 Nr. 1: nur, wenn der
+        # geöffnete Termin auch wirklich im Termine-Ordner liegt (sonst ist eine gleichnamige
+        # Datei dort eine andere).
+        offener_name = (os.path.basename(self._aktueller_pfad).casefold()
+                        if self._aktueller_pfad and self._offener_termin_im_ordner() else None)
 
         entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
             namen, vorhandene, ordner,
@@ -3809,10 +3866,13 @@ class DatensicherungTab(QWidget):
             return
 
         hinweis_uebersprungen = f", {uebersprungen} übersprungen" if uebersprungen else ""
-        self.status_label.setText(
+        text = (
             f"{len(wiederhergestellt)} Termin(e) wiederhergestellt{hinweis_uebersprungen}. "
             "Neue Termine erscheinen in der Terminübersicht beim nächsten „Anderen Termin öffnen…“."
         )
+        self.status_label.setText(text)
+        # Teil 7 Nr. 11: wie beim Erstellen ein Meldungsfenster statt nur der Statuszeile.
+        QMessageBox.information(self, "Wiederherstellen abgeschlossen", text)
 
     def _konflikt_abfragen(self, dateiname: str, ist_offener_termin: bool = False) -> str:
         """Fragt bei einem Namenskonflikt (Termin existiert bereits) nach, wie verfahren
@@ -4606,6 +4666,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.tabelle.setSelectionMode(QTableWidget.SingleSelection)
         self.tabelle.itemSelectionChanged.connect(self._auswahl_geaendert)
         self.tabelle.itemDoubleClicked.connect(lambda _item: self._termin_oeffnen())
+        # Teil 7 Nr. 8: Enter in der Liste öffnet den markierten Termin (sonst griffe der
+        # Standardknopf „Neuen Termin anlegen…“).
+        self.tabelle.installEventFilter(self)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
@@ -4666,7 +4729,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         for row, t in enumerate(self._termine):
             werte = [
                 datum_anzeige(t.datum) or "?",
-                t.verein if t.lesbar else f"{t.dateiname} (nicht lesbar)",
+                (t.verein or t.dateiname) if t.lesbar else f"{t.dateiname} (nicht lesbar)",
                 t.ort or "",
                 str(t.anzahl_teilnehmer) if t.lesbar else "",
             ]
@@ -4677,6 +4740,13 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # weiterhin von Hand nachziehbar.
         self.tabelle.resizeColumnsToContents()
         self._auswahl_geaendert()
+
+    def eventFilter(self, obj, event) -> bool:  # type: ignore[override]
+        if (obj is self.tabelle and event.type() == QEvent.KeyPress
+                and event.key() in (Qt.Key_Return, Qt.Key_Enter) and self._ausgewaehlter_termin() is not None):
+            self._termin_oeffnen()
+            return True
+        return super().eventFilter(obj, event)
 
     def _ausgewaehlter_termin(self):
         zeile = self.tabelle.currentRow()
@@ -4752,21 +4822,48 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 "Programm schließen.",
             )
             return
+        # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 5, Marcos Entscheidung): Vorgabe „Nein“ und
+        # Löschen in den Papierkorb; ohne Papierkorb endgültig nach eigener Rückfrage.
+        bezeichnung = f"„{termin.verein or termin.dateiname}“ ({datum_anzeige(termin.datum) or '?'})"
         antwort = QMessageBox.question(
             self,
             "Termin löschen",
-            f"Termin „{termin.verein or termin.dateiname}“ ({datum_anzeige(termin.datum) or '?'}) inklusive aller "
-            f"Teilnehmer- und Ergebnisdaten unwiderruflich löschen?\n\nDatei: {termin.pfad}",
+            f"Termin {bezeichnung} inklusive aller Teilnehmer- und Ergebnisdaten in den Papierkorb "
+            f"verschieben?\n\nDatei: {_pfad_anzeige(termin.pfad)}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if antwort != QMessageBox.Yes:
             return
         try:
-            os.remove(termin.pfad)
+            if not self._in_papierkorb(termin.pfad):
+                antwort = QMessageBox.question(
+                    self,
+                    "Kein Papierkorb",
+                    f"Der Termin {bezeichnung} lässt sich nicht in den Papierkorb verschieben (z. B. "
+                    "auf einem USB-Stick oder Netzlaufwerk ohne Papierkorb, oder die Datei ist in "
+                    "einem anderen Programm geöffnet). Endgültig löschen?",
+                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+                )
+                if antwort != QMessageBox.Yes:
+                    return
+                os.remove(termin.pfad)
         except OSError as exc:
             QMessageBox.critical(self, "Löschen fehlgeschlagen",
                                  f"Der Termin konnte nicht gelöscht werden.\n\n{_klartext_fehler(exc)}")
             return
         self._aktualisieren()
+        # Danach ist nichts markiert - ein zweites „Löschen…“ + Enter träfe sonst den nächsten.
+        self.tabelle.setCurrentItem(None)
+        self.tabelle.clearSelection()
+        self._auswahl_geaendert()
+
+    @staticmethod
+    def _in_papierkorb(pfad: str) -> bool:
+        if not os.path.exists(pfad):
+            raise FileNotFoundError(2, "No such file or directory", pfad)
+        # PySide6 liefert hier je nach Version ein bool oder (bool, Pfad im Papierkorb).
+        ergebnis = QFile.moveToTrash(pfad)
+        return bool(ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis)
 
     def _demo_waehlen(self) -> None:
         self.demo_angefordert = True
