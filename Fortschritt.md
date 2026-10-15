@@ -6653,4 +6653,6 @@ Marco hat bemerkt: Die Release-Seite von 1.0.47 enthielt auch „Was ist neu in 
   auf 1.0.48 gekürzt. Der Skill `shs-build` (und die Codex-Kopie) sagt jetzt ausdrücklich „ganz
   neu schreiben, Vorversion löschen“. Am Workflow ändert sich nichts.
 - **Veröffentlichte Releases 1.0.47 und 1.0.48:** Sie sollen auf den eigenen Abschnitt plus die
-  automatische Zeile „Full Changelog“ gekürzt werden. Der Stand dazu steht im folgenden Nachtrag.
+  automatische Zeile „Full Changelog“ gekürzt werden. Der Stand dazu steht im folgenden Nachtrag.- **Nachtrag:** Mit Marcos Freigabe per `gh release edit` korrigiert. v1.0.47 und v1.0.48 zeigen
+  jetzt nur ihren eigenen Abschnitt und die Zeile „Full Changelog“. Dateien, Tags und die
+  Kennzeichnung „Latest“ (1.0.48) sind unverändert. 1.0.46 war nicht betroffen.
