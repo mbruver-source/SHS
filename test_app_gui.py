@@ -488,8 +488,9 @@ def test_mehrere_markierte_loeschen_und_zwei_markierte_tauschen(qtbot, conn, mon
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
     tab.show()
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a_, **k: fragen.append(a_[2]) or QMessageBox.Yes)
+    fragen, vorgaben = [], []
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a_, **k: fragen.append(a_[2]) or vorgaben.append(a_[4]) or QMessageBox.Yes)
 
     _zeilen_markieren(tab, 0, 1)
     assert tab.tauschen_btn.isEnabled() and tab.loeschen_btn.isEnabled()
@@ -497,6 +498,7 @@ def test_mehrere_markierte_loeschen_und_zwei_markierte_tauschen(qtbot, conn, mon
     assert "genau einem" in tab.bearbeiten_btn.toolTip()
     qtbot.mouseClick(tab.tauschen_btn, Qt.MouseButton.LeftButton)
     assert "„A, Max“ (Nr. 1)" in fragen[-1] and "„B, Max“ (Nr. 2)" in fragen[-1]
+    assert vorgaben[-1] == QMessageBox.No  # Tauschen ändert Daten (Marco 15.10.2026)
     nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(conn)}
     assert (nummern[a], nummern[b]) == (2, 1)
 
@@ -3706,6 +3708,23 @@ def test_pdf_exportieren_meldet_fehler_ohne_statusmeldung(qtbot, tmp_path, monke
     assert status.text().startswith("3 Bögen:") and gespeichert_meldungen[-1][1] == "3 Bögen"
 
 
+def test_ja_nein_setzt_vorgabe_und_wertet_antwort_aus(monkeypatch):
+    """Abschluss-QS 15.10.2026 (A19c): gemeinsamer Helfer für Ja/Nein-Rückfragen - Vorgabe
+    „Nein“, außer ausdrücklich „Ja“ gewünscht; nur „Ja“ ergibt True."""
+    import desktop_gemeinsam
+
+    aufrufe = []
+    antwort = [QMessageBox.Yes]
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: aufrufe.append(a) or antwort[0])
+
+    assert desktop_gemeinsam._ja_nein(None, "Titel", "Text?") is True
+    assert aufrufe[-1] == (None, "Titel", "Text?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    assert desktop_gemeinsam._ja_nein(None, "T", "X", vorgabe_ja=True) is True
+    assert aufrufe[-1][4] == QMessageBox.Yes
+    for antwort[0] in (QMessageBox.No, QMessageBox.Cancel, QMessageBox.NoButton):  # Esc/Schließen
+        assert desktop_gemeinsam._ja_nein(None, "T", "X") is False
+
+
 def test_dialoge_werden_nach_exec_freigegeben_und_wartecursor_zurueckgesetzt(qtbot, monkeypatch):
     """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 9, Teil 6 Nr. 7/8: Dialoge bleiben nicht als
     Kinder liegen; der Wartecursor wird auch bei einem Fehler zurückgesetzt."""
@@ -5766,12 +5785,15 @@ def test_neuer_termin_hinweis_bei_leerem_verband_und_meldestelle(qtbot, monkeypa
     dialog.pfad_feld.setText(str(tmp_path / "t.sqlite"))
     fragen = []
     antwort = [QMessageBox.No]
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[2]) or antwort[0])
+    vorgaben = []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: fragen.append(a[2]) or vorgaben.append(a[4]) or antwort[0])
     akzeptiert = []
     monkeypatch.setattr(dialog, "accept", lambda: akzeptiert.append(True))
 
     dialog._pruefen_und_akzeptieren()
     assert "Verband und Meldestelle sind leer" in fragen[-1]
+    assert vorgaben[-1] == QMessageBox.Yes  # harmlos, später nachtragbar (Marco 15.10.2026)
     assert not akzeptiert
 
     dialog.verband.setText("HSVRM")
@@ -6093,6 +6115,7 @@ def test_import_hinweis_ohne_bereiche_fragt_nicht(qtbot, conn, monkeypatch):
     set_veranstaltung(conn, verein="HSV", datum="2026-11-14", startnummer_bereiche="ED1-Flächensuche=1-5")
     app_modul._startnummern_nach_import_anbieten(None, conn)
     assert len(fragen) == 1
+    assert fragen[0][4] == QMessageBox.Yes  # Vergeben ändert keine vorhandene Nummer (Marco 15.10.2026)
 
 
 

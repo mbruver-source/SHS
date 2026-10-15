@@ -70,6 +70,7 @@ from db_sicherung import (
 from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _fehler_anzeigen,
+    _ja_nein,
     _klartext_fehler,
     _gegenstand_zeile,
     _GEGENSTAND_ZUORDNUNG_FREI,
@@ -539,12 +540,10 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         for bezeichnung, feld in (("Geburtsdatum", self.geburtsdatum), ("Wurftag", self.wurftag)):
             wert = normalisiere_datum(feld.text())
             if wert and wert > heute:
-                antwort = QMessageBox.question(
+                if not _ja_nein(
                     self, "Datum in der Zukunft",
                     f"{bezeichnung} {datum_anzeige(wert)} liegt in der Zukunft. Trotzdem speichern?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-                )
-                if antwort != QMessageBox.Yes:
+                ):
                     feld.setFocus()
                     return
         if not self.startnummer_unbekannt.isChecked() and self.startnummer.value() in self._vergebene_nummern:
@@ -577,23 +576,19 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                                     self.disziplin.currentText() if ist_ed else None)
         if self._angebotene and kuerzel not in self._angebotene:
             pruefung = pruefung_nach_kuerzel(kuerzel)
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self, "Prüfung nicht angeboten",
                 f"„{pruefung.bezeichnung if pruefung else kuerzel}“ wird in diesem Termin nicht "
                 "angeboten (Veranstaltungsdaten). Trotzdem speichern?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if antwort != QMessageBox.Yes:
+            ):
                 self.stufe.setFocus()
                 return
         if ist_ed and (self.gegenstand_2.text().strip() or self.gegenstand_3.text().strip()):
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self, "Nur ein Gegenstand bei ED",
                 "Bei einer Einzeldisziplin (ED) gibt es nur einen Gegenstand. Die Einträge "
                 "in Gegenstand 2 und 3 werden nicht gespeichert.\n\nTrotzdem speichern?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if antwort != QMessageBox.Yes:
+            ):
                 return
         # Teil 2 Nr. 4: nur Gegenstände mit Text zählen - wie in db.gegenstand_fuer_disziplin.
         vergebene_disziplinen = [] if ist_ed else [
@@ -1734,13 +1729,11 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         elif not os.path.isdir(os.path.dirname(pfad)):
             QMessageBox.warning(self, "Speicherort", f"Den Ordner gibt es nicht:\n{os.path.dirname(pfad)}")
         elif os.path.exists(pfad):
-            antwort = QMessageBox.question(
+            if _ja_nein(
                 self, "Datei existiert bereits",
                 f"Die Datei „{pfad}“ existiert bereits.\n\nStattdessen als bestehenden Termin öffnen? "
                 "(„Nein“: zurück, um einen anderen Speicherort zu wählen.)",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if antwort == QMessageBox.Yes:
+            ):
                 self.bestehenden_oeffnen = True
                 self.accept()
                 return False
@@ -1781,16 +1774,15 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         fehlend = [name for name, leer in (("Verband", not self.verband.text().strip()),
                                            ("Meldestelle", self.meldestelle_text() is None)) if leer]
         if not self._bearbeiten and fehlend:
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self, "Angaben für das Anmeldeformular",
                 f"{' und '.join(fehlend)} {'ist' if len(fehlend) == 1 else 'sind'} leer und "
                 f"{'fehlt' if len(fehlend) == 1 else 'fehlen'} dann auf dem Anmeldeformular für die Teilnehmer.\n\n"
                 "Du kannst das auch später im Reiter „Verwaltung“ über „Veranstaltungsdaten "
                 "bearbeiten…“ nachtragen.\n\n"
                 "Trotzdem jetzt speichern?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
-            )
-            if antwort != QMessageBox.Yes:
+                vorgabe_ja=True,
+            ):
                 (self.verband if "Verband" in fehlend else self.meldestelle).setFocus()
                 return
         if not _speichern_vor_dem_schliessen(self, self._speichern):

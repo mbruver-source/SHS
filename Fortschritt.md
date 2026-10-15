@@ -6473,6 +6473,7 @@ Die Abschluss-QS (`qs-wartbarkeit`) fand keine Fehler, nur Stilpunkte. Umgesetzt
   `desktop_gemeinsam`, Absturzprotokoll/Diagnose in ein eigenes Modul.
 - Gemeinsame Testattrappen in `test_app_gui.py`; Zeitgrenzen der `waitUntil` bündeln.
 - Ein gemeinsamer Helfer für Ja/Nein-Rückfragen und für das Öffnen fremder Termin-Dateien.
+  **Aufgegriffen 15.10.2026**, siehe „Restpunkte der Desktop-Prüfung: H1–H3“ am Ende.
 
 ### A19 Abschluss der Desktop-Prüfung (15.10.2026)
 
@@ -6520,3 +6521,33 @@ Nr. 3 (A1) und der Befund N-1 der Abschluss-QS (A19a, in `aufgaben.md`). Die Kom
 mit „Desktop-Prüfung 14.10.2026, Teil x Nr. y“ verweisen auf diese Berichte. Zurückgestellte
 Sicherheitspunkte gab es keine. Neue Prüfberichte entstehen weiter zuerst in
 `_unveroeffentlicht/` (Skill `desktop-pruefung`).
+
+
+## Restpunkte der Desktop-Prüfung: H1–H3 (15.10.2026)
+
+Marco hat das empfohlene Paket aus den zurückgestellten Punkten freigegeben: gemeinsame Helfer für
+Ja/Nein-Rückfragen (H1) und für das Öffnen fremder Termin-Dateien (H2) aus A19c sowie der
+CSV-Export über den gemeinsamen Exportablauf (H3, aus A16 bzw. Teil 6 Nr. 11). Plan mit Marcos
+Entscheidungen vorab abgestimmt.
+
+### H1 Ja/Nein-Helfer
+
+- Neu `_ja_nein(parent, titel, text, *, vorgabe_ja=False)` in `desktop_gemeinsam`. Alle 20
+  Ja/Nein-Rückfragen in `app.py`, `desktop_dialoge.py` und `desktop_gemeinsam.py` laufen darüber,
+  jede mit ausdrücklich gesetzter Vorgabe. Der Helfer ruft `QMessageBox.question` positionell auf,
+  deshalb gelten Klartext und Freigabe (`meldungsfenster_als_klartext`) und die bestehenden
+  Test-Attrappen weiter.
+- **Marcos Entscheidung zu den Vorgaben:** „Startnummern tauschen?“ hatte bisher unbeabsichtigt
+  „Ja“ (keine Vorgabe angegeben) und hat jetzt „Nein“, weil es Daten ändert. „Startnummern fehlen
+  – jetzt vergeben?“ nach dem Import und „Angaben für das Anmeldeformular“ behalten „Ja“, jetzt
+  ausdrücklich gesetzt: Beides ändert nichts Vorhandenes bzw. lässt sich später nachtragen. Die
+  übrigen 17 Rückfragen bleiben bei „Nein“.
+- Rückfragen mit drei Knöpfen (Speichern/Verwerfen/Abbrechen, Mitsichern, Import-Konflikt) bleiben,
+  wie sie sind.
+- Der `closeEvent`-Docstring (Teil 8 Nr. 8) war schon in A15 berichtigt.
+- Tests: Helfer (Vorgabe, Rückgabe bei Nein/Abbrechen/Schließen), Vorgabe beim Tauschen, beim
+  Startnummern-Angebot und beim Anmeldeformular. Gegenprobe: Die neuen Prüfungen scheitern auf dem
+  alten Stand. Lokal: GUI 343 passed. Zwei Tests mit echten Maus-/Tastaturereignissen
+  (`test_bezahlt_checkbox_im_teilnehmer_dialog`, `test_strg_s_speichert_in_der_ergebniserfassung`)
+  sind auf diesem Rechner auch ohne die Änderung rot, das liegt an der Umgebung. Die Unittests
+  sind OK.

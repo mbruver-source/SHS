@@ -198,6 +198,7 @@ from desktop_gemeinsam import (
     _ausdrucke_ordner,
     _datei_gespeichert_melden,
     _db_fehler_anzeigen,
+    _ja_nein,
     deutsche_qt_texte_laden,
     _DQ_SPALTE,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
@@ -350,12 +351,12 @@ def _startnummern_nach_import_anbieten(parent, conn) -> None:
             "Startnummern-Bereich in den Veranstaltungsdaten eintragen (Reiter „Verwaltung“).",
         )
         return
-    antwort = QMessageBox.question(
+    if _ja_nein(
         parent, "Startnummern fehlen",
         f"{len(ohne)} Teilnehmer haben noch keine Startnummer.\n\nJetzt „Fehlende "
         "Startnummern vergeben“? (Bereits vergebene Nummern bleiben unverändert.)",
-    )
-    if antwort == QMessageBox.Yes:
+        vorgabe_ja=True,
+    ):
         _fehlende_startnummern_vergeben_mit_meldung(parent, conn)
 
 
@@ -779,11 +780,10 @@ class TeilnehmerTab(QWidget):
             nummer = f"Nr. {t['startnummer']}" if t["startnummer"] is not None else "ohne Nummer"
             return f"„{t['nachname']}, {t['vorname']}“ ({nummer})"
 
-        antwort = QMessageBox.question(
+        if not _ja_nein(
             self, "Startnummern tauschen",
             f"Startnummern von {beschreibung(a)} und {beschreibung(b)} tauschen?",
-        )
-        if antwort != QMessageBox.Yes:
+        ):
             return
         try:
             tausche_startnummern(self.conn, id_a, id_b)
@@ -854,7 +854,7 @@ class TeilnehmerTab(QWidget):
             )
             return
         wer = f"der Teilnehmer in „{bezeichnung}“" if bezeichnung else "ALLER Teilnehmer"
-        antwort = QMessageBox.question(
+        if not _ja_nein(
             self, "Startnummern zurücksetzen",
             f"Die Startnummern {wer} ({anzahl}) werden entfernt. Neu vergeben "
             "kannst du sie danach mit „Fehlende Startnummern vergeben…“.\n\n"
@@ -862,9 +862,7 @@ class TeilnehmerTab(QWidget):
             "im Web erfasste Ergebnisse werden beim Zurückholen über die Startnummer "
             "zugeordnet. Nach einer Veröffentlichung im Web daher nicht mehr umnummerieren.\n\n"
             "Fortfahren?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if antwort != QMessageBox.Yes:
+        ):
             return
         try:
             entfernt = startnummern_zuruecksetzen(self.conn, pruefung)
@@ -965,9 +963,7 @@ class TeilnehmerTab(QWidget):
             )
         # Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 3): Vorgabe „Nein“ - sonst löschte
         # Strg+A, „Löschen“, Enter alle sichtbaren Teilnehmer.
-        antwort = QMessageBox.question(self, "Teilnehmer löschen", frage,
-                                       QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if antwort == QMessageBox.Yes:
+        if _ja_nein(self, "Teilnehmer löschen", frage):
             try:
                 for t in teilnehmer:
                     delete_teilnehmer(self.conn, t["id"])
@@ -1012,15 +1008,13 @@ class TeilnehmerTab(QWidget):
             else:
                 wer = "Für " + ", ".join(f"„{n}“" for n in mit_ergebnissen) + " sind"
                 subjekt = "die Teilnehmer"
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self,
                 "Keine Teilnahme",
                 f"{wer} bereits Ergebnisse erfasst. Sie bleiben gespeichert, "
                 f"werden aber nicht mehr gewertet, solange {subjekt} als "
                 "„keine Teilnahme“ markiert ist.\n\nTrotzdem markieren?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if antwort != QMessageBox.Yes:
+            ):
                 return
         try:
             for t in aktuelle:
@@ -2001,15 +1995,12 @@ class ErgebnisTab(QWidget):
         """Reagiert auf den "Liste aktualisieren"-Button: warnt vorher, falls dabei
         ungespeicherte Änderungen verloren gingen."""
         if self.hat_ungespeicherte_aenderungen():
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self,
                 "Ungespeicherte Änderungen",
                 "Es gibt noch nicht gespeicherte Ergebnisse. Beim Aktualisieren gehen diese "
                 "verloren.\n\nTrotzdem aktualisieren?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if antwort != QMessageBox.Yes:
+            ):
                 return
         self.aktualisieren()
 
@@ -2343,14 +2334,12 @@ def _stechen_offen_bestaetigen(parent, conn, leistungsklasse: str | None = None)
     ]
     if not offen:
         return True
-    antwort = QMessageBox.question(
+    return _ja_nein(
         parent, "Stechen offen",
         "In " + ", ".join(offen) + " sind mehrere punktgleich auf Platz 1 – das Stechen ist noch "
         "nicht eingetragen (Reiter „Auswertung“ → „Stechen-Sieger festlegen…“).\n\n"
         "Die Ergebnisliste trotzdem jetzt speichern? Dort steht dann „Stechen offen“.",
-        QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
     )
-    return antwort == QMessageBox.Yes
 
 
 def _eindeutige_texte(texte: list[str]) -> list[str]:
@@ -3222,12 +3211,10 @@ class ZeitplanTab(QWidget):
         self.aktualisieren()
 
     def _richter_loeschen(self, richter_id: int, name: str) -> None:
-        antwort = QMessageBox.question(
+        if not _ja_nein(
             self, "Richter löschen",
             f"„{name}“ samt allen dort eingeplanten Prüfungsblöcken/Pausen löschen?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if antwort != QMessageBox.Yes:
+        ):
             return
         try:
             loesche_zeitplan_richter(self.conn, richter_id)
@@ -3265,14 +3252,12 @@ class ZeitplanTab(QWidget):
             return
         # UX-Test 02.10.2026, U9: nur warnen, wenn es schon einen Plan gibt, der verloren ginge.
         if any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter):
-            antwort = QMessageBox.question(
+            if not _ja_nein(
                 self, "Automatisch verteilen",
                 "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter "
                 "und ERSETZT dabei deren bisherigen Zeitplan (bereits eingefügte Pausen und "
                 "von Hand geänderte Reihenfolgen gehen dabei verloren). Fortfahren?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if antwort != QMessageBox.Yes:
+            ):
                 return
         self.verteilen_ohne_rueckfrage()
 
@@ -4305,13 +4290,11 @@ def zweitstart_pruefen(ordner=None) -> bool:
         return True
     if sperre.error() != QLockFile.LockFailedError:
         return True
-    antwort = QMessageBox.question(
+    return _ja_nein(
         None, "Programm läuft bereits",
         "Das SHS-Prüfungsprogramm ist schon geöffnet. Arbeiten zwei Fenster am selben Termin, "
         "können sich Änderungen gegenseitig überschreiben.\n\nTrotzdem ein weiteres Fenster öffnen?",
-        QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
     )
-    return antwort == QMessageBox.Yes
 
 
 def laufkennung_setzen() -> bool:
@@ -4566,16 +4549,13 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
                 if not rueckfrage_moeglich:
                     return False
-                antwort = QMessageBox.question(
+                return _ja_nein(
                     self,
                     "Nicht alle Ergebnisse gespeichert",
                     "Einige Ergebnisse konnten nicht automatisch gespeichert werden (siehe "
                     "vorherige Meldung).\n\nProgramm trotzdem beenden und diese ungespeicherten "
                     "Änderungen verwerfen?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
                 )
-                return antwort == QMessageBox.Yes
         return True
 
     def _sitzungsende_pruefen(self, manager) -> None:
@@ -4762,16 +4742,13 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 # gespeicherte Zeile beim Neuaufbau der Tabs still verloren. Standard ist
                 # deshalb "Nein" (Wechsel abbrechen, Zeile korrigieren).
                 if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-                    antwort = QMessageBox.question(
+                    if not _ja_nein(
                         self,
                         "Nicht alle Ergebnisse gespeichert",
                         "Einige Ergebnisse konnten nicht gespeichert werden (siehe vorherige "
                         f"Meldung).\n\n{verwerfen_frage} und diese ungespeicherten "
                         "Änderungen verwerfen?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No,
-                    )
-                    if antwort != QMessageBox.Yes:
+                    ):
                         return False
         return True
 
@@ -4999,26 +4976,22 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 5, Marcos Entscheidung): Vorgabe „Nein“ und
         # Löschen in den Papierkorb; ohne Papierkorb endgültig nach eigener Rückfrage.
         bezeichnung = f"„{termin.verein or termin.dateiname}“ ({datum_anzeige(termin.datum) or '?'})"
-        antwort = QMessageBox.question(
+        if not _ja_nein(
             self,
             "Termin löschen",
             f"Termin {bezeichnung} inklusive aller Teilnehmer- und Ergebnisdaten in den Papierkorb "
             f"verschieben?\n\nDatei: {_pfad_anzeige(termin.pfad)}",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if antwort != QMessageBox.Yes:
+        ):
             return
         try:
             if not self._in_papierkorb(termin.pfad):
-                antwort = QMessageBox.question(
+                if not _ja_nein(
                     self,
                     "Kein Papierkorb",
                     f"Der Termin {bezeichnung} lässt sich nicht in den Papierkorb verschieben (z. B. "
                     "auf einem USB-Stick oder Netzlaufwerk ohne Papierkorb, oder die Datei ist in "
                     "einem anderen Programm geöffnet). Endgültig löschen?",
-                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-                )
-                if antwort != QMessageBox.Yes:
+                ):
                     return
                 os.remove(termin.pfad)
         except OSError as exc:

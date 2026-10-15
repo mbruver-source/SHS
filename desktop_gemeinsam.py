@@ -119,6 +119,15 @@ def _ausfuehren(dialog) -> int:
     return ergebnis
 
 
+def _ja_nein(parent, titel: str, text: str, *, vorgabe_ja: bool = False) -> bool:
+    """Ja/Nein-Rückfrage mit ausdrücklich gewählter Vorgabe; True bei „Ja“. Vorgabe „Nein“
+    für alles, was Daten ändert oder verwirft (Abschluss-QS 15.10.2026, A19c). Ruft
+    QMessageBox.question positionell auf - Klartext und Freigabe übernimmt
+    meldungsfenster_als_klartext, und Tests können die Vorgabe als fünftes Argument lesen."""
+    vorgabe = QMessageBox.Yes if vorgabe_ja else QMessageBox.No
+    return QMessageBox.question(parent, titel, text, QMessageBox.Yes | QMessageBox.No, vorgabe) == QMessageBox.Yes
+
+
 @contextlib.contextmanager
 def _wartecursor():
     """Wartecursor für längere Arbeiten (PDF- und CSV-Export, Sicherung), sicher wieder
@@ -256,14 +265,12 @@ def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_labe
     # verschicken.
     konflikte = zeitplan_ueberschneidungen(conn)
     if konflikte:
-        antwort = QMessageBox.question(
+        if not _ja_nein(
             parent, "Überschneidungen im Zeitplan",
             f"Im Zeitplan gibt es {len(konflikte)} Überschneidung(en): Teams stehen gleichzeitig "
             "bzw. ohne Mindestabstand an zwei Stellen (im Reiter „Zeitplan“ rot markiert).\n\n"
             "Trotzdem als PDF speichern?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-        )
-        if antwort != QMessageBox.Yes:
+        ):
             return
     _pdf_exportieren(parent, ablageort, status_label, "Zeitplan speichern", _export_dateiname(conn, "Zeitplan"),
                      lambda pfad: pdf_export.erstelle_zeitplan_pdf(conn, pfad), "Zeitplan gespeichert")
