@@ -2466,25 +2466,38 @@ def lesen_begrenzen(conn: sqlite3.Connection) -> None:
 
 def pruefe_termin_aufbau(conn: sqlite3.Connection) -> None:
     """Wirft sqlite3.DatabaseError, wenn die Datei nicht wie eine Termin-Datei aufgebaut
-    ist: veranstaltung und teilnehmer müssen gewöhnliche Tabellen ohne berechnete
-    Spalten sein."""
-    tabellen = {
-        zeile[0] for zeile in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('veranstaltung', 'teilnehmer')"
-        )
-    }
-    if tabellen != {"veranstaltung", "teilnehmer"}:
+    ist: veranstaltung und teilnehmer müssen gewöhnliche Tabellen sein, und keine Tabelle
+    darf berechnete Spalten haben."""
+    tabellen = [zeile[0] for zeile in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+    if not {"veranstaltung", "teilnehmer"} <= set(tabellen):
         raise sqlite3.DatabaseError("keine Termin-Datei")
-    for tabelle in ("veranstaltung", "teilnehmer"):
-        # Spalte "hidden" in table_xinfo: 2/3 = berechnete (GENERATED) Spalte.
-        if any(zeile[6] in (2, 3) for zeile in conn.execute(f"PRAGMA table_xinfo({tabelle})")):
+    for tabelle in tabellen:
+        # Spalte "hidden" in table_xinfo: 2/3 = berechnete (GENERATED) Spalte. Name als
+        # Parameter - er stammt aus der fremden Datei.
+        if any(zeile[6] in (2, 3) for zeile in conn.execute("SELECT * FROM pragma_table_xinfo(?)", (tabelle,))):
             raise sqlite3.DatabaseError("keine Termin-Datei")
 
 
-def _termin_info_lesen(pfad: Path) -> TerminInfo:
-    with closing(oeffne_termin_lesend(pfad)) as conn:
+def termin_lesend_pruefen(pfad: str | Path) -> sqlite3.Connection:
+    """Öffnet eine fremde Termin-Datei nur lesend und prüft ihren Aufbau - gemeinsame
+    Reihenfolge für Terminübersicht und Termin-Import (Abschluss-QS 15.10.2026, A19c;
+    termin_oeffnen folgt ihr ebenso, erlaubt aber zusätzlich eine Datei ohne Tabellen):
+    lesend öffnen, Arbeit begrenzen, Aufbau prüfen. Die Begrenzung bleibt
+    gesetzt (aufheben mit conn.set_progress_handler(None, 0)). Ein liegengebliebenes Journal
+    spielt der Aufrufer vorher zurück oder nicht; ohne Zurückspielen scheitert das Öffnen.
+    Bei einem Fehler wird die Verbindung geschlossen."""
+    conn = oeffne_termin_lesend(pfad)
+    try:
         lesen_begrenzen(conn)
         pruefe_termin_aufbau(conn)
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
+def _termin_info_lesen(pfad: Path) -> TerminInfo:
+    with closing(termin_lesend_pruefen(pfad)) as conn:
         v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
         anzahl = int(conn.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0])
 
@@ -2621,15 +2634,12 @@ def termin_oeffnen(pfad: str) -> sqlite3.Connection:
     if os.path.getsize(pfad) > 0:
         _journal_zurueckspielen(pfad)
         try:
+            # Gleiche Reihenfolge wie termin_lesend_pruefen; nur eine SQLite-Datei ganz ohne
+            # Tabellen ist hier erlaubt (neuer Termin), deshalb die Aufbauprüfung nur mit Tabellen.
             with closing(oeffne_termin_lesend(pfad)) as pruef:
                 lesen_begrenzen(pruef)
-                tabellen = [z[0] for z in pruef.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
-                if tabellen:
+                if pruef.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' LIMIT 1").fetchone():
                     pruefe_termin_aufbau(pruef)
-                    for tabelle in tabellen:
-                        # Name als Parameter - er stammt aus der fremden Datei.
-                        if any(z[6] in (2, 3) for z in pruef.execute("SELECT * FROM pragma_table_xinfo(?)", (tabelle,))):
-                            raise sqlite3.DatabaseError("berechnete Spalte")
                 if pruef.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                     raise sqlite3.DatabaseError("quick_check")
         except sqlite3.DatabaseError as exc:

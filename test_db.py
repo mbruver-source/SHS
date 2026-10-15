@@ -2905,6 +2905,41 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertFalse(termine["ohne_tabellen.sqlite"].lesbar)
         self.assertFalse(termine["endlos.sqlite"].lesbar)
 
+    def test_berechnete_spalte_in_nebentabelle_macht_termin_nicht_lesbar(self):
+        """Abschluss-QS 15.10.2026 (A19c): Terminübersicht und Termin-Import prüfen wie
+        termin_oeffnen alle Tabellen auf berechnete Spalten, nicht nur veranstaltung und
+        teilnehmer."""
+        import db
+
+        pfad = self.ordner / "neben.sqlite"
+        self._gueltiger_termin(pfad)
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute("CREATE TABLE extra (a, b TEXT GENERATED ALWAYS AS (upper(a)) VIRTUAL)")
+            conn.commit()
+        self.assertFalse(liste_termine(self.ordner)[0].lesbar)
+        with self.assertRaises(sqlite3.DatabaseError):
+            db.termin_lesend_pruefen(pfad)
+        # Die Verbindung ist nach dem Fehler geschlossen - unter Windows ließe sich die Datei
+        # sonst nicht löschen.
+        os.remove(pfad)
+
+    def test_termin_lesend_pruefen_begrenzt_und_prueft(self):
+        import db
+
+        pfad = self.ordner / "gut.sqlite"
+        self._gueltiger_termin(pfad)
+        with closing(db.termin_lesend_pruefen(pfad)) as conn:
+            self.assertEqual(conn.execute("SELECT verein FROM veranstaltung").fetchone()["verein"], "SGV")
+            with self.assertRaises(sqlite3.OperationalError):  # nur lesend
+                conn.execute("DELETE FROM teilnehmer")
+            with self.assertRaises(sqlite3.OperationalError):  # Arbeit begrenzt
+                conn.execute("WITH RECURSIVE z(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM z) "
+                             "SELECT count(*) FROM z").fetchone()
+        self._fremde_datei("fremd.sqlite", "CREATE TABLE kunden (id INTEGER)")
+        with self.assertRaises(sqlite3.DatabaseError):
+            db.termin_lesend_pruefen(self.ordner / "fremd.sqlite")
+        os.remove(self.ordner / "fremd.sqlite")
+
     @unittest.skipUnless(os.name == "nt", "UNC-Pfade nur unter Windows")
     def test_oeffne_termin_lesend_mit_unc_pfad(self):
         pfad = self.ordner / "Termin #3.sqlite"

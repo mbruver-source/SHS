@@ -3968,6 +3968,65 @@ def test_termin_import_dialog_meldet_nicht_lesbare_quelle(qtbot, monkeypatch, tm
     assert not (tmp_path / "weg.sqlite").exists()
 
 
+def test_termin_import_dialog_prueft_wie_termin_oeffnen(qtbot, monkeypatch, tmp_path):
+    """Abschluss-QS 15.10.2026 (A19c): Der Import-Dialog nutzt db.termin_lesend_pruefen -
+    berechnete Spalten in einer Nebentabelle machen die Quelle nicht lesbar. Ein
+    liegengebliebenes Journal wird nicht zurückgespielt (Marcos Entscheidung 15.10.2026):
+    die Quelle gilt als nicht lesbar und bleibt unverändert."""
+    import sqlite3
+    import subprocess
+    import sys
+
+    def quelle(name):
+        pfad = tmp_path / name
+        with closing(init_db(str(pfad))) as c:
+            set_veranstaltung(c, verein="Quelle", datum="2026-11-14")
+            _teilnehmer_anlegen(c, nachname="Q")
+        return pfad
+
+    def dialog_fuer(pfad):
+        info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
+                          ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
+        monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+        dialog = TerminImportDialog(None, aktueller_pfad=None)
+        qtbot.addWidget(dialog)
+        return dialog
+
+    gut = quelle("gut.sqlite")
+    dialog = dialog_fuer(gut)
+    assert dialog.ausgewaehlte_ids() and dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    dialog.schliesse_quelle()
+
+    neben = quelle("neben.sqlite")
+    with closing(sqlite3.connect(str(neben))) as c:
+        c.execute("CREATE TABLE extra (a, b TEXT GENERATED ALWAYS AS (upper(a)) VIRTUAL)")
+        c.commit()
+    dialog = dialog_fuer(neben)
+    assert "nicht gelesen" in dialog.teilnehmer_liste.item(0).text()
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    assert dialog.quelle_conn() is None
+
+    # Absturz mitten im Speichern, die Datei ist schon halb beschrieben (kleiner Cache). Ist
+    # sie noch unverändert, liest SQLite lesend den alten Stand - auch ohne zu schreiben.
+    journal = quelle("journal.sqlite")
+    skript = (
+        "import os, sqlite3, sys; c = sqlite3.connect(sys.argv[1]); "
+        "c.execute(\"PRAGMA journal_mode=DELETE\"); c.execute(\"PRAGMA cache_size=2\"); c.execute('BEGIN'); "
+        "c.execute(\"UPDATE veranstaltung SET verein = 'halb'\"); "
+        "c.execute(\"INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe) "
+        "SELECT 'x', 'y', 'z', 'DK', 1 FROM (WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n "
+        "WHERE i < 3000) SELECT i FROM n)\"); os._exit(0)"
+    )
+    subprocess.run([sys.executable, "-c", skript, str(journal)], check=False)
+    if not os.path.exists(f"{journal}-journal"):
+        pytest.skip("kein Journal entstanden (Cache groß genug)")
+    inhalt = journal.read_bytes()
+    dialog = dialog_fuer(journal)
+    assert "nicht gelesen" in dialog.teilnehmer_liste.item(0).text()
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    assert os.path.exists(f"{journal}-journal") and journal.read_bytes() == inhalt
+
+
 def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monkeypatch):
     """Ein Lese- oder Schreibfehler mitten im Import endet in einer Meldung statt im
     allgemeinen Fehlerfenster; die Liste wird trotzdem aktualisiert."""

@@ -49,17 +49,15 @@ from db import (
     dateiname_vorschlagen,
     datum_anzeige,
     leistungsklasse_label,
-    lesen_begrenzen,
     liste_termine,
     list_teilnehmer,
     normalisiere_datum,
-    oeffne_termin_lesend,
     pruefe_startnummer_bereiche,
-    pruefe_termin_aufbau,
     pruefungen_als_text,
     startnummer_bereiche,
     startnummer_bereiche_als_text,
     startnummer_bereichsgroesse,
+    termin_lesend_pruefen,
     termine_ordner,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
@@ -805,11 +803,13 @@ class TerminImportDialog(QDialog):
             return
         # Die Quelle wird nur gelesen (Desktop-Prüfung 14.10.2026, Teil 1 Nr. 2): kein
         # init_db, also keine Migration und kein Schreiben in den anderen Termin - auch
-        # schreibgeschützte Dateien älterer Versionen lassen sich so verwenden.
+        # schreibgeschützte Dateien älterer Versionen lassen sich so verwenden. Die Auswahl
+        # spielt ein Journal nicht zurück (Marcos Entscheidung 15.10.2026); ist die Datei schon
+        # halb beschrieben, gilt sie als nicht lesbar. Die Terminliste aus liste_termine hat
+        # liegengebliebene Journale wie im Startdialog schon beim Öffnen des Dialogs
+        # zurückgespielt - das betrifft also nur ein Journal, das erst danach entsteht.
         try:
-            self._quelle_conn = oeffne_termin_lesend(self._termine[index].pfad)
-            lesen_begrenzen(self._quelle_conn)  # vor der Aufbauprüfung, wie in db.liste_termine
-            pruefe_termin_aufbau(self._quelle_conn)
+            self._quelle_conn = termin_lesend_pruefen(self._termine[index].pfad)
             eintraege = []
             for t in list_teilnehmer(self._quelle_conn):
                 text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"

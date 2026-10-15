@@ -6551,3 +6551,27 @@ Entscheidungen vorab abgestimmt.
   (`test_bezahlt_checkbox_im_teilnehmer_dialog`, `test_strg_s_speichert_in_der_ergebniserfassung`)
   sind auf diesem Rechner auch ohne die Änderung rot, das liegt an der Umgebung. Die Unittests
   sind OK.
+### H2 Fremde Termin-Dateien gleich prüfen
+
+- `db.pruefe_termin_aufbau` prüft berechnete Spalten jetzt in **allen** Tabellen. Vorher tat das
+  nur `termin_oeffnen`; Terminübersicht und Termin-Import prüften nur `veranstaltung` und
+  `teilnehmer`. Neuer Helfer `db.termin_lesend_pruefen(pfad)`: lesend öffnen, Arbeit begrenzen,
+  Aufbau prüfen, bei einem Fehler Verbindung schließen. Ihn nutzen `liste_termine` (über
+  `_termin_info_lesen`) und der Termin-Import-Dialog. `termin_oeffnen` folgt derselben
+  Reihenfolge mit `pruefe_termin_aufbau` direkt, weil dort eine SQLite-Datei ganz ohne Tabellen
+  (neuer Termin) erlaubt bleibt.
+- Zusätzlich „nicht lesbar“ werden nur Dateien, die `termin_oeffnen` ohnehin abgelehnt hätte.
+- **Journal (Marcos Entscheidung):** Die Auswahl im Import-Dialog spielt kein Journal zurück.
+  Ausprobiert mit SQLite 3.53.2: Ist die Datei beim Absturz schon halb beschrieben, scheitert das
+  lesende Öffnen, und die Quelle gilt als nicht lesbar. Ist sie noch unverändert, liest SQLite
+  den alten Stand. In beiden Fällen schreibt die Auswahl nichts. **Präzisiert nach der
+  Verifikation (Marco):** Die Terminliste des Dialogs kommt aus `liste_termine` und spielt
+  liegengebliebene Journale wie im Startdialog schon beim Öffnen zurück. Das betrifft die eigenen
+  Termine im Termine-Ordner, das Verhalten bleibt; der Kommentar sagt das jetzt genau.
+- Offen und nicht Teil davon: Der Import-Dialog führt kein `quick_check` aus; das spielt nur bei
+  fremd erzeugten Dateien ohne Journal eine Rolle (wie vorher). Ebenso weiter zurückgestellt:
+  `quick_check` bei sehr großen Dateien.
+- Tests: berechnete Spalte in einer Nebentabelle (Übersicht und Import-Dialog), Helfer (nur
+  lesend, begrenzt, schließt bei Fehler), Import-Dialog mit halb geschriebener Datei samt Journal
+  (nicht lesbar, Datei und Journal unverändert). Die Gegenprobe ist rot auf dem alten Stand. GUI
+  344 passed (dieselben zwei Umgebungsfälle rot), Unittests OK.
