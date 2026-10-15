@@ -2969,6 +2969,20 @@ class TestTerminOeffnen(unittest.TestCase):
             termin_oeffnen(str(pfad))
         self.assertEqual(pfad.read_bytes(), vorher)
 
+    def test_zusaetzliche_tabelle_mit_sonderzeichen_im_namen(self):
+        """Abschluss-QS 15.10.2026: Tabellennamen aus der Datei landen nicht im SQL-Text."""
+        pfad = self._termin("sonderzeichen.sqlite")
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute('CREATE TABLE "a""); select 1; --" (x)')
+            conn.commit()
+        with closing(termin_oeffnen(str(pfad))) as conn:
+            self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
+        with closing(sqlite3.connect(str(pfad))) as conn:
+            conn.execute('CREATE TABLE "b""; x" (x, y AS (x + 1))')
+            conn.commit()
+        with self.assertRaises(TerminNichtOeffenbar):
+            termin_oeffnen(str(pfad))
+
     def test_unbekannte_werte_werden_abgelehnt(self):
         for spalte, wert in (("art", "XX"), ("stufe", 7), ("disziplin", "Wasser"), ("gegenstand_1_disziplin", "x")):
             with self.subTest(spalte=spalte):

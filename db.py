@@ -2621,7 +2621,8 @@ def termin_oeffnen(pfad: str) -> sqlite3.Connection:
                 if tabellen:
                     pruefe_termin_aufbau(pruef)
                     for tabelle in tabellen:
-                        if any(z[6] in (2, 3) for z in pruef.execute(f'PRAGMA table_xinfo("{tabelle}")')):
+                        # Name als Parameter - er stammt aus der fremden Datei.
+                        if any(z[6] in (2, 3) for z in pruef.execute("SELECT * FROM pragma_table_xinfo(?)", (tabelle,))):
                             raise sqlite3.DatabaseError("berechnete Spalte")
                 if pruef.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                     raise sqlite3.DatabaseError("quick_check")

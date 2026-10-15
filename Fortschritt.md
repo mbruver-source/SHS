@@ -6426,3 +6426,10 @@ automatisch abgearbeitet, von hoch nach optional, zusammenhängende Befunde als 
   Textabgleich auf „nicht angeboten“ für den Freischalt-Hinweis; Docstrings korrigiert.
 - **Tests:** erneut eingelesenes Formular nach geändertem Angebot, Freischalt-Hinweis nur bei
   echter Ablehnung.
+
+### A19a Abschluss-QS: Sicherheitskorrektur beim Öffnen von Termin-Dateien (15.10.2026)
+
+- Die Abschluss-QS (`qs-sicherheit`) über alle Commits A1–A18 bestätigt die drei
+  Sicherheitskorrekturen der Desktop-Prüfung als vollständig. Ein neuer, niedrig eingestufter
+  Punkt beim Öffnen fremder Termin-Dateien ist behoben (Sicherheitskorrektur, Details folgen
+  nach dem Release), mit Test.
