@@ -6798,3 +6798,14 @@ ab 201 Teilnehmern).
   `docs/HANDBUCH.pdf` neu, Version 1.0.49.
 - Tests lokal: Unittests 656 OK (172 übersprungen), GUI 359 passed.
 - Keine offenen Sicherheitsfunde in diesem Build.
+- **Nachtrag (CI nach dem Tag):** `build-macos (macos-15, AppleSilicon)` scheiterte nach
+  erfolgreichem Selbsttest beim Aushängen des DMG (`hdiutil: couldn't unmount … Resource busy`,
+  exit 16). Das ist ein sporadischer Runner-Fehler. Nach Marcos „Re-run failed jobs“ war der Job
+  grün, das DMG ist im Release.
+  - Auf Marcos Go gehärtet: `build-installer.yml` versucht das Aushängen bis zu fünfmal mit
+    3 s Pause und erzwingt es zuletzt (`hdiutil detach -force`). Der Exit-Status des
+    Selbsttests bleibt maßgeblich. Lässt sich das Laufwerk auch erzwungen nicht aushängen,
+    schlägt der Schritt bewusst fehl.
+  - Lokal mit nachgebautem `hdiutil` unter `bash -e -o pipefail` durchgespielt: 0, 2 und 9
+    Fehlversuche.
+  - Nur lokal committet, der Push geht mit dem nächsten Release (CI-Datei).

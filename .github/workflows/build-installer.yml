@@ -218,7 +218,17 @@ jobs:
           status=0
           "$laufwerk/SHS-Pruefungsprogramm.app/Contents/MacOS/SHS-Pruefungsprogramm" --selbsttest "$protokoll" || status=$?
           cat "$protokoll" || echo "Kein Protokoll geschrieben"
-          hdiutil detach "$laufwerk"
+          # Seit 1.0.49 beobachtet: Direkt nach dem Selbsttest hält macOS das Laufwerk manchmal
+          # noch fest ("Resource busy") - mehrmals versuchen, zuletzt erzwingen. Scheitert auch
+          # das, schlägt der Schritt bewusst fehl.
+          for versuch in 1 2 3 4 5; do
+            hdiutil detach "$laufwerk" && break
+            echo "Aushängen, Versuch $versuch fehlgeschlagen"
+            [ "$versuch" -lt 5 ] && sleep 3
+          done
+          if [ -d "$laufwerk" ]; then
+            hdiutil detach -force "$laufwerk"
+          fi
           exit $status
 
       - name: .dmg als Artefakt hochladen
