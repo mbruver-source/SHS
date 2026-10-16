@@ -1279,14 +1279,19 @@ def pruefe_ergebnis_eingabe(suche: int | None, anzeige: int | None) -> str | Non
 
 @_mit_rollback
 def eintragen_ergebnis(
-    conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int | None, anzeige: int | None
+    conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, suche: int | None, anzeige: int | None,
+    *, commit: bool = True,
 ) -> None:
     """Trägt Suchleistung/Anzeigeleistung für eine Disziplin eines Teilnehmers ein.
 
     suche/anzeige dürfen auch beide None sein - das löscht ein zuvor eingetragenes
     Ergebnis wieder (z.B. wenn in der Ergebniserfassung beide Felder einer Zeile geleert
     werden). Die CHECK-Constraints auf den Spalten (BETWEEN 0 AND 60/40) greifen bei
-    NULL nicht, SQLite wertet einen NULL-Vergleich nicht als Verletzung."""
+    NULL nicht, SQLite wertet einen NULL-Vergleich nicht als Verletzung.
+
+    commit=False (Sammelspeichern der Ergebniserfassung, Lasttest 16.10.2026): der Aufrufer
+    committet selbst. Ein Fehler rollt über _mit_rollback die GANZE offene Transaktion
+    zurück, also auch die vorher ohne Commit geschriebenen Ergebnisse."""
     if disziplin not in DISZIPLIN_SPALTEN:
         raise ValueError(f"Unbekannte Disziplin: {disziplin!r}")
     spalte_suche, spalte_anzeige = DISZIPLIN_SPALTEN[disziplin]
@@ -1294,12 +1299,14 @@ def eintragen_ergebnis(
         f"UPDATE ergebnisse SET {spalte_suche} = ?, {spalte_anzeige} = ? WHERE teilnehmer_id = ?",
         (suche, anzeige, teilnehmer_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 @_mit_rollback
 def setze_ergebnis_status(
-    conn: sqlite3.Connection, teilnehmer_id: int, disqualifiziert: bool, abbruch: bool
+    conn: sqlite3.Connection, teilnehmer_id: int, disqualifiziert: bool, abbruch: bool,
+    *, commit: bool = True,
 ) -> None:
     """Setzt die beiden unabhängigen Status "Disqualifiziert"/"Abbruch" eines Teilnehmers
     (Nutzerwunsch 21.09., siehe ErgebnisTab in app.py). Ist mindestens einer der beiden
@@ -1307,12 +1314,13 @@ def setze_ergebnis_status(
     Wertnote mehr - eine ggf. weiterhin in suche_*/anzeige_*-Spalten stehende Punktzahl
     bleibt dabei unangetastet (die GUI leert/sperrt die Eingabe zwar, siehe
     ErgebnisTab._punkteeingabe_sperren, ein direkter DB-Zugriff wie z.B. sync_termin.py
-    könnte sie aber weiterhin enthalten)."""
+    könnte sie aber weiterhin enthalten). commit=False wie bei eintragen_ergebnis()."""
     conn.execute(
         "UPDATE ergebnisse SET disqualifiziert = ?, abbruch = ? WHERE teilnehmer_id = ?",
         (int(disqualifiziert), int(abbruch), teilnehmer_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 @_mit_rollback

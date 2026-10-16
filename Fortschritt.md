@@ -6653,6 +6653,148 @@ Marco hat bemerkt: Die Release-Seite von 1.0.47 enthielt auch „Was ist neu in 
   auf 1.0.48 gekürzt. Der Skill `shs-build` (und die Codex-Kopie) sagt jetzt ausdrücklich „ganz
   neu schreiben, Vorversion löschen“. Am Workflow ändert sich nichts.
 - **Veröffentlichte Releases 1.0.47 und 1.0.48:** Sie sollen auf den eigenen Abschnitt plus die
-  automatische Zeile „Full Changelog“ gekürzt werden. Der Stand dazu steht im folgenden Nachtrag.- **Nachtrag:** Mit Marcos Freigabe per `gh release edit` korrigiert. v1.0.47 und v1.0.48 zeigen
+  automatische Zeile „Full Changelog“ gekürzt werden. Der Stand dazu steht im folgenden Nachtrag.
+- **Nachtrag:** Mit Marcos Freigabe per `gh release edit` korrigiert. v1.0.47 und v1.0.48 zeigen
   jetzt nur ihren eigenen Abschnitt und die Zeile „Full Changelog“. Dateien, Tags und die
   Kennzeichnung „Latest“ (1.0.48) sind unverändert. 1.0.46 war nicht betroffen.
+
+## Lasttest mit 200 / 500 / 1000 Teilnehmern (16.10.2026)
+
+Marco wollte wissen, wie lange die einzelnen Komponenten bei großen Prüfungen brauchen (nur
+Anlegen, Ergebnisse eintragen, Auswertung). Gemessen mit Version 1.0.48 über ein Messskript, das
+dieselben Module wie die Installation nutzt (Oberfläche ohne sichtbares Fenster, Median aus 3
+Läufen). Gemischte Prüfungen über alle 12 Angebote (ED 1–3 je Disziplin, DK 1–3). Das Skript
+liegt nicht im Repo. Die Datei `Lasttest-1000.sqlite` liegt zur Sichtprüfung im Termine-Ordner.
+
+**Messwerte in Sekunden (vor der Beschleunigung unten):**
+
+| Komponente | 200 | 500 | 1000 |
+|---|---|---|---|
+| Teilnehmer einzeln anlegen (gesamt, je TN ca. 2 ms) | 0,33 | 0,92 | 1,9 |
+| CSV-Import | 0,35 | 1,2 | 2,2 |
+| Startnummern vergeben | 0,01 | 0,02 | 0,04 |
+| Ergebnisse eintragen, nur Datenbank (1465 Werte bei 1000) | 0,01 | 0,03 | 0,08 |
+| Ergebniserfassung „Alle speichern“ | 0,55 | 1,6 | 3,6 |
+| Ergebniserfassung sortieren (Spaltenklick) | 0,3 | 1,3 | 2,8 |
+| Auswertung berechnen | 0,01 | 0,01 | 0,03 |
+| Ergebnisliste-PDF | 0,07 | 0,21 | 0,40 |
+| Ergebnis-Etiketten-PDF | 0,24 | 0,69 | 1,4 |
+| Statistik-PDF | 0,03 | 0,05 | 0,08 |
+| Alle Bewertungsbögen als ein PDF (3,7 MB bei 1000) | 2,0 | 6,3 | 12,5 |
+| Termin öffnen (Hauptfenster) | 0,34 | 1,1 | 1,8 |
+| Wechsel in den Reiter Ergebniserfassung | 0,47 | 1,8 | 4,8 |
+| Wechsel in die übrigen Reiter | < 0,2 | < 0,2 | < 0,2 |
+| Zusätzlicher Arbeitsspeicher | 71 MB | 138 MB | 266 MB |
+
+- Datenbank und Auswertungsrechnung wachsen linear und bleiben im Millisekundenbereich.
+- Engpass ist die Ergebniserfassung: Jede Zeile hat eigene Eingabefelder (bei 1000 TN rund 5000
+  Widgets), und die Tabelle wurde bei jedem Reiterwechsel komplett neu aufgebaut.
+- „Alle speichern“: 1,6 s von 2,6 s (Profiler) sind die Einzel-Commits je Disziplin
+  (`eintragen_ergebnis` committet selbst).
+- Messfallstrick: Ohne laufende Qt-Ereignisschleife führt `deleteLater` nie aus, alte Zellwidgets
+  sammelten sich an (scheinbar 20 s Reiterwechsel, 1,1 GB). Mit ausdrücklichem
+  `sendPostedEvents(DeferredDelete)` bleibt die Widgetzahl konstant – kein Leck in der echten
+  Anwendung.
+
+### Beschleunigung der Ergebniserfassung (Marcos Go 16.10.2026)
+
+- `ErgebnisTab.aktualisieren_falls_geaendert()`: Beim Reiterwechsel wird nur neu aufgebaut, wenn
+  sich der Datenstand seit dem letzten Aufbau geändert hat (`conn.total_changes` für diese
+  Verbindung, `PRAGMA data_version` für andere Verbindungen). Der Pfad mit ungespeicherten
+  Eingaben und „Liste aktualisieren“ sind unverändert.
+- `alle_speichern` übernimmt den neuen Datenstand, wenn die Tabelle vorher aktuell war und kein
+  Datenbankfehler auftrat. Nach eigenem Speichern ist kein Neuaufbau nötig.
+- `_aktualiere_zeilenstatus` setzt Stylesheet und Tooltip nur noch bei Änderung.
+- Speicher- und Commit-Verhalten bewusst unverändert (später ab 201 Teilnehmern geändert, siehe nächster Abschnitt).
+- Ergebnis bei 1000 TN: Reiterwechsel 4,8 s → 0,8 s (Rest: Spaltenbreiten und Anzeige), Eintippen
+  1,2 s → 0,6 s, „Alle speichern“ 3,6 s → 2,9 s.
+- Tests: fünf neue GUI-Tests in `test_app_gui.py` (kein Neuaufbau ohne Änderung bzw. nach eigenem
+  Speichern; Neuaufbau nach Änderung über dieselbe und über eine zweite Verbindung sowie nach
+  fremder Änderung vor dem Speichern). Gegenprobe: Ohne die Änderung scheitern die beiden
+  „kein Neuaufbau“-Tests.
+- **Nachbesserung nach der Verifikation:**
+  - `_datenstand()` liefert `None`, wenn die Datei gesperrt oder nicht lesbar ist. Dann wird wie
+    bisher neu aufgebaut, und `alle_speichern` bleibt im Fehlerweg aus Desktop-Prüfung Teil 3
+    Nr. 1. Vorher konnte die Abfrage dort eine ungefangene Ausnahme werfen.
+  - Nach dem Speichern wird der Stand nur übernommen, wenn keine andere Verbindung inzwischen
+    committet hat (`data_version` vorher = nachher).
+  - Bei Sortierung nach einer Ergebnisspalte wird der Stand nicht übernommen. Der nächste
+    Reiterwechsel sortiert dann wie bisher neu.
+  - Ohne Neuaufbau wird auch der Komma-Hinweis ausgeblendet.
+  - Drei weitere Tests (gesperrte Datei, Ergebnissortierung, Hinweis). Gegenprobe: Alle drei
+    scheitern ohne die jeweilige Korrektur.
+
+### „Alle speichern“ ab 200 Teilnehmern in einer Transaktion (Marcos Entscheidung 16.10.2026)
+
+Marco: „bisheriges Verhalten bis 200 Teilnehmern beibehalten und ab da das neue einbauen“.
+Sammel-PDF der Bewertungsbögen bleibt unverändert. `Lasttest-1000.sqlite` bleibt im
+Termine-Ordner liegen.
+
+- **Bis 200 Teilnehmer** (Zeilen der Ergebniserfassung) gilt das bisherige Verhalten: ein Commit
+  je Ergebnis. Bei einem Datenbankfehler bleiben die schon gespeicherten Zeilen erhalten
+  (Desktop-Prüfung Teil 3 Nr. 1).
+- **Ab 201 Teilnehmern** gilt ganz oder gar nicht: Alle Änderungen gehen in eine Transaktion, am
+  Ende folgt ein Commit. Bei einem Datenbankfehler wird zurückgerollt. Der gespeicherte Stand der
+  Tabelle wird wiederhergestellt, alle Eingaben bleiben als ungespeichert stehen. Eigene
+  Meldung: „Es wurde nichts gespeichert“.
+- **Umsetzung:**
+  - `db.eintragen_ergebnis` und `db.setze_ergebnis_status` haben jetzt den optionalen Parameter
+    `commit=True` (nur als Schlüsselwort). Alle anderen Aufrufer (Web, Kopieren, Selbsttest)
+    bleiben unverändert.
+  - Schwelle `_SAMMELSPEICHERN_UEBER_TEILNEHMER = 200` in `app.py`; sie gilt bei mehr als 200.
+  - Ein `IntegrityError` bricht im Sammelmodus das ganze Speichern ab, weil `_mit_rollback` die
+    offene Transaktion schon zurückgerollt hat.
+- **Messung „Alle speichern“:**
+
+  | Teilnehmer | 200 | 201 | 500 | 1000 |
+  |---|---|---|---|---|
+  | Dauer | 0,56 s | 0,08 s | 0,21 s | 0,59 s |
+
+  Vorher waren es bei 1000 Teilnehmern 3,6 s.
+- **Tests:**
+  - `test_db`: `commit=False` schreibt nichts fest.
+  - `test_app_gui`, drei Tests: Bis zur Schwelle bleibt die erste Zeile bei einem Fehler
+    gespeichert. Oberhalb wird bei einem Fehler nichts gespeichert, alles bleibt ungespeichert
+    und keine Transaktion offen. Oberhalb wird alles mit `commit=False` gespeichert und ist für
+    eine zweite Verbindung sichtbar.
+  - Gegenprobe: Mit abgeschaltetem Sammelmodus scheitern die beiden Tests oberhalb der Schwelle.
+- **Nachbesserung nach der Verifikation:**
+  - Auch eine unerwartete Ausnahme ohne Datenbankbezug rollt im Sammelmodus zurück. Danach gilt
+    wieder der alte Stand der Tabelle, und die Ausnahme wird weitergereicht. Vorher blieb eine
+    halbe Transaktion offen, die der nächste Commit einer anderen Aktion festgeschrieben hätte.
+    Neuer Test dazu.
+  - Die Konstante heißt jetzt `_SAMMELSPEICHERN_UEBER_TEILNEHMER`, weil sie bei mehr als 200 gilt.
+  - Die Docstrings in `db.py` erklären `commit=False`, die von `alle_speichern` erklären die
+    Schwelle.
+  - Ein `IntegrityError` im Sammelmodus nennt den betroffenen Teilnehmer in der Meldung.
+  - Build-Verifikation 1.0.49 (Marcos Entscheidungen 16.10.2026):
+    - Die Rückfrage nach gescheitertem Speichern beim Beenden und Terminwechsel sagt jetzt
+      „Nicht alle Ergebnisse konnten …“ statt „Einige …“. Das passt auch, wenn im Sammelmodus
+      gar nichts gespeichert wurde.
+    - Neuer Test für den `IntegrityError` im Sammelmodus (echter CHECK-Fehler, alles
+      zurückgerollt, Teilnehmer in der Meldung).
+    - Zurückgestellt als vertretbare Restlücke: kein Test für eine andere Verbindung, die
+      *während* „Alle speichern“ schreibt (Bedingung `data_version` vorher = nachher). Das ist
+      schwer nachzustellen.
+  - Von Marco verworfen (16.10.2026):
+    - ein Satz im Handbuch zum „ganz oder gar nicht“ ab 201 Teilnehmern;
+    - das Umformulieren von „Außerdem fehlerhafte Eingaben“, wenn ein `IntegrityError` im
+      Sammelmodus selbst die Ursache ist.
+- Stand: mit Version 1.0.49 gebaut.
+## Version 1.0.49 (16.10.2026, Build auf Marcos Wunsch „neues build“)
+
+Bündelt die Restpunkte H1–H3 der Desktop-Prüfung (Ja/Nein-Helfer, gleiche Prüfung fremder
+Termin-Dateien, CSV-Export über den gemeinsamen Ablauf) und die Beschleunigung der
+Ergebniserfassung aus dem Lasttest (Reiterwechsel nur bei geändertem Datenstand, Sammelspeichern
+ab 201 Teilnehmern).
+
+- Verifikation über alles seit `v1.0.48`: kein funktionaler Befund. Vier Kleinigkeiten hat Marco
+  entschieden: Hinweis in `Fortschritt.md`, Rückfragetext „Nicht alle Ergebnisse …“ und Test für
+  den `IntegrityError` umgesetzt, Test für Schreiben während des Speicherns zurückgestellt
+  (siehe Abschnitt Lasttest).
+- `Architektur.md` (Abschnitt Architekturentscheidungen) und `RELEASE_NOTES.md` (neu, nur
+  1.0.49) nachgezogen. Handbuch inhaltlich unverändert (Marcos Entscheidung).
+- Screenshots mit `tools/screenshots.py` neu, 11 Bilder geändert (Versionsnummer).
+  `docs/HANDBUCH.pdf` neu, Version 1.0.49.
+- Tests lokal: Unittests 656 OK (172 übersprungen), GUI 359 passed.
+- Keine offenen Sicherheitsfunde in diesem Build.

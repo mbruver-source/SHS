@@ -128,6 +128,11 @@ flowchart TB
   Verzweigungen im Code für "welche Datenbank".
 - **Web-Umfang bewusst eng gehalten**: nur Ergebniserfassung + Admin (Benutzer/Termine).
   Termin anlegen, Teilnehmerverwaltung, Zeitplan, PDF-Export bleiben Desktop-Aufgaben.
+- **Ergebniserfassung bei großen Prüfungen (Lasttest 16.10.2026)**: Die Tabelle hat je Zeile
+  eigene Eingabefelder und wird beim Reiterwechsel nur neu aufgebaut, wenn sich der Datenstand
+  geändert hat (`ErgebnisTab._datenstand`: `total_changes` plus `PRAGMA data_version`).
+  „Alle speichern“ schreibt bis 200 Teilnehmer mit einem Commit je Ergebnis. Darüber nutzt es
+  eine Transaktion (`_SAMMELSPEICHERN_UEBER_TEILNEHMER`, ganz oder gar nicht).
 - **Benutzerkonten statt gemeinsamem Zugangscode**: zwei Rollen (Administrator, "Nur
   Eintragen"), global über alle Termine (nicht mehr an einen einzelnen Termin gebunden).
 - **Datei-Upload/Download statt direktem Dateizugriff des Containers**: funktioniert

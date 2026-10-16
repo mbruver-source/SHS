@@ -78,7 +78,7 @@ from db_import import (
     CsvImportErgebnis,
 )
 from desktop_darstellung import _erzeuge_qss
-from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
+from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
 
 
 # Hinweistexte der letzten Speichermeldungen (siehe gespeichert_meldungen).
@@ -1006,6 +1006,306 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_bei_zwischenzeitlichem_dq(qtbot,
     assert ergebnis_tab._status_boxen_je_zeile[0][0].isChecked()
     assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
     assert get_ergebnis(conn, tid)["suche_flaechensuche"] is None
+
+
+def _fenster_auf_ergebnis_tab(qtbot, conn, pfad):
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    return fenster, fenster.ergebnis_tab
+
+
+def _hin_und_zurueck(fenster):
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+
+
+def test_ergebnis_tab_tabwechsel_ohne_aenderung_baut_nicht_neu(qtbot, termin):
+    # Lasttest 16.10.2026: der Neuaufbau kostet bei 1000 Teilnehmern rund 5 s.
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    feld_vorher = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0]
+
+    _hin_und_zurueck(fenster)
+
+    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is feld_vorher
+
+
+def test_ergebnis_tab_tabwechsel_baut_nach_aenderung_neu(qtbot, termin):
+    # Änderung über dieselbe Verbindung (z. B. ein anderer Reiter).
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    eintragen_ergebnis(conn, tid, "Flächensuche", 55, 35)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
+
+
+def test_ergebnis_tab_tabwechsel_erkennt_aenderung_ueber_andere_verbindung(qtbot, termin):
+    # Änderung über eine zweite Verbindung (z. B. eine zweite Programminstanz).
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    with closing(init_db(pfad)) as andere:
+        eintragen_ergebnis(andere, tid, "Flächensuche", 44, 22)
+    fenster._tabs.setCurrentWidget(ergebnis_tab)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("44", "22")
+
+
+def test_ergebnis_tab_nach_eigenem_speichern_kein_neuaufbau(qtbot, termin):
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    ergebnis_tab.alle_speichern()
+
+    _hin_und_zurueck(fenster)
+
+    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is suche_feld
+    assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
+
+
+def test_ergebnis_tab_speichern_nach_fremder_aenderung_baut_beim_tabwechsel_neu(qtbot, termin):
+    # Hat sich die DB vor dem Speichern anderweitig geändert, zeigt die Tabelle nach dem
+    # Speichern nicht alles aktuell - der nächste Tabwechsel muss neu aufbauen.
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fremd = _teilnehmer_anlegen(conn, nachname="Fremd", startnummer=2)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+
+    def zeile(nachname):
+        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    eintragen_ergebnis(conn, fremd, "Flächensuche", 41, 21)
+    ergebnis_tab.alle_speichern()
+
+    _hin_und_zurueck(fenster)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Fremd")]["Flächensuche"]
+    assert (suche_feld.text(), anzeige_feld.text()) == ("41", "21")
+
+
+def test_ergebnis_tab_speichern_bei_gesperrter_datei_bleibt_im_fehlerweg(qtbot, termin, monkeypatch):
+    # Verifikation 16.10.2026: die Abfrage des Datenstands darf den Fehlerweg von
+    # alle_speichern (Desktop-Prüfung Teil 3 Nr. 1) nicht umgehen.
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    meldungen = []
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: meldungen.append(a[1]))
+    conn.execute("PRAGMA busy_timeout = 0")
+
+    with closing(init_db(pfad)) as andere:
+        andere.execute("BEGIN EXCLUSIVE")
+        ergebnis_tab.alle_speichern()  # ohne Änderungen: darf nicht werfen
+        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+        suche_feld.setText("50")
+        anzeige_feld.setText("30")
+        ergebnis_tab.alle_speichern()
+        andere.rollback()
+
+    assert len(meldungen) == 1
+    assert ergebnis_tab.hat_ungespeicherte_aenderungen()
+
+
+def test_ergebnis_tab_nach_speichern_mit_ergebnissortierung_baut_neu(qtbot, termin):
+    # Sortierung nach einer Ergebnisspalte wendet erst ein Neuaufbau neu an - wie vorher.
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    ergebnis_tab._spalte_geklickt(_STATUS_SPALTE)
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    ergebnis_tab.alle_speichern()
+
+    _hin_und_zurueck(fenster)
+
+    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is not suche_feld
+
+
+def test_ergebnis_tab_tabwechsel_ohne_neuaufbau_blendet_hinweise_aus(qtbot, termin):
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0].inputRejected.emit()
+    assert not ergebnis_tab.hinweis_label.isHidden()
+
+    _hin_und_zurueck(fenster)
+
+    assert ergebnis_tab.hinweis_label.isHidden()
+
+
+def _zwei_eingaben_mit_fehler_beim_zweiten(qtbot, termin, monkeypatch, sammeln_ab):
+    """Zwei Teilnehmer mit Eingaben; das Schreiben des zweiten Ergebnisses scheitert."""
+    import app as app_modul
+    conn, pfad = termin
+    erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
+    zweiter = _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
+    monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", sammeln_ab)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    for zeile in range(2):
+        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
+        suche_feld.setText("50")
+        anzeige_feld.setText("30")
+
+    echt = app_modul.eintragen_ergebnis
+
+    def zweites_scheitert(conn_, tid, *a, **k):
+        if tid == zweiter:
+            _schreibfehler()
+        echt(conn_, tid, *a, **k)
+
+    meldungen = []
+    monkeypatch.setattr("app.eintragen_ergebnis", zweites_scheitert)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
+    # Beim Schließen am Testende: ungespeicherte Eingaben verwerfen statt modal nachzufragen.
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    ergebnis_tab.alle_speichern()
+    return conn, ergebnis_tab, erster, meldungen
+
+
+def test_alle_speichern_bis_200_teilnehmer_behaelt_gespeicherte_zeilen(qtbot, termin, monkeypatch):
+    # Bisheriges Verhalten (Desktop-Prüfung Teil 3 Nr. 1): Commit je Ergebnis.
+    conn, ergebnis_tab, erster, meldungen = _zwei_eingaben_mit_fehler_beim_zweiten(
+        qtbot, termin, monkeypatch, sammeln_ab=200
+    )
+
+    assert get_ergebnis(conn, erster)["suche_flaechensuche"] == 50
+    assert not ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert "Bereits gespeicherte Zeilen bleiben erhalten" in meldungen[0]
+
+
+def test_alle_speichern_ueber_schwelle_speichert_bei_fehler_nichts(qtbot, termin, monkeypatch):
+    # Lasttest 16.10.2026: oberhalb der Schwelle eine Transaktion - ganz oder gar nicht.
+    conn, ergebnis_tab, erster, meldungen = _zwei_eingaben_mit_fehler_beim_zweiten(
+        qtbot, termin, monkeypatch, sammeln_ab=1
+    )
+
+    assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
+    assert not conn.in_transaction
+    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert "Es wurde nichts gespeichert" in meldungen[0]
+    assert ergebnis_tab.status_label.text() == "Speichern abgebrochen – nichts gespeichert."
+
+
+def test_alle_speichern_ueber_schwelle_speichert_alles_in_einer_transaktion(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
+    zweiter = _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
+    monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    for zeile, (suche, anzeige) in enumerate([("50", "30"), ("44", "22")]):
+        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
+        suche_feld.setText(suche)
+        anzeige_feld.setText(anzeige)
+    ergebnis_tab._status_boxen_je_zeile[1][1].setChecked(True)  # Abbruch beim Zweiten
+    commits = []
+    monkeypatch.setattr("app.setze_ergebnis_status", _commit_zaehlen(commits, setze_ergebnis_status))
+    monkeypatch.setattr("app.eintragen_ergebnis", _commit_zaehlen(commits, eintragen_ergebnis))
+
+    ergebnis_tab.alle_speichern()
+
+    assert commits == [False, False]
+    assert not conn.in_transaction
+    with closing(init_db(pfad)) as andere:
+        assert get_ergebnis(andere, erster)["suche_flaechensuche"] == 50
+        assert get_ergebnis(andere, zweiter)["abbruch"] == 1
+    assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
+
+
+def test_alle_speichern_ueber_schwelle_laesst_bei_unerwartetem_fehler_keine_transaktion_offen(
+    qtbot, termin, monkeypatch
+):
+    # Verifikation 16.10.2026: auch eine Ausnahme ohne Datenbankbezug darf keine halbe
+    # Transaktion hinterlassen, die der nächste Commit einer anderen Aktion festschreibt.
+    conn, pfad = termin
+    erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
+    monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    for zeile in range(2):
+        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
+        suche_feld.setText("50")
+        anzeige_feld.setText("30")
+    aufrufe = []
+    echt = ergebnis_tab._aktualisiere_zeilenstatus
+
+    def zweite_zeile_scheitert(row):
+        aufrufe.append(row)
+        if len(aufrufe) == 2:
+            raise RuntimeError("unerwartet")
+        echt(row)
+
+    monkeypatch.setattr(ergebnis_tab, "_aktualisiere_zeilenstatus", zweite_zeile_scheitert)
+
+    with pytest.raises(RuntimeError):
+        ergebnis_tab.alle_speichern()
+
+    assert not conn.in_transaction
+    assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
+    monkeypatch.setattr(ergebnis_tab, "_aktualisiere_zeilenstatus", echt)
+    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+
+
+def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot, termin, monkeypatch):
+    # Verifikation 16.10.2026: ein IntegrityError (hier der echte CHECK der Datenbank) rollt
+    # im Sammelmodus über db._mit_rollback alles zurück - die Meldung nennt den Teilnehmer.
+    import app as app_modul
+    conn, pfad = termin
+    erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
+    zweiter = _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
+    monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
+    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+    for zeile in range(2):
+        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
+        suche_feld.setText("50")
+        anzeige_feld.setText("30")
+    echt = app_modul.eintragen_ergebnis
+
+    def zweiter_verletzt_check(conn_, tid, disziplin, suche, anzeige, **k):
+        echt(conn_, tid, disziplin, 99 if tid == zweiter else suche, anzeige, **k)
+
+    meldungen = []
+    monkeypatch.setattr("app.eintragen_ergebnis", zweiter_verletzt_check)
+    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
+
+    ergebnis_tab.alle_speichern()
+
+    assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
+    assert not conn.in_transaction
+    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert "Es wurde nichts gespeichert" in meldungen[0]
+    assert "Zweiter, Max – Flächensuche" in meldungen[0]
+
+
+def _commit_zaehlen(liste, funktion):
+    def aufruf(*a, commit=True, **k):
+        liste.append(commit)
+        return funktion(*a, commit=commit, **k)
+    return aufruf
 
 
 def test_filter_bezahlt_blendet_zeilen_nach_status_aus(qtbot, conn):

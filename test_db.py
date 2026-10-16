@@ -706,6 +706,22 @@ class TestDatenbank(unittest.TestCase):
         self.assertIsNone(zeile["suche_truemmerfeld"])
         self.assertIsNone(zeile["anzeige_truemmerfeld"])
 
+    def test_ergebnis_ohne_commit_bleibt_in_offener_transaktion(self):
+        # Lasttest 16.10.2026: "Alle speichern" bündelt ab 200 Teilnehmern die Schreibzugriffe
+        # in einer Transaktion - commit=False darf daher nichts festschreiben.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="X", vorname="Y", rufname_hund="Z", art="ED", stufe=1, disziplin="Trümmerfeld"))
+
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=58, anzeige=38, commit=False)
+        setze_ergebnis_status(self.conn, tid, disqualifiziert=True, abbruch=False, commit=False)
+        self.conn.rollback()
+
+        zeile = self.conn.execute(
+            "SELECT suche_truemmerfeld, disqualifiziert FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+        ).fetchone()
+        self.assertIsNone(zeile["suche_truemmerfeld"])
+        self.assertEqual(zeile["disqualifiziert"], 0)
+
     def test_teilnehmer_bearbeiten(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="Alt", vorname="A", rufname_hund="H", art="ED", stufe=1,

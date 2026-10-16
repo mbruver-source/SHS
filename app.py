@@ -1407,6 +1407,12 @@ def _punkte_validator(parent) -> QRegularExpressionValidator:
 # Spalten der Ergebnistabelle, deren Sortierschlüssel nur aus den Stammdaten kommt.
 _SORTIERSPALTEN_AUS_STAMMDATEN = (0, 1, 2, 3)
 
+# Lasttest 16.10.2026 (Marcos Entscheidung): Bei mehr Teilnehmern speichert "Alle speichern"
+# in EINER Transaktion statt mit einem Commit je Ergebnis (bei 1000 Teilnehmern 2,9 s -> 0,6 s).
+# Ein Datenbankfehler speichert dann gar nichts; bis einschließlich dieser Zahl bleibt es beim
+# bisherigen Verhalten, bei dem schon gespeicherte Zeilen erhalten bleiben.
+_SAMMELSPEICHERN_UEBER_TEILNEHMER = 200
+
 
 class ErgebnisTab(QWidget):
     """Eine Zeile je Teilnehmer. Bei DK werden alle drei Disziplinen nebeneinander in
@@ -1567,9 +1573,35 @@ class ErgebnisTab(QWidget):
         gewählte Sortierung bleibt dabei erhalten (siehe _zeilen_aufbauen)."""
         self._neu_laden()
 
+    def aktualisieren_falls_geaendert(self) -> None:
+        """Wie aktualisieren(), aber nur, wenn sich die Datenbank seit dem letzten Aufbau
+        geändert hat (für den Tabwechsel). Lasttest 16.10.2026: Der Neuaufbau kostet bei
+        1000 Teilnehmern rund 5 s, weil jede Zeile eigene Eingabefelder bekommt."""
+        stand = self._datenstand()
+        if stand is not None and stand == self._geladener_datenstand:
+            # Wie nach einem Neuaufbau: alte Status- und Komma-Hinweise ausblenden.
+            self.status_label.setText("")
+            self._eingabe_hinweis_ausblenden()
+            return
+        self.aktualisieren()
+
+    def _datenstand(self) -> tuple[int, int] | None:
+        """Kennung des Datenstands: total_changes zählt die geänderten Zeilen über diese
+        Verbindung (auch aus anderen Reitern, zurückgerollte eingeschlossen), PRAGMA
+        data_version die Commits anderer Verbindungen (z. B. einer zweiten
+        Programminstanz). None, wenn die Datei gerade nicht lesbar ist (gesperrt, Stick
+        abgezogen) - dann wird wie bisher neu aufgebaut, Fehler meldet der Neuaufbau."""
+        try:
+            return self.conn.total_changes, self.conn.execute("PRAGMA data_version").fetchone()[0]
+        except sqlite3.Error:
+            return None
+
     def _neu_laden(self, werte_override: dict | None = None, status_override: dict | None = None) -> None:
         """Gemeinsamer Kern von aktualisieren() (ohne Overrides) und
         aktualisieren_eingaben_erhalten() (mit den noch ungespeicherten Eingaben)."""
+        # Vor dem Lesen merken, damit eine Änderung während des Aufbaus beim nächsten
+        # Tabwechsel noch einen Neuaufbau auslöst.
+        self._geladener_datenstand = self._datenstand()
         self._teilnehmer_je_zeile = list_teilnehmer(self.conn, nur_teilnehmende=True)
         if self._sortierspalte in _SORTIERSPALTEN_AUS_STAMMDATEN:
             # Sortierung nach Stammdaten: vor dem Aufbau sortieren, dann nur EIN Aufbau
@@ -2129,8 +2161,13 @@ class ErgebnisTab(QWidget):
                     zu_hoch = wert is not None and wert > maximum
                     if zu_hoch:
                         stil += f" border: 2px solid {_farbe('fehler').name()};"
-                    widget.setToolTip(f"Höchstens {maximum} Punkte." if zu_hoch else "")
-                widget.setStyleSheet(stil)
+                    tooltip = f"Höchstens {maximum} Punkte." if zu_hoch else ""
+                    if widget.toolTip() != tooltip:
+                        widget.setToolTip(tooltip)
+                # Nur bei Änderung setzen: setStyleSheet ist teuer und lief bei jedem Aufbau
+                # und Speichern für tausende Felder (Lasttest 16.10.2026).
+                if widget.styleSheet() != stil:
+                    widget.setStyleSheet(stil)
             else:
                 item = self.tabelle.item(row, col)
                 if item is not None:
@@ -2173,16 +2210,44 @@ class ErgebnisTab(QWidget):
                     item.setForeground(_farbe("gedaempft"))
             self._aktualisiere_zeilenstatus(row)
 
+    def _sammelspeichern_zuruecknehmen(self, geladen_vorher: list, status_geladen_vorher: list) -> None:
+        """Rollt ein gescheitertes Sammelspeichern zurück und setzt die Tabelle auf den
+        Stand davor: alle Eingaben gelten wieder als ungespeichert."""
+        with contextlib.suppress(sqlite3.Error):
+            self.conn.rollback()
+        self._geladen_je_zeile = geladen_vorher
+        self._status_geladen_je_zeile = status_geladen_vorher
+        for zeile in range(len(self._teilnehmer_je_zeile)):
+            self._aktualisiere_zeilenstatus(zeile)
+
     def alle_speichern(self) -> None:
         """Speichert alle geänderten Zeilen der Tabelle auf einmal (unabhängig vom
-        aktuellen Filter - auch ausgeblendete Zeilen werden mitgespeichert)."""
+        aktuellen Filter - auch ausgeblendete Zeilen werden mitgespeichert). Bei mehr als
+        _SAMMELSPEICHERN_UEBER_TEILNEHMER Teilnehmern in einer Transaktion (ganz oder gar
+        nicht), sonst mit einem Commit je Ergebnis."""
         gespeichert = 0
         fehler: list[str] = []
+        # Stand die Tabelle vor dem Speichern auf dem aktuellen Datenstand, entspricht sie
+        # danach wieder der Datenbank - der nächste Tabwechsel muss dann nicht neu aufbauen.
+        # Ausnahme: Sortierung nach einer Ergebnisspalte, die ein Neuaufbau neu anwenden würde.
+        stand_vorher = self._datenstand()
+        tabelle_war_aktuell = (
+            stand_vorher is not None
+            and stand_vorher == self._geladener_datenstand
+            and self._sortierspalte in (None, *_SORTIERSPALTEN_AUS_STAMMDATEN)
+        )
+        gesammelt = len(self._teilnehmer_je_zeile) > _SAMMELSPEICHERN_UEBER_TEILNEHMER
+        if gesammelt:
+            # Für den Fehlerfall: dann gilt wieder der Stand vor dem Speichern.
+            geladen_vorher = [dict(geladen) for geladen in self._geladen_je_zeile]
+            status_geladen_vorher = list(self._status_geladen_je_zeile)
 
         # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 1: Ein Schreibfehler der Datenbank
         # (schreibgeschützt, gesperrt, Stick abgezogen) bricht beim ersten Mal ab - die
         # übrigen Eingaben bleiben als ungespeichert stehen, sodass die Nachfrage beim
         # Beenden bzw. Terminwechsel greift, statt dass eine Ausnahme sie überspringt.
+        # Im Sammelmodus (siehe _SAMMELSPEICHERN_UEBER_TEILNEHMER) wird dabei alles
+        # zurückgerollt, und alle Eingaben bleiben ungespeichert stehen.
         db_fehler: sqlite3.Error | None = None
         try:
             for row, t in enumerate(self._teilnehmer_je_zeile):
@@ -2205,7 +2270,7 @@ class ErgebnisTab(QWidget):
                             # Tabelle leer auszusehen, aber beim nächsten Laden wieder
                             # aufzutauchen bzw. dauerhaft als "nicht gespeichert" markiert zu
                             # bleiben.
-                            eintragen_ergebnis(self.conn, t["id"], disziplin, None, None)
+                            eintragen_ergebnis(self.conn, t["id"], disziplin, None, None, commit=not gesammelt)
                             geladen[disziplin] = (None, None)
                             gespeichert += 1
                             continue
@@ -2229,9 +2294,15 @@ class ErgebnisTab(QWidget):
                             continue
 
                         try:
-                            eintragen_ergebnis(self.conn, t["id"], disziplin, suche_wert, anzeige_wert)
+                            eintragen_ergebnis(
+                                self.conn, t["id"], disziplin, suche_wert, anzeige_wert, commit=not gesammelt
+                            )
                         except sqlite3.IntegrityError as exc:
                             fehler.append(f"{name} – {disziplin}: {exc}")
+                            if gesammelt:
+                                # eintragen_ergebnis hat die ganze offene Transaktion
+                                # zurückgerollt (db._mit_rollback) - also Abbruch wie unten.
+                                raise
                             continue
 
                         geladen[disziplin] = (suche_wert, anzeige_wert)
@@ -2243,23 +2314,53 @@ class ErgebnisTab(QWidget):
                 # Felder als "geleert" erkannt und die echten Punkte dauerhaft gelöscht.
 
                 if status_wert != self._status_geladen_je_zeile[row]:
-                    setze_ergebnis_status(self.conn, t["id"], status_wert[0], status_wert[1])
+                    setze_ergebnis_status(
+                        self.conn, t["id"], status_wert[0], status_wert[1], commit=not gesammelt
+                    )
                     self._status_geladen_je_zeile[row] = status_wert
                     gespeichert += 1
 
                 self._aktualisiere_zeilenstatus(row)
+            if gesammelt:
+                self.conn.commit()
         except sqlite3.Error as exc:
             db_fehler = exc
-            self._aktualisiere_zeilenstatus(row)
+            if gesammelt:
+                self._sammelspeichern_zuruecknehmen(geladen_vorher, status_geladen_vorher)
+                gespeichert = 0
+            else:
+                self._aktualisiere_zeilenstatus(row)
+        except BaseException:
+            # Unerwarteter Fehler (kein Datenbankfehler): im Sammelmodus keine halbe
+            # Transaktion offen lassen, die der nächste Commit einer anderen Aktion
+            # festschreiben würde.
+            if gesammelt:
+                self._sammelspeichern_zuruecknehmen(geladen_vorher, status_geladen_vorher)
+            raise
+
+        if tabelle_war_aktuell and db_fehler is None:
+            stand_nachher = self._datenstand()
+            # Eigene Commits ändern nur total_changes. Hat eine andere Verbindung während
+            # des Speicherns geschrieben (data_version geändert), bleibt der alte Stand
+            # gemerkt, und der nächste Tabwechsel baut neu auf.
+            if stand_nachher is not None and stand_nachher[1] == stand_vorher[1]:
+                self._geladener_datenstand = stand_nachher
 
         if db_fehler is not None:
-            self.status_label.setText(
-                f"Speichern abgebrochen – {gespeichert} Ergebnis(se) gespeichert, die übrigen nicht."
-            )
-            einleitung = (
-                "Die Ergebnisse konnten nicht (vollständig) gespeichert werden. Bereits gespeicherte "
-                "Zeilen bleiben erhalten, die übrigen Eingaben stehen weiter in der Tabelle."
-            )
+            if gesammelt:
+                self.status_label.setText("Speichern abgebrochen – nichts gespeichert.")
+                einleitung = (
+                    "Die Ergebnisse konnten nicht gespeichert werden. Es wurde nichts gespeichert, "
+                    "alle Eingaben stehen weiter in der Tabelle."
+                )
+            else:
+                self.status_label.setText(
+                    f"Speichern abgebrochen – {gespeichert} Ergebnis(se) gespeichert, die übrigen nicht."
+                )
+                einleitung = (
+                    "Die Ergebnisse konnten nicht (vollständig) gespeichert werden. Bereits gespeicherte "
+                    "Zeilen bleiben erhalten, die übrigen Eingaben stehen weiter in der Tabelle."
+                )
             if fehler:
                 # Eine einzige Meldung (Desktop-Prüfung 14.10.2026): Eingabefehler, die vor dem
                 # Abbruch auffielen, gehören mit hinein.
@@ -4541,7 +4642,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 return _ja_nein(
                     self,
                     "Nicht alle Ergebnisse gespeichert",
-                    "Einige Ergebnisse konnten nicht automatisch gespeichert werden (siehe "
+                    "Nicht alle Ergebnisse konnten automatisch gespeichert werden (siehe "
                     "vorherige Meldung).\n\nProgramm trotzdem beenden und diese ungespeicherten "
                     "Änderungen verwerfen?",
                 )
@@ -4734,7 +4835,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                     if not _ja_nein(
                         self,
                         "Nicht alle Ergebnisse gespeichert",
-                        "Einige Ergebnisse konnten nicht gespeichert werden (siehe vorherige "
+                        "Nicht alle Ergebnisse konnten gespeichert werden (siehe vorherige "
                         f"Meldung).\n\n{verwerfen_frage} und diese ungespeicherten "
                         "Änderungen verwerfen?",
                     ):
@@ -4763,6 +4864,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             # verwerfen (z. B. damit ein inzwischen als "keine Teilnahme" markierter
             # Teilnehmer verschwindet).
             self.ergebnis_tab.aktualisieren_eingaben_erhalten()
+            return
+        if widget is self.ergebnis_tab:
+            self.ergebnis_tab.aktualisieren_falls_geaendert()
             return
         if hasattr(widget, "aktualisieren"):
             widget.aktualisieren()
