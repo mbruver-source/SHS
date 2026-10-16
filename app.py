@@ -4528,13 +4528,18 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _theme_wechseln(self, theme_name: str) -> None:
         _theme_speichern(theme_name)
-        _darstellung_anwenden(QApplication.instance())
-        self._farben_auffrischen()
+        self._darstellung_neu_anwenden()
 
     def _design_wechseln(self, design_name: str) -> None:
         _design_speichern(design_name)
-        _darstellung_anwenden(QApplication.instance())
-        self._farben_auffrischen()
+        self._darstellung_neu_anwenden()
+
+    def _darstellung_neu_anwenden(self) -> None:
+        # Lasttest 16.10.2026: Qt gestaltet dabei jedes Widget neu - bei 1000 Teilnehmern
+        # rund 3 s (vor allem die Zellen der Ergebniserfassung), daher der Wartecursor.
+        with _wartecursor():
+            _darstellung_anwenden(QApplication.instance())
+            self._farben_auffrischen()
 
     def _farben_auffrischen(self) -> None:
         """Färbt Tabelleninhalte nach einem Darstellungswechsel neu. Teilnehmer,

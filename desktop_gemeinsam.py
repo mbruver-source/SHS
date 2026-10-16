@@ -131,8 +131,8 @@ def _ja_nein(parent, titel: str, text: str, *, vorgabe_ja: bool = False) -> bool
 
 @contextlib.contextmanager
 def _wartecursor():
-    """Wartecursor für längere Arbeiten (PDF- und CSV-Export, Sicherung), sicher wieder
-    zurückgesetzt (Teil 6 Nr. 7)."""
+    """Wartecursor für längere Arbeiten (z. B. Exporte, Sicherung und Wiederherstellen,
+    Ansichtswechsel), sicher wieder zurückgesetzt (Teil 6 Nr. 7)."""
     QApplication.setOverrideCursor(Qt.WaitCursor)
     try:
         yield

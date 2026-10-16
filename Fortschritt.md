@@ -6704,8 +6704,9 @@ liegt nicht im Repo. Die Datei `Lasttest-1000.sqlite` liegt zur Sichtprüfung im
   Eingaben und „Liste aktualisieren“ sind unverändert.
 - `alle_speichern` übernimmt den neuen Datenstand, wenn die Tabelle vorher aktuell war und kein
   Datenbankfehler auftrat. Nach eigenem Speichern ist kein Neuaufbau nötig.
-- `_aktualiere_zeilenstatus` setzt Stylesheet und Tooltip nur noch bei Änderung.
-- Speicher- und Commit-Verhalten bewusst unverändert (später ab 201 Teilnehmern geändert, siehe nächster Abschnitt).
+- `_aktualisiere_zeilenstatus` setzt Stylesheet und Tooltip nur noch bei Änderung.
+- Speicher- und Commit-Verhalten bewusst unverändert (später ab 201 Teilnehmern geändert,
+  siehe nächster Abschnitt).
 - Ergebnis bei 1000 TN: Reiterwechsel 4,8 s → 0,8 s (Rest: Spaltenbreiten und Anzeige), Eintippen
   1,2 s → 0,6 s, „Alle speichern“ 3,6 s → 2,9 s.
 - Tests: fünf neue GUI-Tests in `test_app_gui.py` (kein Neuaufbau ohne Änderung bzw. nach eigenem
@@ -6808,4 +6809,88 @@ ab 201 Teilnehmern).
     schlägt der Schritt bewusst fehl.
   - Lokal mit nachgebautem `hdiutil` unter `bash -e -o pipefail` durchgespielt: 0, 2 und 9
     Fehlversuche.
-  - Nur lokal committet, der Push geht mit dem nächsten Release (CI-Datei).
+  - Lokal committet, auf Marcos Wunsch von ihm selbst gepusht (16.10.2026).
+
+## Rahmen unter den Reitern unterbrochen (16.10.2026)
+
+Marco (Screenshot, Design „Hoher Kontrast“, Reiter „Verwaltung“): Die obere Rahmenlinie des
+Inhaltsbereichs fehlte unter den Reitern. Sie war nur in den Lücken zwischen den Reitern (kleine
+Striche) und rechts neben dem letzten Reiter zu sehen.
+
+- **Ursache:** `QTabWidget::pane` liegt mit `top: -1px` unter der Reiterleiste. Jeder
+  `QTabBar::tab` hatte den Fensterhintergrund als eigenen Hintergrund und übermalte die Linie;
+  sichtbar blieb sie nur in den 2 px `margin-right`. Bei „Hell“ fiel das wegen der hellgrauen
+  Linie kaum auf.
+- **Behebung:** `QTabBar::tab { background: transparent; }` in `desktop_darstellung._QSS_TEMPLATE`
+  (mit kurzem QSS-Kommentar). Die Linie läuft jetzt in allen Designs durch, der Unterstrich des
+  gewählten Reiters liegt weiter darüber. Einziges `QTabWidget` ist das Hauptfenster.
+- `test_theme.py`: die Zeichen-für-Zeichen-Erwartung für „Hell“ nachgezogen.
+- Geprüft per Bild (fensterlos gerendert, „Hell“ und „Hoher Kontrast“, vorher/nachher). GUI- und
+  Theme-Tests: 360 passed.
+- Beim nächsten Build ändern sich dadurch die Screenshots leicht (durchgehende Linie).
+- Stand: mit Version 1.0.50 gebaut.
+- Nach der Verifikation (Marcos Entscheidungen): Der veraltete QSS-Kommentar „… sowie der
+  Hilfe-Dialog“ ist korrigiert (der Hilfe-Dialog hat keine Reiter mehr), `test_theme.py` ist
+  mitgezogen. Testname und Kommentar „bisheriges Aussehen“ bleiben.
+
+## Ansicht wechseln bei 1000 Teilnehmern langsam (16.10.2026)
+
+Marco: „bei den 1000 Teilnehmer Änderungen der Ansicht sehr lange“ (Menü Ansicht → Hintergrund
+bzw. Akzentfarbe).
+
+- **Messung** (`Lasttest-1000`, offscreen, Speichern der Auswahl abgeklemmt): ein Wechsel kostet
+  rund 2,6 s, bei 200 Teilnehmern rund 0,5 s. Davon entfallen 2,0–2,1 s auf
+  `QApplication.setStyleSheet`. Qt gestaltet jedes Widget neu, und 7045 der 7293 Widgets
+  gehören zur Ergebniserfassung (3009 Punktefelder, 2000 Checkboxen samt Rahmen-Widget). Unser
+  eigenes Neuladen (Teilnehmer, Auswertung, Zeitplan, Umfärben) kostet rund 0,3 s.
+- **Abschätzung:** Ohne die Checkbox-Zellen wären es rund 1,0 s, ganz ohne Zell-Widgets rund
+  0,07 s je Wechsel.
+- **Marcos Entscheidung:** Jetzt nur ein Wartecursor. Neue Methode
+  `HauptFenster._darstellung_neu_anwenden` mit `_wartecursor()` für Hintergrund und
+  Akzentfarbe. Test `test_ansicht_wechseln_zeigt_wartecursor` (beide Wege, Registry
+  abgeklemmt); Gegenprobe ohne Wartecursor rot.
+- Vor dem Build 1.0.50 auf Marcos Entscheidung: Zeitangaben auf „rund 3 s“ vereinheitlicht
+  (gemessen offscreen 2,6 s), Docstring von `_wartecursor` allgemeiner gefasst.
+- Stand: mit Version 1.0.50 gebaut.
+
+### Vorgemerkt für später: Ergebniserfassung ohne Zell-Widgets (Marco 16.10.2026)
+
+Als eigenes, geplantes Paket (Größe L), nicht vor dem nächsten Build:
+- **Ziel:** Punktefelder und „Disqualifiziert“/„Abbruch“ werden normale Tabellenzellen. Die
+  Eingabe läuft über einen Qt-Delegate (Editor erst beim Anklicken, Validator wie heute
+  höchstens zwei Ziffern; Werte über 60/40 wie bisher rot markieren und erst beim Speichern
+  ablehnen, U5), die Checkboxen sind ankreuzbare Zellen. Damit entfallen rund 7000 Widgets bei
+  1000 Teilnehmern.
+- **Erwarteter Nutzen bei 1000 Teilnehmern:**
+  - Ansichtswechsel rund 0,1 s statt rund 3 s;
+  - Reiteraufbau, Neuaufbau nach Änderungen und Sortieren (heute 1,7–2,8 s) deutlich schneller;
+  - weniger Arbeitsspeicher.
+- **Betroffen:**
+  - `ErgebnisTab` (`_zeilen_aufbauen`, `_boxen_je_zeile`/`_status_boxen_je_zeile`, `_feldwert`,
+    `_aktualisiere_zeilenstatus`, Sortierschlüssel aus Widgets, Komma-Hinweis `inputRejected`,
+    Strg+S, Tab-Navigation);
+  - `eingabefelder()` für die Demo-Tour (`desktop_demo.py`);
+  - zahlreiche GUI-Tests, die direkt mit `QLineEdit`/`QCheckBox` arbeiten;
+  - Screenshots und Handbuch-Bilder der Ergebniserfassung.
+- **Vorher mit Marco klären:**
+  - Aussehen der Checkboxen und Eingabefelder (heute sichtbar umrandete Felder);
+  - Bedienung per Tastatur (Tab/Enter, direktes Lostippen);
+  - Umfang der Tests.
+- Auf Marcos „ja“ sollte ein Tippfehler im Docstring von `_punkte_validator` korrigiert werden.
+  Die Build-Verifikation 1.0.50 stellte fest: Der Docstring war schon richtig, der Fehler stand nur
+  in diesem Dokument (Abschnitt Lasttest). Dort ist er korrigiert, `app.py` bleibt unverändert.
+
+## Version 1.0.50 (16.10.2026, Build auf Marcos Wunsch „build“)
+
+Pflege-Version: Der Rahmen unter den Reitern läuft durch, ein Wechsel unter „Ansicht“ zeigt den
+Wartecursor (beide Abschnitte oben). Dazu kommt der schon gepushte CI-Commit zum DMG-Aushängen.
+
+- Verifikation über alles seit `v1.0.49`: kein funktionaler Befund. Kleinigkeiten nach Marcos
+  Entscheidungen erledigt: Zeitangaben vereinheitlicht, Docstring von `_wartecursor`, Zeilenlängen
+  in `Fortschritt.md`. Zwei eigene Ungenauigkeiten in `Fortschritt.md` berichtigt
+  (Docstring-Eintrag, Push-Stand des CI-Commits).
+- `RELEASE_NOTES.md` neu (nur 1.0.50). Handbuch und `Architektur.md` inhaltlich unverändert.
+- Screenshots neu (11 Bilder: Versionsnummer, durchgehende Reiterlinie), `docs/HANDBUCH.pdf` neu,
+  Version 1.0.50.
+- Tests lokal: Unittests 656 OK (172 übersprungen), GUI 362 passed.
+- Keine offenen Sicherheitsfunde in diesem Build.

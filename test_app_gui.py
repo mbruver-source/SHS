@@ -1301,6 +1301,35 @@ def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot,
     assert "Zweiter, Max – Flächensuche" in meldungen[0]
 
 
+@pytest.mark.parametrize("wechsel, speichern, auswahl", [
+    ("_design_wechseln", "app._design_speichern", "kontrast"),
+    ("_theme_wechseln", "app._theme_speichern", "gruen"),
+])
+def test_ansicht_wechseln_zeigt_wartecursor(qtbot, termin, monkeypatch, wechsel, speichern, auswahl):
+    # Lasttest 16.10.2026: bei 1000 Teilnehmern dauert der Wechsel rund 3 s.
+    from PySide6.QtCore import Qt as QtCore_Qt
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    gespeichert = []
+    cursor_waehrenddessen = []
+
+    def cursor_merken(*_a, **_k):
+        cursor = QApplication.overrideCursor()
+        cursor_waehrenddessen.append(cursor.shape() if cursor is not None else None)
+
+    # Speichern abgeklemmt: der Test darf die echte Einstellung (Registry) nicht ändern.
+    monkeypatch.setattr(speichern, gespeichert.append)
+    monkeypatch.setattr("app._darstellung_anwenden", cursor_merken)
+    monkeypatch.setattr(fenster, "_farben_auffrischen", cursor_merken)
+
+    getattr(fenster, wechsel)(auswahl)
+
+    assert gespeichert == [auswahl]
+    assert cursor_waehrenddessen == [QtCore_Qt.WaitCursor, QtCore_Qt.WaitCursor]
+    assert QApplication.overrideCursor() is None
+
+
 def _commit_zaehlen(liste, funktion):
     def aufruf(*a, commit=True, **k):
         liste.append(commit)

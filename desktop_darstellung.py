@@ -50,14 +50,16 @@ QLabel {
     color: @@TEXT@@;
 }
 
-/* Reiter (Teilnehmer/Zeitplan/.../Datensicherung sowie der Hilfe-Dialog) */
+/* Reiter (Teilnehmer/Zeitplan/.../Datensicherung) */
 QTabWidget::pane {
     border: 1px solid @@RAND@@;
     background: @@HINTERGRUND@@;
     top: -1px;
 }
+/* Reiter durchsichtig: sonst übermalen sie die obere Rahmenlinie des Inhaltsbereichs
+(top: -1px), und die Linie erscheint nur in den Lücken (Marco, 16.10.2026). */
 QTabBar::tab {
-    background: @@HINTERGRUND@@;
+    background: transparent;
     color: @@TEXT_GEDAEMPFT@@;
     padding: 8px 16px;
     border: none;
