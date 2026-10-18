@@ -21,6 +21,7 @@ das nicht zwingend, schadet aber auch nicht - hier der Einfachheit halber übera
 
 from __future__ import annotations
 
+import datetime
 import os
 import sys
 
@@ -2786,6 +2787,81 @@ def test_teilnehmer_datum_in_der_zukunft_fragt(qtbot, monkeypatch, antwort):
     assert (dialog.result() == QDialog.Accepted) == (antwort == QMessageBox.Yes)
 
 
+def _tag(abstand_tage: int) -> datetime.date:
+    return datetime.date.today() + datetime.timedelta(days=abstand_tage)
+
+
+@pytest.mark.parametrize(
+    "stichtag_tage, geburt_tage, gefragt, text",
+    [
+        (60, 30, False, None),  # Termin liegt in der Zukunft: Datum zwischen heute und Termin ist ok
+        (60, 90, True, "nach dem Prüfungsdatum"),  # nach dem Termin
+        (-100, -50, True, "nach dem Prüfungsdatum"),  # Nachtrag nach dem Termin, Datum vor heute
+        (-100, -150, False, None),
+    ],
+)
+def test_teilnehmer_zukunftsdatum_gegen_pruefungsdatum(
+    qtbot, monkeypatch, stichtag_tage, geburt_tage, gefragt, text
+):
+    """Offener Punkt 18.10.2026 (Teil 2 Nr. 12): Bezug der Zukunftsprüfung ist das Prüfungsdatum."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=_tag(stichtag_tage).isoformat())
+    dialog.geburtsdatum.setText(_tag(geburt_tage).strftime("%d.%m.%Y"))
+    fragen = []
+    monkeypatch.setattr(
+        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
+    )
+    dialog._pruefen_und_akzeptieren()
+    assert bool(fragen) == gefragt
+    if text:
+        assert text in fragen[0][1]
+
+
+def test_teilnehmer_wurftag_nach_pruefungsdatum_fragt(qtbot, monkeypatch):
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=_tag(60).isoformat())
+    dialog.wurftag.setText(_tag(90).strftime("%d.%m.%Y"))
+    fragen = []
+    monkeypatch.setattr(
+        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
+    )
+    dialog._pruefen_und_akzeptieren()
+    assert len(fragen) == 1 and fragen[0][1].startswith("Wurftag")
+
+
+def test_teilnehmer_tab_gibt_pruefungsdatum_als_stichtag_an_den_dialog(qtbot, conn, monkeypatch):
+    """Hinzufügen und Bearbeiten reichen das Datum des Termins als Stichtag weiter."""
+    set_veranstaltung(conn, "Verein", "2031-05-17")
+    _teilnehmer_anlegen(conn)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.aktualisieren()
+    uebergeben = []
+
+    class _Attrappe:
+        def __init__(self, *args, **kwargs):
+            uebergeben.append(kwargs.get("stichtag"))
+
+    monkeypatch.setattr("app.TeilnehmerDialog", _Attrappe)
+    monkeypatch.setattr("app._ausfuehren", lambda dialog: QDialog.Rejected)
+    tab._teilnehmer_hinzufuegen()
+    tab.tabelle.selectRow(0)
+    tab._teilnehmer_bearbeiten()
+    assert uebergeben == ["2031-05-17", "2031-05-17"]
+
+
+@pytest.mark.parametrize("stichtag", [None, "", "kein Datum"])
+def test_teilnehmer_zukunftsdatum_ohne_lesbares_pruefungsdatum_gegen_heute(
+    qtbot, monkeypatch, stichtag
+):
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=stichtag)
+    dialog.geburtsdatum.setText(_tag(30).strftime("%d.%m.%Y"))
+    fragen = []
+    monkeypatch.setattr(
+        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
+    )
+    dialog._pruefen_und_akzeptieren()
+    assert len(fragen) == 1 and "in der Zukunft" in fragen[0][1]
+
+
 @pytest.mark.parametrize("angebotene, gefragt", [({"DK1"}, True), ({"ED1-Trümmerfeld"}, False), (None, False)])
 def test_teilnehmer_nicht_angebotene_pruefung_fragt(qtbot, monkeypatch, angebotene, gefragt):
     """Teil 2 Nr. 13 (Marcos Entscheidung): „wird nicht angeboten, trotzdem speichern?“."""
@@ -4660,14 +4736,21 @@ def test_startnummer_spalte_sortiert_auch_bei_fehlender_startnummer_ohne_absturz
 
 
 class _StartDialogAttrappe:
+    """Startdialog, der einen Termin wählt (oder, mit `ergebnis`, abbricht bzw. die Demo
+    anfordert). `geoeffnet` zählt die Dialoge, `termin_geoeffnet` die Versuche, den gewählten
+    Termin zu öffnen - die Rückfrage nach ungespeicherten Ergebnissen kommt dazwischen."""
     geoeffnet = 0
+    termin_geoeffnet = 0
+    ergebnis = QDialog.Accepted
+    demo = False
 
     def __init__(self, *args, **kwargs):
         type(self).geoeffnet += 1
-        self.pfad = None
+        self.pfad = "gewaehlter_termin.sqlite"
+        self.demo_angefordert = type(self).demo
 
     def exec(self):
-        return QDialog.Rejected
+        return type(self).ergebnis
 
 
 def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_gelingt):
@@ -4693,7 +4776,16 @@ def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_
 
     monkeypatch.setattr("app.QMessageBox.question", _frage)
     monkeypatch.setattr(_StartDialogAttrappe, "geoeffnet", 0)
+    monkeypatch.setattr(_StartDialogAttrappe, "termin_geoeffnet", 0)
+    monkeypatch.setattr(_StartDialogAttrappe, "ergebnis", QDialog.Accepted)
+    monkeypatch.setattr(_StartDialogAttrappe, "demo", False)
     monkeypatch.setattr("app.StartDialog", _StartDialogAttrappe)
+
+    def _termin_oeffnen_attrappe(*_args, **_kwargs):
+        _StartDialogAttrappe.termin_geoeffnet += 1
+        return None  # wie ein gescheitertes Öffnen: der bisherige Termin bleibt
+
+    monkeypatch.setattr("app._termin_oeffnen_mit_meldung", _termin_oeffnen_attrappe)
     return fenster, fragen
 
 
@@ -4802,7 +4894,7 @@ def test_terminwechsel_abbrechen_bleibt_im_termin(qtbot, termin, monkeypatch):
     fenster._termin_wechseln()
 
     assert fragen == ["Ungespeicherte Ergebnisse"]
-    assert _StartDialogAttrappe.geoeffnet == 0
+    assert _StartDialogAttrappe.termin_geoeffnet == 0
 
 
 def test_terminwechsel_rueckfrage_bietet_speichern_verwerfen_abbrechen(qtbot, termin, monkeypatch):
@@ -4864,7 +4956,7 @@ def test_terminwechsel_bricht_ab_wenn_speichern_zeilen_uebrig_laesst_und_nein(qt
     fenster._termin_wechseln()
 
     assert fragen == ["Ungespeicherte Ergebnisse", "Nicht alle Ergebnisse gespeichert"]
-    assert _StartDialogAttrappe.geoeffnet == 0
+    assert _StartDialogAttrappe.termin_geoeffnet == 0
 
 
 def test_terminwechsel_geht_bei_ja_trotz_uebrig_gebliebener_aenderungen_weiter(qtbot, termin, monkeypatch):
@@ -4875,7 +4967,7 @@ def test_terminwechsel_geht_bei_ja_trotz_uebrig_gebliebener_aenderungen_weiter(q
     fenster._termin_wechseln()
 
     assert len(fragen) == 2
-    assert _StartDialogAttrappe.geoeffnet == 1
+    assert _StartDialogAttrappe.termin_geoeffnet == 1
 
 
 def test_terminwechsel_fragt_nicht_erneut_wenn_speichern_gelingt(qtbot, termin, monkeypatch):
@@ -4886,7 +4978,41 @@ def test_terminwechsel_fragt_nicht_erneut_wenn_speichern_gelingt(qtbot, termin, 
     fenster._termin_wechseln()
 
     assert fragen == ["Ungespeicherte Ergebnisse"]
+    assert _StartDialogAttrappe.termin_geoeffnet == 1
+
+
+def test_terminwechsel_fragt_nicht_wenn_der_startdialog_abgebrochen_wird(qtbot, termin, monkeypatch):
+    """Offener Punkt 18.10.2026: die Rückfrage kommt erst nach der Auswahl im Startdialog."""
+    fenster, fragen = _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, [], speichern_gelingt=True)
+    monkeypatch.setattr(_StartDialogAttrappe, "ergebnis", QDialog.Rejected)
+
+    fenster._termin_wechseln()
+
+    assert fragen == []
     assert _StartDialogAttrappe.geoeffnet == 1
+    assert _StartDialogAttrappe.termin_geoeffnet == 0
+
+
+def test_terminwechsel_zur_demo_fragt_nicht_vorab(qtbot, termin, monkeypatch):
+    """Offener Punkt 18.10.2026: bei der Demo fragt deren Schritt 2 selbst - hier keine Frage."""
+    fenster, fragen = _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, [], speichern_gelingt=True)
+    monkeypatch.setattr(_StartDialogAttrappe, "demo", True)
+    gestartet = []
+
+    class _Tour:
+        def __init__(self, fenster):
+            gestartet.append(fenster)
+
+        def starten(self):
+            pass
+
+    monkeypatch.setattr("app.DemoTour", _Tour)
+
+    fenster._termin_wechseln()
+
+    assert fragen == []
+    assert gestartet == [fenster]
+    assert _StartDialogAttrappe.termin_geoeffnet == 0
 
 
 # --- Codeprüfung 22.09., G4: Geschlecht "nicht angegeben" im TeilnehmerDialog ---------
@@ -6086,6 +6212,54 @@ def test_ergebnis_meldet_verworfene_eingabe_nach_disziplinwechsel(qtbot, conn, m
     assert len(hinweise) == 1
     assert "Nr. 3 – Wechsel, Max (Flächensuche: Disziplin inzwischen geändert)" in hinweise[0]
     assert not tab.hat_ungespeicherte_aenderungen()
+
+
+def test_ergebnis_meldet_person_mit_mehreren_gruenden_nur_einmal(qtbot, conn, monkeypatch):
+    """Offener Punkt 18.10.2026: Disziplinwechsel und DQ zugleich - eine Zeile je Person,
+    beide Gründe in einer Klammer."""
+    tid = _teilnehmer_anlegen(conn, nachname="Doppelt", startnummer=4, disziplin="Flächensuche")
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
+    conn.commit()
+    setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+
+    tab.aktualisieren_eingaben_erhalten()
+
+    assert len(hinweise) == 1
+    assert hinweise[0].count("Doppelt, Max") == 1
+    assert (
+        "Nr. 4 – Doppelt, Max (Flächensuche: Disziplin inzwischen geändert; "
+        "inzwischen „Disqualifiziert“ oder „Abbruch“ gespeichert)"
+    ) in hinweise[0]
+
+
+def test_ergebnis_meldet_mehrere_alte_disziplinen_in_einer_zeile(qtbot, conn, monkeypatch):
+    """Offener Punkt 18.10.2026: DK -> ED mit Eingaben in zwei Disziplinen ergibt eine Zeile."""
+    tid = _teilnehmer_anlegen(conn, nachname="Umgestellt", startnummer=5, art="DK", disziplin=None)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    for disziplin in ("Flächensuche", "Trümmerfeld"):
+        suche_feld, anzeige_feld = tab._boxen_je_zeile[0][disziplin]
+        suche_feld.setText("50")
+        anzeige_feld.setText("30")
+    conn.execute("UPDATE teilnehmer SET art = 'ED', disziplin = 'Behältnisstrecke' WHERE id = ?", (tid,))
+    conn.commit()
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+
+    tab.aktualisieren_eingaben_erhalten()
+
+    assert len(hinweise) == 1
+    assert hinweise[0].count("Umgestellt, Max") == 1
+    zeile = next(z for z in hinweise[0].splitlines() if "Umgestellt, Max" in z)
+    assert "Flächensuche: Disziplin inzwischen geändert" in zeile
+    assert "Trümmerfeld: Disziplin inzwischen geändert" in zeile
 
 
 def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):

@@ -6923,3 +6923,38 @@ PDF-Schrift), wohl überholte Praxistests vom September und Ideen (Englisch, wei
 - Offen aus Gruppe 1: `README_CONTAINER.md`, Abschnitt „Noch offen“ (wo der Web-Container am
   Prüfungstag läuft) braucht Marcos Antwort.
 - Tests lokal: `test_app_web` 83 OK (4 übersprungen).
+
+### 18.10.2026: Gruppe 2 (zurückgestellte kleine Punkte), mit Marcos Entscheidungen
+
+Marco hat die vier vorgeschlagenen Punkte einzeln entschieden: 1, 2 und 4 umsetzen, 3 weiter
+zurückstellen. Nur Arbeitsstand, kein Build.
+
+- **Zukunftsdatum im Teilnehmerdialog (aus Teil 2 Nr. 12):** `TeilnehmerDialog` bekommt den
+  Parameter `stichtag` (Prüfungsdatum des Termins). Geburtsdatum und Wurftag werden gegen
+  dieses Datum geprüft; ist es leer oder nicht lesbar, gilt wie bisher das heutige Datum. Der
+  Text der Rückfrage sagt „liegt nach dem Prüfungsdatum“ bzw. „liegt in der Zukunft“.
+  `app.py` (`_teilnehmer_hinzufuegen`, `_teilnehmer_bearbeiten`) reicht `veranstaltung["datum"]`
+  weiter, die Demo bleibt ohne Stichtag. Neue Tests in `test_app_gui.py` (Stichtag in der
+  Zukunft und in der Vergangenheit, Wurftag, ungültiger Stichtag, Weitergabe aus dem Tab).
+- **Doppelte Meldung „Eingaben verworfen“ (aus Teil 3 Nr. 5 / A10):** `ErgebnisTab._zeilen_aufbauen`
+  sammelt die Gründe je Person und liefert eine Zeile, z. B. „Nr. 4 – Doppelt, Max
+  (Flächensuche: Disziplin inzwischen geändert; inzwischen „Disqualifiziert“ oder „Abbruch“
+  gespeichert)“. Bei nur einem Grund ändert sich der Wortlaut nicht. Zwei neue Tests (zwei
+  Gründe, zwei alte Disziplinen nach DK → ED).
+- **Demo aus dem Startdialog fragt nur einmal (aus Teil 10 Nr. 8):** `HauptFenster._termin_wechseln`
+  öffnet zuerst den Startdialog. Die Rückfrage nach ungespeicherten Ergebnissen kommt erst nach
+  der Auswahl eines Termins. Bei „Abbrechen“ im Dialog wird nicht gefragt, bei der Demo fragt nur
+  deren Schritt 2. Die Terminwechsel-Tests prüfen jetzt, ob der gewählte Termin geöffnet wird
+  (`_StartDialogAttrappe.termin_geoeffnet`) statt ob der Dialog öffnet; zwei neue Tests.
+- **Fehlerfenster (kurze Benutzernamen, ein Fenster je Fehlerbild):** auf Marcos Entscheidung
+  weiter zurückgestellt.
+- Tests lokal: Gegenprobe je Punkt (ohne die Änderung in `app.py`/`desktop_dialoge.py` schlagen
+  die neuen Tests fehl). Auch auf dem unveränderten Stand schlagen in dieser Sitzung
+  `test_bezahlt_checkbox_im_teilnehmer_dialog` und `test_strg_s_speichert_in_der_ergebniserfassung`
+  fehl (Fensterfokus, nicht von diesen Änderungen abhängig).
+- Verifikation (unabhängiger Subagent): kein Fehler. Eine Folge der neuen Reihenfolge beim
+  Terminwechsel: Wählt jemand im Startdialog „Neuen Termin anlegen“, wird die leere Termindatei
+  schon im Dialog angelegt. Antwortet er danach auf „Ungespeicherte Ergebnisse“ mit „Abbrechen“,
+  bleibt diese leere Datei im Termine-Ordner liegen (kein Datenverlust, sie erscheint in der
+  Terminliste). **Offen für Marco:** hinnehmen oder die leere Datei beim Abbrechen wieder löschen.
+- Tests lokal (GUI + Theme): 375 passed, 1 xfailed, 2 fokusbedingte Fehlschläge wie oben.

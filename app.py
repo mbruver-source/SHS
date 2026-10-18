@@ -705,6 +705,7 @@ class TeilnehmerTab(QWidget):
             namen_je_startnummer=self._namen_je_startnummer(),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
             angebotene={p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))},
+            stichtag=(get_veranstaltung(self.conn) or {}).get("datum"),
             # Gespeichert wird im Dialog vor dem Schließen - scheitert es, bleiben die
             # Eingaben stehen (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1).
             speichern=lambda d: add_teilnehmer(self.conn, d.ergebnis()),
@@ -727,6 +728,7 @@ class TeilnehmerTab(QWidget):
             namen_je_startnummer=self._namen_je_startnummer(ausser_teilnehmer_id=teilnehmer_id),
             bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
             angebotene={p.kuerzel for p in angebotene_pruefungen(get_veranstaltung(self.conn))},
+            stichtag=(get_veranstaltung(self.conn) or {}).get("datum"),
             speichern=lambda d: update_teilnehmer(self.conn, teilnehmer_id, d.ergebnis()),
         )
         if _ausfuehren(dialog) == QDialog.Accepted:
@@ -1675,13 +1677,14 @@ class ErgebnisTab(QWidget):
             zutreffende_disziplinen = ALLE_DISZIPLINEN if t["art"] == "DK" else [t["disziplin"]]
             punkte_override = werte_override.get(t["id"], {})
             nummer = f"Nr. {t['startnummer']} – " if t["startnummer"] is not None else ""
+            # Gründe für verworfene Eingaben dieser Person; am Zeilenende zu einem einzigen
+            # Eintrag zusammengeführt (offener Punkt 18.10.2026: sonst stünde sie mehrfach da).
+            gruende: list[str] = []
             for disziplin in punkte_override:
                 if disziplin not in zutreffende_disziplinen:
                     # Teil 3 Nr. 5: Disziplin inzwischen geändert - die Eingabe zur alten
                     # Disziplin hat keinen Platz mehr und wird gemeldet statt still verworfen.
-                    verworfen.append(
-                        f"{nummer}{t['nachname']}, {t['vorname']} ({disziplin}: Disziplin inzwischen geändert)"
-                    )
+                    gruende.append(f"{disziplin}: Disziplin inzwischen geändert")
 
             self.tabelle.setItem(row, 0, QTableWidgetItem(str(t["startnummer"] or "")))
             self.tabelle.setItem(row, 1, QTableWidgetItem(f"{t['nachname']}, {t['vorname']}"))
@@ -1779,9 +1782,9 @@ class ErgebnisTab(QWidget):
             if punkte_override and (angezeigt_dq or angezeigt_abbruch):
                 # Ungespeicherte Punkte, aber inzwischen DQ/Abbruch in der DB - die Eingabe
                 # wird verworfen; der Aufrufer meldet das (Marco, 02.10.2026).
-                verworfen.append(
-                    f"{nummer}{t['nachname']}, {t['vorname']} (inzwischen „Disqualifiziert“ oder „Abbruch“ gespeichert)"
-                )
+                gruende.append("inzwischen „Disqualifiziert“ oder „Abbruch“ gespeichert")
+            if gruende:
+                verworfen.append(f"{nummer}{t['nachname']}, {t['vorname']} ({'; '.join(gruende)})")
             self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
 
@@ -4757,10 +4760,11 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
-        anderen Termin gewechselt werden kann."""
-        if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem den Termin wechseln"):
-            return
+        anderen Termin gewechselt werden kann.
 
+        Die Rückfrage nach ungespeicherten Ergebnissen kommt erst nach der Auswahl im
+        Startdialog (offener Punkt 18.10.2026): bei „Abbrechen“ im Dialog wird gar nicht
+        gefragt, und bei der Demo fragt deren Schritt 2 selbst (sonst käme die Frage zweimal)."""
         dialog = StartDialog(self, aktueller_pfad=self.pfad)
         if _ausfuehren(dialog) != QDialog.Accepted:
             return
@@ -4772,6 +4776,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                                     f"Die Demoprüfung konnte nicht gestartet werden.\n\n{_fehlertext(exc)}")
             return
         if not dialog.pfad:
+            return
+        if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem den Termin wechseln"):
             return
 
         neue_verbindung = _termin_oeffnen_mit_meldung(self, dialog.pfad)

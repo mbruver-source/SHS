@@ -48,6 +48,7 @@ from db import (
     bereiche_automatisch_berechnen,
     dateiname_vorschlagen,
     datum_anzeige,
+    datum_oder_none,
     leistungsklasse_label,
     liste_termine,
     list_teilnehmer,
@@ -136,11 +137,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         bereiche: dict[str, tuple[int, int]] | None = None,
         speichern=None,
         angebotene: set[str] | None = None,
+        stichtag: str | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Teilnehmer bearbeiten" if vorhandener else "Teilnehmer erfassen")
         # Kürzel der im Termin angebotenen Prüfungen (leer/None: keine Rückfrage), Teil 2 Nr. 13.
         self._angebotene = angebotene or set()
+        # Prüfungsdatum des Termins (JJJJ-MM-TT) als Bezug für die Zukunftsprüfung von
+        # Geburtsdatum/Wurftag; fehlt oder ist es nicht lesbar, gilt das heutige Datum.
+        self._stichtag = stichtag
         # Rückruf speichern(dialog), siehe _speichern_vor_dem_schliessen.
         self._speichern = speichern
         # Bereits vergebene Startnummern (beim Bearbeiten ohne die eigene) - für
@@ -534,13 +539,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 return
         # Desktop-Prüfung 14.10.2026 (Teil 2 Nr. 12): Tippfehler wie 2085 statt 2005 ergäben
         # ein negatives Alter (und zählten in der Statistik als jugendlich) - Rückfrage.
-        heute = datetime.date.today().isoformat()
+        pruefungstag = datum_oder_none(self._stichtag)
+        grenze = pruefungstag.isoformat() if pruefungstag else datetime.date.today().isoformat()
+        bezug = "nach dem Prüfungsdatum" if pruefungstag else "in der Zukunft"
         for bezeichnung, feld in (("Geburtsdatum", self.geburtsdatum), ("Wurftag", self.wurftag)):
             wert = normalisiere_datum(feld.text())
-            if wert and wert > heute:
+            if wert and wert > grenze:
                 if not _ja_nein(
                     self, "Datum in der Zukunft",
-                    f"{bezeichnung} {datum_anzeige(wert)} liegt in der Zukunft. Trotzdem speichern?",
+                    f"{bezeichnung} {datum_anzeige(wert)} liegt {bezug}. Trotzdem speichern?",
                 ):
                     feld.setFocus()
                     return
