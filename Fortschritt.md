@@ -6988,3 +6988,23 @@ zurückstellen. Nur Arbeitsstand, kein Build.
 - Tests lokal: Unittests 657 OK (172 übersprungen); GUI + Theme 383 passed, 1 xfailed, dazu
   dieselben 2 fokusbedingten Fehlschläge wie auf dem unveränderten Stand
   (`test_bezahlt_checkbox_im_teilnehmer_dialog`, `test_strg_s_speichert_in_der_ergebniserfassung`).
+
+### 18.10.2026: Gruppe 3, Test für eine zweite Verbindung während „Alle speichern“
+
+Restlücke vom 16.10.2026 (Lasttest/1.0.49): Der Zweig in `ErgebnisTab.alle_speichern`, der den
+eigenen Datenstand nicht übernimmt, wenn eine andere Verbindung während des Speicherns
+committet hat (`PRAGMA data_version` vorher ≠ nachher), war nie ausgelöst. Marcos Entscheidung:
+**Soll-Verhalten bleibt wie heute.** Zuletzt gespeichert gewinnt still. Fremde Änderungen an
+anderen Zellen bleiben erhalten und erscheinen beim nächsten Reiterwechsel, weil die Tabelle dann
+neu aufgebaut wird. Keine Meldung, keine Konflikterkennung je Zelle.
+
+- Neuer GUI-Test `test_ergebnis_tab_fremder_commit_waehrend_des_speicherns_baut_beim_tabwechsel_neu`,
+  parametrisiert für den Einzelmodus (Schwelle 200) und den Sammelmodus (Schwelle 1). Eine zweite
+  Verbindung auf dieselbe Datei committet mitten in `alle_speichern`, vor dem eigenen Schreiben.
+  Erwartet: eigener Wert gespeichert, Neuaufbau beim Reiterwechsel, fremder Wert sichtbar.
+  Gegenprobe: Ohne die Bedingung `stand_nachher[1] == stand_vorher[1]` schlagen beide Fälle fehl.
+- Kein zusätzlicher `test_db`-Test für PostgreSQL. `ErgebnisTab` arbeitet nur mit SQLite
+  (`data_version`, `total_changes`), und das Sperrverhalten unterscheidet sich: SQLite sperrt im
+  Sammelmodus die ganze Datei, ein fremder Schreiber wartet bis zu 5 s und scheitert dann.
+  PostgreSQL sperrt nur Zeilen. Ein gemeinsamer Test bräuchte Fallunterscheidungen, ohne mehr
+  abzusichern.

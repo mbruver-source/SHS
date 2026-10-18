@@ -1103,6 +1103,52 @@ def test_ergebnis_tab_speichern_nach_fremder_aenderung_baut_beim_tabwechsel_neu(
     assert (suche_feld.text(), anzeige_feld.text()) == ("41", "21")
 
 
+@pytest.mark.parametrize("sammeln_ab", [200, 1])
+def test_ergebnis_tab_fremder_commit_waehrend_des_speicherns_baut_beim_tabwechsel_neu(
+    qtbot, termin, monkeypatch, sammeln_ab
+):
+    """Restlücke vom 16.10.2026: Eine andere Verbindung (z. B. zweite Programminstanz)
+    committet, während „Alle speichern“ läuft. Der eigene Stand darf dann nicht als aktuell
+    gelten (data_version geändert) - der nächste Tabwechsel baut neu auf und zeigt die
+    fremde Änderung. Soll-Verhalten laut Marco 18.10.2026: so wie heute, keine Meldung.
+    Mit 200 einzeln committet, mit 1 in einer Transaktion (dort kann ein fremder Commit nur
+    vor dem ersten eigenen Schreiben landen, sonst hielte die Datei die Sperre)."""
+    import app as app_modul
+    conn, pfad = termin
+    da = _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
+    fremd = _teilnehmer_anlegen(conn, nachname="Fremd", startnummer=2)
+    monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", sammeln_ab)
+    fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
+
+    def zeile(nachname):
+        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+
+    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
+    suche_feld.setText("50")
+    anzeige_feld.setText("30")
+    echt = app_modul.eintragen_ergebnis
+    with closing(init_db(pfad)) as andere:
+
+        def mit_fremdem_commit(conn_, tid, *a, **k):
+            # Erst die andere Verbindung, dann das eigene Schreiben - nach stand_vorher.
+            if tid == da:
+                eintragen_ergebnis(andere, fremd, "Flächensuche", 41, 21)
+            echt(conn_, tid, *a, **k)
+
+        monkeypatch.setattr("app.eintragen_ergebnis", mit_fremdem_commit)
+        ergebnis_tab.alle_speichern()
+
+    assert get_ergebnis(conn, da)["suche_flaechensuche"] == 50
+    assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
+    _hin_und_zurueck(fenster)
+
+    assert ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"][0] is not suche_feld  # neu aufgebaut
+    suche_fremd, anzeige_fremd = ergebnis_tab._boxen_je_zeile[zeile("Fremd")]["Flächensuche"]
+    assert (suche_fremd.text(), anzeige_fremd.text()) == ("41", "21")
+    suche_da, anzeige_da = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
+    assert (suche_da.text(), anzeige_da.text()) == ("50", "30")
+
+
 def test_ergebnis_tab_speichern_bei_gesperrter_datei_bleibt_im_fehlerweg(qtbot, termin, monkeypatch):
     # Verifikation 16.10.2026: die Abfrage des Datenstands darf den Fehlerweg von
     # alle_speichern (Desktop-Prüfung Teil 3 Nr. 1) nicht umgehen.
