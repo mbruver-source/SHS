@@ -439,6 +439,14 @@ class TestAppWeb(_AppWebTestBasis):
         self.termine = []
         antwort = self._anmelden()
         self.assertIn("kein Termin veröffentlicht".encode(), antwort.data)
+        # Der Hinweis verweist auf die Web-Oberfläche, nicht nur auf das Kommandozeilenskript.
+        self.assertIn("Web-Oberfläche".encode(), antwort.data)
+
+    def test_passwortfeld_hat_dieselbe_gestaltung_wie_textfelder(self):
+        """Das Passwortfeld der Anmeldung war schmal und ungestaltet (offener Punkt 23.09.)."""
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(b"input[type=password]", antwort.data)
 
     def test_geloeschtes_termin_schema_leitet_sauber_zur_terminauswahl_um(self):
         """QS-Fund 21.09.: löschte ein Administrator einen Termin, während ein anderer
