@@ -119,6 +119,123 @@ def termin(tmp_path):
     connection.close()
 
 
+# --- Gemeinsame Attrappen und Zeitgrenzen (Abschluss-QS A19c, umgesetzt 18.10.2026) -------
+#
+# Zeitgrenze für qtbot.waitUntil: Hintergrundarbeit (Update-Abfrage, Neuaufbau, Freigabe
+# eines Dialogs) braucht lokal Millisekunden; die Grenze gilt nur für langsame CI-Rechner.
+WARTEZEIT_MS = 3000
+
+# Welcher Teil eines QMessageBox-Aufrufs (parent, titel, text, knoepfe, vorgabe) gemerkt wird.
+_DIALOG_TEIL = {
+    "text": lambda a: a[2],
+    "titel": lambda a: a[1],
+    "args": lambda a: a,
+    "titel_text": lambda a: (a[1], a[2]),
+    "titel_vorgabe": lambda a: (a[1], a[4]),
+    "text_vorgabe": lambda a: (a[2], a[4]),
+}
+
+
+def rueckfragen_sammeln(monkeypatch, *antworten, merke="text"):
+    """Ersetzt app.QMessageBox.question: merkt je Aufruf den Teil `merke` und antwortet
+    der Reihe nach mit `antworten` (die letzte gilt für alle weiteren Fragen)."""
+    gesammelt = []
+
+    def _frage(*a, **_k):
+        gesammelt.append(_DIALOG_TEIL[merke](a))
+        return antworten[min(len(gesammelt), len(antworten)) - 1]
+
+    monkeypatch.setattr("app.QMessageBox.question", _frage)
+    return gesammelt
+
+
+def rueckfragen_beantworten(monkeypatch, antwort):
+    """Ersetzt app.QMessageBox.question durch eine feste Antwort, ohne mitzuschreiben -
+    oft nur, damit beim Schließen am Testende kein modales Fenster hängt."""
+    monkeypatch.setattr("app.QMessageBox.question", lambda *_a, **_k: antwort)
+
+
+def meldungen_sammeln(monkeypatch, art, merke="text"):
+    """Ersetzt app.QMessageBox.<art> ("information", "warning", "critical") und merkt je
+    Aufruf den Teil `merke`."""
+    gesammelt = []
+    monkeypatch.setattr(f"app.QMessageBox.{art}", lambda *a, **_k: gesammelt.append(_DIALOG_TEIL[merke](a)))
+    return gesammelt
+
+
+def meldungen_stumm(monkeypatch, *arten):
+    """Ersetzt app.QMessageBox.<art> für jede Art durch einen stummen Aufruf."""
+    for art in arten:
+        monkeypatch.setattr(f"app.QMessageBox.{art}", lambda *_a, **_k: None)
+
+
+def _pause_dialog_attrappe(dauer_minuten, bezeichnung, uhrzeit=None):
+    """Ersetzt PauseDialog: sofort „OK“ mit den gegebenen Werten. Mit `uhrzeit` gilt die
+    Pause für alle Richter ab dieser Uhrzeit (wie das Häkchen im echten Dialog)."""
+
+    class _Feld:
+        def __init__(self, wert):
+            self._wert = wert
+
+        def isChecked(self):
+            return bool(self._wert)
+
+        def text(self):
+            return self._wert or ""
+
+    class _PauseDialog:
+        def __init__(self, *_a, **_k):
+            self.fuer_alle = _Feld(uhrzeit)
+            self.uhrzeit = _Feld(uhrzeit)
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def werte(self):
+            return {"dauer_minuten": dauer_minuten, "bezeichnung": bezeichnung}
+
+    return _PauseDialog
+
+
+def _vorbelegung_aufzeichnen(ziel: dict):
+    """Ersetzt VeranstaltungsDialog: schreibt die übergebene Vorbelegung nach `ziel` und
+    bricht sofort ab, statt einen echten (blockierenden) Dialog zu öffnen."""
+
+    class _AbbrechenderDialog:
+        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False, speichern=None):
+            ziel.clear()
+            ziel.update(vorbelegung or {})
+
+        def exec(self):
+            return QDialog.Rejected
+
+    return _AbbrechenderDialog
+
+
+def _import_dialog_attrappe(quelle, ids):
+    """Ersetzt TerminImportDialog: sofort „OK“ mit der (schon geöffneten) Quelle `quelle`
+    und den Teilnehmer-IDs `ids`; schliesse_quelle schließt sie, falls sie das kann."""
+
+    class _ImportDialog:
+        def __init__(self, parent, aktueller_pfad):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def quelle_conn(self):
+            return quelle
+
+        def ausgewaehlte_ids(self):
+            return ids
+
+        def schliesse_quelle(self):
+            if hasattr(quelle, "close"):
+                quelle.close()
+
+    return _ImportDialog
+
+
 @pytest.fixture
 def conn(termin):
     """Nur die Verbindung, für Tests ohne HauptFenster (kein Pfad nötig)."""
@@ -385,13 +502,12 @@ def test_keine_teilnahme_fragt_bei_erfassten_ergebnissen_nach(qtbot, conn, monke
     tab.show()
     tab.tabelle.selectRow(0)
 
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.No)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No, merke="args")
     qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
     assert len(fragen) == 1
     assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 0
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
     assert list_teilnehmer(conn)[0]["keine_teilnahme"] == 1
     # Das Ergebnis bleibt gespeichert.
@@ -433,8 +549,7 @@ def test_mehrfachmarkierung_bezahlt_und_keine_teilnahme(qtbot, conn, monkeypatch
     qtbot.mouseClick(tab.bezahlt_btn, Qt.MouseButton.LeftButton)
     assert {t["nachname"]: t["bezahlt"] for t in list_teilnehmer(conn)} == {"A": 0, "B": 0, "C": 0}
 
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.Yes)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
     qtbot.mouseClick(tab.teilnahme_btn, Qt.MouseButton.LeftButton)
     assert len(fragen) == 1 and "„B, Max“" in fragen[0] and "„A, Max“" not in fragen[0]
     assert {t["nachname"]: t["keine_teilnahme"] for t in list_teilnehmer(conn)} == {"A": 1, "B": 1, "C": 0}
@@ -471,9 +586,7 @@ def test_loeschen_nennt_markierten_statt_aktuellen_teilnehmer(qtbot, conn, monke
     modell.setCurrentIndex(tab.tabelle.model().index(1, 0), QItemSelectionModel.NoUpdate)
     _zeilen_markieren(tab, 0)
     assert tab.tabelle.currentRow() == 1 and tab._ausgewaehlte_id() == a
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question",
-                        lambda *a_, **k: fragen.append((a_[2], a_[4])) or QMessageBox.No)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No, merke="text_vorgabe")
     tab._teilnehmer_loeschen()
     assert "„A, Max“" in fragen[0][0]
     # Desktop-Prüfung 14.10.2026, Teil 1 Nr. 3: Vorgabe „Nein“.
@@ -521,22 +634,8 @@ def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
     tab = ZeitplanTab(conn)
     qtbot.addWidget(tab)
 
-    class _Dialog:
-        def __init__(self, *a, **k):
-            from PySide6.QtWidgets import QCheckBox, QLineEdit
-            self.fuer_alle = QCheckBox()
-            self.fuer_alle.setChecked(True)
-            self.uhrzeit = QLineEdit("12:00")
-
-        def exec(self):
-            return QDialog.Accepted
-
-        def werte(self):
-            return {"dauer_minuten": 30, "bezeichnung": "Mittag"}
-
-    monkeypatch.setattr("app.PauseDialog", _Dialog)
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a_, **k: meldungen.append(a_[2]))
+    monkeypatch.setattr("app.PauseDialog", _pause_dialog_attrappe(30, "Mittag", uhrzeit="12:00"))
+    meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._pause_hinzufuegen(richter)
     assert meldungen and "Anna: 09:10 Uhr" in meldungen[0]
 
@@ -603,7 +702,7 @@ def test_altversion_oeffnet_im_hauptfenster_mit_allen_reitern(qtbot, tmp_path, v
 
     kopie = tmp_path / "termin.sqlite"
     shutil.copy(os.path.join(_ALTDATEN, version, "termin.sqlite"), kopie)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     conn = init_db(str(kopie))
     try:
         fenster = HauptFenster(conn, str(kopie))
@@ -673,19 +772,9 @@ def test_pause_nach_startzeit_eingabe_geht_nicht_verloren(qtbot, conn, monkeypat
     qtbot.wait(150)
     assert aufgebaut == []
     modal[0] = None
-    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=2000)
+    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=WARTEZEIT_MS)
 
-    class _Dialog:
-        def __init__(self, *_a, **_k):
-            self.fuer_alle = type("C", (), {"isChecked": lambda _s: False})()
-
-        def exec(self):
-            return QDialog.Accepted
-
-        def werte(self):
-            return {"dauer_minuten": 15, "bezeichnung": "Pause"}
-
-    monkeypatch.setattr("app.PauseDialog", _Dialog)
+    monkeypatch.setattr("app.PauseDialog", _pause_dialog_attrappe(15, "Pause"))
     tab._pause_hinzufuegen(richter_id, None)
     assert [e["typ"] for e in list_zeitplan_eintraege(conn, richter_id)] == ["pause"]
 
@@ -713,14 +802,13 @@ def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, mon
     tab.zeitplan_start.setText("11:00")
     tab.zeitplan_start.editingFinished.emit()
     assert aufgebaut == [] and get_veranstaltung(conn)["zeitplan_start"] == "11:00"
-    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=2000)
+    qtbot.waitUntil(lambda: aufgebaut == [True], timeout=WARTEZEIT_MS)
     monkeypatch.undo()
 
     tab.zeitplan_start.setText("25:99")
     tab.zeitplan_start.editingFinished.emit()  # still: keine Meldung, nichts gespeichert
     assert get_veranstaltung(conn)["zeitplan_start"] == "11:00"
-    warnungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
+    warnungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
     monkeypatch.setattr("app._zeitplan_pdf_exportieren", lambda *a: pytest.fail("kein PDF erwartet"))
     tab._pdf_exportieren()
     tab._automatisch_verteilen()
@@ -746,8 +834,7 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     assert tab.stechen_btn.isEnabled()
 
     # Rückfrage vor dem Druck; "Nein" bricht ab, bevor ein Dateifenster kommt.
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *x, **k: fragen.append(x[2]) or QMessageBox.No)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
     monkeypatch.setattr("desktop_gemeinsam._speicherort_waehlen", lambda *x, **k: pytest.fail("kein Dateifenster erwartet"))
     tab._rangliste_drucken()
     assert "Stechen" in fragen[0]
@@ -811,8 +898,7 @@ def test_fremdobjekte_meldung(qtbot, monkeypatch):
     """H-1: Nach dem Entfernen fremder Trigger/Views erscheint ein Hinweis, sonst nicht."""
     import app as app_modul
 
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning")
     monkeypatch.setattr(app_modul, "entfernte_fremdobjekte", lambda: [])
     app_modul._fremdobjekte_melden(None)
     assert meldungen == []
@@ -850,7 +936,7 @@ def test_ergebnis_tab_laedt_nach_abgelehntem_speichern_neu_und_behaelt_eingaben(
     anzeige_feld.setText("30")
     assert ergebnis_tab.hat_ungespeicherte_aenderungen()
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
     setze_keine_teilnahme(conn, fehlt, True)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
@@ -886,7 +972,7 @@ def test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(
     anzeige_feld.setText("30")
     ergebnis_tab._status_boxen_je_zeile[zeile("Dq")][0].setChecked(True)
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
     # Inzwischen kommt für den unberührten Teilnehmer ein Ergebnis in die DB.
     eintragen_ergebnis(conn, unberuehrt, "Flächensuche", 55, 35)
@@ -905,8 +991,7 @@ def test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(
 
 def test_ergebnis_tab_sortieren_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(qtbot, conn, monkeypatch):
     # Wie oben, aber über den Sortier-Pfad (Spaltenklick) statt über den Tabwechsel.
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    hinweise = meldungen_sammeln(monkeypatch, "information")
     _teilnehmer_anlegen(conn, nachname="Bearbeitet", startnummer=1)
     unberuehrt = _teilnehmer_anlegen(conn, nachname="Unberuehrt", startnummer=2)
     tab = ErgebnisTab(conn)
@@ -942,8 +1027,7 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_auch_beim_sortieren(qtbot, conn,
     suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
     suche_feld.setText("50")
     anzeige_feld.setText("30")
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    hinweise = meldungen_sammeln(monkeypatch, "information")
     setze_ergebnis_status(conn, tid, disqualifiziert=False, abbruch=True)
 
     tab._spalte_geklickt(1)
@@ -967,9 +1051,8 @@ def test_ergebnis_tab_kein_hinweis_bei_selbst_gesetztem_dq(qtbot, termin, monkey
     ergebnis_tab = fenster.ergebnis_tab
     ergebnis_tab._status_boxen_je_zeile[0][0].setChecked(True)
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
+    hinweise = meldungen_sammeln(monkeypatch, "information")
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
@@ -995,9 +1078,8 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_bei_zwischenzeitlichem_dq(qtbot,
     suche_feld.setText("50")
     anzeige_feld.setText("30")
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
+    hinweise = meldungen_sammeln(monkeypatch, "information")
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
     setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
@@ -1224,7 +1306,7 @@ def _zwei_eingaben_mit_fehler_beim_zweiten(qtbot, termin, monkeypatch, sammeln_a
     monkeypatch.setattr("app.eintragen_ergebnis", zweites_scheitert)
     monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
     # Beim Schließen am Testende: ungespeicherte Eingaben verwerfen statt modal nachzufragen.
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     ergebnis_tab.alle_speichern()
     return conn, ergebnis_tab, erster, meldungen
 
@@ -1289,7 +1371,7 @@ def test_alle_speichern_ueber_schwelle_laesst_bei_unerwartetem_fehler_keine_tran
     erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
     _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
     monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile in range(2):
         suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
@@ -1323,7 +1405,7 @@ def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot,
     erster = _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1)
     zweiter = _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
     monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile in range(2):
         suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
@@ -1628,11 +1710,11 @@ def test_ed_mit_weiteren_gegenstaenden_fragt_vor_dem_speichern(qtbot, monkeypatc
     dialog.gegenstand_2.setText("Korken")
     dialog.art.setCurrentText("ED")
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     dialog._pruefen_und_akzeptieren()
     assert dialog.result() == 0  # abgelehnt -> Dialog bleibt offen
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     dialog._pruefen_und_akzeptieren()
     assert dialog.result() == 1
     assert dialog.ergebnis().gegenstand_2 is None
@@ -2209,7 +2291,7 @@ def test_version_tupel_und_neutrale_meldung(qtbot, monkeypatch):
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     dialog._updates_pruefen()
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
     assert dialog._ergebnis_zeile.text().startswith("Neueste veröffentlichte Version: 2.0.0-rc1")
     assert not dialog._download_btn.isHidden()
 
@@ -2228,7 +2310,7 @@ def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monke
     qtbot.addWidget(dialog)
     dialog._updates_pruefen()
     assert not dialog._updates_btn.isEnabled()
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
     assert "nicht rechtzeitig" in dialog._ergebnis_zeile.text()
     freigabe.set()
     qtbot.wait(200)
@@ -2240,7 +2322,7 @@ def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monke
     monkeypatch.setattr(app, "_neueste_version_pruefen", kaputt)
     monkeypatch.setattr(VersionDialog, "UPDATE_ZEITGRENZE_MS", 15000)
     dialog._updates_pruefen()
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
     assert "fehlgeschlagen (AttributeError)" in dialog._ergebnis_zeile.text()
 
     # Eine Antwort aus einem früheren Lauf wird verworfen, auch wenn gerade wieder geprüft wird.
@@ -2250,7 +2332,7 @@ def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monke
     dialog._update_ergebnis(dialog._update_lauf - 1, ("8.8.8", None))
     assert not dialog._updates_btn.isEnabled() and "8.8.8" not in dialog._ergebnis_zeile.text()
     freigabe.set()
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
 
 
 @pytest.mark.parametrize("antwort", [QMessageBox.No, QMessageBox.Yes])
@@ -2260,8 +2342,7 @@ def test_zweitstart_fragt_nach(qtbot, tmp_path, monkeypatch, antwort):
 
     monkeypatch.setattr(app, "_zweitstart_sperre", [])
     assert app.zweitstart_pruefen(tmp_path) is True
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[4])) or antwort)
+    fragen = rueckfragen_sammeln(monkeypatch, antwort, merke="titel_vorgabe")
     assert app.zweitstart_pruefen(tmp_path) is (antwort == QMessageBox.Yes)
     assert fragen == [("Programm läuft bereits", QMessageBox.No)]
     for sperre in app._zweitstart_sperre:
@@ -2300,7 +2381,7 @@ def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qt
     update_buttons = [b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen"]
     assert len(update_buttons) == 1
     qtbot.mouseClick(update_buttons[0], Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)  # Abfrage läuft im Hintergrund
 
     assert neuere_version in dialog._ergebnis_zeile.text()
     assert dialog._download_btn.isVisible()
@@ -2321,7 +2402,7 @@ def test_versiondialog_update_button_zeigt_hinweis_wenn_aktuell(qtbot, monkeypat
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
     qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)  # Abfrage läuft im Hintergrund
 
     assert "bereits die neueste Version" in dialog._ergebnis_zeile.text()
     assert not dialog._download_btn.isVisible()
@@ -2342,7 +2423,7 @@ def test_versiondialog_update_button_zeigt_fehler_ohne_internet(qtbot, monkeypat
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
     qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=3000)  # Abfrage läuft im Hintergrund
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)  # Abfrage läuft im Hintergrund
 
     assert "Keine Verbindung" in dialog._ergebnis_zeile.text()
     assert not dialog._download_btn.isVisible()
@@ -2433,7 +2514,7 @@ def test_schliessen_fragt_nach_wenn_speichern_zeilen_uebrig_laesst_und_bricht_be
     # anzeigt (z.B. nur ein Feld einer Zeile ausgefüllt).
     monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
 
     fenster.close()
 
@@ -2463,7 +2544,7 @@ def test_schliessen_bei_schreibfehler_fragt_nach_statt_still_zu_verwerfen(qtbot,
     meldungen = []
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
     monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
 
     fenster.close()
 
@@ -2486,7 +2567,7 @@ def test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen(qtbot, termin, 
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
     monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
     # Für das Schließen beim Aufräumen des Tests: verwerfen statt modal zu warten.
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     manager = _FakeSitzungsManager(interaktion=False)
 
     fenster._sitzungsende_pruefen(manager)
@@ -2627,8 +2708,7 @@ def test_neuer_termin_legt_datei_an_und_fragt_bei_vorhandener(qtbot, tmp_path, m
         return dialog.result()
 
     monkeypatch.setattr(VeranstaltungsDialog, "exec", _exec)
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.Yes)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="titel")
 
     start = StartDialog()
     qtbot.addWidget(start)
@@ -2660,7 +2740,7 @@ def test_reiterwechsel_bei_schreibfehler_wechselt_trotzdem(qtbot, termin, monkey
     anzeige_feld.setText("38")
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
     monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
 
     fenster._tabs.setCurrentIndex(0)
 
@@ -2721,9 +2801,8 @@ def test_neuer_termin_speicherort_wird_geprueft(qtbot, tmp_path, monkeypatch):
     (tmp_path / "2026-11-14_SGV-Koeppern.sqlite").write_bytes(b"")
     dialog = _neuer_termin_dialog(qtbot, tmp_path, monkeypatch)
     assert dialog.pfad_feld.text() == str(tmp_path / "2026-11-14_SGV-Koeppern (2).sqlite")
-    warnungen, fragen = [], []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[2]))
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.No)
+    warnungen = meldungen_sammeln(monkeypatch, "warning")
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No, merke="titel")
 
     dialog.pfad_feld.setText("termin.sqlite")
     dialog._pruefen_und_akzeptieren()
@@ -2761,8 +2840,7 @@ def test_veranstaltungsdialog_zwischeneingabe_im_bereich(qtbot, monkeypatch):
     _beschriftung, von_feld, bis_feld = dialog.bereich_felder["DK1"]
     von_feld.setText("20.")
     bis_feld.setText("40")
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning")
     dialog._pruefen_und_akzeptieren()
     assert "„20.“ ist keine Startnummer (1–999)" in meldungen[0] and "invalid literal" not in meldungen[0]
     assert dialog.focusWidget() is von_feld and dialog.result() == 0
@@ -2776,7 +2854,7 @@ def test_dialoge_fokus_und_groesse(qtbot, tmp_path, monkeypatch):
     teilnehmer.show()
     assert teilnehmer.focusWidget() is teilnehmer.nachname
     teilnehmer.nachname.setText("Muster")
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: None)
+    meldungen_stumm(monkeypatch, "warning")
     teilnehmer._pruefen_und_akzeptieren()
     assert teilnehmer.focusWidget() is teilnehmer.vorname
 
@@ -2826,8 +2904,7 @@ def test_teilnehmer_datum_in_der_zukunft_fragt(qtbot, monkeypatch, antwort):
     """Teil 2 Nr. 12: Rückfrage (Vorgabe „Nein“), keine Sperre."""
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
     dialog.geburtsdatum.setText("01.01.2085")
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[4])) or antwort)
+    fragen = rueckfragen_sammeln(monkeypatch, antwort, merke="titel_vorgabe")
     dialog._pruefen_und_akzeptieren()
     assert fragen == [("Datum in der Zukunft", QMessageBox.No)]
     assert (dialog.result() == QDialog.Accepted) == (antwort == QMessageBox.Yes)
@@ -2852,10 +2929,7 @@ def test_teilnehmer_zukunftsdatum_gegen_pruefungsdatum(
     """Offener Punkt 18.10.2026 (Teil 2 Nr. 12): Bezug der Zukunftsprüfung ist das Prüfungsdatum."""
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=_tag(stichtag_tage).isoformat())
     dialog.geburtsdatum.setText(_tag(geburt_tage).strftime("%d.%m.%Y"))
-    fragen = []
-    monkeypatch.setattr(
-        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
-    )
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="titel_text")
     dialog._pruefen_und_akzeptieren()
     assert bool(fragen) == gefragt
     if text:
@@ -2865,10 +2939,7 @@ def test_teilnehmer_zukunftsdatum_gegen_pruefungsdatum(
 def test_teilnehmer_wurftag_nach_pruefungsdatum_fragt(qtbot, monkeypatch):
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=_tag(60).isoformat())
     dialog.wurftag.setText(_tag(90).strftime("%d.%m.%Y"))
-    fragen = []
-    monkeypatch.setattr(
-        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
-    )
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="titel_text")
     dialog._pruefen_und_akzeptieren()
     assert len(fragen) == 1 and fragen[0][1].startswith("Wurftag")
 
@@ -2900,10 +2971,7 @@ def test_teilnehmer_zukunftsdatum_ohne_lesbares_pruefungsdatum_gegen_heute(
 ):
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot, stichtag=stichtag)
     dialog.geburtsdatum.setText(_tag(30).strftime("%d.%m.%Y"))
-    fragen = []
-    monkeypatch.setattr(
-        "app.QMessageBox.question", lambda *a, **k: fragen.append((a[1], a[2])) or QMessageBox.Yes
-    )
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="titel_text")
     dialog._pruefen_und_akzeptieren()
     assert len(fragen) == 1 and "in der Zukunft" in fragen[0][1]
 
@@ -2915,8 +2983,7 @@ def test_teilnehmer_nicht_angebotene_pruefung_fragt(qtbot, monkeypatch, angebote
     dialog.art.setCurrentText("ED")
     dialog.stufe.setCurrentText("1")
     dialog.disziplin.setCurrentText("Trümmerfeld")
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.No)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
     dialog._pruefen_und_akzeptieren()
     if gefragt:
         assert "wird in diesem Termin nicht angeboten" in fragen[0] and dialog.result() == 0
@@ -2949,9 +3016,8 @@ def test_neuer_termin_in_fehlendem_ordner_meldet_fehler_und_legt_nichts_an(qtbot
     monkeypatch.setattr("app.liste_termine", lambda: [])
     monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
     monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
-    meldungen = []
     # Teil 2 Nr. 2: der fehlende Ordner fällt jetzt schon im Dialog auf.
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning")
     ziel = tmp_path / "fehlt" / "termin.sqlite"
 
     def _exec(dialog):
@@ -2997,7 +3063,7 @@ def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, 
 
     monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
 
     fenster.close()
 
@@ -3121,7 +3187,7 @@ def test_sitzungsende_mit_zusage_fragt_im_folgenden_closeevent_nicht_erneut(qtbo
     assert fenster.isVisible()
     assert fenster._beenden_freigegeben is False
     # Aufräumen: beim Teardown darf das Schließen nicht erneut blockieren.
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-Nachrichten (WM_ENDSESSION)")
@@ -3192,7 +3258,7 @@ def test_sitzungsende_bricht_bei_resten_und_nein_ab(qtbot, termin, monkeypatch):
     qtbot.addWidget(fenster)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     manager = _FakeSitzungsManager(interaktion=True)
 
     fenster._sitzungsende_pruefen(manager)
@@ -3787,18 +3853,7 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
     monkeypatch.setattr("app.liste_termine", lambda: [letzter])
 
     aufgezeichnete_vorbelegung = {}
-
-    class _AbbrechenderDialogStub:
-        """Ersetzt VeranstaltungsDialog: zeichnet nur die übergebene Vorbelegung auf und
-        bricht sofort ab, statt einen echten (blockierenden) Dialog zu öffnen."""
-
-        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False, speichern=None):
-            aufgezeichnete_vorbelegung.update(vorbelegung or {})
-
-        def exec(self):
-            return QDialog.Rejected
-
-    monkeypatch.setattr("app.VeranstaltungsDialog", _AbbrechenderDialogStub)
+    monkeypatch.setattr("app.VeranstaltungsDialog", _vorbelegung_aufzeichnen(aufgezeichnete_vorbelegung))
 
     dialog = StartDialog()
     qtbot.addWidget(dialog)
@@ -3824,16 +3879,7 @@ def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, mon
     monkeypatch.setattr("app.liste_termine", lambda: [])
 
     aufgezeichnete_vorbelegung = {"noch_nicht_aufgerufen": True}
-
-    class _AbbrechenderDialogStub:
-        def __init__(self, parent=None, vorbelegung=None, bearbeiten=False, speichern=None):
-            aufgezeichnete_vorbelegung.clear()
-            aufgezeichnete_vorbelegung.update(vorbelegung or {})
-
-        def exec(self):
-            return QDialog.Rejected
-
-    monkeypatch.setattr("app.VeranstaltungsDialog", _AbbrechenderDialogStub)
+    monkeypatch.setattr("app.VeranstaltungsDialog", _vorbelegung_aufzeichnen(aufgezeichnete_vorbelegung))
 
     dialog = StartDialog()
     qtbot.addWidget(dialog)
@@ -3956,7 +4002,7 @@ def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monke
     class _AkzeptierenderTauschDialogStub:
         """Ersetzt StartnummerTauschenDialog: akzeptiert sofort mit dem zweiten
         übergebenen Teilnehmer als Tauschpartner, statt einen echten (blockierenden)
-        Dialog zu öffnen - entspricht dem Muster von _AbbrechenderDialogStub oben."""
+        Dialog zu öffnen - entspricht dem Muster von _vorbelegung_aufzeichnen oben."""
 
         def __init__(self, parent, teilnehmer, andere_teilnehmer):
             self._partner_id = andere_teilnehmer[0]["id"]
@@ -4189,14 +4235,14 @@ def test_dialoge_werden_nach_exec_freigegeben_und_wartecursor_zurueckgesetzt(qtb
     dialog = QDialog(eltern)
     monkeypatch.setattr(dialog, "exec", lambda: QDialog.Accepted)
     assert desktop_gemeinsam._ausfuehren(dialog) == QDialog.Accepted
-    qtbot.waitUntil(lambda: not eltern.findChildren(QDialog), timeout=2000)
+    qtbot.waitUntil(lambda: not eltern.findChildren(QDialog), timeout=WARTEZEIT_MS)
 
     # Echte Aufrufstelle: das Versionsfenster bleibt nicht als Kind des Hauptfensters liegen.
     monkeypatch.setattr(VersionDialog, "exec", lambda self: QDialog.Rejected)
     fenster = QWidget()
     qtbot.addWidget(fenster)
     app.HauptFenster._version_anzeigen(fenster)
-    qtbot.waitUntil(lambda: not fenster.findChildren(VersionDialog), timeout=2000)
+    qtbot.waitUntil(lambda: not fenster.findChildren(VersionDialog), timeout=WARTEZEIT_MS)
 
     with pytest.raises(RuntimeError):
         with desktop_gemeinsam._wartecursor():
@@ -4554,27 +4600,11 @@ def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monk
     allgemeinen Fehlerfenster; die Liste wird trotzdem aktualisiert."""
     import sqlite3 as _sqlite3
 
-    class _Stub:
-        def __init__(self, parent, aktueller_pfad):
-            self.geschlossen = False
-
-        def exec(self):
-            return QDialog.Accepted
-
-        def quelle_conn(self):
-            return object()
-
-        def ausgewaehlte_ids(self):
-            return [1]
-
-        def schliesse_quelle(self):
-            pass
-
     def scheitert(*_a, **_k):
         raise _sqlite3.OperationalError("database is locked")
 
     gemeldet = []
-    monkeypatch.setattr("app.TerminImportDialog", _Stub)
+    monkeypatch.setattr("app.TerminImportDialog", _import_dialog_attrappe(object(), [1]))
     monkeypatch.setattr("app.importiere_teilnehmer_stammdaten", scheitert)
     monkeypatch.setattr("app.get_teilnehmer", lambda *a: None)  # Quelle ist hier nur eine Attrappe
     monkeypatch.setattr("app._db_fehler_anzeigen",
@@ -4606,28 +4636,8 @@ def test_aus_anderem_termin_importieren_uebernimmt_ausgewaehlte_teilnehmer(qtbot
     quelle_id = add_teilnehmer(quelle_conn, NeuerTeilnehmer(
         nachname="Import", vorname="Mich", rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld"))
 
-    class _ImportDialogStub:
-        """Ersetzt TerminImportDialog: liefert direkt den (schon geöffneten) Teilnehmer
-        ohne echten (blockierenden) Dialog - entspricht dem Muster von
-        _AkzeptierenderTauschDialogStub oben."""
-
-        def __init__(self, parent, aktueller_pfad):
-            pass
-
-        def exec(self):
-            return QDialog.Accepted
-
-        def quelle_conn(self):
-            return quelle_conn
-
-        def ausgewaehlte_ids(self):
-            return [quelle_id]
-
-        def schliesse_quelle(self):
-            quelle_conn.close()
-
-    monkeypatch.setattr("app.TerminImportDialog", _ImportDialogStub)
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+    monkeypatch.setattr("app.TerminImportDialog", _import_dialog_attrappe(quelle_conn, [quelle_id]))
+    meldungen_stumm(monkeypatch, "information")
 
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
@@ -4648,25 +4658,8 @@ def test_aus_anderem_termin_importieren_weist_auf_nicht_angebotene_pruefung_hin(
                                                     art="ED", stufe=1, disziplin="Trümmerfeld")),
     ]
 
-    class _Stub:
-        def __init__(self, parent, aktueller_pfad):
-            pass
-
-        def exec(self):
-            return QDialog.Accepted
-
-        def quelle_conn(self):
-            return quelle_conn
-
-        def ausgewaehlte_ids(self):
-            return ids
-
-        def schliesse_quelle(self):
-            quelle_conn.close()
-
-    meldungen = []
-    monkeypatch.setattr("app.TerminImportDialog", _Stub)
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[2]))
+    monkeypatch.setattr("app.TerminImportDialog", _import_dialog_attrappe(quelle_conn, ids))
+    meldungen = meldungen_sammeln(monkeypatch, "information")
     monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda *a: None)
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
@@ -4696,8 +4689,7 @@ def test_lange_namenslisten_werden_gekuerzt_mit_details(qtbot, monkeypatch):
     assert kurz.count("\n") < 30
 
     # Kurze Listen: wie bisher eine einfache Meldung ohne Details.
-    einfach = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: einfach.append(a[2]))
+    einfach = meldungen_sammeln(monkeypatch, "information")
     app_modul._import_ergebnis_melden(None, CsvImportErgebnis(importiert=2, fehler=[]))
     assert einfach == ["2 Teilnehmer importiert."]
 
@@ -4719,8 +4711,7 @@ def test_abgebrochener_import_nennt_anzahl_der_uebernommenen(qtbot, conn, monkey
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(datei), ""))
     monkeypatch.setattr("app._import_ordner_merken", lambda *a: None)
     monkeypatch.setattr("app.importiere_teilnehmer_aus_csv", teilweise)
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "critical")
 
     app_modul._teilnehmerliste_importieren(None, conn)
 
@@ -4888,13 +4879,7 @@ def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_
             zustand["ungespeichert"] = False
 
     monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", _speichern)
-    fragen = []
-
-    def _frage(*args, **kwargs):
-        fragen.append(args[1])
-        return antworten[len(fragen) - 1]
-
-    monkeypatch.setattr("app.QMessageBox.question", _frage)
+    fragen = rueckfragen_sammeln(monkeypatch, *antworten, merke="titel")
     monkeypatch.setattr(_StartDialogAttrappe, "geoeffnet", 0)
     monkeypatch.setattr(_StartDialogAttrappe, "termin_geoeffnet", 0)
     monkeypatch.setattr(_StartDialogAttrappe, "ergebnis", QDialog.Accepted)
@@ -4932,10 +4917,9 @@ def test_terminwechsel_zu_kaputter_datei_behaelt_den_termin(qtbot, termin, monke
     qtbot.addWidget(fenster)
     kaputt = tmp_path / "kaputt.sqlite"
     kaputt.write_bytes(b"keine Datenbank" * 20)
-    _StartDialogMitPfad.pfad_vorgabe = str(kaputt)
+    monkeypatch.setattr(_StartDialogMitPfad, "pfad_vorgabe", str(kaputt))
     monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[1]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
 
     fenster._termin_wechseln()
 
@@ -4953,9 +4937,9 @@ def test_terminwechsel_bei_fehler_im_reiteraufbau_bleibt_alles_wie_es_war(qtbot,
     ziel = tmp_path / "neu.sqlite"
     with closing(init_db(str(ziel))) as neu:
         set_veranstaltung(neu, verein="Neu", datum="2026-12-01")
-    _StartDialogMitPfad.pfad_vorgabe = str(ziel)
+    monkeypatch.setattr(_StartDialogMitPfad, "pfad_vorgabe", str(ziel))
     monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: None)
+    meldungen_stumm(monkeypatch, "warning")
 
     def kaputt(*_a, **_k):
         raise KeyError("XX")
@@ -4979,7 +4963,7 @@ def test_terminwechsel_loescht_alte_reiter_und_setzt_titel(qtbot, termin, monkey
     qtbot.addWidget(fenster)
     ziel = tmp_path / "ohne_verein.sqlite"
     init_db(str(ziel)).close()
-    _StartDialogMitPfad.pfad_vorgabe = str(ziel)
+    monkeypatch.setattr(_StartDialogMitPfad, "pfad_vorgabe", str(ziel))
     monkeypatch.setattr("app.StartDialog", _StartDialogMitPfad)
     for _ in range(3):
         fenster._termin_wechseln()
@@ -5023,9 +5007,7 @@ def test_terminwechsel_rueckfrage_bietet_speichern_verwerfen_abbrechen(qtbot, te
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
-    aufrufe = []
-    monkeypatch.setattr("app.QMessageBox.question",
-                        lambda *a, **k: aufrufe.append(a) or QMessageBox.Cancel)
+    aufrufe = rueckfragen_sammeln(monkeypatch, QMessageBox.Cancel, merke="args")
 
     assert fenster._rueckfrage_ungespeichert(verwerfen=True) == "abbrechen"
     assert fenster._rueckfrage_ungespeichert(verwerfen=False) == "abbrechen"
@@ -5043,7 +5025,7 @@ def test_reiterwechsel_abbrechen_bleibt_in_der_ergebniserfassung(qtbot, termin, 
     qtbot.addWidget(fenster)
     fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Cancel)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Cancel)
 
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
 
@@ -5141,8 +5123,7 @@ def test_terminwechsel_abgebrochen_entfernt_eben_angelegten_termin(
         return papierkorb_klappt
 
     monkeypatch.setattr(_StartDialogAttrappe, "_in_papierkorb", staticmethod(_papierkorb), raising=False)
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append((a[1], a[2])))
+    hinweise = meldungen_sammeln(monkeypatch, "information", merke="titel_text")
 
     fenster._termin_wechseln()
 
@@ -5358,8 +5339,7 @@ def test_wiederherstellen_passwortschleife_prueft_drei_passwoerter(qtbot, tmp_pa
     monkeypatch.setattr("app.sicherung_inhalt", inhalt)
     monkeypatch.setattr("app.QInputDialog.getText", lambda *a, **k: (abfragen.pop(0), True))
     monkeypatch.setattr("app.sicherung_wiederherstellen", lambda *a, **k: ["neu.sqlite"])
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[1]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
     monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[1]))
     tab = DatensicherungTab()
     qtbot.addWidget(tab)
@@ -5382,8 +5362,7 @@ def test_wiederherstellen_nicht_lesbare_sicherung_meldet_klartext(qtbot, monkeyp
 
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
     monkeypatch.setattr("app.sicherung_inhalt", weg)
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "warning")
     tab = DatensicherungTab()
     qtbot.addWidget(tab)
     tab._sicherung_wiederherstellen()
@@ -5465,9 +5444,8 @@ def test_termin_loeschen_vorgabe_nein_papierkorb_und_auswahl_leer(qtbot, tmp_pat
     start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
     # Teil 7 Nr. 11: ohne Verein steht der Dateiname da.
     assert start.tabelle.item(1, 1).text() == "b.sqlite"
-    fragen, papierkorb_pfade = [], []
-    monkeypatch.setattr("app.QMessageBox.question",
-                        lambda *a, **k: fragen.append((a[1], a[4])) or QMessageBox.Yes)
+    papierkorb_pfade = []
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="titel_vorgabe")
 
     def in_papierkorb(pfad):
         papierkorb_pfade.append(pfad)
@@ -5499,7 +5477,7 @@ def test_in_papierkorb_wertet_bool_und_tupel_aus(tmp_path, monkeypatch):
 
 def test_termin_loeschen_nein_behaelt_datei(qtbot, tmp_path, monkeypatch):
     start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.No)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     monkeypatch.setattr("app.QFile.moveToTrash", lambda pfad: pytest.fail("darf nicht löschen"))
     start.tabelle.selectRow(0)
     start._termin_loeschen()
@@ -5532,8 +5510,7 @@ def test_wiederherstellen_unvollstaendig_nennt_ersetzte_termine(qtbot, tmp_path,
         raise TeilweiseWiederhergestelltError(["a.sqlite"], PermissionError("Datei gesperrt"))
 
     monkeypatch.setattr("app.sicherung_wiederherstellen", wiederherstellen_mit_abbruch)
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: meldungen.append((a[1], a[2])))
+    meldungen = meldungen_sammeln(monkeypatch, "critical", merke="titel_text")
     tab = DatensicherungTab()
     qtbot.addWidget(tab)
 
@@ -6390,8 +6367,7 @@ def test_ergebnis_meldet_verworfene_eingabe_nach_disziplinwechsel(qtbot, conn, m
     anzeige_feld.setText("30")
     conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
     conn.commit()
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    hinweise = meldungen_sammeln(monkeypatch, "information")
 
     tab.aktualisieren_eingaben_erhalten()
 
@@ -6412,8 +6388,7 @@ def test_ergebnis_meldet_person_mit_mehreren_gruenden_nur_einmal(qtbot, conn, mo
     conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
     conn.commit()
     setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    hinweise = meldungen_sammeln(monkeypatch, "information")
 
     tab.aktualisieren_eingaben_erhalten()
 
@@ -6436,8 +6411,7 @@ def test_ergebnis_meldet_mehrere_alte_disziplinen_in_einer_zeile(qtbot, conn, mo
         anzeige_feld.setText("30")
     conn.execute("UPDATE teilnehmer SET art = 'ED', disziplin = 'Behältnisstrecke' WHERE id = ?", (tid,))
     conn.commit()
-    hinweise = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append(a[2]))
+    hinweise = meldungen_sammeln(monkeypatch, "information")
 
     tab.aktualisieren_eingaben_erhalten()
 
@@ -6764,12 +6738,11 @@ def test_fehlende_startnummern_knopf_doppelklick_und_tausch_ohne_nummer(qtbot, t
     assert sorted(t["startnummer"] for t in list_teilnehmer(conn)) == [10, 11]
 
     # Marco 09.10.2026: alle Startnummern zurücksetzen - "Nein" ändert nichts, "Ja" entfernt alle.
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.No)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
     qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
     assert "(2)" in fragen[-1]
     assert sorted(t["startnummer"] for t in list_teilnehmer(conn)) == [10, 11]
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
     assert [t["startnummer"] for t in list_teilnehmer(conn)] == [None, None]
     assert tab.status_label.text() == "2 Startnummer(n) zurückgesetzt."
@@ -6802,9 +6775,9 @@ def test_startnummern_filter_art_lk_und_hinweis(qtbot, termin, monkeypatch):
     tab.show()
     assert tab.startnummern_hinweis.text() == "Ohne Startnummer: ED LK 1 Flächensuche (1)"
 
-    infos, fragen = [], []
+    infos = []
     monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append(text))
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a[2]) or QMessageBox.Yes)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
 
     tab.filter_combo.setCurrentText("ED LK 1 Trümmerfeld")
     qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
@@ -6848,8 +6821,8 @@ def test_vergabe_nach_import_ignoriert_filter(qtbot, termin, monkeypatch):
     _teilnehmer_anlegen(conn, nachname="Neu-T", disziplin="Trümmerfeld", startnummer=None)
     _teilnehmer_anlegen(conn, nachname="Neu-F", disziplin="Flächensuche", startnummer=None)
 
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
+    meldungen_stumm(monkeypatch, "information")
     app_modul._startnummern_nach_import_anbieten(tab, conn)
 
     nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
@@ -6871,12 +6844,11 @@ def test_gefilterte_pruefung_ohne_passende_pruefung_bricht_ab(qtbot, termin, mon
 
     tab.filter_combo.addItem("Gibt es nicht")
     tab.filter_combo.setCurrentText("Gibt es nicht")
-    warnungen = []
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: QMessageBox.Yes)
+    warnungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     # Fiele A wieder auf "Alle" zurück, soll der Test rot werden statt an einem
     # Meldungsfenster hängen zu bleiben.
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: None)
+    meldungen_stumm(monkeypatch, "information")
     qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
     assert warnungen == ["Unbekannte Prüfung", "Unbekannte Prüfung"]
@@ -6890,8 +6862,8 @@ def test_import_hinweis_ohne_bereiche_fragt_nicht(qtbot, conn, monkeypatch):
 
     monkeypatch.undo()  # echte Funktion statt der Aufzeichnung aus der autouse-Fixture
     _teilnehmer_anlegen(conn, startnummer=None)
-    fragen, infos = [], []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.No)
+    infos = []
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No, merke="args")
     monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append(text))
 
     app_modul._startnummern_nach_import_anbieten(None, conn)
@@ -7029,8 +7001,7 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
     qtbot.addWidget(fenster)
     tab = fenster.zeitplan_tab
 
-    fragen = []
-    monkeypatch.setattr("app.QMessageBox.question", lambda *a, **k: fragen.append(a) or QMessageBox.Yes)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="args")
     tab._automatisch_verteilen()
     assert fragen == []  # leerer Plan: keine Warnung
     tab._automatisch_verteilen()
@@ -7067,9 +7038,8 @@ def test_formular_import_ki_weg_eingeklappt_und_vorlage(qtbot, conn, monkeypatch
     def gesperrt(pfad):
         raise PermissionError(13, "Permission denied", pfad)
 
-    warnungen = []
     monkeypatch.setattr("app.schreibe_csv_vorlage", gesperrt)
-    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **k: warnungen.append(a[2]))
+    warnungen = meldungen_sammeln(monkeypatch, "warning")
     next(b for b in tab.findChildren(QPushButton) if b.text() == "Leere Vorlage (CSV) speichern…").click()
     assert "in einem anderen Programm geöffnet" in warnungen[0] and "\\\\" not in warnungen[0]
 
@@ -7093,17 +7063,15 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
     def gesperrt(*_a):
         raise PermissionError(13, "Permission denied", str(ziel))
 
-    fehler = []
     monkeypatch.setattr("app.exportiere_teilnehmer_csv", gesperrt)
-    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: fehler.append(a[2]))
+    fehler = meldungen_sammeln(monkeypatch, "critical")
     next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste speichern (CSV, für Excel)…").click()
     assert "in einem anderen Programm geöffnet" in fehler[0]
 
     # Dieselbe Datei im Reiter "Teilnehmer" wieder einlesen -> wird erkannt, kein zweiter
     # Müller (UX-Nachtest N1), und die Meldung nennt ihn als bereits vorhanden.
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(ziel), ""))
-    meldungen = []
-    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[2]))
+    meldungen = meldungen_sammeln(monkeypatch, "information")
     next(b for b in fenster.teilnehmer_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste einlesen (Excel/CSV)…").click()
     assert [t["nachname"] for t in list_teilnehmer(conn)].count("Müller") == 1
     assert "bereits vorhanden" in meldungen[0]
@@ -7513,7 +7481,7 @@ def test_demo_tippt_zeichen_fuer_zeichen_und_weiter_fuehrt_sofort_zu_ende(qtbot,
     dialog = tour._dialog
     verein = demo_daten.VERANSTALTUNG["verein"]
     assert dialog.verein.text() != verein  # erst ein Teil getippt
-    qtbot.waitUntil(lambda: len(dialog.verein.text()) >= 3, timeout=3000)
+    qtbot.waitUntil(lambda: len(dialog.verein.text()) >= 3, timeout=WARTEZEIT_MS)
     assert verein.startswith(dialog.verein.text())
 
     tour._alles_sofort()

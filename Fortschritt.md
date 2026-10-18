@@ -7008,3 +7008,44 @@ neu aufgebaut wird. Keine Meldung, keine Konflikterkennung je Zelle.
   Sammelmodus die ganze Datei, ein fremder Schreiber wartet bis zu 5 s und scheitert dann.
   PostgreSQL sperrt nur Zeilen. Ein gemeinsamer Test bräuchte Fallunterscheidungen, ohne mehr
   abzusichern.
+
+### 18.10.2026: Gruppe 3, gemeinsame Testattrappen und Zeitgrenzen in `test_app_gui.py`
+
+Zurückgestellter Punkt aus der Abschluss-QS Wartbarkeit (A19c, 15.10.2026). Marco hat den großen
+Umfang gewählt, also auch die Fixtures für Rückfragen und Meldungen. Das ist ein reiner Testumbau
+ohne Änderung am Programm.
+
+- **Gemeinsame Helfer** oben in `test_app_gui.py`, nach dem autouse-Fixture:
+  - `rueckfragen_sammeln(monkeypatch, *antworten, merke=...)`: ersetzt
+    `app.QMessageBox.question`, merkt Text, Titel, Titel+Vorgabe, Text+Vorgabe oder alle
+    Argumente und antwortet der Reihe nach. Die letzte Antwort gilt weiter.
+  - `rueckfragen_beantworten(monkeypatch, antwort)`: feste Antwort, ohne mitzuschreiben.
+  - `meldungen_sammeln(monkeypatch, art, merke=...)` und `meldungen_stumm(monkeypatch, *arten)`
+    für `information`, `warning` und `critical`.
+  - `_pause_dialog_attrappe`, `_vorbelegung_aufzeichnen` und `_import_dialog_attrappe` ersetzen
+    die doppelt bzw. dreifach geschriebenen Attrappen für PauseDialog, VeranstaltungsDialog und
+    TerminImportDialog.
+  - `WARTEZEIT_MS = 3000` für die 12 `qtbot.waitUntil` mit eigener Grenze. Vier Stellen mit
+    2000 ms bekommen dadurch 1 s mehr. `waitUntil(fenster.isActiveWindow)` behält den
+    pytest-qt-Standard von 5 s.
+- **Umgestellt:** 69 Einzeiler-Patches und 3 mehrzeilige (Zukunftsdatum-Tests) auf `app.QMessageBox.*` (rund 60 Tests), dazu
+  `_terminwechsel_vorbereiten`. Die Umstellung lief mechanisch per Skript. Ersetzt wurden nur
+  eindeutige Muster, eine Liste `x = []` nur dann, wenn sie bis zum Patch unbenutzt war. Die
+  Restfälle sind von Hand angepasst.
+- **Bewusst nicht angefasst:**
+  - Patches mit eigener Signatur (`lambda self/parent, titel, text`), weil sie die Aufrufform
+    mitprüfen.
+  - `pytest.fail(...)` als Rückfrage.
+  - Rückfragen, die eine zweite Frage als Fehler werten (`_frage` mit `pop`,
+    `_keine_rueckfrage`).
+  - Patches auf `QMessageBox` statt `"app.QMessageBox"` sowie `exec`/`clickedButton`.
+  - Die Negativ-Wartezeiten (`qtbot.wait(150/200)`), die Zeiten im Unterprozess-Skript und
+    `UPDATE_ZEITGRENZE_MS` (Programmkonstante).
+- `_StartDialogMitPfad.pfad_vorgabe` wird jetzt per monkeypatch gesetzt und bleibt deshalb nicht
+  über das Testende hinaus stehen.
+- Verifikation (unabhängiger Subagent): an keiner Stelle eine Abweichung in der Bedeutung. Er hat
+  gemerkten Teil, Antwort, Patch-Ziel und entfernte Listen je Stelle geprüft, ebenso die
+  Antwortfolge in `_terminwechsel_vorbereiten`. Seine zwei Kleinigkeiten sind erledigt:
+  `isActiveWindow` behält 5 s, die drei mehrzeiligen Muster sind mit umgestellt.
+- Tests lokal: Unittests 657 OK (172 übersprungen); GUI + Theme 385 passed, 1 xfailed, dazu die
+  zwei bekannten fokusbedingten Fehlschläge.
