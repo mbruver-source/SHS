@@ -91,9 +91,10 @@ python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export
 Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne
 `pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
 
-GUI-Tests (`test_app_gui.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
-PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2` und laufen nur in der CI
-(`.github/workflows/tests.yml`).
+GUI-Tests (`test_app_gui.py`, `test_theme.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
+PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen auch lokal, wenn PySide6
+installiert ist (Anaconda-Python, siehe Memory „Lokales Python“); die echten PostgreSQL-Tests
+laufen nur in der CI (`.github/workflows/tests.yml`).
 
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben (aus dem Cowork-Arbeitsablauf übernommen, 21.09.2026)
 

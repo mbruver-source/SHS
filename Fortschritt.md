@@ -6894,3 +6894,32 @@ Wartecursor (beide Abschnitte oben). Dazu kommt der schon gepushte CI-Commit zum
   Version 1.0.50.
 - Tests lokal: Unittests 656 OK (172 übersprungen), GUI 362 passed.
 - Keine offenen Sicherheitsfunde in diesem Build.
+
+## 18.10.2026: Offene Punkte gesichtet, Gruppe 1 (kleine Fixes) umgesetzt
+
+Eine Durchsicht dieser Datei ab Zeile 4700 (ältere Abschnitte gezielt) hat die noch offenen
+Punkte ergeben. Marco hat drei Gruppen zur Abarbeitung gewählt: kleine Code-/Doku-Fixes
+(Gruppe 1), zurückgestellte kleine Punkte (Gruppe 2) und zurückgestellte M/L-Punkte (Gruppe 3).
+Gruppe 2 und 3 werden wie üblich einzeln mit Marco besprochen und erst nach seinem Go umgesetzt.
+Nicht im Auftrag: Prüfungen am echten Gerät (Mac/Linux-Vorschau, Design „Hell“, Papierkorb,
+PDF-Schrift), wohl überholte Praxistests vom September und Ideen (Englisch, weitere Testarten).
+
+**Gruppe 1, erledigt (nur Arbeitsstand, kein Build):**
+- Offener Punkt vom 23.09. (Web „Termin wählen“): Der Hinweis ohne veröffentlichten Termin nennt
+  jetzt die Web-Oberfläche („Termine“, für Administratoren) und erst danach `sync_termin.py`.
+  `templates/termin_waehlen.html`, Test in `test_app_web.py`.
+- Offener Punkt vom 23.09. (Passwortfeld der Web-Anmeldung): `templates/base.html` gestaltet
+  jetzt auch `input[type=password]` wie Text- und Zahlenfelder. Test mit Gegenprobe (schlägt
+  ohne die CSS-Zeile fehl).
+- Erledigt-Vermerk zu den Einträgen vom 23.09.: Die GitHub-Labels `fehler` und `wunsch` sind
+  angelegt (per `gh label list` geprüft). „Private vulnerability reporting“ ist laut GitHub-API
+  ebenfalls aktiv (`enabled: true`, von der Verifikation geprüft).
+- `CLAUDE.md` und `AGENTS.md`: GUI-Tests (`test_app_gui.py`, `test_theme.py`) laufen lokal mit
+  dem Anaconda-Python, nur die echten PostgreSQL-Tests laufen allein in der CI. `test_theme`
+  braucht PySide6 und steht deshalb im GUI-Absatz, nicht im Befehl ohne PySide6.
+- Skill `desktop-pruefung`: Hinweis zum Berichtsordner. Der Lauf vom Oktober 2026 liegt in
+  `Desktop-Pruefung-2026-10/`, `_unveroeffentlicht/desktop-pruefung/` gibt es nur bei
+  unveröffentlichten Berichten.
+- Offen aus Gruppe 1: `README_CONTAINER.md`, Abschnitt „Noch offen“ (wo der Web-Container am
+  Prüfungstag läuft) braucht Marcos Antwort.
+- Tests lokal: `test_app_web` 83 OK (4 übersprungen).

@@ -10,7 +10,12 @@ gestartet, damit ein Lauf gründlich bleibt. Den Prüfer stellt der Agenten-Typ 
 (`.claude/agents/desktop-pruefer.md`).
 
 Berichtsordner: `_unveroeffentlicht/desktop-pruefung/` (per `.gitignore` ausgeschlossen, siehe
-CLAUDE.md "Sicherheitsfunde erst nach dem Release veröffentlichen").
+CLAUDE.md "Sicherheitsfunde erst nach dem Release veröffentlichen"). Den Ordner gibt es nur,
+solange ein Lauf unveröffentlichte Berichte enthält; der Lauf vom Oktober 2026 (alle 10 Teile,
+veröffentlicht mit 1.0.48) liegt im Repo unter `Desktop-Pruefung-2026-10/` (`uebersicht.md`,
+`teil-NN.md`, `aufgaben.md`). Ruft jemand `/desktop-pruefung` ohne Nummer auf und
+`_unveroeffentlicht/desktop-pruefung/` fehlt, ist das kein Fehler: dann gilt
+`Desktop-Pruefung-2026-10/uebersicht.md` als Stand.
 
 ## Aufruf
 
