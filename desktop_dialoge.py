@@ -820,13 +820,26 @@ class TerminImportDialog(QDialog):
             eintraege = []
             for t in list_teilnehmer(self._quelle_conn):
                 text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"
+                # Nur ein Vermerk (Marco 18.10.2026): übernommen werden ohnehin nur die
+                # Stammdaten. .get, weil sehr alte Quelldateien die Spalte nicht haben.
+                if t.get("keine_teilnahme"):
+                    text += " – im Quelltermin nicht erschienen"
                 eintraege.append((text, t["id"]))
             self._quelle_conn.set_progress_handler(None, 0)
         except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
             self.schliesse_quelle()
+            if isinstance(exc, (sqlite3.Error, OSError)):
+                grund = _klartext_fehler(exc).replace(chr(10) * 2, " ")
+            else:
+                # Fehlende Spalte o. Ä. in der fremden Datei: str(KeyError) wäre nur der
+                # Schlüssel (offener Punkt 18.10.2026). Kein Programmfehler, daher auch kein
+                # Eintrag ins Absturzprotokoll.
+                grund = (
+                    "Die Datei enthält nicht alle erwarteten Angaben "
+                    f"(Technisch: {type(exc).__name__}: {exc})."
+                )
             hinweis = QListWidgetItem(
-                "Die Teilnehmer dieses Termins konnten nicht gelesen werden. "
-                f"{_klartext_fehler(exc).replace(chr(10) * 2, ' ')}\n"
+                f"Die Teilnehmer dieses Termins konnten nicht gelesen werden. {grund}\n"
                 "Bitte einen anderen Termin wählen."
             )
             hinweis.setFlags(Qt.NoItemFlags)

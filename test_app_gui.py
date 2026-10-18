@@ -4275,6 +4275,77 @@ def test_termin_import_dialog_listet_teilnehmer_und_importiert_auswahl(qtbot, tm
     dialog.schliesse_quelle()
 
 
+def test_termin_import_dialog_vermerkt_nicht_erschienene(qtbot, tmp_path, monkeypatch):
+    """Offener Punkt 18.10.2026: Vermerk für „keine Teilnahme“ in der Quelle, weiter vorausgewählt."""
+    quelle_pfad = str(tmp_path / "quelle.sqlite")
+    quelle_conn = init_db(quelle_pfad)
+    weg_id = add_teilnehmer(quelle_conn, NeuerTeilnehmer(
+        nachname="Weg", vorname="A", rufname_hund="Hund1", art="ED", stufe=1, disziplin="Trümmerfeld"))
+    add_teilnehmer(quelle_conn, NeuerTeilnehmer(
+        nachname="Da", vorname="B", rufname_hund="Hund2", art="ED", stufe=1, disziplin="Flächensuche"))
+    setze_keine_teilnahme(quelle_conn, weg_id, True)
+    quelle_conn.close()
+    termin_info = TerminInfo(
+        pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
+        ort="Testort", datum="2026-01-01", anzahl_teilnehmer=2, lesbar=True,
+    )
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    texte = [dialog.teilnehmer_liste.item(i).text() for i in range(dialog.teilnehmer_liste.count())]
+    (weg,) = [tx for tx in texte if tx.startswith("Weg, A")]
+    (da,) = [tx for tx in texte if tx.startswith("Da, B")]
+    assert weg.endswith(" – im Quelltermin nicht erschienen")
+    assert "nicht erschienen" not in da
+    assert len(dialog.ausgewaehlte_ids()) == 2
+    dialog.schliesse_quelle()
+
+
+def test_termin_import_dialog_alte_quelle_ohne_keine_teilnahme(qtbot, tmp_path, monkeypatch):
+    """Sehr alte Quelldateien haben die Spalte keine_teilnahme nicht - kein Vermerk, kein Fehler."""
+    quelle_pfad = str(tmp_path / "quelle.sqlite")
+    init_db(quelle_pfad).close()
+    termin_info = TerminInfo(
+        pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
+        ort="Testort", datum="2026-01-01", anzahl_teilnehmer=1, lesbar=True,
+    )
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+    alt = {"id": 1, "nachname": "Alt", "vorname": "A", "rufname_hund": "Rex",
+           "art": "ED", "stufe": 1, "disziplin": "Trümmerfeld"}
+    monkeypatch.setattr("desktop_dialoge.list_teilnehmer", lambda conn: [alt])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    assert dialog.teilnehmer_liste.count() == 1
+    assert dialog.teilnehmer_liste.item(0).text().startswith("Alt, A – Rex")
+    assert "nicht erschienen" not in dialog.teilnehmer_liste.item(0).text()
+    assert dialog.ausgewaehlte_ids() == [1]
+    dialog.schliesse_quelle()
+
+
+def test_termin_import_dialog_fehlende_spalte_erklaert(qtbot, tmp_path, monkeypatch):
+    """Offener Punkt 18.10.2026: bei fehlender Spalte nicht nur „'nachname'“ anzeigen."""
+    quelle_pfad = str(tmp_path / "quelle.sqlite")
+    init_db(quelle_pfad).close()
+    termin_info = TerminInfo(
+        pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
+        ort="Testort", datum="2026-01-01", anzahl_teilnehmer=1, lesbar=True,
+    )
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge.list_teilnehmer", lambda conn: [{"id": 1}])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    text = dialog.teilnehmer_liste.item(0).text()
+    assert "nicht alle erwarteten Angaben" in text
+    assert "KeyError: 'nachname'" in text
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+
+
 def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypatch):
     eigener = TerminInfo(
         pfad="eigen.sqlite", dateiname="eigen.sqlite", verein="Eigen", vereins_nr=None,
@@ -4743,11 +4814,14 @@ class _StartDialogAttrappe:
     termin_geoeffnet = 0
     ergebnis = QDialog.Accepted
     demo = False
+    neu = False
+    pfad_vorgabe = "gewaehlter_termin.sqlite"
 
     def __init__(self, *args, **kwargs):
         type(self).geoeffnet += 1
-        self.pfad = "gewaehlter_termin.sqlite"
+        self.pfad = type(self).pfad_vorgabe
         self.demo_angefordert = type(self).demo
+        self.neu_angelegt = type(self).neu
 
     def exec(self):
         return type(self).ergebnis
@@ -4779,6 +4853,8 @@ def _terminwechsel_vorbereiten(qtbot, termin, monkeypatch, antworten, speichern_
     monkeypatch.setattr(_StartDialogAttrappe, "termin_geoeffnet", 0)
     monkeypatch.setattr(_StartDialogAttrappe, "ergebnis", QDialog.Accepted)
     monkeypatch.setattr(_StartDialogAttrappe, "demo", False)
+    monkeypatch.setattr(_StartDialogAttrappe, "neu", False)
+    monkeypatch.setattr(_StartDialogAttrappe, "pfad_vorgabe", "gewaehlter_termin.sqlite")
     monkeypatch.setattr("app.StartDialog", _StartDialogAttrappe)
 
     def _termin_oeffnen_attrappe(*_args, **_kwargs):
@@ -4991,6 +5067,70 @@ def test_terminwechsel_fragt_nicht_wenn_der_startdialog_abgebrochen_wird(qtbot, 
     assert fragen == []
     assert _StartDialogAttrappe.geoeffnet == 1
     assert _StartDialogAttrappe.termin_geoeffnet == 0
+
+
+@pytest.mark.parametrize(
+    "neu, papierkorb_klappt", [(True, True), (True, False), (True, "fehler"), (False, True)]
+)
+def test_terminwechsel_abgebrochen_entfernt_eben_angelegten_termin(
+    qtbot, termin, monkeypatch, tmp_path, neu, papierkorb_klappt
+):
+    """Marco 18.10.2026: neu angelegter Termin, dann „Abbrechen“ bei der Rückfrage - die leere
+    Datei kommt in den Papierkorb (mit Hinweis). Ein gewählter vorhandener Termin bleibt."""
+    fenster, fragen = _terminwechsel_vorbereiten(
+        qtbot, termin, monkeypatch, [QMessageBox.Cancel], speichern_gelingt=True
+    )
+    datei = tmp_path / "neu.sqlite"
+    init_db(str(datei)).close()
+    monkeypatch.setattr(_StartDialogAttrappe, "pfad_vorgabe", str(datei))
+    monkeypatch.setattr(_StartDialogAttrappe, "neu", neu)
+    verschoben = []
+
+    def _papierkorb(pfad):
+        verschoben.append(pfad)
+        if papierkorb_klappt == "fehler":
+            raise PermissionError(13, "Zugriff verweigert", pfad)
+        if papierkorb_klappt:
+            os.remove(pfad)
+        return papierkorb_klappt
+
+    monkeypatch.setattr(_StartDialogAttrappe, "_in_papierkorb", staticmethod(_papierkorb), raising=False)
+    hinweise = []
+    monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: hinweise.append((a[1], a[2])))
+
+    fenster._termin_wechseln()
+
+    assert fragen == ["Ungespeicherte Ergebnisse"]
+    assert _StartDialogAttrappe.termin_geoeffnet == 0
+    if not neu:
+        assert verschoben == [] and hinweise == [] and datei.exists()
+    elif papierkorb_klappt is True:
+        assert verschoben == [str(datei)] and not datei.exists()
+        assert [titel for titel, _ in hinweise] == ["Neuer Termin entfernt"]
+        assert "neu.sqlite" in hinweise[0][1]
+    else:
+        assert datei.exists()
+        assert [titel for titel, _ in hinweise] == ["Neuer Termin bleibt"]
+        assert "nicht in den Papierkorb" in hinweise[0][1] and "neu.sqlite" in hinweise[0][1]
+
+
+def test_startdialog_merkt_neu_angelegten_termin(qtbot, monkeypatch, tmp_path):
+    """Nur ein eben angelegter Termin gilt als neu, nicht ein gewählter vorhandener."""
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    for angelegt, bestehend, erwartet in ((True, False, True), (False, True, False)):
+        dialog = StartDialog()
+        qtbot.addWidget(dialog)
+
+        class _Veranstaltung:
+            def __init__(self, *a, **k):
+                self.termin_angelegt = angelegt
+                self.bestehenden_oeffnen = bestehend
+                self.pfad_feld = QLineEdit(str(tmp_path / "x.sqlite"))
+
+        monkeypatch.setattr("app.VeranstaltungsDialog", _Veranstaltung)
+        monkeypatch.setattr("app._ausfuehren", lambda d: QDialog.Accepted)
+        dialog._neuer_termin()
+        assert dialog.neu_angelegt is erwartet
 
 
 def test_terminwechsel_zur_demo_fragt_nicht_vorab(qtbot, termin, monkeypatch):

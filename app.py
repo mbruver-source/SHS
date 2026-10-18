@@ -4778,6 +4778,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         if not dialog.pfad:
             return
         if not self._ungespeicherte_ergebnisse_klaeren("Trotzdem den Termin wechseln"):
+            if getattr(dialog, "neu_angelegt", False):
+                self._neu_angelegten_termin_entfernen(dialog.pfad)
             return
 
         neue_verbindung = _termin_oeffnen_mit_meldung(self, dialog.pfad)
@@ -4799,6 +4801,28 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             )
             return
         alte_verbindung.close()
+
+    def _neu_angelegten_termin_entfernen(self, pfad: str) -> None:
+        """Der Startdialog hat den Termin eben erst angelegt, der Wechsel wurde dann bei der
+        Rückfrage abgebrochen: die leere Datei kommt in den Papierkorb, statt liegen zu
+        bleiben (Marco 18.10.2026). Klappt das nicht, bleibt sie liegen; der Hinweis nennt
+        den Ort (sie kann außerhalb des Termine-Ordners liegen)."""
+        name = os.path.basename(pfad)
+        try:
+            entfernt = StartDialog._in_papierkorb(pfad)
+        except OSError:
+            entfernt = False
+        # Ist die Datei inzwischen ohnehin weg (z. B. FileNotFoundError), gilt sie als entfernt.
+        entfernt = entfernt or not os.path.exists(pfad)
+        if entfernt:
+            text = f"Der eben neu angelegte Termin „{name}“ wurde wieder entfernt (Papierkorb)."
+        else:
+            text = (
+                f"Der eben neu angelegte Termin „{name}“ ließ sich nicht in den Papierkorb "
+                f"verschieben. Die leere Datei bleibt unter „{_pfad_anzeige(pfad)}“ und kann "
+                "gelöscht werden (im Termine-Ordner auch über den Startdialog)."
+            )
+        QMessageBox.information(self, "Neuer Termin entfernt" if entfernt else "Neuer Termin bleibt", text)
 
     def _rueckfrage_ungespeichert(self, verwerfen: bool) -> str:
         """Gemeinsame Rückfrage bei ungespeicherten Ergebnissen (Desktop-Prüfung 14.10.2026,
@@ -4917,6 +4941,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.pfad: str | None = None
         # "🎓 Demoprüfung" gewählt - der Aufrufer startet dann die Demo (desktop_demo).
         self.demo_angefordert = False
+        # True, wenn `pfad` eben erst über „Neuen Termin anlegen“ entstanden ist - siehe
+        # HauptFenster._neu_angelegten_termin_entfernen.
+        self.neu_angelegt = False
         self._termine: list = []
         # Nur gesetzt, wenn der Dialog aus einem bereits offenen Hauptfenster heraus
         # ("Anderen Termin öffnen…") gestartet wurde - siehe _termin_loeschen.
@@ -5053,6 +5080,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # Geöffnet wird nur der angelegte bzw. der bewusst gewählte vorhandene Termin.
         if dialog.bestehenden_oeffnen or getattr(dialog, "termin_angelegt", False):
             self.pfad = pfad
+            self.neu_angelegt = getattr(dialog, "termin_angelegt", False) and not dialog.bestehenden_oeffnen
             self.accept()
 
     def _termin_oeffnen(self) -> None:

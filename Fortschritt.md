@@ -6957,4 +6957,34 @@ zurückstellen. Nur Arbeitsstand, kein Build.
   schon im Dialog angelegt. Antwortet er danach auf „Ungespeicherte Ergebnisse“ mit „Abbrechen“,
   bleibt diese leere Datei im Termine-Ordner liegen (kein Datenverlust, sie erscheint in der
   Terminliste). **Offen für Marco:** hinnehmen oder die leere Datei beim Abbrechen wieder löschen.
+  **Geklärt 18.10.2026:** in den Papierkorb, mit Hinweis (siehe nächster Abschnitt).
 - Tests lokal (GUI + Theme): 375 passed, 1 xfailed, 2 fokusbedingte Fehlschläge wie oben.
+
+### 18.10.2026: Gruppe 2, restliche kleine Punkte (Marcos Entscheidungen)
+
+- **Import-Dialog, fehlende Spalte (A7):** Bei einem `KeyError`/`IndexError`/`TypeError`/
+  `ValueError` beim Lesen der Quelle steht jetzt „Die Datei enthält nicht alle erwarteten
+  Angaben (Technisch: KeyError: 'nachname').“ statt nur „'nachname'“. Datenbank- und
+  Dateifehler bleiben bei `_klartext_fehler`. Kein Eintrag ins Absturzprotokoll, weil die fremde
+  Datei die Ursache ist. `desktop_dialoge.py` (`TerminImportDialog._termin_gewaehlt`).
+- **Import-Dialog, nicht erschienen (Nachtrag 02.10., Punkt 3):** Teilnehmer mit „keine
+  Teilnahme“ im Quelltermin bekommen den Vermerk „– im Quelltermin nicht erschienen“ und bleiben
+  vorausgewählt (Marco: nur Vermerk). Alte Quelldateien ohne die Spalte gehen weiter.
+- **Leere neue Termindatei beim Abbrechen (Folge der neuen Reihenfolge beim Terminwechsel):**
+  `StartDialog` merkt sich in `neu_angelegt`, ob der gewählte Termin eben erst angelegt wurde.
+  Bricht der Anwender danach die Rückfrage „Ungespeicherte Ergebnisse“ ab, verschiebt
+  `HauptFenster._neu_angelegten_termin_entfernen` die Datei in den Papierkorb und zeigt einen
+  Hinweis. Klappt der Papierkorb nicht, bleibt die Datei, und der Hinweis sagt das. Ein
+  vorhandener Termin wird nie angefasst.
+- **Weiter zurückgestellt (Marco):** CSV-Altexporte mit „'“ und Excel-Verdacht, Zeitplan-Effizienz
+  (Blockplan, Pausen-Dialog), `alle_speichern()` ohne mögliche Rückfrage (X11/macOS),
+  `-wal`/`-shm` beim lesenden Öffnen fremder WAL-Dateien. Ebenso die Fehlerfenster-Punkte (s. o.).
+- Tests: neue GUI-Tests mit Gegenprobe (Vermerk, fehlende Spalte, Papierkorb klappt/klappt
+  nicht/vorhandener Termin, `neu_angelegt` im Startdialog).
+- Verifikation (unabhängiger Subagent): kein Fehler. Seine Kleinigkeiten gleich erledigt: Der
+  Hinweis bei gescheitertem Papierkorb nennt den Speicherort (die Datei kann außerhalb des
+  Termine-Ordners liegen). Ist die Datei ohnehin schon weg, gilt sie als entfernt. Dazu Tests
+  für einen Fehler beim Papierkorb und für alte Quelldateien ohne `keine_teilnahme`.
+- Tests lokal: Unittests 657 OK (172 übersprungen); GUI + Theme 383 passed, 1 xfailed, dazu
+  dieselben 2 fokusbedingten Fehlschläge wie auf dem unveränderten Stand
+  (`test_bezahlt_checkbox_im_teilnehmer_dialog`, `test_strg_s_speichert_in_der_ergebniserfassung`).
