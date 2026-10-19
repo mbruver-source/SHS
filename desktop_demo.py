@@ -905,14 +905,16 @@ class DemoTour(QObject):
                 "Am Prüfungstag kommen die Punkte in die Ergebniserfassung: je Disziplin die "
                 "Suchleistung (0–60) und die Anzeigeleistung (0–40). Beim Dreikampf stehen "
                 "alle drei Disziplinen nebeneinander in einer Zeile.\n\n"
+                "Einfach eine Zelle anklicken und lostippen. Tab springt zur nächsten Zelle, "
+                "Enter übernimmt die Zahl, Entf leert die Zelle.\n\n"
                 "Gelbe Zeilen sind noch nicht gespeichert.",
                 self._aktionen_ergebnisse,
             ),
             DemoSchritt(
                 "9. Disqualifikation",
                 "Wird ein Team disqualifiziert oder bricht ab, setzt man den Haken "
-                "„Disqualifiziert“ bzw. „Abbruch“. Die Punktefelder werden dann geleert und "
-                "gesperrt.\n\n"
+                "„Disqualifiziert“ bzw. „Abbruch“ (per Klick oder mit der Leertaste). Die "
+                "Punktezellen werden dann geleert und grau gesperrt.\n\n"
                 "Das Team bekommt keine Wertnote und keinen Platz, zählt aber bei der Zahl "
                 "der Starter mit.",
                 self._aktionen_disqualifikation,
