@@ -14,8 +14,8 @@ Start durch Marco:
 |---|---|---|---|---|---|
 | O1 Sicherung konsistent | S | erledigt | 97214c1 | 16 % / ~0 % → 33 % / 1 % | GUI 388 grün, Unittests 660 grün; 2 Rückfragen offen (unten) |
 | O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | erledigt | f03447b | 33 % / 1 % → 41 % / 2 % | Unittests 664, GUI 393 grün; Rückfrage 3 offen |
-| O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | erledigt | (s. git log) | 42 % / 2 % → 53 % / 3 % | Unittests 664, GUI 394 grün |
-| O4 Schnitt 2 `desktop_auswertung.py` | M | offen | | | |
+| O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | erledigt | c7a0866 | 42 % / 2 % → 53 % / 3 % | Unittests 664, GUI 394 grün |
+| O4 Schnitt 2 `desktop_auswertung.py` | M | erledigt | (s. git log) | 54 % / 3 % → 0 % / 4 % | Unittests OK, GUI 394 grün |
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | offen | | | |
 | O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | offen | | | nach O1 |
 | O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | offen | | | |
@@ -196,6 +196,11 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
 - Achtung: `HauptFenster` erzeugt `TeilnehmerUebersichtTab`. Den Patch
   `"app.TeilnehmerUebersichtTab"` behalten (der Name bleibt in `app` importiert, weil das
   Hauptfenster ihn nutzt).
+
+- Nachtrag aus der Verifikation von O4 (für O6): Zeilenangaben der Teile 1 und 8 im Skill
+  `desktop-pruefung` (beide Spiegel) erneuern; Kommentar „siehe BewertungsbogenAuswahlDialog
+  oben“ in `desktop_auswertung.py` (bei `ExportTab`) auf `desktop_dialoge.py` korrigieren;
+  `app.QDesktopServices` NICHT als „unbenutzt“ entfernen (Tests patchen es).
 
 ### O5 Schnitt 3 `desktop_zeitplan.py` (M)
 - Code: `app.py` ~2836–3489 `ZeitplanTab`.

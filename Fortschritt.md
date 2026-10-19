@@ -7190,3 +7190,34 @@ Entscheidungen vom 18.10.2026.
   - Die Gegenprobe vergleicht mit der echten Funktion, statt den Pfad zu wiederholen.
   - Im Docstring steht ein Hinweis auf Importe, die erst in einer Funktion stehen.
   - Übrige Leerzeilen sind entfernt.
+
+
+## 19.10.2026: O4 `app.py` aufteilen, Schnitt 2 `desktop_auswertung.py` (automatische Abarbeitung)
+
+- **Verschoben, Code unverändert (byte-gleich geprüft):** aus `app.py` nach `desktop_auswertung.py`.
+  - Die Auswertungshilfen `_vorname_nachname`, `_stechen_offen_bestaetigen` und `_eindeutige_texte`.
+  - Die Reiter `AuswertungTab` und `TeilnehmerUebersichtTab`.
+  - `_EXCEL_CSV_HINWEIS` und `ExportTab`.
+  - `app.py` holt die drei Reiter zurück, weil das Hauptfenster sie erzeugt. 21 Importe, die
+    `app.py` nicht mehr braucht, sind entfernt.
+- **Zeilenzahl:** `app.py` hat jetzt 4208 Zeilen, `desktop_auswertung.py` 751.
+- **Werkzeug:** Verschoben wurde mit einem Skript. Es leitet die Importe des neuen Moduls aus
+  `app.py` ab und räumt danach die Importe in `app.py` mit pyflakes auf. O5 und O6 nutzen es
+  ebenso.
+- **Tests:**
+  - Die drei Reiter werden aus `desktop_auswertung` importiert, `BewertungsbogenAuswahlDialog`
+    aus `desktop_dialoge`.
+  - Die Patches auf `_db_fehler_anzeigen`, `_ausfuehren` und `_zeitplan_pdf_exportieren` laufen
+    über `ueberall_ersetzen`.
+  - `exportiere_teilnehmer_csv` und `_eindeutige_texte` werden in `desktop_auswertung` gepatcht.
+  - `DESKTOP_MODULE` und die Modulliste in `tools/screenshots.py` sind erweitert.
+  - Volle Läufe grün: Unittests OK, GUI 394 OK.
+- **Skill `desktop-pruefung`:** Die Dateiangaben der Teile 4 und 6 sind angepasst.
+- **Verifikation (unabhängiger Subagent):** keine funktionalen Befunde.
+  - Kein Patch auf `app.X` verfehlt still sein Ziel.
+  - `app.QDesktopServices` bleibt importiert, obwohl pyflakes den Import als unbenutzt meldet:
+    Zwei Tests patchen ihn.
+  - Für O6 notiert:
+    - Die Zeilenangaben der Teile 1 und 8 im Skill `desktop-pruefung` stimmen nicht mehr.
+    - Der Kommentar „siehe BewertungsbogenAuswahlDialog oben“ in `desktop_auswertung.py` ist
+      veraltet. Er wurde unverändert mitgenommen und war schon vorher falsch.

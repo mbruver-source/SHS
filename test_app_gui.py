@@ -35,18 +35,14 @@ from app import (
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
     _wiederherstellungsziele_planen,
-    AuswertungTab,
-    BewertungsbogenAuswahlDialog,
     DatensicherungTab,
     ErgebnisTab,
-    ExportTab,
     FormularImportTab,
     HauptFenster,
     HilfeDialog,
     StartDialog,
     TeilnehmerDialog,
     TeilnehmerTab,
-    TeilnehmerUebersichtTab,
     TerminImportDialog,
     VeranstaltungsDialog,
     VerwaltungTab,
@@ -77,6 +73,9 @@ from db_import import (
     CsvImportErgebnis,
 )
 from desktop_darstellung import _erzeuge_qss
+from desktop_dialoge import BewertungsbogenAuswahlDialog
+import desktop_auswertung
+from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 import desktop_programm
 from desktop_programm import VERSION, VersionDialog
 from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
@@ -165,8 +164,8 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
 
 #: Module der Desktop-Oberfläche, die gemeinsame Namen (z. B. termine_ordner) jeweils selbst
 #: importieren - siehe ueberall_ersetzen.
-DESKTOP_MODULE = ("app", "desktop_darstellung", "desktop_demo", "desktop_dialoge", "desktop_gemeinsam",
-                  "desktop_programm")
+DESKTOP_MODULE = ("app", "desktop_auswertung", "desktop_darstellung", "desktop_demo", "desktop_dialoge",
+                  "desktop_gemeinsam", "desktop_programm")
 
 import db as _db_modul  # noqa: E402
 #: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).
@@ -792,10 +791,9 @@ def test_stechen_gleiche_person_mit_zwei_hunden_und_vorgabe_offen(qtbot, conn, m
 
 def test_eindeutige_texte_fuer_die_stechen_auswahl():
     """Abschluss-QS 15.10.2026: auch drei gleichlautende Einträge werden eindeutig."""
-    import app
 
-    assert app._eindeutige_texte(["A", "B", "A", "A"]) == ["A [1]", "B", "A [2]", "A [3]"]
-    assert app._eindeutige_texte(["A", "B"]) == ["A", "B"]
+    assert desktop_auswertung._eindeutige_texte(["A", "B", "A", "A"]) == ["A [1]", "B", "A [2]", "A [3]"]
+    assert desktop_auswertung._eindeutige_texte(["A", "B"]) == ["A", "B"]
 
 
 def test_pause_nach_startzeit_eingabe_geht_nicht_verloren(qtbot, conn, monkeypatch):
@@ -858,7 +856,7 @@ def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, mon
     tab.zeitplan_start.editingFinished.emit()  # still: keine Meldung, nichts gespeichert
     assert get_veranstaltung(conn)["zeitplan_start"] == "11:00"
     warnungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
-    monkeypatch.setattr("app._zeitplan_pdf_exportieren", lambda *a: pytest.fail("kein PDF erwartet"))
+    ueberall_ersetzen(monkeypatch, "_zeitplan_pdf_exportieren", lambda *a: pytest.fail("kein PDF erwartet"))
     tab._pdf_exportieren()
     tab._automatisch_verteilen()
     assert warnungen == ["Ungültige Uhrzeit", "Ungültige Uhrzeit"]
@@ -1287,7 +1285,7 @@ def test_ergebnis_tab_speichern_bei_gesperrter_datei_bleibt_im_fehlerweg(qtbot, 
     _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     meldungen = []
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: meldungen.append(a[1]))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: meldungen.append(a[1]))
     conn.execute("PRAGMA busy_timeout = 0")
 
     with closing(init_db(pfad)) as andere:
@@ -1353,7 +1351,7 @@ def _zwei_eingaben_mit_fehler_beim_zweiten(qtbot, termin, monkeypatch, sammeln_a
 
     meldungen = []
     monkeypatch.setattr("app.eintragen_ergebnis", zweites_scheitert)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
     # Beim Schließen am Testende: ungespeicherte Eingaben verwerfen statt modal nachzufragen.
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     ergebnis_tab.alle_speichern()
@@ -1467,7 +1465,7 @@ def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot,
 
     meldungen = []
     monkeypatch.setattr("app.eintragen_ergebnis", zweiter_verletzt_check)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, einleitung: meldungen.append(einleitung))
 
     ergebnis_tab.alle_speichern()
 
@@ -2585,7 +2583,7 @@ def test_schliessen_bei_schreibfehler_fragt_nach_statt_still_zu_verwerfen(qtbot,
 
     meldungen = []
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
 
     fenster.close()
@@ -2607,7 +2605,7 @@ def test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen(qtbot, termin, 
     suche_feld.setText("58")
     anzeige_feld.setText("38")
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
     # Für das Schließen beim Aufräumen des Tests: verwerfen statt modal zu warten.
     rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     manager = _FakeSitzungsManager(interaktion=False)
@@ -2701,7 +2699,7 @@ def test_zeitplan_schreibfehler_beim_anzeigen_und_startzeit(qtbot, conn, monkeyp
     „Startzeit speichern“ melden Schreibfehler statt des allgemeinen Fehlerfensters."""
     set_veranstaltung(conn, verein="SGV", datum="2026-11-14", wertungsrichter_1="Anna")
     meldungen = []
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
     monkeypatch.setattr("app.zeitplan_richter_aus_veranstaltung_anlegen", _schreibfehler)
     monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
     tab = ZeitplanTab(conn)
@@ -2723,7 +2721,7 @@ def test_csv_import_meldet_schreibfehler(qtbot, conn, monkeypatch, tmp_path):
     monkeypatch.setattr("app._import_ordner_merken", lambda *a: None)
     monkeypatch.setattr("app.importiere_teilnehmer_aus_csv", _schreibfehler)
     meldungen = []
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
 
     app_modul._teilnehmerliste_importieren(None, conn)
 
@@ -2778,7 +2776,7 @@ def test_reiterwechsel_bei_schreibfehler_wechselt_trotzdem(qtbot, termin, monkey
     suche_feld.setText("58")
     anzeige_feld.setText("38")
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
     rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
 
     fenster._tabs.setCurrentIndex(0)
@@ -2997,7 +2995,7 @@ def test_teilnehmer_tab_gibt_pruefungsdatum_als_stichtag_an_den_dialog(qtbot, co
             uebergeben.append(kwargs.get("stichtag"))
 
     monkeypatch.setattr("app.TeilnehmerDialog", _Attrappe)
-    monkeypatch.setattr("app._ausfuehren", lambda dialog: QDialog.Rejected)
+    ueberall_ersetzen(monkeypatch, "_ausfuehren", lambda dialog: QDialog.Rejected)
     tab._teilnehmer_hinzufuegen()
     tab.tabelle.selectRow(0)
     tab._teilnehmer_bearbeiten()
@@ -3080,7 +3078,7 @@ def test_mindestabstand_bei_schreibfehler_zeigt_gespeicherten_wert(qtbot, conn, 
     tab = ZeitplanTab(conn)
     qtbot.addWidget(tab)
     monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
-    monkeypatch.setattr("app._db_fehler_anzeigen", lambda *a, **k: None)
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
 
     tab.mindestabstand.setValue(35)
 
@@ -4754,8 +4752,7 @@ def test_aus_anderem_termin_importieren_meldet_datenbankfehler(qtbot, conn, monk
     monkeypatch.setattr("app.TerminImportDialog", _import_dialog_attrappe(object(), [1]))
     monkeypatch.setattr("app.importiere_teilnehmer_stammdaten", scheitert)
     monkeypatch.setattr("app.get_teilnehmer", lambda *a: None)  # Quelle ist hier nur eine Attrappe
-    monkeypatch.setattr("app._db_fehler_anzeigen",
-                        lambda parent, exc, einleitung="": gemeldet.append((str(exc), einleitung)))
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, einleitung="": gemeldet.append((str(exc), einleitung)))
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
     aktualisiert = []
@@ -5302,7 +5299,7 @@ def test_startdialog_merkt_neu_angelegten_termin(qtbot, monkeypatch, tmp_path):
                 self.pfad_feld = QLineEdit(str(tmp_path / "x.sqlite"))
 
         monkeypatch.setattr("app.VeranstaltungsDialog", _Veranstaltung)
-        monkeypatch.setattr("app._ausfuehren", lambda d: QDialog.Accepted)
+        ueberall_ersetzen(monkeypatch, "_ausfuehren", lambda d: QDialog.Accepted)
         dialog._neuer_termin()
         assert dialog.neu_angelegt is erwartet
 
@@ -6022,7 +6019,7 @@ def test_csv_export_nutzt_gemeinsamen_ablauf(qtbot, conn, monkeypatch, tmp_path,
     assert tab.status_label.text().startswith("Teilnehmerliste (2 Teilnehmer) gespeichert:")
 
     fehler, protokolliert = [], []
-    monkeypatch.setattr("app.exportiere_teilnehmer_csv", lambda *a: {}["kaputt"])
+    monkeypatch.setattr("desktop_auswertung.exportiere_teilnehmer_csv", lambda *a: {}["kaputt"])
     monkeypatch.setattr(desktop_gemeinsam.QMessageBox, "critical", lambda *a, **k: fehler.append((a[1], a[2])))
     monkeypatch.setattr(desktop_gemeinsam, "fehler_protokollieren", protokolliert.append)
     tab.status_label.setText("alt")
@@ -7246,7 +7243,7 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
     def gesperrt(*_a):
         raise PermissionError(13, "Permission denied", str(ziel))
 
-    monkeypatch.setattr("app.exportiere_teilnehmer_csv", gesperrt)
+    monkeypatch.setattr("desktop_auswertung.exportiere_teilnehmer_csv", gesperrt)
     fehler = meldungen_sammeln(monkeypatch, "critical")
     next(b for b in fenster.export_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste speichern (CSV, für Excel)…").click()
     assert "in einem anderen Programm geöffnet" in fehler[0]
