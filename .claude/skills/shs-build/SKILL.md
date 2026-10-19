@@ -35,6 +35,8 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 - `Architektur.md`, `README*.md`.
 - `UML.md`: Haben sich Abläufe, Klassen oder Modulgrenzen geändert, das passende
   Mermaid-Diagramm nachziehen (Namen gegen den Code prüfen).
+- `OFFEN.md`: Punkte, die seit dem letzten Build erledigt, entschieden, zurückgestellt oder als
+  Restrisiko akzeptiert wurden, eintragen bzw. streichen.
 - `RELEASE_NOTES.md` **ganz neu schreiben**: Die Datei enthält nur den Abschnitt „Was ist neu
   in X.Y.Z“ der kommenden Version, in verständlicher Sprache für Vereinsmitglieder. Den Abschnitt
   der Vorversion löschen, nicht darunter stehen lassen. Der Workflow übernimmt die ganze Datei

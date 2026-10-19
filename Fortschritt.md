@@ -7639,3 +7639,18 @@ Auf Marcos Wunsch ist `UML.md` jetzt fester Teil der Pflege:
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
   `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert), auf
   Wunsch auch `UML.md`.
+
+
+## 19.10.2026: `OFFEN.md` als Übersicht der offenen Punkte
+
+Auf Marcos Wunsch fasst die neue Datei `OFFEN.md` zusammen, was bisher über viele Abschnitte
+dieser Datei verteilt stand. Je Punkt gibt es Datum und Fundstelle:
+- A: 7 offene Punkte, vor allem Prüfungen am echten Gerät;
+- B: 12 bewusst zurückgestellte Punkte;
+- C: 33 akzeptierte Restrisiken bzw. abgelehnte Punkte.
+
+Ein Such-Agent hat die Liste aus `Fortschritt.md`, `CLAUDE.md` und den beiden Aufgabenlisten
+gesammelt und jeweils geprüft, dass der Punkt später nicht erledigt wurde. Stichproben habe ich
+nachgeprüft. Verweise darauf stehen in `CLAUDE.md`/`AGENTS.md`, `Architektur.md`, im Skill
+`shs-build` und im Agenten `verifikation` (jeweils mit Spiegel). Erledigt seit dem Sammeln: die
+claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.

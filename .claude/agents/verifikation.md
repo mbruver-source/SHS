@@ -20,7 +20,9 @@ Vorgehen:
 4. Fehlen Tests für die geänderte Logik?
 5. Ist `Fortschritt.md` nachgezogen? Muss weitere Dokumentation angepasst werden?
    Ändert der Diff einen Ablauf, eine Klasse oder eine Modulgrenze, prüfen, ob das passende
-   Diagramm in `UML.md` noch stimmt (Aufrufe, Reihenfolge, Namen).
+   Diagramm in `UML.md` noch stimmt (Aufrufe, Reihenfolge, Namen). Erledigt die Änderung
+   einen Punkt aus `OFFEN.md` oder entsteht ein neuer zurückgestellter Punkt, muss `OFFEN.md`
+   nachgezogen sein. Punkte aus `OFFEN.md`, Teil C, nicht erneut als Befund melden.
 6. Projektregeln: kein Versionsbump, Commit oder Push ohne Marcos Anforderung; offene
    Sicherheitsfunde in Commit-Nachrichten, Kommentaren und `Fortschritt.md` nur
    allgemein beschrieben (siehe `CLAUDE.md`).

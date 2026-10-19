@@ -6,7 +6,8 @@ Gedacht als schneller Einstieg für neue Sitzungen/Subagents, die den Code noch 
 Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.md`.
 Die Abläufe (Programmstart, Termin öffnen, Teilnehmer, Zeitplan, Ergebniserfassung,
 Auswertung, Web-Erfassung, Datensicherung, Update, Demoprüfung) sowie die Klassen der
-Desktop-App zeigt `UML.md` als Mermaid-Diagramme.
+Desktop-App zeigt `UML.md` als Mermaid-Diagramme. Offene, zurückgestellte und akzeptierte
+Punkte stehen gesammelt in `OFFEN.md`.
 
 ## 1. Zwei Laufzeitumgebungen, eine gemeinsame Datenschicht
 

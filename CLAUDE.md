@@ -6,6 +6,9 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
   selbst durch die großen Module (`app.py`: rund 3600 Zeilen, `db.py`: rund 3600 Zeilen,
   Stand 19.10.2026; ausgelagert sind `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
   durcharbeitest. Die Abläufe und Klassen als UML (Mermaid) stehen in `UML.md`.
+- **Offene, zurückgestellte und akzeptierte Punkte auf einen Blick:** `OFFEN.md` - vor jeder
+  Planung und bevor du einen Befund meldest dort nachsehen; Fundstellen verweisen in
+  `Fortschritt.md`.
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.
