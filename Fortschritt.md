@@ -7410,3 +7410,42 @@ Umsetzung nach Marcos Entscheidungen vom 18.10.2026 (Variante A).
   werden?
 - **Vor dem nächsten Build** (nicht Teil des Loops): Marco sieht sich die neue Ergebniserfassung
   am echten Windows an. Außerdem muss `docs/HANDBUCH.pdf` neu erzeugt werden.
+
+
+## 19.10.2026: O10 Messung der neuen Ergebniserfassung (automatische Abarbeitung)
+
+Neues Messskript `tools/lasttest_ergebniserfassung.py`, nur für Entwickler und nicht Teil der
+Auslieferung.
+- Es legt einen Termin mit gemischten Prüfungen über alle 12 Angebote in einem Temp-Ordner an:
+  die Hälfte mit Ergebnissen, ein paar Disqualifizierte.
+- Gemessen wird offscreen mit dem echten Hauptfenster als Median aus 3 Läufen.
+- Mit `--repo` misst es einen anderen Stand. Für den Vergleich vorher/nachher war das O7
+  (cded543, gleiche Schnittstelle, noch Eingabefelder) per `git worktree`.
+
+**1000 Teilnehmer, Sekunden:**
+
+| Messung | vorher (O7, Eingabefelder) | nachher (O9, Zellen) | Ziel |
+|---|---|---|---|
+| Termin öffnen (Hauptfenster) | 2,37 | 0,64 | |
+| Erster Wechsel in die Ergebniserfassung | 1,02 | 0,13 | |
+| Reiterwechsel ohne Änderung (hin und zurück) | 0,50 | 0,21 | |
+| Reiterwechsel mit Neuaufbau | 2,45 | 0,46 | < 0,5 ✓ |
+| Sortieren (Spaltenklick) | 2,07 | 0,38 | < 0,5 ✓ |
+| 50 Ergebnisse eintragen + „Alle speichern“ | 0,13 | 0,10 | |
+| Ansichtswechsel (Hintergrund) | 2,53 | 0,42 | < 0,3 ✗ |
+| Zusätzlicher Arbeitsspeicher | 282 MB | 54 MB | |
+
+Die Vorher-Werte liegen über der groben Messung aus O8 (1,28/1,30 s), weil das Skript den ganzen
+Reiterwechsel bzw. Klick mit sichtbarem Hauptfenster misst, O8 nur den Tabellenaufbau.
+Zum Vergleich der Lasttest vom 16.10.2026 mit 1.0.48: Reiterwechsel 4,8 s, Ansichtswechsel rund
+2,6 s, 266 MB.
+
+**Ansichtswechsel im Einzelnen:**
+- Stylesheet anwenden 0,14–0,26 s;
+- Teilnehmer-Reiter neu laden 0,12 s;
+- Ergebniserfassung umfärben 0,13 s;
+- Auswertung und Zeitplan 0,08 s.
+
+Das Ziel ist knapp verfehlt, die Ergebniserfassung ist aber nicht mehr der Engpass. Laut Ablauf
+steht dazu eine Rückfrage an Marco in `aufgaben.md` (Nr. 5) mit drei Möglichkeiten. Bis dahin
+bleibt es beim Wartecursor.

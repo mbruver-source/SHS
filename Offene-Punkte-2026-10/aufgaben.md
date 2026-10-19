@@ -20,8 +20,8 @@ Start durch Marco:
 | O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | 55d946d | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
 | O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | cded543 | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | 54c7e69 | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
-| O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | (s. git log) | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
-| O10 Messung Lasttest-1000 | S | offen | | | nach O9 |
+| O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | 04d3026 | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
+| O10 Messung Lasttest-1000 | S | erledigt | (s. git log) | 75 % / 10 % → 85 % / 11 % | Neuaufbau 0,46 s, Sortieren 0,38 s ✓; Ansicht 0,42 s ✗ → Rückfrage 5 |
 | O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | offen | | | zuletzt |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
@@ -329,6 +329,20 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
    den früheren Eingabefeldern genauso (gleiche Stylesheet-Farben). Dunkel/Hoher Kontrast sind
    deutlich. Soll die gesperrte Zelle in allen Designs sichtbar anders aussehen (z. B. dunkleres
    Grau oder gestrichelter Rahmen)? Bis zur Entscheidung bleibt es wie bisher.
+5. **O10, Ansichtswechsel knapp über dem Ziel:** Bei 1000 Teilnehmern dauert der Wechsel von
+   Hintergrund bzw. Akzentfarbe jetzt 0,42 s (vorher 2,53 s), Ziel war < 0,3 s. Die
+   Ergebniserfassung ist nicht mehr der Engpass. Die Zeit verteilt sich so:
+   - Stylesheet anwenden 0,14–0,26 s;
+   - Teilnehmer-Reiter neu laden 0,12 s;
+   - Ergebniserfassung umfärben 0,13 s;
+   - Auswertung und Zeitplan 0,08 s.
+
+   Möglich wären:
+   - (a) so lassen; der Wartecursor bleibt;
+   - (b) beim Umfärben nur geänderte Zellen anfassen, rund −0,1 s;
+   - (c) den Teilnehmer-Reiter nur umfärben statt neu laden, rund −0,1 s.
+
+   Mit (b) und (c) läge der Wechsel voraussichtlich knapp unter 0,3 s. Bis zur Entscheidung (a).
 
 ## Hinweise für den Abschlussbericht
 
