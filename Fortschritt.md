@@ -7856,3 +7856,17 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
 - **V8, `closeEvent` nach abgebrochenem Abmelden ohne Interaktion:** Bleibt so, wer das Fenster
   selbst schließt, sieht die Meldungen (`OFFEN.md` C35).
 - `OFFEN.md` A8 und A9 sind gestrichen.
+
+
+## 19.10.2026: Python-Version bleibt vorerst 3.11 (Marco)
+
+- **Frage:** Bringt Python 3.12 Verbesserungen? Die CI testet mit 3.11, lokal ist nur 3.12/3.14
+  installiert.
+- **Ergebnis:** Für das Programm nicht spürbar.
+  - Die Geschwindigkeit hängt an Qt, SQLite und den PDFs, nicht an Python.
+  - f-Strings, Fehlermeldungen und Typ-Syntax helfen nur beim Entwickeln.
+  - Die neue `sqlite3`-Transaktionssteuerung brauchen wir nicht.
+  - Die eingebauten sqlite3-Datumsumwandlungen (ab 3.12 mit Warnung) nutzt der Code nicht.
+- **Entscheidung:** Es bleibt bei 3.11 in CI, Installer, Mac-/Linux-Paketen und Container. Der
+  Wechsel kommt etwa Mitte 2027, vor dem Ende der Sicherheitsupdates für 3.11 im Oktober
+  2027, und zwar direkt auf 3.13/3.14. Eingetragen als `OFFEN.md` B13.

@@ -33,6 +33,7 @@ suchen.
 | B10 | Weitere Testarten (Windows in der CI erledigt 19.10.2026, V2): gleichzeitige Web-Eingaben, Abdeckung, bandit/ZAP/XSS, Generalprobe, Barrierefreiheit | 03.10.2026 | F:4198 |
 | B11 | Altdaten-Tests erweitern (Web-Sync, CSV-Export, Anmeldeformular mit Altdaten) | 03.10.2026 | F:4383 |
 | B12 | `app.py` nicht weiter aufteilen: Teilnehmer-, Formular-Import-, Ergebnis-Reiter, Hauptfenster, StartDialog und `main` bleiben dort | 18.10.2026 | F:6474 |
+| B13 | Python-Version anheben (heute 3.11 in CI, Installer, Paketen, Container; Sicherheitsupdates bis Oktober 2027): etwa Mitte 2027 direkt auf 3.13/3.14, nicht über 3.12. Dabei sqlite3-Datumsumwandlungen prüfen (heute ungenutzt) | 19.10.2026 | F:7861 |
 
 ## C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
 
