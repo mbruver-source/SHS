@@ -841,6 +841,15 @@ ankreuzen oder in der Liste „Startnummer tauschen…“ verwenden.
 **Ein Termin erscheint im Startbildschirm als „… (nicht lesbar)“, beim Öffnen kommt „Datei beschädigt“.**
 Die Datei ist beschädigt oder keine Termin-Datei. Stelle den Termin aus deiner letzten
 Datensicherung wieder her („Als Kopie importieren“, wenn du den Stand vergleichen willst).
+Beim Import von Teilnehmern aus einem anderen Termin wird die gewählte Datei zusätzlich auf
+Beschädigungen geprüft; eine beschädigte Datei meldet der Dialog statt ihrer Teilnehmer.
+
+**Ein Termin erscheint als „… (nicht lesbar: zu groß)“ oder „… (nicht lesbar: zu aufwendig zu prüfen)“.**
+Ein Termin ist normalerweise deutlich kleiner als 1 MB. Eine Datei über 50 MB lässt sich trotzdem
+öffnen; vorher fragt das Programm „ungewöhnlich groß, trotzdem öffnen?“. In der Import-Auswahl
+erscheint sie nicht. „Zu aufwendig zu prüfen“ heißt: Schon das Lesen der Grunddaten dauerte
+ungewöhnlich lange. Eine solche Datei stammt vermutlich nicht aus diesem Programm und wird nicht
+geöffnet.
 
 **Ich habe das Passwort der Datensicherung vergessen.**
 Das lässt sich nicht wiederherstellen. Erstelle eine neue Sicherung und notiere das Passwort

@@ -109,6 +109,8 @@ from db import (
     sortierschluessel_text,
     termin_oeffnen,
     TerminNichtOeffenbar,
+    TerminUngewoehnlichGross,
+    GRUND_ZU_GROSS,
     list_zeitplan_richter,
     loesche_zeitplan_eintrag,
     loesche_zeitplan_richter,
@@ -2396,9 +2398,20 @@ def _termin_oeffnen_mit_meldung(parent, pfad: str):
     """Öffnet einen Termin über db.termin_oeffnen; lässt er sich nicht öffnen (keine
     Termin-Datei, beschädigt, schreibgeschützt, unbekannte Werte), erscheint eine
     verständliche Meldung und das Ergebnis ist None - der bisherige Termin bzw. der
-    Startdialog bleibt (Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4)."""
+    Startdialog bleibt (Desktop-Prüfung 14.10.2026, Teil 7 Nr. 4). Bei einer ungewöhnlich
+    großen Datei wird vorher nachgefragt (offene Punkte O2, Marco 18.10.2026)."""
     try:
-        return termin_oeffnen(pfad)
+        try:
+            return termin_oeffnen(pfad)
+        except TerminUngewoehnlichGross as exc:
+            antwort = QMessageBox.question(
+                parent, "Ungewöhnlich große Termin-Datei",
+                f"„{os.path.basename(pfad)}“: {exc}\n\nTrotzdem öffnen?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if antwort != QMessageBox.Yes:
+                return None
+            return termin_oeffnen(pfad, groesse_bestaetigt=True)
     except TerminNichtOeffenbar as exc:
         meldung = str(exc)
     except (sqlite3.Error, OSError) as exc:
@@ -5032,7 +5045,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         for row, t in enumerate(self._termine):
             werte = [
                 datum_anzeige(t.datum) or "?",
-                (t.verein or t.dateiname) if t.lesbar else f"{t.dateiname} (nicht lesbar)",
+                (t.verein or t.dateiname) if t.lesbar
+                else f"{t.dateiname} (nicht lesbar{': ' + t.grund if t.grund else ''})",
                 t.ort or "",
                 str(t.anzahl_teilnehmer) if t.lesbar else "",
             ]
@@ -5100,8 +5114,14 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         termin = self._ausgewaehlter_termin()
         if termin is None:
             return
-        if not termin.lesbar:
-            QMessageBox.warning(self, "Datei beschädigt", f"„{termin.dateiname}“ lässt sich nicht als Termin-Datei lesen.")
+        # Eine nur zu große Datei darf trotzdem geöffnet werden - die Rückfrage stellt
+        # _termin_oeffnen_mit_meldung (offene Punkte O2).
+        if not termin.lesbar and termin.grund != GRUND_ZU_GROSS:
+            if termin.grund:
+                QMessageBox.warning(self, "Datei nicht lesbar",
+                                    f"„{termin.dateiname}“ ist {termin.grund} und lässt sich nicht als Termin-Datei lesen.")
+            else:
+                QMessageBox.warning(self, "Datei beschädigt", f"„{termin.dateiname}“ lässt sich nicht als Termin-Datei lesen.")
             return
         self.pfad = termin.pfad
         self.accept()

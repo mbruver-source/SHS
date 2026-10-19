@@ -12,8 +12,8 @@ Start durch Marco:
 
 | Aufgabe | Größe | Status | Commit | Limit vorher → nachher (5 h / 7 T) | Bemerkung |
 |---|---|---|---|---|---|
-| O1 Sicherung konsistent | S | erledigt | (dieser Commit) | 16 % / ~0 % → 33 % / 1 % | GUI 388 grün, Unittests 660 grün; 2 Rückfragen offen (unten) |
-| O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | offen | | | |
+| O1 Sicherung konsistent | S | erledigt | 97214c1 | 16 % / ~0 % → 33 % / 1 % | GUI 388 grün, Unittests 660 grün; 2 Rückfragen offen (unten) |
+| O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | erledigt | (s. git log) | 33 % / 1 % → 41 % / 2 % | Unittests 664, GUI 393 grün; Rückfrage 3 offen |
 | O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | offen | | | |
 | O4 Schnitt 2 `desktop_auswertung.py` | M | offen | | | |
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | offen | | | |
@@ -290,6 +290,10 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
 2. **O1, Journal mit zurückschreiben:** Beim Wiederherstellen wird eine im ZIP enthaltene
    `-journal` mit zurückgeschrieben (sonst wäre das Mitsichern wirkungslos). Das stand nicht
    ausdrücklich in deiner Entscheidung, bitte bestätigen.
+3. **O2, Wortlaut in der Terminübersicht:** Eine Datei über 50 MB steht als „… (nicht lesbar: zu
+   groß)“ da, lässt sich aber nach der Rückfrage trotzdem öffnen (sonst wäre die Rückfrage nicht
+   erreichbar). Lieber „… (ungewöhnlich groß)“ ohne „nicht lesbar“? Bis zur Entscheidung bleibt
+   es wie beschlossen.
 
 ## Hinweise für den Abschlussbericht
 

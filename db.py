@@ -2428,6 +2428,9 @@ class TerminInfo:
     startnummer_bereiche: str | None = None
     # Marco 09.10.2026: die Standardgröße der Bereiche ebenfalls übernehmen.
     startnummer_bereichsgroesse: str | None = None
+    # Offene Punkte O2 (Marco 18.10.2026): kurzer Grund bei lesbar=False, wenn er nicht
+    # „beschädigt“ ist - GRUND_ZU_GROSS oder GRUND_ZU_AUFWENDIG.
+    grund: str | None = None
 
 
 # Schrittgrenze (in Einheiten von _LESE_SCHRITTWEITE SQLite-Arbeitsschritten) für das
@@ -2435,6 +2438,43 @@ class TerminInfo:
 # nur einen Bruchteil davon.
 _LESE_SCHRITTWEITE = 1000
 _LESE_HOECHSTSCHRITTE = 1000
+
+# Offene Punkte O2 (Marco 18.10.2026): eigene Termine sind deutlich kleiner als 1 MB. Eine
+# größere Datei gilt in Terminübersicht und Import als nicht lesbar, beim Öffnen erscheint
+# eine Rückfrage (TerminUngewoehnlichGross).
+TERMIN_GROESSE_GRENZE = 50 * 1024 * 1024
+GRUND_ZU_GROSS = "zu groß"
+GRUND_ZU_AUFWENDIG = "zu aufwendig zu prüfen"
+SCHRITTGRENZE_TEXT = (
+    "Die Datei ist zu groß bzw. zu aufwendig zu prüfen. Sie stammt vermutlich nicht aus "
+    "diesem Programm und wird deshalb nicht gelesen."
+)
+
+
+def _megabyte(groesse: int) -> str:
+    """MB mit einer Nachkommastelle (Komma), damit knapp über der Grenze nicht „50 MB“ steht."""
+    return f"{groesse / (1024 * 1024):.1f}".replace(".", ",")
+
+
+class TerminZuGross(sqlite3.DatabaseError):
+    """Die Datei ist größer als TERMIN_GROESSE_GRENZE und wird nur lesend nicht geprüft
+    (Terminübersicht, Import). Unterklasse von sqlite3.DatabaseError, damit sie dort wie eine
+    nicht lesbare Datei behandelt wird; der Text ist für den Nutzer bestimmt."""
+
+
+def ist_schrittgrenze(exc: BaseException) -> bool:
+    """True, wenn die Abfrage an der Begrenzung aus lesen_begrenzen scheiterte (und nicht an
+    einer beschädigten Datei)."""
+    return isinstance(exc, sqlite3.OperationalError) and "interrupted" in str(exc).lower()
+
+
+def _groesse_pruefen(pfad: str | Path) -> None:
+    groesse = os.path.getsize(pfad)
+    if groesse > TERMIN_GROESSE_GRENZE:
+        raise TerminZuGross(
+            f"Die Datei ist ungewöhnlich groß ({_megabyte(groesse)} MB) und wird deshalb nicht "
+            "gelesen. Ein Termin ist sonst deutlich kleiner als 1 MB."
+        )
 
 
 def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
@@ -2493,7 +2533,9 @@ def termin_lesend_pruefen(pfad: str | Path) -> sqlite3.Connection:
     lesend öffnen, Arbeit begrenzen, Aufbau prüfen. Die Begrenzung bleibt
     gesetzt (aufheben mit conn.set_progress_handler(None, 0)). Ein liegengebliebenes Journal
     spielt der Aufrufer vorher zurück oder nicht; ohne Zurückspielen scheitert das Öffnen.
-    Bei einem Fehler wird die Verbindung geschlossen."""
+    Bei einem Fehler wird die Verbindung geschlossen. Eine Datei über
+    TERMIN_GROESSE_GRENZE ergibt TerminZuGross (offene Punkte O2)."""
+    _groesse_pruefen(pfad)
     conn = oeffne_termin_lesend(pfad)
     try:
         lesen_begrenzen(conn)
@@ -2502,6 +2544,14 @@ def termin_lesend_pruefen(pfad: str | Path) -> sqlite3.Connection:
         conn.close()
         raise
     return conn
+
+
+def termin_unversehrt_pruefen(conn: sqlite3.Connection) -> None:
+    """PRAGMA quick_check auf einer Verbindung aus termin_lesend_pruefen: findet auch
+    beschädigte Seiten, an denen Aufbauprüfung und erste Abfragen noch vorbeikommen. Wirft
+    sqlite3.DatabaseError (Text mit „malformed“, also Klartext „beschädigt“)."""
+    if conn.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise sqlite3.DatabaseError("database disk image is malformed (quick_check)")
 
 
 def _termin_info_lesen(pfad: Path) -> TerminInfo:
@@ -2538,6 +2588,19 @@ def sortierschluessel_text(text) -> str:
 
 class TerminNichtOeffenbar(Exception):
     """Die Datei lässt sich nicht als Termin öffnen; der Text ist für den Nutzer bestimmt."""
+
+
+class TerminUngewoehnlichGross(TerminNichtOeffenbar):
+    """termin_oeffnen ohne groesse_bestaetigt bei einer Datei über TERMIN_GROESSE_GRENZE: der
+    Aufrufer fragt nach und öffnet bei Ja mit groesse_bestaetigt=True erneut (offene Punkte
+    O2). Unterklasse, damit ein Aufrufer ohne Rückfrage wenigstens die Meldung zeigt."""
+
+    def __init__(self, groesse: int):
+        self.megabyte = _megabyte(groesse)
+        super().__init__(
+            f"Die Termin-Datei ist ungewöhnlich groß ({self.megabyte} MB). Ein Termin ist sonst "
+            "deutlich kleiner als 1 MB."
+        )
 
 
 def _journal_zurueckspielen(pfad) -> None:
@@ -2621,7 +2684,7 @@ def _termin_werte_pruefen(conn: sqlite3.Connection) -> None:
             raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
 
 
-def termin_oeffnen(pfad: str) -> sqlite3.Connection:
+def termin_oeffnen(pfad: str, groesse_bestaetigt: bool = False) -> sqlite3.Connection:
     """Öffnet einen Termin für das Hauptfenster - mit Prüfungen (Desktop-Prüfung 14.10.2026,
     Teil 7 Nr. 4; eine fehlende Datei ergibt TerminNichtOeffenbar statt eines neuen, leeren
     Termins). Die ersten laufen nur lesend, bevor die Datei beschrieben wird; die
@@ -2634,12 +2697,18 @@ def termin_oeffnen(pfad: str) -> sqlite3.Connection:
     - nach init_db eine Schreibprobe (PRAGMA user_version), damit ein schreibgeschützter
       Termin sofort auffällt und nicht erst beim ersten Speichern (Marcos Entscheidung
       14.10.2026; der Änderungszeitstempel der Datei ändert sich dabei);
-    - Plausibilitätsprüfung der Wertebereiche."""
+    - Plausibilitätsprüfung der Wertebereiche.
+    Offene Punkte O2 (Marco 18.10.2026): über TERMIN_GROESSE_GRENZE ohne groesse_bestaetigt
+    -> TerminUngewoehnlichGross (Rückfrage beim Aufrufer); scheitert die lesende Prüfung an
+    der Schrittgrenze, nennt die Meldung das statt „beschädigt“."""
     if not os.path.exists(pfad):
         # Abschluss-QS 15.10.2026 (K-3): eine inzwischen gelöschte/verschobene Datei nicht still
         # als leeren Termin neu anlegen - neue Termine legt StartDialog._neuer_termin an.
         raise TerminNichtOeffenbar("Die Termin-Datei wurde nicht gefunden (gelöscht oder verschoben?).")
-    if os.path.getsize(pfad) > 0:
+    groesse = os.path.getsize(pfad)
+    if groesse > TERMIN_GROESSE_GRENZE and not groesse_bestaetigt:
+        raise TerminUngewoehnlichGross(groesse)
+    if groesse > 0:
         _journal_zurueckspielen(pfad)
         try:
             # Gleiche Reihenfolge wie termin_lesend_pruefen; nur eine SQLite-Datei ganz ohne
@@ -2651,6 +2720,8 @@ def termin_oeffnen(pfad: str) -> sqlite3.Connection:
                 if pruef.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                     raise sqlite3.DatabaseError("quick_check")
         except sqlite3.DatabaseError as exc:
+            if ist_schrittgrenze(exc):
+                raise TerminNichtOeffenbar(SCHRITTGRENZE_TEXT) from exc
             raise TerminNichtOeffenbar(
                 "Die Datei ist keine Termin-Datei des SHS-Prüfungsprogramms oder sie ist beschädigt."
             ) from exc
@@ -2694,10 +2765,16 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
         _journal_zurueckspielen(pfad)
         try:
             ergebnisse.append(_termin_info_lesen(pfad))
-        except (sqlite3.Error, IndexError, KeyError, TypeError, ValueError, OverflowError):
+        except (sqlite3.Error, IndexError, KeyError, TypeError, ValueError, OverflowError) as exc:
+            if isinstance(exc, TerminZuGross):
+                grund = GRUND_ZU_GROSS
+            elif ist_schrittgrenze(exc):
+                grund = GRUND_ZU_AUFWENDIG
+            else:
+                grund = None
             ergebnisse.append(TerminInfo(
                 pfad=str(pfad), dateiname=pfad.name, verein=None, vereins_nr=None, ort=None,
-                datum=None, anzahl_teilnehmer=0, lesbar=False,
+                datum=None, anzahl_teilnehmer=0, lesbar=False, grund=grund,
             ))
     ergebnisse.sort(key=lambda t: (t.datum or "", t.dateiname), reverse=True)
     return ergebnisse

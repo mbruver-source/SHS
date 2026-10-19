@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 
 from db import (
     ALLE_DISZIPLINEN,
+    SCHRITTGRENZE_TEXT,
     get_veranstaltung,
     set_veranstaltung,
     zeitplan_ueberschneidungen,
@@ -439,6 +440,10 @@ _SQLITE_KLARTEXT = (
                           "Netzlaufwerk getrennt)."),
     (("unable to open",), "Die Termin-Datei lässt sich nicht öffnen bzw. anlegen (z. B. Ordner "
                           "fehlt, USB-Stick abgezogen oder Netzlaufwerk getrennt)."),
+    # Offene Punkte O2 (Marco 18.10.2026): Abbruch durch db.lesen_begrenzen ("interrupted",
+    # sonst setzt niemand eine Schrittgrenze) bzw. Befund von quick_check ("malformed").
+    (("interrupted",), SCHRITTGRENZE_TEXT),
+    (("malformed",), "Die Termin-Datei ist beschädigt."),
 )
 
 

@@ -3000,6 +3000,51 @@ class TestTerminOeffnen(unittest.TestCase):
         conn.close()
         return pfad
 
+    def test_ungewoehnlich_grosse_datei(self):
+        """Offene Punkte O2 (Marco 18.10.2026): über der Größengrenze fragt das Öffnen nach,
+        Terminübersicht und lesende Prüfung behandeln die Datei als nicht lesbar."""
+        import db
+        pfad = self._termin()
+        with patch("db.TERMIN_GROESSE_GRENZE", 100):
+            with self.assertRaises(db.TerminUngewoehnlichGross) as kontext:
+                termin_oeffnen(str(pfad))
+            self.assertIn("ungewöhnlich groß", str(kontext.exception))
+            with closing(termin_oeffnen(str(pfad), groesse_bestaetigt=True)) as conn:
+                self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
+            with self.assertRaises(db.TerminZuGross):
+                db.termin_lesend_pruefen(pfad)
+            [info] = db.liste_termine(self.ordner)
+            self.assertFalse(info.lesbar)
+            self.assertEqual(info.grund, db.GRUND_ZU_GROSS)
+        with patch("db.TERMIN_GROESSE_GRENZE", 50 * 1024 * 1024), patch("db.os.path.getsize", return_value=50 * 1024 * 1024 + 300 * 1024):
+            with self.assertRaises(db.TerminUngewoehnlichGross) as kontext:
+                termin_oeffnen(str(pfad))
+            self.assertIn("(50,3 MB)", str(kontext.exception))
+        # Genau auf der Grenze gilt die Datei noch nicht als zu groß.
+        with patch("db.TERMIN_GROESSE_GRENZE", pfad.stat().st_size):
+            with closing(termin_oeffnen(str(pfad))):
+                pass
+        # Gegenprobe: unter der Grenze bleibt alles wie bisher.
+        [info] = db.liste_termine(self.ordner)
+        self.assertTrue(info.lesbar)
+        self.assertIsNone(info.grund)
+        with closing(termin_oeffnen(str(pfad))):
+            pass
+
+    def test_schrittgrenze_heisst_nicht_beschaedigt(self):
+        """Offene Punkte O2: scheitert das Lesen an db.lesen_begrenzen, nennen Übersicht und
+        Öffnen das statt „beschädigt“."""
+        import db
+        pfad = self._termin()
+        with patch("db._LESE_SCHRITTWEITE", 1), patch("db._LESE_HOECHSTSCHRITTE", 0):
+            [info] = db.liste_termine(self.ordner)
+            with self.assertRaises(TerminNichtOeffenbar) as kontext:
+                termin_oeffnen(str(pfad))
+        self.assertFalse(info.lesbar)
+        self.assertEqual(info.grund, db.GRUND_ZU_AUFWENDIG)
+        self.assertEqual(str(kontext.exception), db.SCHRITTGRENZE_TEXT)
+        self.assertNotIn("beschädigt", str(kontext.exception))
+
     def test_normaler_leerer_und_fehlender_termin(self):
         with closing(termin_oeffnen(str(self._termin()))) as conn:
             self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")

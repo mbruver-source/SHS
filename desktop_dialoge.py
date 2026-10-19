@@ -59,6 +59,7 @@ from db import (
     startnummer_bereiche_als_text,
     startnummer_bereichsgroesse,
     termin_lesend_pruefen,
+    termin_unversehrt_pruefen,
     termine_ordner,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
@@ -817,6 +818,9 @@ class TerminImportDialog(QDialog):
         # zurückgespielt - das betrifft also nur ein Journal, das erst danach entsteht.
         try:
             self._quelle_conn = termin_lesend_pruefen(self._termine[index].pfad)
+            # Offene Punkte O2 (Marco 18.10.2026): nur hier, nicht in der Terminübersicht
+            # (der Start bleibt schnell).
+            termin_unversehrt_pruefen(self._quelle_conn)
             eintraege = []
             for t in list_teilnehmer(self._quelle_conn):
                 text = f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})"

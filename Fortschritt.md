@@ -7101,3 +7101,49 @@ er offen war. Umgesetzt nach Marcos Entscheidungen vom 18.10.2026.
     Datei anwenden, mit möglicherweise beschädigtem Inhalt. Das war vorher genauso. Vorschlag:
     eine solche alte Datei beim Ersetzen wegräumen.
   - Ebenso bitte bestätigen, dass die `-journal` beim Wiederherstellen mit zurückgeschrieben wird.
+
+
+## 19.10.2026: O2 Dateiprüfung – Größengrenze, quick_check im Import, eigene Meldung bei der Schrittgrenze (automatische Abarbeitung)
+
+Zweite Aufgabe aus `Offene-Punkte-2026-10/aufgaben.md`, umgesetzt nach Marcos Entscheidungen vom
+18.10.2026.
+
+- **Größengrenze 50 MB** (`db.TERMIN_GROESSE_GRENZE`):
+  - `termin_lesend_pruefen` wirft bei einer größeren Datei `TerminZuGross`, eine Unterklasse von
+    `sqlite3.DatabaseError`. Terminübersicht und Import behandeln die Datei deshalb wie eine nicht
+    lesbare.
+  - `TerminInfo` hat ein neues Feld `grund`. Der Startdialog zeigt „… (nicht lesbar: zu groß)“.
+  - Eine nur zu große Datei lässt sich im Startdialog trotzdem wählen. `termin_oeffnen` wirft ohne
+    `groesse_bestaetigt` die Ausnahme `TerminUngewoehnlichGross`. Daraufhin fragt
+    `_termin_oeffnen_mit_meldung`: „ungewöhnlich groß (N MB) … Trotzdem öffnen?“. Bei Nein bleibt
+    der bisherige Stand, bei Ja wird die Datei geöffnet.
+  - Das gilt für Programmstart und Terminwechsel. In der Import-Auswahl fehlt eine solche Datei wie
+    jede nicht lesbare.
+- **quick_check im Import:** Neu ist `db.termin_unversehrt_pruefen`. `TerminImportDialog` ruft es
+  nach `termin_lesend_pruefen` auf. Eine beschädigte Seite außerhalb der gelesenen Teilnehmer ergibt
+  den Hinweis „Die Termin-Datei ist beschädigt.“. Die Terminübersicht prüft so nicht, damit der
+  Start schnell bleibt.
+- **Schrittgrenze:** Scheitert eine Datei an der Rechenschritt-Grenze (`db.ist_schrittgrenze`),
+  heißt es „zu groß bzw. zu aufwendig zu prüfen“ statt „beschädigt“, und zwar an drei Stellen:
+  - im Startdialog als Grund „zu aufwendig zu prüfen“ mit eigener Warnung;
+  - in `termin_oeffnen`;
+  - im Import über einen neuen Eintrag in `_SQLITE_KLARTEXT`.
+- **Tests:**
+  - in `test_db.TestTerminOeffnen` zwei neue Tests für Grenze, Grenzwert, MB-Angabe und
+    Schrittgrenze;
+  - in `test_app_gui.py` vier neue Tests:
+    - quick_check mit einer gezielt beschädigten Seite;
+    - Schrittgrenze im Import;
+    - Rückfrage Ja/Nein;
+    - Startdialog mit Grund.
+  - Gegenprobe: Alle neuen Tests scheitern ohne die Programmänderung.
+  - Volle Läufe grün: Unittests 664 OK, GUI 393 OK. Auch die zwei bekannten Fokus-Tests liefen
+    diesmal grün.
+- **Verifikation (unabhängiger Subagent):** keine Abweichung vom Auftrag. Behoben:
+  - Klartext „Die Termin-Datei ist beschädigt.“ statt „Die Datei …“. Er gilt für alle Aufrufer von
+    `_klartext_fehler`, auch beim Speichern einer Exportdatei.
+  - Die MB-Angabe hat eine Nachkommastelle (50,3 MB statt 50 MB knapp über der Grenze).
+  - Test für den Grenzwert ergänzt.
+  - `docs/HANDBUCH.md` (Häufige Fragen) nachgezogen.
+- **Rückfrage an Marco** (in `aufgaben.md`): „nicht lesbar: zu groß“, obwohl sich die Datei nach
+  Rückfrage öffnen lässt – lieber „(ungewöhnlich groß)“?

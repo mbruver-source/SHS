@@ -4536,6 +4536,121 @@ def test_termin_import_dialog_meldet_nicht_lesbare_quelle(qtbot, monkeypatch, tm
     assert not (tmp_path / "weg.sqlite").exists()
 
 
+def _seite_beschaedigen(pfad, tabelle):
+    """Überschreibt die Wurzelseite von `tabelle` - Aufbauprüfung und Abfragen auf anderen
+    Tabellen gelingen weiter, erst quick_check findet den Schaden."""
+    import sqlite3
+    with closing(sqlite3.connect(pfad)) as c:
+        seite = c.execute("SELECT rootpage FROM sqlite_master WHERE name = ?", (tabelle,)).fetchone()[0]
+        groesse = c.execute("PRAGMA page_size").fetchone()[0]
+    with open(pfad, "r+b") as datei:
+        datei.seek((seite - 1) * groesse)
+        datei.write(b"\xff" * 64)
+
+
+def test_termin_import_dialog_prueft_quelle_mit_quick_check(qtbot, monkeypatch, tmp_path):
+    """Offene Punkte O2 (Marco 18.10.2026): eine beschädigte Seite außerhalb der gelesenen
+    Teilnehmer macht die Quelle im Import nicht lesbar."""
+    import sqlite3
+    pfad = tmp_path / "quelle.sqlite"
+    with closing(init_db(str(pfad))) as c:
+        set_veranstaltung(c, verein="Quelle", datum="2026-11-14")
+        _teilnehmer_anlegen(c, nachname="Q")
+        c.execute("CREATE TABLE notiz (text TEXT)")
+        c.executemany("INSERT INTO notiz VALUES (?)", [("x" * 200,)] * 50)
+        c.commit()
+    _seite_beschaedigen(pfad, "notiz")
+    with closing(sqlite3.connect(pfad)) as c:
+        assert c.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0] == 1
+    info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
+                      ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    assert dialog.teilnehmer_liste.count() == 1
+    assert "beschädigt" in dialog.teilnehmer_liste.item(0).text()
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    assert dialog.quelle_conn() is None
+
+
+def test_termin_import_dialog_nennt_schrittgrenze(qtbot, monkeypatch, tmp_path):
+    """Offene Punkte O2: scheitert das Lesen der Quelle an der Schrittgrenze, heißt es
+    „zu aufwendig“ statt eines technischen Abbruchs."""
+    import db
+    pfad = tmp_path / "quelle.sqlite"
+    with closing(init_db(str(pfad))) as c:
+        set_veranstaltung(c, verein="Quelle", datum="2026-11-14")
+        _teilnehmer_anlegen(c, nachname="Q")
+    info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
+                      ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
+    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+    monkeypatch.setattr("db._LESE_SCHRITTWEITE", 1)
+    monkeypatch.setattr("db._LESE_HOECHSTSCHRITTE", 0)
+
+    dialog = TerminImportDialog(None, aktueller_pfad=None)
+    qtbot.addWidget(dialog)
+
+    assert db.SCHRITTGRENZE_TEXT in dialog.teilnehmer_liste.item(0).text()
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+
+
+@pytest.mark.parametrize("antwort", [QMessageBox.No, QMessageBox.Yes])
+def test_ungewoehnlich_grosser_termin_fragt_vor_dem_oeffnen(qtbot, monkeypatch, tmp_path, antwort):
+    """Offene Punkte O2 (Marco 18.10.2026): Rückfrage „ungewöhnlich groß, trotzdem öffnen?“;
+    Nein bricht ohne weitere Meldung ab, Ja öffnet."""
+    import app
+    pfad = tmp_path / "gross.sqlite"
+    with closing(init_db(str(pfad))) as c:
+        set_veranstaltung(c, verein="Groß", datum="2026-11-14")
+    monkeypatch.setattr("db.TERMIN_GROESSE_GRENZE", 100)
+    fragen = rueckfragen_sammeln(monkeypatch, antwort)
+    monkeypatch.setattr("app.QMessageBox.warning", lambda *a, **_k: pytest.fail(f"Meldung: {a}"))
+
+    conn = app._termin_oeffnen_mit_meldung(None, str(pfad))
+
+    assert len(fragen) == 1
+    assert "ungewöhnlich groß" in fragen[0]
+    assert "Trotzdem öffnen?" in fragen[0]
+    if antwort == QMessageBox.Yes:
+        assert conn is not None
+        conn.close()
+    else:
+        assert conn is None
+
+
+def test_startdialog_zeigt_grund_und_oeffnet_zu_grosse_datei(qtbot, monkeypatch, tmp_path):
+    """Offene Punkte O2: die Terminübersicht nennt den Grund; eine nur zu große Datei lässt
+    sich trotzdem wählen (die Rückfrage folgt beim Öffnen), eine zu aufwendige nicht."""
+    import db
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+
+    def info(name, grund):
+        return TerminInfo(pfad=str(tmp_path / name), dateiname=name, verein=None, vereins_nr=None,
+                          ort=None, datum=None, anzahl_teilnehmer=0, lesbar=False, grund=grund)
+
+    monkeypatch.setattr("app.liste_termine", lambda: [info("gross.sqlite", db.GRUND_ZU_GROSS),
+                                                      info("aufwendig.sqlite", db.GRUND_ZU_AUFWENDIG)])
+    warnungen = meldungen_sammeln(monkeypatch, "warning")
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    texte = [dialog.tabelle.item(z, 1).text() for z in range(dialog.tabelle.rowCount())]
+    assert "gross.sqlite (nicht lesbar: zu groß)" in texte
+    assert "aufwendig.sqlite (nicht lesbar: zu aufwendig zu prüfen)" in texte
+
+    dialog.tabelle.selectRow(texte.index("aufwendig.sqlite (nicht lesbar: zu aufwendig zu prüfen)"))
+    dialog._termin_oeffnen()
+    assert dialog.result() != QDialog.Accepted
+    assert len(warnungen) == 1 and "zu aufwendig zu prüfen" in warnungen[0]
+
+    dialog.tabelle.selectRow(texte.index("gross.sqlite (nicht lesbar: zu groß)"))
+    dialog._termin_oeffnen()
+    assert dialog.result() == QDialog.Accepted
+    assert dialog.pfad == str(tmp_path / "gross.sqlite")
+    assert len(warnungen) == 1
+
+
 def test_termin_import_dialog_prueft_wie_termin_oeffnen(qtbot, monkeypatch, tmp_path):
     """Abschluss-QS 15.10.2026 (A19c): Der Import-Dialog nutzt db.termin_lesend_pruefen -
     berechnete Spalten in einer Nebentabelle machen die Quelle nicht lesbar. Ein
