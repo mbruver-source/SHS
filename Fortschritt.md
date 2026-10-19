@@ -7626,3 +7626,16 @@ Auf Marcos Wunsch ist `UML.md` jetzt fester Teil der Pflege:
   `UML.md`.
 - Agent `verifikation` (und Spiegel `.codex`): Ändert ein Diff einen Ablauf, eine Klasse oder
   eine Modulgrenze, prüft er, ob das passende Diagramm noch stimmt.
+
+
+## 19.10.2026: Quellcode-Spiegel auf 1.0.51
+
+- `SHS-Pruefungsprogramm-Quellcode` stand noch auf 1.0.44. Jetzt sind alle Dateien aus Git
+  außer `.claude/` übernommen, die Workflows wie bisher zusätzlich im Wurzelordner. Im Spiegel
+  wurde nichts gelöscht.
+- 97 Dateien sind neu, darunter die vier `desktop_*.py`, `UML.md`, `fonts/`, `symbol/`,
+  `tools/` und die Berichtsordner. 60 Dateien sind geändert. Der Byte-Abgleich danach ist
+  identisch.
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
+  `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert), auf
+  Wunsch auch `UML.md`.
