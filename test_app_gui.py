@@ -6627,6 +6627,24 @@ def test_ergebnis_offenes_eingabefeld_geht_beim_speichern_nicht_verloren(qtbot, 
     assert not tab.hat_ungespeicherte_aenderungen()
 
 
+def test_ergebnis_offenes_eingabefeld_uebersteht_den_designwechsel(qtbot, conn, monkeypatch):
+    """QS 19.10.2026: Ein Designwechsel per Maus nimmt dem Feld den Fokus nicht; das Umfärben
+    der Zelle lud bisher den alten Wert ins offene Feld zurück."""
+    import desktop_darstellung as darstellung
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.punkte_eintragen(0, "Flächensuche", anzeige="30")
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "55")
+    monkeypatch.setattr(darstellung, "_aktives_design", "dunkel")
+
+    tab.farben_auffrischen()
+
+    assert editor.text() == "55"
+    tab.alle_speichern()
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 55
+
+
 def test_ergebnis_offenes_eingabefeld_zaehlt_als_ungespeichert(qtbot, conn):
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = _ergebnis_tab_gezeigt(qtbot, conn)

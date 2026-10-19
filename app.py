@@ -1430,6 +1430,11 @@ class _PunkteDelegate(QStyledItemDelegate):
         return editor
 
     def setEditorData(self, editor, index):  # noqa: N802
+        # Qt ruft das bei jeder Änderung der Zelle erneut auf, etwa wenn ein Designwechsel
+        # den Hintergrund neu setzt - eine schon getippte Zahl darf das nicht überschreiben
+        # (QS 19.10.2026).
+        if editor.isModified():
+            return
         editor.setText(index.data(Qt.EditRole) or "")
         editor.selectAll()  # Lostippen ersetzt den Wert (Marco 18.10.2026)
 
