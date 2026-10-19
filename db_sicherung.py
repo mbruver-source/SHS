@@ -364,29 +364,52 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
     return sorted(namen)
 
 
-def _ersetzen_ohne_altes_journal(tmp_pfad_str: str, ordner: Path, ziel: str) -> None:
-    """Ersetzt `ordner/ziel` durch die temporäre Datei und entfernt dabei eine alte
-    Rücksprung-Datei des Ziels. Sie wird zuerst beiseitegelegt; scheitert das Ersetzen,
-    kommt sie zurück, damit der bisherige Termin samt Journal stimmig bleibt."""
-    altes_journal = ordner / f"{ziel}{_JOURNAL_ENDUNG}"
-    if not altes_journal.exists():
-        os.replace(tmp_pfad_str, ordner / ziel)
-        return
-    beiseite_fd, beiseite = tempfile.mkstemp(dir=ordner, prefix=f".{ziel}{_JOURNAL_ENDUNG}.", suffix=".alt")
-    os.close(beiseite_fd)
+def _beiseitelegen(pfad: Path) -> str:
+    """Benennt `pfad` in eine versteckte Datei im selben Ordner um und gibt deren Pfad zurück."""
+    fd, beiseite = tempfile.mkstemp(dir=pfad.parent, prefix=f".{pfad.name}.", suffix=".alt")
+    os.close(fd)
     try:
-        os.replace(altes_journal, beiseite)
+        os.replace(pfad, beiseite)
     except BaseException:
         with suppress(OSError):
             os.remove(beiseite)
         raise
+    return beiseite
+
+
+def _termin_ersetzen(ordner: Path, ziel: str, tmp_termin: str, tmp_journal: str | None) -> None:
+    """Ersetzt `ordner/ziel` samt Rücksprung-Datei als Einheit (Marco 19.10.2026).
+
+    Eine alte „<ziel>-journal“ wird immer entfernt - SQLite würde sie sonst beim nächsten
+    Öffnen auf die neue Datei zurückspielen; mit `tmp_journal` kommt die aus dem ZIP an ihre
+    Stelle. Die alten Dateien werden zuerst beiseitegelegt. Scheitert ein Schritt, kommen sie
+    zurück und eine schon ersetzte neue Termin-Datei wird wieder entfernt: dann bleibt der
+    bisherige Stand vollständig erhalten."""
+    termin = ordner / ziel
+    journal = ordner / f"{ziel}{_JOURNAL_ENDUNG}"
+    beiseite: list[tuple[str, Path]] = []
+    termin_ersetzt = False
     try:
-        os.replace(tmp_pfad_str, ordner / ziel)
+        if journal.exists():
+            beiseite.append((_beiseitelegen(journal), journal))
+        # Ohne Journal ersetzt os.replace() die Termin-Datei atomar; mit Journal sind es zwei
+        # Schritte, deshalb muss die alte Termin-Datei für den Rückweg erhalten bleiben.
+        if tmp_journal is not None and termin.exists():
+            beiseite.append((_beiseitelegen(termin), termin))
+        os.replace(tmp_termin, termin)
+        termin_ersetzt = True
+        if tmp_journal is not None:
+            os.replace(tmp_journal, journal)
     except BaseException:
-        os.replace(beiseite, altes_journal)
+        if termin_ersetzt and not any(original == termin for _, original in beiseite):
+            with suppress(OSError):
+                os.remove(termin)
+        for alt, original in reversed(beiseite):
+            os.replace(alt, original)
         raise
-    with suppress(OSError):
-        os.remove(beiseite)
+    for alt, _original in beiseite:
+        with suppress(OSError):
+            os.remove(alt)
 
 
 def sicherung_wiederherstellen(
@@ -405,12 +428,11 @@ def sicherung_wiederherstellen(
     Enthält das ZIP zu einem gewählten Termin eine Rücksprung-Datei („<name>-journal“,
     siehe sicherung_erstellen: roh gesicherte Datei), wird sie als „<Zielname>-journal“
     mit zurückgeschrieben (offene Punkte O1, 19.10.2026) - direkt nach der Termin-Datei.
-    Sie erscheint nicht in der Rückgabe; scheitert ihr Ersetzen, nennt
-    TeilweiseWiederhergestelltError die schon ersetzten Termine einschließlich dieses einen.
-    Enthält das ZIP keine, wird eine alte „<Zielname>-journal“ im Zielordner (etwa nach einem
-    Absturz) beim Ersetzen gelöscht - SQLite würde sie sonst beim nächsten Öffnen auf die
-    wiederhergestellte Datei zurückspielen (Marco 19.10.2026). Scheitert das Ersetzen der
-    Termin-Datei, kommt sie unverändert zurück.
+    Sie erscheint nicht in der Rückgabe. Enthält das ZIP keine, wird eine alte
+    „<Zielname>-journal“ im Zielordner (etwa nach einem Absturz) beim Ersetzen gelöscht.
+    Termin-Datei und Rücksprung-Datei werden als Einheit ersetzt (_termin_ersetzen): scheitert
+    ein Schritt, bleibt der bisherige Stand dieses Termins samt Journal erhalten (Marco
+    19.10.2026).
 
     Jede Datei wird ATOMAR geschrieben (temporäre Datei im selben Zielordner, danach
     os.replace()) statt direkt in die Zieldatei - bricht das Schreiben mittendrin ab
@@ -447,50 +469,47 @@ def sicherung_wiederherstellen(
             raise ValueError(f"Zieldateiname mehrfach vergeben: {ziel!r}")
         gesehen.add(ziel.casefold())
 
-    # (temporäre Datei, Zieldateiname, ist Rücksprung-Datei)
-    vorbereitet: list[tuple[str, str, bool]] = []
-    # Zieldateinamen, zu denen das ZIP eine Rücksprung-Datei enthält
-    mit_journal: set[str] = set()
+    # (Zieldateiname, temporäre Termin-Datei, temporäre Rücksprung-Datei oder None)
+    vorbereitet: list[tuple[str, str, str | None]] = []
+    temporaere: list[str] = []
     try:
         with _zip_oeffnen(zip_pfad, passwort) as zf:
             vorhandene_eintraege = set(zf.namelist())
 
-            def vorbereiten(quelle: str, ziel: str, journal: bool) -> None:
+            def vorbereiten(quelle: str, ziel: str) -> str:
                 daten = zf.read(quelle)
                 # os.replace() ist nur innerhalb DESSELBEN Dateisystems atomar - die
                 # temporäre Datei muss deshalb im selben Ordner liegen wie das Ziel, nicht
                 # z.B. im System-Temp-Verzeichnis.
                 tmp_fd, tmp_pfad_str = tempfile.mkstemp(dir=ordner, prefix=f".{ziel}.", suffix=".tmp")
-                vorbereitet.append((tmp_pfad_str, ziel, journal))
+                temporaere.append(tmp_pfad_str)
                 with os.fdopen(tmp_fd, "wb") as tmp_datei:
                     tmp_datei.write(daten)
+                return tmp_pfad_str
 
             for quelle, ziel in entscheidungen.items():
-                vorbereiten(quelle, ziel, False)
+                tmp_termin = vorbereiten(quelle, ziel)
                 # Roh gesicherte Datei mit Rücksprung-Datei (siehe sicherung_erstellen):
                 # beide gehören zusammen, sonst ist der Stand womöglich widersprüchlich.
                 # Der Name leitet sich aus dem oben geprüften Zielnamen ab.
+                tmp_journal = None
                 if f"{quelle}{_JOURNAL_ENDUNG}" in vorhandene_eintraege:
-                    vorbereiten(f"{quelle}{_JOURNAL_ENDUNG}", f"{ziel}{_JOURNAL_ENDUNG}", True)
-                    mit_journal.add(ziel)
+                    tmp_journal = vorbereiten(f"{quelle}{_JOURNAL_ENDUNG}", f"{ziel}{_JOURNAL_ENDUNG}")
+                vorbereitet.append((ziel, tmp_termin, tmp_journal))
 
         geschrieben: list[str] = []
-        for tmp_pfad_str, ziel, journal in vorbereitet:
+        for ziel, tmp_termin, tmp_journal in vorbereitet:
             try:
-                if journal or ziel in mit_journal:
-                    os.replace(tmp_pfad_str, ordner / ziel)
-                else:
-                    _ersetzen_ohne_altes_journal(tmp_pfad_str, ordner, ziel)
+                _termin_ersetzen(ordner, ziel, tmp_termin, tmp_journal)
             except Exception as exc:
                 if geschrieben:
                     raise TeilweiseWiederhergestelltError(geschrieben, exc) from exc
                 raise
-            if not journal:
-                geschrieben.append(ziel)
+            geschrieben.append(ziel)
     finally:
         # Nach Erfolg sind alle temporären Dateien umbenannt; nach einem Fehler werden
         # die übrigen hier entfernt.
-        for tmp_pfad_str, _ziel, _journal in vorbereitet:
+        for tmp_pfad_str in temporaere:
             with suppress(FileNotFoundError):
                 os.remove(tmp_pfad_str)
     return geschrieben

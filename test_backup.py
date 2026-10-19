@@ -303,25 +303,62 @@ class TestSicherungMomentaufnahme(unittest.TestCase):
         self.assertEqual(roh, ["a.sqlite"])
         self.assertLess(dauer, 15)
 
-    def test_scheitert_das_zurueckschreiben_des_journals_nennt_der_fehler_den_termin(self):
+    def test_scheitert_das_zurueckschreiben_des_journals_bleibt_kein_halber_termin(self):
+        """QS 19.10.2026: Termin-Datei und Journal werden als Einheit ersetzt."""
         pfad = _termin_anlegen(self.ordner, "a.sqlite")
         self._halb_geschrieben(pfad)
         sicherung_erstellen(str(self.ziel), ordner=self.ordner)
         echt = os.replace
         aufrufe = []
 
-        def zweites_scheitert(quelle, ziel):
+        def journal_scheitert(quelle, ziel):
             aufrufe.append(ziel)
-            if len(aufrufe) == 2:
+            if str(ziel).endswith("-journal") and not str(quelle).endswith(".alt"):
                 raise PermissionError(13, "gesperrt", str(ziel))
             echt(quelle, ziel)
 
-        with patch("db_sicherung.os.replace", zweites_scheitert):
-            with self.assertRaises(TeilweiseWiederhergestelltError) as kontext:
+        with patch("db_sicherung.os.replace", journal_scheitert):
+            with self.assertRaises(PermissionError):
                 sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
-        self.assertEqual(kontext.exception.geschrieben, ["neu.sqlite"])
         self.assertEqual([pathlib.Path(z).name for z in aufrufe], ["neu.sqlite", "neu.sqlite-journal"])
-        self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["neu.sqlite"])
+        self.assertEqual(list(self.zurueck.iterdir()), [])
+
+    def test_scheitert_das_journal_kommen_alter_termin_und_altes_journal_zurueck(self):
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        self._halb_geschrieben(pfad)
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        alt = _termin_anlegen(self.zurueck, "neu.sqlite", verein="Alter Stand")
+        self._halb_geschrieben(alt)
+        vorher = {p.name: p.read_bytes() for p in self.zurueck.iterdir()}
+        echt = os.replace
+
+        def journal_scheitert(quelle, ziel):
+            if str(ziel).endswith("-journal") and str(quelle).endswith(".tmp"):
+                raise PermissionError(13, "gesperrt", str(ziel))
+            echt(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", journal_scheitert):
+            with self.assertRaises(PermissionError):
+                sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertEqual({p.name: p.read_bytes() for p in self.zurueck.iterdir()}, vorher)
+
+    def test_zweiter_termin_scheitert_erster_bleibt_vollstaendig(self):
+        _termin_anlegen(self.ordner, "a.sqlite")
+        _termin_anlegen(self.ordner, "b.sqlite")
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        echt = os.replace
+
+        def b_gesperrt(quelle, ziel):
+            if pathlib.Path(ziel).name == "b.sqlite":
+                raise PermissionError(13, "gesperrt", str(ziel))
+            echt(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", b_gesperrt):
+            with self.assertRaises(TeilweiseWiederhergestelltError) as kontext:
+                sicherung_wiederherstellen(
+                    str(self.ziel), {"a.sqlite": "a.sqlite", "b.sqlite": "b.sqlite"}, ordner=self.zurueck)
+        self.assertEqual(kontext.exception.geschrieben, ["a.sqlite"])
+        self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["a.sqlite"])
 
     def test_altes_journal_am_ziel_wird_beim_wiederherstellen_entfernt(self):
         """Marco 19.10.2026: SQLite würde ein altes Journal neben dem Ziel sonst auf die
