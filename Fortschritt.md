@@ -7221,3 +7221,26 @@ Entscheidungen vom 18.10.2026.
     - Die Zeilenangaben der Teile 1 und 8 im Skill `desktop-pruefung` stimmen nicht mehr.
     - Der Kommentar „siehe BewertungsbogenAuswahlDialog oben“ in `desktop_auswertung.py` ist
       veraltet. Er wurde unverändert mitgenommen und war schon vorher falsch.
+
+
+## 19.10.2026: O5 `app.py` aufteilen, Schnitt 3 `desktop_zeitplan.py` (automatische Abarbeitung)
+
+- **Verschoben, Code unverändert (byte-gleich geprüft):** `ZeitplanTab` und der nur dort genutzte
+  Helfer `_klartext_tooltip` gehen aus `app.py` nach `desktop_zeitplan.py`.
+  - `app.py` holt nur `ZeitplanTab` zurück.
+  - 27 Importe, die `app.py` nicht mehr braucht, sind entfernt.
+  - `app.py` hat jetzt 3518 Zeilen, `desktop_zeitplan.py` 731.
+- **Tests:**
+  - Die Patches auf `PauseDialog` und `zeitplan_richter_aus_veranstaltung_anlegen` zielen jetzt
+    auf `desktop_zeitplan`.
+  - `_aktualisiere_veranstaltung_feld` läuft über `ueberall_ersetzen`.
+  - `ZeitplanTab` und `_klartext_tooltip` werden aus dem neuen Modul importiert.
+  - `DESKTOP_MODULE` und `tools/screenshots.py` sind erweitert.
+  - Volle Läufe grün: Unittests OK, GUI 394 OK.
+- **Skill `desktop-pruefung`:** Die Dateiangaben der Teile 1 und 4 sind angepasst.
+- **Werkzeugfehler (gleich behoben):** Das Verschiebe-Skript machte aus einem unbenutzten
+  `import html` kurz die kaputte Zeile `import html import`. Behoben ist das im Skript und in
+  `app.py`.
+- **Verifikation (unabhängiger Subagent):** keine Befunde mit Nacharbeit.
+  - Eine überzählige Leerzeile vor `TeilnehmerTab` ist entfernt.
+  - Unterschiedliche Zeilenenden im Arbeitsstand gleicht git beim Commit an (`autocrlf`).

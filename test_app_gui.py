@@ -46,7 +46,6 @@ from app import (
     TerminImportDialog,
     VeranstaltungsDialog,
     VerwaltungTab,
-    ZeitplanTab,
 )
 from db import (
     ALLE_PRUEFUNGEN,
@@ -78,6 +77,7 @@ import desktop_auswertung
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 import desktop_programm
 from desktop_programm import VERSION, VersionDialog
+from desktop_zeitplan import ZeitplanTab
 from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
 
 
@@ -165,7 +165,7 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
 #: Module der Desktop-Oberfläche, die gemeinsame Namen (z. B. termine_ordner) jeweils selbst
 #: importieren - siehe ueberall_ersetzen.
 DESKTOP_MODULE = ("app", "desktop_auswertung", "desktop_darstellung", "desktop_demo", "desktop_dialoge",
-                  "desktop_gemeinsam", "desktop_programm")
+                  "desktop_gemeinsam", "desktop_programm", "desktop_zeitplan")
 
 import db as _db_modul  # noqa: E402
 #: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).
@@ -682,7 +682,7 @@ def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
     tab = ZeitplanTab(conn)
     qtbot.addWidget(tab)
 
-    monkeypatch.setattr("app.PauseDialog", _pause_dialog_attrappe(30, "Mittag", uhrzeit="12:00"))
+    monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog_attrappe(30, "Mittag", uhrzeit="12:00"))
     meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._pause_hinzufuegen(richter)
     assert meldungen and "Anna: 09:10 Uhr" in meldungen[0]
@@ -821,7 +821,7 @@ def test_pause_nach_startzeit_eingabe_geht_nicht_verloren(qtbot, conn, monkeypat
     modal[0] = None
     qtbot.waitUntil(lambda: aufgebaut == [True], timeout=WARTEZEIT_MS)
 
-    monkeypatch.setattr("app.PauseDialog", _pause_dialog_attrappe(15, "Pause"))
+    monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog_attrappe(15, "Pause"))
     tab._pause_hinzufuegen(richter_id, None)
     assert [e["typ"] for e in list_zeitplan_eintraege(conn, richter_id)] == ["pause"]
 
@@ -2700,8 +2700,8 @@ def test_zeitplan_schreibfehler_beim_anzeigen_und_startzeit(qtbot, conn, monkeyp
     set_veranstaltung(conn, verein="SGV", datum="2026-11-14", wertungsrichter_1="Anna")
     meldungen = []
     ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
-    monkeypatch.setattr("app.zeitplan_richter_aus_veranstaltung_anlegen", _schreibfehler)
-    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+    monkeypatch.setattr("desktop_zeitplan.zeitplan_richter_aus_veranstaltung_anlegen", _schreibfehler)
+    ueberall_ersetzen(monkeypatch, "_aktualisiere_veranstaltung_feld", _schreibfehler)
     tab = ZeitplanTab(conn)
     qtbot.addWidget(tab)
     tab.show()
@@ -2807,7 +2807,7 @@ def test_veranstaltung_bearbeiten_bleibt_bei_schreibfehler_offen(qtbot, conn, mo
     set_veranstaltung(conn, verein="SGV", datum="2026-11-14", verband="HSVRM", meldestelle="x")
     meldungen = []
     monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
-    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+    ueberall_ersetzen(monkeypatch, "_aktualisiere_veranstaltung_feld", _schreibfehler)
 
     def _exec(dialog):
         dialog.verein.setText("Neuer Verein")
@@ -3077,7 +3077,7 @@ def test_mindestabstand_bei_schreibfehler_zeigt_gespeicherten_wert(qtbot, conn, 
     set_veranstaltung(conn, verein="SGV", datum="2026-11-14", dk_mindestabstand="20")
     tab = ZeitplanTab(conn)
     qtbot.addWidget(tab)
-    monkeypatch.setattr("app._aktualisiere_veranstaltung_feld", _schreibfehler)
+    ueberall_ersetzen(monkeypatch, "_aktualisiere_veranstaltung_feld", _schreibfehler)
     ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
 
     tab.mindestabstand.setValue(35)
@@ -7111,7 +7111,7 @@ def test_meldungsfenster_zeigen_reinen_text(monkeypatch):
 
 def test_klartext_tooltip_maskiert_namen():
     """S-1: Tooltips mit Richternamen zeigen Markup wörtlich statt es auszuführen."""
-    from app import _klartext_tooltip
+    from desktop_zeitplan import _klartext_tooltip
 
     tooltip = _klartext_tooltip('Gleichzeitig bei <img src="//server/x.png">\nzweite Zeile')
     assert "<img" not in tooltip
