@@ -1472,11 +1472,13 @@ class _PunkteDelegate(QStyledItemDelegate):
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)  # Zellhintergrund, Auswahl
 
         # Farben wie beim Eingabefeld im Stylesheet (desktop_darstellung, „Eingabefelder“:
-        # FLAECHE/RAND, gesperrt FLAECHE_DISABLED/RAND_DISABLED, Fokus in der Akzentfarbe -
-        # die steht in QPalette.Link; Highlight ist nur die blasse Auswahlfarbe).
+        # FLAECHE/RAND, Fokus in der Akzentfarbe - die steht in QPalette.Link; Highlight ist
+        # nur die blasse Auswahlfarbe). Gesperrte Zellen (DQ/Abbruch) sind eine deutlich
+        # abgesetzte Fläche ohne Rahmen - FLAECHE_DISABLED war in Hell/Sand kaum von einer
+        # leeren Zelle zu unterscheiden (Marco 19.10.2026).
         aktiv = bool(index.flags() & Qt.ItemIsEnabled)
         if not aktiv:
-            fuellung = _farbe("FLAECHE_DISABLED")
+            fuellung = _farbe("gesperrt_bg")
         elif index.data(_UNGESPEICHERT_ROLLE):
             fuellung = _farbe("ungespeichert_bg")
         else:
@@ -1485,8 +1487,10 @@ class _PunkteDelegate(QStyledItemDelegate):
             stift = QPen(_farbe("fehler"), 2)
         elif opt.state & QStyle.State_HasFocus:
             stift = QPen(opt.palette.color(QPalette.Link), 2)
+        elif aktiv:
+            stift = QPen(_farbe("RAND"), 1)
         else:
-            stift = QPen(_farbe("RAND" if aktiv else "RAND_DISABLED"), 1)
+            stift = QPen(Qt.NoPen)
         feld = QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)

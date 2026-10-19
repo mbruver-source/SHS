@@ -308,7 +308,7 @@ def _haken_bild_bereitstellen() -> None:
 # Menü Ansicht -> Hintergrund). Die Großbuchstaben-Schlüssel füllen die gleichnamigen
 # @@...@@-Platzhalter in _QSS_TEMPLATE; "hell" entspricht bit-für-bit dem bisherigen
 # Aussehen (siehe test_theme.py). Die Kleinbuchstaben-Farbschlüssel (ok, warnung, fehler,
-# gedaempft, ungespeichert_bg, zeile_bg) sind semantische Farben für Stellen, an denen der
+# gedaempft, ungespeichert_bg, gesperrt_bg, zeile_bg) sind semantische Farben für Stellen, an denen der
 # Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über _farbe(), das seit
 # O9 (19.10.2026) auch die Großbuchstaben-Schlüssel liefert (FLAECHE, RAND …, für die selbst
 # gezeichneten Punktezellen der Ergebniserfassung); fehler und
@@ -344,6 +344,7 @@ _DESIGNS: dict[str, dict] = {
         "fehler": "#C62828",
         "gedaempft": "#808080",
         "ungespeichert_bg": "#FFF3CD",
+        "gesperrt_bg": "#D5DBE3",
         "zeile_bg": "#FFFFFF",
     },
     "sand": {
@@ -372,6 +373,7 @@ _DESIGNS: dict[str, dict] = {
         "fehler": "#B3261E",
         "gedaempft": "#857A6C",
         "ungespeichert_bg": "#FCEBC0",
+        "gesperrt_bg": "#D9D0C1",
         "zeile_bg": "#FBF8F3",
     },
     "dunkel": {
@@ -399,6 +401,7 @@ _DESIGNS: dict[str, dict] = {
         "fehler": "#FF7B72",
         "gedaempft": "#7D8795",
         "ungespeichert_bg": "#4A3F1F",
+        "gesperrt_bg": "#111317",
         "zeile_bg": "#1E2228",
     },
     "kontrast": {
@@ -426,6 +429,7 @@ _DESIGNS: dict[str, dict] = {
         "fehler": "#B00020",
         "gedaempft": "#4D4D4D",
         "ungespeichert_bg": "#FFE58A",
+        "gesperrt_bg": "#C8C8C8",
         "zeile_bg": "#FFFFFF",
     },
 }
@@ -477,7 +481,7 @@ def _erzeuge_qss(theme_name: str, design_name: str = _DESIGN_DEFAULT) -> str:
 
 def _farbe(name: str) -> QColor:
     """Farbe des aktiven Hintergrund-Designs - semantisch (ok/warnung/fehler/gedaempft/
-    ungespeichert_bg/zeile_bg) oder ein Stylesheet-Schlüssel (FLAECHE, RAND, …) - für
+    ungespeichert_bg/gesperrt_bg/zeile_bg) oder ein Stylesheet-Schlüssel (FLAECHE, RAND, …) - für
     Stellen, an denen der Code selbst färbt."""
     return QColor(_DESIGNS[_aktives_design][name])
 
