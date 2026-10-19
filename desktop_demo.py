@@ -914,7 +914,7 @@ class DemoTour(QObject):
                 "9. Disqualifikation",
                 "Wird ein Team disqualifiziert oder bricht ab, setzt man den Haken "
                 "„Disqualifiziert“ bzw. „Abbruch“ (per Klick oder mit der Leertaste). Die "
-                "Punktezellen werden dann geleert und grau gesperrt.\n\n"
+                "Punktezellen werden dann geleert und gesperrt (abgesetzte Fläche).\n\n"
                 "Das Team bekommt keine Wertnote und keinen Platz, zählt aber bei der Zahl "
                 "der Starter mit.",
                 self._aktionen_disqualifikation,

@@ -1408,8 +1408,8 @@ class _HakenItem(QTableWidgetItem):
 class _PunkteDelegate(QStyledItemDelegate):
     """Zeichnet eine Punktezelle wie ein umrandetes Eingabefeld (roter Rahmen über dem
     Maximum, gelb solange ungespeichert, leer und ohne Rahmen auf abgesetzter Fläche wenn
-    gesperrt) und öffnet zum
-    Bearbeiten ein QLineEdit mit _punkte_validator. Lostippen ersetzt den Wert."""
+    gesperrt) und öffnet zum Bearbeiten ein QLineEdit mit _punkte_validator. Lostippen
+    ersetzt den Wert."""
 
     def __init__(self, tab: "ErgebnisTab"):
         super().__init__(tab.tabelle)

@@ -6921,7 +6921,8 @@ PDF-Schrift), wohl überholte Praxistests vom September und Ideen (Englisch, wei
   `Desktop-Pruefung-2026-10/`, `_unveroeffentlicht/desktop-pruefung/` gibt es nur bei
   unveröffentlichten Berichten.
 - Offen aus Gruppe 1: `README_CONTAINER.md`, Abschnitt „Noch offen“ (wo der Web-Container am
-  Prüfungstag läuft) braucht Marcos Antwort.
+  Prüfungstag läuft) braucht Marcos Antwort. **Geklärt 19.10.2026:** auf demselben Rechner oder
+  im selben Netz; der Abschnitt heißt jetzt „Betriebsort und Grenzen“.
 - Tests lokal: `test_app_web` 83 OK (4 übersprungen).
 
 ### 18.10.2026: Gruppe 2 (zurückgestellte kleine Punkte), mit Marcos Entscheidungen

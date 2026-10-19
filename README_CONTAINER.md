@@ -281,11 +281,10 @@ komplette Compose-Stack tatsächlich hochkommt und die Login-Seite antwortet –
 Registry-Veröffentlichung. Reine Absicherung, dass `Containerfile`/`compose.yaml` nicht
 kaputtgehen, analog zu `tests.yml` für die eigentliche Testsuite.
 
-## Noch offen
+## Betriebsort und Grenzen
 
-- Wo der Container am Prüfungstag tatsächlich läuft (derselbe Windows-Laptop wie die
-  Desktop-Version über Podman Desktop, oder ein separates Gerät im Vereinsnetz) ist
-  bewusst noch nicht endgültig entschieden – dieses Setup funktioniert für beide Fälle
-  unverändert, nur der Zielrechner unterscheidet sich.
+- Der Container läuft am Prüfungstag entweder auf demselben Rechner wie die Desktop-Version
+  (z. B. über Podman Desktop) oder auf einem anderen Gerät im selben Netz (Marco 19.10.2026).
+  Das Setup ist für beide Fälle gleich, nur der Zielrechner unterscheidet sich.
 - Kein Reverse-Proxy/HTTPS (bewusst, siehe Deployment-Annahme oben) – bleibt so, solange
   die Web-Version nur im lokalen Vereins-Netzwerk läuft.

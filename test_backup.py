@@ -395,6 +395,34 @@ class TestSicherungMomentaufnahme(unittest.TestCase):
                 sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
         self.assertEqual({p.name: p.read_bytes() for p in self.zurueck.iterdir()}, vorher)
 
+    def test_scheitert_auch_das_zurueckholen_kommen_die_uebrigen_zurueck(self):
+        """Vor-Build-Verifikation 19.10.2026: Scheitert beim Rückweg das Zurückholen einer
+        Datei, kommen die anderen trotzdem zurück, und gemeldet wird der ursprüngliche Fehler."""
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        self._halb_geschrieben(pfad)
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        alt = _termin_anlegen(self.zurueck, "neu.sqlite", verein="Alter Stand")
+        self._halb_geschrieben(alt)
+        termin_vorher = alt.read_bytes()
+        journal_vorher = pathlib.Path(f"{alt}-journal").read_bytes()
+        echt = os.replace
+
+        def scheitert(quelle, ziel):
+            quelle, ziel = str(quelle), str(ziel)
+            if ziel.endswith("-journal") and quelle.endswith(".tmp"):
+                raise PermissionError(13, "Journal gesperrt", ziel)
+            if ziel.endswith("neu.sqlite") and quelle.endswith(".alt"):
+                raise PermissionError(13, "Zurückholen gesperrt", ziel)
+            echt(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", scheitert):
+            with self.assertRaises(PermissionError) as kontext:
+                sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertEqual(kontext.exception.strerror, "Journal gesperrt")
+        self.assertEqual(pathlib.Path(f"{alt}-journal").read_bytes(), journal_vorher)
+        beiseite = [p for p in self.zurueck.iterdir() if p.name.endswith(".alt")]
+        self.assertEqual([p.read_bytes() for p in beiseite], [termin_vorher])
+
     def test_nicht_lesbare_datei_wird_roh_gesichert(self):
         _termin_anlegen(self.ordner, "gut.sqlite")
         kaputt = self.ordner / "kaputt.sqlite"

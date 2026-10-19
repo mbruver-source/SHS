@@ -419,8 +419,8 @@ sequenceDiagram
     TB->>E: itemChanged → _zelle_geaendert
     E->>E: Zeile gelb „nicht gespeichert“,<br/>zu hoch → roter Rahmen
     opt Haken DQ / Abbruch (Klick oder Leertaste)
-        N->>TB: Haken setzen
-        TB->>E: status_setzen
+        N->>TB: Haken setzen (_HakenDelegate.editorEvent)
+        TB->>E: itemChanged → _zelle_geaendert → _status_umgeschaltet
         E->>E: Punktezellen leeren und sperren
     end
     N->>E: „Alle Ergebnisse speichern“ / Strg+S

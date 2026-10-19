@@ -595,10 +595,11 @@ gesperrt.
 - **Gelbe Zeilen** mit „● nicht gespeichert“ enthalten Änderungen, die noch nicht gesichert sind.
 - **„Alle Ergebnisse speichern“** sichert alle Änderungen auf einmal. Speichere am Prüfungstag
   regelmäßig.
-- Suche **und** Anzeige gehören zusammen. Ist nur eines der beiden Felder ausgefüllt, wird die
+- Suche **und** Anzeige gehören zusammen. Ist nur eine der beiden Zellen ausgefüllt, wird die
   Zeile nicht gespeichert: „Bitte Suche UND Anzeige eintragen oder beide Felder leer lassen.“
-- **Ergebnis entfernen:** beide Felder leeren und speichern.
-- **„Disqualifiziert“** bzw. **„Abbruch“** ankreuzen leert und sperrt die Punktefelder.
+- **Ergebnis entfernen:** beide Zellen leeren und speichern.
+- **„Disqualifiziert“** bzw. **„Abbruch“** ankreuzen leert und sperrt die Punktezellen (sie
+  erscheinen dann als abgesetzte Fläche ohne Rahmen).
 - Die Filter blenden nur aus, ungespeicherte Eingaben bleiben erhalten. **„Liste aktualisieren“**
   fragt vorher nach, wenn noch etwas ungespeichert ist.
 - Ein Klick auf einen **Spaltenkopf** sortiert nach dieser Spalte (Pfeil im Kopf), ein zweiter
@@ -607,7 +608,7 @@ gesperrt.
   Zum Ändern eines Werts geht auch ein Doppelklick oder **F2** (am Mac Enter). **Enter** übernimmt
   die Zahl und bleibt in der Zelle. **Entf** bzw. die **Rücktaste** leert die markierte Zelle.
 - Mit der **Tab-Taste** springst du zur nächsten Eingabe: Suche → Anzeige → nächste Disziplin →
-  „Disqualifiziert“ → „Abbruch“ → nächste Zeile (Umschalt+Tab zurück). Gesperrte Felder und
+  „Disqualifiziert“ → „Abbruch“ → nächste Zeile (Umschalt+Tab zurück). Gesperrte Zellen und
   „–“ werden übersprungen. Die **Leertaste** (oder ein Klick) setzt bzw. entfernt das Häkchen bei
   „Disqualifiziert“ und „Abbruch“.
 - Gelb bzw. der rote Rahmen bei zu hohen Punkten erscheinen, sobald du die Zelle verlässt oder
@@ -745,6 +746,9 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
   und Verein des geöffneten Termins sowie den Tag der Sicherung, z. B.
   `SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-2026-10-03.zip`. **Ein vergessenes Passwort lässt sich nicht
   wiederherstellen.** Bewahre es getrennt von der Sicherung auf.
+  Jeder Termin kommt mit seinem zuletzt gespeicherten Stand in die Sicherung, auch der gerade
+  geöffnete. Lässt sich eine Datei nicht als Termin lesen (z. B. beschädigt), wird sie
+  unverändert mitgesichert, und die Meldung nennt sie.
 - **„Sicherung wiederherstellen…“:** Fragt bei Bedarf nach dem Passwort. Für jeden Termin,
   den es schon gibt, wählst du **„Überschreiben“**, **„Als Kopie importieren“** oder
   **„Überspringen“**. Den gerade geöffneten Termin kann man nicht überschreiben.
