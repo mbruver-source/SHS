@@ -7617,3 +7617,12 @@ Gebündelt seit 1.0.50 (Details in den Abschnitten vom 18. und 19.10.2026):
   - Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten;
   - bewusst zurückgestellt: Fehlerfenster-Punkte, CSV-Altexporte, Effizienz des Zeitplans,
     `-wal`/`-shm` beim lesenden Öffnen.
+
+
+## 19.10.2026: `UML.md` aktuell halten
+
+Auf Marcos Wunsch ist `UML.md` jetzt fester Teil der Pflege:
+- Skill `shs-build` (und Spiegel `.agents`): Unter „Dokumente nachziehen“ steht jetzt auch
+  `UML.md`.
+- Agent `verifikation` (und Spiegel `.codex`): Ändert ein Diff einen Ablauf, eine Klasse oder
+  eine Modulgrenze, prüft er, ob das passende Diagramm noch stimmt.

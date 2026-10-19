@@ -19,6 +19,8 @@ Vorgehen:
    die Änderung diese Bereiche betrifft und lokal deshalb ungetestet ist.
 4. Fehlen Tests für die geänderte Logik?
 5. Ist `Fortschritt.md` nachgezogen? Muss weitere Dokumentation angepasst werden?
+   Ändert der Diff einen Ablauf, eine Klasse oder eine Modulgrenze, prüfen, ob das passende
+   Diagramm in `UML.md` noch stimmt (Aufrufe, Reihenfolge, Namen).
 6. Projektregeln: kein Versionsbump, Commit oder Push ohne Marcos Anforderung; offene
    Sicherheitsfunde in Commit-Nachrichten, Kommentaren und `Fortschritt.md` nur
    allgemein beschrieben (siehe `CLAUDE.md`).
