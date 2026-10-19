@@ -7543,3 +7543,24 @@ Marco hat alle Rückfragen entschieden. Umgesetzt ist jede als eigener lokaler C
   - Sichtprüfung der Ergebniserfassung am echten Windows;
   - `docs/HANDBUCH.pdf` neu erzeugen;
   - CI nach Marcos Push.
+
+
+## 19.10.2026: Demoprüfung angepasst, UML-Schaubilder
+
+- **Demoprüfung (Marcos Wunsch):** Die Erklärtexte passen jetzt zur neuen Ergebniserfassung.
+  - Schritt 8 erklärt Lostippen, Tab, Enter und Entf.
+  - Schritt 9 nennt Klick bzw. Leertaste für die Haken und die grau gesperrten Punktezellen.
+
+  `docs/bilder/handbuch_demo.png` ist neu aufgenommen. Die Demo-Tests sind grün.
+- **UML (Marcos Wunsch, Format Mermaid in Markdown):** Die neue Datei `UML.md` enthält 13
+  Diagramme:
+  - Komponenten und Klassen der Desktop-App;
+  - Gesamtablauf eines Prüfungstermins;
+  - Programmstart/Beenden, Termin öffnen, Teilnehmer erfassen/importieren, Zeitplan;
+  - Ergebniserfassung und Speichern, Auswertung/Stechen/Ausdrucke;
+  - Web-Erfassung mit Veröffentlichen und Zurückholen;
+  - Datensicherung/Wiederherstellung, Update-Prüfung/Sitzungsende und Demoprüfung.
+
+  Alle Diagramme habe ich mit `mermaid-cli` (11.4.2) fehlerfrei gerendert und stichprobenartig
+  angesehen. Die Namen sind mit dem Code abgeglichen. `Architektur.md` verweist darauf.
+  Ändert sich ein Ablauf, wird das passende Diagramm mitgepflegt.

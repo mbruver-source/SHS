@@ -4,6 +4,9 @@ Stand: 20.09.2026 (Modul-/Testübersicht aktualisiert 22.09.2026, Modulaufteilun
 aktuellen, tatsächlich umgesetzten Stand inkl. der später hinzugekommenen Web/PostgreSQL-Variante.
 Gedacht als schneller Einstieg für neue Sitzungen/Subagents, die den Code noch nicht kennen -
 Details und Historie einzelner Entscheidungen stehen weiterhin in `Fortschritt.md`.
+Die Abläufe (Programmstart, Termin öffnen, Teilnehmer, Zeitplan, Ergebniserfassung,
+Auswertung, Web-Erfassung, Datensicherung, Update, Demoprüfung) sowie die Klassen der
+Desktop-App zeigt `UML.md` als Mermaid-Diagramme.
 
 ## 1. Zwei Laufzeitumgebungen, eine gemeinsame Datenschicht
 
