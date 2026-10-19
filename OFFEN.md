@@ -26,8 +26,6 @@ suchen.
 
 | Nr. | Punkt | Entscheidung | Fundstelle |
 |---|---|---|---|
-| B1 | Fehlerfenster: Benutzernamen ab 3 Zeichen schwärzen auch gleichlautenden Text der Diagnose (ersetzt nur zu viel) | 13.10., bestätigt 18./19.10.2026 | F:5786 |
-| B2 | Fehlerfenster: ein Fenster je Fehlerbild (Typ + innerste Stelle), verschiedene Fehler derselben Zeile zeigen nur eines | 13.10., bestätigt 18./19.10.2026 | F:5790 |
 | B3 | CSV-Altexporte: zwei Sonderfälle behalten ein „'“ zu viel; Excel-Verdacht kann bei Nummern wie „1E5“ fälschlich anschlagen | 14.10., weiter 18.10.2026 | F:6146, F:6980 |
 | B4 | Zeitplan-Effizienz: `_aktueller_eintrag` rechnet den ganzen Blockplan, `PauseDialog` legt Felder auch beim Bearbeiten an | 15.10., weiter 18.10.2026 | F:6360 |
 | B5 | `alle_speichern()` warnt auch ohne erlaubte Interaktion (praktisch nur X11/macOS) | 05.10., weiter 18.10.2026 | F:4805, F:6981 |

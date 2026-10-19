@@ -6210,6 +6210,36 @@ def test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende(tmp_path, monkeyp
     assert "(nicht lesbar)" in desktop_gemeinsam.diagnose_text("9.9.9")
 
 
+def test_kurzer_benutzername_nur_in_pfaden_ersetzt(tmp_path, monkeypatch):
+    """OFFEN.md B1 (19.10.2026): Ein kurzer Name wie "max" wird nur als Ordnername ersetzt,
+    nicht in gleichlautendem Text ("max(", "Maxwert"); ab 6 Zeichen auch im Freitext."""
+    from pathlib import Path
+
+    import desktop_gemeinsam
+
+    heim = tmp_path / "Users" / "max"
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: heim))
+    monkeypatch.setenv("USERNAME", "max")
+    monkeypatch.setenv("USER", "max")
+    monkeypatch.setattr(desktop_gemeinsam, "_kurzpfad", lambda pfad: None)
+    text = desktop_gemeinsam._ohne_benutzerpfad(
+        f"{heim}\\x.py\nwert = max(a, b) bei Max\nD:\\Daten\\max\\y.db und /home/MAX\nmax\n"
+        f"Kein Zugriff auf {heim}.\n{chr(92).join(['D:', 'max', 'y.db'])!r} /home/max.bak")
+    zeilen = text.split("\n")
+    assert zeilen[0] == "~\\x.py"
+    assert zeilen[1] == "wert = max(a, b) bei Max"
+    assert zeilen[2] == "D:\\Daten\\<Benutzer>\\y.db und /home/<Benutzer>"
+    assert zeilen[3] == "max"
+    # Pfad am Satzende (Verifikation 19.10.2026): der Name darf nicht stehen bleiben
+    assert "max" not in zeilen[4].lower() and zeilen[4].endswith("<Benutzer>.")
+    # repr()-Form mit verdoppelten Backslashes und Ordner mit Endung
+    assert "max" not in zeilen[5].lower() and zeilen[5].count("<Benutzer>") == 2
+
+    monkeypatch.setenv("USERNAME", "muster")
+    monkeypatch.setenv("USER", "muster")
+    assert desktop_gemeinsam._ohne_benutzerpfad("von muster gemeldet") == "von <Benutzer> gemeldet"
+
+
 def test_diagnose_text_fuehrt_fehler_aus_dem_protokoll_nicht_doppelt_auf(tmp_path, monkeypatch):
     import desktop_gemeinsam
 
@@ -6287,6 +6317,39 @@ def test_fehlerfenster_wiederkehrender_fehler_nur_einmal_je_sitzung(fehlerfenste
 
     assert len(protokolliert) == 5
     assert len(fenster) == 3
+
+
+def _hilfsfunktion_mit_fehler():
+    raise RuntimeError("gleiche innerste Stelle")
+
+
+def _weg_a():
+    _hilfsfunktion_mit_fehler()
+
+
+def _weg_b():
+    _hilfsfunktion_mit_fehler()
+
+
+def _ueber_weg_melden(weg) -> None:
+    try:
+        weg()
+    except RuntimeError:
+        sys.excepthook(*sys.exc_info())
+
+
+def test_fehlerfenster_je_aufrufweg_ein_fenster(fehlerfenster_hook):
+    """OFFEN.md B2 (19.10.2026): Das Fehlerbild ist Typ plus ganzer Aufrufweg. Derselbe Fehler
+    in einer Hilfsfunktion, erreicht über zwei Wege, zeigt zwei Fenster; die Wiederholung über
+    denselben Weg (z. B. ein Timer) bleibt bei einem."""
+    protokolliert, fenster = fehlerfenster_hook
+    for _ in range(3):
+        _ueber_weg_melden(_weg_a)
+    _ueber_weg_melden(_weg_b)
+    _ueber_weg_melden(_weg_b)
+
+    assert len(protokolliert) == 5
+    assert len(fenster) == 2
 
 
 def test_fehlerfenster_nicht_bei_abbruch_ohne_app_oder_im_nebenthread(fehlerfenster_hook, monkeypatch):

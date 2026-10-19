@@ -7700,3 +7700,27 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   nur die letzte Zeile), Zeitgrenze, genauere Formulierung im Verifikations-Agenten.
 - **Offen bis zu Marcos Push:** Das Ergebnis des Windows-Jobs ist erst nach dem Push sichtbar.
   Prüfschritt in V8: unter „Actions“ beide Test-Jobs grün.
+
+
+## 19.10.2026: V3 Fehlerfenster B1 + B2 (Verbesserungen, automatische Abarbeitung)
+
+- **B1, kurze Benutzernamen (`desktop_gemeinsam._ohne_benutzerpfad`):**
+  - Ab 6 Zeichen wird der Name wie bisher auch im Freitext ersetzt.
+  - Kürzere Namen (3–5 Zeichen) ersetzt das Programm nur noch direkt nach einem Pfadtrenner,
+    wenn kein Buchstabe und keine Ziffer folgt. „max(“ und „bei Max“ bleiben so lesbar.
+  - Weiter geschwärzt werden „D:\Daten\max\…“, „/home/max“, „…\max.“ am Satzende, die
+    repr()-Form und „max.bak“.
+  - Im Zweifel wird eher zu viel geschwärzt: „min/max“ wird zu „min/<Benutzer>“.
+- **B2, Fehlerbild (`_fehlerbild`):** Das Fehlerbild ist jetzt Typ plus ganzer Aufrufweg (alle
+  Traceback-Stellen) statt nur der innersten Stelle.
+  - Derselbe Fehler in einer Hilfsfunktion zeigt je Aufrufweg ein Fenster.
+  - Ein wiederkehrender Timer- oder Zeichenfehler bleibt bei einem Fenster.
+  - Bei Rekursion mit wechselnder Tiefe gibt es nacheinander je Tiefe ein Fenster, nie zwei
+    gleichzeitig. Das ist vertretbar.
+- **Tests:** `test_kurzer_benutzername_nur_in_pfaden_ersetzt` und
+  `test_fehlerfenster_je_aufrufweg_ein_fenster`. Die Gegenprobe mit altem Code ist rot.
+  GUI 410 grün, Unittests OK.
+- **Verifikation (Subagent):** Der Rückschritt „C:\Users\max.“ am Satzende blieb in der
+  ersten Fassung ungeschwärzt. Er ist behoben, und die Testfälle sind ergänzt (Satzende,
+  repr(), „max.bak“). Das Handbuch hat einen Halbsatz zu kurzen Namen bekommen.
+- `OFFEN.md` B1 und B2 sind gestrichen.

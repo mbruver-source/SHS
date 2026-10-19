@@ -895,7 +895,8 @@ Ordner `Termine`); wird sie zu groß, heißt die ältere Fassung `absturzprotoko
 **„Fehlerbericht kopieren“** im Fehlerfenster bzw. **„Diagnose kopieren“** im Fenster
 **„Version“** legt Version, System und das Ende des Protokolls in die Zwischenablage – zum
 Einfügen in die Meldung. Dein Benutzerordner wird dabei durch `~` ersetzt, dein Benutzername
-durch `<Benutzer>`; kurz durchsehen, ob trotzdem echte Teilnehmerdaten darin stehen. **„Protokoll-Ordner öffnen“** zeigt die Datei.
+durch `<Benutzer>` (ein sehr kurzer Name wie „max“ nur in Pfadangaben, damit Text wie `max(`
+lesbar bleibt); kurz durchsehen, ob trotzdem echte Teilnehmerdaten darin stehen. **„Protokoll-Ordner öffnen“** zeigt die Datei.
 
 **Funktioniert meine Installation vollständig?**
 Das Programm kann sich selbst prüfen, ohne deine Termine anzufassen. Unter Windows dazu im

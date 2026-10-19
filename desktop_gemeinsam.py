@@ -901,6 +901,8 @@ def absturzprotokoll_pfad():
 # und das Ende des Absturzprotokolls, ohne Benutzerpfad. Nichts wird automatisch verschickt.
 _DIAGNOSE_PROTOKOLL_ZEILEN = 40
 _BENUTZER_PLATZHALTER = "<Benutzer>"
+# Ab dieser Länge wird der Benutzername auch im Freitext ersetzt, kürzere nur in Pfaden.
+_NAME_FREITEXT_AB = 6
 
 
 def _kurzpfad(pfad: str) -> str | None:
@@ -921,7 +923,9 @@ def _kurzpfad(pfad: str) -> str | None:
 def _ohne_benutzerpfad(text: str) -> str:
     """Ersetzt den Benutzerordner durch "~" und den Benutzernamen durch "<Benutzer>" - in
     allen üblichen Schreibweisen: mit "\\", "/" oder (aus repr() in Fehlertexten) "\\\\",
-    in beliebiger Groß-/Kleinschreibung und als Windows-Kurzpfad."""
+    in beliebiger Groß-/Kleinschreibung und als Windows-Kurzpfad. Kurze Namen (3-5 Zeichen,
+    z. B. "max") nur als Ordnername in Pfaden, damit gleichlautender Text wie "max(" lesbar
+    bleibt (OFFEN.md B1, 19.10.2026)."""
     import re
     from pathlib import Path
 
@@ -944,8 +948,12 @@ def _ohne_benutzerpfad(text: str) -> str:
     if kurz:
         namen.add(Path(kurz).name)
     for name in sorted((n for n in namen if len(n) >= 3), key=len, reverse=True):
-        text = re.sub(r"(?<![\w~])" + re.escape(name) + r"(?![\w~])", _BENUTZER_PLATZHALTER, text,
-                      flags=re.IGNORECASE)
+        if len(name) >= _NAME_FREITEXT_AB:
+            muster = r"(?<![\w~])" + re.escape(name) + r"(?![\w~])"
+        else:  # nur nach einem Pfadtrenner; danach kein Buchstabe/keine Ziffer (lieber zu viel:
+            # auch "max." am Satzende, "max.bak", "max~1", "min/max")
+            muster = r"(?<=[\\/])" + re.escape(name) + r"(?!\w)"
+        text = re.sub(muster, _BENUTZER_PLATZHALTER, text, flags=re.IGNORECASE)
     return text
 
 
@@ -1050,8 +1058,9 @@ def fehlerfenster_zeigen(version: str, fehler: str, parent=None, programm_endet:
 
 
 _fehlerfenster_offen = False
-# Bereits gezeigte Fehlerbilder (Typ + Stelle) - ein ständig wiederkehrender Fehler (z. B. in
-# einem Timer oder beim Zeichnen) öffnet so nicht nach jedem OK sofort das nächste Fenster.
+# Bereits gezeigte Fehlerbilder (Typ + ganzer Aufrufweg) - ein ständig wiederkehrender Fehler
+# (z. B. in einem Timer oder beim Zeichnen) öffnet so nicht nach jedem OK sofort das nächste
+# Fenster; derselbe Fehler über einen anderen Aufrufweg zeigt dagegen ein eigenes (OFFEN.md B2).
 _gezeigte_fehler: set = set()
 
 
@@ -1059,8 +1068,7 @@ def _fehlerbild(typ, tb) -> tuple:
     import traceback
 
     stellen = traceback.extract_tb(tb) if tb is not None else []
-    stelle = stellen[-1] if stellen else None
-    return (typ.__qualname__, stelle.filename if stelle else "", stelle.lineno if stelle else 0)
+    return (typ.__qualname__, tuple((s.filename, s.lineno) for s in stellen))
 
 
 def fehlerfenster_einrichten(version: str) -> None:

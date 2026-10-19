@@ -17,8 +17,8 @@ Start durch Marco:
 | Aufgabe | Größe | Status | Commit | Limit vorher → nachher (5 h / 7 T) | Bemerkung |
 |---|---|---|---|---|---|
 | V1 Robuste GUI-Tests (Bezahlt-Checkbox, Strg+S) | S | erledigt | c1ff49c | 82 % / 19 % → 88 % / 20 % | GUI 408 grün; mit echter Windows-Plattform 1 passed + 1 begründeter Skip |
-| V2 Windows-Job in der CI | M | erledigt | siehe Log | 0 % / 20 % → 8 % / 21 % | lokal im frischen venv 922 passed; CI-Ergebnis erst nach Marcos Push |
-| V3 B1 + B2 Fehlerfenster | S | offen | | | |
+| V2 Windows-Job in der CI | M | erledigt | f494b39 | 0 % / 20 % → 8 % / 21 % | lokal im frischen venv 922 passed; CI-Ergebnis erst nach Marcos Push |
+| V3 B1 + B2 Fehlerfenster | S | erledigt | siehe Log | 9 % / 21 % → 14 % / 21 % | GUI 410 grün; Nacharbeit aus Verifikation (Pfad am Satzende) |
 | V4 B3 CSV-Altexporte und Excel-Verdacht | S | offen | | | |
 | V5 B4 Zeitplan-Effizienz | S | offen | | | |
 | V6 B5 Warnung ohne erlaubte Interaktion | S | offen | | | |
