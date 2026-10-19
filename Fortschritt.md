@@ -7676,3 +7676,27 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   Verbindung) ist auch mit echter Plattform rot. Nachgezogen: Der Skip „Fenster nicht aktiv“
   greift offscreen nicht mehr; der Import steht oben.
 - `OFFEN.md` C26 ist gestrichen.
+
+
+## 19.10.2026: V2 Windows-Job in der CI (Verbesserungen, automatische Abarbeitung)
+
+- **`tests.yml`:** neuer Job `test-windows` (windows-latest, Python 3.11, dieselben
+  festgenagelten Action-Hashes, offscreen, `PYTHONUTF8=1`). Er installiert `requirements.txt`,
+  `requirements-web.txt` und `requirements-dev.txt` in einem pip-Aufruf, prüft pypdf und
+  startet `pytest -v`. PostgreSQL bleibt im Linux-Job (Service-Container gehen unter Windows
+  nicht), die PostgreSQL-Tests überspringen sich dort selbst.
+- **Zeitgrenze:** Beide Jobs haben `timeout-minutes: 30`, damit ein hängender GUI-Test nicht
+  bis zur 6-h-Grenze läuft (Linux-Lauf bisher rund 3 min).
+- **Lokal nachgestellt:** frisches venv außerhalb des Repos (Python 3.12, weil 3.11 lokal
+  fehlt; PySide6 6.12.0, nur die drei Anforderungsdateien). Die volle Suite ergab 922 passed,
+  174 skipped, 1 xfailed.
+  - Übersprungen wurden die PostgreSQL-Tests, der Test für die echte Windows-Plattform und zwei
+    Abgleiche ohne Original-ODS.
+  - Die Registry (`HKCU\Software\SHS-Pruefungsprogramm`) blieb unberührt.
+  - Ein Test mit `skipif` war nicht nötig.
+- **Doku:** `Architektur.md` (CI-Kasten, Abschnitt 4), `CLAUDE.md`/`AGENTS.md`,
+  Agent `verifikation` (.claude und .codex), `OFFEN.md` B10.
+- **Verifikation (Subagent):** in Ordnung. Übernommen: ein pip-Aufruf statt drei (pwsh wertet
+  nur die letzte Zeile), Zeitgrenze, genauere Formulierung im Verifikations-Agenten.
+- **Offen bis zu Marcos Push:** Das Ergebnis des Windows-Jobs ist erst nach dem Push sichtbar.
+  Prüfschritt in V8: unter „Actions“ beide Test-Jobs grün.

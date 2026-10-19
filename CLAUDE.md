@@ -94,7 +94,8 @@ Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requ
 GUI-Tests (`test_app_gui.py`, `test_theme.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
 PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen auch lokal, wenn PySide6
 installiert ist (Anaconda-Python, siehe Memory „Lokales Python“); die echten PostgreSQL-Tests
-laufen nur in der CI (`.github/workflows/tests.yml`).
+laufen nur in der CI (`.github/workflows/tests.yml`, Job `test` unter Linux). Der zweite Job
+`test-windows` führt die Suite seit 19.10.2026 zusätzlich unter Windows aus (ohne PostgreSQL).
 
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben (aus dem Cowork-Arbeitsablauf übernommen, 21.09.2026)
 

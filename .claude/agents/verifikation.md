@@ -15,8 +15,8 @@ Vorgehen:
    verlangt war? Ist etwas dabei, das nicht verlangt war?
 3. Tests ausführen:
    `C:\Users\mbruv\anaconda3\python.exe -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen`
-   GUI-Tests und echte PostgreSQL-Tests laufen nur in der CI; sag ausdrücklich, wenn
-   die Änderung diese Bereiche betrifft und lokal deshalb ungetestet ist.
+   Echte PostgreSQL-Tests laufen nur in der CI (Linux-Job); die GUI-Tests laufen lokal mit
+   Anaconda und in der CI unter Linux und Windows. Sag ausdrücklich, was lokal ungetestet ist.
 4. Fehlen Tests für die geänderte Logik?
 5. Ist `Fortschritt.md` nachgezogen? Muss weitere Dokumentation angepasst werden?
    Ändert der Diff einen Ablauf, eine Klasse oder eine Modulgrenze, prüfen, ob das passende

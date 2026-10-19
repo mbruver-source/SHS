@@ -35,7 +35,7 @@ suchen.
 | B7 | Sicherheitsprüfung S-5 (gering): Web-App nutzt das DB-Eigentümerkonto; Nutzen gering bei hohem Umbau | 03.10.2026 | F:4510 |
 | B8 | SignPath Foundation (Code-Signatur): erst wieder, wenn das Programm weiter verbreitet ist | 05.10.2026 | F:4770 |
 | B9 | Englische Sprachumschaltung: nur geschätzt (Desktop 5–6, alles 9–11 Fenster), Weg beschrieben | 15.10.2026 | F:6605 |
-| B10 | Weitere Testarten: Windows in der CI, gleichzeitige Web-Eingaben, Abdeckung, bandit/ZAP/XSS, Generalprobe, Barrierefreiheit | 03.10.2026 | F:4198 |
+| B10 | Weitere Testarten (Windows in der CI erledigt 19.10.2026, V2): gleichzeitige Web-Eingaben, Abdeckung, bandit/ZAP/XSS, Generalprobe, Barrierefreiheit | 03.10.2026 | F:4198 |
 | B11 | Altdaten-Tests erweitern (Web-Sync, CSV-Export, Anmeldeformular mit Altdaten) | 03.10.2026 | F:4383 |
 | B12 | `app.py` nicht weiter aufteilen: Teilnehmer-, Formular-Import-, Ergebnis-Reiter, Hauptfenster, StartDialog und `main` bleiben dort | 18.10.2026 | F:6474 |
 

@@ -19,6 +19,12 @@ name: Tests
 # scheitern, siehe test_db.py. requirements-web.txt (Flask) wird zusätzlich installiert,
 # damit test_app_web.py (Web-Backend, V1: Ergebniseingabe) laufen kann.
 #
+# Zweiter Job test-windows (Verbesserungen V2, 19.10.2026): dieselbe Suite noch einmal unter
+# Windows, weil fast alle Nutzer dort arbeiten (Pfade, Dateisperren, Zeichensatz, Qt-Plattform).
+# Ohne PostgreSQL: Service-Container gibt es nur unter Linux, die PostgreSQL-Tests
+# überspringen sich dort ohne SHS_TEST_POSTGRES_DSN selbst und laufen weiter im Linux-Job.
+# PYTHONUTF8=1, damit die Konsolenausgabe mit Umlauten nicht am Windows-Zeichensatz scheitert.
+#
 # Der eigentliche Windows-Installer-Build (PyInstaller + Inno Setup) läuft weiterhin
 # separat über build-installer.yml bzw. manuell über build_installer.bat, siehe
 # README_INSTALLER.md - weder requirements-postgres.txt (psycopg2) noch
@@ -40,6 +46,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Hängt ein GUI-Test, bricht der Job nach 30 min ab statt erst nach 6 h (Lauf rund 3 min).
+    timeout-minutes: 30
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -89,6 +97,38 @@ jobs:
 
       # Codeprüfung 22.09. (M4): ohne pypdf wird TestPdfExport still übersprungen - hier
       # lieber laut scheitern, als unbemerkt wieder ohne PDF-Inhaltsprüfung zu laufen.
+      - name: Prüfen, dass pypdf für die PDF-Tests verfügbar ist
+        run: python -c "import pypdf"
+
+      - name: Tests ausführen
+        run: pytest -v
+
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Python ${{ matrix.python-version }} einrichten
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      # Ein einziger pip-Aufruf: pwsh bricht einen mehrzeiligen run-Block bei einem
+      # fehlgeschlagenen Programm nicht ab, gewertet wird nur die letzte Zeile.
+      - name: Abhängigkeiten installieren (ohne PostgreSQL-Treiber)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-web.txt -r requirements-dev.txt
+
       - name: Prüfen, dass pypdf für die PDF-Tests verfügbar ist
         run: python -c "import pypdf"
 

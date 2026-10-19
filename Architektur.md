@@ -92,7 +92,7 @@ flowchart TB
         Container["Containerfile + compose.yaml<br/>Services: web (Flask/waitress) + db (postgres:16)"]
     end
     subgraph CI[".github/workflows"]
-        Tests["tests.yml<br/>pytest, inkl. PostgreSQL-Service-Container<br/>+ PySide6-GUI-Tests (pytest-qt)"]
+        Tests["tests.yml<br/>pytest unter Linux (inkl. PostgreSQL-Service-Container)<br/>und Windows, jeweils mit PySide6-GUI-Tests (pytest-qt)"]
         Installer["build-installer.yml<br/>PyInstaller + Inno Setup (Windows)<br/>+ .dmg (macOS) / AppImage + .deb (Linux), Vorschau<br/>ausgelöst durch Tag 'vX.Y.Z'<br/>-> GitHub Release"]
         ContainerBuild["build-container.yml<br/>Image-Build -> ghcr.io"]
     end
@@ -203,8 +203,11 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   mit einem Wegwerf-Container (`podman run --rm -p 55432:5432 -e POSTGRES_USER=shs_test
   -e POSTGRES_PASSWORD=shs_test -e POSTGRES_DB=shs_test docker.io/library/postgres:16`);
   die Tests setzen die Datenbank selbst zurück und lassen sich beliebig oft wiederholen.
-- **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt` - ebenfalls nur in der CI;
-  `test_theme.py` braucht PySide6 (importiert `desktop_darstellung`).
+- **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt`; `test_theme.py` braucht
+  PySide6 (importiert `desktop_darstellung`). Sie laufen lokal mit Anaconda und in der CI.
+- **Zwei CI-Jobs** in `tests.yml` (seit 19.10.2026): `test` unter Linux mit PostgreSQL und
+  `test-windows` unter Windows ohne PostgreSQL (dort keine Service-Container; die
+  PostgreSQL-Tests überspringen sich), beide offscreen mit der ganzen Suite.
 - **PDF-Inhaltstests** (`test_pdf_export.py`) brauchen `pypdf` - ohne pypdf wird der Großteil
   übersprungen. Test-/Dev-Abhängigkeiten stehen in `requirements-dev.txt`.
 - **`test_app_web.py`** mockt (bis auf `TestAppWebPostgres`) die PostgreSQL-Klebefunktionen und
