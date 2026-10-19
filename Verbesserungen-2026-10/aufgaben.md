@@ -21,8 +21,8 @@ Start durch Marco:
 | V3 B1 + B2 Fehlerfenster | S | erledigt | 34bc9ef | 9 % / 21 % → 14 % / 21 % | GUI 410 grün; Nacharbeit aus Verifikation (Pfad am Satzende) |
 | V4 B3 CSV-Altexporte und Excel-Verdacht | S | erledigt | 61f0faa | 15 % / 21 % → 19 % / 22 % | Unittests OK, GUI 410 grün; „1E5“ bleibt in B3 |
 | V5 B4 Zeitplan-Effizienz | S | erledigt | 1b9bdda | 19 % / 22 % → 26 % / 22 % | Unittests OK, GUI 412 grün; UML Diagramm 7 berichtigt |
-| V6 B5 Warnung ohne erlaubte Interaktion | S | erledigt | siehe Log | 26 % / 22 % → 36 % / 23 % | GUI 413 grün; Knopf-Verbindung per Lambda (im Testlauf gefunden) |
-| V7 B6 `-wal`/`-shm` beim lesenden Öffnen | S | offen | | | |
+| V6 B5 Warnung ohne erlaubte Interaktion | S | erledigt | 7b46b4e | 26 % / 22 % → 36 % / 23 % | GUI 413 grün; Knopf-Verbindung per Lambda (im Testlauf gefunden) |
+| V7 B6 `-wal`/`-shm` beim lesenden Öffnen | S | erledigt | siehe Log | 36 % / 23 % → 42 % / 24 % | GUI 413 grün; Rückfrage 1 (Restrisiko immutable) |
 | V8 Abschluss | S | offen | | | zuletzt |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
@@ -169,4 +169,10 @@ zurück.
 
 ## Rückfragen an Marco
 
-(noch keine)
+1. **V7, Restrisiko `immutable=1`:** Eine fremde Termin-Datei im WAL-Modus ohne `-wal` daneben
+   wird jetzt ohne Sperre gelesen (sonst blieben `-wal`/`-shm` liegen). Öffnet genau während
+   des Lesens ein fremdes Werkzeug (z. B. DB Browser) die Datei, schreibt und macht einen
+   Checkpoint, könnten Übersicht, Import oder Sicherung einen Mischstand lesen oder
+   „beschädigt“ melden. Eigene Termin-Dateien sind nie betroffen (Rollback-Journal). Sehr
+   unwahrscheinlich. Vorschlag: als akzeptiertes Restrisiko in `OFFEN.md` Teil C eintragen.
+   Alternative: B6 zurücknehmen (Zusatzdateien bleiben dann liegen).

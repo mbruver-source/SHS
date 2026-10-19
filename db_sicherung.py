@@ -168,7 +168,9 @@ def _momentaufnahme(pfad: Path) -> bytes | None:
     Die Lesesperre wird vorher mit einer eigenen Abfrage geholt: Connection.backup()
     wiederholt bei einer gesperrten Quelle sonst endlos, und die Sicherung hinge, solange
     eine andere Instanz (oder die eigene Verbindung) schreibt. So gilt die übliche Wartezeit
-    der Verbindung, danach kommt ein Fehler und damit die Rohsicherung."""
+    der Verbindung, danach kommt ein Fehler und damit die Rohsicherung. Ausnahme: eine fremde
+    Datei im WAL-Modus ohne "-wal" öffnet oeffne_termin_lesend mit immutable=1, dann ohne
+    Sperre (siehe dort)."""
     try:
         quelle = oeffne_termin_lesend(pfad)
     except sqlite3.Error:

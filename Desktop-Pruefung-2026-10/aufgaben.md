@@ -257,7 +257,8 @@ Sicherungs-ZIP (`PermissionError`).
   - Der Hinweis im TerminImportDialog zeigt die rohe Ausnahme; sie soll über
     `_klartext_fehler` laufen.
 - Offen, keine Regression, nur zur Kenntnis:
-  - Eine fremde Datei im WAL-Modus hinterlässt beim lesenden Öffnen `-wal`/`-shm`.
+  - ~~Eine fremde Datei im WAL-Modus hinterlässt beim lesenden Öffnen `-wal`/`-shm`.~~
+    Erledigt 19.10.2026 (Verbesserungen V7, `immutable=1`).
   - Eine Datei mit liegengebliebenem Journal gilt im Import-Dialog als nicht lesbar.
 
 **A10 Rückfrage bei ungespeicherten Änderungen** (S): T8-2, T10-8, T8-10, T8-8 (`closeEvent`-Docstring).

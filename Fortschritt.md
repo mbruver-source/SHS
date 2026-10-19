@@ -7804,3 +7804,28 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
     `_ja_nein`, alles gespeichert);
   - Docstring.
 - `OFFEN.md` B5 ist gestrichen.
+
+
+## 19.10.2026: V7 `-wal`/`-shm` beim lesenden Öffnen B6 (Verbesserungen, automatische Abarbeitung)
+
+- **`db.oeffne_termin_lesend`:** Ist die Datei im WAL-Modus (Kopf-Bytes 18/19 = 2) und liegt
+  keine `-wal` daneben (`_ist_wal_ohne_wal_datei`), wird sie mit `?mode=ro&immutable=1`
+  geöffnet. Dann legt SQLite keine `-wal`/`-shm` mehr an.
+  - Liegt eine `-wal` daneben, bleibt es wie bisher, weil deren Inhalt mitgelesen werden muss.
+  - Eigene Termin-Dateien laufen mit Rollback-Journal und sind nie betroffen.
+  - Betroffen sind Terminübersicht, Termin-Import, die Vorprüfung in `termin_oeffnen` und die
+    Momentaufnahme der Sicherung.
+- **Restrisiko (Rückfrage an Marco, `OFFEN.md` A8):** `immutable` liest ohne Sperre. Öffnet
+  ein fremdes Werkzeug die WAL-Datei genau während des Lesens und schreibt per Checkpoint
+  zurück, kann ein Mischstand oder „beschädigt“ entstehen. Das ist sehr unwahrscheinlich.
+- **Nebeneffekt (positiv):** Eine WAL-Datei ohne `-wal` auf schreibgeschütztem Medium ließ
+  sich vorher mit `mode=ro` nicht lesen. Jetzt geht es.
+- **Tests:**
+  - `test_fremde_wal_datei_hinterlaesst_beim_lesen_keine_zusatzdateien` (Übersicht, Prüfung,
+    Momentaufnahme);
+  - `test_wal_datei_mit_wal_daneben_liest_deren_inhalt_mit`.
+  - Gegenprobe rot. Unittests OK, GUI 413 grün.
+- **Verifikation (Subagent):** Der Code ist in Ordnung. Übernommen: Restrisiko in den
+  Docstrings von `oeffne_termin_lesend` und `_momentaufnahme`, A9-Hinweis in
+  `Desktop-Pruefung-2026-10/aufgaben.md` als erledigt vermerkt.
+- `OFFEN.md` B6 ist gestrichen, A8 (Rückfrage) ist neu.

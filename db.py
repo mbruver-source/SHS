@@ -2484,18 +2484,41 @@ def _groesse_pruefen(pfad: str | Path) -> None:
         )
 
 
+def _ist_wal_ohne_wal_datei(pfad: Path) -> bool:
+    """True, wenn der SQLite-Kopf WAL-Modus anzeigt (Bytes 18/19 = 2) und keine "-wal"-Datei
+    daneben liegt. Lesefehler zählen als False (dann öffnet SQLite wie bisher und meldet selbst)."""
+    try:
+        with open(pfad, "rb") as datei:
+            kopf = datei.read(20)
+        if len(kopf) < 20 or kopf[18] != 2 or kopf[19] != 2:
+            return False
+        return not os.path.exists(str(pfad) + "-wal")
+    except OSError:
+        return False
+
+
 def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
     """Öffnet eine Termin-Datei nur lesend (ohne init_db: keine Migration, kein Schreiben).
     Der Pfad wird als korrekt kodierte file:-URI übergeben, damit Zeichen wie "#" oder "%"
     im Datei- oder Ordnernamen nicht als URI-Bestandteile gelesen werden. Bewusst ohne
     Authority-Teil (nicht Path.as_uri()), weil SQLite "file://server/..." ablehnt -
-    UNC-Pfade (\\\\server\\freigabe\\...) werden als "file:////server/..." übergeben."""
+    UNC-Pfade (\\\\server\\freigabe\\...) werden als "file:////server/..." übergeben.
+
+    Eine fremde Datei im WAL-Modus ohne "-wal" daneben wird mit immutable=1 geöffnet: sonst
+    legt SQLite auch beim nur lesenden Zugriff "-wal"/"-shm" an und lässt sie liegen (OFFEN.md
+    B6, 19.10.2026). Liegt eine "-wal" daneben, muss ihr Inhalt mitgelesen werden - dann wie
+    bisher. Eigene Termin-Dateien laufen mit Rollback-Journal und sind nie betroffen.
+    Restrisiko: immutable liest ohne Sperre - öffnet ein fremdes Werkzeug die Datei genau
+    während des Lesens und schreibt per Checkpoint in die Hauptdatei, kann ein Mischstand
+    oder SQLITE_CORRUPT entstehen (Rückfrage an Marco, Verbesserungen V7)."""
     posix = str(Path(pfad).absolute()).replace("\\", "/")
     if posix.startswith("//"):
         posix = "//" + posix
     elif not posix.startswith("/"):
         posix = "/" + posix
     uri = "file:" + quote(posix, safe="/:") + "?mode=ro"
+    if _ist_wal_ohne_wal_datei(Path(pfad)):
+        uri += "&immutable=1"
     conn = sqlite3.connect(uri, uri=True)
     conn.row_factory = sqlite3.Row
     return conn

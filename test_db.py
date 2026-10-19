@@ -2893,6 +2893,51 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertFalse(termine[0].lesbar)
         self.assertIsNone(termine[0].verein)
 
+    def test_fremde_wal_datei_hinterlaesst_beim_lesen_keine_zusatzdateien(self):
+        """OFFEN.md B6 (19.10.2026): Eine Termin-Datei im WAL-Modus durchläuft Übersicht,
+        Prüfung und Momentaufnahme der Sicherung, ohne dass "-wal"/"-shm" liegen bleiben."""
+        from db import termin_lesend_pruefen, termin_unversehrt_pruefen
+        from db_sicherung import _momentaufnahme
+
+        pfad = self.ordner / "fremd.sqlite"
+        self._gueltiger_termin(pfad, verein="WAL-Verein")
+        conn = sqlite3.connect(str(pfad))
+        self.assertEqual(conn.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+        conn.close()
+        vorher = sorted(p.name for p in self.ordner.iterdir())
+        self.assertEqual(vorher, ["fremd.sqlite"])
+
+        termine = liste_termine(self.ordner)
+        self.assertEqual([t.verein for t in termine], ["WAL-Verein"])
+        pruef = termin_lesend_pruefen(pfad)
+        try:
+            termin_unversehrt_pruefen(pruef)
+            self.assertEqual(pruef.execute("SELECT verein FROM veranstaltung").fetchone()[0], "WAL-Verein")
+        finally:
+            pruef.close()
+        self.assertIsNotNone(_momentaufnahme(pfad))
+        self.assertEqual(sorted(p.name for p in self.ordner.iterdir()), vorher)
+
+    def test_wal_datei_mit_wal_daneben_liest_deren_inhalt_mit(self):
+        """OFFEN.md B6: Liegt eine "-wal" daneben, wird ihr Inhalt weiter mitgelesen (kein
+        immutable)."""
+        pfad = self.ordner / "offen.sqlite"
+        self._gueltiger_termin(pfad, verein="Alt")
+        schreiber = sqlite3.connect(str(pfad))
+        try:
+            schreiber.execute("PRAGMA journal_mode=WAL")
+            schreiber.execute("PRAGMA wal_autocheckpoint=0")
+            schreiber.execute("UPDATE veranstaltung SET verein = 'Neu'")
+            schreiber.commit()
+            self.assertTrue((self.ordner / "offen.sqlite-wal").exists())
+            leser = oeffne_termin_lesend(pfad)
+            try:
+                self.assertEqual(leser.execute("SELECT verein FROM veranstaltung").fetchone()[0], "Neu")
+            finally:
+                leser.close()
+        finally:
+            schreiber.close()
+
     def test_liste_termine_ignoriert_andere_dateitypen(self):
         (self.ordner / "notizen.txt").write_text("nicht relevant")
         self.assertEqual(liste_termine(self.ordner), [])
