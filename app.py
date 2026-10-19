@@ -3347,6 +3347,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
             werte = [
                 datum_anzeige(t.datum) or "?",
                 (t.verein or t.dateiname) if t.lesbar
+                # Eine nur zu große Datei lässt sich nach Rückfrage öffnen (Marco 19.10.2026).
+                else f"{t.dateiname} (ungewöhnlich groß)" if t.grund == GRUND_ZU_GROSS
                 else f"{t.dateiname} (nicht lesbar{': ' + t.grund if t.grund else ''})",
                 t.ort or "",
                 str(t.anzahl_teilnehmer) if t.lesbar else "",

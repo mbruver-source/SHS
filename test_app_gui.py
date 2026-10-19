@@ -4608,7 +4608,7 @@ def test_startdialog_zeigt_grund_und_oeffnet_zu_grosse_datei(qtbot, monkeypatch,
     dialog = StartDialog()
     qtbot.addWidget(dialog)
     texte = [dialog.tabelle.item(z, 1).text() for z in range(dialog.tabelle.rowCount())]
-    assert "gross.sqlite (nicht lesbar: zu groß)" in texte
+    assert "gross.sqlite (ungewöhnlich groß)" in texte
     assert "aufwendig.sqlite (nicht lesbar: zu aufwendig zu prüfen)" in texte
 
     dialog.tabelle.selectRow(texte.index("aufwendig.sqlite (nicht lesbar: zu aufwendig zu prüfen)"))
@@ -4616,7 +4616,7 @@ def test_startdialog_zeigt_grund_und_oeffnet_zu_grosse_datei(qtbot, monkeypatch,
     assert dialog.result() != QDialog.Accepted
     assert len(warnungen) == 1 and "zu aufwendig zu prüfen" in warnungen[0]
 
-    dialog.tabelle.selectRow(texte.index("gross.sqlite (nicht lesbar: zu groß)"))
+    dialog.tabelle.selectRow(texte.index("gross.sqlite (ungewöhnlich groß)"))
     dialog._termin_oeffnen()
     assert dialog.result() == QDialog.Accepted
     assert dialog.pfad == str(tmp_path / "gross.sqlite")

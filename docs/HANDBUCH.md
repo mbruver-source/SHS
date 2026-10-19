@@ -854,10 +854,10 @@ Datensicherung wieder her („Als Kopie importieren“, wenn du den Stand vergle
 Beim Import von Teilnehmern aus einem anderen Termin wird die gewählte Datei zusätzlich auf
 Beschädigungen geprüft; eine beschädigte Datei meldet der Dialog statt ihrer Teilnehmer.
 
-**Ein Termin erscheint als „… (nicht lesbar: zu groß)“ oder „… (nicht lesbar: zu aufwendig zu prüfen)“.**
+**Ein Termin erscheint als „… (ungewöhnlich groß)“ oder „… (nicht lesbar: zu aufwendig zu prüfen)“.**
 Ein Termin ist normalerweise deutlich kleiner als 1 MB. Eine Datei über 50 MB lässt sich trotzdem
-öffnen; vorher fragt das Programm „ungewöhnlich groß, trotzdem öffnen?“. In der Import-Auswahl
-erscheint sie nicht. „Zu aufwendig zu prüfen“ heißt: Schon das Lesen der Grunddaten dauerte
+öffnen; vorher fragt das Programm „ungewöhnlich groß, trotzdem öffnen?“. Bei einer sehr großen
+Datei kann das Öffnen dann eine Weile dauern. In der Import-Auswahl erscheint sie nicht. „Zu aufwendig zu prüfen“ heißt: Schon das Lesen der Grunddaten dauerte
 ungewöhnlich lange. Eine solche Datei stammt vermutlich nicht aus diesem Programm und wird nicht
 geöffnet.
 

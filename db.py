@@ -2440,8 +2440,8 @@ _LESE_SCHRITTWEITE = 1000
 _LESE_HOECHSTSCHRITTE = 1000
 
 # Offene Punkte O2 (Marco 18.10.2026): eigene Termine sind deutlich kleiner als 1 MB. Eine
-# größere Datei gilt in Terminübersicht und Import als nicht lesbar, beim Öffnen erscheint
-# eine Rückfrage (TerminUngewoehnlichGross).
+# größere Datei wird in Terminübersicht und Import nicht gelesen (die Übersicht zeigt sie als
+# „ungewöhnlich groß“), beim Öffnen erscheint eine Rückfrage (TerminUngewoehnlichGross).
 TERMIN_GROESSE_GRENZE = 50 * 1024 * 1024
 GRUND_ZU_GROSS = "zu groß"
 GRUND_ZU_AUFWENDIG = "zu aufwendig zu prüfen"
@@ -2700,7 +2700,9 @@ def termin_oeffnen(pfad: str, groesse_bestaetigt: bool = False) -> sqlite3.Conne
     - Plausibilitätsprüfung der Wertebereiche.
     Offene Punkte O2 (Marco 18.10.2026): über TERMIN_GROESSE_GRENZE ohne groesse_bestaetigt
     -> TerminUngewoehnlichGross (Rückfrage beim Aufrufer); scheitert die lesende Prüfung an
-    der Schrittgrenze, nennt die Meldung das statt „beschädigt“."""
+    der Schrittgrenze, nennt die Meldung das statt „beschädigt“. Mit groesse_bestaetigt
+    entfällt die Schrittgrenze - sonst scheiterte eine große Datei trotz „Ja“ meist doch an
+    ihr (Marco 19.10.2026, QS O11)."""
     if not os.path.exists(pfad):
         # Abschluss-QS 15.10.2026 (K-3): eine inzwischen gelöschte/verschobene Datei nicht still
         # als leeren Termin neu anlegen - neue Termine legt StartDialog._neuer_termin an.
@@ -2714,7 +2716,8 @@ def termin_oeffnen(pfad: str, groesse_bestaetigt: bool = False) -> sqlite3.Conne
             # Gleiche Reihenfolge wie termin_lesend_pruefen; nur eine SQLite-Datei ganz ohne
             # Tabellen ist hier erlaubt (neuer Termin), deshalb die Aufbauprüfung nur mit Tabellen.
             with closing(oeffne_termin_lesend(pfad)) as pruef:
-                lesen_begrenzen(pruef)
+                if not groesse_bestaetigt:
+                    lesen_begrenzen(pruef)
                 if pruef.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' LIMIT 1").fetchone():
                     pruefe_termin_aufbau(pruef)
                 if pruef.execute("PRAGMA quick_check").fetchone()[0] != "ok":

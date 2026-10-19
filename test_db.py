@@ -3020,6 +3020,14 @@ class TestTerminOeffnen(unittest.TestCase):
             with self.assertRaises(db.TerminUngewoehnlichGross) as kontext:
                 termin_oeffnen(str(pfad))
             self.assertIn("(50,3 MB)", str(kontext.exception))
+        # Nach dem „Ja“ gilt die Schrittgrenze nicht mehr (Marco 19.10.2026), sonst schon.
+        with patch("db._LESE_SCHRITTWEITE", 1), patch("db._LESE_HOECHSTSCHRITTE", 1):
+            with self.assertRaises(db.TerminNichtOeffenbar) as kontext:
+                termin_oeffnen(str(pfad))
+            self.assertEqual(str(kontext.exception), db.SCHRITTGRENZE_TEXT)
+            with patch("db.TERMIN_GROESSE_GRENZE", 100):
+                with closing(termin_oeffnen(str(pfad), groesse_bestaetigt=True)) as conn:
+                    self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
         # Genau auf der Grenze gilt die Datei noch nicht als zu groß.
         with patch("db.TERMIN_GROESSE_GRENZE", pfad.stat().st_size):
             with closing(termin_oeffnen(str(pfad))):
