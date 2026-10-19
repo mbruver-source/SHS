@@ -7449,3 +7449,24 @@ Zum Vergleich der Lasttest vom 16.10.2026 mit 1.0.48: Reiterwechsel 4,8 s, Ansic
 Das Ziel ist knapp verfehlt, die Ergebniserfassung ist aber nicht mehr der Engpass. Laut Ablauf
 steht dazu eine Rückfrage an Marco in `aufgaben.md` (Nr. 5) mit drei Möglichkeiten. Bis dahin
 bleibt es beim Wartecursor.
+
+
+## 19.10.2026: Rückfragen 1 und 2 zu O1 (Rücksprung-Datei beim Wiederherstellen)
+
+Marco hat beide Rückfragen mit Ja beantwortet.
+- **Rückfrage 2:** Enthält das ZIP zu einem Termin eine `-journal`, wird sie beim Wiederherstellen
+  mit zurückgeschrieben. Das ist seit O1 so und jetzt bestätigt.
+- **Rückfrage 1:** Liegt am Ziel noch eine alte `<Zielname>-journal` (etwa nach einem Absturz) und
+  enthält das ZIP keine, löscht `sicherung_wiederherstellen` sie jetzt beim Ersetzen. Bisher blieb
+  sie liegen, und SQLite hätte sie beim nächsten Öffnen auf die wiederhergestellte Datei
+  zurückgespielt. Dabei kann der Inhalt beschädigt werden.
+  - Ablauf: Das alte Journal wird zuerst beiseitegelegt. Scheitert das Ersetzen der Termin-Datei,
+    etwa weil sie gesperrt ist, kommt es zurück. Der bisherige Termin bleibt so samt Journal
+    stimmig.
+  - Verifikation (Subagent): in Ordnung. Ein kleiner Rest wurde behoben: Ließ sich schon das
+    Beiseitelegen nicht ausführen, blieb eine leere `.alt`-Datei liegen. Als Restrisiko bleibt
+    ein Absturz genau zwischen Beiseitelegen und Ersetzen. Dann fehlt dem bisherigen Termin sein
+    Journal, die Datei liegt nur noch als `.alt` daneben. Die umgekehrte Reihenfolge hätte das
+    schlimmere Fenster: Das alte Journal würde auf die neue Datei zurückgespielt.
+- **Tests:** zwei neue in `test_backup.py`. Der erste (altes Journal wird entfernt) ist ohne die
+  Änderung rot. Unittests OK, GUI-Tests zur Datensicherung grün.

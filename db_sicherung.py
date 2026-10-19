@@ -364,6 +364,31 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
     return sorted(namen)
 
 
+def _ersetzen_ohne_altes_journal(tmp_pfad_str: str, ordner: Path, ziel: str) -> None:
+    """Ersetzt `ordner/ziel` durch die temporäre Datei und entfernt dabei eine alte
+    Rücksprung-Datei des Ziels. Sie wird zuerst beiseitegelegt; scheitert das Ersetzen,
+    kommt sie zurück, damit der bisherige Termin samt Journal stimmig bleibt."""
+    altes_journal = ordner / f"{ziel}{_JOURNAL_ENDUNG}"
+    if not altes_journal.exists():
+        os.replace(tmp_pfad_str, ordner / ziel)
+        return
+    beiseite_fd, beiseite = tempfile.mkstemp(dir=ordner, prefix=f".{ziel}{_JOURNAL_ENDUNG}.", suffix=".alt")
+    os.close(beiseite_fd)
+    try:
+        os.replace(altes_journal, beiseite)
+    except BaseException:
+        with suppress(OSError):
+            os.remove(beiseite)
+        raise
+    try:
+        os.replace(tmp_pfad_str, ordner / ziel)
+    except BaseException:
+        os.replace(beiseite, altes_journal)
+        raise
+    with suppress(OSError):
+        os.remove(beiseite)
+
+
 def sicherung_wiederherstellen(
     zip_pfad: str, entscheidungen: dict[str, str], passwort: str | None = None, ordner: Path | None = None
 ) -> list[str]:
@@ -382,6 +407,10 @@ def sicherung_wiederherstellen(
     mit zurückgeschrieben (offene Punkte O1, 19.10.2026) - direkt nach der Termin-Datei.
     Sie erscheint nicht in der Rückgabe; scheitert ihr Ersetzen, nennt
     TeilweiseWiederhergestelltError die schon ersetzten Termine einschließlich dieses einen.
+    Enthält das ZIP keine, wird eine alte „<Zielname>-journal“ im Zielordner (etwa nach einem
+    Absturz) beim Ersetzen gelöscht - SQLite würde sie sonst beim nächsten Öffnen auf die
+    wiederhergestellte Datei zurückspielen (Marco 19.10.2026). Scheitert das Ersetzen der
+    Termin-Datei, kommt sie unverändert zurück.
 
     Jede Datei wird ATOMAR geschrieben (temporäre Datei im selben Zielordner, danach
     os.replace()) statt direkt in die Zieldatei - bricht das Schreiben mittendrin ab
@@ -420,6 +449,8 @@ def sicherung_wiederherstellen(
 
     # (temporäre Datei, Zieldateiname, ist Rücksprung-Datei)
     vorbereitet: list[tuple[str, str, bool]] = []
+    # Zieldateinamen, zu denen das ZIP eine Rücksprung-Datei enthält
+    mit_journal: set[str] = set()
     try:
         with _zip_oeffnen(zip_pfad, passwort) as zf:
             vorhandene_eintraege = set(zf.namelist())
@@ -441,11 +472,15 @@ def sicherung_wiederherstellen(
                 # Der Name leitet sich aus dem oben geprüften Zielnamen ab.
                 if f"{quelle}{_JOURNAL_ENDUNG}" in vorhandene_eintraege:
                     vorbereiten(f"{quelle}{_JOURNAL_ENDUNG}", f"{ziel}{_JOURNAL_ENDUNG}", True)
+                    mit_journal.add(ziel)
 
         geschrieben: list[str] = []
         for tmp_pfad_str, ziel, journal in vorbereitet:
             try:
-                os.replace(tmp_pfad_str, ordner / ziel)
+                if journal or ziel in mit_journal:
+                    os.replace(tmp_pfad_str, ordner / ziel)
+                else:
+                    _ersetzen_ohne_altes_journal(tmp_pfad_str, ordner, ziel)
             except Exception as exc:
                 if geschrieben:
                     raise TeilweiseWiederhergestelltError(geschrieben, exc) from exc

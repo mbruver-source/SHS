@@ -21,7 +21,7 @@ Start durch Marco:
 | O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | cded543 | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | 54c7e69 | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | 04d3026 | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
-| O10 Messung Lasttest-1000 | S | erledigt | (s. git log) | 75 % / 10 % → 85 % / 11 % | Neuaufbau 0,46 s, Sortieren 0,38 s ✓; Ansicht 0,42 s ✗ → Rückfrage 5 |
+| O10 Messung Lasttest-1000 | S | erledigt | 9496c24 | 75 % / 10 % → 85 % / 11 % | Neuaufbau 0,46 s, Sortieren 0,38 s ✓; Ansicht 0,42 s ✗ → Rückfrage 5 |
 | O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | offen | | | zuletzt |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
@@ -315,10 +315,10 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
      wiederhergestellte Datei zurück, der Inhalt kann dabei beschädigt werden. Das war schon vor
      O1 so.
    - Vorschlag: eine solche Datei beim Ersetzen wegräumen (Papierkorb oder löschen).
-   - Bis zur Entscheidung bleibt es wie bisher.
+   - **Marco 19.10.2026: ja.** Umgesetzt: wird beim Ersetzen gelöscht, bei Fehlschlag zurückgelegt.
 2. **O1, Journal mit zurückschreiben:** Beim Wiederherstellen wird eine im ZIP enthaltene
    `-journal` mit zurückgeschrieben (sonst wäre das Mitsichern wirkungslos). Das stand nicht
-   ausdrücklich in deiner Entscheidung, bitte bestätigen.
+   ausdrücklich in deiner Entscheidung, bitte bestätigen. **Marco 19.10.2026: ja, bestätigt.**
 3. **O2, Wortlaut in der Terminübersicht:** Eine Datei über 50 MB steht als „… (nicht lesbar: zu
    groß)“ da, lässt sich aber nach der Rückfrage trotzdem öffnen (sonst wäre die Rückfrage nicht
    erreichbar). Lieber „… (ungewöhnlich groß)“ ohne „nicht lesbar“? Bis zur Entscheidung bleibt

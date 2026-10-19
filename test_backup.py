@@ -323,6 +323,41 @@ class TestSicherungMomentaufnahme(unittest.TestCase):
         self.assertEqual([pathlib.Path(z).name for z in aufrufe], ["neu.sqlite", "neu.sqlite-journal"])
         self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["neu.sqlite"])
 
+    def test_altes_journal_am_ziel_wird_beim_wiederherstellen_entfernt(self):
+        """Marco 19.10.2026: SQLite würde ein altes Journal neben dem Ziel sonst auf die
+        wiederhergestellte Datei zurückspielen."""
+        from contextlib import closing
+        from db import get_veranstaltung, termin_oeffnen
+        _termin_anlegen(self.ordner, "a.sqlite")
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        alt = _termin_anlegen(self.zurueck, "neu.sqlite")
+        self._halb_geschrieben(alt)
+
+        geschrieben = sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+
+        self.assertEqual(geschrieben, ["neu.sqlite"])
+        self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["neu.sqlite"])
+        with closing(termin_oeffnen(str(self.zurueck / "neu.sqlite"))) as conn:
+            self.assertEqual(get_veranstaltung(conn)["verein"], "Testverein")
+
+    def test_scheitert_das_ersetzen_bleibt_das_alte_journal_erhalten(self):
+        _termin_anlegen(self.ordner, "a.sqlite")
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        alt = _termin_anlegen(self.zurueck, "neu.sqlite")
+        self._halb_geschrieben(alt)
+        vorher = {p.name: p.read_bytes() for p in self.zurueck.iterdir()}
+        echt = os.replace
+
+        def termin_gesperrt(quelle, ziel):
+            if pathlib.Path(ziel).name == "neu.sqlite":
+                raise PermissionError(13, "gesperrt", str(ziel))
+            echt(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", termin_gesperrt):
+            with self.assertRaises(PermissionError):
+                sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertEqual({p.name: p.read_bytes() for p in self.zurueck.iterdir()}, vorher)
+
     def test_nicht_lesbare_datei_wird_roh_gesichert(self):
         _termin_anlegen(self.ordner, "gut.sqlite")
         kaputt = self.ordner / "kaputt.sqlite"
