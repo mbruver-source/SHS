@@ -156,6 +156,7 @@ from desktop_gemeinsam import (
     _klartext_fehler,
     fehler_protokollieren,
     fehlerfenster_zeigen,
+    meldung_protokollieren,
     qt_meldungen_protokollieren,
     _Ablageort,
     absturzprotokoll_einrichten,
@@ -1712,7 +1713,8 @@ class ErgebnisTab(QWidget):
 
         self.speichern_btn = speichern_btn = QPushButton("Alle Ergebnisse speichern")  # Attribut für die Demoprüfung
         speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
-        speichern_btn.clicked.connect(self.alle_speichern)
+        # Lambda: clicked(bool) würde sonst als meldungen=False ankommen.
+        speichern_btn.clicked.connect(lambda: self.alle_speichern())
         # UX-Test 02.10.2026, K11: Strg+S speichert wie der Button - nur solange der Fokus
         # in diesem Reiter liegt (z. B. in einem Punktefeld). Über ein Lambda verbunden,
         # damit Tests alle_speichern() per monkeypatch ersetzen können.
@@ -2546,12 +2548,15 @@ class ErgebnisTab(QWidget):
         for zeile in range(len(self._teilnehmer_je_zeile)):
             self._aktualisiere_zeilenstatus(zeile)
 
-    def alle_speichern(self) -> None:
+    def alle_speichern(self, meldungen: bool = True) -> None:
         """Speichert alle geänderten Zeilen der Tabelle auf einmal (unabhängig vom
         aktuellen Filter - auch ausgeblendete Zeilen werden mitgespeichert). Bei mehr als
         _SAMMELSPEICHERN_UEBER_TEILNEHMER Teilnehmern in einer Transaktion (ganz oder gar
         nicht), sonst mit einem Commit je Ergebnis. Ein offenes Eingabefeld wird vorher
-        übernommen (Strg+S, Knopf, Reiterwechsel, Schließen)."""
+        übernommen (Strg+S, Knopf, Reiterwechsel, Schließen). Mit meldungen=False (Sitzungsende
+        ohne erlaubte Interaktion, OFFEN.md B5) erscheint kein Fenster; ins Absturzprotokoll
+        gehen nur Anzahl und Art der Fehler, keine Teilnehmernamen (es landet in der kopierbaren
+        Diagnose)."""
         self.tabelle.offenen_editor_beenden()
         gespeichert = 0
         fehler: list[str] = []
@@ -2693,19 +2698,31 @@ class ErgebnisTab(QWidget):
                 # Eine einzige Meldung (Desktop-Prüfung 14.10.2026): Eingabefehler, die vor dem
                 # Abbruch auffielen, gehören mit hinein.
                 einleitung += "\n\nAußerdem fehlerhafte Eingaben:\n" + "\n".join(fehler)
-            _db_fehler_anzeigen(self, db_fehler, einleitung)
+            if meldungen:
+                _db_fehler_anzeigen(self, db_fehler, einleitung)
+            else:
+                fehler_protokollieren(db_fehler)
+                meldung_protokollieren(
+                    "Speichern beim Sitzungsende",
+                    f"Speichern abgebrochen ({gespeichert} gespeichert, {len(fehler)} fehlerhafte "
+                    "Eingabe(n)); die übrigen Eingaben stehen weiter in der Tabelle.",
+                )
         elif gespeichert:
             self.status_label.setText(f"{gespeichert} Ergebnis(se) gespeichert.")
         elif not fehler:
             self.status_label.setText("Keine Änderungen zu speichern.")
 
         if fehler and db_fehler is None:
-            QMessageBox.warning(
-                self,
-                "Nicht alle Ergebnisse gespeichert",
-                "Folgende Zeilen konnten nicht gespeichert werden (übrige wurden gespeichert):\n\n"
-                + "\n".join(fehler),
-            )
+            text = ("Folgende Zeilen konnten nicht gespeichert werden (übrige wurden gespeichert):\n\n"
+                    + "\n".join(fehler))
+            if meldungen:
+                QMessageBox.warning(self, "Nicht alle Ergebnisse gespeichert", text)
+            else:
+                meldung_protokollieren(
+                    "Speichern beim Sitzungsende",
+                    f"{len(fehler)} Eingabe(n) nicht speicherbar (unvollständig oder zu hoch); "
+                    "sie stehen weiter in der Tabelle.",
+                )
 
 
 def _fenstertitel(conn, pfad: str | None, demo: bool) -> str:
@@ -2964,7 +2981,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         """Gemeinsame Logik für closeEvent und das Beenden durch Windows/Setup
         (_sitzungsende_pruefen): Demoprüfung beenden, ungespeicherte Ergebnisse automatisch
         speichern, bei Resten nachfragen. True = Beenden erlaubt. Ohne erlaubte Rückfrage
-        (rueckfrage_moeglich=False) wird bei Resten nicht gefragt, sondern abgelehnt."""
+        (rueckfrage_moeglich=False) erscheint auch beim Speichern keine Meldung, und bei Resten
+        wird nicht gefragt, sondern abgelehnt."""
         # Laufende Demoprüfung zuerst beenden: sie stellt den echten Termin wieder her (die
         # Prüfung unten gilt dann ihm) bzw. schließt ihr eigenes Fenster samt Demo-Termin.
         tour = self._demo_tour
@@ -2973,7 +2991,10 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             if tour.eigenes_fenster:
                 return True
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-            self.ergebnis_tab.alle_speichern()
+            if rueckfrage_moeglich:
+                self.ergebnis_tab.alle_speichern()
+            else:  # keine Meldungsfenster, die das System nicht erlaubt (OFFEN.md B5)
+                self.ergebnis_tab.alle_speichern(meldungen=False)
             if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
                 if not rueckfrage_moeglich:
                     return False

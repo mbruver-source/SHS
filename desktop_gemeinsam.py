@@ -869,6 +869,12 @@ def fehler_protokollieren(exc: BaseException) -> None:
                        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
 
 
+def meldung_protokollieren(kopf: str, text: str) -> None:
+    """Schreibt eine Meldung ins Absturzprotokoll statt in ein Fenster - z. B. beim
+    Sitzungsende ohne erlaubte Interaktion (OFFEN.md B5, 19.10.2026)."""
+    _protokoll_eintrag(kopf, text)
+
+
 def qt_meldungen_protokollieren():
     """Desktop-Prüfung 14.10.2026 (Teil 9 Nr. 8): Qt-Warnungen und -Fehler (z. B. „Could not
     parse application stylesheet“) gehen im installierten Programm ohne Konsole sonst

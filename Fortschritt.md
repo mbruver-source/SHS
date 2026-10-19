@@ -7775,3 +7775,32 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
     Block hinzufügen → PruefungsblockDialog, Eintrag bearbeiten → `db.zeitplan_eintrag`, dann
     Dauer bzw. PauseDialog.
 - `OFFEN.md` B4 ist gestrichen.
+
+
+## 19.10.2026: V6 Warnung ohne erlaubte Interaktion B5 (Verbesserungen, automatische Abarbeitung)
+
+- **`ErgebnisTab.alle_speichern(meldungen=True)`:** Mit `meldungen=False` erscheint weder die
+  Warnung zu fehlerhaften Eingaben noch das DB-Fehlerfenster.
+  - Den DB-Fehler schreibt `fehler_protokollieren` ins Absturzprotokoll.
+  - Dazu kommt eine kurze Meldung über die neue `desktop_gemeinsam.meldung_protokollieren`.
+    Sie nennt nur Anzahl und Art, keine Teilnehmernamen, weil das Protokollende in die
+    kopierbare Diagnose geht.
+- **`_beenden_vorbereiten`:** Ohne erlaubte Rückfrage (Sitzungsende unter X11/macOS, wenn das
+  System keine Interaktion erlaubt) ruft es `alle_speichern(meldungen=False)` auf. Bei Resten
+  lehnt es weiter mit `manager.cancel()` ab.
+- **Im Testlauf gefunden und behoben:** Der Knopf „Alle Ergebnisse speichern“ war direkt mit
+  `alle_speichern` verbunden. `clicked(bool)` kam dadurch als `meldungen=False` an, und die
+  Warnung blieb aus. Er ist jetzt wie Strg+S über ein Lambda verbunden;
+  `test_ergebnis_nur_ein_feld_geleert_…` hat das aufgedeckt.
+- **Tests:**
+  - neu: `test_sitzungsende_ohne_interaktion_zeigt_keine_eingabewarnung`;
+  - erweitert: `test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen` (Protokoll statt
+    Fenster).
+  - Gegenprobe rot. Unittests OK, GUI 413 grün.
+- **Verifikation (Subagent):** in Ordnung. Alle Aufrufer sind geprüft, keiner übergibt ein
+  Positionsargument. Übernommen:
+  - keine Namen im Protokoll;
+  - `UML.md` Diagramm 12 mit den drei Ausgängen (ohne Rückfrage ablehnen, mit Rückfrage
+    `_ja_nein`, alles gespeichert);
+  - Docstring.
+- `OFFEN.md` B5 ist gestrichen.

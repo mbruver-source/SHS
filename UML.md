@@ -591,9 +591,16 @@ sequenceDiagram
     OS->>H: commitDataRequest (Abmelden, Setup)
     H->>H: _sitzungsende_pruefen
     alt ungespeicherte Ergebnisse
-        H->>H: alle_speichern
+        H->>H: alle_speichern (ohne erlaubte Interaktion: keine Meldung, Gründe ins Absturzprotokoll)
     end
-    H-->>OS: Beenden erlaubt (SitzungsendeFilter nimmt es bei Abbruch zurück)
+    alt Reste ungespeichert, keine Rückfrage erlaubt
+        H-->>OS: manager.cancel() (Beenden abgelehnt)
+    else Reste ungespeichert, Rückfrage erlaubt
+        H->>H: _ja_nein „trotzdem beenden?“
+        H-->>OS: Nein: manager.cancel(), Ja: Beenden erlaubt
+    else alles gespeichert
+        H-->>OS: Beenden erlaubt (SitzungsendeFilter nimmt es bei Abbruch zurück)
+    end
 ```
 
 ---

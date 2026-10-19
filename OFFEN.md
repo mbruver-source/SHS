@@ -27,7 +27,6 @@ suchen.
 | Nr. | Punkt | Entscheidung | Fundstelle |
 |---|---|---|---|
 | B3 | Excel-Verdacht kann bei Nummern wie „1E5“ fälschlich anschlagen (Altexporte und Telefon-Grenze erledigt 19.10.2026, V4) | 14.10., weiter 18.10.2026 | F:6146, F:6980 |
-| B5 | `alle_speichern()` warnt auch ohne erlaubte Interaktion (praktisch nur X11/macOS) | 05.10., weiter 18.10.2026 | F:4805, F:6981 |
 | B6 | Fremde Termin-Datei im WAL-Modus hinterlässt beim lesenden Öffnen `-wal`/`-shm` | 14.10., weiter 18.10.2026 | F:6982 |
 | B7 | Sicherheitsprüfung S-5 (gering): Web-App nutzt das DB-Eigentümerkonto; Nutzen gering bei hohem Umbau | 03.10.2026 | F:4510 |
 | B8 | SignPath Foundation (Code-Signatur): erst wieder, wenn das Programm weiter verbreitet ist | 05.10.2026 | F:4770 |

@@ -2649,10 +2649,45 @@ def test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen(qtbot, termin, 
     # Für das Schließen beim Aufräumen des Tests: verwerfen statt modal zu warten.
     rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
     manager = _FakeSitzungsManager(interaktion=False)
+    protokolliert = []
+    monkeypatch.setattr("app.fehler_protokollieren", lambda exc: protokolliert.append(str(exc)))
+    monkeypatch.setattr("app.meldung_protokollieren", lambda kopf, text: protokolliert.append(kopf))
 
     fenster._sitzungsende_pruefen(manager)
 
     assert manager.abgebrochen is True
+    # OFFEN.md B5: ohne erlaubte Interaktion kein Fehlerfenster, der Grund steht im Protokoll.
+    assert protokolliert == ["attempt to write a readonly database", "Speichern beim Sitzungsende"]
+
+
+def test_sitzungsende_ohne_interaktion_zeigt_keine_eingabewarnung(qtbot, termin, monkeypatch):
+    """OFFEN.md B5 (19.10.2026): Eine nicht speicherbare Eingabe beim Sitzungsende ohne
+    erlaubte Interaktion öffnet keine Warnung; das Beenden wird abgelehnt, der Grund
+    protokolliert."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.ergebnis_tab.punkte_eintragen(0, "Flächensuche", "58", "")  # halb ausgefüllt
+
+    def _kein_fenster(*a, **k):
+        raise AssertionError("ohne erlaubte Interaktion darf kein Fenster erscheinen")
+
+    monkeypatch.setattr("app.QMessageBox.warning", _kein_fenster)
+    ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", _kein_fenster)
+    protokolliert = []
+    monkeypatch.setattr("app.meldung_protokollieren", lambda kopf, text: protokolliert.append(text))
+    manager = _FakeSitzungsManager(interaktion=False)
+
+    fenster._sitzungsende_pruefen(manager)
+
+    assert manager.abgebrochen is True
+    # Nur Anzahl und Art, keine Namen: das Protokoll geht in die kopierbare Diagnose.
+    assert len(protokolliert) == 1 and "1 Eingabe(n) nicht speicherbar" in protokolliert[0]
+    assert "Zorn" not in protokolliert[0]
+    # Feld wieder leeren, damit das Schließen beim Aufräumen nichts mehr zu melden hat.
+    fenster.ergebnis_tab.punkte_eintragen(0, "Flächensuche", "", "")
+    assert not fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
 
 
 def test_klartext_fuer_typische_datenbankfehler():
@@ -3340,7 +3375,7 @@ def test_sitzungsende_ohne_rueckfrage_bricht_bei_resten_ohne_dialog_ab(qtbot, te
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     monkeypatch.setattr(type(fenster.ergebnis_tab), "hat_ungespeicherte_aenderungen", lambda self: True)
-    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self: None)
+    monkeypatch.setattr(type(fenster.ergebnis_tab), "alle_speichern", lambda self, meldungen=True: None)
 
     def _keine_rueckfrage(*a, **k):
         raise AssertionError("ohne erlaubte Interaktion darf keine Rückfrage erscheinen")
