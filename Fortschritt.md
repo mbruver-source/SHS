@@ -7565,3 +7565,42 @@ Marco hat alle Rückfragen entschieden. Umgesetzt ist jede als eigener lokaler C
   Alle Diagramme habe ich mit `mermaid-cli` (11.4.2) fehlerfrei gerendert und stichprobenartig
   angesehen. Die Namen sind mit dem Code abgeglichen. `Architektur.md` verweist darauf.
   Ändert sich ein Ablauf, wird das passende Diagramm mitgepflegt.
+
+
+## Version 1.0.51 (19.10.2026, Build auf Marcos Wunsch „neues build“)
+
+Gebündelt seit 1.0.50 (Details in den Abschnitten vom 18. und 19.10.2026):
+- **Offene Punkte Gruppe 1 und 2:**
+  - Web-Hinweis ohne Termin, Passwortfeld gestaltet;
+  - Prüfungsdatum als Stichtag;
+  - eine Zeile je Person bei verworfenen Eingaben;
+  - Rückfrage beim Terminwechsel erst nach dem Startdialog;
+  - Import-Dialog mit Klartext und Vermerk für Nicht-Erschienene;
+  - leerer neuer Termin bei Abbruch in den Papierkorb;
+  - Testhelfer.
+- **O1–O11:**
+  - Sicherung als stimmige Momentaufnahme;
+  - Dateiprüfung mit Größengrenze und quick_check im Import;
+  - `app.py` in vier `desktop_*.py` aufgeteilt;
+  - Ergebniserfassung mit Zellen und Delegates statt Eingabefeldern, bei 1000 Teilnehmern
+    rund fünfmal schneller und 54 statt 282 MB;
+  - Messskript;
+  - QS in drei Rollen.
+- **Rückfragen 1–8 entschieden und umgesetzt:**
+  - Journal beim Wiederherstellen;
+  - große Dateien nach „Ja“ ohne Schrittgrenze;
+  - gesperrte Zellen deutlich abgesetzt;
+  - kein Eingabeverlust beim Designwechsel;
+  - Termin und Journal als Einheit;
+  - Kleinigkeiten.
+- Demoprüfung erklärt die neue Bedienung. `UML.md` mit 13 Mermaid-Diagrammen.
+- **Vor dem Build geklärt:**
+  - Marco hat die Ergebniserfassung am echten Windows geprüft (alles in Ordnung).
+  - `README_CONTAINER.md`: Betriebsort ist derselbe Rechner oder dasselbe Netz.
+  - Die Punkte der Vor-Build-Verifikation hat Marco alle umsetzen lassen (75eabd7).
+- **Build:**
+  - `RELEASE_NOTES.md` neu für 1.0.51;
+  - `bump_version.py`;
+  - alle 15 Screenshots neu, nur die Versionsnummer geändert;
+  - `docs/HANDBUCH.pdf` neu, 40 Seiten.
+- **Tests:** Unittests OK (172 übersprungen), GUI 407 grün.
