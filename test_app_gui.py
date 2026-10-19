@@ -34,8 +34,6 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, Q
 from app import (
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
-    _wiederherstellungsziele_planen,
-    DatensicherungTab,
     ErgebnisTab,
     FormularImportTab,
     HauptFenster,
@@ -45,7 +43,6 @@ from app import (
     TeilnehmerTab,
     TerminImportDialog,
     VeranstaltungsDialog,
-    VerwaltungTab,
 )
 from db import (
     ALLE_PRUEFUNGEN,
@@ -72,11 +69,12 @@ from db_import import (
     CsvImportErgebnis,
 )
 from desktop_darstellung import _erzeuge_qss
-from desktop_dialoge import BewertungsbogenAuswahlDialog
+from desktop_dialoge import BewertungsbogenAuswahlDialog, _wiederherstellungsziele_planen
 import desktop_auswertung
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 import desktop_programm
 from desktop_programm import VERSION, VersionDialog
+from desktop_verwaltung import DatensicherungTab, VerwaltungTab
 from desktop_zeitplan import ZeitplanTab
 from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
 
@@ -89,8 +87,6 @@ meldungen_hinweise: list = []
 def gespeichert_meldungen(monkeypatch):
     """UX-Test U7: Nach jedem Speichern erscheint ein modales Meldungsfenster - in den Tests
     wird es durch eine Aufzeichnung ersetzt, damit kein Test daran hängen bleibt."""
-    import desktop_gemeinsam
-
     meldungen = []
 
     def _aufzeichnen(parent, pfad, titel, datei_oeffnen_text="PDF öffnen", hinweis=None):
@@ -99,8 +95,9 @@ def gespeichert_meldungen(monkeypatch):
 
     meldungen_hinweise[:] = []
 
-    monkeypatch.setattr(desktop_gemeinsam, "_datei_gespeichert_melden", _aufzeichnen)
-    monkeypatch.setattr("app._datei_gespeichert_melden", _aufzeichnen)
+    # In jedem Modul, das die Meldung selbst importiert (app, desktop_gemeinsam,
+    # desktop_verwaltung ...), siehe ueberall_ersetzen.
+    ueberall_ersetzen(monkeypatch, "_datei_gespeichert_melden", _aufzeichnen)
     # UX-Test U1: nach Importen wird die Sammelvergabe per Rückfrage angeboten - in den
     # Tests nur aufzeichnen (eigener Test unten nutzt die echte Funktion).
     monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda parent, conn: meldungen.append(("import", None, None)))
@@ -165,7 +162,7 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
 #: Module der Desktop-Oberfläche, die gemeinsame Namen (z. B. termine_ordner) jeweils selbst
 #: importieren - siehe ueberall_ersetzen.
 DESKTOP_MODULE = ("app", "desktop_auswertung", "desktop_darstellung", "desktop_demo", "desktop_dialoge",
-                  "desktop_gemeinsam", "desktop_programm", "desktop_zeitplan")
+                  "desktop_gemeinsam", "desktop_programm", "desktop_verwaltung", "desktop_zeitplan")
 
 import db as _db_modul  # noqa: E402
 #: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).
@@ -780,7 +777,7 @@ def test_stechen_gleiche_person_mit_zwei_hunden_und_vorgabe_offen(qtbot, conn, m
         angezeigt.update(eintraege=eintraege, index=index)
         return next(e for e in eintraege if "mit Ali" in e), True
 
-    monkeypatch.setattr("app.QInputDialog.getItem", waehlen)
+    monkeypatch.setattr("desktop_auswertung.QInputDialog.getItem", waehlen)
     tab._stechen_sieger_festlegen()
     assert len(set(angezeigt["eintraege"])) == len(angezeigt["eintraege"]) == 3
     assert angezeigt["eintraege"][angezeigt["index"]].endswith("Stechen noch offen")
@@ -890,7 +887,7 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     def waehlen(_p, _t, _l, eintraege, _i, _e):
         return next(e for e in eintraege if "B Ben" in e), True
 
-    monkeypatch.setattr("app.QInputDialog.getItem", waehlen)
+    monkeypatch.setattr("desktop_auswertung.QInputDialog.getItem", waehlen)
     tab._stechen_sieger_festlegen()
     plaetze = {tab.tabelle.item(r, 2).text(): tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
     assert plaetze == {"Ben, B": "1. von 2 (nach Stechen)", "Anna, A": "2. von 2"}
@@ -5424,7 +5421,7 @@ def test_q1_offener_termin_wird_erkannt(qtbot, tmp_path, monkeypatch):
     (tmp_path / "Pruefung.sqlite").write_bytes(b"")
     ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
-    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
+    monkeypatch.setattr("desktop_verwaltung.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
     tab = DatensicherungTab(aktueller_pfad=str(tmp_path / "Pruefung.sqlite"))
     qtbot.addWidget(tab)
     abgefragt = []
@@ -5448,7 +5445,7 @@ def test_wiederherstellen_offener_termin_ausserhalb_des_ordners_ist_kein_konflik
     stick.mkdir()
     ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: ordner)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
-    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
+    monkeypatch.setattr("desktop_verwaltung.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
     tab = DatensicherungTab(aktueller_pfad=str(stick / "Pruefung.sqlite"))
     qtbot.addWidget(tab)
     abgefragt = []
@@ -5480,9 +5477,9 @@ def test_wiederherstellen_passwortschleife_prueft_drei_passwoerter(qtbot, tmp_pa
         return ["neu.sqlite"]
 
     abfragen = list(eingaben)
-    monkeypatch.setattr("app.sicherung_inhalt", inhalt)
-    monkeypatch.setattr("app.QInputDialog.getText", lambda *a, **k: (abfragen.pop(0), True))
-    monkeypatch.setattr("app.sicherung_wiederherstellen", lambda *a, **k: ["neu.sqlite"])
+    monkeypatch.setattr("desktop_verwaltung.sicherung_inhalt", inhalt)
+    monkeypatch.setattr("desktop_verwaltung.QInputDialog.getText", lambda *a, **k: (abfragen.pop(0), True))
+    monkeypatch.setattr("desktop_verwaltung.sicherung_wiederherstellen", lambda *a, **k: ["neu.sqlite"])
     meldungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
     monkeypatch.setattr("app.QMessageBox.information", lambda *a, **k: meldungen.append(a[1]))
     tab = DatensicherungTab()
@@ -5505,7 +5502,7 @@ def test_wiederherstellen_nicht_lesbare_sicherung_meldet_klartext(qtbot, monkeyp
         raise FileNotFoundError(2, "No such file or directory", "sicherung.zip")
 
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
-    monkeypatch.setattr("app.sicherung_inhalt", weg)
+    monkeypatch.setattr("desktop_verwaltung.sicherung_inhalt", weg)
     meldungen = meldungen_sammeln(monkeypatch, "warning")
     tab = DatensicherungTab()
     qtbot.addWidget(tab)
@@ -5541,11 +5538,11 @@ def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path
             return None
 
     vorschlaege, aufrufe = [], []
-    monkeypatch.setattr("app.SicherungErstellenDialog", _Dialog)
+    monkeypatch.setattr("desktop_verwaltung.SicherungErstellenDialog", _Dialog)
     monkeypatch.setattr("app.QFileDialog.getSaveFileName",
                         lambda _p, _t, vorschlag, _f: vorschlaege.append(vorschlag) or (str(tmp_path / "s.zip"), ""))
-    monkeypatch.setattr("app.sicherung_erstellen", lambda pfad, **k: aufrufe.append(k) or 1)
-    monkeypatch.setattr("app._datei_gespeichert_melden", lambda *a, **k: None)
+    monkeypatch.setattr("desktop_verwaltung.sicherung_erstellen", lambda pfad, **k: aufrufe.append(k) or 1)
+    ueberall_ersetzen(monkeypatch, "_datei_gespeichert_melden", lambda *a, **k: None)
     tab = DatensicherungTab(aktueller_pfad=str(termin_pfad), conn=conn)
     qtbot.addWidget(tab)
 
@@ -5578,9 +5575,9 @@ def test_sicherung_nennt_roh_gesicherte_dateien(qtbot, tmp_path, monkeypatch, ge
         roh_gesichert.extend(roh)
         return 2
 
-    monkeypatch.setattr("app.SicherungErstellenDialog", _Dialog)
+    monkeypatch.setattr("desktop_verwaltung.SicherungErstellenDialog", _Dialog)
     monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a: (str(tmp_path / "s.zip"), ""))
-    monkeypatch.setattr("app.sicherung_erstellen", _sichern)
+    monkeypatch.setattr("desktop_verwaltung.sicherung_erstellen", _sichern)
     monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: pytest.fail("Sicherung gescheitert"))
     tab = DatensicherungTab()
     qtbot.addWidget(tab)
@@ -5685,12 +5682,12 @@ def test_wiederherstellen_unvollstaendig_nennt_ersetzte_termine(qtbot, tmp_path,
 
     ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
-    monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["a.sqlite", "b.sqlite"])
+    monkeypatch.setattr("desktop_verwaltung.sicherung_inhalt", lambda *a, **k: ["a.sqlite", "b.sqlite"])
 
     def wiederherstellen_mit_abbruch(*a, **k):
         raise TeilweiseWiederhergestelltError(["a.sqlite"], PermissionError("Datei gesperrt"))
 
-    monkeypatch.setattr("app.sicherung_wiederherstellen", wiederherstellen_mit_abbruch)
+    monkeypatch.setattr("desktop_verwaltung.sicherung_wiederherstellen", wiederherstellen_mit_abbruch)
     meldungen = meldungen_sammeln(monkeypatch, "critical", merke="titel_text")
     tab = DatensicherungTab()
     qtbot.addWidget(tab)

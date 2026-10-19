@@ -37,9 +37,12 @@ Prüfe alle Dimensionen in einem Durchgang:
 - **Wartbarkeit:** Duplikate, toter Code, unnötig komplizierte Stellen, veraltete Kommentare.
 - **Testlücken:** fehlende Tests für die geprüften Stellen (`test_app_gui.py`, `test_db.py` usw.).
 
-Rahmen: Die Reiter liegen bewusst noch in `app.py`, weil die Tests `app.X` patchen
-(`Architektur.md` Abschnitt 4). Ein Befund "in eigenes Modul verschieben" braucht deshalb eine
-Abwägung, warum sich das trotzdem lohnt.
+Rahmen: Seit 19.10.2026 ist `app.py` aufgeteilt (Teilnehmer-, Import- und Ergebnis-Reiter,
+Hauptfenster und Start bleiben dort; Auswertung/Export, Zeitplan, Verwaltung/Datensicherung und
+Programm-Drumherum liegen in `desktop_auswertung.py`, `desktop_zeitplan.py`,
+`desktop_verwaltung.py`, `desktop_programm.py`). Regeln für Patch-Ziele und Modulgrenzen stehen
+in `Architektur.md` („Patch-Ziele bei Modulaufteilungen“); ein Befund "weiter aufteilen" braucht
+eine Abwägung gegen diese Regeln.
 
 ## Gegenprüf-Modus
 

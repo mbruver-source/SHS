@@ -16,8 +16,8 @@ Start durch Marco:
 | O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | erledigt | f03447b | 33 % / 1 % → 41 % / 2 % | Unittests 664, GUI 393 grün; Rückfrage 3 offen |
 | O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | erledigt | c7a0866 | 42 % / 2 % → 53 % / 3 % | Unittests 664, GUI 394 grün |
 | O4 Schnitt 2 `desktop_auswertung.py` | M | erledigt | 7cc2548 | 54 % / 3 % → 0 % / 4 % (neues 5-h-Fenster) | Unittests OK, GUI 394 grün |
-| O5 Schnitt 3 `desktop_zeitplan.py` | M | erledigt | (s. git log) | 1 % / 4 % → 7 % / 4 % | Unittests OK, GUI 394 grün |
-| O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | offen | | | nach O1 |
+| O5 Schnitt 3 `desktop_zeitplan.py` | M | erledigt | fbd85fd | 1 % / 4 % → 7 % / 4 % | Unittests OK, GUI 394 grün |
+| O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | (s. git log) | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
 | O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | offen | | | |
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | offen | | | nach O7 |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | offen | | | nach O8 |

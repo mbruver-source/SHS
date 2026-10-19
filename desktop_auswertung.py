@@ -737,7 +737,7 @@ class ExportTab(QWidget):
 
     def _bewertungsboegen_exportieren(self) -> None:
         # Nutzerwunsch (21.09.): Auswahl, welche LK/Disziplin gedruckt werden sollen (siehe
-        # BewertungsbogenAuswahlDialog oben) - Standard bleibt "alle" (Dialog startet mit
+        # BewertungsbogenAuswahlDialog in desktop_dialoge.py) - Standard bleibt "alle" (Dialog startet mit
         # allen Einträgen angehakt), Abbrechen bricht den kompletten Export ab.
         auswahl_dialog = BewertungsbogenAuswahlDialog(self, alle_leistungsklassen(self.conn))
         if _ausfuehren(auswahl_dialog) != QDialog.Accepted:

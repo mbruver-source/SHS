@@ -7244,3 +7244,38 @@ Entscheidungen vom 18.10.2026.
 - **Verifikation (unabhängiger Subagent):** keine Befunde mit Nacharbeit.
   - Eine überzählige Leerzeile vor `TeilnehmerTab` ist entfernt.
   - Unterschiedliche Zeilenenden im Arbeitsstand gleicht git beim Commit an (`autocrlf`).
+
+
+## 19.10.2026: O6 `app.py` aufteilen, Schnitt 3b `desktop_verwaltung.py` und Abschluss der Aufteilung (automatische Abarbeitung)
+
+- **Verschoben, Code unverändert (byte-gleich geprüft):** `VerwaltungTab` und
+  `DatensicherungTab` aus `app.py` nach `desktop_verwaltung.py`.
+  - `app.py` holt nur die beiden Reiter zurück und importiert `db_sicherung` nicht mehr.
+  - `app.py` hat jetzt 3169 Zeilen, vor O3 waren es 5263. `desktop_verwaltung.py` hat 388.
+- **Tests:**
+  - Die Patches auf `sicherung_*` und `SicherungErstellenDialog` zielen jetzt auf
+    `desktop_verwaltung`.
+  - `"app.QInputDialog.*"` war ein Klassenattribut-Patch. Er läuft jetzt über
+    `desktop_auswertung` bzw. `desktop_verwaltung`, weil `app` den Namen nicht mehr importiert.
+  - `_datei_gespeichert_melden` wird im autouse-Fixture über `ueberall_ersetzen` ersetzt, damit
+    auch die Meldungen aus `desktop_verwaltung` aufgezeichnet werden und kein Fenster aufgeht.
+  - `tools/screenshots.py` ersetzt `termine_ordner` und `_datei_gespeichert_melden` per Schleife
+    in allen Desktop-Modulen.
+  - Volle Läufe grün: Unittests OK, GUI 394 OK.
+- **Doku zum Abschluss der Aufteilung (O3–O6):**
+  - `Architektur.md`:
+    - Diagramm mit den neuen Modulen;
+    - Modultabelle mit vier neuen Zeilen;
+    - Mutex-Hinweis;
+    - Abschnitt „Patch-Ziele bei Modulaufteilungen“ mit Regeln zu Patch-Zielen,
+      `ueberall_ersetzen`, Ordner-Schutz und „nie `import app`“;
+    - `db.py` heißt jetzt „größtes Modul“.
+  - `CLAUDE.md` und `AGENTS.md`: Zeilenzahlen nachgezogen.
+  - `build.spec`: Kommentar angepasst.
+  - Skill `desktop-pruefung`: Teile 1, 2, 7, 8 und der Zeilenstand angepasst.
+  - Agent `desktop-pruefer`: Der Rahmen „Reiter liegen bewusst in `app.py`“ ist ersetzt.
+  - `desktop_auswertung.py`: Kommentar zum `BewertungsbogenAuswahlDialog` korrigiert.
+  - Damit sind auch die O6-Nachträge aus O4 und O5 erledigt.
+- **Verifikation (unabhängiger Subagent):** Am Code gab es nichts zu beanstanden. Die
+  gemeldeten Doku-Punkte sind behoben: veralteter Agenten-Rahmen, „zweitgrößtes Modul“,
+  Einbindung von `desktop_dialoge`, Zeilenangabe der gem-Helfer im Skill.

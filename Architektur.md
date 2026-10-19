@@ -23,7 +23,9 @@ SQLite und PostgreSQL.
 ```mermaid
 flowchart TB
     subgraph Desktop["Desktop-App (PySide6)"]
-        AppPy["app.py (größtes Modul)<br/>GUI-Tabs: Teilnehmer, Ergebnis, Auswertung,<br/>Zeitplan, Export, Verwaltung, Datensicherung,<br/>Hauptfenster, Start- und Versionsdialog"]
+        AppPy["app.py<br/>Reiter Teilnehmer, Formular-Import, Ergebnis,<br/>Hauptfenster, Startdialog, main()"]
+        DeskReiter["desktop_auswertung.py, desktop_zeitplan.py,<br/>desktop_verwaltung.py: weitere Reiter<br/>(Auswertung, Übersicht, Export, Zeitplan,<br/>Verwaltung, Datensicherung)"]
+        DeskProgramm["desktop_programm.py<br/>Versionsfenster/Update,<br/>Sitzungsende, Zweitstart"]
         DeskDialoge["desktop_dialoge.py<br/>Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
         DeskGemeinsam["desktop_gemeinsam.py<br/>gemeinsame GUI-Hilfen<br/>(Ablageorte, PDF-Speichern, Fehlermeldungen)"]
         DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Akzentfarben"]
@@ -38,7 +40,7 @@ flowchart TB
     end
 
     subgraph Shared["Gemeinsame Schicht"]
-        DbPy["db.py (zweitgrößtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Ergebnisse, Zeitplan-Berechnung"]
+        DbPy["db.py (größtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Ergebnisse, Zeitplan-Berechnung"]
         ShsCore["shs_core.py (klein)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
         PdfExport["pdf_export.py<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan,<br/>ausfüllbares Anmeldeformular"]
     end
@@ -55,7 +57,13 @@ flowchart TB
     AppPy --> DeskGemeinsam
     AppPy --> DeskDarstellung
     AppPy --> DbImport
-    AppPy --> DbSicherung
+    AppPy --> DeskReiter
+    AppPy --> DeskProgramm
+    DeskReiter --> DeskDialoge
+    DeskReiter --> DeskGemeinsam
+    DeskReiter --> DbPy
+    DeskReiter --> DbSicherung
+    DeskProgramm --> DeskGemeinsam
     AppPy --> DeskDemo
     DeskDemo --> DeskDialoge
     DeskDemo --> DeskGemeinsam
@@ -93,8 +101,12 @@ flowchart TB
 
 | Datei | Zweck | Zugehöriger Test |
 |---|---|---|
-| `app.py` | Desktop-GUI (PySide6): alle Tabs, `HauptFenster` (`closeEvent`-Handling, Auto-Save; Beenden durch Windows/Setup über `commitDataRequest` → `_sitzungsende_pruefen`, abgebrochenes Abmelden über `SitzungsendeFilter`, eingerichtet von `sitzungsende_einrichten`), `StartDialog`, `VersionDialog` + Update-Prüfung (im Hintergrund-Thread mit Zeitgrenze), Rückfrage beim zweiten Programmstart (`zweitstart_pruefen`, QLockFile) und „Diagnose kopieren“; `main()` lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein | `test_app_gui.py` |
-| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung inkl. Startnummern-Bereichen mit Standardgröße/Anzahl und „Bereiche automatisch festlegen“); von `app.py` per `from … import` eingebunden | `test_app_gui.py` |
+| `app.py` | Desktop-GUI (PySide6): Reiter Teilnehmer, Formular-Import und Ergebnis, `HauptFenster` (`closeEvent`-Handling, Auto-Save; Beenden durch Windows/Setup über `commitDataRequest` → `_sitzungsende_pruefen`), `StartDialog`; `main()` lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein. Die übrigen Reiter und das Programm-Drumherum liegen seit 19.10.2026 (offene Punkte O3–O6) in den vier Modulen darunter; `app.py` holt nur zurück, was es selbst nutzt | `test_app_gui.py` |
+| `desktop_auswertung.py` | Reiter Auswertung (Rangliste, Stechen), Teilnehmerübersicht (je Leistungsklasse, Behältnis-Bedarf) und Export (PDF-Ausdrucke, CSV) | `test_app_gui.py` |
+| `desktop_zeitplan.py` | Reiter Zeitplan (Richter-Spuren, Prüfungsblöcke/Pausen, Verteilung, Überschneidungen, PDF); Planungslogik in `db.py` | `test_app_gui.py`, `test_db.py` (`TestZeitplan`) |
+| `desktop_verwaltung.py` | Reiter Verwaltung (Veranstaltungsdaten) und Datensicherung (Erstellen/Wiederherstellen samt Konfliktabfrage; Logik in `db_sicherung.py`) | `test_app_gui.py`, `test_backup.py` |
+| `desktop_programm.py` | `VersionDialog` + Update-Prüfung (im Hintergrund-Thread mit Zeitgrenze) und „Diagnose kopieren“, Sitzungsende (`SitzungsendeFilter`, `sitzungsende_einrichten`), Rückfrage beim zweiten Programmstart (`zweitstart_pruefen`, QLockFile) und Mutex (`laufkennung_setzen`) | `test_app_gui.py` |
+| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, Hilfe, Veranstaltung inkl. Startnummern-Bereichen mit Standardgröße/Anzahl und „Bereiche automatisch festlegen“); von `app.py` und den ausgelagerten Reiter-Modulen per `from … import` eingebunden | `test_app_gui.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/Speicherdialog für PDF und CSV (Ordner `Termine\Ausdrucke\<Termin>`, Meldung „gespeichert“ mit „PDF öffnen“/„Ordner zeigen“), Startordner der Importe, Fehlermeldungen (Datenbank- und Dateifehler im Klartext über `_klartext_fehler`/`_db_fehler_anzeigen`; breite Fänger über `_fehlertext`: Programmfehler kommen mit Typ ins Absturzprotokoll), Öffnen von Dateien/Adressen mit Meldung bei Fehlschlag (`_url_oeffnen`), modale Dialoge über `_ausfuehren` (danach freigegeben), Ja/Nein-Rückfragen über `_ja_nein` (Vorgabe „Nein“, nur ausdrücklich „Ja“), Wartecursor `_wartecursor`, gemeinsamer Exportablauf `_datei_exportieren` für PDF und CSV (Hülle `_pdf_exportieren`), responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle, deutsche Qt-Texte (`deutsche_qt_texte_laden`), Absturzprotokoll (`absturzprotokoll_einrichten`: `sys.excepthook` + `faulthandler` → `absturzprotokoll.txt`, über 1 MB beim Start umbenannt zu `absturzprotokoll.alt.txt`; je Lauf begrenzt, Wiederholungen nur gezählt; Qt-Warnungen über `qt_meldungen_protokollieren`), Fehlerfenster bei unbehandelten Fehlern (`fehlerfenster_einrichten`) und kopierbare Diagnose ohne Benutzerpfad (`diagnose_text`) | `test_app_gui.py` |
 | `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()`: jedes Design (auch „Hell“) setzt eine feste QPalette und fordert ab Qt 6.8 das passende Farbschema an, „Dunkel“ zusätzlich den Fusion-Stil; das Häkchen-Bild der Nicht-Hell-Designs liegt im Programmordner `~/SHS-Pruefungsprogramm`; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
 | `desktop_demo.py` | Geführte Demoprüfung (Button „🎓 Demoprüfung“ im Hauptfenster und im Startdialog): `DemoTour` legt einen Termin in einem eigenen Temp-Ordner an (nie im Termine-Ordner), führt 15 Schritte über die echten Reiter vor (ohne modale Rückfragen), `DemoPanel` erklärt, `DemoMarkierung` rahmt das aktive Element (selbst gezeichnet, kein Stylesheet); nach jedem fertigen Schritt automatisch weiter nach `DemoTour.AUTO_WEITER_S` Sekunden (abschaltbar; wartet bei offener Meldung, hält bei „PDF öffnen“ und eigener Eingabe im Demo-Dialog an); am Ende wird der vorherige Termin wiederhergestellt und der Temp-Ordner gelöscht. Importiert bewusst NICHT `app` (bekommt das Hauptfenster bzw. eine Fenster-Fabrik übergeben, sonst doppelter Import über `__main__`) | `test_app_gui.py` |
@@ -164,7 +176,7 @@ flowchart TB
     Setup nur über `commitDataRequest`; dort speichert die App automatisch und kann bei
     ungespeicherten Resten ablehnen. `closeEvent` kommt erst nach der Zusage.
   - Laufendes Programm beim Update (05.10.2026): Das Programm meldet sich per benanntem
-    Mutex an (`app.laufkennung_setzen`, lokal und `Global\`), `installer.iss` prüft ihn mit
+    Mutex an (`desktop_programm.laufkennung_setzen`, lokal und `Global\`), `installer.iss` prüft ihn mit
     `AppMutex`. So erkennt das Setup das Programm auch dann, wenn ein Virenscanner die EXE
     offen hält und der Restart Manager deshalb gar nicht schließt.
   - CI: Schreibrechte nur in den Veröffentlichungs-Jobs, Actions auf Commit-Hashes, feste
@@ -191,12 +203,26 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   läuft stattdessen echt gegen eine temporäre SQLite-Datei - dadurch überall lauffähig, ohne
   PostgreSQL zu brauchen.
 - **Patch-Ziele bei Modulaufteilungen**: Tests ersetzen Namen per `patch("db.X")`/
-  `monkeypatch.setattr("app.X")`. Das wirkt nur, solange der Aufrufer den Namen im selben
-  Modul nachschlägt - deshalb sind bisher nur aufgerufene Bausteine (Dialoge, Hilfen,
-  Darstellung, Import, Sicherung) ausgelagert, die aufrufenden Tabs und die intern
-  gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) noch nicht.
-  Ausnahme `desktop_demo.py`: ruft Tab-Methoden über die übergebene Fenster-Instanz auf (die
-  schlagen weiter in `app` nach); Demo-Tests patchen `desktop_demo.X` bzw. `db.X`.
+  `monkeypatch.setattr("<modul>.X")`. Das wirkt nur in dem Modul, in dem der Aufrufer den Namen
+  nachschlägt. Seit der Aufteilung von `app.py` (19.10.2026, O3–O6) gilt deshalb:
+  - Ein Test patcht das Modul, in dem der Code liegt, z. B. `"desktop_verwaltung.sicherung_inhalt"`.
+    `app.py` importiert nur noch, was es selbst nutzt, ein veralteter `"app.X"`-Patch scheitert
+    also laut (AttributeError) statt still ins Leere zu gehen.
+  - Namen, die mehrere Module selbst importieren (`termine_ordner`, `_db_fehler_anzeigen`,
+    `_ausfuehren`, `_datei_gespeichert_melden`, `_aktualisiere_veranstaltung_feld`,
+    `_zeitplan_pdf_exportieren`), ersetzt der Helfer `ueberall_ersetzen(monkeypatch, name, wert)`
+    in allen Modulen aus `DESKTOP_MODULE` (`test_app_gui.py`). Ein neues Desktop-Modul gehört in
+    diese Liste und in die Modulliste von `tools/screenshots.py`.
+  - Ein autouse-Fixture lenkt `termine_ordner` in allen Desktop-Modulen, `db` und `db_sicherung`
+    auf einen Temp-Ordner; kein Test schreibt in den echten Termine-Ordner.
+  - Klassenattribute (`"app.QMessageBox.question"`) wirken überall, gleich über welches Modul.
+  - Neue Desktop-Module importieren nie `app` (unter `python app.py`/der EXE lebt das
+    Hauptfenster in `__main__`, ein `import app` lädt eine zweite Kopie). Was sie aus dem
+    Hauptfenster brauchen, bekommen sie als Argument; gemeinsame Helfer stehen in
+    `desktop_gemeinsam.py`. `desktop_demo.py` ruft Tab-Methoden über die übergebene
+    Fenster-Instanz auf; Demo-Tests patchen `desktop_demo.X` bzw. `db.X`.
+  - Die intern gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) bleiben in
+    `db.py`.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
   test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version
   test_shs_core test_bewertung_referenz test_altversionen` deckt alles außer GUI- und echten Postgres-Tests ab.
