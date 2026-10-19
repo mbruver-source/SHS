@@ -182,6 +182,9 @@ zurück.
    ohne Meldungen gespeichert werden? Vorschlag: so lassen. Wer das Fenster selbst schließt,
    darf die Meldung sehen.
 
+**Antwort Marco (19.10.2026):** Beide Vorschläge angenommen. Rückfrage 1 ist als
+akzeptiertes Restrisiko `OFFEN.md` C34 eingetragen, Rückfrage 2 bleibt so (C35).
+
 ## Abschlussbericht (19.10.2026)
 
 Commits (alle lokal, nicht gepusht): c1ff49c V1, f494b39 V2, 34bc9ef V3, 61f0faa V4,

@@ -2510,7 +2510,7 @@ def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
     bisher. Eigene Termin-Dateien laufen mit Rollback-Journal und sind nie betroffen.
     Restrisiko: immutable liest ohne Sperre - öffnet ein fremdes Werkzeug die Datei genau
     während des Lesens und schreibt per Checkpoint in die Hauptdatei, kann ein Mischstand
-    oder SQLITE_CORRUPT entstehen (Rückfrage an Marco, Verbesserungen V7)."""
+    oder SQLITE_CORRUPT entstehen (von Marco am 19.10.2026 akzeptiert, OFFEN.md C34)."""
     posix = str(Path(pfad).absolute()).replace("\\", "/")
     if posix.startswith("//"):
         posix = "//" + posix

@@ -21,8 +21,6 @@ suchen.
 | A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
 | A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
 | A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
-| A9 | Rückfrage V8: Soll `closeEvent` nach einer Freigabe ohne Interaktion (abgebrochenes Abmelden unter X11) ebenfalls ohne Meldungen speichern? Bisher unverändert mit Meldungen | 19.10.2026 | Verbesserungen-2026-10/aufgaben.md |
-| A8 | Rückfrage V7: Restrisiko `immutable=1` (fremde WAL-Datei, Checkpoint eines fremden Werkzeugs genau während des Lesens) als akzeptiert eintragen? | 19.10.2026 | F:7809, Verbesserungen-2026-10/aufgaben.md |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
@@ -77,6 +75,7 @@ suchen.
 | C23 | „Alle speichern“ ab 201 Teilnehmern ganz oder gar nicht, ohne eigenen Handbuchsatz | 16.10.2026 | F:6780 |
 | C24 | Ergebniserfassung: Gelb/roter Rahmen erst nach dem Übernehmen; Demo markiert das Zellenrechteck | 18.10.2026 | F:7347 |
 | C25 | Ansichtswechsel bei 1000 Teilnehmern 0,42 s (Ziel war < 0,3 s) | 19.10.2026 | F:7517 |
+| C35 | `closeEvent` nach abgebrochenem Abmelden ohne Interaktion (X11) speichert neue Eingaben weiter mit Meldungen | 19.10.2026 | F:7834 (V8), Verbesserungen-2026-10/aufgaben.md |
 
 **Datensicherung**
 
@@ -86,6 +85,7 @@ suchen.
 | C28 | Grenzfall bei präparierten Sicherungen (allgemein); Strg+C während des Ersetzens ohne Teil-Meldung | 07.10.2026 | F:5192 |
 | C29 | Import-Dialog spielt kein Journal zurück | 15.10.2026 | F:6564 |
 | C30 | Drei Daten-Kleinfunde vom 21.09. (ZIP-Eintragsname, `_LASTROWID_TABELLEN`, Commit-Muster) | 21.09.2026 | F:638 |
+| C34 | Fremde WAL-Datei ohne `-wal` wird mit `immutable=1` ohne Sperre gelesen: Checkpoint eines fremden Werkzeugs genau währenddessen kann Mischstand/„beschädigt“ ergeben | 19.10.2026 | F:7809 (V7) |
 
 **Sonstiges**
 

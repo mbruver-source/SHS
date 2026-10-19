@@ -7845,3 +7845,14 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   - Randfall `closeEvent` nach einem abgebrochenen Abmelden ohne Interaktion.
 - **Prüfschritt nach Marcos Push:** unter „Actions“ beide Test-Jobs grün, `test` (Linux) und
   der neue `test-windows`.
+
+
+## 19.10.2026: Rückfragen aus den Verbesserungen V7/V8 entschieden (Marco)
+
+- **V7, `immutable=1` bei fremden WAL-Dateien:** Das Restrisiko ist akzeptiert. Öffnet ein
+  fremdes Werkzeug die Datei genau während des Lesens und schreibt per Checkpoint zurück, kann
+  ein Mischstand entstehen. Eingetragen als `OFFEN.md` C34, Docstring von
+  `oeffne_termin_lesend` angepasst.
+- **V8, `closeEvent` nach abgebrochenem Abmelden ohne Interaktion:** Bleibt so, wer das Fenster
+  selbst schließt, sieht die Meldungen (`OFFEN.md` C35).
+- `OFFEN.md` A8 und A9 sind gestrichen.
