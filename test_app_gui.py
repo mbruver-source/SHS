@@ -958,7 +958,7 @@ def test_keine_teilnahme_fehlt_in_ergebnis_tab(qtbot, conn):
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
 
-    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Da"]
+    assert _ergebnis_nachnamen(tab) == ["Da"]
 
 
 def test_ergebnis_tab_laedt_nach_abgelehntem_speichern_neu_und_behaelt_eingaben(qtbot, termin, monkeypatch):
@@ -974,10 +974,8 @@ def test_ergebnis_tab_laedt_nach_abgelehntem_speichern_neu_und_behaelt_eingaben(
     fenster.show()
     fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
     ergebnis_tab = fenster.ergebnis_tab
-    zeile_da = next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == "Da")
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile_da]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    zeile_da = _ergebnis_zeile(ergebnis_tab, "Da")
+    ergebnis_tab.punkte_eintragen(zeile_da, "Flächensuche", "50", "30")
     assert ergebnis_tab.hat_ungespeicherte_aenderungen()
 
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
@@ -985,9 +983,8 @@ def test_ergebnis_tab_laedt_nach_abgelehntem_speichern_neu_und_behaelt_eingaben(
     setze_keine_teilnahme(conn, fehlt, True)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
-    assert [t["nachname"] for t in ergebnis_tab._teilnehmer_je_zeile] == ["Da"]
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("50", "30")
+    assert _ergebnis_nachnamen(ergebnis_tab) == ["Da"]
+    assert ergebnis_tab.punkte(0, "Flächensuche") == ("50", "30")
     assert ergebnis_tab.hat_ungespeicherte_aenderungen()
 
 
@@ -1009,12 +1006,10 @@ def test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(
     ergebnis_tab = fenster.ergebnis_tab
 
     def zeile(nachname):
-        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+        return _ergebnis_zeile(ergebnis_tab, nachname)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
-    ergebnis_tab._status_boxen_je_zeile[zeile("Dq")][0].setChecked(True)
+    ergebnis_tab.punkte_eintragen(zeile("Bearbeitet"), "Flächensuche", "50", "30")
+    ergebnis_tab.status_setzen(zeile("Dq"), dq=True)
 
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
@@ -1022,11 +1017,10 @@ def test_ergebnis_tab_neuladen_ueberschreibt_zwischenzeitliche_ergebnisse_nicht(
     eintragen_ergebnis(conn, unberuehrt, "Flächensuche", 55, 35)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Unberuehrt")]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
-    assert not ergebnis_tab._zeile_ist_ungespeichert(zeile("Unberuehrt"))
-    assert ergebnis_tab._zeile_ist_ungespeichert(zeile("Bearbeitet"))
-    assert ergebnis_tab._status_boxen_je_zeile[zeile("Dq")][0].isChecked()
+    assert ergebnis_tab.punkte(zeile("Unberuehrt"), "Flächensuche") == ("55", "35")
+    assert not ergebnis_tab.zeile_ungespeichert(zeile("Unberuehrt"))
+    assert ergebnis_tab.zeile_ungespeichert(zeile("Bearbeitet"))
+    assert ergebnis_tab.status(zeile("Dq"))[0]
 
     ergebnis_tab.alle_speichern()
     assert get_ergebnis(conn, unberuehrt)["suche_flaechensuche"] == 55
@@ -1043,20 +1037,16 @@ def test_ergebnis_tab_sortieren_ueberschreibt_zwischenzeitliche_ergebnisse_nicht
     tab.show()
 
     def zeile(nachname):
-        return next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+        return _ergebnis_zeile(tab, nachname)
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    tab.punkte_eintragen(zeile("Bearbeitet"), "Flächensuche", "50", "30")
     eintragen_ergebnis(conn, unberuehrt, "Flächensuche", 55, 35)
 
     tab._spalte_geklickt(1)
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Unberuehrt")]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
-    assert not tab._zeile_ist_ungespeichert(zeile("Unberuehrt"))
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[zeile("Bearbeitet")]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("50", "30")
+    assert tab.punkte(zeile("Unberuehrt"), "Flächensuche") == ("55", "35")
+    assert not tab.zeile_ungespeichert(zeile("Unberuehrt"))
+    assert tab.punkte(zeile("Bearbeitet"), "Flächensuche") == ("50", "30")
 
     tab.alle_speichern()
     assert get_ergebnis(conn, unberuehrt)["suche_flaechensuche"] == 55
@@ -1068,9 +1058,7 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_auch_beim_sortieren(qtbot, conn,
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
     tab.show()
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     hinweise = meldungen_sammeln(monkeypatch, "information")
     setze_ergebnis_status(conn, tid, disqualifiziert=False, abbruch=True)
 
@@ -1078,7 +1066,7 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_auch_beim_sortieren(qtbot, conn,
 
     assert len(hinweise) == 1
     assert "Nr. 7 – Getippt, Max" in hinweise[0]
-    assert tab._status_boxen_je_zeile[0][1].isChecked()
+    assert tab.status(0)[1]
 
 
 def test_ergebnis_tab_kein_hinweis_bei_selbst_gesetztem_dq(qtbot, termin, monkeypatch):
@@ -1093,7 +1081,7 @@ def test_ergebnis_tab_kein_hinweis_bei_selbst_gesetztem_dq(qtbot, termin, monkey
     fenster.show()
     fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
     ergebnis_tab = fenster.ergebnis_tab
-    ergebnis_tab._status_boxen_je_zeile[0][0].setChecked(True)
+    ergebnis_tab.status_setzen(0, dq=True)
 
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     hinweise = meldungen_sammeln(monkeypatch, "information")
@@ -1101,7 +1089,7 @@ def test_ergebnis_tab_kein_hinweis_bei_selbst_gesetztem_dq(qtbot, termin, monkey
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
     assert hinweise == []
-    assert ergebnis_tab._status_boxen_je_zeile[0][0].isChecked()
+    assert ergebnis_tab.status(0)[0]
     assert ergebnis_tab.hat_ungespeicherte_aenderungen()
     assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
 
@@ -1118,9 +1106,7 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_bei_zwischenzeitlichem_dq(qtbot,
     fenster.show()
     fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
     ergebnis_tab = fenster.ergebnis_tab
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    ergebnis_tab.punkte_eintragen(0, "Flächensuche", "50", "30")
 
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     hinweise = meldungen_sammeln(monkeypatch, "information")
@@ -1130,9 +1116,19 @@ def test_ergebnis_tab_meldet_verworfene_eingabe_bei_zwischenzeitlichem_dq(qtbot,
 
     assert len(hinweise) == 1
     assert "Getippt, Max" in hinweise[0]
-    assert ergebnis_tab._status_boxen_je_zeile[0][0].isChecked()
+    assert ergebnis_tab.status(0)[0]
     assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
     assert get_ergebnis(conn, tid)["suche_flaechensuche"] is None
+
+
+def _ergebnis_zeile(tab, nachname):
+    """Zeile des (ersten) Teilnehmers mit diesem Nachnamen in der Ergebniserfassung."""
+    return next(r for r in range(tab.zeilenanzahl()) if tab.teilnehmer_der_zeile(r)["nachname"] == nachname)
+
+
+def _ergebnis_nachnamen(tab):
+    """Nachnamen in der angezeigten Reihenfolge der Ergebniserfassung."""
+    return [tab.teilnehmer_der_zeile(r)["nachname"] for r in range(tab.zeilenanzahl())]
 
 
 def _fenster_auf_ergebnis_tab(qtbot, conn, pfad):
@@ -1154,11 +1150,11 @@ def test_ergebnis_tab_tabwechsel_ohne_aenderung_baut_nicht_neu(qtbot, termin):
     conn, pfad = termin
     _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
-    feld_vorher = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0]
+    aufbau_vorher = ergebnis_tab.aufbau_kennung
 
     _hin_und_zurueck(fenster)
 
-    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is feld_vorher
+    assert ergebnis_tab.aufbau_kennung == aufbau_vorher
 
 
 def test_ergebnis_tab_tabwechsel_baut_nach_aenderung_neu(qtbot, termin):
@@ -1171,8 +1167,7 @@ def test_ergebnis_tab_tabwechsel_baut_nach_aenderung_neu(qtbot, termin):
     eintragen_ergebnis(conn, tid, "Flächensuche", 55, 35)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("55", "35")
+    assert ergebnis_tab.punkte(0, "Flächensuche") == ("55", "35")
 
 
 def test_ergebnis_tab_tabwechsel_erkennt_aenderung_ueber_andere_verbindung(qtbot, termin):
@@ -1186,22 +1181,20 @@ def test_ergebnis_tab_tabwechsel_erkennt_aenderung_ueber_andere_verbindung(qtbot
         eintragen_ergebnis(andere, tid, "Flächensuche", 44, 22)
     fenster._tabs.setCurrentWidget(ergebnis_tab)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("44", "22")
+    assert ergebnis_tab.punkte(0, "Flächensuche") == ("44", "22")
 
 
 def test_ergebnis_tab_nach_eigenem_speichern_kein_neuaufbau(qtbot, termin):
     conn, pfad = termin
     tid = _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    ergebnis_tab.punkte_eintragen(0, "Flächensuche", "50", "30")
+    aufbau_vorher = ergebnis_tab.aufbau_kennung
     ergebnis_tab.alle_speichern()
 
     _hin_und_zurueck(fenster)
 
-    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is suche_feld
+    assert ergebnis_tab.aufbau_kennung == aufbau_vorher
     assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
     assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 50
 
@@ -1215,18 +1208,15 @@ def test_ergebnis_tab_speichern_nach_fremder_aenderung_baut_beim_tabwechsel_neu(
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
 
     def zeile(nachname):
-        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+        return _ergebnis_zeile(ergebnis_tab, nachname)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    ergebnis_tab.punkte_eintragen(zeile("Da"), "Flächensuche", "50", "30")
     eintragen_ergebnis(conn, fremd, "Flächensuche", 41, 21)
     ergebnis_tab.alle_speichern()
 
     _hin_und_zurueck(fenster)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Fremd")]["Flächensuche"]
-    assert (suche_feld.text(), anzeige_feld.text()) == ("41", "21")
+    assert ergebnis_tab.punkte(zeile("Fremd"), "Flächensuche") == ("41", "21")
 
 
 @pytest.mark.parametrize("sammeln_ab", [200, 1])
@@ -1247,11 +1237,10 @@ def test_ergebnis_tab_fremder_commit_waehrend_des_speicherns_baut_beim_tabwechse
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
 
     def zeile(nachname):
-        return next(r for r, t in enumerate(ergebnis_tab._teilnehmer_je_zeile) if t["nachname"] == nachname)
+        return _ergebnis_zeile(ergebnis_tab, nachname)
 
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    ergebnis_tab.punkte_eintragen(zeile("Da"), "Flächensuche", "50", "30")
+    aufbau_vorher = ergebnis_tab.aufbau_kennung
     echt = app_modul.eintragen_ergebnis
     with closing(init_db(pfad)) as andere:
 
@@ -1268,11 +1257,9 @@ def test_ergebnis_tab_fremder_commit_waehrend_des_speicherns_baut_beim_tabwechse
     assert not ergebnis_tab.hat_ungespeicherte_aenderungen()
     _hin_und_zurueck(fenster)
 
-    assert ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"][0] is not suche_feld  # neu aufgebaut
-    suche_fremd, anzeige_fremd = ergebnis_tab._boxen_je_zeile[zeile("Fremd")]["Flächensuche"]
-    assert (suche_fremd.text(), anzeige_fremd.text()) == ("41", "21")
-    suche_da, anzeige_da = ergebnis_tab._boxen_je_zeile[zeile("Da")]["Flächensuche"]
-    assert (suche_da.text(), anzeige_da.text()) == ("50", "30")
+    assert ergebnis_tab.aufbau_kennung != aufbau_vorher  # neu aufgebaut
+    assert ergebnis_tab.punkte(zeile("Fremd"), "Flächensuche") == ("41", "21")
+    assert ergebnis_tab.punkte(zeile("Da"), "Flächensuche") == ("50", "30")
 
 
 def test_ergebnis_tab_speichern_bei_gesperrter_datei_bleibt_im_fehlerweg(qtbot, termin, monkeypatch):
@@ -1288,9 +1275,7 @@ def test_ergebnis_tab_speichern_bei_gesperrter_datei_bleibt_im_fehlerweg(qtbot, 
     with closing(init_db(pfad)) as andere:
         andere.execute("BEGIN EXCLUSIVE")
         ergebnis_tab.alle_speichern()  # ohne Änderungen: darf nicht werfen
-        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-        suche_feld.setText("50")
-        anzeige_feld.setText("30")
+        ergebnis_tab.punkte_eintragen(0, "Flächensuche", "50", "30")
         ergebnis_tab.alle_speichern()
         andere.rollback()
 
@@ -1304,21 +1289,20 @@ def test_ergebnis_tab_nach_speichern_mit_ergebnissortierung_baut_neu(qtbot, term
     _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     ergebnis_tab._spalte_geklickt(_STATUS_SPALTE)
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    ergebnis_tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     ergebnis_tab.alle_speichern()
+    aufbau_vorher = ergebnis_tab.aufbau_kennung
 
     _hin_und_zurueck(fenster)
 
-    assert ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0] is not suche_feld
+    assert ergebnis_tab.aufbau_kennung != aufbau_vorher
 
 
 def test_ergebnis_tab_tabwechsel_ohne_neuaufbau_blendet_hinweise_aus(qtbot, termin):
     conn, pfad = termin
     _teilnehmer_anlegen(conn, nachname="Da", startnummer=1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
-    ergebnis_tab._boxen_je_zeile[0]["Flächensuche"][0].inputRejected.emit()
+    qtbot.keyClicks(ergebnis_tab.zelle_bearbeiten(0, "Flächensuche", "suche"), ",")
     assert not ergebnis_tab.hinweis_label.isHidden()
 
     _hin_und_zurueck(fenster)
@@ -1335,9 +1319,7 @@ def _zwei_eingaben_mit_fehler_beim_zweiten(qtbot, termin, monkeypatch, sammeln_a
     monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", sammeln_ab)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile in range(2):
-        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
-        suche_feld.setText("50")
-        anzeige_feld.setText("30")
+        ergebnis_tab.punkte_eintragen(zeile, "Flächensuche", "50", "30")
 
     echt = app_modul.eintragen_ergebnis
 
@@ -1362,8 +1344,8 @@ def test_alle_speichern_bis_200_teilnehmer_behaelt_gespeicherte_zeilen(qtbot, te
     )
 
     assert get_ergebnis(conn, erster)["suche_flaechensuche"] == 50
-    assert not ergebnis_tab._zeile_ist_ungespeichert(0)
-    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert not ergebnis_tab.zeile_ungespeichert(0)
+    assert ergebnis_tab.zeile_ungespeichert(1)
     assert "Bereits gespeicherte Zeilen bleiben erhalten" in meldungen[0]
 
 
@@ -1375,8 +1357,8 @@ def test_alle_speichern_ueber_schwelle_speichert_bei_fehler_nichts(qtbot, termin
 
     assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
     assert not conn.in_transaction
-    assert ergebnis_tab._zeile_ist_ungespeichert(0)
-    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert ergebnis_tab.zeile_ungespeichert(0)
+    assert ergebnis_tab.zeile_ungespeichert(1)
     assert "Es wurde nichts gespeichert" in meldungen[0]
     assert ergebnis_tab.status_label.text() == "Speichern abgebrochen – nichts gespeichert."
 
@@ -1388,10 +1370,8 @@ def test_alle_speichern_ueber_schwelle_speichert_alles_in_einer_transaktion(qtbo
     monkeypatch.setattr("app._SAMMELSPEICHERN_UEBER_TEILNEHMER", 1)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile, (suche, anzeige) in enumerate([("50", "30"), ("44", "22")]):
-        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
-        suche_feld.setText(suche)
-        anzeige_feld.setText(anzeige)
-    ergebnis_tab._status_boxen_je_zeile[1][1].setChecked(True)  # Abbruch beim Zweiten
+        ergebnis_tab.punkte_eintragen(zeile, "Flächensuche", suche, anzeige)
+    ergebnis_tab.status_setzen(1, abbruch=True)  # Abbruch beim Zweiten
     commits = []
     monkeypatch.setattr("app.setze_ergebnis_status", _commit_zaehlen(commits, setze_ergebnis_status))
     monkeypatch.setattr("app.eintragen_ergebnis", _commit_zaehlen(commits, eintragen_ergebnis))
@@ -1418,9 +1398,7 @@ def test_alle_speichern_ueber_schwelle_laesst_bei_unerwartetem_fehler_keine_tran
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile in range(2):
-        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
-        suche_feld.setText("50")
-        anzeige_feld.setText("30")
+        ergebnis_tab.punkte_eintragen(zeile, "Flächensuche", "50", "30")
     aufrufe = []
     echt = ergebnis_tab._aktualisiere_zeilenstatus
 
@@ -1438,7 +1416,7 @@ def test_alle_speichern_ueber_schwelle_laesst_bei_unerwartetem_fehler_keine_tran
     assert not conn.in_transaction
     assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
     monkeypatch.setattr(ergebnis_tab, "_aktualisiere_zeilenstatus", echt)
-    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert ergebnis_tab.zeile_ungespeichert(0)
 
 
 def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot, termin, monkeypatch):
@@ -1452,9 +1430,7 @@ def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot,
     rueckfragen_beantworten(monkeypatch, QMessageBox.No)
     fenster, ergebnis_tab = _fenster_auf_ergebnis_tab(qtbot, conn, pfad)
     for zeile in range(2):
-        suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[zeile]["Flächensuche"]
-        suche_feld.setText("50")
-        anzeige_feld.setText("30")
+        ergebnis_tab.punkte_eintragen(zeile, "Flächensuche", "50", "30")
     echt = app_modul.eintragen_ergebnis
 
     def zweiter_verletzt_check(conn_, tid, disziplin, suche, anzeige, **k):
@@ -1468,8 +1444,8 @@ def test_alle_speichern_ueber_schwelle_bricht_bei_integrity_error_ganz_ab(qtbot,
 
     assert get_ergebnis(conn, erster)["suche_flaechensuche"] is None
     assert not conn.in_transaction
-    assert ergebnis_tab._zeile_ist_ungespeichert(0)
-    assert ergebnis_tab._zeile_ist_ungespeichert(1)
+    assert ergebnis_tab.zeile_ungespeichert(0)
+    assert ergebnis_tab.zeile_ungespeichert(1)
     assert "Es wurde nichts gespeichert" in meldungen[0]
     assert "Zweiter, Max – Flächensuche" in meldungen[0]
 
@@ -2574,9 +2550,7 @@ def test_schliessen_bei_schreibfehler_fragt_nach_statt_still_zu_verwerfen(qtbot,
     qtbot.addWidget(fenster)
     fenster.show()
     tab = fenster.ergebnis_tab
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
 
     meldungen = []
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
@@ -2598,9 +2572,7 @@ def test_abmelden_bei_schreibfehler_bricht_ab_statt_zu_verwerfen(qtbot, termin, 
     _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1, disziplin="Flächensuche")
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
-    suche_feld, anzeige_feld = fenster.ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
+    fenster.ergebnis_tab.punkte_eintragen(0, "Flächensuche", "58", "38")
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
     ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
     # Für das Schließen beim Aufräumen des Tests: verwerfen statt modal zu warten.
@@ -2769,9 +2741,7 @@ def test_reiterwechsel_bei_schreibfehler_wechselt_trotzdem(qtbot, termin, monkey
     qtbot.addWidget(fenster)
     tab = fenster.ergebnis_tab
     fenster._tabs.setCurrentWidget(tab)
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
     monkeypatch.setattr("app.eintragen_ergebnis", _schreibfehler)
     ueberall_ersetzen(monkeypatch, "_db_fehler_anzeigen", lambda *a, **k: None)
     rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
@@ -3330,13 +3300,10 @@ def test_ergebnis_loeschen_durch_leeren_beider_felder_wird_gespeichert(qtbot, te
     fenster.show()
 
     ergebnis_tab = fenster.ergebnis_tab
-    suche_feld, anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    assert suche_feld.text() == "45"
-    assert anzeige_feld.text() == "28"
+    assert ergebnis_tab.punkte(0, "Flächensuche") == ("45", "28")
 
-    suche_feld.clear()
-    anzeige_feld.clear()
-    assert ergebnis_tab._zeile_ist_ungespeichert(0)
+    ergebnis_tab.punkte_eintragen(0, "Flächensuche", "", "")
+    assert ergebnis_tab.zeile_ungespeichert(0)
 
     speichern_btn = next(
         b for b in fenster.findChildren(QPushButton) if b.text() == "Alle Ergebnisse speichern"
@@ -3352,7 +3319,7 @@ def test_ergebnis_loeschen_durch_leeren_beider_felder_wird_gespeichert(qtbot, te
 
     # Zeile gilt jetzt als gespeichert (nicht mehr dauerhaft gelb markiert) und der
     # Status-Text bestätigt das Speichern statt "Keine Änderungen zu speichern".
-    assert not ergebnis_tab._zeile_ist_ungespeichert(0)
+    assert not ergebnis_tab.zeile_ungespeichert(0)
     assert "gespeichert" in ergebnis_tab.status_label.text().lower()
     assert "keine änderungen" not in ergebnis_tab.status_label.text().lower()
 
@@ -3370,8 +3337,7 @@ def test_ergebnis_nur_ein_feld_geleert_zeigt_fehlermeldung_statt_stillem_datenve
     fenster.show()
 
     ergebnis_tab = fenster.ergebnis_tab
-    suche_feld, _anzeige_feld = ergebnis_tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.clear()
+    ergebnis_tab.punkte_eintragen(0, "Flächensuche", suche="")
 
     warnung_gezeigt = {}
 
@@ -3656,14 +3622,14 @@ def test_ergebnis_zeigt_hund_und_sortiert_danach(qtbot, conn):
 
 
 def _ed_zeile_hat_nur_eigene_eingabefelder(tab, row: int, ed_disziplin: str) -> None:
-    from PySide6.QtWidgets import QLineEdit
-
+    assert tab.erfassbare_disziplinen(row) == [ed_disziplin]
     for disziplin, spalten in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.items():
         for spalte in spalten:
             if disziplin == ed_disziplin:
-                assert isinstance(tab.tabelle.cellWidget(row, spalte), QLineEdit)
+                assert tab.spalte_bearbeitbar(row, spalte)
             else:
-                assert tab.tabelle.cellWidget(row, spalte) is None
+                # Regressionsschutz 23.09.: kein altes DK-Eingabefeld über dem „–“.
+                assert not tab.spalte_bearbeitbar(row, spalte)
                 assert tab.tabelle.item(row, spalte).text() == "–"
 
 
@@ -3716,26 +3682,22 @@ def test_ergebnis_sortierung_verliert_keine_ungespeicherte_eingabe(qtbot, conn):
     tab.show()
 
     # Zorn (vor der Sortierung Zeile 0) bekommt eine noch nicht gespeicherte Eingabe.
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
-    assert tab._zeile_ist_ungespeichert(0)
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
+    assert tab.zeile_ungespeichert(0)
 
     tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # nach Name sortieren
 
     # Zorn steht jetzt in Zeile 1 (Adler < Zorn) - die Eingabe muss ihm gefolgt sein.
     assert tab.tabelle.item(0, 1).text() == "Adler, Max"
     assert tab.tabelle.item(1, 1).text() == "Zorn, Max"
-    zorn_suche, zorn_anzeige = tab._boxen_je_zeile[1]["Flächensuche"]
-    assert zorn_suche.text() == "58"
-    assert zorn_anzeige.text() == "38"
-    assert tab._zeile_ist_ungespeichert(1)
+    assert tab.punkte(1, "Flächensuche") == ("58", "38")
+    assert tab.zeile_ungespeichert(1)
     # Adler (jetzt Zeile 0) hat weiterhin keine Eingabe.
-    assert not tab._zeile_ist_ungespeichert(0)
+    assert not tab.zeile_ungespeichert(0)
 
     # Die ungespeicherte Eingabe lässt sich nach der Sortierung ganz normal speichern.
     tab.alle_speichern()
-    assert not tab._zeile_ist_ungespeichert(1)
+    assert not tab.zeile_ungespeichert(1)
 
 
 # --- Ergebniserfassung: Disqualifiziert/Abbruch ---------------------------------------
@@ -3749,27 +3711,20 @@ def test_ergebnis_disqualifiziert_sperrt_und_leert_punkteeingabe(qtbot, conn):
     qtbot.addWidget(tab)
     tab.show()
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
 
-    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]
-    dq_box.setChecked(True)
+    tab.status_setzen(0, dq=True)
 
-    assert suche_feld.text() == ""
-    assert anzeige_feld.text() == ""
-    assert not suche_feld.isEnabled()
-    assert not anzeige_feld.isEnabled()
+    assert tab.punkte(0, "Flächensuche") == ("", "")
+    assert tab.zelle_gesperrt(0, "Flächensuche")
 
     # Wieder abwählen gibt die Felder wieder frei - befüllt sie dabei mit dem zuletzt aus
     # der DB geladenen Stand (hier leer, da die Eingabe oben nie gespeichert wurde; siehe
     # test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht für den Fall mit
     # bereits gespeicherten Punkten).
-    dq_box.setChecked(False)
-    assert suche_feld.isEnabled()
-    assert anzeige_feld.isEnabled()
-    assert suche_feld.text() == ""
-    assert anzeige_feld.text() == ""
+    tab.status_setzen(0, dq=False)
+    assert not tab.zelle_gesperrt(0, "Flächensuche")
+    assert tab.punkte(0, "Flächensuche") == ("", "")
 
 
 def test_ergebnis_disqualifiziert_und_abbruch_werden_unabhaengig_gespeichert(qtbot, conn):
@@ -3778,22 +3733,19 @@ def test_ergebnis_disqualifiziert_und_abbruch_werden_unabhaengig_gespeichert(qtb
     qtbot.addWidget(tab)
     tab.show()
 
-    dq_box, abbruch_box = tab._status_boxen_je_zeile[0]
-    dq_box.setChecked(True)
-    assert tab._zeile_ist_ungespeichert(0)
+    tab.status_setzen(0, dq=True)
+    assert tab.zeile_ungespeichert(0)
 
     tab.alle_speichern()
 
     ergebnis = get_ergebnis(conn, tid)
     assert ergebnis["disqualifiziert"] == 1
     assert ergebnis["abbruch"] == 0
-    assert not tab._zeile_ist_ungespeichert(0)
+    assert not tab.zeile_ungespeichert(0)
 
     # Nach dem "Liste aktualisieren" bleibt der gespeicherte Status sichtbar gesetzt.
     tab.aktualisieren()
-    dq_box, abbruch_box = tab._status_boxen_je_zeile[0]
-    assert dq_box.isChecked()
-    assert not abbruch_box.isChecked()
+    assert tab.status(0) == (True, False)
 
 
 def test_ergebnis_disqualifiziert_bleibt_beim_sortieren_und_laedt_gesperrte_felder(qtbot, conn):
@@ -3806,17 +3758,13 @@ def test_ergebnis_disqualifiziert_bleibt_beim_sortieren_und_laedt_gesperrte_feld
     qtbot.addWidget(tab)
     tab.show()
 
-    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]  # Zorn, vor der Sortierung Zeile 0
-    dq_box.setChecked(True)
+    tab.status_setzen(0, dq=True)  # Zorn, vor der Sortierung Zeile 0
 
     tab.tabelle.horizontalHeader().sectionClicked.emit(1)  # nach Name sortieren
 
     assert tab.tabelle.item(1, 1).text() == "Zorn, Max"
-    zorn_dq_box, _ = tab._status_boxen_je_zeile[1]
-    assert zorn_dq_box.isChecked()
-    zorn_suche, zorn_anzeige = tab._boxen_je_zeile[1]["Flächensuche"]
-    assert not zorn_suche.isEnabled()
-    assert not zorn_anzeige.isEnabled()
+    assert tab.status(1)[0]
+    assert tab.zelle_gesperrt(1, "Flächensuche")
 
 
 def test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht(qtbot, conn):
@@ -3830,30 +3778,26 @@ def test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht(qtbot, conn)
     qtbot.addWidget(tab)
     tab.show()
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
     tab.alle_speichern()
     ergebnis = get_ergebnis(conn, tid)
     assert ergebnis["suche_flaechensuche"] == 58
     assert ergebnis["anzeige_flaechensuche"] == 38
 
-    dq_box, _abbruch_box = tab._status_boxen_je_zeile[0]
-    dq_box.setChecked(True)
+    tab.status_setzen(0, dq=True)
     tab.alle_speichern()
     # Direkt nach dem Speichern einer gesperrten Zeile gilt sie als gespeichert - die
     # (leeren, gesperrten) Punktefelder dürfen die Zeile nicht dauerhaft als "nicht
     # gespeichert" markieren.
-    assert not tab._zeile_ist_ungespeichert(0)
+    assert not tab.zeile_ungespeichert(0)
 
     ergebnis = get_ergebnis(conn, tid)
     assert ergebnis["disqualifiziert"] == 1
     assert ergebnis["suche_flaechensuche"] == 58
     assert ergebnis["anzeige_flaechensuche"] == 38
 
-    dq_box.setChecked(False)
-    assert suche_feld.text() == "58"
-    assert anzeige_feld.text() == "38"
+    tab.status_setzen(0, dq=False)
+    assert tab.punkte(0, "Flächensuche") == ("58", "38")
 
     # Erneutes Speichern OHNE weitere Eingabe darf die wiederhergestellten Werte nicht
     # versehentlich als "unverändert" verwerfen oder erneut löschen.
@@ -5731,7 +5675,7 @@ def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
     tab.aktualisieren()
     assert namen() == ["Adler, Max", "Meier, Max", "Zorn, Max"]
     # Die Eingabefelder gehören nach dem erneuten Sortieren weiterhin zur richtigen Zeile.
-    assert tab._teilnehmer_je_zeile[0]["nachname"] == "Adler"
+    assert tab.teilnehmer_der_zeile(0)["nachname"] == "Adler"
 
     # Nächster Klick auf dieselbe Spalte kehrt die (tatsächlich sichtbare) Richtung um.
     tab.tabelle.horizontalHeader().sectionClicked.emit(1)
@@ -5828,19 +5772,15 @@ def test_designwechsel_behaelt_ungespeicherte_ergebnisse(qtbot, termin, darstell
     qtbot.addWidget(fenster)
     tab = fenster.ergebnis_tab
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("58")
-    anzeige_feld.setText("38")
-    assert tab._zeile_ist_ungespeichert(0)
+    tab.punkte_eintragen(0, "Flächensuche", "58", "38")
+    assert tab.zeile_ungespeichert(0)
 
     fenster._design_actions["dunkel"].trigger()
 
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    assert suche_feld.text() == "58"
-    assert anzeige_feld.text() == "38"
-    assert tab._zeile_ist_ungespeichert(0)
+    assert tab.punkte(0, "Flächensuche") == ("58", "38")
+    assert tab.zeile_ungespeichert(0)
     dunkel_gelb = darstellung._DESIGNS["dunkel"]["ungespeichert_bg"].lower()
-    assert dunkel_gelb in suche_feld.styleSheet().lower()
+    assert tab.zellzustand(0, "Flächensuche", "suche")["hintergrund"] == dunkel_gelb
 
 
 def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_speicher, monkeypatch):
@@ -6071,11 +6011,8 @@ def test_strg_s_speichert_in_der_ergebniserfassung(qtbot, termin, monkeypatch):
     qtbot.keyClick(tab.tabelle, Qt.Key_S, Qt.ControlModifier)
     assert aufrufe == [True]
 
-    # Fokus in einem eingebetteten Punktefeld (setCellWidget) - typischer Fall beim Tippen.
-    punktefeld = next(
-        w for w in tab.tabelle.findChildren(QLineEdit) if w.isVisible() and w.isEnabled()
-    )
-    punktefeld.setFocus()
+    # Fokus in einer Punktezelle beim Bearbeiten - typischer Fall beim Tippen.
+    punktefeld = tab.zelle_bearbeiten(0, tab.erfassbare_disziplinen(0)[0], "suche")
     qtbot.keyClick(punktefeld, Qt.Key_S, Qt.ControlModifier)
     assert aufrufe == [True, True]
 
@@ -6447,14 +6384,13 @@ def test_punkte_ueber_maximum_rot_und_klartext_beim_speichern(qtbot, termin, mon
     qtbot.addWidget(fenster)
     fenster.show()
     tab = fenster.ergebnis_tab
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
 
-    qtbot.keyClicks(suche_feld, "65")
-    qtbot.keyClicks(anzeige_feld, "30")
-    assert suche_feld.text() == "65"
-    assert "border" in suche_feld.styleSheet()
-    assert suche_feld.toolTip() == "Höchstens 60 Punkte."
-    assert "border" not in anzeige_feld.styleSheet()
+    qtbot.keyClicks(tab.zelle_bearbeiten(0, "Flächensuche", "suche"), "65")
+    qtbot.keyClicks(tab.zelle_bearbeiten(0, "Flächensuche", "anzeige"), "30")
+    assert tab.punkte(0, "Flächensuche") == ("65", "30")
+    assert tab.zellzustand(0, "Flächensuche", "suche")["zu_hoch"]
+    assert tab.zellzustand(0, "Flächensuche", "suche")["tooltip"] == "Höchstens 60 Punkte."
+    assert not tab.zellzustand(0, "Flächensuche", "anzeige")["zu_hoch"]
 
     meldungen = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: meldungen.append(a[2]))
@@ -6463,10 +6399,10 @@ def test_punkte_ueber_maximum_rot_und_klartext_beim_speichern(qtbot, termin, mon
     assert len(meldungen) == 1
     assert "Suche höchstens 60 Punkte (eingegeben: 65)" in meldungen[0]
     assert "CHECK" not in meldungen[0]
-    assert tab._zeile_ist_ungespeichert(0)
+    assert tab.zeile_ungespeichert(0)
 
-    suche_feld.setText("55")
-    assert "border" not in suche_feld.styleSheet()
+    tab.punkte_eintragen(0, "Flächensuche", suche="55")
+    assert not tab.zellzustand(0, "Flächensuche", "suche")["zu_hoch"]
 
 
 def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
@@ -6486,12 +6422,11 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
         qtbot.addWidget(fenster)
         fenster.show()
         tab = fenster.ergebnis_tab
-        suche_feld, _anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-        qtbot.keyClicks(suche_feld, "45,5")
+        qtbot.keyClicks(tab.zelle_bearbeiten(0, "Flächensuche", "suche"), "45,5")
     finally:
         QLocale.setDefault(vorher)
 
-    assert suche_feld.text() == "45"
+    assert tab.punkte(0, "Flächensuche")[0] == "45"
     # N6 (UX-Nachtest): bleibt hervorgehoben stehen, bis die nächste gültige Eingabe kommt.
     # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 2: als Klartext in einem eigenen Label, die
     # Hervorhebung kommt aus dessen Stylesheet (vorher stand rohes HTML in der Statuszeile).
@@ -6500,7 +6435,7 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
     assert "<" not in tab.hinweis_label.text()
     assert "font-weight: bold" in tab.hinweis_label.styleSheet()
     assert not tab.hinweis_label.isHidden()
-    suche_feld.setText("4")
+    tab.punkte_eintragen(0, "Flächensuche", suche="4")
     assert tab.hinweis_label.text() == ""
     assert tab.hinweis_label.isHidden()
 
@@ -6528,9 +6463,9 @@ def test_ergebnis_sortierung_nach_name_mit_umlauten(qtbot, conn):
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
     tab._spalte_geklickt(1)
-    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
+    assert _ergebnis_nachnamen(tab) == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
     tab.aktualisieren()  # Sortierung bleibt beim Neuladen (nur ein Aufbau)
-    assert [t["nachname"] for t in tab._teilnehmer_je_zeile] == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
+    assert _ergebnis_nachnamen(tab) == ["Adler", "Älter", "ebert", "Ötzi", "Zorn"]
 
 
 def test_ergebnis_meldet_verworfene_eingabe_nach_disziplinwechsel(qtbot, conn, monkeypatch):
@@ -6539,9 +6474,7 @@ def test_ergebnis_meldet_verworfene_eingabe_nach_disziplinwechsel(qtbot, conn, m
     tid = _teilnehmer_anlegen(conn, nachname="Wechsel", startnummer=3, disziplin="Flächensuche")
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
     conn.commit()
     hinweise = meldungen_sammeln(monkeypatch, "information")
@@ -6559,9 +6492,7 @@ def test_ergebnis_meldet_person_mit_mehreren_gruenden_nur_einmal(qtbot, conn, mo
     tid = _teilnehmer_anlegen(conn, nachname="Doppelt", startnummer=4, disziplin="Flächensuche")
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
-    suche_feld, anzeige_feld = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche_feld.setText("50")
-    anzeige_feld.setText("30")
+    tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     conn.execute("UPDATE teilnehmer SET disziplin = 'Trümmerfeld' WHERE id = ?", (tid,))
     conn.commit()
     setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
@@ -6583,9 +6514,7 @@ def test_ergebnis_meldet_mehrere_alte_disziplinen_in_einer_zeile(qtbot, conn, mo
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
     for disziplin in ("Flächensuche", "Trümmerfeld"):
-        suche_feld, anzeige_feld = tab._boxen_je_zeile[0][disziplin]
-        suche_feld.setText("50")
-        anzeige_feld.setText("30")
+        tab.punkte_eintragen(0, disziplin, "50", "30")
     conn.execute("UPDATE teilnehmer SET art = 'ED', disziplin = 'Behältnisstrecke' WHERE id = ?", (tid,))
     conn.commit()
     hinweise = meldungen_sammeln(monkeypatch, "information")
@@ -7284,9 +7213,7 @@ def test_ergebniserfassung_leere_zeile_zeigt_noch_kein_ergebnis(qtbot, termin):
     qtbot.addWidget(fenster)
     tab = fenster.ergebnis_tab
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "noch kein Ergebnis"
-    suche, anzeige = tab._boxen_je_zeile[0]["Flächensuche"]
-    suche.setText("50")
-    anzeige.setText("30")
+    tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     tab.alle_speichern()
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "✓ gespeichert"
 
@@ -7627,9 +7554,8 @@ def test_demo_fragt_in_schritt_2_nach_ungespeicherten_ergebnissen_im_eigenen_ter
     fenster._demo_starten()
     tour = fenster._demo_tour
     _demo_bis(tour, "1.")
-    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
-    felder["Trümmerfeld"][0].setText("50")
-    felder["Trümmerfeld"][1].setText("30")
+    ergebnis_tab = fenster.ergebnis_tab
+    ergebnis_tab.punkte_eintragen(ergebnis_tab.zeile_von(tid), "Trümmerfeld", "50", "30")
     fragen = []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[1]) or QMessageBox.Yes)
 
@@ -7681,8 +7607,8 @@ def test_demo_haelt_in_schritt_2_an_wenn_ergebnisse_im_eigenen_termin_nicht_spei
     fenster._demo_starten()
     tour = fenster._demo_tour
     _demo_bis(tour, "1.")
-    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
-    felder["Trümmerfeld"][0].setText("50")  # nur Suche - lässt sich nicht speichern
+    ergebnis_tab = fenster.ergebnis_tab
+    ergebnis_tab.punkte_eintragen(ergebnis_tab.zeile_von(tid), "Trümmerfeld", suche="50")  # nur Suche - lässt sich nicht speichern
     fragen = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
     monkeypatch.setattr(
@@ -7715,9 +7641,8 @@ def test_demo_schritt_2_abbrechen_oder_verwerfen(qtbot, termin, demo_umgebung, m
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     fenster.show()
-    _row, felder, _status = fenster.ergebnis_tab.eingabefelder(tid)
-    felder["Trümmerfeld"][0].setText("50")
-    felder["Trümmerfeld"][1].setText("30")
+    ergebnis_tab = fenster.ergebnis_tab
+    ergebnis_tab.punkte_eintragen(ergebnis_tab.zeile_von(tid), "Trümmerfeld", "50", "30")
     fragen = []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: fragen.append(a[1]) or antwort)
 

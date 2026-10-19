@@ -71,7 +71,15 @@ from db import (
 )
 from desktop_dialoge import TeilnehmerDialog, VeranstaltungsDialog
 from shs_core import stechen_gruppen
-from desktop_gemeinsam import _ausdrucke_ordner, _export_dateiname, _fehlertext, _pfad_anzeige, _url_oeffnen
+from desktop_gemeinsam import (
+    _DQ_SPALTE,
+    _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
+    _ausdrucke_ordner,
+    _export_dateiname,
+    _fehlertext,
+    _pfad_anzeige,
+    _url_oeffnen,
+)
 
 #: Präfix der Temp-Ordner - alte Reste (z. B. nach einem Absturz) werden beim nächsten
 #: Start aufgeräumt, siehe demo_reste_aufraeumen.
@@ -1155,22 +1163,30 @@ class DemoTour(QObject):
         """Tippt eine Punktzahl Ziffer für Ziffer. Das Feld wird jedes Mal frisch gesucht -
         baut der Anwender die Tabelle zwischendurch neu auf („Liste aktualisieren“), sind
         die alten Felder weg."""
-        def feld() -> QLineEdit:
-            felder = self._fenster.ergebnis_tab.eingabefelder(self._ids[nachname])
-            if felder is None or disziplin not in felder[1]:
+        tab = self._fenster.ergebnis_tab
+        feldname = ("suche", "anzeige")[index]
+
+        def zeile() -> int:
+            row = tab.zeile_von(self._ids[nachname])
+            if row is None or disziplin not in tab.erfassbare_disziplinen(row):
                 raise DemoFehler(f"Die Zeile von {nachname} ist in der Ergebniserfassung nicht zu finden.")
-            return felder[1][disziplin][index]
+            return row
+
+        def eintragen(text: str) -> None:
+            tab.punkte_eintragen(zeile(), disziplin, **{feldname: text})
 
         def fokus() -> None:
-            eingabe = feld()
-            self._markieren(eingabe)
-            eingabe.setText("")
+            row = zeile()
+            tab.zeile_zeigen(row)
+            spalte = _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin][index]
+            self._markieren(tab.tabelle.cellWidget(row, spalte))
+            eintragen("")
         fokus.pause_ms = self.PAUSE_MS // 3
 
         text = str(wert)
         aktionen: list[Callable[[], None]] = [fokus]
         for laenge in range(1, len(text) + 1):
-            taste = (lambda teil=text[:laenge]: feld().setText(teil))
+            taste = (lambda teil=text[:laenge]: eintragen(teil))
             taste.pause_ms = random.randint(*self.TASTE_MS)
             aktionen.append(taste)
         aktionen[-1].pause_ms = self.PAUSE_MS // 2
@@ -1180,12 +1196,13 @@ class DemoTour(QObject):
         self._reiter_zeigen(self._fenster.ergebnis_tab)  # Teil 10 Nr. 4
         def aktion() -> None:
             nachname = next(t["daten"]["nachname"] for t in demo_daten.TEILNEHMER if t.get("status") == "dq")
-            felder = self._fenster.ergebnis_tab.eingabefelder(self._ids[nachname])
-            if felder is None:
+            tab = self._fenster.ergebnis_tab
+            row = tab.zeile_von(self._ids[nachname])
+            if row is None:
                 raise DemoFehler(f"Die Zeile von {nachname} ist in der Ergebniserfassung nicht zu finden.")
-            dq_box = felder[2][0]
-            self._markieren(dq_box.parentWidget() or dq_box)
-            dq_box.setChecked(True)
+            tab.zeile_zeigen(row)
+            self._markieren(tab.tabelle.cellWidget(row, _DQ_SPALTE))
+            tab.status_setzen(row, dq=True)
         return [aktion]
 
     def _aktionen_speichern(self) -> list[Callable[[], None]]:

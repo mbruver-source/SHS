@@ -17,8 +17,8 @@ Start durch Marco:
 | O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | erledigt | c7a0866 | 42 % / 2 % → 53 % / 3 % | Unittests 664, GUI 394 grün |
 | O4 Schnitt 2 `desktop_auswertung.py` | M | erledigt | 7cc2548 | 54 % / 3 % → 0 % / 4 % (neues 5-h-Fenster) | Unittests OK, GUI 394 grün |
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | erledigt | fbd85fd | 1 % / 4 % → 7 % / 4 % | Unittests OK, GUI 394 grün |
-| O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | (s. git log) | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
-| O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | offen | | | |
+| O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | 55d946d | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
+| O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | (s. git log) | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | offen | | | nach O7 |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | offen | | | nach O8 |
 | O10 Messung Lasttest-1000 | S | offen | | | nach O9 |
@@ -235,6 +235,23 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
   `tools/screenshots.py` (335–342).
 - Alle Tests grün; die Gegenprobe entfällt, weil sich nichts am Verhalten ändert. Ein voller Lauf
   vorher/nachher mit identischem Ergebnis genügt.
+
+- **Umgesetzt (19.10.2026), festgelegte Namen** (`ErgebnisTab`, Abschnitt „Zellwert-Schnittstelle“;
+  `feld` = "suche"/"anzeige", Punkte als Text):
+  - `zeilenanzahl()`, `teilnehmer_der_zeile(zeile)`, `zeile_von(teilnehmer_id)`, `zeile_zeigen(zeile)`;
+  - `erfassbare_disziplinen(zeile)`, `spalte_bearbeitbar(zeile, spalte)` (sieht in der Tabelle nach);
+  - `punkte(zeile, disziplin) -> (str, str)`, `punkte_eintragen(zeile, disziplin, suche=None, anzeige=None)`;
+  - `status(zeile) -> (dq, abbruch)`, `status_setzen(zeile, dq=None, abbruch=None)`;
+  - `zelle_gesperrt(zeile, disziplin)` (beide Felder), `zeile_ungespeichert(zeile)`;
+  - `zellzustand(zeile, disziplin, feld) -> {"zu_hoch", "tooltip", "hintergrund"}` (hintergrund = Farbe
+    „ungespeichert“ als #rrggbb oder None);
+  - `zelle_bearbeiten(zeile, disziplin, feld)` -> Editor (Fokus gesetzt) für Tastatur-Tests;
+  - `aufbau_kennung` (Zähler je `_zeilen_aufbauen`).
+  - `eingabefelder()` entfällt. Die Demo markiert bis O9 noch `tabelle.cellWidget(zeile, spalte)`
+    (in O8 auf ein Zellenrechteck umstellen, sonst fehlt der Demo das Markierungsziel).
+  - Für O8: `spalte_bearbeitbar` auf Item-Flags/Delegate umstellen; `zellzustand.hintergrund` muss
+    weiter None liefern, solange die Zeile nicht ungespeichert ist; der Kommentar
+    „Eingabefelder über setCellWidget“ in `test_app_gui.py` (Spaltenbreiten-Test) veraltet dann.
 
 ### O8 Ergebnis 2: Items + Delegate (L)
 - `_zeilen_aufbauen` (~1642–1794) ohne `setCellWidget`. Ein Delegate für die Punktespalten:

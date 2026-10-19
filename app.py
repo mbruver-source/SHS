@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sqlite3
 import sys
 import traceback
@@ -1365,6 +1366,9 @@ class ErgebnisTab(QWidget):
         # beiden Status-Checkboxen "Disqualifiziert"/"Abbruch" je Zeile.
         self._status_boxen_je_zeile: list[tuple[QCheckBox, QCheckBox]] = []
         self._status_geladen_je_zeile: list[tuple[bool, bool]] = []
+        # Zählt jeden Neuaufbau der Zeilen (offene Punkte O7): Tests prüfen damit „nicht neu
+        # aufgebaut“, ohne sich auf einzelne Eingabe-Widgets zu verlassen.
+        self.aufbau_kennung = 0
 
         spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
@@ -1485,15 +1489,101 @@ class ErgebnisTab(QWidget):
                 return True
         return False
 
-    def eingabefelder(self, teilnehmer_id: int):
-        """(Zeile, Punktefelder je Disziplin, (Disqualifiziert-, Abbruch-Checkbox)) eines
-        Teilnehmers oder None - für die Demoprüfung (desktop_demo), die die Felder sichtbar
-        ausfüllt. Scrollt die Zeile dabei in den sichtbaren Bereich."""
-        for row, t in enumerate(self._teilnehmer_je_zeile):
-            if t["id"] == teilnehmer_id:
-                self.tabelle.scrollTo(self.tabelle.model().index(row, 0))
-                return row, self._boxen_je_zeile[row], self._status_boxen_je_zeile[row]
-        return None
+    # --- Zellwert-Schnittstelle (offene Punkte O7, 19.10.2026) ------------------------
+    # Für Tests, Demoprüfung und Screenshots: Werte und Zustände je Zeile und Disziplin,
+    # ohne die Darstellung der Zellen zu kennen (bis O8 ein QLineEdit je Zelle, danach
+    # Items mit Delegate). `feld` ist "suche" oder "anzeige"; Punkte sind Texte wie in der
+    # Eingabe ("" = noch nicht eingetragen). Eine Disziplin, die in der Zeile nicht erfasst
+    # wird (ED: nur die eigene), ergibt KeyError.
+
+    _FELDER = ("suche", "anzeige")
+
+    def zeilenanzahl(self) -> int:
+        return len(self._teilnehmer_je_zeile)
+
+    def teilnehmer_der_zeile(self, zeile: int) -> dict:
+        """Stammdaten des Teilnehmers in `zeile` (Reihenfolge wie angezeigt)."""
+        return self._teilnehmer_je_zeile[zeile]
+
+    def zeile_von(self, teilnehmer_id: int) -> int | None:
+        """Tabellenzeile eines Teilnehmers oder None, wenn er nicht in der Liste steht (z. B.
+        „keine Teilnahme“). Per Filter ausgeblendete Zeilen werden gefunden."""
+        return next((row for row, t in enumerate(self._teilnehmer_je_zeile) if t["id"] == teilnehmer_id), None)
+
+    def zeile_zeigen(self, zeile: int) -> None:
+        """Scrollt die Zeile in den sichtbaren Bereich (Demoprüfung)."""
+        self.tabelle.scrollTo(self.tabelle.model().index(zeile, 0))
+
+    def erfassbare_disziplinen(self, zeile: int) -> list[str]:
+        """Disziplinen, für die die Zeile Punktezellen hat (ED: nur die eigene, DK: alle)."""
+        return list(self._boxen_je_zeile[zeile])
+
+    def spalte_bearbeitbar(self, zeile: int, spalte: int) -> bool:
+        """Sieht in der Tabelle selbst nach, ob sich die Zelle bearbeiten lässt (bis O8: ein
+        Eingabe-Widget liegt darin). Für ED-fremde Disziplinen („–“) muss das False sein -
+        auch nachdem eine Zeile von DK auf ED umgestellt oder umsortiert wurde."""
+        return self.tabelle.cellWidget(zeile, spalte) is not None
+
+    def _punktefeld(self, zeile: int, disziplin: str, feld: str) -> QLineEdit:
+        return self._boxen_je_zeile[zeile][disziplin][self._FELDER.index(feld)]
+
+    def punkte(self, zeile: int, disziplin: str) -> tuple[str, str]:
+        """(Suche, Anzeige) wie angezeigt."""
+        suche_feld, anzeige_feld = self._boxen_je_zeile[zeile][disziplin]
+        return suche_feld.text(), anzeige_feld.text()
+
+    def punkte_eintragen(self, zeile: int, disziplin: str, suche: str | int | None = None,
+                         anzeige: str | int | None = None) -> None:
+        """Trägt Punkte ein wie eine Eingabe des Anwenders (None = Feld unverändert lassen).
+        Der Wert gilt sofort als übernommen; Gültigkeitsprüfung beim Tippen siehe
+        zelle_bearbeiten."""
+        for feld, wert in (("suche", suche), ("anzeige", anzeige)):
+            if wert is not None:
+                self._punktefeld(zeile, disziplin, feld).setText(str(wert))
+
+    def status(self, zeile: int) -> tuple[bool, bool]:
+        """(Disqualifiziert, Abbruch) wie angezeigt."""
+        dq_box, abbruch_box = self._status_boxen_je_zeile[zeile]
+        return dq_box.isChecked(), abbruch_box.isChecked()
+
+    def status_setzen(self, zeile: int, dq: bool | None = None, abbruch: bool | None = None) -> None:
+        """Setzt Disqualifiziert/Abbruch wie ein Klick des Anwenders (None = unverändert)."""
+        dq_box, abbruch_box = self._status_boxen_je_zeile[zeile]
+        if dq is not None:
+            dq_box.setChecked(dq)
+        if abbruch is not None:
+            abbruch_box.setChecked(abbruch)
+
+    def zelle_gesperrt(self, zeile: int, disziplin: str) -> bool:
+        """True, solange BEIDE Punktezellen der Disziplin wegen Disqualifiziert/Abbruch
+        gesperrt sind (leer sind sie dann ebenfalls, siehe punkte())."""
+        return not any(f.isEnabled() for f in self._boxen_je_zeile[zeile][disziplin])
+
+    def zeile_ungespeichert(self, zeile: int) -> bool:
+        """True, wenn die Zeile vom zuletzt gespeicherten Stand abweicht (gelb markiert)."""
+        return self._zeile_ist_ungespeichert(zeile)
+
+    def zellzustand(self, zeile: int, disziplin: str, feld: str) -> dict:
+        """Darstellungszustand einer Punktezelle: `zu_hoch` (roter Rahmen), `tooltip` und
+        `hintergrund` (Farbe der Markierung „ungespeichert“ als „#rrggbb“, kleingeschrieben;
+        None, solange die Zeile nicht ungespeichert ist)."""
+        widget = self._punktefeld(zeile, disziplin, feld)
+        stil = widget.styleSheet()
+        treffer = re.search(r"background-color:\s*([^;]+);", stil)
+        return {
+            "zu_hoch": "border" in stil,
+            "tooltip": widget.toolTip(),
+            "hintergrund": treffer.group(1).strip().lower() if treffer else None,
+        }
+
+    def zelle_bearbeiten(self, zeile: int, disziplin: str, feld: str) -> QLineEdit:
+        """Setzt den Fokus in die Punktezelle und gibt das Eingabefeld zurück - für
+        Tastatur-Tests (Validator, Komma-Hinweis, Tab/Enter). Nur für Tasten und Fokus
+        gedacht, Werte über punkte()/punkte_eintragen()."""
+        widget = self._punktefeld(zeile, disziplin, feld)
+        self.tabelle.scrollTo(self.tabelle.model().index(zeile, 0))
+        widget.setFocus()
+        return widget
 
     def aktualisieren(self) -> None:
         """Baut die Tabelle komplett neu aus der Datenbank auf (verwirft dabei nicht
@@ -1593,6 +1683,7 @@ class ErgebnisTab(QWidget):
         self._geladen_je_zeile = []
         self._status_boxen_je_zeile = []
         self._status_geladen_je_zeile = []
+        self.aufbau_kennung += 1
 
         self.tabelle.setRowCount(len(self._teilnehmer_je_zeile))
         for row, t in enumerate(self._teilnehmer_je_zeile):

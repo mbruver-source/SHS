@@ -7279,3 +7279,38 @@ Entscheidungen vom 18.10.2026.
 - **Verifikation (unabhängiger Subagent):** Am Code gab es nichts zu beanstanden. Die
   gemeldeten Doku-Punkte sind behoben: veralteter Agenten-Rahmen, „zweitgrößtes Modul“,
   Einbindung von `desktop_dialoge`, Zeilenangabe der gem-Helfer im Skill.
+
+
+## 19.10.2026: O7 Ergebniserfassung, Schritt 1: Zellwert-Schnittstelle (automatische Abarbeitung)
+
+Erster von drei Schritten zur Ergebniserfassung ohne ein Widget je Zelle. Grundlage sind Marcos
+Entscheidungen vom 18.10.2026. Dieser Schritt ändert das Verhalten nicht.
+
+- **Neue Schnittstelle am `ErgebnisTab`:** Sie liest und setzt Werte und Zustände je Zeile und
+  Disziplin, ohne dass man die Darstellung der Zellen kennen muss. Die genauen Namen stehen in
+  `Offene-Punkte-2026-10/aufgaben.md` unter O7.
+  - Werte und Status: `punkte`/`punkte_eintragen` und `status`/`status_setzen`.
+  - Zustände: `zelle_gesperrt`, `zeile_ungespeichert` und `zellzustand` (zu hoch, Tooltip,
+    Hintergrund).
+  - Zeilen und Zellen finden: `zeile_von`, `teilnehmer_der_zeile`, `erfassbare_disziplinen` und
+    `spalte_bearbeitbar`.
+  - `zelle_bearbeiten` gibt den Editor für Tastatur-Tests zurück.
+  - `aufbau_kennung` ersetzt die Identitätsprüfungen „nicht neu aufgebaut“.
+  - Vorerst liegt die Schnittstelle auf den heutigen Eingabefeldern. `eingabefelder()` entfällt.
+- **Umgestellt:** alle Ergebnis-Tests in `test_app_gui.py` (rund 45 Tests), die Demoprüfung
+  (ziffernweises Tippen, DQ ankreuzen) und `tools/screenshots.py`. Kein Test greift mehr direkt
+  auf die Eingabe-Widgets zu.
+  - Das Komma testet jetzt eine echte Eingabe (`keyClicks`) statt eines ausgelösten Signals.
+  - Der Maximum-Test prüft zusätzlich das Anzeigefeld.
+  - Der Designwechsel vergleicht die Farbe genau, statt nur nach ihr zu suchen.
+- **Tests:** vorher und nachher je 394 GUI-Tests grün, die Unittests ebenfalls.
+- **Verifikation (unabhängiger Subagent), zwei Lücken gefunden und behoben:**
+  - Der Regressionsschutz vom 23.09. („kein altes DK-Eingabefeld über dem –“ in ED-Zeilen) war
+    verloren gegangen. Jetzt prüft ihn `spalte_bearbeitbar`, das in der Tabelle selbst nachsieht.
+    Gegenprobe: Ohne `removeCellWidget` scheitern beide ED-Tests.
+  - „Kein Neuaufbau nach eigenem Speichern“ merkt sich die Aufbau-Kennung wieder schon vor dem
+    Speichern.
+  - Weitere Änderungen nach der Verifikation:
+    - `zelle_gesperrt` prüft jetzt beide Felder.
+    - Die Docstrings sind präzisiert.
+    - Hinweise für O8 stehen in `aufgaben.md`.

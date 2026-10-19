@@ -344,11 +344,9 @@ def _bild_zeitplan(termine: _Termine, ziel: Path) -> list[Path]:
 def _ergebnisse_eintippen(fenster, ids, werte_je_name) -> None:
     tab = fenster.ergebnis_tab
     for name, werte in werte_je_name.items():
-        felder = tab.eingabefelder(ids[name])
+        zeile = tab.zeile_von(ids[name])
         for disziplin, (suche, anzeige) in werte.items():
-            suche_feld, anzeige_feld = felder[1][disziplin]
-            suche_feld.setText(str(suche))
-            anzeige_feld.setText(str(anzeige))
+            tab.punkte_eintragen(zeile, disziplin, suche, anzeige)
     _warten()
 
 
