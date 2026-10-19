@@ -1407,7 +1407,8 @@ class _HakenItem(QTableWidgetItem):
 
 class _PunkteDelegate(QStyledItemDelegate):
     """Zeichnet eine Punktezelle wie ein umrandetes Eingabefeld (roter Rahmen über dem
-    Maximum, gelb solange ungespeichert, grau und leer wenn gesperrt) und öffnet zum
+    Maximum, gelb solange ungespeichert, leer und ohne Rahmen auf abgesetzter Fläche wenn
+    gesperrt) und öffnet zum
     Bearbeiten ein QLineEdit mit _punkte_validator. Lostippen ersetzt den Wert."""
 
     def __init__(self, tab: "ErgebnisTab"):
@@ -1775,9 +1776,9 @@ class ErgebnisTab(QWidget):
 
     # --- Zellwert-Schnittstelle (offene Punkte O7, 19.10.2026) ------------------------
     # Für Tests, Demoprüfung und Screenshots: Werte und Zustände je Zeile und Disziplin,
-    # ohne die Darstellung der Zellen zu kennen. `feld` ist "suche" oder "anzeige"; Punkte sind Texte wie in der
-    # Eingabe ("" = noch nicht eingetragen). Eine Disziplin, die in der Zeile nicht erfasst
-    # wird (ED: nur die eigene), ergibt KeyError.
+    # ohne die Darstellung der Zellen zu kennen. `feld` ist "suche" oder "anzeige"; Punkte
+    # sind Texte wie in der Eingabe ("" = noch nicht eingetragen). Eine Disziplin, die in der
+    # Zeile nicht erfasst wird (ED: nur die eigene), ergibt KeyError.
 
     _FELDER = ("suche", "anzeige")
 

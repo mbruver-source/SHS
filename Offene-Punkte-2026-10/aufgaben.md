@@ -309,6 +309,14 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
 
 ## Rückfragen an Marco
 
+**Entscheidungen 19.10.2026 (Marco), alle umgesetzt:**
+- 1 und 2: ja (d0d3538).
+- 3: Nach dem „Ja“ ohne Schrittgrenze prüfen; die Übersicht zeigt „(ungewöhnlich groß)“
+  (fae1c5f).
+- 4: Gesperrte Zellen deutlicher absetzen, ohne Rahmen (fe9e04b).
+- 5: So lassen.
+- 6 (4869795), 7 (b955117) und 8 (63c3752): umsetzen.
+
 1. **O1, alte Rücksprung-Datei beim Wiederherstellen:**
    - Liegt neben dem Ziel noch eine alte `<Ziel>-journal` (etwa nach einem Absturz) und enthält
      das ZIP keine, bleibt sie liegen. Beim nächsten Öffnen spielt SQLite sie auf die neu
@@ -411,8 +419,8 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
     weichen nur werkzeugspezifisch ab.
   - Nach CLAUDE.md wird jeder QS-Befund erst nach Marcos Go umgesetzt. Deshalb ist von den
     Befunden nichts umgesetzt.
-- **Offen für Marco:** Rückfragen 3–8. Wichtigste ist Nr. 6, denn dabei geht eine Eingabe
-  verloren. Sie sollte vor dem nächsten Build behoben sein.
+- **Offen für Marco:** nichts mehr; alle Rückfragen sind am 19.10.2026 entschieden und
+  umgesetzt (siehe oben).
 - **Vor dem nächsten Build:**
   - Sichtprüfung der neuen Ergebniserfassung am echten Windows und der Mac/Linux-Vorschau;
   - `docs/HANDBUCH.pdf` neu erzeugen;

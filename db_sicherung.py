@@ -404,8 +404,11 @@ def _termin_ersetzen(ordner: Path, ziel: str, tmp_termin: str, tmp_journal: str 
         if termin_ersetzt and not any(original == termin for _, original in beiseite):
             with suppress(OSError):
                 os.remove(termin)
+        # Jede Datei einzeln zurückholen; scheitert das bei einer, bleibt sie als „.alt“
+        # liegen, und gemeldet wird weiter der ursprüngliche Fehler.
         for alt, original in reversed(beiseite):
-            os.replace(alt, original)
+            with suppress(OSError):
+                os.replace(alt, original)
         raise
     for alt, _original in beiseite:
         with suppress(OSError):

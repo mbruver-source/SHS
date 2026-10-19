@@ -7498,3 +7498,48 @@ Marco hat beide Rückfragen mit Ja beantwortet.
   - Sichtprüfung am echten Windows;
   - `docs/HANDBUCH.pdf` neu erzeugen;
   - CI nach Marcos Push.
+
+
+## 19.10.2026: Rückfragen 3–8 der offenen Punkte entschieden und umgesetzt
+
+Marco hat alle Rückfragen entschieden. Umgesetzt ist jede als eigener lokaler Commit:
+- **3, große Termin-Dateien (fae1c5f):** Nach dem „Ja“ auf „ungewöhnlich groß, trotzdem
+  öffnen?“ prüft `termin_oeffnen` ohne Schrittgrenze. Sonst scheiterte eine echte große Datei
+  trotz „Ja“ meist doch. Die Terminübersicht zeigt eine solche Datei als „(ungewöhnlich groß)“
+  statt „(nicht lesbar: zu groß)“. Im Import gilt sie weiter als nicht lesbar. Die
+  Handbuch-FAQ ist angepasst.
+- **4, gesperrte Punktezellen (fe9e04b):** Nach Disqualifiziert/Abbruch sind sie in allen
+  Designs eine deutlich abgesetzte Fläche ohne Rahmen. Dafür gibt es den neuen Designschlüssel
+  `gesperrt_bg`: Hell #D5DBE3, Sand #D9D0C1, Dunkel #111317, Hoher Kontrast #C8C8C8. Ich habe
+  alle vier Designs offscreen gerendert und angesehen. Die Screenshots der Ergebniserfassung
+  sind neu.
+- **5, Ansichtswechsel 0,42 s:** bleibt so.
+- **6, Eingabeverlust (4869795):** `_PunkteDelegate.setEditorData` überschreibt ein schon
+  bearbeitetes Feld nicht mehr (`isModified`). Bisher lud das Umfärben nach einem
+  Designwechsel per Maus den alten Wert ins offene Feld. Dazu gibt es einen neuen Test,
+  die Gegenprobe ist rot.
+- **7, Journal als Einheit (b955117):** `_termin_ersetzen` legt die alte Termin-Datei und das
+  alte Journal beiseite, ersetzt beide und legt bei einem Fehler alles zurück. Ein halb
+  wiederhergestellter Termin ohne Journal bleibt nicht mehr stehen.
+  `TeilweiseWiederhergestelltError` nennt nur noch vollständig ersetzte Termine. Drei Tests
+  sind angepasst bzw. neu.
+- **8, Kleinigkeiten (63c3752):**
+  - Docstrings von `app.py`, `db.py` und `db_sicherung.py` auf die neue Modulaufteilung
+    angepasst;
+  - unbenutzter Import in `desktop_demo.py` entfernt; der Demo-Test patcht jetzt
+    `desktop_gemeinsam`;
+  - Verlaufskommentare gekürzt;
+  - zwei Stilpunkte in `test_app_gui.py`.
+- **Tests:** Unittests OK, GUI 407 grün (vorher 406, ein neuer Test).
+- **Verifikation (Subagent):** Der Code ist in Ordnung. Nachgezogen habe ich:
+  - Docstring von `_PunkteDelegate`;
+  - einen Kommentar-Umbruch;
+  - das Zurückholen in `_termin_ersetzen`: Es holt jetzt jede Datei einzeln zurück und meldet
+    den ursprünglichen Fehler.
+- **Restrisiko:** Mit Journal im ZIP ist das Ersetzen zwei Schritte statt einem atomaren.
+  Stürzt das Programm genau dazwischen ab, liegt der alte Termin als versteckte `.alt`-Datei im
+  Termine-Ordner.
+- **Vor dem nächsten Build bleibt:**
+  - Sichtprüfung der Ergebniserfassung am echten Windows;
+  - `docs/HANDBUCH.pdf` neu erzeugen;
+  - CI nach Marcos Push.
