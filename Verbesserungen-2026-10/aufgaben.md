@@ -22,8 +22,8 @@ Start durch Marco:
 | V4 B3 CSV-Altexporte und Excel-Verdacht | S | erledigt | 61f0faa | 15 % / 21 % → 19 % / 22 % | Unittests OK, GUI 410 grün; „1E5“ bleibt in B3 |
 | V5 B4 Zeitplan-Effizienz | S | erledigt | 1b9bdda | 19 % / 22 % → 26 % / 22 % | Unittests OK, GUI 412 grün; UML Diagramm 7 berichtigt |
 | V6 B5 Warnung ohne erlaubte Interaktion | S | erledigt | 7b46b4e | 26 % / 22 % → 36 % / 23 % | GUI 413 grün; Knopf-Verbindung per Lambda (im Testlauf gefunden) |
-| V7 B6 `-wal`/`-shm` beim lesenden Öffnen | S | erledigt | siehe Log | 36 % / 23 % → 42 % / 24 % | GUI 413 grün; Rückfrage 1 (Restrisiko immutable) |
-| V8 Abschluss | S | offen | | | zuletzt |
+| V7 B6 `-wal`/`-shm` beim lesenden Öffnen | S | erledigt | 8a8a078 | 36 % / 23 % → 42 % / 24 % | GUI 413 grün; Rückfrage 1 (Restrisiko immutable) |
+| V8 Abschluss | S | erledigt | dieser Commit | 42 % / 24 % → 48 % / 24 % | Abschluss-Verifikation in Ordnung; Rückfragen 1 und 2 offen |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
 
@@ -176,3 +176,30 @@ zurück.
    „beschädigt“ melden. Eigene Termin-Dateien sind nie betroffen (Rollback-Journal). Sehr
    unwahrscheinlich. Vorschlag: als akzeptiertes Restrisiko in `OFFEN.md` Teil C eintragen.
    Alternative: B6 zurücknehmen (Zusatzdateien bleiben dann liegen).
+2. **V8, Randfall Sitzungsende:** Erlaubt das System beim Abmelden keine Rückfrage und wird
+   das Abmelden danach doch abgebrochen (X11), speichert das spätere Schließen per Fenster-X
+   neue Eingaben wie gewohnt mit Meldungen. Das ist vorhandenes Verhalten. Soll dort ebenfalls
+   ohne Meldungen gespeichert werden? Vorschlag: so lassen. Wer das Fenster selbst schließt,
+   darf die Meldung sehen.
+
+## Abschlussbericht (19.10.2026)
+
+Commits (alle lokal, nicht gepusht): c1ff49c V1, f494b39 V2, 34bc9ef V3, 61f0faa V4,
+1b9bdda V5, 7b46b4e V6, 8a8a078 V7, dazu der Abschluss-Commit V8.
+
+- Verbrauch: 82 % → 88 % (V1), dann neues Fenster 0 % → 42 % für V2–V7, V8 rund 5 %.
+  Tatsächlich etwa S ≈ 5–10 %, M ≈ 8 %.
+- Tests am Ende: Unittests OK (skipped=175), GUI 413 passed, 1 skipped, 1 xfailed. Frisches
+  venv wie im Windows-Job: 922 passed (Stand V2).
+- Abschluss-Verifikation über alle Commits: in Ordnung, keine Muss-Punkte. Übernommen:
+  - UML Diagramm 12 (`ErgebnisTab.alle_speichern`, Hinweis SitzungsendeFilter für alle
+    Freigaben) und Klassendiagramm (`alle_speichern(meldungen)`);
+  - Fundstellen in `OFFEN.md` A8/B3.
+- `OFFEN.md`: C26, B1, B2, B4, B5, B6 gestrichen; B3 auf „1E5“ gekürzt; B10 „Windows in der
+  CI“ erledigt; A8 und A9 (Rückfragen 1 und 2) neu.
+- **Prüfschritt für Marco nach dem Push:** unter „Actions“ beide Test-Jobs prüfen, `test`
+  (Linux, mit PostgreSQL) und `test-windows`. Der Windows-Job läuft dann zum ersten Mal
+  (lokal mit Python 3.12 nachgestellt, die CI nutzt 3.11). Restrisiko laut Verifikation: der
+  Strg+S-Test unter Linux-offscreen, falls das Aktivieren dort verzögert ist.
+- Die Änderung am Codex-Agenten `.codex/agents/verifikation.toml` ist nur lokal, `.codex/`
+  ist von Git ausgeschlossen.

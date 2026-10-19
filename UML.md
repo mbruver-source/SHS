@@ -113,7 +113,7 @@ classDiagram
         +tabelle
         +aktualisieren()
         +aktualisieren_falls_geaendert()
-        +alle_speichern()
+        +alle_speichern(meldungen)
         +farben_auffrischen()
         +hat_ungespeicherte_aenderungen()
         +punkte(zeile, disziplin)
@@ -591,7 +591,7 @@ sequenceDiagram
     OS->>H: commitDataRequest (Abmelden, Setup)
     H->>H: _sitzungsende_pruefen
     alt ungespeicherte Ergebnisse
-        H->>H: alle_speichern (ohne erlaubte Interaktion: keine Meldung, Gründe ins Absturzprotokoll)
+        H->>H: ErgebnisTab.alle_speichern (ohne erlaubte Interaktion: keine Meldung, Gründe ins Absturzprotokoll)
     end
     alt Reste ungespeichert, keine Rückfrage erlaubt
         H-->>OS: manager.cancel() (Beenden abgelehnt)
@@ -599,8 +599,9 @@ sequenceDiagram
         H->>H: _ja_nein „trotzdem beenden?“
         H-->>OS: Nein: manager.cancel(), Ja: Beenden erlaubt
     else alles gespeichert
-        H-->>OS: Beenden erlaubt (SitzungsendeFilter nimmt es bei Abbruch zurück)
+        H-->>OS: Beenden erlaubt
     end
+    Note over H,OS: Wird ein erlaubtes Beenden doch abgebrochen, nimmt SitzungsendeFilter die Freigabe zurück
 ```
 
 ---

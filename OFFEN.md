@@ -21,13 +21,14 @@ suchen.
 | A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
 | A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
 | A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
-| A8 | Rückfrage V7: Restrisiko `immutable=1` (fremde WAL-Datei, Checkpoint eines fremden Werkzeugs genau während des Lesens) als akzeptiert eintragen? | 19.10.2026 | Verbesserungen-2026-10/aufgaben.md |
+| A9 | Rückfrage V8: Soll `closeEvent` nach einer Freigabe ohne Interaktion (abgebrochenes Abmelden unter X11) ebenfalls ohne Meldungen speichern? Bisher unverändert mit Meldungen | 19.10.2026 | Verbesserungen-2026-10/aufgaben.md |
+| A8 | Rückfrage V7: Restrisiko `immutable=1` (fremde WAL-Datei, Checkpoint eines fremden Werkzeugs genau während des Lesens) als akzeptiert eintragen? | 19.10.2026 | F:7809, Verbesserungen-2026-10/aufgaben.md |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
 | Nr. | Punkt | Entscheidung | Fundstelle |
 |---|---|---|---|
-| B3 | Excel-Verdacht kann bei Nummern wie „1E5“ fälschlich anschlagen (Altexporte und Telefon-Grenze erledigt 19.10.2026, V4) | 14.10., weiter 18.10.2026 | F:6146, F:6980 |
+| B3 | Excel-Verdacht kann bei Nummern wie „1E5“ fälschlich anschlagen (Altexporte und Telefon-Grenze erledigt 19.10.2026, V4) | 14.10., weiter 18.10.2026 | F:6146, F:6980, F:7729 |
 | B7 | Sicherheitsprüfung S-5 (gering): Web-App nutzt das DB-Eigentümerkonto; Nutzen gering bei hohem Umbau | 03.10.2026 | F:4510 |
 | B8 | SignPath Foundation (Code-Signatur): erst wieder, wenn das Programm weiter verbreitet ist | 05.10.2026 | F:4770 |
 | B9 | Englische Sprachumschaltung: nur geschätzt (Desktop 5–6, alles 9–11 Fenster), Weg beschrieben | 15.10.2026 | F:6605 |

@@ -7829,3 +7829,19 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   Docstrings von `oeffne_termin_lesend` und `_momentaufnahme`, A9-Hinweis in
   `Desktop-Pruefung-2026-10/aufgaben.md` als erledigt vermerkt.
 - `OFFEN.md` B6 ist gestrichen, A8 (Rückfrage) ist neu.
+
+
+## 19.10.2026: V8 Abschluss der Verbesserungen V1–V7 (automatische Abarbeitung)
+
+- **Commits (lokal, nicht gepusht):** c1ff49c, f494b39, 34bc9ef, 61f0faa, 1b9bdda, 7b46b4e,
+  8a8a078 und der Abschluss-Commit. Bericht in `Verbesserungen-2026-10/aufgaben.md`.
+- **Abschluss-Verifikation über alle Commits:** in Ordnung, keine Muss-Punkte.
+  - Geprüft wurden die Wechselwirkungen, unter anderem `alle_speichern(meldungen)` gegen
+    Strg+S und die Demo.
+  - Die neuen Tests haben keine Plattformannahmen; der V3-Test ist für Linux durchgerechnet.
+  - Übernommen: `UML.md` Diagramm 12 und Klassendiagramm sowie die `OFFEN.md`-Fundstellen.
+- **Rückfragen an Marco (`OFFEN.md` A8, A9):**
+  - Restrisiko `immutable=1` bei fremden WAL-Dateien;
+  - Randfall `closeEvent` nach einem abgebrochenen Abmelden ohne Interaktion.
+- **Prüfschritt nach Marcos Push:** unter „Actions“ beide Test-Jobs grün, `test` (Linux) und
+  der neue `test-windows`.
