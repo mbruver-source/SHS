@@ -602,7 +602,17 @@ gesperrt.
 - Die Filter blenden nur aus, ungespeicherte Eingaben bleiben erhalten. **„Liste aktualisieren“**
   fragt vorher nach, wenn noch etwas ungespeichert ist.
 - Ein Klick auf einen **Spaltenkopf** sortiert nach dieser Spalte (Pfeil im Kopf), ein zweiter
-  Klick kehrt die Richtung um. Mit der **Tab-Taste** springst du von Eingabefeld zu Eingabefeld.
+  Klick kehrt die Richtung um.
+- **Eintippen:** Zelle anklicken und einfach die Zahl tippen – sie ersetzt den bisherigen Wert.
+  Zum Ändern eines Werts geht auch ein Doppelklick oder **F2** (am Mac Enter). **Enter** übernimmt
+  die Zahl und bleibt in der Zelle. **Entf** bzw. die **Rücktaste** leert die markierte Zelle.
+- Mit der **Tab-Taste** springst du zur nächsten Eingabe: Suche → Anzeige → nächste Disziplin →
+  „Disqualifiziert“ → „Abbruch“ → nächste Zeile (Umschalt+Tab zurück). Gesperrte Felder und
+  „–“ werden übersprungen. Die **Leertaste** (oder ein Klick) setzt bzw. entfernt das Häkchen bei
+  „Disqualifiziert“ und „Abbruch“.
+- Gelb bzw. der rote Rahmen bei zu hohen Punkten erscheinen, sobald du die Zelle verlässt oder
+  Enter drückst. Eine gerade getippte Zahl geht beim Speichern, Reiterwechsel oder Schließen nie
+  verloren.
 
 Beim Wechsel des **Reiters** fragt das Programm bei ungespeicherten Ergebnissen „Jetzt
 speichern?“. Bei „Nein“ bleiben sie ungespeichert in der Tabelle stehen, „Abbrechen“ bleibt in

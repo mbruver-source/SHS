@@ -19,8 +19,8 @@ Start durch Marco:
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | erledigt | fbd85fd | 1 % / 4 % → 7 % / 4 % | Unittests OK, GUI 394 grün |
 | O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | 55d946d | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
 | O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | cded543 | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
-| O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | (s. git log) | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
-| O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | offen | | | nach O8 |
+| O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | 54c7e69 | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
+| O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | (s. git log) | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
 | O10 Messung Lasttest-1000 | S | offen | | | nach O9 |
 | O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | offen | | | zuletzt |
 
@@ -323,6 +323,12 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
    groß)“ da, lässt sich aber nach der Rückfrage trotzdem öffnen (sonst wäre die Rückfrage nicht
    erreichbar). Lieber „… (ungewöhnlich groß)“ ohne „nicht lesbar“? Bis zur Entscheidung bleibt
    es wie beschlossen.
+4. **O9, gesperrte Punktezellen in Hell/Sand:** Nach Disqualifiziert/Abbruch sind die Punktezellen
+   grau und leer – in den Designs Hell und Sand ist dieses Grau (FLAECHE_DISABLED) aber kaum von
+   einer leeren aktiven Zelle (FLAECHE) zu unterscheiden, in Hell sogar etwas heller. Das war mit
+   den früheren Eingabefeldern genauso (gleiche Stylesheet-Farben). Dunkel/Hoher Kontrast sind
+   deutlich. Soll die gesperrte Zelle in allen Designs sichtbar anders aussehen (z. B. dunkleres
+   Grau oder gestrichelter Rahmen)? Bis zur Entscheidung bleibt es wie bisher.
 
 ## Hinweise für den Abschlussbericht
 

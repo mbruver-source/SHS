@@ -6573,6 +6573,25 @@ def test_ergebnis_strg_tab_wechselt_den_reiter(qtbot, termin):
     assert fenster._tabs.currentIndex() != index_vorher
 
 
+def test_ergebnis_entf_leert_die_markierte_punktezelle(qtbot, conn):
+    """Verifikation O9: wie früher im Eingabefeld leert Entf/Rücktaste die Zelle direkt."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", 50, 30)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    suche, anzeige = _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"]
+    tab.tabelle.setCurrentCell(0, suche)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
+    tab.tabelle.setCurrentCell(0, anzeige)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Backspace)
+    assert tab.punkte(0, "Flächensuche") == ("", "")
+    assert tab.zeile_ungespeichert(0)
+    # Info-Zellen bleiben unberührt.
+    name = tab.tabelle.item(0, 1).text()
+    tab.tabelle.setCurrentCell(0, 1)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
+    assert tab.tabelle.item(0, 1).text() == name != ""
+
+
 def test_ergebnis_leertaste_schaltet_haekchen(qtbot, conn):
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = _ergebnis_tab_gezeigt(qtbot, conn)

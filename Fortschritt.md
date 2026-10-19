@@ -7373,3 +7373,40 @@ Umsetzung nach Marcos Entscheidungen vom 18.10.2026 (Variante A).
   - `Architektur.md` ist nachgezogen.
 - **Offen für O9:** HANDBUCH (Bedienung der Tabelle), Sichtkontrolle in allen Designs,
   Screenshots.
+
+
+## 19.10.2026: O9 Ergebniserfassung, Schritt 3: Darstellung, Handbuch, Screenshots (automatische Abarbeitung)
+
+- **Sichtkontrolle:** Die neue Ergebniserfassung habe ich offscreen mit echter Schrift in Hell,
+  Sand, Dunkel und Hoher Kontrast gerendert. Dabei korrigiert:
+  - Die Ziffern in den Punktezellen waren zu klein. Der Delegate zeichnet jetzt mit der Schrift
+    der Tabelle.
+  - Die Farben der Punktezellen kommen wie beim Eingabefeld-Stylesheet aus dem Design:
+    FLAECHE/RAND, gesperrt FLAECHE_DISABLED/RAND_DISABLED. `_farbe()` liefert dafür auch die
+    Großbuchstaben-Schlüssel; Kommentar und Docstring in `desktop_darstellung.py` sind angepasst.
+  - Fokusrahmen (2 px) und Demo-Markierung nehmen jetzt die Akzentfarbe (`QPalette.Link`).
+    `QPalette.Highlight` ist in den hellen Designs nur die blasse Auswahlfarbe. Damit war die
+    aktuelle Zelle kaum zu sehen und die Demo-Markierung auf gelben Zeilen fast unsichtbar (das
+    galt schon vor O8).
+- **Entf/Rücktaste:** Sie leeren eine markierte Punktezelle wieder direkt, wie früher im
+  Eingabefeld. Das war eine kleine Lücke aus O8, die die Verifikation gefunden hat. Dazu gibt es
+  einen neuen Test.
+- **Handbuch** (Abschnitt Ergebniserfassung): neue Bedienung beschrieben:
+  - Lostippen;
+  - Doppelklick oder F2 (am Mac Enter);
+  - Enter bleibt in der Zelle;
+  - Entf leert die Zelle;
+  - Tab-Reihenfolge und Leertaste;
+  - Gelb und Rot erscheinen nach dem Übernehmen;
+  - nichts geht verloren.
+
+  Website, READMEs und die Hilfe im Programm erwähnen die alte Bedienung nicht.
+- **Screenshots neu** mit `tools/screenshots.py`: `handbuch_ergebniserfassung.png`,
+  `ergebniserfassung.png` und `handbuch_demo.png`. Die Demo-Markierung ist jetzt sichtbar.
+- **Tests:** GUI 406 grün.
+- **Verifikation (unabhängiger Subagent):** Die Punkte oben sind umgesetzt.
+- **Rückfrage an Marco** (in `aufgaben.md`): Gesperrte Punktezellen sind in Hell/Sand kaum von
+  leeren zu unterscheiden. Das war mit den alten Eingabefeldern genauso. Soll das deutlicher
+  werden?
+- **Vor dem nächsten Build** (nicht Teil des Loops): Marco sieht sich die neue Ergebniserfassung
+  am echten Windows an. Außerdem muss `docs/HANDBUCH.pdf` neu erzeugt werden.

@@ -309,7 +309,9 @@ def _haken_bild_bereitstellen() -> None:
 # @@...@@-Platzhalter in _QSS_TEMPLATE; "hell" entspricht bit-für-bit dem bisherigen
 # Aussehen (siehe test_theme.py). Die Kleinbuchstaben-Farbschlüssel (ok, warnung, fehler,
 # gedaempft, ungespeichert_bg, zeile_bg) sind semantische Farben für Stellen, an denen der
-# Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über _farbe(); fehler und
+# Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über _farbe(), das seit
+# O9 (19.10.2026) auch die Großbuchstaben-Schlüssel liefert (FLAECHE, RAND …, für die selbst
+# gezeichneten Punktezellen der Ergebniserfassung); fehler und
 # zeile_bg fließen außerdem in _design_palette() ein. "anzeigename" ist der Menütext.
 # "dunkel": True schaltet zusätzlich den Fusion-Stil ein, fordert das dunkle Farbschema an
 # und mischt die Auswahlfarbe aus Akzent und Hintergrund (siehe _darstellung_anwenden()).
@@ -474,8 +476,9 @@ def _erzeuge_qss(theme_name: str, design_name: str = _DESIGN_DEFAULT) -> str:
 
 
 def _farbe(name: str) -> QColor:
-    """Semantische Farbe (ok/warnung/fehler/gedaempft/ungespeichert_bg/zeile_bg) des
-    aktiven Hintergrund-Designs - für Stellen, an denen der Code selbst färbt."""
+    """Farbe des aktiven Hintergrund-Designs - semantisch (ok/warnung/fehler/gedaempft/
+    ungespeichert_bg/zeile_bg) oder ein Stylesheet-Schlüssel (FLAECHE, RAND, …) - für
+    Stellen, an denen der Code selbst färbt."""
     return QColor(_DESIGNS[_aktives_design][name])
 
 

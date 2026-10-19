@@ -174,7 +174,9 @@ class DemoMarkierung(QWidget):
     def paintEvent(self, _event) -> None:  # type: ignore[override]
         maler = QPainter(self)
         maler.setRenderHint(QPainter.Antialiasing)
-        maler.setPen(QPen(self.palette().color(QPalette.Highlight), 3))
+        # Akzentfarbe (QPalette.Link) - Highlight ist in den hellen Designs die blasse
+        # Auswahlfarbe und auf gelben Zeilen kaum zu sehen (Verifikation O9).
+        maler.setPen(QPen(self.palette().color(QPalette.Link), 3))
         maler.setBrush(Qt.NoBrush)
         maler.drawRoundedRect(QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5), 6, 6)
 

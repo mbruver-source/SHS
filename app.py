@@ -1466,19 +1466,22 @@ class _PunkteDelegate(QStyledItemDelegate):
         opt.text = ""
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)  # Zellhintergrund, Auswahl
 
+        # Farben wie beim Eingabefeld im Stylesheet (desktop_darstellung, „Eingabefelder“:
+        # FLAECHE/RAND, gesperrt FLAECHE_DISABLED/RAND_DISABLED, Fokus in der Akzentfarbe -
+        # die steht in QPalette.Link; Highlight ist nur die blasse Auswahlfarbe).
         aktiv = bool(index.flags() & Qt.ItemIsEnabled)
         if not aktiv:
-            fuellung = opt.palette.color(QPalette.Disabled, QPalette.Window)
+            fuellung = _farbe("FLAECHE_DISABLED")
         elif index.data(_UNGESPEICHERT_ROLLE):
             fuellung = _farbe("ungespeichert_bg")
         else:
-            fuellung = opt.palette.color(QPalette.Base)
+            fuellung = _farbe("FLAECHE")
         if index.data(_ZU_HOCH_ROLLE):
             stift = QPen(_farbe("fehler"), 2)
         elif opt.state & QStyle.State_HasFocus:
-            stift = QPen(opt.palette.color(QPalette.Highlight), 1.5)
+            stift = QPen(opt.palette.color(QPalette.Link), 2)
         else:
-            stift = QPen(opt.palette.color(QPalette.Mid), 1)
+            stift = QPen(_farbe("RAND" if aktiv else "RAND_DISABLED"), 1)
         feld = QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
@@ -1486,6 +1489,7 @@ class _PunkteDelegate(QStyledItemDelegate):
         painter.setBrush(fuellung)
         painter.drawRoundedRect(feld, 4, 4)
         if aktiv and text:
+            painter.setFont(opt.font)  # Schrift der Tabelle wie in den Info-Spalten
             painter.setPen(opt.palette.color(QPalette.Text))
             painter.drawText(feld, Qt.AlignCenter, text)
         painter.restore()
@@ -1551,6 +1555,15 @@ class _ErgebnisTabelle(QTableWidget):
         if event.key() in (Qt.Key_Tab, Qt.Key_Backtab) and event.modifiers() & Qt.ControlModifier:
             event.ignore()  # Strg+Tab: Reiter wechseln wie vor O8
             return
+        if (event.key() in (Qt.Key_Delete, Qt.Key_Backspace) and not event.modifiers()
+                and self.state() != QAbstractItemView.State.EditingState):
+            # Entf/Rücktaste leeren eine markierte Punktezelle direkt - wie früher im
+            # Eingabefeld (Verifikation O9).
+            item = self.currentItem()
+            if item is not None and item.flags() & Qt.ItemIsEditable and item.flags() & Qt.ItemIsEnabled:
+                item.setText("")
+                event.accept()
+                return
         super().keyPressEvent(event)
 
     def moveCursor(self, aktion, modifiers):  # noqa: N802
