@@ -22,7 +22,7 @@ Start durch Marco:
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | 54c7e69 | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | 04d3026 | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
 | O10 Messung Lasttest-1000 | S | erledigt | 9496c24 | 75 % / 10 % → 85 % / 11 % | Neuaufbau 0,46 s, Sortieren 0,38 s ✓; Ansicht 0,42 s ✗ → Rückfrage 5 |
-| O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | erledigt | siehe Log | 0 % / 12 % → 23 % / 14 % | QS: Sicherheit ohne Befund; Rückfragen 6–8 |
+| O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | erledigt | b7ce616 | 0 % / 12 % → 23 % / 14 % | QS: Sicherheit ohne Befund; Rückfragen 6–8 |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
 
