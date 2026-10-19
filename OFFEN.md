@@ -80,7 +80,6 @@ suchen.
 | C23 | „Alle speichern“ ab 201 Teilnehmern ganz oder gar nicht, ohne eigenen Handbuchsatz | 16.10.2026 | F:6780 |
 | C24 | Ergebniserfassung: Gelb/roter Rahmen erst nach dem Übernehmen; Demo markiert das Zellenrechteck | 18.10.2026 | F:7347 |
 | C25 | Ansichtswechsel bei 1000 Teilnehmern 0,42 s (Ziel war < 0,3 s) | 19.10.2026 | F:7517 |
-| C26 | Zwei lokal fokusbedingt rote GUI-Tests (`test_bezahlt_checkbox_im_teilnehmer_dialog`, `test_strg_s_speichert_in_der_ergebniserfassung`), je nach Sitzung | 15.10.2026 | F:6954 |
 
 **Datensicherung**
 

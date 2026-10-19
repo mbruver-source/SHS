@@ -7654,3 +7654,25 @@ gesammelt und jeweils geprüft, dass der Punkt später nicht erledigt wurde. Sti
 nachgeprüft. Verweise darauf stehen in `CLAUDE.md`/`AGENTS.md`, `Architektur.md`, im Skill
 `shs-build` und im Agenten `verifikation` (jeweils mit Spiegel). Erledigt seit dem Sammeln: die
 claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
+
+
+## 19.10.2026: V1 Robuste GUI-Tests (Verbesserungen, automatische Abarbeitung)
+
+- **Ursache nachgestellt:** Mit `QT_QPA_PLATFORM=windows`, während ein anderes Fenster im
+  Vordergrund ist, waren `test_bezahlt_checkbox_im_teilnehmer_dialog` und
+  `test_strg_s_speichert_in_der_ergebniserfassung` jedes Mal rot, offscreen nie. Windows stellt
+  Mausklick bzw. Taste einem Fenster im Hintergrund nicht zu (Foreground-Lock).
+- **Bezahlt:** Der Test schaltet jetzt über `click()`. Geprüft wird die Verdrahtung Checkbox →
+  `ergebnis()`, nicht der Mausweg.
+- **Strg+S:**
+  - Zuerst wird die Verdrahtung geprüft, unabhängig vom Fokus: genau ein `QShortcut` mit
+    `QKeySequence.Save`, Kontext `WidgetWithChildrenShortcut`, `activated` ruft
+    `alle_speichern` auf.
+  - Der echte Tastenweg bleibt offscreen (CI) Pflicht. Mit echter Plattform wird er mit
+    Begründung übersprungen, wenn das Fenster nicht aktiv wird oder die Taste nicht ankommt.
+- **Ergebnis:** je 10 Läufe offscreen 2 passed, mit echter Windows-Plattform 1 passed und
+  1 begründeter Skip. Volle GUI-Suite 408 grün.
+- **Verifikation (Subagent):** in Ordnung. Die Gegenprobe mit kaputtem Kürzel (Kontext bzw.
+  Verbindung) ist auch mit echter Plattform rot. Nachgezogen: Der Skip „Fenster nicht aktiv“
+  greift offscreen nicht mehr; der Import steht oben.
+- `OFFEN.md` C26 ist gestrichen.

@@ -28,7 +28,7 @@ import sys
 import pytest
 from contextlib import closing
 from PySide6.QtCore import QPoint, QSize, Qt
-from PySide6.QtGui import QPalette
+from PySide6.QtGui import QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
 import db as _db_modul
@@ -1521,7 +1521,10 @@ def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
     dialog.rufname_hund.setText("Bello")
 
     assert dialog.ergebnis().bezahlt is False
-    qtbot.mouseClick(dialog.bezahlt, Qt.MouseButton.LeftButton)
+    # click() statt qtbot.mouseClick: der Mausklick ging mit echter Windows-Plattform verloren,
+    # wenn ein anderes Fenster den Fokus hatte (Verbesserungen V1, 19.10.2026). Geprüft wird
+    # die Verdrahtung Checkbox -> ergebnis(), nicht der Mausweg.
+    dialog.bezahlt.click()
     assert dialog.ergebnis().bezahlt is True
 
 
@@ -6005,11 +6008,30 @@ def test_strg_s_speichert_in_der_ergebniserfassung(qtbot, termin, monkeypatch):
     aufrufe = []
     monkeypatch.setattr(type(tab), "alle_speichern", lambda self: aufrufe.append(True))
 
-    # Tastenkürzel greifen nur im aktiven Fenster - offscreen muss es explizit aktiviert werden.
+    # Verdrahtung unabhängig vom Fensterfokus (Verbesserungen V1, 19.10.2026): genau ein
+    # Strg+S-Kürzel am Reiter, nur gültig, solange der Fokus in diesem Reiter liegt.
+    kuerzel = [k for k in tab.findChildren(QShortcut) if k.key() == QKeySequence(QKeySequence.Save)]
+    assert len(kuerzel) == 1
+    assert kuerzel[0].context() == Qt.WidgetWithChildrenShortcut
+    kuerzel[0].activated.emit()
+    assert aufrufe == [True]
+    aufrufe.clear()
+
+    # Der echte Tastenweg geht nur, wenn das Fenster aktiv wird - mit echter Plattform hat
+    # oft ein anderes Fenster den Fokus, dann bleibt es bei der Prüfung oben.
     fenster.activateWindow()
-    qtbot.waitUntil(fenster.isActiveWindow)
     tab.tabelle.setFocus()
+    try:
+        qtbot.waitUntil(lambda: fenster.isActiveWindow() and tab.tabelle.hasFocus(), timeout=2000)
+    except qtbot.TimeoutError:
+        if QApplication.platformName() == "offscreen":
+            raise  # offscreen (CI) muss der echte Tastenweg immer gehen
+        pytest.skip("Fenster wird nicht aktiv (anderes Fenster hat den Fokus); Verdrahtung oben geprüft")
     qtbot.keyClick(tab.tabelle, Qt.Key_S, Qt.ControlModifier)
+    if not aufrufe and QApplication.platformName() != "offscreen":
+        # Windows lässt ein Fenster im Hintergrund nicht in den Vordergrund (Foreground-Lock):
+        # Qt hält es für aktiv, das Betriebssystem stellt die Taste aber nicht zu.
+        pytest.skip("Tastenkürzel erreicht das Fenster nicht (Vordergrund gesperrt); Verdrahtung oben geprüft")
     assert aufrufe == [True]
 
     # Fokus in einer Punktezelle beim Bearbeiten - typischer Fall beim Tippen.
