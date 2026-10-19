@@ -7604,3 +7604,16 @@ Gebündelt seit 1.0.50 (Details in den Abschnitten vom 18. und 19.10.2026):
   - alle 15 Screenshots neu, nur die Versionsnummer geändert;
   - `docs/HANDBUCH.pdf` neu, 40 Seiten.
 - **Tests:** Unittests OK (172 übersprungen), GUI 407 grün.
+
+
+## 19.10.2026: 1.0.51 ausgeliefert
+
+- Marco hat gepusht und `v1.0.51` getaggt. Laut Marco sind alle Workflows grün.
+- **Im Release:** Setup (.exe), zwei .dmg (Apple Silicon und Intel), AppImage und .deb (per
+  `gh release view` geprüft).
+- Es gibt keine offenen Sicherheitsfunde und nichts in `_unveroeffentlicht/`, das zu
+  veröffentlichen wäre. Die QS-Sicherheitsprüfung über `fb1918a..HEAD` war ohne Befund.
+- **Weiter offen:**
+  - Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten;
+  - bewusst zurückgestellt: Fehlerfenster-Punkte, CSV-Altexporte, Effizienz des Zeitplans,
+    `-wal`/`-shm` beim lesenden Öffnen.
