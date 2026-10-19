@@ -133,6 +133,7 @@ def _umgebung_einrichten() -> QApplication:
     import desktop_demo
     import desktop_dialoge
     import desktop_gemeinsam
+    import desktop_programm
     from desktop_gemeinsam import deutsche_qt_texte_laden, meldungsfenster_als_klartext
 
     for modul in (app_modul, desktop_darstellung):
@@ -140,7 +141,8 @@ def _umgebung_einrichten() -> QApplication:
             modul._gespeichertes_theme_lesen = lambda: desktop_darstellung._THEME_DEFAULT
         if hasattr(modul, "_gespeichertes_design_lesen"):
             modul._gespeichertes_design_lesen = lambda: desktop_darstellung._DESIGN_DEFAULT
-    for modul in (app_modul, desktop_dialoge, desktop_demo):
+    # Jedes Desktop-Modul, das termine_ordner selbst importiert (seit der Aufteilung von app.py).
+    for modul in (app_modul, desktop_dialoge, desktop_demo, desktop_programm):
         modul.termine_ordner = lambda: ANZEIGE_ORDNER
     stumm = lambda *args, **kwargs: None  # noqa: E731
     desktop_gemeinsam._datei_gespeichert_melden = stumm

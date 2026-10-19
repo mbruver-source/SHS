@@ -32,7 +32,6 @@ from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
 from app import (
-    VERSION,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
     _wiederherstellungsziele_planen,
@@ -50,7 +49,6 @@ from app import (
     TeilnehmerUebersichtTab,
     TerminImportDialog,
     VeranstaltungsDialog,
-    VersionDialog,
     VerwaltungTab,
     ZeitplanTab,
 )
@@ -79,6 +77,8 @@ from db_import import (
     CsvImportErgebnis,
 )
 from desktop_darstellung import _erzeuge_qss
+import desktop_programm
+from desktop_programm import VERSION, VersionDialog
 from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
 
 
@@ -161,6 +161,55 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
     gesammelt = []
     monkeypatch.setattr(f"app.QMessageBox.{art}", lambda *a, **_k: gesammelt.append(_DIALOG_TEIL[merke](a)))
     return gesammelt
+
+
+#: Module der Desktop-Oberfläche, die gemeinsame Namen (z. B. termine_ordner) jeweils selbst
+#: importieren - siehe ueberall_ersetzen.
+DESKTOP_MODULE = ("app", "desktop_darstellung", "desktop_demo", "desktop_dialoge", "desktop_gemeinsam",
+                  "desktop_programm")
+
+import db as _db_modul  # noqa: E402
+#: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).
+_ECHTER_TERMINE_ORDNER = _db_modul.termine_ordner
+
+
+def ueberall_ersetzen(monkeypatch, name, wert):
+    """Ersetzt `name` in jedem Desktop-Modul, das ihn hat (offene Punkte O3, 19.10.2026).
+    Seit app.py aufgeteilt ist, holt sich jedes Modul z. B. termine_ordner per
+    `from … import` selbst - ein Patch nur auf "app.termine_ordner" erreicht die anderen nicht.
+    Nicht erreicht werden Namen, die ein Modul erst in einer Funktion importiert (z. B.
+    termine_ordner in desktop_gemeinsam.absturzprotokoll_einrichten - dort wirkt nur der
+    db-Patch aus _termine_ordner_schuetzen)."""
+    import importlib
+    for modulname in DESKTOP_MODULE:
+        modul = importlib.import_module(modulname)
+        if hasattr(modul, name):
+            monkeypatch.setattr(modul, name, wert)
+
+
+@pytest.fixture(autouse=True)
+def _termine_ordner_schuetzen(monkeypatch, tmp_path_factory):
+    """Kein Test landet im echten Termine-Ordner des Benutzerprofils (offene Punkte O3):
+    termine_ordner zeigt in allen Desktop-Modulen und in db auf einen eigenen Temp-Ordner.
+    Tests mit einem bestimmten Ordner setzen ihn mit ueberall_ersetzen. db_sicherung nutzt
+    termine_ordner als Vorgabe für Sicherung und Wiederherstellung."""
+    import db_sicherung
+    ordner = tmp_path_factory.mktemp("termine")
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: ordner)
+    for modul in (_db_modul, db_sicherung):
+        monkeypatch.setattr(modul, "termine_ordner", lambda: ordner)
+    return ordner
+
+
+def test_termine_ordner_ist_in_allen_modulen_geschuetzt(_termine_ordner_schuetzen):
+    """Gegenprobe zum Schutz oben: kein Desktop-Modul (auch db und db_sicherung) nutzt im
+    Test die echte Funktion termine_ordner; alle liefern den Temp-Ordner des Schutzes."""
+    import importlib
+    for modulname in DESKTOP_MODULE + ("db", "db_sicherung"):
+        modul = importlib.import_module(modulname)
+        if hasattr(modul, "termine_ordner"):
+            assert modul.termine_ordner is not _ECHTER_TERMINE_ORDNER, modulname
+            assert modul.termine_ordner() == _termine_ordner_schuetzen, modulname
 
 
 def meldungen_stumm(monkeypatch, *arten):
@@ -2254,7 +2303,6 @@ class _Antwort:
 ])
 def test_neueste_version_pruefen_faengt_alle_antworten_ab(monkeypatch, antwort, erwartet):
     """Desktop-Prüfung 14.10.2026, Teil 8 Nr. 1, 5 und 9: jede Antwort ergibt eine Meldung."""
-    import app
 
     import http.client
     import ssl
@@ -2273,7 +2321,7 @@ def test_neueste_version_pruefen_faengt_alle_antworten_ab(monkeypatch, antwort, 
         return _Antwort(antwort)
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    version, fehler = app._neueste_version_pruefen()
+    version, fehler = desktop_programm._neueste_version_pruefen()
     assert version == erwartet[0]
     assert (fehler is None) == (erwartet[1] is None)
     if erwartet[1]:
@@ -2282,12 +2330,11 @@ def test_neueste_version_pruefen_faengt_alle_antworten_ab(monkeypatch, antwort, 
 
 def test_version_tupel_und_neutrale_meldung(qtbot, monkeypatch):
     """Teil 8 Nr. 4: nicht vergleichbare Versionen ergeben eine neutrale Meldung."""
-    import app
 
-    assert app._version_tupel("v1.0.47") == (1, 0, 47)
+    assert desktop_programm._version_tupel("v1.0.47") == (1, 0, 47)
     for text in ("1.1", "2.0.0-rc1", "dev"):
-        assert app._version_tupel(text) is None
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: ("2.0.0-rc1", None))
+        assert desktop_programm._version_tupel(text) is None
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: ("2.0.0-rc1", None))
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     dialog._updates_pruefen()
@@ -2299,12 +2346,11 @@ def test_version_tupel_und_neutrale_meldung(qtbot, monkeypatch):
 def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monkeypatch):
     """Teil 8 Nr. 1 und 5: hängt die Abfrage, meldet das Fenster nach der Zeitgrenze; eine
     spätere Antwort wird verworfen. Eine Ausnahme gibt den Knopf ebenfalls frei."""
-    import app
 
     import threading
 
     freigabe = threading.Event()
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
     monkeypatch.setattr(VersionDialog, "UPDATE_ZEITGRENZE_MS", 100)
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
@@ -2319,14 +2365,14 @@ def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monke
     def kaputt():
         raise AttributeError("x")
 
-    monkeypatch.setattr(app, "_neueste_version_pruefen", kaputt)
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", kaputt)
     monkeypatch.setattr(VersionDialog, "UPDATE_ZEITGRENZE_MS", 15000)
     dialog._updates_pruefen()
     qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
     assert "fehlgeschlagen (AttributeError)" in dialog._ergebnis_zeile.text()
 
     # Eine Antwort aus einem früheren Lauf wird verworfen, auch wenn gerade wieder geprüft wird.
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: freigabe.wait(5) and ("9.9.9", None))
     freigabe.clear()
     dialog._updates_pruefen()
     dialog._update_ergebnis(dialog._update_lauf - 1, ("8.8.8", None))
@@ -2338,19 +2384,18 @@ def test_update_pruefung_zeitgrenze_und_fehler_geben_den_knopf_frei(qtbot, monke
 @pytest.mark.parametrize("antwort", [QMessageBox.No, QMessageBox.Yes])
 def test_zweitstart_fragt_nach(qtbot, tmp_path, monkeypatch, antwort):
     """Teil 8 Nr. 6 (Marcos Entscheidung): ein zweiter Start fragt, sperrt aber nicht."""
-    import app
 
-    monkeypatch.setattr(app, "_zweitstart_sperre", [])
-    assert app.zweitstart_pruefen(tmp_path) is True
+    monkeypatch.setattr(desktop_programm, "_zweitstart_sperre", [])
+    assert desktop_programm.zweitstart_pruefen(tmp_path) is True
     fragen = rueckfragen_sammeln(monkeypatch, antwort, merke="titel_vorgabe")
-    assert app.zweitstart_pruefen(tmp_path) is (antwort == QMessageBox.Yes)
+    assert desktop_programm.zweitstart_pruefen(tmp_path) is (antwort == QMessageBox.Yes)
     assert fragen == [("Programm läuft bereits", QMessageBox.No)]
-    for sperre in app._zweitstart_sperre:
+    for sperre in desktop_programm._zweitstart_sperre:
         sperre.unlock()
 
     # Lässt sich keine Sperrdatei anlegen (z. B. Datei statt Ordner), startet es ohne Rückfrage.
     (tmp_path / "datei").write_text("x")
-    assert app.zweitstart_pruefen(tmp_path / "datei") is True and len(fragen) == 1
+    assert desktop_programm.zweitstart_pruefen(tmp_path / "datei") is True and len(fragen) == 1
 
 
 def test_versiondialog_zeigt_aktuelle_version(qtbot):
@@ -2374,8 +2419,8 @@ def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qt
     qtbot.addWidget(dialog)
     dialog.show()
 
-    neuere_version = ".".join(str(t + 1) for t in app._version_tupel(VERSION)[:1]) + ".0.0"
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: (neuere_version, None))
+    neuere_version = ".".join(str(t + 1) for t in desktop_programm._version_tupel(VERSION)[:1]) + ".0.0"
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: (neuere_version, None))
     assert not dialog._download_btn.isVisible()
 
     update_buttons = [b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen"]
@@ -2389,16 +2434,14 @@ def test_versiondialog_update_button_zeigt_neuere_version_mit_download_button(qt
     geoeffnete_urls = []
     monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()) or True)
     qtbot.mouseClick(dialog._download_btn, Qt.MouseButton.LeftButton)
-    assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
+    assert geoeffnete_urls == [desktop_programm.GITHUB_RELEASES_URL]
 
 
 def test_versiondialog_update_button_zeigt_hinweis_wenn_aktuell(qtbot, monkeypatch):
-    import app
-
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     dialog.show()
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: (VERSION, None))
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: (VERSION, None))
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
     qtbot.mouseClick(update_btn, Qt.MouseButton.LeftButton)
@@ -2412,13 +2455,12 @@ def test_versiondialog_update_button_zeigt_fehler_ohne_internet(qtbot, monkeypat
     """_neueste_version_pruefen() fängt Netzwerkfehler selbst ab und liefert einen
     Fehlertext statt einer Exception (siehe dortiger Docstring) - der Dialog zeigt diesen
     Text dann einfach an, statt abzustürzen."""
-    import app
 
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     dialog.show()
     monkeypatch.setattr(
-        app, "_neueste_version_pruefen", lambda: (None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?).")
+        desktop_programm, "_neueste_version_pruefen", lambda: (None, "Keine Verbindung zu GitHub möglich (kein Internetzugang?).")
     )
 
     update_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
@@ -2440,14 +2482,14 @@ def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugrif
     dialog.show()
 
     aufgerufen = {}
-    monkeypatch.setattr(app, "_neueste_version_pruefen", lambda: aufgerufen.setdefault("ja", True))
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: aufgerufen.setdefault("ja", True))
     geoeffnete_urls = []
     monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()) or True)
 
     seite_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Releases-Seite im Browser öffnen")
     qtbot.mouseClick(seite_btn, Qt.MouseButton.LeftButton)
 
-    assert geoeffnete_urls == [app.GITHUB_RELEASES_URL]
+    assert geoeffnete_urls == [desktop_programm.GITHUB_RELEASES_URL]
     assert "ja" not in aufgerufen
 
 
@@ -2691,11 +2733,8 @@ def test_csv_import_meldet_schreibfehler(qtbot, conn, monkeypatch, tmp_path):
 def test_neuer_termin_legt_datei_an_und_fragt_bei_vorhandener(qtbot, tmp_path, monkeypatch):
     from contextlib import closing
 
-    import desktop_dialoge
-
     monkeypatch.setattr("app.liste_termine", lambda: [])
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
-    monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     ziel = tmp_path / "termin.sqlite"
 
     def _exec(dialog):
@@ -2788,7 +2827,7 @@ def test_veranstaltung_bearbeiten_bleibt_bei_schreibfehler_offen(qtbot, conn, mo
 
 
 def _neuer_termin_dialog(qtbot, tmp_path, monkeypatch):
-    monkeypatch.setattr("desktop_dialoge.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     dialog = VeranstaltungsDialog(vorbelegung={"verein": "SGV Köppern", "datum": "2026-11-14",
                                                "verband": "HSVRM", "meldestelle": "x"})
     qtbot.addWidget(dialog)
@@ -3011,11 +3050,8 @@ def test_aktualisiere_veranstaltung_feld_behaelt_alle_felder(conn):
 
 
 def test_neuer_termin_in_fehlendem_ordner_meldet_fehler_und_legt_nichts_an(qtbot, tmp_path, monkeypatch):
-    import desktop_dialoge
-
     monkeypatch.setattr("app.liste_termine", lambda: [])
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
-    monkeypatch.setattr(desktop_dialoge, "termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     # Teil 2 Nr. 2: der fehlende Ordner fällt jetzt schon im Dialog auf.
     meldungen = meldungen_sammeln(monkeypatch, "warning")
     ziel = tmp_path / "fehlt" / "termin.sqlite"
@@ -3072,28 +3108,24 @@ def test_schliessen_verwirft_bei_ja_trotz_uebrig_gebliebener_aenderungen(qtbot, 
 
 def test_laufkennung_passt_zum_appmutex_im_installer():
     """Update-Test 05.10.2026: Das Setup erkennt das laufende Programm über AppMutex - der
-    Name in installer.iss muss exakt LAUF_MUTEX_NAME aus app.py sein."""
+    Name in installer.iss muss exakt LAUF_MUTEX_NAME aus desktop_programm.py sein."""
     import re
-
-    import app
 
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "installer.iss"), encoding="utf-8") as datei:
         inhalt = datei.read()
     treffer = re.findall(r"^AppMutex=(.+)$", inhalt, re.MULTILINE)
-    assert treffer == [",".join(app.LAUF_MUTEX_NAMEN)]
-    assert app.LAUF_MUTEX_NAMEN[0] == app.LAUF_MUTEX_NAME
+    assert treffer == [",".join(desktop_programm.LAUF_MUTEX_NAMEN)]
+    assert desktop_programm.LAUF_MUTEX_NAMEN[0] == desktop_programm.LAUF_MUTEX_NAME
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="benannter Mutex nur unter Windows")
 def test_laufkennung_setzen_legt_den_mutex_an(monkeypatch):
     import ctypes
 
-    import app
-
-    monkeypatch.setattr(app, "_lauf_mutex", [])
-    assert app.laufkennung_setzen() is True
-    assert app.laufkennung_setzen() is True  # zweiter Aufruf legt keine neuen an
-    assert len(app._lauf_mutex) == 2  # lokal und global
+    monkeypatch.setattr(desktop_programm, "_lauf_mutex", [])
+    assert desktop_programm.laufkennung_setzen() is True
+    assert desktop_programm.laufkennung_setzen() is True  # zweiter Aufruf legt keine neuen an
+    assert len(desktop_programm._lauf_mutex) == 2  # lokal und global
 
     oeffnen = ctypes.WINFUNCTYPE(ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p)(
         ("OpenMutexW", ctypes.windll.kernel32)
@@ -3101,12 +3133,12 @@ def test_laufkennung_setzen_legt_den_mutex_an(monkeypatch):
     schliessen = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p)(("CloseHandle", ctypes.windll.kernel32))
     SYNCHRONIZE = 0x00100000
     try:
-        for name in app.LAUF_MUTEX_NAMEN:
+        for name in desktop_programm.LAUF_MUTEX_NAMEN:
             handle = oeffnen(SYNCHRONIZE, False, name)
             assert handle, f"Setup würde das laufende Programm über {name} nicht erkennen"
             schliessen(handle)
     finally:
-        for handle in app._lauf_mutex:
+        for handle in desktop_programm._lauf_mutex:
             schliessen(handle)
 
 
@@ -3198,7 +3230,7 @@ def test_abgebrochenes_abmelden_nimmt_die_freigabe_zurueck(qtbot, termin):
     das Fenster, damit auch ein Fehler beim Installieren des Filters auffällt."""
     import ctypes
 
-    from app import sitzungsende_einrichten
+    from desktop_programm import sitzungsende_einrichten
 
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
@@ -3235,7 +3267,7 @@ def test_sitzungsende_filter_ignoriert_echtes_beenden_und_unsinnige_nachrichten(
     import ctypes
     import ctypes.wintypes
 
-    from app import SitzungsendeFilter
+    from desktop_programm import SitzungsendeFilter
 
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
@@ -3838,7 +3870,7 @@ def test_ergebnis_disqualifiziert_loescht_gespeicherte_punkte_nicht(qtbot, conn)
 
 
 def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     # Nutzerwunsch (20.09., Anmerkung "Anlage neuer Termin nachdem bereits Anlagen
     # erfolgt sind"): das Programm soll sich merken, welcher Verein gemeint ist, damit
     # die oberen 3 Eingaben (Verein/Vereins-Nr./Ort) beim Anlegen eines weiteren Termins
@@ -3873,7 +3905,7 @@ def test_neuer_termin_schlaegt_verein_vereinsnr_ort_des_letzten_termins_vor(qtbo
 
 
 def test_neuer_termin_ohne_bestehende_termine_zeigt_leere_vorbelegung(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     # Gegenprobe: ohne bereits vorhandene Termine (z. B. allererster Start) darf nichts
     # vorbelegt werden.
     monkeypatch.setattr("app.liste_termine", lambda: [])
@@ -4624,7 +4656,7 @@ def test_startdialog_zeigt_grund_und_oeffnet_zu_grosse_datei(qtbot, monkeypatch,
     """Offene Punkte O2: die Terminübersicht nennt den Grund; eine nur zu große Datei lässt
     sich trotzdem wählen (die Rückfrage folgt beim Öffnen), eine zu aufwendige nicht."""
     import db
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
 
     def info(name, grund):
         return TerminInfo(pfad=str(tmp_path / name), dateiname=name, verein=None, vereins_nr=None,
@@ -5393,7 +5425,7 @@ def test_q1_wiederherstellen_konflikt_wird_abgefragt(tmp_path, aktion, ziel):
 
 def test_q1_offener_termin_wird_erkannt(qtbot, tmp_path, monkeypatch):
     (tmp_path / "Pruefung.sqlite").write_bytes(b"")
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
     monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
     tab = DatensicherungTab(aktueller_pfad=str(tmp_path / "Pruefung.sqlite"))
@@ -5417,7 +5449,7 @@ def test_wiederherstellen_offener_termin_ausserhalb_des_ordners_ist_kein_konflik
     (ordner / "Pruefung.sqlite").write_bytes(b"")
     stick = tmp_path / "Stick"
     stick.mkdir()
-    monkeypatch.setattr("app.termine_ordner", lambda: ordner)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: ordner)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
     monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["pruefung.sqlite"])
     tab = DatensicherungTab(aktueller_pfad=str(stick / "Pruefung.sqlite"))
@@ -5440,7 +5472,7 @@ def test_wiederherstellen_passwortschleife_prueft_drei_passwoerter(qtbot, tmp_pa
     geprüft; eine leere Eingabe kostet keinen Versuch. Danach ein Meldungsfenster."""
     from db_sicherung import PasswortFalschError
 
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
     geprueft = []
 
@@ -5496,7 +5528,7 @@ def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path
     termin_pfad = tmp_path / "Stick" / "termin.sqlite"
     termin_pfad.parent.mkdir()
     termin_pfad.write_bytes(b"")
-    monkeypatch.setattr("app.termine_ordner", lambda: ordner)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: ordner)
     monkeypatch.setattr(QMessageBox, "exec", lambda box: 0)
     monkeypatch.setattr(QMessageBox, "clickedButton",
                         lambda box: next(b for b in box.buttons() if b.text() == knopf))
@@ -5533,7 +5565,7 @@ def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path
 def test_sicherung_nennt_roh_gesicherte_dateien(qtbot, tmp_path, monkeypatch, gespeichert_meldungen, roh):
     """Offene Punkte O1 (Marco 18.10.2026): nicht lesbare Dateien werden roh gesichert und
     in der Meldung genannt."""
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
 
     class _Dialog:
         def __init__(self, _parent):
@@ -5567,7 +5599,7 @@ def test_sicherung_nennt_roh_gesicherte_dateien(qtbot, tmp_path, monkeypatch, ge
 
 
 def test_sicherung_ohne_rueckfrage_wenn_termin_im_ordner(qtbot, tmp_path, monkeypatch):
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     (tmp_path / "termin.sqlite").write_bytes(b"")
     tab = DatensicherungTab(aktueller_pfad=str(tmp_path / "termin.sqlite"))
     qtbot.addWidget(tab)
@@ -5583,7 +5615,7 @@ def _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch):
         termine.append(SimpleNamespace(pfad=str(tmp_path / name), dateiname=name, datum="2026-11-14",
                                        verein=verein, ort="", anzahl_teilnehmer=0, lesbar=True))
     monkeypatch.setattr("app.liste_termine", lambda: [t for t in termine if os.path.exists(t.pfad)])
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     start = StartDialog()
     qtbot.addWidget(start)
     return start
@@ -5654,7 +5686,7 @@ def test_wiederherstellen_unvollstaendig_nennt_ersetzte_termine(qtbot, tmp_path,
     ersetzten Termin ab, nennt das Meldungsfenster die schon ersetzten Termine."""
     from db_sicherung import TeilweiseWiederhergestelltError
 
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: ("sicherung.zip", ""))
     monkeypatch.setattr("app.sicherung_inhalt", lambda *a, **k: ["a.sqlite", "b.sqlite"])
 
@@ -6387,7 +6419,6 @@ def test_fehlerfenster_protokoll_ordner_oeffnen(qtbot, tmp_path, monkeypatch):
 
 
 def test_version_dialog_diagnose_kopieren_und_protokoll_ordner(qtbot, tmp_path, monkeypatch):
-    import app
     import desktop_gemeinsam
 
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", None)
@@ -6403,7 +6434,7 @@ def test_version_dialog_diagnose_kopieren_und_protokoll_ordner(qtbot, tmp_path, 
     protokoll.write_text("", encoding="utf-8")
     monkeypatch.setattr(desktop_gemeinsam, "_absturzprotokoll_pfad", protokoll)
     gezeigt = []
-    monkeypatch.setattr(app, "_ordner_zeigen", lambda pfad, parent=None: gezeigt.append(pfad))
+    monkeypatch.setattr(desktop_programm, "_ordner_zeigen", lambda pfad, parent=None: gezeigt.append(pfad))
     dialog = VersionDialog()
     qtbot.addWidget(dialog)
     ordner_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Protokoll-Ordner öffnen")
@@ -6691,7 +6722,7 @@ def test_zeitplan_uebernimmt_richter_einmalig(qtbot, termin):
 
 def test_neuer_termin_hinweis_bei_leerem_verband_und_meldestelle(qtbot, monkeypatch, tmp_path):
     """UX-Test 02.10.2026, K6: nur beim Anlegen, Speichern bleibt möglich."""
-    monkeypatch.setattr("desktop_dialoge.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     dialog = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14"})
     qtbot.addWidget(dialog)
     dialog.pfad_feld.setText(str(tmp_path / "t.sqlite"))
@@ -7315,8 +7346,7 @@ def demo_umgebung(tmp_path, monkeypatch):
     temp.mkdir()
     termine.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(temp))
-    for modul in ("desktop_demo", "desktop_dialoge", "app"):
-        monkeypatch.setattr(f"{modul}.termine_ordner", lambda: termine)
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: termine)
     monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 0)
     # Automatisch weiter aus - die Countdown-Tests schalten es gezielt ein.
     monkeypatch.setattr(desktop_demo.DemoTour, "AUTO_WEITER_S", 0)
@@ -7371,7 +7401,7 @@ def test_demo_button_im_hauptfenster_startet_demo(qtbot, termin, monkeypatch):
 
 
 def test_demo_button_im_startdialog(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)  # Teil 2 Nr. 15
     monkeypatch.setattr("app.liste_termine", lambda: [])
     dialog = StartDialog()
     qtbot.addWidget(dialog)

@@ -13,8 +13,8 @@ Start durch Marco:
 | Aufgabe | Größe | Status | Commit | Limit vorher → nachher (5 h / 7 T) | Bemerkung |
 |---|---|---|---|---|---|
 | O1 Sicherung konsistent | S | erledigt | 97214c1 | 16 % / ~0 % → 33 % / 1 % | GUI 388 grün, Unittests 660 grün; 2 Rückfragen offen (unten) |
-| O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | erledigt | (s. git log) | 33 % / 1 % → 41 % / 2 % | Unittests 664, GUI 393 grün; Rückfrage 3 offen |
-| O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | offen | | | |
+| O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | erledigt | f03447b | 33 % / 1 % → 41 % / 2 % | Unittests 664, GUI 393 grün; Rückfrage 3 offen |
+| O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | erledigt | (s. git log) | 42 % / 2 % → 53 % / 3 % | Unittests 664, GUI 394 grün |
 | O4 Schnitt 2 `desktop_auswertung.py` | M | offen | | | |
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | offen | | | |
 | O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | offen | | | nach O1 |

@@ -111,7 +111,7 @@ python tools/handbuch_pdf.py
   05.10.2026).
 - Das klappt nicht immer: Hält z. B. ein Virenscanner die `.exe` ebenfalls offen, verzichtet
   Inno Setup auf das automatische Schließen. Deshalb meldet sich das Programm zusätzlich mit
-  einem Mutex an (`AppMutex` in `installer.iss`, `laufkennung_setzen()` in `app.py`). Das
+  einem Mutex an (`AppMutex` in `installer.iss`, `laufkennung_setzen()` in `desktop_programm.py`). Das
   Setup erkennt es damit gleich zu Beginn und bittet, es zu schließen. Das wirkt ab einer
   laufenden Version 1.0.44. Auch die Deinstallation erkennt so ein laufendes Programm.
 

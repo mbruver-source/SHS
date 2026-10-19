@@ -7147,3 +7147,46 @@ Zweite Aufgabe aus `Offene-Punkte-2026-10/aufgaben.md`, umgesetzt nach Marcos En
   - `docs/HANDBUCH.md` (Häufige Fragen) nachgezogen.
 - **Rückfrage an Marco** (in `aufgaben.md`): „nicht lesbar: zu groß“, obwohl sich die Datei nach
   Rückfrage öffnen lässt – lieber „(ungewöhnlich groß)“?
+
+
+## 19.10.2026: O3 `app.py` aufteilen, Schnitt 1 `desktop_programm.py` (automatische Abarbeitung)
+
+Dritte Aufgabe aus `Offene-Punkte-2026-10/aufgaben.md`, erster von vier Schnitten nach Marcos
+Entscheidungen vom 18.10.2026.
+
+- **Verschoben, Code unverändert (byte-gleich geprüft):** aus `app.py` nach `desktop_programm.py`.
+  - Version/Update: GitHub-Adressen, `_version_tupel`, `_neueste_version_pruefen`, `_UpdateBote`,
+    `VersionDialog`.
+  - Sitzungsende: `_WM_ENDSESSION`, `SitzungsendeFilter`, `sitzungsende_einrichten`.
+  - Zweitstart: `LAUF_MUTEX_NAME(N)`, `_lauf_mutex`, `laufkennung_setzen`, `ZWEITSTART_SPERRDATEI`,
+    `_zweitstart_sperre`, `zweitstart_pruefen`.
+  - Ebenfalls ins neue Modul kommt der `VERSION`-Import samt Rückfall auf „dev“.
+- **Was `app.py` zurückholt:** nur die Namen, die es selbst nutzt (`VERSION`, `VersionDialog`,
+  `laufkennung_setzen`, `sitzungsende_einrichten`, `zweitstart_pruefen`). Dabei sind fünf Importe
+  weggefallen, die `app.py` nicht mehr braucht.
+- **Zeilenzahl:** `app.py` hat jetzt 4906 Zeilen (vorher 5263), `desktop_programm.py` 394.
+- **Kein Laufzeit-Import von `app`:** `desktop_programm.py` importiert `app` zur Laufzeit nie
+  (wie `desktop_demo.py`). Nur für die Typangabe `"HauptFenster"` gibt es einen Import unter
+  `TYPE_CHECKING`.
+- **Tests:**
+  - Patches auf die verschobenen Namen zielen jetzt auf `desktop_programm`, ebenso die Importe
+    von `VERSION`, `VersionDialog`, `SitzungsendeFilter` und `sitzungsende_einrichten`. Ein
+    veralteter Patch `app.<Name>` scheitert laut.
+  - Neuer Helfer `ueberall_ersetzen(monkeypatch, name, wert)` mit der Liste `DESKTOP_MODULE`.
+    Er ersetzt einen Namen in jedem Desktop-Modul, das ihn hat. Alle bisherigen Patches auf
+    `termine_ordner` laufen darüber.
+  - Neues autouse-Fixture `_termine_ordner_schuetzen`: Im Test zeigt `termine_ordner` in allen
+    Desktop-Modulen, in `db` und in `db_sicherung` auf einen Temp-Ordner. Die Gegenprobe
+    `test_termine_ordner_ist_in_allen_modulen_geschuetzt` scheitert ohne den Schutz.
+  - Volle Läufe grün: Unittests 664 OK, GUI 394 OK.
+- **Nachgezogen:**
+  - die Modulliste in `tools/screenshots.py`;
+  - die Kommentare in `installer.iss` und `README_INSTALLER.md`;
+  - Teil 8 der Skills `desktop-pruefung`.
+  - `Architektur.md`, `build.spec` und die Zeilenzahlen in `CLAUDE.md`/`AGENTS.md` folgen wie
+    geplant in O6.
+- **Verifikation (unabhängiger Subagent):** keine blockierenden Befunde. Behoben:
+  - Der Schutz umfasst jetzt auch `db_sicherung`.
+  - Die Gegenprobe vergleicht mit der echten Funktion, statt den Pfad zu wiederholen.
+  - Im Docstring steht ein Hinweis auf Importe, die erst in einer Funktion stehen.
+  - Übrige Leerzeilen sind entfernt.
