@@ -92,6 +92,7 @@ from db import (
     vergebene_startnummern,
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
+    zeitplan_eintrag,
     zeitplan_gruppen,
     zeitplan_gruppen_status,
     zeitplan_richter_aus_veranstaltung_anlegen,
@@ -2457,6 +2458,18 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual(
             [e["reihenfolge"] for e in list_zeitplan_eintraege(self.conn, r1)], [0, 1, 2, 3]
         )
+
+    def test_zeitplan_eintrag_liest_einen_eintrag(self):
+        """OFFEN.md B4 (19.10.2026): Einzelabfrage statt ganzem Blockplan."""
+        richter_id = add_zeitplan_richter(self.conn, "R1")
+        block_id = add_zeitplan_pruefungsblock(self.conn, richter_id, "ED", 1, "Trümmerfeld", 7)
+        pause_id = add_zeitplan_pause(self.conn, richter_id, 20, "Mittag")
+        block = zeitplan_eintrag(self.conn, block_id)
+        self.assertEqual((block["typ"], block["dauer_minuten"], block["art"], block["stufe"]),
+                         ("pruefung", 7, "ED", 1))
+        pause = zeitplan_eintrag(self.conn, pause_id)
+        self.assertEqual((pause["typ"], pause["dauer_minuten"], pause["bezeichnung"]), ("pause", 20, "Mittag"))
+        self.assertIsNone(zeitplan_eintrag(self.conn, pause_id + 1000))
 
     def test_zeitplan_richter_aus_veranstaltung_anlegen(self):
         # UX-Test 02.10.2026, U8: Richter aus den Veranstaltungsdaten werden übernommen -

@@ -824,6 +824,73 @@ def test_pause_nach_startzeit_eingabe_geht_nicht_verloren(qtbot, conn, monkeypat
     assert [e["typ"] for e in list_zeitplan_eintraege(conn, richter_id)] == ["pause"]
 
 
+def test_zeitplan_eintrag_bearbeiten_ohne_blockplan(qtbot, conn, monkeypatch):
+    """OFFEN.md B4 (19.10.2026): Bearbeiten liest den Eintrag direkt, statt den ganzen
+    Blockplan zu berechnen; der Pausen-Dialog bekommt Dauer und Bezeichnung."""
+    from PySide6.QtWidgets import QListWidget, QListWidgetItem
+
+    from db import add_zeitplan_pause, add_zeitplan_pruefungsblock, add_zeitplan_richter, zeitplan_eintrag
+
+    richter_id = add_zeitplan_richter(conn, "R1")
+    block_id = add_zeitplan_pruefungsblock(conn, richter_id, "ED", 1, "Trümmerfeld", 7)
+    pause_id = add_zeitplan_pause(conn, richter_id, 20, "Mittag")
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+
+    def _kein_blockplan(_conn):
+        raise AssertionError("Blockplan beim Bearbeiten berechnet")
+
+    # raising=False: das Modul importiert die Funktion nicht mehr; die Gegenprobe mit altem Code
+    # schlägt dann hier an.
+    monkeypatch.setattr("desktop_zeitplan.berechne_zeitplan_bloecke", _kein_blockplan, raising=False)
+    monkeypatch.setattr(tab, "aktualisieren", lambda: None)
+    vorbelegung = {}
+    attrappe = _pause_dialog_attrappe(25, "Mittagspause")
+
+    def _pause_dialog(*a, **k):
+        vorbelegung.update(k)
+        return attrappe(*a, **k)
+
+    monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog)
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getInt", lambda *a, **k: (9, True))
+
+    def _liste_mit(eintrag_id):
+        liste = QListWidget()
+        qtbot.addWidget(liste)
+        item = QListWidgetItem("x")
+        item.setData(Qt.UserRole, eintrag_id)
+        liste.addItem(item)
+        liste.setCurrentItem(item)
+        return liste
+
+    tab._eintrag_bearbeiten(_liste_mit(pause_id))
+    assert vorbelegung == {"dauer_minuten": 20, "bezeichnung": "Mittag"}
+    pause = zeitplan_eintrag(conn, pause_id)
+    assert (pause["dauer_minuten"], pause["bezeichnung"]) == (25, "Mittagspause")
+
+    tab._eintrag_bearbeiten(_liste_mit(block_id))
+    assert zeitplan_eintrag(conn, block_id)["dauer_minuten"] == 9
+
+
+def test_pause_dialog_beim_bearbeiten_ohne_felder_fuer_alle(qtbot):
+    """OFFEN.md B4: Beim Bearbeiten legt der Dialog „Bei allen Richtern“/Uhrzeit nicht an."""
+    from PySide6.QtWidgets import QCheckBox
+
+    from desktop_dialoge import PauseDialog
+
+    bearbeiten = PauseDialog(None, dauer_minuten=20, bezeichnung="Mittag")
+    qtbot.addWidget(bearbeiten)
+    assert bearbeiten.fuer_alle is None and bearbeiten.uhrzeit is None
+    assert bearbeiten.findChildren(QCheckBox) == []
+    bearbeiten._pruefen_und_akzeptieren()
+    assert bearbeiten.result() == QDialog.Accepted
+    assert bearbeiten.werte() == {"dauer_minuten": 20, "bezeichnung": "Mittag"}
+
+    neu = PauseDialog(None, neu=True)
+    qtbot.addWidget(neu)
+    assert neu.fuer_alle is not None and len(neu.findChildren(QCheckBox)) == 1
+
+
 def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, monkeypatch):
     """Teil 4 Nr. 3 und 6: Enter bzw. Verlassen des Feldes speichert, „9:5“ wird „09:05“;
     eine ungültige Eingabe verhindert PDF und Verteilen."""

@@ -41,7 +41,6 @@ from db import (
     aktualisiere_zeitplan_eintrag,
     automatische_zeitplan_verteilung,
     berechne_zeitplan,
-    berechne_zeitplan_bloecke,
     dk_mindestabstand,
     get_veranstaltung,
     list_zeitplan_eintraege,
@@ -52,6 +51,7 @@ from db import (
     umbenennen_zeitplan_richter,
     verschiebe_zeitplan_eintrag,
     verschiebe_zeitplan_richter,
+    zeitplan_eintrag,
     zeitplan_gruppen_status,
     zeitplan_richter_aus_veranstaltung_anlegen,
     zeitplan_ueberschneidungen,
@@ -672,20 +672,17 @@ class ZeitplanTab(QWidget):
         self._markierter_eintrag_id = eintrag_id
         self.aktualisieren()
 
-    def _aktueller_eintrag(self, eintrag_id: int) -> dict | None:
-        for plan in berechne_zeitplan_bloecke(self.conn):
-            for eintrag in plan["bloecke"]:
-                if eintrag["id"] == eintrag_id:
-                    return eintrag
-        return None
-
     def _eintrag_bearbeiten(self, liste: QListWidget) -> None:
         item = liste.currentItem()
         if item is None:
             QMessageBox.information(self, "Kein Eintrag ausgewählt", "Bitte zuerst einen Eintrag in der Liste auswählen.")
             return
         eintrag_id = item.data(Qt.UserRole)
-        eintrag = self._aktueller_eintrag(eintrag_id)
+        try:
+            eintrag = zeitplan_eintrag(self.conn, eintrag_id)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
         if eintrag is None:
             return
 

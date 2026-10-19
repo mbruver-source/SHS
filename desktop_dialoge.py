@@ -962,13 +962,16 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
 
         # UX-Test 02.10.2026, U9: beim Hinzufügen wahlweise dieselbe Pause bei allen
         # Richtern zu einer Uhrzeit (z. B. Mittagspause); sonst nach der markierten Zeile.
-        self.fuer_alle = QCheckBox("Bei allen Richtern einfügen, um")
-        self.uhrzeit = QLineEdit("12:00")
-        self.uhrzeit.setPlaceholderText("HH:MM")
-        self.uhrzeit.setMaximumWidth(70)
-        self.uhrzeit.setEnabled(False)
-        self.fuer_alle.toggled.connect(self.uhrzeit.setEnabled)
+        # Beim Bearbeiten gibt es beide Felder nicht (OFFEN.md B4, 19.10.2026).
+        self.fuer_alle: QCheckBox | None = None
+        self.uhrzeit: QLineEdit | None = None
         if neu:
+            self.fuer_alle = QCheckBox("Bei allen Richtern einfügen, um")
+            self.uhrzeit = QLineEdit("12:00")
+            self.uhrzeit.setPlaceholderText("HH:MM")
+            self.uhrzeit.setMaximumWidth(70)
+            self.uhrzeit.setEnabled(False)
+            self.fuer_alle.toggled.connect(self.uhrzeit.setEnabled)
             alle_zeile = QHBoxLayout()
             alle_zeile.addWidget(self.fuer_alle)
             alle_zeile.addWidget(self.uhrzeit)
@@ -992,7 +995,7 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
         self._schriftgroesse_anwenden()
 
     def _pruefen_und_akzeptieren(self) -> None:
-        if self.fuer_alle.isChecked():
+        if self.fuer_alle is not None and self.fuer_alle.isChecked():
             try:
                 datetime.datetime.strptime(self.uhrzeit.text().strip(), "%H:%M")
             except ValueError:

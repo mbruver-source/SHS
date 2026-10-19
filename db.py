@@ -1928,6 +1928,13 @@ def add_zeitplan_pause_bei_allen(
     return [startzeiten[eintrag_id] for eintrag_id in eingefuegt if eintrag_id in startzeiten]
 
 
+def zeitplan_eintrag(conn: sqlite3.Connection, eintrag_id: int) -> dict | None:
+    """Ein einzelner Zeitplan-Eintrag (Prüfungsblock oder Pause) oder None - z. B. zum
+    Bearbeiten, ohne den ganzen Blockplan zu berechnen (OFFEN.md B4, 19.10.2026)."""
+    rows = conn.execute("SELECT * FROM zeitplan_eintrag WHERE id = ?", (eintrag_id,)).fetchall()
+    return dict(rows[0]) if rows else None
+
+
 @_mit_rollback
 def aktualisiere_zeitplan_eintrag(
     conn: sqlite3.Connection, eintrag_id: int, dauer_minuten: int | None = None, bezeichnung: str | None = None,

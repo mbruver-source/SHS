@@ -7751,3 +7751,27 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   - Unittests OK, GUI 410 grün.
 - **Verifikation (Subagent):** in Ordnung. Übernommen: Kommentar und Docstring zur Kehrseite,
   zusätzliche Symmetrie-Fälle, `OFFEN.md` B3 auf den Rest „1E5“ gekürzt.
+
+
+## 19.10.2026: V5 Zeitplan-Effizienz B4 (Verbesserungen, automatische Abarbeitung)
+
+- **Bearbeiten ohne Blockplan:** `ZeitplanTab._eintrag_bearbeiten` liest den Eintrag jetzt mit
+  der neuen `db.zeitplan_eintrag(conn, id)` direkt aus der Tabelle. Bisher rechnete
+  `_aktueller_eintrag` dafür den ganzen Blockplan aus; die Methode ist entfernt.
+  - `dauer_minuten` hat dieselbe Bedeutung wie vorher (je Teilnehmer bzw. Pausendauer, roh aus
+    der Tabelle).
+  - Ein DB-Fehler beim Lesen erscheint jetzt als Meldung.
+  - Der unbenutzte Import von `berechne_zeitplan_bloecke` ist entfernt.
+- **`PauseDialog`:** „Bei allen Richtern“ und Uhrzeit entstehen nur noch beim Hinzufügen
+  (`neu=True`); beim Bearbeiten sind beide `None`.
+- **Tests:**
+  - `test_zeitplan_eintrag_liest_einen_eintrag` (läuft in der CI auch gegen PostgreSQL);
+  - `test_zeitplan_eintrag_bearbeiten_ohne_blockplan` (Pause und Block);
+  - `test_pause_dialog_beim_bearbeiten_ohne_felder_fuer_alle`.
+  - Gegenprobe rot. Unittests OK, GUI 412 grün.
+- **Verifikation (Subagent):** in Ordnung.
+  - Übernommen: Import alphabetisch einsortiert.
+  - In `UML.md` Diagramm 7 stand vorher „Block bearbeiten → PruefungsblockDialog“. Richtig ist:
+    Block hinzufügen → PruefungsblockDialog, Eintrag bearbeiten → `db.zeitplan_eintrag`, dann
+    Dauer bzw. PauseDialog.
+- `OFFEN.md` B4 ist gestrichen.
