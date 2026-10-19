@@ -28,24 +28,38 @@ from __future__ import annotations
 
 import contextlib
 import os
-import re
 import sqlite3
 import sys
 import traceback
 
-from PySide6.QtCore import QEvent, QFile, QItemSelectionModel, QRegularExpression, Qt
+from PySide6.QtCore import (
+    QEvent,
+    QFile,
+    QItemSelectionModel,
+    QModelIndex,
+    QPoint,
+    QRect,
+    QRectF,
+    QRegularExpression,
+    Qt,
+)
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
+    QBrush,
     QCloseEvent,
     QDesktopServices,
+    QPainter,
+    QPalette,
+    QPen,
     QRegularExpressionValidator,
     QKeySequence,
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
+    QAbstractItemView,
     QApplication,
-    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -57,6 +71,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -163,7 +180,6 @@ from desktop_gemeinsam import (
     _responsive_schriftgroesse,
     ResponsiveSchriftMixin,
     _STATUS_SPALTE,
-    _zentrierte_zelle,
 )
 from desktop_dialoge import (
     HilfeDialog,
@@ -1337,6 +1353,235 @@ def _punkte_validator(parent) -> QRegularExpressionValidator:
 # Spalten der Ergebnistabelle, deren Sortierschlüssel nur aus den Stammdaten kommt.
 _SORTIERSPALTEN_AUS_STAMMDATEN = (0, 1, 2, 3)
 
+# --- Ergebniserfassung ohne Widget je Zelle (offene Punkte O8, 19.10.2026) -------------
+# Lasttest 16.10.2026: Ein QLineEdit je Punktezelle (und ein Checkbox-Container je
+# DQ/Abbruch-Zelle) machten bei 1000 Teilnehmern rund 7000 Widgets; jeder Neuaufbau und
+# Ansichtswechsel dauerte Sekunden. Seitdem sind die Zellen QTableWidgetItems; gezeichnet
+# werden sie von zwei Delegates, ein Eingabefeld entsteht nur beim Bearbeiten.
+
+_PUNKTESPALTEN = frozenset(c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values() for c in paar)
+# Rollen der Punktezellen, gesetzt von ErgebnisTab._aktualisiere_zeilenstatus.
+_ZU_HOCH_ROLLE = Qt.UserRole + 1
+_UNGESPEICHERT_ROLLE = Qt.UserRole + 2
+
+
+def _info_item(text: str) -> QTableWidgetItem:
+    """Nur-Anzeige-Zelle (Start-Nr., Name, Hund, Prüfung, Status, „–“)."""
+    item = QTableWidgetItem(text)
+    item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+    return item
+
+
+class _PunkteItem(QTableWidgetItem):
+    """Punktezelle: der Text ist der eingetragene Wert ("" = noch nicht eingetragen).
+    Gesperrt (Disqualifiziert/Abbruch) über das Flag ItemIsEnabled - isEnabled/setEnabled
+    wie beim früheren Eingabefeld, damit die Zeilenlogik unverändert bleibt."""
+
+    def __init__(self, text: str = ""):
+        super().__init__(text)
+        self.setTextAlignment(Qt.AlignCenter)
+        self.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
+
+    def isEnabled(self) -> bool:  # noqa: N802 - wie QWidget
+        return bool(self.flags() & Qt.ItemIsEnabled)
+
+    def setEnabled(self, an: bool) -> None:  # noqa: N802
+        flags = self.flags()
+        self.setFlags(flags | Qt.ItemIsEnabled if an else flags & ~Qt.ItemIsEnabled)
+
+
+class _HakenItem(QTableWidgetItem):
+    """Disqualifiziert-/Abbruch-Zelle mit Häkchen; isChecked/setChecked wie bei QCheckBox."""
+
+    def __init__(self, an: bool):
+        super().__init__("")
+        self.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+        self.setChecked(an)
+
+    def isChecked(self) -> bool:  # noqa: N802
+        return self.checkState() == Qt.Checked
+
+    def setChecked(self, an: bool) -> None:  # noqa: N802
+        self.setCheckState(Qt.Checked if an else Qt.Unchecked)
+
+
+class _PunkteDelegate(QStyledItemDelegate):
+    """Zeichnet eine Punktezelle wie ein umrandetes Eingabefeld (roter Rahmen über dem
+    Maximum, gelb solange ungespeichert, grau und leer wenn gesperrt) und öffnet zum
+    Bearbeiten ein QLineEdit mit _punkte_validator. Lostippen ersetzt den Wert."""
+
+    def __init__(self, tab: "ErgebnisTab"):
+        super().__init__(tab.tabelle)
+        self._tab = tab
+
+    def createEditor(self, parent, option, index):  # noqa: N802
+        editor = QLineEdit(parent)
+        editor.setValidator(_punkte_validator(editor))
+        editor.setAlignment(Qt.AlignCenter)
+        # Das allgemeine Feld-Stylesheet (desktop_darstellung, padding 4px 8px) ist für eine
+        # Tabellenzelle zu groß - die Ziffern würden abgeschnitten.
+        editor.setStyleSheet("padding: 0px 2px;")
+        maximum = self._tab._maximum_der_spalte(index.column())
+        # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend schlucken,
+        # sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5); die nächste gültige
+        # Eingabe nimmt ihn wieder weg.
+        editor.inputRejected.connect(lambda: self._tab._eingabe_abgelehnt(editor, maximum))
+        editor.textEdited.connect(lambda _text: self._tab._eingabe_hinweis_ausblenden())
+        return editor
+
+    def setEditorData(self, editor, index):  # noqa: N802
+        editor.setText(index.data(Qt.EditRole) or "")
+        editor.selectAll()  # Lostippen ersetzt den Wert (Marco 18.10.2026)
+
+    def setModelData(self, editor, model, index):  # noqa: N802
+        text = editor.text()
+        if (index.data(Qt.EditRole) or "") == text:
+            return
+        self._tab._aus_editor = True
+        try:
+            model.setData(index, text, Qt.EditRole)
+        finally:
+            self._tab._aus_editor = False
+
+    def updateEditorGeometry(self, editor, option, index):  # noqa: N802
+        editor.setGeometry(option.rect)
+
+    def eventFilter(self, editor, event):  # noqa: N802
+        # Strg+Tab gehört dem Reiterwechsel (QTabWidget), nicht der Zellnavigation; die
+        # Übernahme des Feldes erledigt dann hat_ungespeicherte_aenderungen.
+        if (event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Tab, Qt.Key_Backtab)
+                and event.modifiers() & Qt.ControlModifier):
+            return False
+        return super().eventFilter(editor, event)
+
+    def paint(self, painter, option, index):
+        if not index.flags() & Qt.ItemIsEditable:
+            super().paint(painter, option, index)  # „–“ für eine ED-fremde Disziplin: schlichter Text
+            return
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        text = opt.text
+        opt.text = ""
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)  # Zellhintergrund, Auswahl
+
+        aktiv = bool(index.flags() & Qt.ItemIsEnabled)
+        if not aktiv:
+            fuellung = opt.palette.color(QPalette.Disabled, QPalette.Window)
+        elif index.data(_UNGESPEICHERT_ROLLE):
+            fuellung = _farbe("ungespeichert_bg")
+        else:
+            fuellung = opt.palette.color(QPalette.Base)
+        if index.data(_ZU_HOCH_ROLLE):
+            stift = QPen(_farbe("fehler"), 2)
+        elif opt.state & QStyle.State_HasFocus:
+            stift = QPen(opt.palette.color(QPalette.Highlight), 1.5)
+        else:
+            stift = QPen(opt.palette.color(QPalette.Mid), 1)
+        feld = QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(stift)
+        painter.setBrush(fuellung)
+        painter.drawRoundedRect(feld, 4, 4)
+        if aktiv and text:
+            painter.setPen(opt.palette.color(QPalette.Text))
+            painter.drawText(feld, Qt.AlignCenter, text)
+        painter.restore()
+
+
+class _HakenDelegate(QStyledItemDelegate):
+    """Häkchen mittig in der Zelle (Disqualifiziert/Abbruch). Umschalten per Klick in die
+    Zelle oder mit der Leertaste; gesperrt nur, wenn die Zelle nicht aktiv ist."""
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        indikator = style.subElementRect(QStyle.SE_ItemViewItemCheckIndicator, opt, widget)
+        haken = QStyleOptionViewItem(opt)
+        opt.features &= ~QStyleOptionViewItem.HasCheckIndicator
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
+        rechteck = QRect(QPoint(0, 0), indikator.size())
+        rechteck.moveCenter(option.rect.center())
+        haken.rect = rechteck
+        haken.state = (haken.state & ~QStyle.State_HasFocus) | (
+            QStyle.State_On if opt.checkState == Qt.Checked else QStyle.State_Off
+        )
+        style.drawPrimitive(QStyle.PE_IndicatorItemViewItemCheck, haken, painter, widget)
+
+    def editorEvent(self, event, model, option, index):  # noqa: N802
+        flags = index.flags()
+        if not (flags & Qt.ItemIsUserCheckable) or not (flags & Qt.ItemIsEnabled):
+            return False
+        typ = event.type()
+        if typ == QEvent.MouseButtonDblClick:
+            return event.button() == Qt.LeftButton
+        if typ == QEvent.MouseButtonRelease:
+            if event.button() != Qt.LeftButton or not option.rect.contains(event.position().toPoint()):
+                return False
+        elif typ == QEvent.KeyPress:
+            if event.key() not in (Qt.Key_Space, Qt.Key_Select):
+                return False
+        else:
+            return False
+        an = Qt.CheckState(index.data(Qt.CheckStateRole)) == Qt.Checked
+        return model.setData(index, (Qt.Unchecked if an else Qt.Checked).value, Qt.CheckStateRole)
+
+
+class _ErgebnisTabelle(QTableWidget):
+    """Tabelle der Ergebniserfassung: Tab/Umschalt+Tab springen nur durch bedienbare Zellen
+    (Punkte, Disqualifiziert, Abbruch) - Suche → Anzeige → nächste Disziplin → DQ →
+    Abbruch → nächste Zeile; Info-Spalten, „–“, gesperrte und ausgeblendete Zeilen werden
+    übersprungen (wie früher die Fokuskette der Eingabefelder, Desktop-Prüfung 14.10.2026,
+    Teil 3 Nr. 3)."""
+
+    def _bedienbar(self, row: int, col: int) -> bool:
+        if self.isRowHidden(row):
+            return False
+        item = self.item(row, col)
+        if item is None:
+            return False
+        flags = item.flags()
+        return bool(flags & Qt.ItemIsEnabled) and bool(flags & (Qt.ItemIsEditable | Qt.ItemIsUserCheckable))
+
+    def keyPressEvent(self, event):  # noqa: N802
+        if event.key() in (Qt.Key_Tab, Qt.Key_Backtab) and event.modifiers() & Qt.ControlModifier:
+            event.ignore()  # Strg+Tab: Reiter wechseln wie vor O8
+            return
+        super().keyPressEvent(event)
+
+    def moveCursor(self, aktion, modifiers):  # noqa: N802
+        if aktion not in (QAbstractItemView.CursorAction.MoveNext, QAbstractItemView.CursorAction.MovePrevious):
+            return super().moveCursor(aktion, modifiers)
+        aktuell = self.currentIndex()
+        spalten, zeilen = self.columnCount(), self.rowCount()
+        pos = aktuell.row() * spalten + aktuell.column() if aktuell.isValid() else -1
+        schritt = 1 if aktion == QAbstractItemView.CursorAction.MoveNext else -1
+        pos += schritt
+        while 0 <= pos < zeilen * spalten:
+            row, col = divmod(pos, spalten)
+            if self._bedienbar(row, col):
+                return self.model().index(row, col)
+            pos += schritt
+        # Keine weitere bedienbare Zelle: ungültiger Index - Tab bzw. Umschalt+Tab verlässt
+        # dann die Tabelle, auch aus einem offenen Feld (sonst öffnete Qt dieselbe Zelle neu).
+        return QModelIndex()
+
+    def offenen_editor_beenden(self, uebernehmen: bool = True) -> None:
+        """Schließt ein offenes Eingabefeld; mit `uebernehmen` gilt die getippte Zahl vorher
+        als eingetragen (vor Speichern, Reiterwechsel, Schließen, Strg+S - die zuletzt
+        getippte Zahl darf nie verloren gehen)."""
+        index = self.currentIndex()
+        editor = self.indexWidget(index) if index.isValid() else None
+        if editor is None:
+            return
+        if uebernehmen:
+            self.commitData(editor)
+        self.closeEditor(editor, QAbstractItemDelegate.NoHint)
+
 # Lasttest 16.10.2026 (Marcos Entscheidung): Bei mehr Teilnehmern speichert "Alle speichern"
 # in EINER Transaktion statt mit einem Commit je Ergebnis (bei 1000 Teilnehmern 2,9 s -> 0,6 s).
 # Ein Datenbankfehler speichert dann gar nichts; bis einschließlich dieser Zahl bleibt es beim
@@ -1354,28 +1599,33 @@ class ErgebnisTab(QWidget):
     def __init__(self, conn, parent=None):
         super().__init__(parent)
         self.conn = conn
-        # Pro Tabellenzeile: Teilnehmer-Stammdaten, die aktiven Eingabefelder je Disziplin
+        # Pro Tabellenzeile: Teilnehmer-Stammdaten, die Punktezellen je Disziplin
         # und die zuletzt aus der DB geladenen (= gespeicherten) Werte je Disziplin -
         # der Vergleich der beiden liefert den "ungespeichert"-Status. Ein leeres Feld
         # bedeutet "noch nicht eingetragen" (None) - kein Platzhalterwert wie zuvor "-1",
         # damit die Felder ohne Vorbelegung wirklich leer erscheinen.
         self._teilnehmer_je_zeile: list[dict] = []
-        self._boxen_je_zeile: list[dict[str, tuple[QLineEdit, QLineEdit]]] = []
+        # Seit O8 (19.10.2026) Zellen statt Eingabefelder, siehe _PunkteItem/_HakenItem.
+        self._boxen_je_zeile: list[dict[str, tuple[_PunkteItem, _PunkteItem]]] = []
         self._geladen_je_zeile: list[dict[str, tuple[int | None, int | None]]] = []
-        # Nutzerwunsch (21.09.): analog zu den Punkte-Eingabefeldern oben, aber für die
-        # beiden Status-Checkboxen "Disqualifiziert"/"Abbruch" je Zeile.
-        self._status_boxen_je_zeile: list[tuple[QCheckBox, QCheckBox]] = []
+        # Nutzerwunsch (21.09.): analog zu den Punktezellen oben, aber für die beiden
+        # Häkchen "Disqualifiziert"/"Abbruch" je Zeile.
+        self._status_boxen_je_zeile: list[tuple[_HakenItem, _HakenItem]] = []
         self._status_geladen_je_zeile: list[tuple[bool, bool]] = []
         # Zählt jeden Neuaufbau der Zeilen (offene Punkte O7): Tests prüfen damit „nicht neu
         # aufgebaut“, ohne sich auf einzelne Eingabe-Widgets zu verlassen.
         self.aufbau_kennung = 0
+        # Interne Änderungen an Zellen (Aufbau, Färben, Sperren) lösen keine Reaktion aus;
+        # _aus_editor markiert eine Übernahme aus dem Eingabefeld (siehe _zelle_geaendert).
+        self._intern_tiefe = 0
+        self._aus_editor = False
 
         spalten = ["Start-Nr.", "Name", "Hund", "Art/LK"]
         for disziplin in ALLE_DISZIPLINEN:
             spalten += [f"{disziplin}\nSuche (0-{SUCHE_MAX})", f"{disziplin}\nAnzeige (0-{ANZEIGE_MAX})"]
         spalten += ["Disqualifiziert", "Abbruch", "Status"]
 
-        self.tabelle = QTableWidget(0, len(spalten))
+        self.tabelle = _ErgebnisTabelle(0, len(spalten))
         self.tabelle.setHorizontalHeaderLabels(spalten)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
         # Nutzerwunsch (22.09.): Spaltenüberschriften sollen bei schmalen Spalten nicht
@@ -1390,11 +1640,25 @@ class ErgebnisTab(QWidget):
         # Start-Nr. steht bereits in der ersten echten Spalte) - deshalb ausgeblendet,
         # ebenso im Reiter "Teilnehmer" (siehe TeilnehmerTab).
         self.tabelle.verticalHeader().setVisible(False)
-        # Infospalten (Start-Nr., Name, Hund, Prüfung) sind nur Anzeige, und Tab springt
-        # von Eingabefeld zu Eingabefeld statt durch die Zellen (Desktop-Prüfung
-        # 14.10.2026, Teil 3 Nr. 3).
-        self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tabelle.setTabKeyNavigation(False)
+        # Infospalten (Start-Nr., Name, Hund, Prüfung) sind nur Anzeige (Flags ohne
+        # ItemIsEditable). Bearbeiten (O8, Marco 18.10.2026): in einer markierten Zelle
+        # lostippen, Doppelklick, zweiter Klick oder F2; Enter übernimmt und bleibt in der
+        # Zelle, die Leertaste schaltet ein Häkchen. Tab springt durch die bedienbaren Zellen
+        # (siehe _ErgebnisTabelle.moveCursor).
+        self.tabelle.setEditTriggers(
+            QAbstractItemView.AnyKeyPressed | QAbstractItemView.DoubleClicked
+            | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed
+        )
+        self.tabelle.setTabKeyNavigation(True)
+        self.tabelle.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.tabelle.setSelectionBehavior(QAbstractItemView.SelectItems)
+        punkte_delegate = _PunkteDelegate(self)
+        for spalte in sorted(_PUNKTESPALTEN):
+            self.tabelle.setItemDelegateForColumn(spalte, punkte_delegate)
+        haken_delegate = _HakenDelegate(self.tabelle)
+        self.tabelle.setItemDelegateForColumn(_DQ_SPALTE, haken_delegate)
+        self.tabelle.setItemDelegateForColumn(_ABBRUCH_SPALTE, haken_delegate)
+        self.tabelle.itemChanged.connect(self._zelle_geaendert)
         # Sortierpfeil wie im Teilnehmer-Reiter (Teil 3 Nr. 7) - die Richtung setzt
         # _spalte_geklickt selbst, weil die Sortierung hier eigene Logik hat.
         self.tabelle.horizontalHeader().setSortIndicatorShown(True)
@@ -1402,12 +1666,9 @@ class ErgebnisTab(QWidget):
         # Nutzerwunsch (21.09., Rückmeldung zur Ergebniserfassung): "klappt gut, ggf. hier
         # auch Sortierungsfunktion" - Klick auf eine Spaltenüberschrift sortiert danach,
         # erneuter Klick auf dieselbe Spalte kehrt die Richtung um (wie in der
-        # Teilnehmerliste, siehe TeilnehmerTab). WICHTIG: hier bewusst NICHT
-        # setSortingEnabled(True)/sortIndicatorChanged wie dort, weil diese Tabelle die
-        # Punkte-Eingabefelder über setCellWidget setzt (echte QLineEdit-Widgets) - Qts
-        # eigene sortItems()-Sortierung verschiebt nur QTableWidgetItems, NICHT per
-        # setCellWidget gesetzte Widgets, und würde die Eingabefelder von den falschen
-        # Zeilen trennen. Stattdessen eine eigene Sortierlogik (siehe _spalte_geklickt/
+        # Teilnehmerliste, siehe TeilnehmerTab). Bewusst NICHT setSortingEnabled(True) wie
+        # dort: die Zeilenlisten (_teilnehmer_je_zeile, _geladen_je_zeile …) hängen an der
+        # Zeilennummer. Eigene Sortierlogik (siehe _spalte_geklickt/
         # _sortieren_und_neu_aufbauen), die vor dem Neuaufbau zuerst die aktuellen
         # (ggf. noch nicht gespeicherten) Werte je Teilnehmer-ID sichert.
         self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
@@ -1483,7 +1744,9 @@ class ErgebnisTab(QWidget):
 
     def hat_ungespeicherte_aenderungen(self) -> bool:
         """True, wenn mindestens eine Zeile von den zuletzt geladenen/gespeicherten
-        Werten abweicht - z.B. um beim Tabwechsel vor Datenverlust zu warnen."""
+        Werten abweicht - z.B. um beim Tabwechsel vor Datenverlust zu warnen. Ein offenes
+        Eingabefeld wird vorher übernommen."""
+        self.tabelle.offenen_editor_beenden()
         for row in range(len(self._teilnehmer_je_zeile)):
             if self._zeile_ist_ungespeichert(row):
                 return True
@@ -1519,16 +1782,23 @@ class ErgebnisTab(QWidget):
         return list(self._boxen_je_zeile[zeile])
 
     def spalte_bearbeitbar(self, zeile: int, spalte: int) -> bool:
-        """Sieht in der Tabelle selbst nach, ob sich die Zelle bearbeiten lässt (bis O8: ein
-        Eingabe-Widget liegt darin). Für ED-fremde Disziplinen („–“) muss das False sein -
-        auch nachdem eine Zeile von DK auf ED umgestellt oder umsortiert wurde."""
-        return self.tabelle.cellWidget(zeile, spalte) is not None
+        """Sieht in der Tabelle selbst nach, ob die Zelle eine Punktezelle ist (Flag
+        ItemIsEditable; eine DQ/Abbruch-Sperre ändert daran nichts). Für ED-fremde
+        Disziplinen („–“) muss das False sein - auch nachdem eine Zeile von DK auf ED
+        umgestellt oder umsortiert wurde."""
+        item = self.tabelle.item(zeile, spalte)
+        return item is not None and bool(item.flags() & Qt.ItemIsEditable)
 
-    def _punktefeld(self, zeile: int, disziplin: str, feld: str) -> QLineEdit:
+    def zellrechteck(self, zeile: int, spalte: int) -> QRect:
+        """Rechteck der Zelle in Koordinaten von tabelle.viewport() (Demoprüfung)."""
+        return self.tabelle.visualRect(self.tabelle.model().index(zeile, spalte))
+
+    def _punktefeld(self, zeile: int, disziplin: str, feld: str) -> _PunkteItem:
         return self._boxen_je_zeile[zeile][disziplin][self._FELDER.index(feld)]
 
     def punkte(self, zeile: int, disziplin: str) -> tuple[str, str]:
-        """(Suche, Anzeige) wie angezeigt."""
+        """(Suche, Anzeige) wie angezeigt (ein offenes Eingabefeld wird vorher übernommen)."""
+        self.tabelle.offenen_editor_beenden()
         suche_feld, anzeige_feld = self._boxen_je_zeile[zeile][disziplin]
         return suche_feld.text(), anzeige_feld.text()
 
@@ -1537,6 +1807,7 @@ class ErgebnisTab(QWidget):
         """Trägt Punkte ein wie eine Eingabe des Anwenders (None = Feld unverändert lassen).
         Der Wert gilt sofort als übernommen; Gültigkeitsprüfung beim Tippen siehe
         zelle_bearbeiten."""
+        self.tabelle.offenen_editor_beenden()
         for feld, wert in (("suche", suche), ("anzeige", anzeige)):
             if wert is not None:
                 self._punktefeld(zeile, disziplin, feld).setText(str(wert))
@@ -1548,6 +1819,7 @@ class ErgebnisTab(QWidget):
 
     def status_setzen(self, zeile: int, dq: bool | None = None, abbruch: bool | None = None) -> None:
         """Setzt Disqualifiziert/Abbruch wie ein Klick des Anwenders (None = unverändert)."""
+        self.tabelle.offenen_editor_beenden()
         dq_box, abbruch_box = self._status_boxen_je_zeile[zeile]
         if dq is not None:
             dq_box.setChecked(dq)
@@ -1561,29 +1833,34 @@ class ErgebnisTab(QWidget):
 
     def zeile_ungespeichert(self, zeile: int) -> bool:
         """True, wenn die Zeile vom zuletzt gespeicherten Stand abweicht (gelb markiert)."""
+        self.tabelle.offenen_editor_beenden()
         return self._zeile_ist_ungespeichert(zeile)
 
     def zellzustand(self, zeile: int, disziplin: str, feld: str) -> dict:
         """Darstellungszustand einer Punktezelle: `zu_hoch` (roter Rahmen), `tooltip` und
         `hintergrund` (Farbe der Markierung „ungespeichert“ als „#rrggbb“, kleingeschrieben;
         None, solange die Zeile nicht ungespeichert ist)."""
-        widget = self._punktefeld(zeile, disziplin, feld)
-        stil = widget.styleSheet()
-        treffer = re.search(r"background-color:\s*([^;]+);", stil)
+        self.tabelle.offenen_editor_beenden()
+        item = self._punktefeld(zeile, disziplin, feld)
         return {
-            "zu_hoch": "border" in stil,
-            "tooltip": widget.toolTip(),
-            "hintergrund": treffer.group(1).strip().lower() if treffer else None,
+            "zu_hoch": bool(item.data(_ZU_HOCH_ROLLE)),
+            "tooltip": item.toolTip(),
+            "hintergrund": item.background().color().name().lower() if item.data(_UNGESPEICHERT_ROLLE) else None,
         }
 
     def zelle_bearbeiten(self, zeile: int, disziplin: str, feld: str) -> QLineEdit:
-        """Setzt den Fokus in die Punktezelle und gibt das Eingabefeld zurück - für
-        Tastatur-Tests (Validator, Komma-Hinweis, Tab/Enter). Nur für Tasten und Fokus
-        gedacht, Werte über punkte()/punkte_eintragen()."""
-        widget = self._punktefeld(zeile, disziplin, feld)
-        self.tabelle.scrollTo(self.tabelle.model().index(zeile, 0))
-        widget.setFocus()
-        return widget
+        """Macht die Punktezelle zur aktuellen Zelle, öffnet ihr Eingabefeld und gibt es mit
+        Fokus zurück - für Tastatur-Tests (Validator, Komma-Hinweis, Tab/Enter). Nur für
+        Tasten und Fokus gedacht, Werte über punkte()/punkte_eintragen()."""
+        item = self._punktefeld(zeile, disziplin, feld)
+        self.tabelle.scrollToItem(item)
+        self.tabelle.setCurrentItem(item)
+        self.tabelle.editItem(item)
+        editor = self.tabelle.indexWidget(self.tabelle.model().index(item.row(), item.column()))
+        if editor is None:
+            raise ValueError(f"Zelle {disziplin}/{feld} in Zeile {zeile} lässt sich nicht bearbeiten (gesperrt?)")
+        editor.setFocus()
+        return editor
 
     def aktualisieren(self) -> None:
         """Baut die Tabelle komplett neu aus der Datenbank auf (verwirft dabei nicht
@@ -1594,8 +1871,9 @@ class ErgebnisTab(QWidget):
 
     def aktualisieren_falls_geaendert(self) -> None:
         """Wie aktualisieren(), aber nur, wenn sich die Datenbank seit dem letzten Aufbau
-        geändert hat (für den Tabwechsel). Lasttest 16.10.2026: Der Neuaufbau kostet bei
-        1000 Teilnehmern rund 5 s, weil jede Zeile eigene Eingabefelder bekommt."""
+        geändert hat (für den Tabwechsel). Lasttest 16.10.2026: Der Neuaufbau kostete bei
+        1000 Teilnehmern rund 5 s (damals ein Eingabefeld je Zelle; seit O8 deutlich weniger,
+        siehe Fortschritt.md)."""
         stand = self._datenstand()
         if stand is not None and stand == self._geladener_datenstand:
             # Wie nach einem Neuaufbau: alte Status- und Komma-Hinweise ausblenden.
@@ -1678,7 +1956,47 @@ class ErgebnisTab(QWidget):
         ergebnis_rows = ergebnisse_je_teilnehmer(self.conn)
         werte_override = werte_override or {}
         status_override = status_override or {}
+        # Ein noch offenes Eingabefeld gehört zur alten Zeilenbelegung; übernommen ist es
+        # (wo nötig) schon über _eingaben_je_id.
+        self.tabelle.offenen_editor_beenden(uebernehmen=False)
+        with self._intern():
+            verworfen = self._zeilen_fuellen(ergebnis_rows, werte_override, status_override)
+        # Spaltenbreiten (und Schriftgröße) an den tatsächlichen Inhalt UND die verfügbare
+        # Fensterbreite anpassen - siehe _spaltenbreiten_anpassen().
+        self._spaltenbreiten_anpassen()
+        return verworfen
 
+    @contextlib.contextmanager
+    def _intern(self):
+        """Zellen ändern, ohne dass _zelle_geaendert darauf reagiert."""
+        self._intern_tiefe += 1
+        try:
+            yield
+        finally:
+            self._intern_tiefe -= 1
+
+    def _zelle_geaendert(self, item: QTableWidgetItem) -> None:
+        """Eine Eingabe des Anwenders (Eingabefeld übernommen, Häkchen geklickt) bzw. von
+        punkte_eintragen/status_setzen."""
+        if self._intern_tiefe:
+            return
+        row, col = item.row(), item.column()
+        if not 0 <= row < len(self._boxen_je_zeile):
+            return
+        if col in (_DQ_SPALTE, _ABBRUCH_SPALTE):
+            self._status_umgeschaltet(row)
+        elif col in _PUNKTESPALTEN:
+            # Die Übernahme aus dem Eingabefeld ist keine neue Eingabe - ein Komma-Hinweis
+            # von gerade eben bleibt stehen (er geht mit der nächsten gültigen Taste weg).
+            self._aktualisiere_zeilenstatus(row, hinweis_ausblenden=not self._aus_editor)
+
+    @staticmethod
+    def _maximum_der_spalte(spalte: int) -> int:
+        return SUCHE_MAX if any(spalte == paar[0] for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values()) else ANZEIGE_MAX
+
+    def _zeilen_fuellen(self, ergebnis_rows, werte_override, status_override) -> list[str]:
+        """Kern von _zeilen_aufbauen (läuft unter _intern)."""
+        verworfen: list[str] = []
         self._boxen_je_zeile = []
         self._geladen_je_zeile = []
         self._status_boxen_je_zeile = []
@@ -1704,25 +2022,23 @@ class ErgebnisTab(QWidget):
                     # Disziplin hat keinen Platz mehr und wird gemeldet statt still verworfen.
                     gruende.append(f"{disziplin}: Disziplin inzwischen geändert")
 
-            self.tabelle.setItem(row, 0, QTableWidgetItem(str(t["startnummer"] or "")))
-            self.tabelle.setItem(row, 1, QTableWidgetItem(f"{t['nachname']}, {t['vorname']}"))
-            self.tabelle.setItem(row, 2, QTableWidgetItem(t["rufname_hund"]))
-            self.tabelle.setItem(row, 3, QTableWidgetItem(leistungsklasse_label(t)))
+            self.tabelle.setItem(row, 0, _info_item(str(t["startnummer"] or "")))
+            self.tabelle.setItem(row, 1, _info_item(f"{t['nachname']}, {t['vorname']}"))
+            self.tabelle.setItem(row, 2, _info_item(t["rufname_hund"]))
+            self.tabelle.setItem(row, 3, _info_item(leistungsklasse_label(t)))
 
-            boxen: dict[str, tuple[QLineEdit, QLineEdit]] = {}
+            boxen: dict[str, tuple[_PunkteItem, _PunkteItem]] = {}
             geladen: dict[str, tuple[int | None, int | None]] = {}
             for disziplin in ALLE_DISZIPLINEN:
                 spalte_suche, spalte_anzeige = _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin]
                 if disziplin not in zutreffende_disziplinen:
-                    # Disziplin gilt für diesen Teilnehmer nicht (ED) - Zellen leer/gesperrt lassen.
-                    # Rückmeldung 23.09.: setItem()/setRowCount() entfernen kein Cell-Widget
-                    # eines früheren Aufbaus - nach einer Umstellung DK -> ED (oder wenn beim
-                    # Sortieren eine ED-Zeile auf die Position einer DK-Zeile rutscht) blieb
-                    # sonst das alte Punkte-Eingabefeld über dem "–" stehen und beschreibbar.
+                    # Disziplin gilt für diesen Teilnehmer nicht (ED) - nicht bearbeitbares „–“.
+                    # Rückmeldung 23.09.: nach einer Umstellung DK -> ED (oder wenn beim
+                    # Sortieren eine ED-Zeile auf die Position einer DK-Zeile rutscht) darf
+                    # keine Punktezelle des früheren Aufbaus stehen bleiben - setItem ersetzt
+                    # die Zelle vollständig (siehe spalte_bearbeitbar).
                     for spalte in (spalte_suche, spalte_anzeige):
-                        self.tabelle.removeCellWidget(row, spalte)
-                        leer = QTableWidgetItem("–")
-                        leer.setFlags(leer.flags() & ~Qt.ItemIsEditable)
+                        leer = _info_item("–")
                         leer.setForeground(_farbe("gedaempft"))
                         self.tabelle.setItem(row, spalte, leer)
                     continue
@@ -1737,30 +2053,10 @@ class ErgebnisTab(QWidget):
                 # Leeres Feld = "noch nicht eingetragen" - ohne jede Vorbelegung (weder
                 # "0" noch ein Platzhalterzeichen), damit ein versehentlich stehen
                 # gelassenes Feld nicht als echte 0-Punkte-Bewertung gespeichert wird.
-                suche_feld = QLineEdit()
-                suche_feld.setValidator(_punkte_validator(suche_feld))
-                suche_feld.setAlignment(Qt.AlignCenter)
-                if angezeigt_suche is not None:
-                    suche_feld.setText(str(angezeigt_suche))
-                self.tabelle.setCellWidget(row, spalte_suche, suche_feld)
-
-                anzeige_feld = QLineEdit()
-                anzeige_feld.setValidator(_punkte_validator(anzeige_feld))
-                anzeige_feld.setAlignment(Qt.AlignCenter)
-                if angezeigt_anzeige is not None:
-                    anzeige_feld.setText(str(angezeigt_anzeige))
-                self.tabelle.setCellWidget(row, spalte_anzeige, anzeige_feld)
-
-                suche_feld.textChanged.connect(lambda _text, r=row: self._aktualisiere_zeilenstatus(r))
-                anzeige_feld.textChanged.connect(lambda _text, r=row: self._aktualisiere_zeilenstatus(r))
-                # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend
-                # schlucken, sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5).
-                suche_feld.inputRejected.connect(
-                    lambda f=suche_feld: self._eingabe_abgelehnt(f, SUCHE_MAX)
-                )
-                anzeige_feld.inputRejected.connect(
-                    lambda f=anzeige_feld: self._eingabe_abgelehnt(f, ANZEIGE_MAX)
-                )
+                suche_feld = _PunkteItem("" if angezeigt_suche is None else str(angezeigt_suche))
+                self.tabelle.setItem(row, spalte_suche, suche_feld)
+                anzeige_feld = _PunkteItem("" if angezeigt_anzeige is None else str(angezeigt_anzeige))
+                self.tabelle.setItem(row, spalte_anzeige, anzeige_feld)
 
                 boxen[disziplin] = (suche_feld, anzeige_feld)
                 geladen[disziplin] = (suche_wert, anzeige_wert)
@@ -1768,32 +2064,23 @@ class ErgebnisTab(QWidget):
             self._boxen_je_zeile.append(boxen)
             self._geladen_je_zeile.append(geladen)
 
-            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): zwei unabhängige Checkboxen,
-            # zentriert in ihrer Zelle über einen kleinen Container (QCheckBox selbst hat
-            # keine eingebaute Zentrierung als Cell-Widget).
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): zwei unabhängige Häkchen, mittig
+            # gezeichnet von _HakenDelegate.
             db_disqualifiziert = bool(aktuell.get("disqualifiziert"))
             db_abbruch = bool(aktuell.get("abbruch"))
             angezeigt_dq, angezeigt_abbruch = status_override.get(
                 t["id"], (db_disqualifiziert, db_abbruch)
             )
 
-            dq_box = QCheckBox()
-            dq_box.setChecked(angezeigt_dq)
-            self.tabelle.setCellWidget(row, _DQ_SPALTE, _zentrierte_zelle(dq_box))
-
-            abbruch_box = QCheckBox()
-            abbruch_box.setChecked(angezeigt_abbruch)
-            self.tabelle.setCellWidget(row, _ABBRUCH_SPALTE, _zentrierte_zelle(abbruch_box))
-
-            dq_box.toggled.connect(lambda _checked, r=row: self._status_umgeschaltet(r))
-            abbruch_box.toggled.connect(lambda _checked, r=row: self._status_umgeschaltet(r))
+            dq_box = _HakenItem(angezeigt_dq)
+            self.tabelle.setItem(row, _DQ_SPALTE, dq_box)
+            abbruch_box = _HakenItem(angezeigt_abbruch)
+            self.tabelle.setItem(row, _ABBRUCH_SPALTE, abbruch_box)
 
             self._status_boxen_je_zeile.append((dq_box, abbruch_box))
             self._status_geladen_je_zeile.append((db_disqualifiziert, db_abbruch))
 
-            status_item = QTableWidgetItem("")
-            status_item.setFlags(status_item.flags() & ~Qt.ItemIsEditable)
-            self.tabelle.setItem(row, _STATUS_SPALTE, status_item)
+            self.tabelle.setItem(row, _STATUS_SPALTE, _info_item(""))
 
             # Punkteeingabe sperren/leeren, wenn Disqualifiziert/Abbruch bereits gesetzt
             # ist (auch direkt nach dem Aufbau, nicht erst bei der nächsten Umschaltung).
@@ -1805,10 +2092,6 @@ class ErgebnisTab(QWidget):
                 verworfen.append(f"{nummer}{t['nachname']}, {t['vorname']} ({'; '.join(gruende)})")
             self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
             self._aktualisiere_zeilenstatus(row)
-
-        # Spaltenbreiten (und Schriftgröße) an den tatsächlichen Inhalt UND die verfügbare
-        # Fensterbreite anpassen - siehe _spaltenbreiten_anpassen().
-        self._spaltenbreiten_anpassen()
         return verworfen
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
@@ -1846,15 +2129,11 @@ class ErgebnisTab(QWidget):
                 f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} "
                 f"QTableWidget::item {{ font-size: {pt:.1f}pt; }}"
             )
-        font = self.tabelle.font()
-        font.setPointSizeF(pt)
-        for boxen in self._boxen_je_zeile:
-            for suche_feld, anzeige_feld in boxen.values():
-                suche_feld.setFont(font)
-                anzeige_feld.setFont(font)
-        for dq_box, abbruch_box in self._status_boxen_je_zeile:
-            dq_box.setFont(font)
-            abbruch_box.setFont(font)
+            # Schrift der Tabelle selbst: gilt für die Delegates und das Eingabefeld beim
+            # Bearbeiten (früher eine setFont-Schleife über alle Eingabefelder).
+            font = self.tabelle.font()
+            font.setPointSizeF(pt)
+            self.tabelle.setFont(font)
 
         self.tabelle.resizeColumnsToContents()
 
@@ -2006,6 +2285,7 @@ class ErgebnisTab(QWidget):
         Anzeigewert würde sonst als "ungespeichert" gelten und beim nächsten Speichern
         einen inzwischen anders gespeicherten Wert (z. B. aus dem Web zurückgeholte
         Ergebnisse) überschreiben oder löschen (Befund Nachprüfung 02.10.2026)."""
+        self.tabelle.offenen_editor_beenden()
         werte_je_id: dict = {}
         status_je_id: dict = {}
         for row, t in enumerate(self._teilnehmer_je_zeile):
@@ -2071,8 +2351,8 @@ class ErgebnisTab(QWidget):
             self.tabelle.setRowHidden(row, not passt)
 
     @staticmethod
-    def _feldwert(feld: QLineEdit) -> int | None:
-        """Liest ein Eingabefeld als Zahl - leer (oder ein durch die Validierung noch
+    def _feldwert(feld: QTableWidgetItem) -> int | None:
+        """Liest eine Punktezelle als Zahl - leer (oder ein durch die Validierung noch
         unvollständiger Zwischenzustand) ergibt None, entspricht also "noch nicht
         eingetragen", ohne dass dafür ein Platzhalterwert im Feld stehen müsste."""
         text = feld.text().strip()
@@ -2102,25 +2382,26 @@ class ErgebnisTab(QWidget):
         return punkte_geaendert or status_geaendert
 
     def _status_umgeschaltet(self, row: int) -> None:
-        """Reagiert auf das Umschalten einer Disqualifiziert-/Abbruch-Checkbox: sperrt/
-        leert bei Bedarf die Punkte-Eingabefelder dieser Zeile und aktualisiert den
+        """Reagiert auf das Umschalten eines Disqualifiziert-/Abbruch-Häkchens: sperrt/
+        leert bei Bedarf die Punktezellen dieser Zeile und aktualisiert den
         Gespeichert-Status. Beim Entsperren (Häkchen entfernt) werden die Felder zuvor
         wieder mit dem zuletzt aus der DB geladenen Stand befüllt statt leer zu bleiben -
         die zugehörigen Punkte wurden beim Sperren NICHT gelöscht (siehe alle_speichern),
         das Feld soll also wieder den tatsächlichen, in der DB stehenden Wert zeigen."""
         dq_box, abbruch_box = self._status_boxen_je_zeile[row]
         sperren = dq_box.isChecked() or abbruch_box.isChecked()
-        if not sperren:
-            geladen = self._geladen_je_zeile[row]
-            for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
-                suche_wert, anzeige_wert = geladen[disziplin]
-                suche_feld.setText("" if suche_wert is None else str(suche_wert))
-                anzeige_feld.setText("" if anzeige_wert is None else str(anzeige_wert))
-        self._punkteeingabe_sperren(row, sperren)
-        self._aktualisiere_zeilenstatus(row)
+        with self._intern():
+            if not sperren:
+                geladen = self._geladen_je_zeile[row]
+                for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
+                    suche_wert, anzeige_wert = geladen[disziplin]
+                    suche_feld.setText("" if suche_wert is None else str(suche_wert))
+                    anzeige_feld.setText("" if anzeige_wert is None else str(anzeige_wert))
+            self._punkteeingabe_sperren(row, sperren)
+            self._aktualisiere_zeilenstatus(row)
 
     def _punkteeingabe_sperren(self, row: int, sperren: bool) -> None:
-        """Sperrt (und leert) die Punkte-Eingabefelder einer Zeile, solange Disqualifiziert
+        """Sperrt (und leert) die Punktezellen einer Zeile, solange Disqualifiziert
         oder Abbruch gesetzt ist - eine Punkteeingabe wäre dann ohnehin irrelevant, da
         berechne_auswertung() für einen solchen Teilnehmer keine aus Punkten berechnete
         Wertnote mehr bildet (siehe db.py). Rührt beim Entsperren den Feldinhalt bewusst
@@ -2128,12 +2409,13 @@ class ErgebnisTab(QWidget):
         Neuaufbau der Tabelle (_zeilen_aufbauen) ist der Feldinhalt zu diesem Zeitpunkt
         bereits korrekt (ggf. inkl. einer noch nicht gespeicherten Eingabe aus
         werte_override) und darf nicht überschrieben werden."""
-        for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
-            if sperren:
-                suche_feld.setText("")
-                anzeige_feld.setText("")
-            suche_feld.setEnabled(not sperren)
-            anzeige_feld.setEnabled(not sperren)
+        with self._intern():
+            for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
+                if sperren:
+                    suche_feld.setText("")
+                    anzeige_feld.setText("")
+                suche_feld.setEnabled(not sperren)
+                anzeige_feld.setEnabled(not sperren)
 
     def _eingabe_abgelehnt(self, feld: QLineEdit, maximum: int) -> None:
         """Hinweis, wenn der Validator ein Zeichen ablehnt (Komma, Buchstabe, dritte
@@ -2157,42 +2439,43 @@ class ErgebnisTab(QWidget):
             self.hinweis_label.hide()
         self._eingabe_hinweis = None
 
-    def _aktualisiere_zeilenstatus(self, row: int) -> None:
+    def _aktualisiere_zeilenstatus(self, row: int, hinweis_ausblenden: bool = True) -> None:
         """Färbt die Zeile gelb und setzt den Status-Text, solange sich mindestens ein
-        Wert vom zuletzt gespeicherten Stand unterscheidet. Punktefelder mit einem Wert
-        über dem Maximum bekommen zusätzlich einen roten Rahmen und einen Tooltip."""
-        self._eingabe_hinweis_ausblenden()  # gültige Eingabe: Komma-Hinweis (U5b) weg
+        Wert vom zuletzt gespeicherten Stand unterscheidet. Punktezellen mit einem Wert
+        über dem Maximum bekommen zusätzlich einen roten Rahmen (_ZU_HOCH_ROLLE, gezeichnet
+        von _PunkteDelegate) und einen Tooltip."""
+        if hinweis_ausblenden:
+            self._eingabe_hinweis_ausblenden()  # gültige Eingabe: Komma-Hinweis (U5b) weg
+        with self._intern():
+            self._zeilenstatus_setzen(row)
+
+    def _zeilenstatus_setzen(self, row: int) -> None:
         ungespeichert = self._zeile_ist_ungespeichert(row)
-        farbe = _farbe("ungespeichert_bg" if ungespeichert else "zeile_bg")
-        maximum_je_feld = {}
-        for suche_feld, anzeige_feld in self._boxen_je_zeile[row].values():
-            maximum_je_feld[suche_feld] = SUCHE_MAX
-            maximum_je_feld[anzeige_feld] = ANZEIGE_MAX
+        pinsel = QBrush(_farbe("ungespeichert_bg" if ungespeichert else "zeile_bg"))
+        maximum_je_spalte = {}
+        for disziplin in self._boxen_je_zeile[row]:
+            spalte_suche, spalte_anzeige = _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin]
+            maximum_je_spalte[spalte_suche] = SUCHE_MAX
+            maximum_je_spalte[spalte_anzeige] = ANZEIGE_MAX
 
         for col in range(self.tabelle.columnCount()):
-            widget = self.tabelle.cellWidget(row, col)
-            if widget is not None:
-                # Gilt sowohl für die Punkte-QLineEdit-Felder als auch für den Container
-                # der Disqualifiziert-/Abbruch-Checkbox (siehe _zentrierte_zelle) -
-                # QSS-Hintergrundfarbe funktioniert für beide Widget-Arten gleich.
-                stil = f"background-color: {farbe.name()};" if ungespeichert else ""
-                maximum = maximum_je_feld.get(widget)
-                if maximum is not None:
-                    wert = self._feldwert(widget)
-                    zu_hoch = wert is not None and wert > maximum
-                    if zu_hoch:
-                        stil += f" border: 2px solid {_farbe('fehler').name()};"
-                    tooltip = f"Höchstens {maximum} Punkte." if zu_hoch else ""
-                    if widget.toolTip() != tooltip:
-                        widget.setToolTip(tooltip)
-                # Nur bei Änderung setzen: setStyleSheet ist teuer und lief bei jedem Aufbau
-                # und Speichern für tausende Felder (Lasttest 16.10.2026).
-                if widget.styleSheet() != stil:
-                    widget.setStyleSheet(stil)
-            else:
-                item = self.tabelle.item(row, col)
-                if item is not None:
-                    item.setBackground(farbe)
+            item = self.tabelle.item(row, col)
+            if item is None:
+                continue
+            # Nur bei Änderung setzen - jede Änderung löst ein Neuzeichnen aus.
+            if item.background() != pinsel:
+                item.setBackground(pinsel)
+            maximum = maximum_je_spalte.get(col)
+            if maximum is not None:
+                wert = self._feldwert(item)
+                zu_hoch = wert is not None and wert > maximum
+                if bool(item.data(_ZU_HOCH_ROLLE)) != zu_hoch:
+                    item.setData(_ZU_HOCH_ROLLE, zu_hoch)
+                if bool(item.data(_UNGESPEICHERT_ROLLE)) != ungespeichert:
+                    item.setData(_UNGESPEICHERT_ROLLE, ungespeichert)
+                tooltip = f"Höchstens {maximum} Punkte." if zu_hoch else ""
+                if item.toolTip() != tooltip:
+                    item.setToolTip(tooltip)
 
         status_item = self.tabelle.item(row, _STATUS_SPALTE)
         if status_item is not None:
@@ -2228,7 +2511,8 @@ class ErgebnisTab(QWidget):
                 item = self.tabelle.item(row, col)
                 # "–"-Platzhalter für Disziplinen, die für diesen Teilnehmer nicht gelten.
                 if item is not None and item.text() == "–" and not (item.flags() & Qt.ItemIsEditable):
-                    item.setForeground(_farbe("gedaempft"))
+                    with self._intern():
+                        item.setForeground(_farbe("gedaempft"))
             self._aktualisiere_zeilenstatus(row)
 
     def _sammelspeichern_zuruecknehmen(self, geladen_vorher: list, status_geladen_vorher: list) -> None:
@@ -2245,7 +2529,9 @@ class ErgebnisTab(QWidget):
         """Speichert alle geänderten Zeilen der Tabelle auf einmal (unabhängig vom
         aktuellen Filter - auch ausgeblendete Zeilen werden mitgespeichert). Bei mehr als
         _SAMMELSPEICHERN_UEBER_TEILNEHMER Teilnehmern in einer Transaktion (ganz oder gar
-        nicht), sonst mit einem Commit je Ergebnis."""
+        nicht), sonst mit einem Commit je Ergebnis. Ein offenes Eingabefeld wird vorher
+        übernommen (Strg+S, Knopf, Reiterwechsel, Schließen)."""
+        self.tabelle.offenen_editor_beenden()
         gespeichert = 0
         fehler: list[str] = []
         # Stand die Tabelle vor dem Speichern auf dem aktuellen Datenstand, entspricht sie

@@ -134,13 +134,17 @@ class DemoMarkierung(QWidget):
     """Farbiger Rahmen um das Element, an dem die Demo gerade arbeitet. Selbst gezeichnet
     (Akzentfarbe aus der Palette) statt per Stylesheet, damit die Stylesheets der Reiter
     (z. B. gelbe ungespeicherte Zeilen) und die Design-Tests unberührt bleiben. Lässt
-    Mausklicks durch und folgt dem Ziel, falls es sich verschiebt."""
+    Mausklicks durch und folgt dem Ziel, falls es sich verschiebt. Mit `bereich` nur ein
+    Ausschnitt des Ziels (in dessen Koordinaten), z. B. eine Tabellenzelle der
+    Ergebniserfassung - die hat seit O8 kein eigenes Widget mehr. Liefert `bereich` ein
+    leeres Rechteck oder None, bleibt die Markierung verborgen."""
 
     RAND = 4
 
-    def __init__(self, ziel: QWidget):
+    def __init__(self, ziel: QWidget, bereich: Callable[[], QRect | None] | None = None):
         super().__init__(ziel.window())
         self._ziel = ziel
+        self._bereich = bereich
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WA_NoSystemBackground)
         self._timer = QTimer(self)
@@ -155,9 +159,15 @@ class DemoMarkierung(QWidget):
         if not _lebt(ziel) or fenster is None or not ziel.isVisible() or ziel.window() is not fenster:
             self.hide()
             return
-        oben_links = ziel.mapTo(fenster, QPoint(0, 0))
+        ausschnitt = QRect(QPoint(0, 0), ziel.size())
+        if self._bereich is not None:
+            ausschnitt = self._bereich()
+            if ausschnitt is None or ausschnitt.isEmpty():
+                self.hide()
+                return
+        oben_links = ziel.mapTo(fenster, ausschnitt.topLeft())
         r = self.RAND
-        self.setGeometry(QRect(oben_links, ziel.size()).adjusted(-r, -r, r, r))
+        self.setGeometry(QRect(oben_links, ausschnitt.size()).adjusted(-r, -r, r, r))
         self.show()
         self.raise_()
 
@@ -688,14 +698,26 @@ class DemoTour(QObject):
 
     # --- Hilfsfunktionen ------------------------------------------------------
 
-    def _markieren(self, ziel: QWidget | None) -> None:
+    def _markieren(self, ziel: QWidget | None, bereich: Callable[[], QRect | None] | None = None) -> None:
         if _lebt(self._markierung):
             self._markierung.entfernen()
         self._markierung = None
         self._ziel = ziel
         if _lebt(ziel):
             self._sichtbar_machen(ziel)
-            self._markierung = DemoMarkierung(ziel)
+            self._markierung = DemoMarkierung(ziel, bereich)
+
+    def _ergebniszelle_markieren(self, teilnehmer_id: int, spalte: int) -> None:
+        """Markiert eine Zelle der Ergebniserfassung (O8: Rechteck statt Eingabe-Widget).
+        Die Zeile wird bei jedem Ausrichten neu gesucht, falls die Tabelle neu aufgebaut
+        oder umsortiert wurde."""
+        tab = self._fenster.ergebnis_tab
+
+        def bereich() -> QRect | None:
+            row = tab.zeile_von(teilnehmer_id)
+            return None if row is None else tab.zellrechteck(row, spalte)
+
+        self._markieren(tab.tabelle.viewport(), bereich)
 
     def _panel_ausweichen(self) -> None:
         if _lebt(self._panel):
@@ -1176,10 +1198,8 @@ class DemoTour(QObject):
             tab.punkte_eintragen(zeile(), disziplin, **{feldname: text})
 
         def fokus() -> None:
-            row = zeile()
-            tab.zeile_zeigen(row)
-            spalte = _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin][index]
-            self._markieren(tab.tabelle.cellWidget(row, spalte))
+            tab.zeile_zeigen(zeile())
+            self._ergebniszelle_markieren(self._ids[nachname], _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin][index])
             eintragen("")
         fokus.pause_ms = self.PAUSE_MS // 3
 
@@ -1201,7 +1221,7 @@ class DemoTour(QObject):
             if row is None:
                 raise DemoFehler(f"Die Zeile von {nachname} ist in der Ergebniserfassung nicht zu finden.")
             tab.zeile_zeigen(row)
-            self._markieren(tab.tabelle.cellWidget(row, _DQ_SPALTE))
+            self._ergebniszelle_markieren(self._ids[nachname], _DQ_SPALTE)
             tab.status_setzen(row, dq=True)
         return [aktion]
 

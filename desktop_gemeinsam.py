@@ -584,23 +584,6 @@ class _NumerischSortierbaresItem(QTableWidgetItem):
 # ein gedecktes Bernstein) kommen aus dem aktiven Hintergrund-Design, siehe _farbe().
 
 
-def _zentrierte_zelle(widget: QWidget) -> QWidget:
-    """Bettet `widget` (z.B. eine QCheckBox) in einen kleinen Container mit zentriertem
-    Layout ein - als setCellWidget-Inhalt einer QTableWidget-Zelle, da eine QCheckBox
-    allein dort automatisch linksbündig erscheint. Siehe ErgebnisTab (Disqualifiziert-/
-    Abbruch-Spalten)."""
-    zelle = QWidget()
-    # Ein einfaches QWidget malt seinen per Stylesheet gesetzten Hintergrund (siehe
-    # _aktualisiere_zeilenstatus) standardmäßig NICHT selbst - anders als z.B. QLineEdit,
-    # das seinen Hintergrund ohnehin über den Stil zeichnet. WA_StyledBackground schaltet
-    # das für dieses Widget gezielt ein.
-    zelle.setAttribute(Qt.WA_StyledBackground, True)
-    layout = QHBoxLayout(zelle)
-    layout.addWidget(widget)
-    layout.setAlignment(Qt.AlignCenter)
-    layout.setContentsMargins(0, 0, 0, 0)
-    return zelle
-
 # Spaltenreihenfolge in der Ergebniserfassung: je Disziplin ein Such-/Anzeigeleistungs-Paar,
 # alle drei nebeneinander in einer Zeile - bei DK sind alle drei aktiv, bei ED nur die
 # jeweils zutreffende (die anderen beiden Spalten bleiben leer/gesperrt).

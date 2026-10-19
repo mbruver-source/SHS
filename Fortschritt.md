@@ -7314,3 +7314,62 @@ Entscheidungen vom 18.10.2026. Dieser Schritt ändert das Verhalten nicht.
     - `zelle_gesperrt` prüft jetzt beide Felder.
     - Die Docstrings sind präzisiert.
     - Hinweise für O8 stehen in `aufgaben.md`.
+
+
+## 19.10.2026: O8 Ergebniserfassung, Schritt 2: Zellen und Delegates statt Eingabefelder (automatische Abarbeitung)
+
+Umsetzung nach Marcos Entscheidungen vom 18.10.2026 (Variante A).
+
+- **Aufbau:**
+  - Die Punktezellen sind jetzt `QTableWidgetItem`s (`_PunkteItem`). `_PunkteDelegate` zeichnet
+    sie wie ein umrandetes Feld:
+    - gelb, solange die Zeile ungespeichert ist;
+    - roter Rahmen und Tooltip über dem Maximum;
+    - grau und leer, wenn gesperrt;
+    - „–“ für ED-fremde Disziplinen als schlichter Text.
+  - Ein `QLineEdit` mit `_punkte_validator` entsteht nur beim Bearbeiten.
+  - Disqualifiziert und Abbruch sind Häkchen-Zellen (`_HakenItem`), mittig gezeichnet von
+    `_HakenDelegate`.
+  - Benutzeränderungen kommen über `itemChanged` an. Interne Änderungen (Aufbau, Färben, Sperren)
+    laufen unter einer Sperre und lösen nichts aus.
+- **Tastatur:**
+  - In einer markierten Zelle lostippen ersetzt den Wert. Bearbeiten geht außerdem per
+    Doppelklick, zweitem Klick oder F2.
+  - Enter übernimmt und bleibt in der Zelle.
+  - Die Leertaste oder ein Klick in die Zelle schaltet das Häkchen.
+  - Tab und Umschalt+Tab springen nur durch bedienbare Zellen (`_ErgebnisTabelle.moveCursor`):
+    Suche → Anzeige → nächste Disziplin → DQ → Abbruch → nächste Zeile. Gesperrte Zellen, „–“,
+    Info-Spalten und ausgeblendete Zeilen werden übersprungen. Am Ende verlässt Tab die Tabelle.
+  - Strg+Tab wechselt weiter den Reiter.
+- **Nichts geht verloren:** Ein offenes Feld wird vor Speichern, Strg+S, Reiterwechsel, Schließen,
+  Sortieren und vor den Lese-Methoden der Zellwert-Schnittstelle übernommen.
+- **Akzeptierte Abweichungen** (Marco):
+  - Gelb und der rote Rahmen erscheinen erst nach dem Übernehmen.
+  - Die Demo markiert jetzt das Zellenrechteck (`DemoMarkierung` mit `bereich`).
+- **Tempo** (grobe Messung, 1000 Teilnehmer): Aufbau 1,37 → 0,48 s, Neuaufbau 1,28 → 0,39 s,
+  Sortieren 1,30 → 0,38 s. Die genaue Messung folgt in O10.
+- **Tests:** 11 neue Tastatur- bzw. Demo-Tests:
+  - Lostippen und Enter;
+  - Tab-Reihenfolge samt Sperre und ausgeblendeter Zeile;
+  - Tab aus dem offenen Feld;
+  - Umschalt+Tab am Anfang;
+  - Strg+Tab;
+  - Leertaste;
+  - Klick ins Häkchen;
+  - offenes Feld beim Speichern und als „ungespeichert“;
+  - Demo-Markierung.
+
+  Der Infozellen-Test prüft jetzt die Flags. Gegenprobe: Mit dem Stand von O7 scheitern 7 der 8
+  ersten neuen Tests; die beiden übrigen prüfen Verhalten, das schon vorher galt. Volle Läufe:
+  Unittests OK, GUI 405 grün.
+- **Verifikation (unabhängiger Subagent):** Kein Pfad gefunden, auf dem eine Eingabe verloren
+  geht oder doppelt reagiert wird. Behoben:
+  - Strg+Tab wechselt wieder den Reiter.
+  - Umschalt+Tab am Tabellenanfang verlässt die Tabelle, statt das Feld neu zu öffnen.
+  - `status_setzen` übernimmt ein offenes Feld vorher.
+  - `zelle_bearbeiten` meldet eine gesperrte Zelle klar.
+  - Veraltete Kommentare zu „Eingabefeldern“ sind angepasst.
+  - `_zentrierte_zelle` ist entfernt (nicht mehr genutzt).
+  - `Architektur.md` ist nachgezogen.
+- **Offen für O9:** HANDBUCH (Bedienung der Tabelle), Sichtkontrolle in allen Designs,
+  Screenshots.

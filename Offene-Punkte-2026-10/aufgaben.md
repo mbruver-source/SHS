@@ -18,8 +18,8 @@ Start durch Marco:
 | O4 Schnitt 2 `desktop_auswertung.py` | M | erledigt | 7cc2548 | 54 % / 3 % → 0 % / 4 % (neues 5-h-Fenster) | Unittests OK, GUI 394 grün |
 | O5 Schnitt 3 `desktop_zeitplan.py` | M | erledigt | fbd85fd | 1 % / 4 % → 7 % / 4 % | Unittests OK, GUI 394 grün |
 | O6 Schnitt 3b `desktop_verwaltung.py` (+ Architektur-Doku) | M | erledigt | 55d946d | 7 % / 4 % → 16 % / 5 % | Unittests OK, GUI 394 grün; Doku der Aufteilung nachgezogen |
-| O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | (s. git log) | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
-| O8 Ergebnis 2: Items + Delegate + Tastatur | L | offen | | | nach O7 |
+| O7 Ergebnis 1: Zellwert-Schnittstelle, Tests umstellen | L | erledigt | cded543 | 17 % / 5 % → 36 % / 7 % | GUI 394 grün vorher/nachher; Schnittstelle unter O7 eingetragen |
+| O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | (s. git log) | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | offen | | | nach O8 |
 | O10 Messung Lasttest-1000 | S | offen | | | nach O9 |
 | O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | offen | | | zuletzt |
@@ -270,6 +270,13 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
   auf den aktiven Editor.
 - `desktop_darstellung.py` 117–131 (Feldrahmen) und 223–242 (Indikator) für den Delegate nutzen.
 - Neue Tastatur-Tests.
+
+- **Umgesetzt (19.10.2026):** `_PunkteItem`/`_HakenItem`, `_PunkteDelegate`/`_HakenDelegate`,
+  `_ErgebnisTabelle` (moveCursor, `offenen_editor_beenden`). Die Demo-Markierung über das
+  Zellenrechteck (`DemoMarkierung(bereich=…)`, `ErgebnisTab.zellrechteck`) ist schon in O8
+  gekommen, weil es keine Zellen-Widgets mehr gibt – in O9 nur noch sichtprüfen.
+  Offen für O9: HANDBUCH Z. 605 (Tab, Lostippen, Enter, Doppelklick/F2, Leertaste),
+  Sichtkontrolle Hell/Dunkel/Hoher Kontrast (gesperrte Zelle grau genug?), Screenshots.
 
 ### O9 Ergebnis 3: Demo, Darstellung, Doku (M)
 - `desktop_demo.py` 1158–1188: Eintippen über die Schnittstelle, Markierung über

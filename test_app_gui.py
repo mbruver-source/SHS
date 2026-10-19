@@ -27,7 +27,7 @@ import sys
 
 import pytest
 from contextlib import closing
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
@@ -76,7 +76,8 @@ import desktop_programm
 from desktop_programm import VERSION, VersionDialog
 from desktop_verwaltung import DatensicherungTab, VerwaltungTab
 from desktop_zeitplan import ZeitplanTab
-from desktop_gemeinsam import _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
+from db import ALLE_DISZIPLINEN
+from desktop_gemeinsam import _ABBRUCH_SPALTE, _DQ_SPALTE, _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
 
 
 # Hinweistexte der letzten Speichermeldungen (siehe gespeichert_meldungen).
@@ -3567,10 +3568,10 @@ def test_ergebnis_tabelle_schrumpft_punktespalten_nicht_unter_minimum_bei_schmal
 
 # --- Ergebniserfassung: Sortierung per Spaltenklick ---------------------------------
 # Nutzerwunsch (21.09., Rückmeldung "klappt gut, ggf. hier auch Sortierungsfunktion").
-# WICHTIG anders als bei TeilnehmerTab (siehe unten): diese Tabelle setzt die Punkte-
-# Eingabefelder über setCellWidget (echte QLineEdit-Widgets) - Qts eigene
-# sortItems()-Sortierung würde diese Widgets NICHT mitverschieben und Eingaben von der
-# falschen Zeile trennen. ErgebnisTab verwendet deshalb eine eigene Sortierlogik
+# WICHTIG anders als bei TeilnehmerTab (siehe unten): die Zeilenlisten von ErgebnisTab
+# (Teilnehmer, geladene Werte …) hängen an der Zeilennummer - Qts eigene
+# sortItems()-Sortierung würde nur die Zellen verschieben und Eingaben von der falschen
+# Zeile trennen. ErgebnisTab verwendet deshalb eine eigene Sortierlogik
 # (_spalte_geklickt, hier über das sectionClicked-Signal wie bei einem echten Klick auf
 # die Spaltenüberschrift ausgelöst), die hier gezielt getestet wird - insbesondere, dass
 # dabei keine ungespeicherte Eingabe verloren geht.
@@ -6441,19 +6442,200 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
 
 
 def test_ergebnis_infozellen_nicht_editierbar_und_sortierpfeil(qtbot, conn):
-    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 3 und 7."""
-    from PySide6.QtWidgets import QTableWidget
-
+    """Desktop-Prüfung 14.10.2026, Teil 3 Nr. 3 und 7; seit O8 (19.10.2026) über die
+    Zell-Flags statt über abgeschaltete Bearbeitung: Info- und Statuszellen lassen sich
+    nicht bearbeiten, auch nicht durch Lostippen."""
     _teilnehmer_anlegen(conn, nachname="Zorn", startnummer=1)
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
-    assert tab.tabelle.editTriggers() == QTableWidget.NoEditTriggers
-    assert not tab.tabelle.tabKeyNavigation()
+    for spalte in (0, 1, 2, 3, _STATUS_SPALTE):
+        assert not tab.spalte_bearbeitbar(0, spalte)
+    tab.tabelle.setCurrentCell(0, 1)
+    qtbot.keyClick(tab.tabelle, Qt.Key_7)
+    assert tab.tabelle.item(0, 1).text() == "Zorn, Max"
+    assert tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is None
     kopf = tab.tabelle.horizontalHeader()
     tab._spalte_geklickt(1)
     assert kopf.sortIndicatorSection() == 1 and kopf.sortIndicatorOrder() == Qt.AscendingOrder
     tab._spalte_geklickt(1)
     assert kopf.sortIndicatorOrder() == Qt.DescendingOrder
+
+
+# --- Ergebniserfassung: Tastatur (offene Punkte O8, Marco 18.10.2026) ---------------------
+# Seit O8 Zellen statt Eingabefelder: Lostippen ersetzt den Wert, Enter übernimmt und bleibt
+# in der Zelle, Tab springt nur durch bedienbare Zellen, die Leertaste schaltet ein Häkchen,
+# und eine gerade getippte Zahl geht beim Speichern nicht verloren.
+
+
+def _ergebnis_tab_gezeigt(qtbot, conn):
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.setFocus()
+    return tab
+
+
+def test_ergebnis_lostippen_ersetzt_wert_und_enter_bleibt_in_der_zelle(qtbot, conn):
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", 17, 20)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    spalte = _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"][0]
+    tab.tabelle.setCurrentCell(0, spalte)
+
+    qtbot.keyClick(tab.tabelle, Qt.Key_4)
+    editor = tab.tabelle.indexWidget(tab.tabelle.currentIndex())
+    assert editor is not None and editor.text() == "4"  # „17“ ersetzt, nicht ergänzt
+    qtbot.keyClick(editor, Qt.Key_2)
+    qtbot.keyClick(editor, Qt.Key_Return)
+
+    # Qt übernimmt per verzögertem Aufruf - danach ist der Wert drin, ohne dass punkte()
+    # selbst übernehmen müsste.
+    qtbot.waitUntil(lambda: tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is None, timeout=WARTEZEIT_MS)
+    assert tab.tabelle.item(0, spalte).text() == "42"
+    assert (tab.tabelle.currentRow(), tab.tabelle.currentColumn()) == (0, spalte)
+    assert tab.punkte(0, "Flächensuche") == ("42", "20")
+    assert tab.zeile_ungespeichert(0)
+
+
+def test_ergebnis_tab_springt_nur_durch_bedienbare_zellen(qtbot, conn):
+    """Suche → Anzeige → DQ → Abbruch → nächste Zeile; „–“, Info- und Statusspalte werden
+    übersprungen, ebenso gesperrte Punkte und ausgeblendete Zeilen."""
+    _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1, disziplin="Trümmerfeld")
+    _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2, disziplin="Trümmerfeld")
+    _teilnehmer_anlegen(conn, nachname="Dritter", startnummer=3, disziplin="Trümmerfeld")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    suche, anzeige = _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Trümmerfeld"]
+    tab.status_setzen(1, dq=True)  # Zweiter: Punkte gesperrt
+    tab.tabelle.setCurrentCell(0, suche)
+
+    besucht = []
+    for _ in range(7):
+        qtbot.keyClick(tab.tabelle, Qt.Key_Tab)
+        tab.tabelle.offenen_editor_beenden()
+        besucht.append((tab.tabelle.currentRow(), tab.tabelle.currentColumn()))
+
+    assert besucht == [
+        (0, anzeige), (0, _DQ_SPALTE), (0, _ABBRUCH_SPALTE),
+        (1, _DQ_SPALTE), (1, _ABBRUCH_SPALTE),
+        (2, suche), (2, anzeige),
+    ]
+    # Umschalt+Tab zurück; eine ausgeblendete Zeile wird übersprungen.
+    tab.tabelle.setRowHidden(1, True)
+    tab.tabelle.setCurrentCell(2, suche)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Backtab, Qt.ShiftModifier)
+    tab.tabelle.offenen_editor_beenden()
+    assert (tab.tabelle.currentRow(), tab.tabelle.currentColumn()) == (0, _ABBRUCH_SPALTE)
+
+
+def test_ergebnis_tab_in_dk_zeile_wechselt_zur_naechsten_disziplin(qtbot, conn):
+    _teilnehmer_anlegen(conn, art="DK", disziplin=None)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    erste, zweite = ALLE_DISZIPLINEN[0], ALLE_DISZIPLINEN[1]
+    tab.tabelle.setCurrentCell(0, _ERGEBNIS_SPALTEN_JE_DISZIPLIN[erste][1])
+    qtbot.keyClick(tab.tabelle, Qt.Key_Tab)
+    tab.tabelle.offenen_editor_beenden()
+    assert tab.tabelle.currentColumn() == _ERGEBNIS_SPALTEN_JE_DISZIPLIN[zweite][0]
+
+
+def test_ergebnis_tab_aus_offenem_feld_uebernimmt_und_oeffnet_die_naechste_zelle(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "50")
+    qtbot.keyClick(editor, Qt.Key_Tab)
+    assert tab.tabelle.currentColumn() == _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"][1]
+    assert tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is not None  # Anzeige gleich offen
+    assert tab.tabelle.item(0, _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"][0]).text() == "50"
+
+
+def test_ergebnis_umschalt_tab_am_anfang_verlaesst_die_tabelle(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "7")
+    qtbot.keyClick(editor, Qt.Key_Backtab, Qt.ShiftModifier)
+    assert tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is None  # nicht neu geöffnet
+    assert tab.punkte(0, "Flächensuche")[0] == "7"
+
+
+def test_ergebnis_strg_tab_wechselt_den_reiter(qtbot, termin):
+    """O8: Tab-Navigation in der Tabelle darf Strg+Tab (Reiterwechsel) nicht schlucken."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    index_vorher = fenster._tabs.currentIndex()
+    tab = fenster.ergebnis_tab
+    tab.tabelle.setCurrentCell(0, _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"][0])
+    qtbot.keyClick(tab.tabelle, Qt.Key_Tab, Qt.ControlModifier)
+    assert fenster._tabs.currentIndex() != index_vorher
+
+
+def test_ergebnis_leertaste_schaltet_haekchen(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    assert tab.status(0) == (False, True)
+    assert tab.zelle_gesperrt(0, "Flächensuche")
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    assert tab.status(0) == (False, False)
+    assert not tab.zelle_gesperrt(0, "Flächensuche")
+
+
+def test_ergebnis_klick_in_die_haekchenzelle_schaltet(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    mitte = tab.zellrechteck(0, _DQ_SPALTE).center()
+    qtbot.mouseClick(tab.tabelle.viewport(), Qt.LeftButton, pos=mitte)
+    assert tab.status(0) == (True, False)
+
+
+def test_ergebnis_offenes_eingabefeld_geht_beim_speichern_nicht_verloren(qtbot, conn):
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.punkte_eintragen(0, "Flächensuche", anzeige="30")
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "55")
+    assert tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is editor  # noch nicht übernommen
+
+    tab.alle_speichern()
+
+    assert get_ergebnis(conn, tid)["suche_flaechensuche"] == 55
+    assert not tab.hat_ungespeicherte_aenderungen()
+
+
+def test_ergebnis_offenes_eingabefeld_zaehlt_als_ungespeichert(qtbot, conn):
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    qtbot.keyClicks(tab.zelle_bearbeiten(0, "Flächensuche", "suche"), "5")
+    assert tab.hat_ungespeicherte_aenderungen()  # z. B. Rückfrage beim Reiterwechsel/Schließen
+
+
+def test_demo_markiert_die_ergebniszelle(qtbot, termin):
+    """O8: die Demo markiert das Zellenrechteck (keine Eingabe-Widgets mehr)."""
+    conn, pfad = termin
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    from desktop_demo import DemoTour
+
+    tour = DemoTour(fenster)
+    spalte = _ERGEBNIS_SPALTEN_JE_DISZIPLIN["Flächensuche"][0]
+    tour._ergebniszelle_markieren(tid, spalte)
+    markierung = tour._markierung
+    zelle = fenster.ergebnis_tab.zellrechteck(0, spalte)
+    rand = markierung.RAND
+    assert markierung.isVisible()
+    assert markierung.size() == zelle.size() + QSize(2 * rand, 2 * rand)
+    oben_links = fenster.ergebnis_tab.tabelle.viewport().mapTo(fenster, zelle.topLeft())
+    assert markierung.pos() == oben_links - QPoint(rand, rand)
+    markierung.entfernen()
 
 
 def test_ergebnis_sortierung_nach_name_mit_umlauten(qtbot, conn):
