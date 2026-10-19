@@ -7049,3 +7049,55 @@ ohne Änderung am Programm.
   `isActiveWindow` behält 5 s, die drei mehrzeiligen Muster sind mit umgestellt.
 - Tests lokal: Unittests 657 OK (172 übersprungen); GUI + Theme 385 passed, 1 xfailed, dazu die
   zwei bekannten fokusbedingten Fehlschläge.
+
+## 19.10.2026: O1 Sicherung als stimmige Momentaufnahme (automatische Abarbeitung)
+
+Erste Aufgabe aus `Offene-Punkte-2026-10/aufgaben.md`. Der Punkt war zurückgestellt seit A11
+(15.10.2026): Der geöffnete Termin wurde beim Sichern als Byte-Kopie ins ZIP geschrieben, während
+er offen war. Umgesetzt nach Marcos Entscheidungen vom 18.10.2026.
+
+- **`db_sicherung.sicherung_erstellen`:** Jede Termin-Datei, die im Ordner und die zusätzlich
+  mitgesicherte, kommt über `_momentaufnahme` ins ZIP. Ablauf: `oeffne_termin_lesend`, dann
+  `backup()` in eine Datenbank im Arbeitsspeicher, dann `serialize()`, dann `writestr`. Eine laufende
+  Schreibtransaktion einer anderen Verbindung ist nicht enthalten. Es entsteht keine Temp-Datei
+  mit Personendaten.
+- **Nicht lesbare Dateien** (beschädigt, keine SQLite-Datei, liegengebliebenes Journal, das sich
+  nur schreibend zurückspielen ließe) werden wie bisher roh gesichert, eine daneben liegende
+  `<name>-journal` mit. In die Quelle wird nicht geschrieben. Der neue Parameter `roh_gesichert`
+  liefert die Namen. `DatensicherungTab._sicherung_erstellen` nennt sie im Meldungsfenster.
+- **`sicherung_wiederherstellen`:** Gehört zu einem gewählten Termin eine `-journal` im ZIP, wird
+  sie mit demselben Zielnamen und dem Zusatz `-journal` zurückgeschrieben, sonst wäre das
+  Mitsichern wirkungslos. Der Name leitet sich nur aus dem schon geprüften Zielnamen ab.
+  `sicherung_inhalt` zeigt die Rücksprung-Datei nicht als eigenen Termin. Die Grenzen nach S-8
+  gelten unverändert für alle Einträge.
+- **Tests:**
+  - `test_backup.TestSicherungMomentaufnahme`: offene fremde Transaktion, liegengebliebenes
+    Journal samt Rundreise mit `termin_oeffnen`, kaputte Datei.
+  - GUI-Test `test_sicherung_nennt_roh_gesicherte_dateien`.
+  - Der Abbruch-Test patcht jetzt `writestr` statt `write`.
+- **Gegenprobe:** Ohne die Änderungen schlagen alle neuen Tests fehl. Eine Einschränkung: Der Test
+  mit der offenen Fremdtransaktion scheitert dabei nur am neuen Parameter. Inhaltlich hätte auch
+  die alte Byte-Kopie den gespeicherten Stand geliefert, solange die andere Verbindung nichts in
+  die Datei ausgelagert hat. Den echten Unterschied zeigt der Journal-Test, weil die alte Sicherung
+  die Rücksprung-Datei nicht enthielt.
+- **Verifikation (unabhängiger Subagent), Fehler F1 behoben:** `Connection.backup()` wiederholt
+  bei einer gesperrten Quelle endlos. Hielt eine andere Instanz (oder die eigene Verbindung)
+  gerade eine exklusive Sperre, hätte die Sicherung mit Wartecursor festgehangen. Die alte
+  Byte-Kopie hat nie gewartet. Jetzt holt `_momentaufnahme` die Lesesperre vorher mit
+  `BEGIN` und einer Abfrage. Es gilt die übliche Wartezeit von 5 s, danach wird die Datei roh
+  gesichert. Neuer Test `test_gesperrte_datei_wird_ohne_endloses_warten_roh_gesichert`.
+  Gegenprobe: Ohne die zwei Zeilen hängt der Test bis zur Zeitgrenze.
+- **Weitere Kleinigkeiten aus der Verifikation erledigt:**
+  - Bei Speichermangel (`MemoryError`) wird roh gesichert.
+  - Der Docstring von `sicherung_wiederherstellen` ist nachgezogen.
+  - Neuer Test: Scheitert das Ersetzen der Rücksprung-Datei, nennt
+    `TeilweiseWiederhergestelltError` den Termin.
+- **Hinweis Speicher:** Die Momentaufnahme hält je Datei etwa das Zwei- bis Dreifache der
+  Dateigröße im Arbeitsspeicher. Eigene Termine sind unter 1 MB groß, bei der 200-MB-Grenze aus
+  S-8 wären es mehrere hundert MB. Wie bisher gibt es beim Erstellen keine Größengrenze.
+- **Rückfrage an Marco (in `Offene-Punkte-2026-10/aufgaben.md`):**
+  - Liegt beim Wiederherstellen neben dem Ziel noch eine alte `-journal` und enthält das ZIP
+    keine, bleibt sie liegen. Beim nächsten Öffnen würde SQLite sie auf die wiederhergestellte
+    Datei anwenden, mit möglicherweise beschädigtem Inhalt. Das war vorher genauso. Vorschlag:
+    eine solche alte Datei beim Ersetzen wegräumen.
+  - Ebenso bitte bestätigen, dass die `-journal` beim Wiederherstellen mit zurückgeschrieben wird.

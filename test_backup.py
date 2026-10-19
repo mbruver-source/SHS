@@ -181,7 +181,7 @@ class TestSicherungErstellen(unittest.TestCase):
                 sicherung_erstellen(str(ziel), passwort=passwort, ordner=self.ordner)
                 vorher = ziel.read_bytes()
 
-                original_write = zip_klasse.write
+                original_write = zip_klasse.writestr
                 aufrufe = []
 
                 def write_mit_fehler(zf, *args, _original=original_write, _aufrufe=aufrufe, **kwargs):
@@ -190,13 +190,152 @@ class TestSicherungErstellen(unittest.TestCase):
                         raise OSError(28, "No space left on device")
                     return _original(zf, *args, **kwargs)
 
-                with patch.object(zip_klasse, "write", write_mit_fehler):
+                # Gesichert wird als Momentaufnahme über writestr (offene Punkte O1).
+                with patch.object(zip_klasse, "writestr", write_mit_fehler):
                     with self.assertRaises(OSError):
                         sicherung_erstellen(str(ziel), passwort=passwort, ordner=self.ordner)
 
                 self.assertEqual(len(aufrufe), 2)
                 self.assertEqual(ziel.read_bytes(), vorher)
                 self.assertEqual(sorted(p.name for p in self.ziel_ordner.iterdir()), ["sicherung.zip", "termine"])
+
+
+class TestSicherungMomentaufnahme(unittest.TestCase):
+    """Offene Punkte O1 (Marco 18.10.2026): Termine kommen als stimmige Momentaufnahme ins
+    ZIP; was sich so nicht lesen lässt, wird roh samt Rücksprung-Datei gesichert, ohne die
+    Quelle anzufassen."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        basis = pathlib.Path(self._tmpdir.name)
+        self.ordner = basis / "termine"
+        self.ordner.mkdir()
+        self.ziel = basis / "sicherung.zip"
+        self.zurueck = basis / "zurueck"
+        self.zurueck.mkdir()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _halb_geschrieben(self, pfad: pathlib.Path) -> None:
+        """Absturz mitten im Speichern (Muster aus test_db): Journal bleibt liegen."""
+        import subprocess
+        import sys
+        skript = (
+            "import os, sqlite3, sys; c = sqlite3.connect(sys.argv[1]); "
+            "c.execute(\"PRAGMA journal_mode=DELETE\"); c.execute('PRAGMA cache_size=2'); c.execute('BEGIN'); "
+            "c.execute(\"UPDATE veranstaltung SET verein = 'halb'\"); "
+            "c.execute(\"INSERT INTO teilnehmer (nachname, vorname, rufname_hund, art, stufe) "
+            "SELECT 'x', 'y', 'z', 'DK', 1 FROM (WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n "
+            "WHERE i < 3000) SELECT i FROM n)\"); os._exit(0)"
+        )
+        subprocess.run([sys.executable, "-c", skript, str(pfad)], check=False)
+        if not os.path.exists(f"{pfad}-journal"):
+            self.skipTest("kein Journal entstanden (Cache groß genug)")
+
+    def _aus_zip_lesen(self, name: str) -> tuple[str, int, str]:
+        """Verein, Teilnehmerzahl und quick_check der Datei `name` aus der Sicherung."""
+        import sqlite3
+        from contextlib import closing
+        datei = self.zurueck / name
+        with zipfile.ZipFile(self.ziel) as zf:
+            datei.write_bytes(zf.read(name))
+        with closing(sqlite3.connect(datei)) as conn:
+            return (
+                conn.execute("SELECT verein FROM veranstaltung").fetchone()[0],
+                conn.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0],
+                conn.execute("PRAGMA quick_check").fetchone()[0],
+            )
+
+    def test_offene_fremde_transaktion_ist_nicht_in_der_sicherung(self):
+        import sqlite3
+        from contextlib import closing
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        with closing(sqlite3.connect(pfad)) as andere:
+            andere.execute("BEGIN")
+            andere.execute("UPDATE veranstaltung SET verein = 'ungespeichert'")
+            roh = []
+            self.assertEqual(sicherung_erstellen(str(self.ziel), ordner=self.ordner, roh_gesichert=roh), 1)
+            andere.rollback()
+        self.assertEqual(roh, [])
+        self.assertEqual(self._aus_zip_lesen("a.sqlite"), ("Testverein", 1, "ok"))
+
+    def test_liegengebliebenes_journal_wird_roh_mitgesichert_und_zurueckgeschrieben(self):
+        from contextlib import closing
+        from db import get_veranstaltung, termin_oeffnen
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        self._halb_geschrieben(pfad)
+        quelle_vorher = pfad.read_bytes()
+        journal_vorher = pathlib.Path(f"{pfad}-journal").read_bytes()
+
+        roh = []
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner, roh_gesichert=roh)
+
+        self.assertEqual(roh, ["a.sqlite"])
+        with zipfile.ZipFile(self.ziel) as zf:
+            self.assertEqual(sorted(zf.namelist()), ["a.sqlite", "a.sqlite-journal"])
+        # Die Quelle bleibt unberührt (kein Zurückspielen beim Sichern).
+        self.assertEqual(pfad.read_bytes(), quelle_vorher)
+        self.assertEqual(pathlib.Path(f"{pfad}-journal").read_bytes(), journal_vorher)
+        # Die Rücksprung-Datei erscheint nicht als eigener Termin ...
+        self.assertEqual(sicherung_inhalt(str(self.ziel)), ["a.sqlite"])
+        # ... wird aber mit zurückgeschrieben, sodass der letzte gespeicherte Stand gilt.
+        geschrieben = sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertEqual(geschrieben, ["neu.sqlite"])
+        self.assertTrue((self.zurueck / "neu.sqlite-journal").exists())
+        with closing(termin_oeffnen(str(self.zurueck / "neu.sqlite"))) as conn:
+            self.assertEqual(get_veranstaltung(conn)["verein"], "Testverein")
+
+    def test_gesperrte_datei_wird_ohne_endloses_warten_roh_gesichert(self):
+        """Verifikation O1: backup() wartete bei einer exklusiv gesperrten Quelle endlos."""
+        import sqlite3
+        import time
+        from contextlib import closing
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        with closing(sqlite3.connect(pfad)) as andere:
+            andere.execute("BEGIN EXCLUSIVE")
+            andere.execute("UPDATE veranstaltung SET verein = 'gesperrt'")
+            roh = []
+            beginn = time.monotonic()
+            sicherung_erstellen(str(self.ziel), ordner=self.ordner, roh_gesichert=roh)
+            dauer = time.monotonic() - beginn
+            andere.rollback()
+        self.assertEqual(roh, ["a.sqlite"])
+        self.assertLess(dauer, 15)
+
+    def test_scheitert_das_zurueckschreiben_des_journals_nennt_der_fehler_den_termin(self):
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        self._halb_geschrieben(pfad)
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner)
+        echt = os.replace
+        aufrufe = []
+
+        def zweites_scheitert(quelle, ziel):
+            aufrufe.append(ziel)
+            if len(aufrufe) == 2:
+                raise PermissionError(13, "gesperrt", str(ziel))
+            echt(quelle, ziel)
+
+        with patch("db_sicherung.os.replace", zweites_scheitert):
+            with self.assertRaises(TeilweiseWiederhergestelltError) as kontext:
+                sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertEqual(kontext.exception.geschrieben, ["neu.sqlite"])
+        self.assertEqual([pathlib.Path(z).name for z in aufrufe], ["neu.sqlite", "neu.sqlite-journal"])
+        self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["neu.sqlite"])
+
+    def test_nicht_lesbare_datei_wird_roh_gesichert(self):
+        _termin_anlegen(self.ordner, "gut.sqlite")
+        kaputt = self.ordner / "kaputt.sqlite"
+        kaputt.write_bytes(b"keine Datenbank " * 64)
+
+        roh = []
+        self.assertEqual(sicherung_erstellen(str(self.ziel), ordner=self.ordner, roh_gesichert=roh), 2)
+
+        self.assertEqual(roh, ["kaputt.sqlite"])
+        with zipfile.ZipFile(self.ziel) as zf:
+            self.assertEqual(zf.read("kaputt.sqlite"), kaputt.read_bytes())
+            self.assertEqual(sorted(zf.namelist()), ["gut.sqlite", "kaputt.sqlite"])
+        self.assertEqual(self._aus_zip_lesen("gut.sqlite"), ("Testverein", 1, "ok"))
 
 
 class TestSicherungInhalt(unittest.TestCase):

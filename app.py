@@ -3932,9 +3932,12 @@ class DatensicherungTab(QWidget):
         if not pfad:
             return
 
+        roh_gesichert: list[str] = []
         try:
             with _wartecursor():
-                anzahl = sicherung_erstellen(pfad, passwort=passwort, zusaetzliche=zusaetzliche)
+                anzahl = sicherung_erstellen(
+                    pfad, passwort=passwort, zusaetzliche=zusaetzliche, roh_gesichert=roh_gesichert
+                )
         except ValueError as exc:
             QMessageBox.warning(self, "Sicherung nicht möglich", str(exc))
             return
@@ -3948,8 +3951,18 @@ class DatensicherungTab(QWidget):
         zusatz = ", passwortgeschützt" if passwort else ""
         self.status_label.setText(f"Sicherung erstellt: {_pfad_anzeige(pfad)} ({anzahl} Termin(e){zusatz}).")
         # UX-Test U7 (Marco 03.10.2026): auch hier ein Meldungsfenster statt nur der Statuszeile.
+        # Offene Punkte O1 (Marco 18.10.2026): Dateien, die sich nicht als Termin lesen ließen,
+        # sind roh gesichert - das soll der Anwender wissen.
+        hinweis = None
+        if roh_gesichert:
+            hinweis = (
+                "Diese Dateien ließen sich nicht als Termin lesen und wurden unverändert "
+                "(samt einer eventuell vorhandenen Rücksprung-Datei) mitgesichert:\n"
+                + "\n".join(f"• {name}" for name in roh_gesichert)
+            )
         _datei_gespeichert_melden(
-            self, pfad, f"Sicherung erstellt ({anzahl} Termin(e){zusatz})", datei_oeffnen_text=None
+            self, pfad, f"Sicherung erstellt ({anzahl} Termin(e){zusatz})", datei_oeffnen_text=None,
+            hinweis=hinweis,
         )
 
     def _sicherung_wiederherstellen(self) -> None:

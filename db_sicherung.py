@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import lzma
 import os
+import sqlite3
 import tempfile
 import zipfile
 import zlib
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import pyzipper
 
-from db import termine_ordner
+from db import oeffne_termin_lesend, termine_ordner
 
 
 class PasswortFalschError(Exception):
@@ -149,9 +150,48 @@ def eindeutigen_dateinamen_finden(
     return f"{stamm} ({zaehler}){endung}"
 
 
+# Endung der Rücksprung-Datei (Rollback-Journal) neben einer Termin-Datei.
+_JOURNAL_ENDUNG = "-journal"
+
+
+def _momentaufnahme(pfad: Path) -> bytes | None:
+    """Stimmiger Stand einer Termin-Datei über die SQLite-Sicherungsfunktion (offene Punkte
+    O1, Marco 18.10.2026): Die Quelle wird nur lesend geöffnet, der Stand landet in einer
+    Datenbank im Arbeitsspeicher und wird von dort als Bytes geliefert - eine gerade
+    laufende, nicht abgeschlossene Schreibtransaktion (z. B. einer zweiten
+    Programminstanz) ist nicht enthalten, und es entsteht keine Temp-Datei mit
+    Personendaten. None, wenn sich die Datei so nicht lesen lässt (beschädigt, keine
+    SQLite-Datei, liegengebliebenes Journal, das nur schreibend zurückgespielt werden
+    könnte, gerade von einer anderen Verbindung gesperrt) - dann sichert der Aufrufer die
+    Datei roh.
+
+    Die Lesesperre wird vorher mit einer eigenen Abfrage geholt: Connection.backup()
+    wiederholt bei einer gesperrten Quelle sonst endlos, und die Sicherung hinge, solange
+    eine andere Instanz (oder die eigene Verbindung) schreibt. So gilt die übliche Wartezeit
+    der Verbindung, danach kommt ein Fehler und damit die Rohsicherung."""
+    try:
+        quelle = oeffne_termin_lesend(pfad)
+    except sqlite3.Error:
+        return None
+    try:
+        quelle.execute("BEGIN")
+        quelle.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+        ziel = sqlite3.connect(":memory:")
+        try:
+            quelle.backup(ziel)
+            return ziel.serialize()
+        finally:
+            ziel.close()
+    except (sqlite3.Error, MemoryError):
+        # Auch zu wenig Arbeitsspeicher für die Momentaufnahme: dann eben roh (streamend).
+        return None
+    finally:
+        quelle.close()
+
+
 def sicherung_erstellen(
     ziel_pfad: str, passwort: str | None = None, nur_dateien: list[str] | None = None, ordner: Path | None = None,
-    zusaetzliche: list[str] | None = None,
+    zusaetzliche: list[str] | None = None, roh_gesichert: list[str] | None = None,
 ) -> int:
     """Erstellt ein ZIP-Backup der Termin-Dateien aus `ordner` (Standard: termine_ordner()).
 
@@ -161,8 +201,15 @@ def sicherung_erstellen(
     Termin, Desktop-Prüfung 14.10.2026, Teil 7 Nr. 1). Ist ihr Name im ZIP schon vergeben,
     bekommen sie einen Zähler wie beim Import als Kopie.
     passwort: falls angegeben (nicht leer), wird das ZIP AES-256-verschlüsselt.
+    roh_gesichert: optionale Liste, in die die Namen (im ZIP) der Dateien geschrieben
+    werden, die sich nicht als Termin lesen ließen und deshalb roh gesichert wurden.
     Gibt die Anzahl der gesicherten Termin-Dateien zurück.
     Wirft ValueError, falls es nichts zu sichern gibt.
+
+    Jede Datei kommt als stimmige Momentaufnahme ins ZIP (siehe _momentaufnahme), nicht als
+    Byte-Kopie der gerade geöffneten Datei. Lässt sie sich so nicht lesen, wird sie wie
+    bisher roh gesichert, eine daneben liegende Rücksprung-Datei („-journal“) mit - in die
+    Quelldatei wird dabei nie geschrieben (Marco 18.10.2026).
 
     Das ZIP entsteht zuerst als temporäre Datei im Zielordner und ersetzt erst nach dem
     vollständigen Schreiben per os.replace() die Zieldatei (QS-Prüfung 07.10.2026,
@@ -191,23 +238,37 @@ def sicherung_erstellen(
     # Wie in sicherung_wiederherstellen(): im selben Ordner, damit os.replace() atomar ist.
     tmp_fd, tmp_pfad_str = tempfile.mkstemp(dir=ziel.parent, prefix=f".{ziel.name}.", suffix=".tmp")
     os.close(tmp_fd)
+    roh: list[str] = []
+
+    def eintraege_schreiben(zf) -> None:
+        for datei, name in eintraege:
+            daten = _momentaufnahme(datei)
+            if daten is not None:
+                zf.writestr(name, daten)
+                continue
+            zf.write(datei, arcname=name)
+            journal = Path(f"{datei}{_JOURNAL_ENDUNG}")
+            if journal.is_file():
+                zf.write(journal, arcname=f"{name}{_JOURNAL_ENDUNG}")
+            roh.append(name)
+
     try:
         if passwort:
             with pyzipper.AESZipFile(
                 tmp_pfad_str, "w", compression=pyzipper.ZIP_LZMA, encryption=pyzipper.WZ_AES
             ) as zf:
                 zf.setpassword(passwort.encode("utf-8"))
-                for datei, name in eintraege:
-                    zf.write(datei, arcname=name)
+                eintraege_schreiben(zf)
         else:
             with zipfile.ZipFile(tmp_pfad_str, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for datei, name in eintraege:
-                    zf.write(datei, arcname=name)
+                eintraege_schreiben(zf)
         os.replace(tmp_pfad_str, ziel)
     except BaseException:
         with suppress(FileNotFoundError):
             os.remove(tmp_pfad_str)
         raise
+    if roh_gesichert is not None:
+        roh_gesichert.extend(roh)
     return len(eintraege)
 
 
@@ -316,6 +377,12 @@ def sicherung_wiederherstellen(
     importieren" vorher eindeutigen_dateinamen_finden() für einen freien Zielnamen
     verwenden. Gibt die Liste der tatsächlich geschriebenen Zieldateinamen zurück.
 
+    Enthält das ZIP zu einem gewählten Termin eine Rücksprung-Datei („<name>-journal“,
+    siehe sicherung_erstellen: roh gesicherte Datei), wird sie als „<Zielname>-journal“
+    mit zurückgeschrieben (offene Punkte O1, 19.10.2026) - direkt nach der Termin-Datei.
+    Sie erscheint nicht in der Rückgabe; scheitert ihr Ersetzen, nennt
+    TeilweiseWiederhergestelltError die schon ersetzten Termine einschließlich dieses einen.
+
     Jede Datei wird ATOMAR geschrieben (temporäre Datei im selben Zielordner, danach
     os.replace()) statt direkt in die Zieldatei - bricht das Schreiben mittendrin ab
     (Absturz, Stromausfall, volle Platte während GENAU dieser Datei), bleibt entweder
@@ -351,32 +418,44 @@ def sicherung_wiederherstellen(
             raise ValueError(f"Zieldateiname mehrfach vergeben: {ziel!r}")
         gesehen.add(ziel.casefold())
 
-    vorbereitet: list[tuple[str, str]] = []  # (temporäre Datei, Zieldateiname)
+    # (temporäre Datei, Zieldateiname, ist Rücksprung-Datei)
+    vorbereitet: list[tuple[str, str, bool]] = []
     try:
         with _zip_oeffnen(zip_pfad, passwort) as zf:
-            for quelle, ziel in entscheidungen.items():
+            vorhandene_eintraege = set(zf.namelist())
+
+            def vorbereiten(quelle: str, ziel: str, journal: bool) -> None:
                 daten = zf.read(quelle)
                 # os.replace() ist nur innerhalb DESSELBEN Dateisystems atomar - die
                 # temporäre Datei muss deshalb im selben Ordner liegen wie das Ziel, nicht
                 # z.B. im System-Temp-Verzeichnis.
                 tmp_fd, tmp_pfad_str = tempfile.mkstemp(dir=ordner, prefix=f".{ziel}.", suffix=".tmp")
-                vorbereitet.append((tmp_pfad_str, ziel))
+                vorbereitet.append((tmp_pfad_str, ziel, journal))
                 with os.fdopen(tmp_fd, "wb") as tmp_datei:
                     tmp_datei.write(daten)
 
+            for quelle, ziel in entscheidungen.items():
+                vorbereiten(quelle, ziel, False)
+                # Roh gesicherte Datei mit Rücksprung-Datei (siehe sicherung_erstellen):
+                # beide gehören zusammen, sonst ist der Stand womöglich widersprüchlich.
+                # Der Name leitet sich aus dem oben geprüften Zielnamen ab.
+                if f"{quelle}{_JOURNAL_ENDUNG}" in vorhandene_eintraege:
+                    vorbereiten(f"{quelle}{_JOURNAL_ENDUNG}", f"{ziel}{_JOURNAL_ENDUNG}", True)
+
         geschrieben: list[str] = []
-        for tmp_pfad_str, ziel in vorbereitet:
+        for tmp_pfad_str, ziel, journal in vorbereitet:
             try:
                 os.replace(tmp_pfad_str, ordner / ziel)
             except Exception as exc:
                 if geschrieben:
                     raise TeilweiseWiederhergestelltError(geschrieben, exc) from exc
                 raise
-            geschrieben.append(ziel)
+            if not journal:
+                geschrieben.append(ziel)
     finally:
         # Nach Erfolg sind alle temporären Dateien umbenannt; nach einem Fehler werden
         # die übrigen hier entfernt.
-        for tmp_pfad_str, _ziel in vorbereitet:
+        for tmp_pfad_str, _ziel, _journal in vorbereitet:
             with suppress(FileNotFoundError):
                 os.remove(tmp_pfad_str)
     return geschrieben

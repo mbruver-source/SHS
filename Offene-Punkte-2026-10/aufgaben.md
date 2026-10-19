@@ -12,7 +12,7 @@ Start durch Marco:
 
 | Aufgabe | Größe | Status | Commit | Limit vorher → nachher (5 h / 7 T) | Bemerkung |
 |---|---|---|---|---|---|
-| O1 Sicherung konsistent | S | offen | | | |
+| O1 Sicherung konsistent | S | erledigt | (dieser Commit) | 16 % / ~0 % → 33 % / 1 % | GUI 388 grün, Unittests 660 grün; 2 Rückfragen offen (unten) |
 | O2 Dateiprüfung (Größe, Import-quick_check, Schrittgrenze) | S | offen | | | |
 | O3 Schnitt 1 `desktop_programm.py` (+ Patch-Helfer, Ordner-Schutz) | M | offen | | | |
 | O4 Schnitt 2 `desktop_auswertung.py` | M | offen | | | |
@@ -280,7 +280,16 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
 
 ## Rückfragen an Marco
 
-(noch keine)
+1. **O1, alte Rücksprung-Datei beim Wiederherstellen:**
+   - Liegt neben dem Ziel noch eine alte `<Ziel>-journal` (etwa nach einem Absturz) und enthält
+     das ZIP keine, bleibt sie liegen. Beim nächsten Öffnen spielt SQLite sie auf die neu
+     wiederhergestellte Datei zurück, der Inhalt kann dabei beschädigt werden. Das war schon vor
+     O1 so.
+   - Vorschlag: eine solche Datei beim Ersetzen wegräumen (Papierkorb oder löschen).
+   - Bis zur Entscheidung bleibt es wie bisher.
+2. **O1, Journal mit zurückschreiben:** Beim Wiederherstellen wird eine im ZIP enthaltene
+   `-journal` mit zurückgeschrieben (sonst wäre das Mitsichern wirkungslos). Das stand nicht
+   ausdrücklich in deiner Entscheidung, bitte bestätigen.
 
 ## Hinweise für den Abschlussbericht
 

@@ -5414,6 +5414,43 @@ def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path
     assert ("HSV" in os.path.basename(vorschlaege[0])) == (erwartet == "mit")
 
 
+@pytest.mark.parametrize("roh", [[], ["kaputt.sqlite"]])
+def test_sicherung_nennt_roh_gesicherte_dateien(qtbot, tmp_path, monkeypatch, gespeichert_meldungen, roh):
+    """Offene Punkte O1 (Marco 18.10.2026): nicht lesbare Dateien werden roh gesichert und
+    in der Meldung genannt."""
+    monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
+
+    class _Dialog:
+        def __init__(self, _parent):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def passwort(self):
+            return None
+
+    def _sichern(pfad, roh_gesichert, **_k):
+        roh_gesichert.extend(roh)
+        return 2
+
+    monkeypatch.setattr("app.SicherungErstellenDialog", _Dialog)
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a: (str(tmp_path / "s.zip"), ""))
+    monkeypatch.setattr("app.sicherung_erstellen", _sichern)
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: pytest.fail("Sicherung gescheitert"))
+    tab = DatensicherungTab()
+    qtbot.addWidget(tab)
+
+    tab._sicherung_erstellen()
+
+    assert gespeichert_meldungen[-1][1] == "Sicherung erstellt (2 Termin(e))"
+    if roh:
+        assert "• kaputt.sqlite" in meldungen_hinweise[-1]
+        assert "nicht als Termin lesen" in meldungen_hinweise[-1]
+    else:
+        assert meldungen_hinweise[-1] is None
+
+
 def test_sicherung_ohne_rueckfrage_wenn_termin_im_ordner(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr("app.termine_ordner", lambda: tmp_path)
     (tmp_path / "termin.sqlite").write_bytes(b"")
