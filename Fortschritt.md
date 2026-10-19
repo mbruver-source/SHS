@@ -7470,3 +7470,31 @@ Marco hat beide Rückfragen mit Ja beantwortet.
     schlimmere Fenster: Das alte Journal würde auf die neue Datei zurückgespielt.
 - **Tests:** zwei neue in `test_backup.py`. Der erste (altes Journal wird entfernt) ist ohne die
   Änderung rot. Unittests OK, GUI-Tests zur Datensicherung grün.
+
+
+## 19.10.2026: O11 Abschluss der automatischen Abarbeitung O1–O10
+
+- **QS über `fb1918a..HEAD`,** nacheinander mit drei Rollen:
+  - **Sicherheit:** kein Befund. Geprüft:
+    - Sicherung und Wiederherstellen samt Journal;
+    - Größen- und Schrittgrenze;
+    - Eingaben in der Ergebniserfassung;
+    - Verschiebung ohne Verlust.
+  - **Korrektheit:** zwei Befunde, beide als Rückfrage eingetragen:
+    - mittel: Eine getippte Zahl im offenen Feld geht verloren, wenn der Hintergrund per Maus
+      gewechselt wird. Nachgestellt und bestätigt.
+    - niedrig: Termin-Datei und Journal werden beim Wiederherstellen nicht als Einheit ersetzt.
+
+    Dazu eine Ergänzung zur offenen Rückfrage 3: Das „Ja“ zum Öffnen großer Dateien wirkt meist
+    nicht, weil die Schrittgrenze weiter gilt.
+  - **Wartbarkeit:** Kleinigkeiten als Rückfrage, etwa veraltete Docstrings und ein unbenutzter
+    Import. Die Zeilenzahl von `app.py` in CLAUDE.md/AGENTS.md ist korrigiert (rund 3600 statt
+    3200). Die gemeldete Abweichung der Spiegel `.agents`/`.codex` hat sich bei der Gegenprüfung
+    nicht bestätigt.
+- Laut CLAUDE.md werden QS-Befunde erst nach Marcos Go umgesetzt. Sie stehen deshalb als
+  Rückfragen 6–8 in `Offene-Punkte-2026-10/aufgaben.md`. Dort steht auch der Abschlussbericht.
+- **Offen für Marco:** Rückfragen 3–8. Die dringendste ist Nr. 6, der Eingabeverlust.
+- **Vor dem nächsten Build:**
+  - Sichtprüfung am echten Windows;
+  - `docs/HANDBUCH.pdf` neu erzeugen;
+  - CI nach Marcos Push.

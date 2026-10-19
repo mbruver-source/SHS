@@ -6,7 +6,7 @@ Diese Datei ist der Spiegel von `CLAUDE.md` für Codex (Stand 05.10.2026). Maßg
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: rund 3200 Zeilen, `db.py`: rund 3600 Zeilen,
+  selbst durch die großen Module (`app.py`: rund 3600 Zeilen, `db.py`: rund 3600 Zeilen,
   Stand 19.10.2026; ausgelagert sind `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
   durcharbeitest.
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**

@@ -22,7 +22,7 @@ Start durch Marco:
 | O8 Ergebnis 2: Items + Delegate + Tastatur | L | erledigt | 54c7e69 | 37 % / 7 % → 60 % / 9 % | GUI 405 grün; Neuaufbau 1000 TN ~0,4 s |
 | O9 Ergebnis 3: Demo, Darstellung, Handbuch, Screenshots | M | erledigt | 04d3026 | 60 % / 9 % → 75 % / 10 % | GUI 406 grün; Screenshots neu; Rückfrage 4 |
 | O10 Messung Lasttest-1000 | S | erledigt | 9496c24 | 75 % / 10 % → 85 % / 11 % | Neuaufbau 0,46 s, Sortieren 0,38 s ✓; Ansicht 0,42 s ✗ → Rückfrage 5 |
-| O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | offen | | | zuletzt |
+| O11 Abschluss (QS 3 Rollen, Doku, Bericht) | M | erledigt | siehe Log | 0 % / 12 % → 23 % / 14 % | QS: Sicherheit ohne Befund; Rückfragen 6–8 |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
 
@@ -323,6 +323,14 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
    groß)“ da, lässt sich aber nach der Rückfrage trotzdem öffnen (sonst wäre die Rückfrage nicht
    erreichbar). Lieber „… (ungewöhnlich groß)“ ohne „nicht lesbar“? Bis zur Entscheidung bleibt
    es wie beschlossen.
+   - **Ergänzung aus der QS (O11):** Das „Ja“ hilft bei echten großen Dateien meist nicht. Auch
+     nach der Bestätigung prüft `termin_oeffnen` mit `quick_check` unter der Rechenschritt-Grenze.
+     55 MB mit großen Textfeldern ließen sich öffnen, 123 MB scheiterten an der Grenze.
+     Realistische Termine sind nicht betroffen: 1000 bis 6000 Teilnehmer lassen sich öffnen und
+     importieren. Das am besten zusammen mit dem Wortlaut entscheiden. Möglichkeiten:
+     - (a) so lassen;
+     - (b) nach dem „Ja“ ohne Schrittgrenze prüfen;
+     - (c) die Rückfrage weglassen und große Dateien nur als „ungewöhnlich groß“ kennzeichnen.
 4. **O9, gesperrte Punktezellen in Hell/Sand:** Nach Disqualifiziert/Abbruch sind die Punktezellen
    grau und leer – in den Designs Hell und Sand ist dieses Grau (FLAECHE_DISABLED) aber kaum von
    einer leeren aktiven Zelle (FLAECHE) zu unterscheiden, in Hell sogar etwas heller. Das war mit
@@ -343,6 +351,73 @@ Stand beim Anlegen (18.10. 18:45): 5 h 56 %, 7 Tage 89 %. Reset 5 h am 18.10. um
    - (c) den Teilnehmer-Reiter nur umfärben statt neu laden, rund −0,1 s.
 
    Mit (b) und (c) läge der Wechsel voraussichtlich knapp unter 0,3 s. Bis zur Entscheidung (a).
+6. **QS O11, Korrektheit, mittel: getippte Zahl geht beim Hintergrundwechsel verloren.**
+   - Ablauf: In der Ergebniserfassung „55“ in eine Punktezelle tippen. Das Feld bleibt offen. Dann
+     per Maus „Ansicht → Hintergrund“ wählen. Das Menü nimmt dem Feld den Fokus nicht.
+   - `farben_auffrischen` setzt den Hintergrund der Zelle neu. Daraufhin lädt Qt den alten Wert
+     ins offene Feld (`setEditorData`). Die „55“ ist still weg, die Zeile gilt nicht als
+     ungespeichert.
+   - Nachgestellt und bestätigt. Betrifft die neue Ergebniserfassung aus O8.
+   - Vorschlag:
+     - `setEditorData` füllt das Feld nur beim Öffnen;
+     - zusätzlich übernimmt `farben_auffrischen` vorher ein offenes Feld;
+     - neuer Test „Ansichtswechsel bei offenem Feld“.
+   - Größe S. Bis zur Entscheidung unverändert.
+7. **QS O11, Korrektheit, niedrig: Termin-Datei und Journal beim Wiederherstellen nicht als
+   Einheit.**
+   - Ablauf: Eine roh gesicherte Datei mit Journal wird wiederhergestellt. Scheitert nach dem
+     Ersetzen der Termin-Datei das Zurückschreiben des Journals (etwa wegen eines
+     Virenscanners), bleibt der halb geschriebene Stand ohne Journal stehen. Er wird als
+     „übernommen“ gemeldet.
+   - Lag am Ziel schon ein altes Journal, bleibt es in diesem Fall liegen.
+   - Der heutige Test schreibt das sogar als erwartet fest.
+   - Vorschlag: wie bei Rückfrage 1 erst die alte Termin-Datei und das alte Journal
+     beiseitelegen, dann beide ersetzen, bei einem Fehler beide zurücklegen. Den Test anpassen.
+   - Größe S.
+8. **QS O11, Wartbarkeit, Kleinigkeiten** (Empfehlung: alle umsetzen, zusammen etwa S):
+   - Der Modul-Docstring von `app.py` ist veraltet: „Startdialog, Versionsfenster …“, „alle
+     Reiter“, „Eingabefelder“. Er sollte auf die `desktop_*.py` verweisen und „Zellen“ sagen.
+   - Docstrings nennen noch `app.py`, wo jetzt ein anderes Modul gemeint ist:
+     - `db.py:1391` und `db.py:1498`: richtig ist `desktop_auswertung.py`;
+     - `db_sicherung.py:348`: richtig ist `desktop_verwaltung.py`.
+   - `desktop_demo.py:37`: `QDesktopServices` wird nicht benutzt. In `app.py` bleibt der Import,
+     weil Tests ihn patchen.
+   - `test_app_gui.py`:
+     - Die Variable `id_b` wird nicht benutzt (`test_startnummer_tauschen_…`).
+     - `import db as _db_modul` steht mitten in der Datei.
+   - Einige Verlaufskommentare („bis O8 ein QLineEdit je Zelle …“) könnten kürzer werden.
+
+## Abschlussbericht (O11, 19.10.2026)
+
+- **Commits:**
+  - O1 97214c1, O2 f03447b, O3 c7a0866, O4 7cc2548, O5 fbd85fd, O6 55d946d;
+  - O7 cded543, O8 54c7e69, O9 04d3026, O10 9496c24;
+  - Rückfragen 1 und 2 d0d3538, O11 Abschluss-Commit.
+
+  Alles liegt nur lokal, zusammen mit den sechs Commits aus Gruppe 1–3. Gepusht ist nichts,
+  ebenso kein Tag, kein Versionsbump und kein Build.
+- **Ergebnis:**
+  - `app.py` von 5196 auf rund 3560 Zeilen verkleinert, ausgelagert in vier `desktop_*.py`.
+  - Die Ergebniserfassung arbeitet mit Zellen statt Eingabefeldern. Bei 1000 Teilnehmern:
+    Neuaufbau 0,46 s (vorher 2,45 s), Ansichtswechsel 0,42 s (vorher 2,53 s), Speicher 54 MB
+    statt 282 MB.
+  - Die Sicherung ist eine stimmige Momentaufnahme. Die Dateiprüfung hat eine Größengrenze.
+- **QS über `fb1918a..HEAD`:**
+  - Sicherheit: kein Befund.
+  - Korrektheit: zwei Befunde (Rückfragen 6, 7), eine Ergänzung zu Rückfrage 3.
+  - Wartbarkeit: Kleinigkeiten (Rückfrage 8). Die Zeilenzahl von `app.py` in
+    CLAUDE.md/AGENTS.md ist gleich korrigiert (rund 3600). Die gemeldeten Abweichungen der
+    Spiegel in `.agents`/`.codex` habe ich gegengeprüft: Sie sind auf dem neuen Stand und
+    weichen nur werkzeugspezifisch ab.
+  - Nach CLAUDE.md wird jeder QS-Befund erst nach Marcos Go umgesetzt. Deshalb ist von den
+    Befunden nichts umgesetzt.
+- **Offen für Marco:** Rückfragen 3–8. Wichtigste ist Nr. 6, denn dabei geht eine Eingabe
+  verloren. Sie sollte vor dem nächsten Build behoben sein.
+- **Vor dem nächsten Build:**
+  - Sichtprüfung der neuen Ergebniserfassung am echten Windows und der Mac/Linux-Vorschau;
+  - `docs/HANDBUCH.pdf` neu erzeugen;
+  - Screenshots nach einer etwaigen Änderung aus Rückfrage 4 neu aufnehmen;
+  - nach Marcos Push: CI mit GUI unter Linux und echtem PostgreSQL.
 
 ## Hinweise für den Abschlussbericht
 
