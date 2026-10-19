@@ -7870,3 +7870,11 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
 - **Entscheidung:** Es bleibt bei 3.11 in CI, Installer, Mac-/Linux-Paketen und Container. Der
   Wechsel kommt etwa Mitte 2027, vor dem Ende der Sicherheitsupdates für 3.11 im Oktober
   2027, und zwar direkt auf 3.13/3.14. Eingetragen als `OFFEN.md` B13.
+
+
+## 19.10.2026: Verbesserungen V1–V8 gepusht, CI grün (Marco)
+
+- Marco hat gepusht (Stand f1f956c). Alle Workflows sind grün.
+- Erster Lauf des neuen Jobs `test-windows`: grün nach rund 7 Minuten. Der Linux-Job `test`
+  braucht rund 3 Minuten. Die Grenze `timeout-minutes: 30` hat damit reichlich Abstand.
+- Der Prüfschritt aus V8 ist erledigt.
