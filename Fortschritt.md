@@ -7878,3 +7878,14 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
 - Erster Lauf des neuen Jobs `test-windows`: grün nach rund 7 Minuten. Der Linux-Job `test`
   braucht rund 3 Minuten. Die Grenze `timeout-minutes: 30` hat damit reichlich Abstand.
 - Der Prüfschritt aus V8 ist erledigt.
+
+
+## 19.10.2026: Quellcode-Spiegel auf Stand der Verbesserungen V1–V8
+
+- `SHS-Pruefungsprogramm-Quellcode` ist nach derselben Regel wie beim letzten Abgleich
+  nachgezogen: alle Dateien aus Git außer `.claude/`, die Workflows zusätzlich im
+  Wurzelordner. Im Spiegel wurde nichts gelöscht.
+- 1 Datei ist neu (`Verbesserungen-2026-10/aufgaben.md`), 19 sind geändert. Der Byte-Abgleich
+  danach ist identisch.
+- Die claude.ai-Ablage „SHS“ erreicht diese Sitzung nicht. Dort `Fortschritt.md` und
+  `Architektur.md` neu hochladen, auf Wunsch auch `UML.md` und `OFFEN.md`.
