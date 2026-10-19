@@ -265,7 +265,9 @@ def _excel_verdacht(zeile: dict, bezeichnung: str) -> list[str]:
             continue
         if _EXCEL_EXPONENT.fullmatch(wert):
             hinweise.append(f"{bezeichnung}: {name} „{wert}“ wurde von Excel gekürzt – {_EXCEL_HINWEIS}.")
-        elif spalte == "telefon" and wert.isdigit() and len(wert) >= 6 and not wert.startswith("0"):
+        # Erst ab 9 Ziffern: Ortsnummern ohne Vorwahl (6-8 Ziffern) sind kein Excel-Verlust
+        # (OFFEN.md B3, 19.10.2026).
+        elif spalte == "telefon" and wert.isdigit() and len(wert) >= 9 and not wert.startswith("0"):
             hinweise.append(
                 f"{bezeichnung}: Telefon „{wert}“ hat keine führende 0 – vermutlich von Excel "
                 f"entfernt; {_EXCEL_HINWEIS}."
@@ -875,7 +877,8 @@ CSV_EXPORT_SPALTEN = ["startnummer", *CSV_IMPORT_SPALTEN, "bezahlt", "keine_teil
 # dann als Text; der Import entfernt es wieder (siehe _csv_wert). "+"/"-" bleiben nur
 # unverändert, wenn der Wert eine Telefonnummer mit Leerzeichen ist ("+49 170 …") oder genau
 # "-": ohne Leerzeichen rechnet Excel "+43-1-5551234" aus (Desktop-Prüfung 14.10.2026, Teil 6
-# Nr. 3, Marcos Entscheidung: dann ebenfalls "'" voranstellen, Excel zeigt es sichtbar).
+# Nr. 3, Marcos Entscheidung: dann ebenfalls "'" voranstellen, Excel zeigt es sichtbar). Beginnt
+# der Wert mit "'", gelten diese Ausnahmen nicht (siehe _braucht_schutz).
 _FORMEL_ZEICHEN = ("=", "@", "+", "-", "\t", "\r")
 _ZAHL_ODER_TELEFON = re.compile(r"[+-]?[\d\s()/.-]+")
 
@@ -885,12 +888,21 @@ def _braucht_schutz(wert: str) -> bool:
     den Wert als Formel lesen? Führende Leerzeichen zählen nicht. Ein Wert, der schon mit
     "'" beginnt, wird ebenfalls geschützt, wenn der Rest geschützt werden müsste - sonst hielte
     der Import ein echtes "'" für das eigene Schutzzeichen (Verifikation N1; Desktop-Prüfung
-    14.10.2026, Teil 6 Nr. 10: auch "' =x" und "''=x" verlustfrei)."""
+    14.10.2026, Teil 6 Nr. 10: auch "' =x" und "''=x" verlustfrei).
+
+    Beginnt der Wert mit "'", gelten die Ausnahmen für "-" und Telefonnummern nicht: Exporte vor
+    dem 14.10.2026 haben "'+49 170 …" und "'-" so geschützt ("''+49 170 …", "''-"); der Import
+    nimmt dieses "'" damit wieder ab (OFFEN.md B3, 19.10.2026). Kehrseite: ein Altexport mit dem
+    echten Wert "''-" bzw. "''+49 …" verliert ein "'" - die Zeile ist mehrdeutig, gewählt ist
+    der wahrscheinlichere Fall."""
     kern = wert.lstrip()
+    mit_hochkomma = kern[:1] == "'"
     while kern[:1] == "'":
         kern = kern[1:].lstrip()
     if not kern or kern[0] not in _FORMEL_ZEICHEN:
         return False
+    if mit_hochkomma:
+        return True
     if kern.rstrip() == "-":
         return False
     return not (kern[0] in "+-" and " " in kern.strip() and _ZAHL_ODER_TELEFON.fullmatch(kern))

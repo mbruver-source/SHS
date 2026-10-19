@@ -7724,3 +7724,30 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   ersten Fassung ungeschwärzt. Er ist behoben, und die Testfälle sind ergänzt (Satzende,
   repr(), „max.bak“). Das Handbuch hat einen Halbsatz zu kurzen Namen bekommen.
 - `OFFEN.md` B1 und B2 sind gestrichen.
+
+
+## 19.10.2026: V4 CSV-Altexporte und Excel-Verdacht (Verbesserungen, automatische Abarbeitung)
+
+- **Altexporte (`db_import._braucht_schutz`):** Beginnt ein Wert mit „'“ und dahinter mit einem
+  Formelzeichen, wird er jetzt immer geschützt. Die Ausnahmen für „-“ und Telefonnummern mit
+  Leerzeichen gelten dann nicht mehr.
+  - Exporte vor dem 14.10.2026 schrieben die echten Werte „'+49 170 …“ und „'-“ als
+    „''+49 170 …“ bzw. „''-“. Der Import nimmt das zusätzliche „'“ jetzt wieder ab. Der
+    hingenommene Punkt vom 14.10. („Bewusst hingenommen“ im Abschnitt Desktop-Prüfung Teil 5/6) ist damit
+    erledigt.
+  - Kehrseite: Ein Altexport mit dem echten Wert „''-“ oder „''+49 …“ verliert ein „'“. Die
+    Zeile ist mehrdeutig; gewählt ist der wahrscheinlichere Fall.
+  - Der Schutz vor CSV-Injection bleibt vollständig. Die Verifikation hat per Brute-Force bis
+    Länge 5 geprüft: Neu wird nichts weniger geschützt, die Rundreise mit neuem Export ist ohne
+    Gegenbeispiel.
+- **Telefon-Verdacht (`_excel_verdacht`):** Der Hinweis „keine führende 0“ kommt erst ab
+  9 Ziffern. Ortsnummern ohne Vorwahl (bis 8 Ziffern) lösen ihn nicht mehr aus, Mobilnummern
+  schon. Der Exponent-Verdacht („1E5“) ist unverändert und bleibt in `OFFEN.md` B3.
+- **Tests:**
+  - `test_csv_import_liest_altexporte_mit_hochkomma_richtig` und
+    `test_excel_verdacht_telefon_erst_ab_neun_ziffern`;
+  - die Symmetrie-Liste ist erweitert;
+  - die Gegenprobe ist rot.
+  - Unittests OK, GUI 410 grün.
+- **Verifikation (Subagent):** in Ordnung. Übernommen: Kommentar und Docstring zur Kehrseite,
+  zusätzliche Symmetrie-Fälle, `OFFEN.md` B3 auf den Rest „1E5“ gekürzt.

@@ -1298,9 +1298,35 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(_csv_zelle_absichern("+49 170 1234567"), "+49 170 1234567")
         self.assertEqual(_csv_zelle_absichern("-"), "-")
         for wert in ("+43-1-5551234", "+49/170/1234567", "' =x", "''=x", "' '=x", "'=x", "'\t=x",
-                     "-", "+49 170 1234567", "'normal"):
+                     "-", "+49 170 1234567", "'normal", "'+49 170 1234567", "'-", "' -",
+                     "''-", "''+49 170 1234567"):
             with self.subTest(wert=wert):
                 self.assertEqual(_csv_wert({"x": _csv_zelle_absichern(wert)}, "x"), wert.strip())
+
+    def test_csv_import_liest_altexporte_mit_hochkomma_richtig(self):
+        """OFFEN.md B3 (19.10.2026): Exporte vor dem 14.10.2026 schützten einen echten Wert
+        "'+49 170 …" bzw. "'-" als "''+49 170 …"/"''-"; der Import nimmt ein "'" wieder ab."""
+        from db_import import _csv_wert, _csv_zelle_absichern
+
+        self.assertEqual(_csv_wert({"x": "''+49 170 1234567"}, "x"), "'+49 170 1234567")
+        self.assertEqual(_csv_wert({"x": "''-"}, "x"), "'-")
+        # Ohne vorangestelltes "'" bleiben Telefonnummer und "-" wie bisher ungeschützt.
+        self.assertEqual(_csv_zelle_absichern("+49 170 1234567"), "+49 170 1234567")
+        self.assertEqual(_csv_wert({"x": "+49 170 1234567"}, "x"), "+49 170 1234567")
+        self.assertEqual(_csv_wert({"x": "-"}, "x"), "-")
+
+    def test_excel_verdacht_telefon_erst_ab_neun_ziffern(self):
+        """OFFEN.md B3 (19.10.2026): Ortsnummern ohne Vorwahl lösen keinen Hinweis aus."""
+        ergebnis = self._csv_import(
+            "nachname;vorname;rufname_hund;art;stufe;disziplin;telefon\n"
+            "Ort;Olga;Rex;DK;1;;123456\n"
+            "Ort;Otto;Bello;DK;1;;12345678\n"
+            "Mobil;Mia;Max;DK;1;;17012345678\n"
+        )
+        self.assertEqual(ergebnis.importiert, 3)
+        excel = [h for h in ergebnis.hinweise if "Excel" in h]
+        self.assertEqual(len(excel), 1, excel)
+        self.assertIn("Telefon „17012345678“ hat keine führende 0", excel[0])
 
     def test_csv_export_entschaerft_formeln_und_reimport_ist_verlustfrei(self):
         # Sicherheitsbefund N1 (Marco 03.10.2026: absichern): Werte, die Excel als Formel
