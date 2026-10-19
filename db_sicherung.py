@@ -345,7 +345,7 @@ def _zip_oeffnen(zip_pfad: str, passwort: str | None):
 def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
     """Liefert die Namen der Termin-Dateien (*.sqlite) in einem Sicherungs-ZIP, ohne sie
     zu entpacken - Grundlage für die Konflikterkennung vor dem eigentlichen
-    Wiederherstellen (siehe sicherung_wiederherstellen() und app.py).
+    Wiederherstellen (siehe sicherung_wiederherstellen() und desktop_verwaltung.py).
 
     Wirft PasswortFalschError, wenn das ZIP passwortgeschützt ist und `passwort` fehlt
     oder falsch ist; ValueError, wenn die Datei kein gültiges ZIP ist oder keine

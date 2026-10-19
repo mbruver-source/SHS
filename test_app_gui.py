@@ -31,6 +31,7 @@ from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
+import db as _db_modul
 from app import (
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
@@ -165,7 +166,6 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
 DESKTOP_MODULE = ("app", "desktop_auswertung", "desktop_darstellung", "desktop_demo", "desktop_dialoge",
                   "desktop_gemeinsam", "desktop_programm", "desktop_verwaltung", "desktop_zeitplan")
 
-import db as _db_modul  # noqa: E402
 #: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).
 _ECHTER_TERMINE_ORDNER = _db_modul.termine_ordner
 
@@ -3966,7 +3966,7 @@ def test_startnummer_tauschen_button_nur_bei_mehreren_teilnehmern_aktiv(qtbot, c
 
 def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monkeypatch):
     id_a = _teilnehmer_anlegen(conn, nachname="Erste", startnummer=1)
-    id_b = _teilnehmer_anlegen(conn, nachname="Zweite", startnummer=2)
+    _teilnehmer_anlegen(conn, nachname="Zweite", startnummer=2)
     tab = TeilnehmerTab(conn)
     qtbot.addWidget(tab)
     tab.show()
@@ -8134,7 +8134,7 @@ def test_demo_kein_countdown_im_letzten_schritt_und_nach_fehler(qtbot, termin, d
 
 def test_demo_pdf_oeffnen_haelt_den_countdown_an(qtbot, termin, demo_umgebung, monkeypatch):
     geoeffnet = []
-    monkeypatch.setattr("desktop_demo.QDesktopServices.openUrl", lambda url: geoeffnet.append(url) or True)
+    monkeypatch.setattr("desktop_gemeinsam.QDesktopServices.openUrl", lambda url: geoeffnet.append(url) or True)
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
     _demo_bis(tour, "13.")
     assert tour._countdown.isActive() and tour._panel.extra_btn.isVisible()

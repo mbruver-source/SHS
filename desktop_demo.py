@@ -34,7 +34,7 @@ from typing import Callable
 
 import shiboken6
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QPoint, QRect, QRectF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFont, QPainter, QPalette, QPen
+from PySide6.QtGui import QFont, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,

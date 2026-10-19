@@ -1388,7 +1388,7 @@ def berechne_teilnehmer_lk_uebersicht(conn) -> dict:
     """Liefert eine Übersicht der Teilnehmerzahlen je Art/Leistungsklasse (bei ED
     zusätzlich je Disziplin aufgeschlüsselt), sowie die daraus resultierende Anzahl
     benötigter Richter. Grundlage für den GUI-Reiter "Übersicht Teilnehmer und
-    LK" (siehe app.py) - fachlich identisch mit
+    LK" (siehe desktop_auswertung.py) - fachlich identisch mit
     pdf_export.erstelle_leistungsrichter_bedarf_pdf() (nutzt dieselben Konstanten
     LR_EINHEITEN_JE_ART/LR_EINHEITEN_PRO_RICHTER, daher immer konsistente Zahlen
     zwischen GUI-Reiter und PDF-Export).
@@ -1495,7 +1495,7 @@ def behaeltnis_bedarf_zeilentexte(zeile: dict) -> list[str]:
 def berechne_behaeltnis_bedarf(conn) -> list[dict]:
     """Benötigte Behältnisse für die Behältnisstrecke je Leistungsklasse (mit Marco am
     25.09. abgestimmt, siehe Fortschritt.md). Grundlage für den GUI-Reiter "Übersicht"
-    (app.py) und die Richter-Bedarf-PDF (pdf_export.py).
+    (desktop_auswertung.py) und die Richter-Bedarf-PDF (pdf_export.py).
 
     Mitgezählt werden alle Teilnehmer, die die Behältnisstrecke laufen: ED mit Disziplin
     Behältnisstrecke und alle DK. Bei n > 0 Teilnehmern einer LK:

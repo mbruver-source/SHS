@@ -1,6 +1,8 @@
 """
-Desktop-Oberfläche (PySide6) des SHS-Prüfungsprogramms: Hauptfenster mit allen Reitern,
-Startdialog, Versionsfenster und Programmstart (`main`). Überblick siehe Architektur.md.
+Desktop-Oberfläche (PySide6) des SHS-Prüfungsprogramms: Hauptfenster mit den Reitern
+Teilnehmer, Formular-Import und Ergebniserfassung, Startdialog und Programmstart (`main`).
+Die übrigen Reiter, Dialoge und Hilfen liegen in den Modulen desktop_*.py (seit 19.10.2026);
+Überblick siehe Architektur.md.
 
 Deckt einen ersten End-to-End-Ablauf ab:
   1. Termin anlegen oder öffnen (eine .sqlite-Datei pro Veranstaltung)
@@ -9,8 +11,8 @@ Deckt einen ersten End-to-End-Ablauf ab:
      vergeben…", UX-Test U1) oder einzeln in der Maske; beim Speichern wird gegen
      bereits vergebene Startnummern geprüft (auch als Datenbank-Constraint
      abgesichert) - eine doppelte Vergabe ist so ausgeschlossen.
-  3. Ergebnisse je Disziplin eintragen (Eingabefelder ohne Vorbelegung - ein leeres
-     Feld gilt als "noch nicht eingetragen", damit es nicht versehentlich als
+  3. Ergebnisse je Disziplin eintragen (Zellen ohne Vorbelegung - eine leere
+     Zelle gilt als "noch nicht eingetragen", damit sie nicht versehentlich als
      0-Punkte-Bewertung gespeichert wird), filterbar nach Art/Leistungsklasse(/
      Disziplin) und nach Startnummer
   4. Auswertung (Wertnote + Rangliste) ansehen, ebenfalls filterbar nach
@@ -1354,10 +1356,8 @@ def _punkte_validator(parent) -> QRegularExpressionValidator:
 _SORTIERSPALTEN_AUS_STAMMDATEN = (0, 1, 2, 3)
 
 # --- Ergebniserfassung ohne Widget je Zelle (offene Punkte O8, 19.10.2026) -------------
-# Lasttest 16.10.2026: Ein QLineEdit je Punktezelle (und ein Checkbox-Container je
-# DQ/Abbruch-Zelle) machten bei 1000 Teilnehmern rund 7000 Widgets; jeder Neuaufbau und
-# Ansichtswechsel dauerte Sekunden. Seitdem sind die Zellen QTableWidgetItems; gezeichnet
-# werden sie von zwei Delegates, ein Eingabefeld entsteht nur beim Bearbeiten.
+# Die Zellen sind QTableWidgetItems, gezeichnet von zwei Delegates; ein Eingabefeld entsteht
+# nur beim Bearbeiten. Ein Widget je Zelle war bei 1000 Teilnehmern zu langsam (Lasttest).
 
 _PUNKTESPALTEN = frozenset(c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values() for c in paar)
 # Rollen der Punktezellen, gesetzt von ErgebnisTab._aktualisiere_zeilenstatus.
@@ -1548,8 +1548,7 @@ class _ErgebnisTabelle(QTableWidget):
     """Tabelle der Ergebniserfassung: Tab/Umschalt+Tab springen nur durch bedienbare Zellen
     (Punkte, Disqualifiziert, Abbruch) - Suche → Anzeige → nächste Disziplin → DQ →
     Abbruch → nächste Zeile; Info-Spalten, „–“, gesperrte und ausgeblendete Zeilen werden
-    übersprungen (wie früher die Fokuskette der Eingabefelder, Desktop-Prüfung 14.10.2026,
-    Teil 3 Nr. 3)."""
+    übersprungen (Desktop-Prüfung 14.10.2026, Teil 3 Nr. 3)."""
 
     def _bedienbar(self, row: int, col: int) -> bool:
         if self.isRowHidden(row):
@@ -1776,8 +1775,7 @@ class ErgebnisTab(QWidget):
 
     # --- Zellwert-Schnittstelle (offene Punkte O7, 19.10.2026) ------------------------
     # Für Tests, Demoprüfung und Screenshots: Werte und Zustände je Zeile und Disziplin,
-    # ohne die Darstellung der Zellen zu kennen (bis O8 ein QLineEdit je Zelle, danach
-    # Items mit Delegate). `feld` ist "suche" oder "anzeige"; Punkte sind Texte wie in der
+    # ohne die Darstellung der Zellen zu kennen. `feld` ist "suche" oder "anzeige"; Punkte sind Texte wie in der
     # Eingabe ("" = noch nicht eingetragen). Eine Disziplin, die in der Zeile nicht erfasst
     # wird (ED: nur die eigene), ergibt KeyError.
 
