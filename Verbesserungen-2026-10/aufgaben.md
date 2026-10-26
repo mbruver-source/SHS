@@ -23,7 +23,7 @@ Start durch Marco:
 | V5 B4 Zeitplan-Effizienz | S | erledigt | 1b9bdda | 19 % / 22 % → 26 % / 22 % | Unittests OK, GUI 412 grün; UML Diagramm 7 berichtigt |
 | V6 B5 Warnung ohne erlaubte Interaktion | S | erledigt | 7b46b4e | 26 % / 22 % → 36 % / 23 % | GUI 413 grün; Knopf-Verbindung per Lambda (im Testlauf gefunden) |
 | V7 B6 `-wal`/`-shm` beim lesenden Öffnen | S | erledigt | 8a8a078 | 36 % / 23 % → 42 % / 24 % | GUI 413 grün; Rückfrage 1 (Restrisiko immutable) |
-| V8 Abschluss | S | erledigt | dieser Commit | 42 % / 24 % → 48 % / 24 % | Abschluss-Verifikation in Ordnung; Rückfragen 1 und 2 offen |
+| V8 Abschluss | S | erledigt | dieser Commit | 42 % / 24 % → 48 % / 24 % | Abschluss-Verifikation in Ordnung; Rückfragen 1 und 2 am 19.10.2026 entschieden (OFFEN.md C34, C35) |
 
 Status: offen / läuft / erledigt / zurückgestellt (mit Grund).
 
@@ -199,7 +199,8 @@ Commits (alle lokal, nicht gepusht): c1ff49c V1, f494b39 V2, 34bc9ef V3, 61f0faa
     Freigaben) und Klassendiagramm (`alle_speichern(meldungen)`);
   - Fundstellen in `OFFEN.md` A8/B3.
 - `OFFEN.md`: C26, B1, B2, B4, B5, B6 gestrichen; B3 auf „1E5“ gekürzt; B10 „Windows in der
-  CI“ erledigt; A8 und A9 (Rückfragen 1 und 2) neu.
+  CI“ erledigt; A8 und A9 (Rückfragen 1 und 2) neu, am 19.10.2026 entschieden und als C34/C35
+  eingetragen.
 - **Prüfschritt für Marco nach dem Push:** unter „Actions“ beide Test-Jobs prüfen, `test`
   (Linux, mit PostgreSQL) und `test-windows`. Der Windows-Job läuft dann zum ersten Mal
   (lokal mit Python 3.12 nachgestellt, die CI nutzt 3.11). Restrisiko laut Verifikation: der

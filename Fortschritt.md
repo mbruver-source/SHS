@@ -7968,4 +7968,24 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   und `build-installer.yml` darauf gestartet. Grün sind Windows, macOS (AppleSilicon und
   Intel) und Linux. Jeder Job meldet „THIRD_PARTY_LICENSES.txt geschrieben“. Die Push-Läufe
   `Tests` und `Container bauen` auf dem Branch sind ebenfalls grün.
-- OFFEN.md A8 ist gestrichen. Der Branch kommt mit dem nächsten Build nach `main`.
+- OFFEN.md A8 ist gestrichen. Der Branch ist inzwischen per Fast-Forward in `main` übernommen
+  (Build 1.0.52); den Remote-Branch kann Marco nach dem Push löschen.
+- Klarstellung zur Nummer A8 in OFFEN.md: Sie war zweimal vergeben, zuerst für die Rückfrage
+  `immutable=1` aus V7 (19.10.2026, entschieden als C34), danach für diesen Probelauf. Beide
+  Einträge sind gestrichen; Verweise auf „A8“ vor dem 25.10.2026 meinen die Rückfrage aus V7.
+
+
+## 26.10.2026: Version 1.0.52 (Build, Marco)
+
+- Gebündelt seit 1.0.51:
+  - die Verbesserungen V1–V8 (siehe Abschnitte vom 19.10.2026);
+  - `THIRD_PARTY_LICENSES.txt` mit den Lizenzen der Fremdkomponenten (25./26.10.2026).
+- Verifikation über `v1.0.51..HEAD`: in Ordnung. Unittests 686 OK, GUI-Tests offscreen 422 passed.
+  Neue Screenshots waren nicht nötig. Marco hat entschieden:
+  - umgesetzt: README (.deb statt Linux allgemein), Fortschritt-Satz zum Branch, Klarstellung
+    zur doppelt vergebenen Nummer A8, Kopfzeile von `OFFEN.md`, Statuszeilen in
+    `Verbesserungen-2026-10/aufgaben.md`;
+  - verworfen: eigener Test für die Randfälle von `_ist_wal_ohne_wal_datei`.
+- `RELEASE_NOTES.md` ist für 1.0.52 neu geschrieben.
+- `bump_version.py` → 1.0.52. Screenshots wurden neu erzeugt (nur die Versionsnummer ist
+  anders), dazu `docs/HANDBUCH.pdf`. Unittests nach dem Bump: 686 OK.

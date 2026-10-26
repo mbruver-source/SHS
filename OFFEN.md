@@ -1,6 +1,6 @@
 # Offene, zurückgestellte und akzeptierte Punkte
 
-Stand: 19.10.2026, nach Release 1.0.51. Die Datei fasst zusammen, was in `Fortschritt.md` über
+Stand: 26.10.2026, nach Release 1.0.52. Die Datei fasst zusammen, was in `Fortschritt.md` über
 viele Abschnitte verteilt steht. Maßgeblich bleibt `Fortschritt.md`; die Fundstellen (F:Zeile)
 zeigen auf den entscheidenden Absatz. Bevor ein Punkt als neuer Befund gemeldet oder neu
 geplant wird, hier nachsehen.
