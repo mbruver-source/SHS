@@ -8015,3 +8015,27 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   Byte-Abgleich danach ist identisch.
 - Marco hat die claude.ai-Ablage aktualisiert, den Branch `drittlizenzen` gelöscht und
   `C:\shsvd` aufgeräumt.
+
+
+## 26.10.2026: GitHub-App für Claude ausprobiert und wieder entfernt (Marco)
+
+- Marco hat in Claude Code `/install-github-app` ausgeführt. Angelegt wurden:
+  - das Repo-Geheimnis `CLAUDE_CODE_OAUTH_TOKEN`;
+  - der Branch `add-claude-github-actions-…` mit den Workflows `claude.yml` (Aufruf per
+    `@claude` in Issues/PRs) und `claude-code-review.yml` (automatische Review jedes PR).
+  - Auf `main` kamen die Workflows nie, sie waren also nicht aktiv.
+- Bewertung für dieses Projekt:
+  - Wenig Nutzen, weil ohne PRs direkt auf `main` gearbeitet wird.
+  - Automatische Review-Kommentare in einem öffentlichen Repo würden Sicherheitsfunde vor dem
+    Release veröffentlichen, entgegen der Regel in CLAUDE.md.
+  - Die Actions waren nicht per Commit-Hash gepinnt.
+- Marco: „brauche nichts davon“. Wieder entfernt:
+  - Branch und Geheimnis löschte Marco selbst; die automatische Freigabe dafür war gesperrt.
+  - Die App-Installation entfernte Marco auf GitHub.
+- Nachgeprüft: Auf GitHub gibt es nur `main`, kein Geheimnis ist hinterlegt, und es laufen nur
+  die bisherigen vier Workflows.
+- Nebenbei: Im Installationsordner (`%LOCALAPPDATA%\Programs\SHS-Pruefungsprogramm`) lagen fünf
+  PDFs vom 12.–14.09.2026 aus Vorabversionen vor dem ersten Git-Stand. Auf Marcos Wunsch sind
+  sie gelöscht. Ursache: Der Dialog bekam damals wohl nur einen Dateinamen und öffnete im
+  Arbeitsordner. Das ist nicht mehr nachprüfbar, und seit v1.0.0 bekommt der Dialog immer einen
+  vollständigen Pfad.
