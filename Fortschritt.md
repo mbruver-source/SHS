@@ -7989,3 +7989,14 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
 - `RELEASE_NOTES.md` ist für 1.0.52 neu geschrieben.
 - `bump_version.py` → 1.0.52. Screenshots wurden neu erzeugt (nur die Versionsnummer ist
   anders), dazu `docs/HANDBUCH.pdf`. Unittests nach dem Bump: 686 OK.
+
+
+## 26.10.2026: 1.0.52 ausgeliefert
+
+- Marco hat gepusht und `v1.0.52` getaggt. Alle Läufe sind grün: Installer bauen (Windows,
+  macOS 2x, Linux), Tests und Container bauen.
+- Das Release enthält: Setup-.exe, beide .dmg, AppImage und .deb.
+- Noch zu tun:
+  - Quellcode-Spiegel nachziehen;
+  - claude.ai-Ablage „SHS“ aktualisieren (Fortschritt.md, Architektur.md);
+  - Branch `drittlizenzen` löschen.
