@@ -2,7 +2,8 @@ name: Tests
 
 # Läuft bei jedem Push und bei jedem Pull Request automatisch die komplette
 # Testsuite: test_db.py, test_db_postgres_wrapper.py, test_pdf_export.py,
-# test_shs_core.py, test_bump_version.py, test_backup.py (reine Logik/Datenschicht, kein Qt),
+# test_shs_core.py, test_bump_version.py, test_backup.py, test_drittlizenzen.py (reine
+# Logik/Datenschicht bzw. Build-Werkzeuge, kein Qt),
 # test_theme.py (Farbschemata, braucht PySide6),
 # test_app_web.py (Flask-Backend der geplanten Web-Version, siehe app_web.py) UND
 # test_app_gui.py (echte PySide6-GUI-Tests über pytest-qt: Klicks, Checkbox-Toggle,

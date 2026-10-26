@@ -129,6 +129,7 @@ flowchart TB
 | `templates/*.html` | Jinja2-Templates für `app_web.py` (Login, Ersteinrichtung, Termin-/Benutzerverwaltung, Ergebniserfassung) | (über `test_app_web.py` abgedeckt) |
 | `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante; Basis-Images per Digest, Geheimnisse als Secrets aus `secrets/` | `.github/workflows/build-container.yml` |
 | `installer.iss`, `build.spec` | Windows-Installer (Inno Setup) bzw. PyInstaller-Bundling für die Desktop-Variante; `build.spec` baut unter macOS die `.app`, unter Linux einen Programmordner (Vorschau seit 07.10.2026) | `.github/workflows/build-installer.yml` |
+| `tools/drittlizenzen.py`, `lizenzen/` | erzeugt beim Build `THIRD_PARTY_LICENSES.txt` mit den Lizenzen aller mitgelieferten Fremdkomponenten (Python, Pakete samt Abhängigkeiten, DejaVu, LGPL-/GPL-Text für Qt); Aufruf aus `build.spec` (Desktop) und `Containerfile` (Web), bricht ab, wenn ein Paket fehlt oder keine Lizenzdatei hat | `test_drittlizenzen.py`, Build selbst (`build-installer.yml`, `build-container.yml`) |
 | `tools/linux_pakete.sh` | baut aus dem Linux-Programmordner AppImage und .deb | `.github/workflows/build-installer.yml` (Job `build-linux`) |
 | `symbol/`, `tools/programmsymbol.py` | Programmsymbol (Beagle) als `.png`/`.ico`/`.icns`; `desktop_gemeinsam.programmsymbol()` lädt es zur Laufzeit | Selbsttest-Schritt „Programmsymbol“ |
 
@@ -236,7 +237,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
     `db.py`.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
   test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version
-  test_shs_core test_bewertung_referenz test_altversionen` deckt alles außer GUI- und echten Postgres-Tests ab.
+  test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen` deckt alles außer GUI- und echten Postgres-Tests ab.
 
 ## 5. Woher kommt was (Verweise)
 

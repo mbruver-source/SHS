@@ -54,7 +54,7 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 ## 4. Tests
 
 ```
-PY -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen
+PY -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
 ```
 
 Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.

@@ -100,8 +100,9 @@ python tools/handbuch_pdf.py
   festen Id ab, landet also bei jeder Version am selben Ort.
 - Die App wird als **eine einzige .exe** (`--onefile`) gebaut – es gibt keine
   losen DLL- oder Zusatzdateien im Installationsordner, um die man sich beim
-  Update kümmern müsste. Ein Update ist schlicht "alte .exe durch neue
-  ersetzen".
+  Update kümmern müsste (einzige Ausnahme: `THIRD_PARTY_LICENSES.txt` mit den
+  Lizenzen der Fremdkomponenten, die der Installer ebenfalls einfach ersetzt).
+  Ein Update ist schlicht "alte .exe durch neue ersetzen".
 - Ist die Anwendung beim Update gerade geöffnet, fordert der Installer
   (`CloseApplications=yes`) automatisch zum Schließen auf und startet sie
   nach der Installation auf Wunsch wieder (`RestartApplications=yes`) – der
@@ -282,7 +283,8 @@ zusätzlich zur Windows-Version (alle nicht signiert, als „Vorschau“ gekennz
       (und `version_info.txt`/`version.py`/`docs/HANDBUCH.md`/`.pdf`) **committet UND gepusht**, bevor
       der Tag gesetzt wird – siehe Warnkasten oben
 - [ ] `pyinstaller build.spec` erfolgreich, `dist\SHS-Pruefungsprogramm.exe`
-      kurz angetestet
+      kurz angetestet; `build\THIRD_PARTY_LICENSES.txt` wurde dabei erzeugt
+      (`tools/drittlizenzen.py`, bricht bei fehlenden Lizenzangaben ab)
 - [ ] `ISCC installer.iss /DMyAppVersion=X.Y.Z` erfolgreich
 - [ ] Setup-Datei auf einem Testrechner mit vorheriger Version installiert
       und geprüft, dass (a) die neue Version läuft und (b) vorhandene

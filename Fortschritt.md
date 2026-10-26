@@ -7889,3 +7889,74 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   danach ist identisch.
 - Die claude.ai-Ablage „SHS“ erreicht diese Sitzung nicht. Dort `Fortschritt.md` und
   `Architektur.md` neu hochladen, auf Wunsch auch `UML.md` und `OFFEN.md`.
+
+
+## 25.10.2026: Lizenzen der Fremdkomponenten (`THIRD_PARTY_LICENSES.txt`, Marco)
+
+- Frage von Marco: Braucht das Projekt eine `THIRD_PARTY_LICENSES.txt`? Ja. Installer, .app,
+  AppImage/.deb und Container-Image enthalten fremden Code (Python, Qt/PySide6 unter LGPL-3.0,
+  reportlab, pypdf, pyzipper/pycryptodomex, Pillow, Flask samt Abhängigkeiten, waitress,
+  psycopg2 mit libpq/OpenSSL). Deren Lizenzen verlangen, dass der Lizenztext mitgeliefert wird.
+  Bisher lag nur der DejaVu-Text bei. Marco: vorbereiten.
+- Umsetzung (nur Arbeitsstand, geht mit dem nächsten Build raus):
+  - `tools/drittlizenzen.py desktop|web <ziel>` geht von `requirements.txt` bzw.
+    `requirements-postgres.txt` + `requirements-web.txt` aus, folgt den Abhängigkeiten der
+    installierten Pakete und schreibt je Paket Version, Lizenz und alle mitgelieferten
+    Lizenzdateien, dazu die Python-Lizenz und (Desktop) den DejaVu-Text. Fehlt bei einem Paket
+    die Lizenzdatei, bricht es ab. Die Datei wird beim Build erzeugt statt eingecheckt, damit sie
+    zu den Paketversionen der jeweiligen Build-Umgebung passt.
+  - Qt/PySide6: Die Wheels enthalten nur den Text der kommerziellen Qt-Lizenz, der weggelassen
+    wird. Stattdessen ein Hinweis (Quellcode-Bezugsquelle, Lizenzliste der Qt-Drittkomponenten,
+    eigenes Bauen aus dem offenen Quellcode wegen der Onefile-.exe) und die Texte von LGPL-3.0
+    und GPL-3.0 aus `lizenzen/` (von gnu.org, SHA-256 `e3a994d8…` bzw. `3972dc97…`).
+  - `build.spec` erzeugt `build/THIRD_PARTY_LICENSES.txt` und packt sie ins Bundle;
+    `installer.iss` legt sie zusätzlich in den Programmordner, `build-installer.yml` ins .dmg,
+    `tools/linux_pakete.sh` nach `/usr/share/doc/shs-pruefungsprogramm/` im .deb. Das
+    `Containerfile` erzeugt `/app/THIRD_PARTY_LICENSES.txt` direkt nach `pip install`.
+  - README.md (Abschnitt Lizenz) und Architektur.md ergänzt.
+- Geprüft: Erzeugung für beide Varianten in frischen venvs mit den aktuellen Paketen
+  (Desktop rund 197 KB, Web rund 28 KB); Abbruch bei falscher Variante; lokaler
+  `pyinstaller build.spec` läuft durch, die Datei liegt in der .exe. Der Selbsttest der lokal
+  gebauten .exe scheiterte an `_sqlite3` - Ursache ist die Anaconda-Basis der Test-venv, nicht
+  die Änderung (die CI baut mit python.org-Python). Container-, macOS- und Linux-Weg sind nur
+  in der CI prüfbar und laufen beim nächsten Build mit.
+- Nicht umgesetzt (optional, bei Bedarf): Verweis auf die Datei im Versionsfenster der App.
+
+
+## 26.10.2026: Nacharbeit Lizenzdatei nach der Verifikation (Marco)
+
+- Der Verifikations-Agent hat den Container-Weg mit Podman auf dem festgelegten Basis-Image
+  nachgestellt (läuft, rund 29 KB) und zehn Punkte gemeldet, keiner davon blockierend. Marco hat
+  entschieden: umsetzen (Befunde 1 und 3 bis 8), den Probelauf vor dem Tag selbst erledigen
+  (Befund 2, OFFEN A8) und den Verweis im Versionsfenster zurückstellen (Befund 9, OFFEN B14).
+  Befund 10 war nur ein Hinweis (siehe unten).
+  - Befund 1 (mittel): Unter macOS und Linux enthält Pythons `LICENSE.txt` nur den PSF-Text,
+    nicht die Lizenzen der mitgelieferten Bibliotheken (OpenSSL, libffi, SQLite usw.). Die
+    Desktop-Datei bekommt dort jetzt einen Hinweis mit Liste und Link auf
+    docs.python.org/3/license.html. Die Container-Datei verweist für die Debian-Pakete des
+    Basis-Images auf `/usr/share/doc/<paket>/copyright`.
+  - Kleinigkeiten am Skript: klare Meldung „Nicht installiert: …“ statt eines Tracebacks,
+    Marker und Extras in `requirements*.txt` werden ausgewertet, der Platzhalter für doppelte
+    Lizenztexte nennt das Paket mit dem ersten Vorkommen, und ein falscher Kommentar zu
+    `packaging` ist korrigiert.
+  - README_INSTALLER.md: Hinweis auf die Lizenzdatei im Installationsordner und in der
+    Kurz-Checkliste.
+  - Neue Tests `test_drittlizenzen.py` (9 Tests) mit nachgebauten dist-info-Ordnern, unabhängig
+    von den installierten Paketen. Sie decken ab: Abhängigkeiten mit Markern und Extras,
+    fehlendes Paket, Paket ohne Lizenzdatei, doppelte Texte, Qt ohne kommerzielle Lizenz mit
+    LGPL/GPL, den Python-Hinweis je Plattform und die Wurzeln aus den requirements-Dateien. Der
+    Testbefehl in CLAUDE.md, AGENTS.md, Architektur.md, im Skill `shs-build` und im Agenten
+    `verifikation` ist ergänzt.
+  - Gegenprobe: Fünf absichtlich eingebaute Fehler (kommerzielle Lizenz nicht gefiltert, Extras
+    ignoriert, alter Platzhalter, Python-Hinweis immer, Traceback statt Meldung) machen jeweils
+    einen Test rot.
+- Zweite Verifikation: in Ordnung. Auf Marcos Go ersetzen die Tests Pythons Lizenzdatei durch
+  eine Attrappe, damit sie auch ohne `LICENSE.txt` laufen (z. B. System-Python von
+  Debian/Ubuntu). Gegenprobe: Mit einem scheiternden `_python_lizenz` bleiben die Tests grün.
+- Offen für Marco, eingetragen in OFFEN.md:
+  - A8: vor dem nächsten Tag `build-installer.yml` per „Run workflow“ starten.
+  - B14: Verweis im Versionsfenster der App (zurückgestellt).
+- Nicht übernommen (nur Hinweis der Verifikation): Der PyInstaller-Bootloader (GPL mit
+  Ausnahme, keine Hinweispflicht), die VC-Runtime von Microsoft (weitergebbar) und
+  pip/setuptools im Container (Lizenzdateien liegen im Image) bekommen keinen eigenen Eintrag.
+

@@ -85,7 +85,7 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ## Tests lokal ausführen (ohne PySide6/psycopg2/pytest)
 
 ```
-python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen
+python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
 ```
 
 Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne

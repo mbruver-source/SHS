@@ -30,6 +30,7 @@ ruft bump_version.py vor diesem Build automatisch auf und gibt dieselbe Nummer
 anschliessend an installer.iss (MyAppVersion) weiter - siehe README_INSTALLER.md.
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,15 @@ WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 # SPECPATH: Ordner dieser Spec-Datei (von PyInstaller gesetzt), unabhängig vom Arbeitsordner.
 VERSION = (Path(SPECPATH) / "version.txt").read_text(encoding="utf-8").strip()
+
+# Lizenzen der mitgelieferten Fremdkomponenten (Marco 25.10.2026), passend zu den Paketen dieser
+# Build-Umgebung erzeugt. installer.iss und die CI legen die Datei zusätzlich sichtbar neben das
+# Programm, weil sie unter Windows sonst nur in der .exe steckt.
+DRITTLIZENZEN = Path(SPECPATH) / "build" / "THIRD_PARTY_LICENSES.txt"
+subprocess.run(
+    [sys.executable, str(Path(SPECPATH) / "tools" / "drittlizenzen.py"), "desktop", str(DRITTLIZENZEN)],
+    check=True,
+)
 
 a = Analysis(
     ["app.py"],
@@ -57,6 +67,7 @@ a = Analysis(
         ("fonts/DejaVuSansCondensed-Bold.ttf", "fonts"),
         ("fonts/DejaVuSansCondensed-Oblique.ttf", "fonts"),
         ("fonts/LICENSE-DejaVu.txt", "fonts"),
+        (str(DRITTLIZENZEN), "."),
     ],
     # pyzipper (Datensicherung, siehe db_sicherung.py) importiert pycryptodomex für die
     # AES-Verschlüsselung - PyInstaller bringt dafür über pyinstaller-hooks-contrib

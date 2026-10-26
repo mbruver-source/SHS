@@ -135,5 +135,11 @@ pytest               # Tests
 
 MIT – siehe [LICENSE](LICENSE).
 
+Die ausgelieferten Programme enthalten Komponenten Dritter (u. a. Python, Qt/PySide6 unter der
+LGPL-3.0, reportlab, Flask). Deren Lizenzen stehen in `THIRD_PARTY_LICENSES.txt`, die beim Build
+mit `tools/drittlizenzen.py` erzeugt wird und neben dem installierten Programm liegt (Windows im
+Programmordner, macOS im .dmg, Linux unter `/usr/share/doc/shs-pruefungsprogramm/`, Container
+unter `/app/`).
+
 Die Windows-Installer sollen künftig kostenlos über die SignPath Foundation signiert werden;
 siehe [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) für Rollen und Freigabeprozess.

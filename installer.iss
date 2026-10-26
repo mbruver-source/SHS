@@ -97,9 +97,11 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "Desktop-Verknüpfung anlegen"; GroupDescription: "Zusätzliche Symbole:"
 
 [Files]
-; --onefile-Build aus build.spec: genau eine .exe, keine losen Zusatzdateien -
-; das ist es, was ein Update so einfach macht (eine Datei ersetzt die andere).
+; --onefile-Build aus build.spec: genau eine .exe, keine losen Zusatzdateien außer der
+; Lizenzdatei - das ist es, was ein Update so einfach macht (eine Datei ersetzt die andere).
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Lizenzen der Fremdkomponenten (Qt/PySide6, Python, reportlab ...), erzeugt von build.spec.
+Source: "build\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

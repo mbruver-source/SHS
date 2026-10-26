@@ -21,6 +21,7 @@ suchen.
 | A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
 | A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
 | A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
+| A8 | Vor dem nächsten Tag `build-installer.yml` per „Run workflow“ starten: Lizenzdatei unter macOS/Linux, .dmg, .deb und Inno Setup laufen sonst erst beim Tag | 26.10.2026 | F:7926 |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
@@ -34,6 +35,7 @@ suchen.
 | B11 | Altdaten-Tests erweitern (Web-Sync, CSV-Export, Anmeldeformular mit Altdaten) | 03.10.2026 | F:4383 |
 | B12 | `app.py` nicht weiter aufteilen: Teilnehmer-, Formular-Import-, Ergebnis-Reiter, Hauptfenster, StartDialog und `main` bleiben dort | 18.10.2026 | F:6474 |
 | B13 | Python-Version anheben (heute 3.11 in CI, Installer, Paketen, Container; Sicherheitsupdates bis Oktober 2027): etwa Mitte 2027 direkt auf 3.13/3.14, nicht über 3.12. Dabei sqlite3-Datumsumwandlungen prüfen (heute ungenutzt) | 19.10.2026 | F:7861 |
+| B14 | Verweis auf `THIRD_PARTY_LICENSES.txt` im Versionsfenster der App | 26.10.2026 | F:7926 |
 
 ## C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
 

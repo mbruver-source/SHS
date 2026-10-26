@@ -14,7 +14,7 @@ Vorgehen:
 2. Diff lesen (`git diff`, bei Commits `git show`). Prüfen: Ist alles umgesetzt, was
    verlangt war? Ist etwas dabei, das nicht verlangt war?
 3. Tests ausführen:
-   `C:\Users\mbruv\anaconda3\python.exe -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen`
+   `C:\Users\mbruv\anaconda3\python.exe -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen`
    Echte PostgreSQL-Tests laufen nur in der CI (Linux-Job); die GUI-Tests laufen lokal mit
    Anaconda und in der CI unter Linux und Windows. Sag ausdrücklich, was lokal ungetestet ist.
 4. Fehlen Tests für die geänderte Logik?

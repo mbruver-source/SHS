@@ -210,6 +210,7 @@ jobs:
           version="$(tr -d '[:space:]' < version.txt)"
           mkdir -p dmg Output
           cp -R dist/SHS-Pruefungsprogramm.app dmg/
+          cp build/THIRD_PARTY_LICENSES.txt dmg/
           ln -s /Applications dmg/Applications
           dmg="Output/SHS-Pruefungsprogramm-$version-macOS-$MAC_TYP.dmg"
           hdiutil create -volname "SHS-Pruefungsprogramm" -srcfolder dmg -ov -format UDZO "$dmg"
