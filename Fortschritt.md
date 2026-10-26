@@ -8000,3 +8000,18 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   - Quellcode-Spiegel nachziehen;
   - claude.ai-Ablage „SHS“ aktualisieren (Fortschritt.md, Architektur.md);
   - Branch `drittlizenzen` löschen.
+
+
+## 26.10.2026: Quellcode-Spiegel auf 1.0.52
+
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen: alle Dateien aus
+  Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner. Im Spiegel wurde nichts
+  gelöscht.
+- 8 Dateien sind neu:
+  - `lizenzen/` (2);
+  - `tools/drittlizenzen.py`, `test_drittlizenzen.py`;
+  - `testdaten/altversionen/v1.0.52/` (4).
+- 32 Dateien sind geändert, dazu `build-installer.yml` und `tests.yml` im Wurzelordner. Der
+  Byte-Abgleich danach ist identisch.
+- Marco hat die claude.ai-Ablage aktualisiert, den Branch `drittlizenzen` gelöscht und
+  `C:\shsvd` aufgeräumt.
