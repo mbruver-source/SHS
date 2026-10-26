@@ -7960,3 +7960,12 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   Ausnahme, keine Hinweispflicht), die VC-Runtime von Microsoft (weitergebbar) und
   pip/setuptools im Container (Lizenzdateien liegen im Image) bekommen keinen eigenen Eintrag.
 
+
+## 26.10.2026: Probelauf der Lizenzdatei in der CI (A8 erledigt)
+
+- Ein erster „Run workflow“ auf `main` sagte nichts aus, weil die Änderung dort noch nicht lag.
+- Deshalb liegt sie auf dem Branch `drittlizenzen` (Commit `d3eacd1`). Marco hat ihn gepusht
+  und `build-installer.yml` darauf gestartet. Grün sind Windows, macOS (AppleSilicon und
+  Intel) und Linux. Jeder Job meldet „THIRD_PARTY_LICENSES.txt geschrieben“. Die Push-Läufe
+  `Tests` und `Container bauen` auf dem Branch sind ebenfalls grün.
+- OFFEN.md A8 ist gestrichen. Der Branch kommt mit dem nächsten Build nach `main`.

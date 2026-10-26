@@ -21,7 +21,6 @@ suchen.
 | A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
 | A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
 | A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
-| A8 | Vor dem nächsten Tag `build-installer.yml` per „Run workflow“ starten: Lizenzdatei unter macOS/Linux, .dmg, .deb und Inno Setup laufen sonst erst beim Tag | 26.10.2026 | F:7926 |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
