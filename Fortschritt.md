@@ -8408,3 +8408,19 @@ nannte fünf Ursachen:
 - Version erhöht, Handbuch-Bilder und `docs/HANDBUCH.pdf` mit der neuen Versionsnummer neu.
 - **Tests lokal:** 704 Unittests (175 übersprungen) und 473 GUI-Tests grün.
 - Vor dem Tag folgt ein CI-Probelauf auf `probe-1.0.54`.
+
+
+## 01.11.2026: 1.0.54 ausgeliefert, Quellcode-Spiegel auf 1.0.54
+
+- Marco hat den Probelauf auf `probe-1.0.54` grün abgeschlossen, `main` gepusht und
+  `v1.0.54` getaggt.
+  - Release v1.0.54 ist mit allen 5 Dateien veröffentlicht.
+  - „Installer bauen“ (41325434595), „Tests“ und „Container bauen“ sind grün.
+  - Der Probe-Branch ist gelöscht.
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen: alle Dateien aus
+  Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner. Im Spiegel wurde nichts
+  gelöscht.
+- 5 Dateien sind neu (`desktop_beagle.py`, `testdaten/altversionen/v1.0.54/` mit 4 Dateien),
+  22 sind geändert. Der Byte-Abgleich danach ist identisch.
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
+  `Fortschritt.md` neu hoch; `Architektur.md` und `Grobkonzept.md` sind unverändert.
