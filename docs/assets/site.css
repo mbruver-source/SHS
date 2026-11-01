@@ -3,20 +3,26 @@
 
 :root {
   color-scheme: light;
-  --grund: #f5f6f2;
-  --flaeche: #ffffff;
-  --flaeche-2: #eceee7;
-  --tinte: #1b2420;
-  --tinte-2: #4f5b55;
-  --linie: #d7dcd3;
-  --akzent: #c8551a;        /* Signalorange wie Kenndecke/Warnweste */
+  /* Erscheinungsbild „Beagle“ wie Programm und Weboberfläche (1.0.53, Marco 01.11.2026):
+     Creme, Lohbraun, Kopf Anthrazit - Werte aus desktop_darstellung.py/templates/base.html. */
+  --grund: #FBF8F3;
+  --flaeche: #FFFDF9;
+  --flaeche-2: #F2ECE2;
+  --tinte: #2B2620;
+  --tinte-2: #5E5549;
+  --linie: #E2D9CB;
+  --akzent: #8C5A32;        /* Lohbraun */
   --akzent-tinte: #ffffff;
-  --akzent-hell: #fbe9de;
-  --wald: #1f4a40;
-  --wald-hell: #e1ece7;
-  --gut: #2f7a4f;
-  --schlecht: #a8322a;
-  --schatten: 0 1px 2px rgb(27 36 32 / 6%), 0 8px 28px rgb(27 36 32 / 10%);
+  --akzent-hell: #F3E9DD;
+  --wald: #6A4325;          /* dunkles Lohbraun: Links, Wertnoten, Ablauf */
+  --wald-hell: #EFE5D8;
+  --gut: #24592A;
+  --schlecht: #B3261E;
+  --kopf: #2F2B27;
+  --kopf-text: #F4EEE4;
+  --kopf-text2: #CDBFA9;
+  --kopf-rand: #6A6560;
+  --schatten: 0 1px 2px rgb(43 38 32 / 6%), 0 8px 28px rgb(43 38 32 / 10%);
   --radius: 10px;
   --breite: 1120px;
   --text: 68ch;
@@ -28,37 +34,45 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --grund: #111714;
-    --flaeche: #19211d;
-    --flaeche-2: #212b26;
-    --tinte: #e5ebe7;
-    --tinte-2: #a3b0a9;
-    --linie: #2e3a34;
-    --akzent: #ec8746;
-    --akzent-tinte: #1a0e06;
-    --akzent-hell: #3a2518;
-    --wald: #8fcbb9;
-    --wald-hell: #1c2e28;
-    --gut: #6fc28f;
-    --schlecht: #ef8a80;
+    --grund: #1C1915;
+    --flaeche: #25211C;
+    --flaeche-2: #2E2923;
+    --tinte: #EEE7DC;
+    --tinte-2: #B8AC9A;
+    --linie: #3D362E;
+    --akzent: #D29A68;
+    --akzent-tinte: #1F140A;
+    --akzent-hell: #3A2B1E;
+    --wald: #DDB48A;
+    --wald-hell: #33291F;
+    --gut: #7CC48A;
+    --schlecht: #EF8A80;
+    --kopf: #14110E;
+    --kopf-text: #F4EEE4;
+    --kopf-text2: #CDBFA9;
+    --kopf-rand: #4B4641;
     --schatten: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px rgb(0 0 0 / 35%);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --grund: #111714;
-  --flaeche: #19211d;
-  --flaeche-2: #212b26;
-  --tinte: #e5ebe7;
-  --tinte-2: #a3b0a9;
-  --linie: #2e3a34;
-  --akzent: #ec8746;
-  --akzent-tinte: #1a0e06;
-  --akzent-hell: #3a2518;
-  --wald: #8fcbb9;
-  --wald-hell: #1c2e28;
-  --gut: #6fc28f;
-  --schlecht: #ef8a80;
+  --grund: #1C1915;
+  --flaeche: #25211C;
+  --flaeche-2: #2E2923;
+  --tinte: #EEE7DC;
+  --tinte-2: #B8AC9A;
+  --linie: #3D362E;
+  --akzent: #D29A68;
+  --akzent-tinte: #1F140A;
+  --akzent-hell: #3A2B1E;
+  --wald: #DDB48A;
+  --wald-hell: #33291F;
+  --gut: #7CC48A;
+  --schlecht: #EF8A80;
+  --kopf: #14110E;
+  --kopf-text: #F4EEE4;
+  --kopf-text2: #CDBFA9;
+  --kopf-rand: #4B4641;
   --schatten: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px rgb(0 0 0 / 35%);
 }
 
@@ -84,20 +98,20 @@ p { margin: 0; }
 /* ---------- Kopfleiste ---------- */
 .kopf {
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
-  background: color-mix(in srgb, var(--grund) 88%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--linie);
+  /* Kopf wie der Kopfbalken des Programms: Anthrazit mit Lohbraun-Linie wie die Reiter */
+  background: var(--kopf);
+  color: var(--kopf-text);
+  border-bottom: 3px solid var(--akzent);
 }
 .kopf .huelle { display: flex; align-items: center; gap: 1.25rem; min-height: 3.5rem; flex-wrap: wrap; }
-.marke { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; color: var(--tinte); text-decoration: none; letter-spacing: -0.01em; }
-.marke:hover { color: var(--tinte); }
-.marke-zeichen {
-  width: 1.9rem; height: 1.9rem; border-radius: 7px; display: grid; place-items: center;
-  background: var(--wald); color: var(--grund); font: 700 0.72rem/1 var(--schrift-mono); letter-spacing: 0.02em;
-}
+.marke { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; color: var(--kopf-text); text-decoration: none; letter-spacing: -0.01em; }
+.marke:hover { color: var(--kopf-text); }
+/* Der Beagle rund wie im Kopfbalken des Programms */
+.marke-zeichen { width: 2.1rem; height: 2.1rem; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--kopf-rand); }
 .navi { display: flex; gap: 1.1rem; margin-left: auto; flex-wrap: wrap; font-size: 0.95rem; }
-.navi a { color: var(--tinte-2); text-decoration: none; }
-.navi a:hover, .navi a[aria-current="page"] { color: var(--tinte); text-decoration: underline; }
+.navi a { color: var(--kopf-text2); text-decoration: none; }
+.navi a:hover, .navi a[aria-current="page"] { color: var(--kopf-text); text-decoration: underline; }
+.kopf :focus-visible { outline-color: var(--kopf-text); }
 
 /* ---------- Knöpfe ---------- */
 .knopf {
@@ -159,8 +173,9 @@ p { margin: 0; }
 .ablauf span { display: block; font-size: 0.88rem; color: var(--tinte-2); margin-top: 0.25rem; }
 
 /* Funktionen */
-.funktionen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--linie); border: 1px solid var(--linie); border-radius: var(--radius); overflow: hidden; }
-.funktion { background: var(--flaeche); padding: 1.4rem 1.4rem 1.5rem; }
+.funktionen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+/* Karten mit leichtem Schatten wie in der Weboberfläche */
+.funktion { background: var(--flaeche); padding: 1.4rem 1.4rem 1.5rem; border: 1px solid var(--linie); border-radius: var(--radius); box-shadow: 0 1px 3px rgb(43 38 32 / 8%); }
 .funktion h3 { font-size: 1.05rem; font-weight: 680; }
 .funktion p { color: var(--tinte-2); font-size: 0.93rem; margin-top: 0.45rem; }
 .kuerzel { display: inline-block; font: 600 0.72rem/1 var(--schrift-mono); color: var(--wald); background: var(--wald-hell); padding: 0.28rem 0.45rem; border-radius: 4px; margin-bottom: 0.7rem; letter-spacing: 0.04em; }
