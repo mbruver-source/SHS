@@ -1,5 +1,6 @@
 """Darstellung der Desktop-Oberfläche: Qt-Stylesheet, Akzentfarben (Themes),
-Hintergrund-Designs (hell/dunkel), gespeicherte Auswahl (QSettings) und deren Anwendung.
+Hintergrund-Designs (Beagle/hell/dunkel/Kontrast), gespeicherte Auswahl (QSettings) und deren
+Anwendung.
 
 Aus app.py ausgelagert (Codex-Architekturprüfung 27.09.2026); rein interne Umstellung,
 Aussehen und Verhalten sind unverändert. Die Abhängigkeiten laufen nur in eine Richtung:
@@ -32,7 +33,7 @@ ein einzelner Akzentton (je gewähltem Theme, siehe _THEMES/_erzeuge_qss() unten
 dem Anwenden per str.replace() durch die Theme-Hexwerte ersetzt werden; str.format() geht
 hier nicht, da das Stylesheet selbst voller literaler {}-Blockklammern ist). Die übrigen
 Platzhalter dieser Art (Hintergrund, Flächen, Rahmen, Schrift) kommen aus dem gewählten
-Hintergrund-Design (_DESIGNS unten); "hell" entspricht dem bisherigen Aussehen. Ruhige
+Hintergrund-Design (_DESIGNS unten); Standard ist seit 01.11.2026 "beagle". Ruhige
 Flächen statt vieler Rahmen/Schatten. Global über QApplication.setStyleSheet() gesetzt
 (siehe _darstellung_anwenden(), aufgerufen aus main() in app.py) - HauptFenster &
 Dialoge setzen zusätzlich per ResponsiveSchriftMixin
@@ -63,13 +64,13 @@ QTabBar::tab {
     color: @@TEXT_GEDAEMPFT@@;
     padding: 8px 16px;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-bottom: 3px solid transparent;
     margin-right: 2px;
 }
 QTabBar::tab:selected {
     color: @@TEXT_STARK@@;
     font-weight: 600;
-    border-bottom: 2px solid @@AKZENT@@;
+    border-bottom: 3px solid @@AKZENT@@;
 }
 QTabBar::tab:hover:!selected {
     color: @@TEXT_STARK@@;
@@ -77,7 +78,7 @@ QTabBar::tab:hover:!selected {
 
 /* Schaltflächen: neutral/sekundär als Standard; die jeweilige Haupt-Aktion eines
 Reiters/Dialogs trägt objectName "primaerButton" (siehe z.B. TeilnehmerTab) und wird
-blau hervorgehoben - ebenso automatisch jeder Dialog-Default-Button (die "OK"-Schaltfläche
+in der Akzentfarbe hervorgehoben - ebenso automatisch jeder Dialog-Default-Button (die "OK"-Schaltfläche
 einer QDialogButtonBox, über die Qt-eigene :default-Pseudoklasse, ohne dass jeder
 Dialog einzeln angepasst werden muss). */
 QPushButton {
@@ -133,6 +134,56 @@ QComboBox::drop-down {
     border: none;
     width: 20px;
 }
+/* Pfeilknöpfe der Zahlenfelder (Marco 01.11.2026, Erscheinungsbild „Beagle“): Sobald das
+Feld selbst einen Rahmen aus dem Stylesheet hat, zeichnet Qt die Knöpfe nur noch als flache
+Kästchen ohne Pfeil. Deshalb eigene Knöpfe und Pfeile als Bild (_pfeile_bereitstellen()). */
+QSpinBox, QDateEdit {
+    padding-right: 22px;
+}
+QSpinBox::up-button, QDateEdit::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 20px;
+    border: none;
+    border-left: 1px solid @@RAND@@;
+    border-top-right-radius: 6px;
+    background: @@FLAECHE@@;
+}
+QSpinBox::down-button, QDateEdit::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 20px;
+    border: none;
+    border-left: 1px solid @@RAND@@;
+    border-bottom-right-radius: 6px;
+    background: @@FLAECHE@@;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDateEdit::up-button:hover, QDateEdit::down-button:hover {
+    background: @@FLAECHE_HOVER@@;
+}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed,
+QDateEdit::up-button:pressed, QDateEdit::down-button:pressed {
+    background: @@FLAECHE_PRESSED@@;
+}
+QSpinBox::up-arrow, QDateEdit::up-arrow {
+    image: url("@@PFEIL_HOCH@@");
+    width: 10px;
+    height: 10px;
+}
+QSpinBox::down-arrow, QDateEdit::down-arrow {
+    image: url("@@PFEIL_RUNTER@@");
+    width: 10px;
+    height: 10px;
+}
+QSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off,
+QDateEdit::up-arrow:disabled, QDateEdit::up-arrow:off {
+    image: url("@@PFEIL_HOCH_AUS@@");
+}
+QSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off,
+QDateEdit::down-arrow:disabled, QDateEdit::down-arrow:off {
+    image: url("@@PFEIL_RUNTER_AUS@@");
+}
 QCheckBox {
     color: @@TEXT@@;
     spacing: 6px;
@@ -180,16 +231,89 @@ QScrollBar::handle {
 QScrollBar::handle:hover {
     background: @@SCROLL_HOVER@@;
 }
+
+/* Kopfbalken mit Beagle und Termin-Angaben (desktop_gemeinsam.KopfBalken), Menüleiste im
+selben Ton, Gruppen als helle Karten und der kurze Hinweis mit Hilfe-Symbol
+(desktop_gemeinsam.kurzer_hinweis) - Marco 01.11.2026, Erscheinungsbild „Beagle“. Rand und
+Hover im Kopf sind feste Farben statt durchscheinender, damit „Hoher Kontrast“ einen
+klaren weißen Rand bekommt. */
+QMenuBar {
+    background: @@KOPF@@;
+    color: @@KOPF_TEXT@@;
+}
+QMenuBar::item {
+    background: transparent;
+    color: @@KOPF_TEXT@@;
+    padding: 4px 10px;
+}
+QMenuBar::item:selected {
+    background: @@KOPF_HOVER@@;
+}
+#kopfBalken {
+    background: @@KOPF@@;
+}
+#kopfBalken QLabel {
+    color: @@KOPF_TEXT@@;
+    background: transparent;
+}
+#kopfBalken QLabel#kopfUnterzeile {
+    color: @@KOPF_TEXT2@@;
+}
+#kopfBalken QPushButton {
+    background: transparent;
+    color: @@KOPF_TEXT@@;
+    border: 1px solid @@KOPF_RAND@@;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+#kopfBalken QPushButton:hover {
+    background: @@KOPF_HOVER@@;
+}
+#kopfBalken QPushButton:pressed {
+    background: @@KOPF_HOVER@@;
+    border-color: @@KOPF_TEXT2@@;
+}
+/* Gesperrt (z. B. „Anderen Termin öffnen…“ während der Demo): gestrichelter Rand, damit es
+auch in „Hoher Kontrast“ (Unterzeile ebenfalls weiß) erkennbar bleibt. */
+#kopfBalken QPushButton:disabled {
+    color: @@KOPF_TEXT2@@;
+    border: 1px dashed @@KOPF_RAND@@;
+}
+QGroupBox {
+    background: @@KARTE@@;
+    border: 1px solid @@RAND@@;
+    border-radius: 8px;
+    margin-top: 18px;
+    padding: 12px 8px 8px 8px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 4px;
+    color: @@GRUPPE_TITEL@@;
+}
+QLabel#kurzHinweis {
+    color: @@TEXT_GEDAEMPFT@@;
+}
 """
 
-_THEME_DEFAULT = "blau"
+_THEME_DEFAULT = "lohbraun"
 
-# Drei Akzentfarb-Themes (Menü Ansicht -> Akzentfarbe): nur der Akzentton wechselt, der
-# Hintergrund kommt unabhängig davon aus _DESIGNS unten. "blau" + Design "hell" entspricht
-# bit-für-bit dem bisherigen, fest verdrahteten Erscheinungsbild (siehe test_theme.py).
+# Akzentfarb-Themes (Menü Ansicht -> Akzentfarbe): nur der Akzentton wechselt, der
+# Hintergrund kommt unabhängig davon aus _DESIGNS unten. Lohbraun ist seit dem
+# Erscheinungsbild „Beagle“ der Standard (Marco 01.11.2026); Blau, Grün und Violett bleiben
+# wählbar, und eine schon gespeicherte Wahl bleibt erhalten.
 _THEMES: dict[str, dict[str, str]] = {
+    "lohbraun": {
+        "anzeigename": "Lohbraun (Standard)",
+        "akzent": "#8C5A32",
+        "akzent_hover": "#7A4E2B",
+        "akzent_pressed": "#6A4325",
+        "akzent_hell": "#F3E7D9",
+    },
     "blau": {
-        "anzeigename": "Blau (Standard)",
+        "anzeigename": "Blau",
         "akzent": "#2F6FED",
         "akzent_hover": "#2A63D6",
         "akzent_pressed": "#2558BF",
@@ -212,9 +336,10 @@ _THEMES: dict[str, dict[str, str]] = {
 }
 
 
-_DESIGN_DEFAULT = "hell"
+_DESIGN_DEFAULT = "beagle"
 
-# Nur für Designs außer "hell" angehängt (hell bleibt damit bit-für-bit wie bisher): gut
+# Nur für Designs mit "eigene_haken" angehängt (alle außer "hell", das damit wie bisher den
+# nativen Haken zeigt; Marco 01.11.2026, vorher hing das an „Design ist nicht der Standard“): gut
 # sichtbare Checkboxen. Ohne diese Regel zeichnet Fusion (dunkles Design) den Rahmen
 # dunkler als den Hintergrund und die Box verschwindet. Eine eigene ::indicator-Regel
 # schaltet allerdings das native Häkchen ab - deshalb das weiße Häkchen als Bild
@@ -266,34 +391,19 @@ def _qss_url(pfad: str) -> str:
 _haken_geschrieben = False
 
 
-def _haken_bild_bereitstellen() -> None:
-    """Zeichnet das weiße Häkchen für _QSS_CHECKBOX_ZUSATZ einmal je Programmlauf neu als
-    PNG (erst in eine Temp-Datei, dann per os.replace an seinen Platz). Scheitert das
-    (Ordner nicht beschreibbar), bleibt die angehakte Box nur akzentfarbig gefüllt - kein
-    Grund, den Programmstart oder den Designwechsel abzubrechen."""
-    global _haken_geschrieben
-    if _haken_geschrieben:
-        return
-    pfad = _haken_pfad()
+def _bild_speichern(bild: QImage, pfad: str) -> bool:
+    """Speichert ein PNG erst in eine Temp-Datei und setzt es dann per os.replace an seinen
+    Platz; True bei Erfolg. Scheitert das (Ordner nicht beschreibbar), bleibt keine
+    Zwischendatei liegen. Gemeinsam für Häkchen, Pfeile und desktop_gemeinsam.symbol_png."""
     try:
         os.makedirs(os.path.dirname(pfad), exist_ok=True)
     except OSError:
-        return
-    bild = QImage(32, 32, QImage.Format_ARGB32)
-    bild.fill(Qt.transparent)
-    maler = QPainter(bild)
-    maler.setRenderHint(QPainter.Antialiasing)
-    stift = QPen(QColor("#FFFFFF"), 4)
-    stift.setCapStyle(Qt.RoundCap)
-    stift.setJoinStyle(Qt.RoundJoin)
-    maler.setPen(stift)
-    maler.drawPolyline([QPointF(7, 17), QPointF(13, 23), QPointF(25, 9)])
-    maler.end()
+        return False
     zwischen = f"{pfad}.{os.getpid()}.tmp"
     try:
         if bild.save(zwischen, "PNG"):
             os.replace(zwischen, pfad)
-            _haken_geschrieben = True
+            return True
     except OSError:
         pass
     finally:
@@ -302,12 +412,84 @@ def _haken_bild_bereitstellen() -> None:
                 os.remove(zwischen)
             except OSError:
                 pass
+    return False
+
+
+def _strich_bild(punkte: list[tuple[float, float]], farbe: str, groesse: int, breite: float) -> QImage:
+    """Zeichnet einen abgerundeten Linienzug (Häkchen, Pfeil) auf durchsichtigem Grund."""
+    bild = QImage(groesse, groesse, QImage.Format_ARGB32)
+    bild.fill(Qt.transparent)
+    maler = QPainter(bild)
+    maler.setRenderHint(QPainter.Antialiasing)
+    stift = QPen(QColor(farbe), breite)
+    stift.setCapStyle(Qt.RoundCap)
+    stift.setJoinStyle(Qt.RoundJoin)
+    maler.setPen(stift)
+    maler.drawPolyline([QPointF(x, y) for x, y in punkte])
+    maler.end()
+    return bild
+
+
+def _haken_bild_bereitstellen() -> None:
+    """Zeichnet das weiße Häkchen für _QSS_CHECKBOX_ZUSATZ einmal je Programmlauf neu als
+    PNG (erst in eine Temp-Datei, dann per os.replace an seinen Platz). Scheitert das
+    (Ordner nicht beschreibbar), bleibt die angehakte Box nur akzentfarbig gefüllt - kein
+    Grund, den Programmstart oder den Designwechsel abzubrechen."""
+    global _haken_geschrieben
+    if _haken_geschrieben:
+        return
+    bild = _strich_bild([(7, 17), (13, 23), (25, 9)], "#FFFFFF", 32, 4)
+    if _bild_speichern(bild, _haken_pfad()):
+        _haken_geschrieben = True
+
+
+# Pfeile der Zahlenfelder (QSpinBox), je Richtung und Farbe eine Datei neben dem Häkchen.
+_PFEIL_PUNKTE = {
+    "hoch": [(5, 13), (10, 8), (15, 13)],
+    "runter": [(5, 8), (10, 13), (15, 8)],
+}
+# In diesem Programmlauf schon geschriebene Pfeil-Dateien (wie _haken_geschrieben).
+_pfeile_geschrieben: set[str] = set()
+
+
+def _pfeil_pfad(richtung: str, farbe: str) -> str:
+    """Ablageort eines Pfeil-Bildes: derselbe Ordner wie das Häkchen (_haken_pfad)."""
+    ordner = os.path.dirname(_haken_pfad())
+    return f"{ordner}/pfeil_{richtung}_{farbe.lstrip('#').upper()}.png"
+
+
+def _pfeil_farben(design: dict) -> dict[str, tuple[str, str]]:
+    """Platzhalter -> Farbe der vier Pfeil-Bilder (aktiv und gesperrt)."""
+    return {
+        "PFEIL_HOCH": ("hoch", design["TEXT_BUTTON"]),
+        "PFEIL_RUNTER": ("runter", design["TEXT_BUTTON"]),
+        "PFEIL_HOCH_AUS": ("hoch", design["TEXT_DISABLED"]),
+        "PFEIL_RUNTER_AUS": ("runter", design["TEXT_DISABLED"]),
+    }
+
+
+def _pfeile_bereitstellen(design: dict) -> None:
+    """Zeichnet die Pfeile der Zahlenfelder für das Design einmal je Programmlauf (Marco
+    01.11.2026). Scheitert das, zeigt das Feld nur leere Knöpfe - die Pfeiltasten der
+    Tastatur und das Mausrad funktionieren weiter."""
+    for richtung, farbe in _pfeil_farben(design).values():
+        pfad = _pfeil_pfad(richtung, farbe)
+        if pfad in _pfeile_geschrieben:
+            continue
+        # Doppelte Auflösung (20 px für 10 px im Stylesheet), damit es auch bei 150/200 %
+        # Bildschirmskalierung scharf bleibt.
+        bild = _strich_bild(_PFEIL_PUNKTE[richtung], farbe, 20, 2.4)
+        if _bild_speichern(bild, pfad):
+            _pfeile_geschrieben.add(pfad)
 
 
 # Hintergrund-Designs (unabhängig von der Akzentfarbe in _THEMES frei kombinierbar, siehe
 # Menü Ansicht -> Hintergrund). Die Großbuchstaben-Schlüssel füllen die gleichnamigen
-# @@...@@-Platzhalter in _QSS_TEMPLATE; "hell" entspricht bit-für-bit dem bisherigen
-# Aussehen (siehe test_theme.py). Die Kleinbuchstaben-Farbschlüssel (ok, warnung, fehler,
+# @@...@@-Platzhalter in _QSS_TEMPLATE; Standard ist "beagle" (Marco 01.11.2026, ersetzt
+# "Warm / Sand"; ein gespeichertes "sand" wird beim Lesen zu "beagle"). KOPF, KOPF_TEXT,
+# KOPF_TEXT2 (Unterzeile), KOPF_RAND und KOPF_HOVER färben Menüleiste und Kopfbalken, KARTE
+# die Gruppen (QGroupBox) und GRUPPE_TITEL deren Überschrift. "eigene_haken": True hängt
+# _QSS_CHECKBOX_ZUSATZ an. Die Kleinbuchstaben-Farbschlüssel (ok, warnung, fehler,
 # gedaempft, ungespeichert_bg, gesperrt_bg, zeile_bg) sind semantische Farben für Stellen, an denen der
 # Code selbst färbt (Tabellenzellen, HTML-Labels) - abgerufen über _farbe(), das seit
 # O9 (19.10.2026) auch die Großbuchstaben-Schlüssel liefert (FLAECHE, RAND …, für die selbst
@@ -317,9 +499,46 @@ def _haken_bild_bereitstellen() -> None:
 # und mischt die Auswahlfarbe aus Akzent und Hintergrund (siehe _darstellung_anwenden()).
 # Jedes Design - auch "hell" - setzt seine eigene QPalette.
 _DESIGNS: dict[str, dict] = {
-    "hell": {
-        "anzeigename": "Hell (Standard)",
+    "beagle": {
+        "anzeigename": "Beagle (Standard)",
         "dunkel": False,
+        "eigene_haken": True,
+        "HINTERGRUND": "#FBF8F3",
+        "FLAECHE": "#F2ECE2",
+        "FLAECHE_HOVER": "#EAE2D5",
+        "FLAECHE_PRESSED": "#E1D7C7",
+        "FLAECHE_DISABLED": "#F6F2EB",
+        "RAND": "#E2D9CB",
+        "RAND_DISABLED": "#ECE6DB",
+        "TEXT": "#2B2620",
+        "TEXT_STARK": "#1F1A15",
+        "TEXT_BUTTON": "#3A3229",
+        "TEXT_GEDAEMPFT": "#5E5549",
+        "PLATZHALTER": "#7A6F61",
+        "TEXT_HEADER": "#5E5549",
+        "TEXT_DISABLED": "#B3A898",
+        "TABELLE_ALT": "#FCFAF6",
+        "SCROLL": "#DCD2C3",
+        "SCROLL_HOVER": "#C9BCA8",
+        "KOPF": "#2F2B27",
+        "KOPF_TEXT": "#F4EEE4",
+        "KOPF_TEXT2": "#CDBFA9",
+        "KOPF_RAND": "#6A6560",
+        "KOPF_HOVER": "#4B4641",
+        "KARTE": "#FFFDF9",
+        "GRUPPE_TITEL": "#6A4325",
+        "ok": "#2E7D32",
+        "warnung": "#A15C00",
+        "fehler": "#B3261E",
+        "gedaempft": "#857A6C",
+        "ungespeichert_bg": "#FCEBC0",
+        "gesperrt_bg": "#D9D0C1",
+        "zeile_bg": "#FBF8F3",
+    },
+    "hell": {
+        "anzeigename": "Hell",
+        "dunkel": False,
+        "eigene_haken": False,
         "HINTERGRUND": "#FFFFFF",
         "FLAECHE": "#F1F4F8",
         "FLAECHE_HOVER": "#E7ECF3",
@@ -339,6 +558,13 @@ _DESIGNS: dict[str, dict] = {
         "TABELLE_ALT": "#FBFCFD",
         "SCROLL": "#D8DEE7",
         "SCROLL_HOVER": "#C3CBD8",
+        "KOPF": "#2B2F36",
+        "KOPF_TEXT": "#F3F5F8",
+        "KOPF_TEXT2": "#C2C9D3",
+        "KOPF_RAND": "#676A70",
+        "KOPF_HOVER": "#474B51",
+        "KARTE": "#FBFCFD",
+        "GRUPPE_TITEL": "#34425A",
         "ok": "#2E7D32",
         "warnung": "#B56A00",
         "fehler": "#C62828",
@@ -347,38 +573,10 @@ _DESIGNS: dict[str, dict] = {
         "gesperrt_bg": "#D5DBE3",
         "zeile_bg": "#FFFFFF",
     },
-    "sand": {
-        "anzeigename": "Warm / Sand",
-        "dunkel": False,
-        "HINTERGRUND": "#FBF8F3",
-        "FLAECHE": "#F2EDE4",
-        "FLAECHE_HOVER": "#EAE3D7",
-        "FLAECHE_PRESSED": "#E0D7C8",
-        "FLAECHE_DISABLED": "#F6F2EB",
-        "RAND": "#E3DBCD",
-        "RAND_DISABLED": "#ECE6DB",
-        "TEXT": "#2B2620",
-        "TEXT_STARK": "#1F1A14",
-        "TEXT_BUTTON": "#3A332A",
-        # UX-Test 02.10.2026, U14: dunkler (vorher #756B5E/#8C8172).
-        "TEXT_GEDAEMPFT": "#5E5549",
-        "PLATZHALTER": "#756B5E",  # UX-Test U14: heller als TEXT_GEDAEMPFT
-        "TEXT_HEADER": "#5E5549",
-        "TEXT_DISABLED": "#B3A898",
-        "TABELLE_ALT": "#F7F3EC",
-        "SCROLL": "#DDD4C5",
-        "SCROLL_HOVER": "#CABFAE",
-        "ok": "#2E7D32",
-        "warnung": "#A15C00",
-        "fehler": "#B3261E",
-        "gedaempft": "#857A6C",
-        "ungespeichert_bg": "#FCEBC0",
-        "gesperrt_bg": "#D9D0C1",
-        "zeile_bg": "#FBF8F3",
-    },
     "dunkel": {
         "anzeigename": "Dunkel",
         "dunkel": True,
+        "eigene_haken": True,
         "HINTERGRUND": "#1E2228",
         "FLAECHE": "#2A2F37",
         "FLAECHE_HOVER": "#333944",
@@ -396,6 +594,13 @@ _DESIGNS: dict[str, dict] = {
         "TABELLE_ALT": "#23272E",
         "SCROLL": "#454C57",
         "SCROLL_HOVER": "#58606C",
+        "KOPF": "#14171B",
+        "KOPF_TEXT": "#E6E9EE",
+        "KOPF_TEXT2": "#9AA4B2",
+        "KOPF_RAND": "#53565A",
+        "KOPF_HOVER": "#313439",
+        "KARTE": "#252A31",
+        "GRUPPE_TITEL": "#D7DEE8",
         "ok": "#6FCF97",
         "warnung": "#F2B84B",
         "fehler": "#FF7B72",
@@ -407,6 +612,7 @@ _DESIGNS: dict[str, dict] = {
     "kontrast": {
         "anzeigename": "Hoher Kontrast",
         "dunkel": False,
+        "eigene_haken": True,
         "HINTERGRUND": "#FFFFFF",
         "FLAECHE": "#FFFFFF",
         "FLAECHE_HOVER": "#E8E8E8",
@@ -424,6 +630,14 @@ _DESIGNS: dict[str, dict] = {
         "TABELLE_ALT": "#F2F2F2",
         "SCROLL": "#6E6E6E",
         "SCROLL_HOVER": "#3D3D3D",
+        # Kopf ohne Zwischentöne: schwarz, Schrift und Rand weiß (keine Transparenz).
+        "KOPF": "#000000",
+        "KOPF_TEXT": "#FFFFFF",
+        "KOPF_TEXT2": "#FFFFFF",
+        "KOPF_RAND": "#FFFFFF",
+        "KOPF_HOVER": "#333333",
+        "KARTE": "#FFFFFF",
+        "GRUPPE_TITEL": "#000000",
         "ok": "#0B6B2E",
         "warnung": "#8A4B00",
         "fehler": "#B00020",
@@ -438,8 +652,8 @@ _DESIGNS: dict[str, dict] = {
 # das helle akzent_hell aus _THEMES wäre auf dunklem Grund ein greller Balken.
 _AUSWAHL_MISCHANTEIL_DUNKEL = 0.35
 
-# Zuletzt per _darstellung_anwenden() gesetztes Design; _farbe() liest es. Standard "hell",
-# damit Tabs, die ohne main() erzeugt werden (GUI-Tests), die bisherigen Farben bekommen.
+# Zuletzt per _darstellung_anwenden() gesetztes Design; _farbe() liest es. Vorbelegt mit dem
+# Standard, damit Tabs, die ohne main() erzeugt werden (GUI-Tests), dessen Farben bekommen.
 _aktives_design = _DESIGN_DEFAULT
 
 
@@ -467,8 +681,10 @@ def _erzeuge_qss(theme_name: str, design_name: str = _DESIGN_DEFAULT) -> str:
     theme = _THEMES.get(theme_name, _THEMES[_THEME_DEFAULT])
     design = _DESIGNS.get(design_name, _DESIGNS[_DESIGN_DEFAULT])
     text = _QSS_TEMPLATE
-    if design_name in _DESIGNS and design_name != _DESIGN_DEFAULT:
+    if design.get("eigene_haken"):
         text += _QSS_CHECKBOX_ZUSATZ.replace("@@HAKEN@@", _qss_url(_haken_pfad()))
+    for platzhalter, (richtung, farbe) in _pfeil_farben(design).items():
+        text = text.replace(f"@@{platzhalter}@@", _qss_url(_pfeil_pfad(richtung, farbe)))
     text = text.replace("@@AKZENT_HOVER@@", theme["akzent_hover"])
     text = text.replace("@@AKZENT_PRESSED@@", theme["akzent_pressed"])
     text = text.replace("@@AKZENT_HELL@@", _auswahlfarbe(theme, design))
@@ -496,17 +712,27 @@ def _gespeichertes_theme_lesen() -> str:
     """Liest das zuletzt gewählte Theme pro Windows-Benutzer (QSettings/Registry)."""
     einstellungen = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     wert = einstellungen.value(_SETTINGS_KEY_THEME, _THEME_DEFAULT)
-    return wert if wert in _THEMES else _THEME_DEFAULT
+    # Wie beim Design: ein nicht als Text gespeicherter Wert (z. B. von Hand in der Registry)
+    # ergibt den Standard statt eines TypeError beim Start (Verifikation 01.11.2026).
+    return wert if isinstance(wert, str) and wert in _THEMES else _THEME_DEFAULT
 
 
 def _theme_speichern(theme_name: str) -> None:
     QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_KEY_THEME, theme_name)
 
 
+# Gespeicherte Namen früherer Designs -> heutiger Name.
+_ALTE_DESIGNS = {"sand": "beagle"}
+
+
 def _gespeichertes_design_lesen() -> str:
-    """Liest das zuletzt gewählte Hintergrund-Design pro Windows-Benutzer."""
+    """Liest das zuletzt gewählte Hintergrund-Design pro Windows-Benutzer. Das frühere
+    „Warm / Sand“ ist im Design „Beagle“ aufgegangen (Marco 01.11.2026)."""
     einstellungen = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
     wert = einstellungen.value(_SETTINGS_KEY_DESIGN, _DESIGN_DEFAULT)
+    if not isinstance(wert, str):  # z. B. eine von Hand verstellte Registry
+        return _DESIGN_DEFAULT
+    wert = _ALTE_DESIGNS.get(wert, wert)
     return wert if wert in _DESIGNS else _DESIGN_DEFAULT
 
 
@@ -591,7 +817,8 @@ def _darstellung_anwenden(app: QApplication) -> None:
     if schema is not None and hasattr(hinweise, "setColorScheme"):
         hinweise.setColorScheme(schema.Dark if design["dunkel"] else schema.Light)
     app.setPalette(_design_palette(theme, design))
-    if design_name != _DESIGN_DEFAULT:
+    if design.get("eigene_haken"):
         _haken_bild_bereitstellen()
+    _pfeile_bereitstellen(design)
     _aktives_design = design_name
     app.setStyleSheet(_erzeuge_qss(theme_name, design_name))

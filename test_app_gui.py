@@ -78,7 +78,7 @@ from desktop_programm import VERSION, VersionDialog
 from desktop_verwaltung import DatensicherungTab, VerwaltungTab
 from desktop_zeitplan import ZeitplanTab
 from db import ALLE_DISZIPLINEN
-from desktop_gemeinsam import _ABBRUCH_SPALTE, _DQ_SPALTE, _STATUS_SPALTE, _aktualisiere_veranstaltung_feld
+from desktop_gemeinsam import _ABBRUCH_SPALTE, _DQ_SPALTE, _STATUS_SPALTE, _aktualisiere_veranstaltung_feld, symbol
 
 
 # Hinweistexte der letzten Speichermeldungen (siehe gespeichert_meldungen).
@@ -198,6 +198,16 @@ def _termine_ordner_schuetzen(monkeypatch, tmp_path_factory):
     return ordner
 
 
+@pytest.fixture(autouse=True)
+def _bilder_ordner_schuetzen(monkeypatch, tmp_path_factory):
+    """Häkchen, Pfeile und Symbol-PNGs (desktop_darstellung/desktop_gemeinsam.symbol_png)
+    landen in einem Temp-Ordner statt im echten Benutzerprofil (Marco 01.11.2026). Tests
+    mit eigenem Pfad (darstellung_speicher) ersetzen _haken_pfad danach noch einmal."""
+    import desktop_darstellung as darstellung
+    ordner = tmp_path_factory.mktemp("bilder")
+    monkeypatch.setattr(darstellung, "_haken_pfad", lambda: f"{ordner}/haken.png".replace("\\", "/"))
+
+
 def test_termine_ordner_ist_in_allen_modulen_geschuetzt(_termine_ordner_schuetzen):
     """Gegenprobe zum Schutz oben: kein Desktop-Modul (auch db und db_sicherung) nutzt im
     Test die echte Funktion termine_ordner; alle liefern den Temp-Ordner des Schutzes."""
@@ -315,7 +325,8 @@ def test_qss_modern_minimal_enthaelt_kernselektoren():
     qss_blau = _erzeuge_qss("blau")
     assert "QTabBar::tab:selected" in qss_blau
     assert "QPushButton#primaerButton" in qss_blau
-    assert "#2F6FED" in qss_blau  # Akzentfarbe des Standard-Themes "blau"
+    assert "#2F6FED" in qss_blau  # Akzentfarbe des Themes "blau"
+    assert "#8C5A32" in _erzeuge_qss("lohbraun")  # Standard seit Marco 01.11.2026
 
 
 def test_teilnehmer_hinzufuegen_ist_primaerbutton(qtbot, conn):
@@ -1004,6 +1015,24 @@ def test_programmsymbol_und_selbsttest_schritt(qtbot, tmp_path, monkeypatch):
     protokoll = tmp_path / "symbol.log"
     assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 1
     assert "FEHLER  Programmsymbol" in protokoll.read_text(encoding="utf-8")
+
+
+def test_selbsttest_schritt_symbole(qtbot, tmp_path, monkeypatch):
+    """Erscheinungsbild „Beagle“ (Marco 01.11.2026): fehlen die SVGs im Bundle, meldet der
+    Selbsttest das als Fehler."""
+    import desktop_gemeinsam
+    import selbsttest
+
+    protokoll = tmp_path / "ok.log"
+    selbsttest.fuehre_selbsttest_aus(str(protokoll))
+    assert f"OK      Symbole ({len(desktop_gemeinsam.SYMBOL_NAMEN)} Symbole (QtSvg))" in protokoll.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(desktop_gemeinsam, "_symbol_zwischenspeicher", {})
+    monkeypatch.setattr(desktop_gemeinsam, "symbol_pfad", lambda name: str(tmp_path / f"{name}.svg"))
+    protokoll = tmp_path / "fehler.log"
+    assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 1
+    text = protokoll.read_text(encoding="utf-8")
+    assert "FEHLER  Symbole" in text and "check.svg" in text
 
 
 def test_selbsttest_schritt_lizenztexte(qtbot, tmp_path, monkeypatch):
@@ -2301,7 +2330,7 @@ def test_hilfe_button_ist_sichtbar_und_oeffnet_hilfedialog(qtbot, termin, monkey
     qtbot.addWidget(fenster)
     fenster.show()
 
-    hilfe_buttons = [b for b in fenster.findChildren(QPushButton) if b.text() == "❓ Hilfe"]
+    hilfe_buttons = [b for b in fenster.findChildren(QPushButton) if b.text() == "Hilfe"]
     assert len(hilfe_buttons) == 1
     hilfe_btn = hilfe_buttons[0]
     assert hilfe_btn.isVisible()
@@ -2326,7 +2355,7 @@ def test_version_button_ist_sichtbar_und_oeffnet_versiondialog(qtbot, termin, mo
     qtbot.addWidget(fenster)
     fenster.show()
 
-    version_buttons = [b for b in fenster.findChildren(QPushButton) if b.text() == f"ℹ️ Version {VERSION}"]
+    version_buttons = [b for b in fenster.findChildren(QPushButton) if b.text() == f"Version {VERSION}"]
     assert len(version_buttons) == 1
     version_btn = version_buttons[0]
     assert version_btn.isVisible()
@@ -4449,8 +4478,9 @@ def test_teilnehmerliste_zeigt_warnung_bei_fehlender_chipnr_und_gegenstaenden(qt
     assert tab.tabelle.horizontalHeaderItem(7).text() == "Anmerkungen"
 
     text_unvollstaendig = tab.tabelle.item(zeile_unvollstaendig, 7).text()
-    assert text_unvollstaendig.startswith("⚠")
-    assert "Chip-Nr." in text_unvollstaendig
+    # Warndreieck als Symbol an der Zelle statt „⚠“ im Text (Marco 01.11.2026).
+    assert text_unvollstaendig.startswith("Chip-Nr.")
+    assert not tab.tabelle.item(zeile_unvollstaendig, 7).icon().isNull()
     # UX-Test 02.10.2026, U14: Gegenstände erscheinen als "noch offen" statt "fehlt".
     assert "Gegenstand noch offen" in text_unvollstaendig
     assert tab.tabelle.item(zeile_vollstaendig, 7).text() == ""
@@ -4474,7 +4504,7 @@ def test_teilnehmerliste_zeigt_nur_info_statt_fehler_wenn_gegenstand_auf_frei_st
     )
     zelle = tab.tabelle.item(zeile, 7)
     assert zelle.text() == "Gegenstand der Suchdisziplin nicht zugeordnet"
-    assert not zelle.text().startswith("⚠")
+    assert zelle.icon().isNull()
     assert not zelle.font().bold()
 
 
@@ -5884,6 +5914,7 @@ def darstellung_speicher(monkeypatch, tmp_path_factory):
     hinweise = qapp.styleHints()
     for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil", "_haken_geschrieben"):
         monkeypatch.setattr(darstellung, name, getattr(darstellung, name))
+    monkeypatch.setattr(darstellung, "_pfeile_geschrieben", set())
     # Häkchen-Bild nicht ins echte Benutzerprofil schreiben.
     haken = tmp_path_factory.mktemp("haken") / "haken.png"
     monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(haken).replace("\\", "/"))
@@ -5907,8 +5938,8 @@ def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellun
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
 
-    assert set(fenster._design_actions) == {"hell", "sand", "dunkel", "kontrast"}
-    assert set(fenster._theme_actions) == {"blau", "gruen", "violett"}
+    assert set(fenster._design_actions) == {"beagle", "hell", "dunkel", "kontrast"}
+    assert set(fenster._theme_actions) == {"lohbraun", "blau", "gruen", "violett"}
     assert fenster._design_actions["hell"].isChecked()
     assert fenster._theme_actions["blau"].isChecked()
 
@@ -7487,7 +7518,11 @@ def test_seitenleiste_maskiert_namen(qtbot, termin):
     tab.aktualisieren()
     text = tab._offene_starts_label.text()
     assert "&lt;img" in text
-    assert "<img" not in text
+    # Einzige echte Bilder: die eigenen Symbole (symbol_png, Marco 01.11.2026).
+    import re
+    bilder = re.findall(r'<img src="([^"]*)"', text)
+    assert bilder and all("/symbole/" in quelle and quelle.endswith(".png") for quelle in bilder)
+    assert '<img src="x.png"' not in text
 
 
 def test_meldungsfenster_zeigen_reinen_text(monkeypatch):
@@ -7522,7 +7557,7 @@ def test_klartext_tooltip_maskiert_namen():
 
 
 def test_zeitplan_markiert_ueberschneidungen(qtbot, termin):
-    """UX-Test 02.10.2026, U2b: betroffene Zeilen rot mit ⚠ und Tooltip, Seitenleiste
+    """UX-Test 02.10.2026, U2b: betroffene Zeilen rot mit Warndreieck und Tooltip, Seitenleiste
     zeigt einen Warnbereich je Team; der Mindestabstand ist einstellbar und gespeichert."""
     from PySide6.QtWidgets import QListWidget
 
@@ -7537,11 +7572,13 @@ def test_zeitplan_markiert_ueberschneidungen(qtbot, termin):
     spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
     listen = [lw for spalte in spalten if spalte is not None for lw in spalte.findChildren(QListWidget)]
     zeilen = [lw.item(i) for lw in listen for i in range(lw.count())]
-    markiert = [z for z in zeilen if z.text().startswith("⚠")]
-    assert len(markiert) == 6
-    assert "gleichzeitig" in markiert[0].toolTip()
+    warnsymbol = symbol("alert-triangle", "fehler").cacheKey()
+    markiert = [z for z in zeilen if z.icon().cacheKey() == warnsymbol]
+    teilnehmer = [z for z in markiert if not z.font().bold()]
+    assert len(teilnehmer) == 6
+    assert "gleichzeitig" in teilnehmer[0].toolTip()
     # Verifikation U9: auch die Blockköpfe der betroffenen Blöcke sind markiert.
-    assert sum(1 for z in zeilen if z.text().startswith("▸ ⚠")) == 3
+    assert sum(1 for z in markiert if z.font().bold()) == 3
     seitenleiste = tab._offene_starts_label.text()
     assert "Überschneidungen (2 Team(s))" in seitenleiste
     assert "Nr. 1 Muster" in seitenleiste
@@ -7592,7 +7629,8 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
     spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
     liste = next(lw for sp in spalten if sp is not None for lw in sp.findChildren(QListWidget))
     texte = [liste.item(i).text() for i in range(liste.count())]
-    assert texte[0].startswith("▸ ED LK 1 – Flächensuche  (2 Teilnehmer")
+    assert texte[0].startswith("ED LK 1 – Flächensuche  (2 Teilnehmer")
+    assert liste.item(0).icon().cacheKey() == symbol("chevron-right", "TEXT_GEDAEMPFT").cacheKey()
     assert liste.item(0).font().bold()
     assert texte[1].lstrip().startswith("09:00") and "Nr. 1" in texte[1]
 
@@ -7680,7 +7718,7 @@ def test_gegenstand_offen_ist_dezent_und_entfaellt_bei_keine_teilnahme(qtbot, co
 
 def test_ergebniserfassung_leere_zeile_zeigt_noch_kein_ergebnis(qtbot, termin):
     """UX-Test 02.10.2026, K1: leere Zeilen zeigen "noch kein Ergebnis" statt
-    "✓ gespeichert"; nach dem Speichern eines Ergebnisses "✓ gespeichert"."""
+    "gespeichert"; nach dem Speichern eines Ergebnisses "gespeichert" mit Haken-Symbol."""
     from app import _STATUS_SPALTE
 
     conn, pfad = termin
@@ -7689,9 +7727,13 @@ def test_ergebniserfassung_leere_zeile_zeigt_noch_kein_ergebnis(qtbot, termin):
     qtbot.addWidget(fenster)
     tab = fenster.ergebnis_tab
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "noch kein Ergebnis"
+    assert tab.tabelle.item(0, _STATUS_SPALTE).icon().isNull()
     tab.punkte_eintragen(0, "Flächensuche", "50", "30")
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "nicht gespeichert"
+    assert tab.tabelle.item(0, _STATUS_SPALTE).icon().cacheKey() == symbol("device-floppy", "warnung").cacheKey()
     tab.alle_speichern()
-    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "✓ gespeichert"
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "gespeichert"
+    assert tab.tabelle.item(0, _STATUS_SPALTE).icon().cacheKey() == symbol("check", "ok").cacheKey()
 
 
 def test_auswertung_namensliste_vorname_nachname(qtbot, termin):
@@ -7789,7 +7831,7 @@ def test_demo_button_im_hauptfenster_startet_demo(qtbot, termin, monkeypatch):
             gestartet.append("gestartet")
 
     monkeypatch.setattr("app.DemoTour", _TourAttrappe)
-    knoepfe = [b for b in fenster.findChildren(QPushButton) if b.text() == "🎓 Demoprüfung"]
+    knoepfe = [b for b in fenster.findChildren(QPushButton) if b.text() == "Demoprüfung"]
     assert len(knoepfe) == 1 and knoepfe[0].isVisible()
 
     qtbot.mouseClick(knoepfe[0], Qt.MouseButton.LeftButton)
@@ -7803,7 +7845,7 @@ def test_demo_button_im_startdialog(qtbot, monkeypatch, tmp_path):
     dialog = StartDialog()
     qtbot.addWidget(dialog)
     dialog.show()
-    knoepfe = [b for b in dialog.findChildren(QPushButton) if b.text() == "🎓 Demoprüfung"]
+    knoepfe = [b for b in dialog.findChildren(QPushButton) if b.text() == "Demoprüfung"]
     assert len(knoepfe) == 1
 
     qtbot.mouseClick(knoepfe[0], Qt.MouseButton.LeftButton)
@@ -8171,6 +8213,85 @@ def test_demo_erklaerfenster_bleibt_im_bildschirm_und_springt_nicht_doppelt(
     tour.beenden()
 
 
+def test_demo_erklaerfenster_waechst_mit_dem_hinweis(qtbot):
+    """A4-Prüfung am echten Windows (Marco 01.11.2026): kam während eines Schritts
+    „Gespeichert unter …“ samt „PDF öffnen“ dazu, wuchs das Fenster nicht mit und der
+    Erklärtext war mitten in der Zeile abgeschnitten."""
+    import desktop_demo
+    from PySide6.QtWidgets import QWidget
+
+    eltern = QWidget()
+    qtbot.addWidget(eltern)
+    panel = desktop_demo.DemoPanel(eltern)
+    schritt = desktop_demo.DemoSchritt("13. Ergebnisliste als PDF", "Erklärung mit vielen Wörtern. " * 25)
+    panel.anzeigen(13, 15, schritt, letzter=False)
+    qtbot.waitExposed(panel)
+    hoehe_vorher, breite_vorher = panel.height(), panel.width()
+    panel.hinweis("Gespeichert unter: C:\\Users\\Name\\AppData\\Local\\Temp\\shs_demo_abc\\"
+                  "Hundefreunde-Musterstadt\\Ergebnisliste_2026-11-01.pdf")
+    panel.extra("PDF öffnen", lambda: None)
+    qtbot.wait(50)
+    assert panel.height() > hoehe_vorher
+    assert panel.width() == breite_vorher  # nicht breiter (sonst ragte es rechts hinaus)
+    text = panel.text_label
+    assert text.height() >= text.heightForWidth(text.width())
+    panel.schliessen()
+
+
+def test_demo_weiter_knopf_bleibt_an_derselben_stelle(qtbot, termin, demo_umgebung):
+    """Marco 01.11.2026 (in 1.0.52 beobachtet): Erklärfenster änderten je Schritt Größe und
+    Lage, man musste „Weiter“ jedes Mal mit der Maus suchen. Jetzt bleiben Unterkante und
+    Breite fest, das Fenster wächst nach oben - solange es nicht ausweichen muss."""
+    from PySide6.QtCore import QPoint
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    panel = tour._panel
+    panel.ausweichen = lambda ziel: None  # nur die Größenänderung prüfen, nicht das Ausweichen
+    lagen, hoehen = set(), set()
+    while not tour.ist_beendet and tour._index + 1 < len(tour._schritte) - 1:
+        tour.weiter()
+        rechts_unten = panel.weiter_btn.mapToGlobal(QPoint(panel.weiter_btn.width(), panel.weiter_btn.height()))
+        lagen.add((rechts_unten.x(), rechts_unten.y()))
+        hoehen.add(panel.height())
+    tour.beenden()
+    assert len(hoehen) > 1  # die Schritte sind unterschiedlich lang ...
+    assert len(lagen) == 1, lagen  # ... „Weiter“ steht trotzdem immer an derselben Stelle
+
+
+def test_demo_erklaerfenster_bleibt_wo_der_anwender_es_hinschiebt(qtbot):
+    """Marco 01.11.2026: verschiebt der Anwender das Erklärfenster oder zieht es selbst am
+    unteren Rand größer, gilt die neue Unterkante - das Programm schiebt es nicht zurück."""
+    import desktop_demo
+    from PySide6.QtWidgets import QWidget
+
+    eltern = QWidget()
+    qtbot.addWidget(eltern)
+    panel = desktop_demo.DemoPanel(eltern)
+    kurz = desktop_demo.DemoSchritt("1. Kurz", "Wenig Text.")
+    lang = desktop_demo.DemoSchritt("2. Lang", "Erklärung mit vielen Wörtern. " * 25)
+    panel.anzeigen(1, 2, kurz, letzter=False)
+    qtbot.waitExposed(panel)
+    frei = panel.screen().availableGeometry()
+    # Vom Anwender nach links gezogen, Unterkante 100 px über dem Bildschirmrand (Platz zum
+    # Wachsen nach oben und für die 30 px weiter unten).
+    panel.move(frei.left() + 40, frei.bottom() - 100 - panel.frameGeometry().height())
+    unten = panel.frameGeometry().bottom()
+    assert unten - 400 > frei.top()
+    panel.anzeigen(2, 2, lang, letzter=False)
+    assert panel.frameGeometry().bottom() == unten  # wächst nach oben, Unterkante bleibt
+    # Selbst am unteren Rand größer gezogen: bleibt so, die neue Unterkante gilt.
+    panel.resize(panel.width(), panel.height() + 30)
+    assert panel.frameGeometry().bottom() == unten + 30
+    panel.anzeigen(1, 2, kurz, letzter=False)
+    assert panel.frameGeometry().bottom() == unten + 30
+    panel.schliessen()
+
+
 def test_demo_schritt_4_prueft_eigene_eingaben(qtbot, termin, demo_umgebung, monkeypatch):
     """Teil 10 Nr. 3: unvollständige eigene Eingaben im Demo-Dialog halten die Demo mit
     Hinweis an, statt einen Teilnehmer ohne Pflichtangaben zu speichern."""
@@ -8219,7 +8340,7 @@ def test_demo_knopf_holt_erklaerfenster_zurueck(qtbot, termin, demo_umgebung, mo
     fenster.demo_btn.click()
     assert tour._panel.isVisible()
     tour.beenden()
-    assert fenster.demo_btn.text() == "🎓 Demoprüfung"
+    assert fenster.demo_btn.text() == "Demoprüfung"
 
 
 def test_demo_startfehler_im_startdialog_weg_fuehrt_zurueck(qtbot, monkeypatch):
@@ -8312,16 +8433,16 @@ def test_demo_zaehlt_nach_fertigem_schritt_herunter_und_schaltet_weiter(qtbot, t
     schaltet dann von allein weiter (Tick hier direkt statt nach je 1 s)."""
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3)
     assert tour._index == 0 and tour._countdown.isActive()
-    assert tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    assert tour._panel.weiter_btn.text() == "Weiter (3)"
 
     tour._countdown_tick()
-    assert tour._panel.weiter_btn.text() == "Weiter ▶ (2)"
+    assert tour._panel.weiter_btn.text() == "Weiter (2)"
     tour._countdown_tick()
     tour._countdown_tick()
 
     assert tour._index == 1
     # Neuer Schritt fertig (TEMPO 0) -> frischer Countdown.
-    assert tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    assert tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter (3)"
     tour.beenden()
 
 
@@ -8333,7 +8454,7 @@ def test_demo_countdown_startet_erst_wenn_der_schritt_fertig_ist(qtbot, termin, 
     tour._countdown_stoppen()
     tour._schritt_zeigen(1)  # „1. Neuen Termin anlegen“ tippt mit Pausen
     assert tour._offen and not tour._countdown.isActive()
-    assert tour._panel.weiter_btn.text() == "Weiter ▶"
+    assert tour._panel.weiter_btn.text() == "Weiter"
 
     tour._alles_sofort()
 
@@ -8348,7 +8469,7 @@ def test_demo_klick_auf_weiter_waehrend_des_countdowns_geht_genau_einen_schritt(
     qtbot.mouseClick(tour._panel.weiter_btn, Qt.MouseButton.LeftButton)
 
     assert tour._index == 1
-    assert tour._rest == 3 and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    assert tour._rest == 3 and tour._panel.weiter_btn.text() == "Weiter (3)"
     tour.beenden()
 
 
@@ -8357,7 +8478,7 @@ def test_demo_automatisch_weiter_abschaltbar(qtbot, termin, demo_umgebung, monke
     assert tour._panel.auto_box.isChecked()
 
     tour._panel.auto_box.setChecked(False)
-    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶"
+    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter"
     tour.weiter()
     assert tour._index == 1 and not tour._countdown.isActive()
 
@@ -8370,7 +8491,7 @@ def test_demo_kein_countdown_im_letzten_schritt_und_nach_fehler(qtbot, termin, d
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
     _demo_bis(tour, "15.")
     assert not tour._countdown.isActive()
-    assert tour._panel.weiter_btn.text() == "Fertig ✔"
+    assert tour._panel.weiter_btn.text() == "Fertig"
     tour.beenden()
 
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
@@ -8399,7 +8520,7 @@ def test_demo_pdf_oeffnen_haelt_den_countdown_an(qtbot, termin, demo_umgebung, m
     qtbot.mouseClick(tour._panel.extra_btn, Qt.MouseButton.LeftButton)
 
     assert len(geoeffnet) == 1
-    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter ▶"
+    assert not tour._countdown.isActive() and tour._panel.weiter_btn.text() == "Weiter"
     # Verifikation 05.10.2026, Punkt 4: sichtbarer Hinweis, warum es nicht weitergeht.
     assert not tour._panel.pause_label.isHidden()
     assert "angehalten" in tour._panel.pause_label.text()
@@ -8421,11 +8542,11 @@ def test_demo_countdown_wartet_solange_ein_sperrendes_fenster_offen_ist(qtbot, t
     for _ in range(5):
         tour._countdown_tick()
     # Zahl steht; nach dem Schließen bleiben mindestens AUTO_WEITER_NACH_MODAL_S (3).
-    assert tour._index == 0 and tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    assert tour._index == 0 and tour._panel.weiter_btn.text() == "Weiter (3)"
 
     modal["offen"] = False
     tour._countdown_tick()  # erster Tick danach startet nur den Takt neu
-    assert tour._panel.weiter_btn.text() == "Weiter ▶ (3)"
+    assert tour._panel.weiter_btn.text() == "Weiter (3)"
     tour._countdown_tick()
     tour._countdown_tick()
     assert tour._index == 0
@@ -8549,3 +8670,825 @@ def test_screenshot_skript_erzeugt_alle_bilder(tmp_path, monkeypatch):
         bild = QImage(str(tmp_path / f"{name}.png"))
         assert not bild.isNull(), f"{name}.png fehlt"
         assert (bild.width(), bild.height()) == (breite, hoehe), name
+
+
+# --- Abdeckung 01.11.2026 (OFFEN B10): Zeitplan-Bearbeitung über die Oberfläche ----------
+
+
+def _zeitplan_spalten(tab) -> list:
+    """Die Richter-Spalten (QGroupBox) des Zeitplan-Reiters in der angezeigten Reihenfolge."""
+    from PySide6.QtWidgets import QGroupBox
+
+    spalten = []
+    for i in range(tab._spalten_layout.count()):
+        widget = tab._spalten_layout.itemAt(i).widget()
+        if isinstance(widget, QGroupBox):
+            spalten.append(widget)
+    return spalten
+
+
+def _zeitplan_spalte(tab, name):
+    return next(s for s in _zeitplan_spalten(tab) if s.title() == name)
+
+
+def _zeitplan_titel(tab) -> list[str]:
+    return [s.title() for s in _zeitplan_spalten(tab)]
+
+
+def _knopf(widget, text) -> QPushButton:
+    return next(b for b in widget.findChildren(QPushButton) if b.text() == text)
+
+
+def _symbolknopf(widget, tooltip) -> QPushButton:
+    """Knopf nur mit Symbol (ohne Text), gefunden über den Tooltip."""
+    return next(b for b in widget.findChildren(QPushButton) if not b.text() and b.toolTip() == tooltip)
+
+
+def _zeitplan_liste(spalte):
+    from PySide6.QtWidgets import QListWidget
+
+    return spalte.findChild(QListWidget)
+
+
+def _richter_namen(connection) -> list[str]:
+    from db import list_zeitplan_richter
+
+    return [r["name"] for r in list_zeitplan_richter(connection)]
+
+
+def _zeitplan_tab(qtbot, connection) -> ZeitplanTab:
+    # Bewusst ohne show(): showEvent würde Richter aus den Veranstaltungsdaten anlegen.
+    tab = ZeitplanTab(connection)
+    qtbot.addWidget(tab)
+    return tab
+
+
+def test_zeitplan_richter_anlegen_umbenennen_verschieben_ueber_knoepfe(qtbot, conn, monkeypatch):
+    """Abdeckung 01.11.2026 (B10): Richter anlegen, umbenennen (auch Abbrechen und leerer
+    Name) und nach links/rechts verschieben über die Knöpfe; Datenbank und Spalten folgen."""
+    tab = _zeitplan_tab(qtbot, conn)
+    assert _zeitplan_titel(tab) == []
+
+    _knopf(tab, "Richter hinzufügen").click()
+    _knopf(tab, "Richter hinzufügen").click()
+    assert _richter_namen(conn) == ["Richter 1", "Richter 2"]
+    assert _zeitplan_titel(tab) == ["Richter 1", "Richter 2"]
+
+    vorbelegt = []
+    antworten = [("  Frau Weber  ", True), ("Anders", False), ("   ", True)]
+
+    def _text(*_a, text="", **_k):
+        vorbelegt.append(text)
+        return antworten.pop(0)
+
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getText", _text)
+    _knopf(_zeitplan_spalte(tab, "Richter 1"), "Umbenennen…").click()
+    assert _richter_namen(conn) == ["Frau Weber", "Richter 2"]
+    assert _zeitplan_titel(tab) == ["Frau Weber", "Richter 2"]
+    _knopf(_zeitplan_spalte(tab, "Frau Weber"), "Umbenennen…").click()  # Abbrechen
+    _knopf(_zeitplan_spalte(tab, "Frau Weber"), "Umbenennen…").click()  # nur Leerzeichen
+    assert _richter_namen(conn) == ["Frau Weber", "Richter 2"]
+    assert vorbelegt == ["Richter 1", "Frau Weber", "Frau Weber"] and antworten == []
+
+    _symbolknopf(_zeitplan_spalte(tab, "Frau Weber"), "Spalte nach rechts verschieben").click()
+    assert _richter_namen(conn) == ["Richter 2", "Frau Weber"]
+    assert _zeitplan_titel(tab) == ["Richter 2", "Frau Weber"]
+    _symbolknopf(_zeitplan_spalte(tab, "Frau Weber"), "Spalte nach rechts verschieben").click()  # schon ganz rechts
+    assert _zeitplan_titel(tab) == ["Richter 2", "Frau Weber"]
+    _symbolknopf(_zeitplan_spalte(tab, "Frau Weber"), "Spalte nach links verschieben").click()
+    assert _richter_namen(conn) == ["Frau Weber", "Richter 2"]
+    assert _zeitplan_titel(tab) == ["Frau Weber", "Richter 2"]
+
+
+def test_zeitplan_richter_loeschen_nur_nach_rueckfrage(qtbot, conn, monkeypatch):
+    """Abdeckung 01.11.2026 (B10): „Richter löschen“ fragt mit Vorgabe „Nein“; bei „Nein“
+    bleibt alles, bei „Ja“ verschwinden Richter, Spalte und seine Einträge."""
+    from db import list_zeitplan_eintraege
+
+    r1 = add_zeitplan_richter(conn, "R1")
+    r2 = add_zeitplan_richter(conn, "R2")
+    add_zeitplan_pruefungsblock(conn, r1, "ED", 1, "Flächensuche", 10)
+    add_zeitplan_pruefungsblock(conn, r2, "ED", 2, "Flächensuche", 10)
+    tab = _zeitplan_tab(qtbot, conn)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No, QMessageBox.Yes, merke="text_vorgabe")
+
+    _knopf(_zeitplan_spalte(tab, "R1"), "Richter löschen").click()
+    assert _richter_namen(conn) == ["R1", "R2"] and _zeitplan_titel(tab) == ["R1", "R2"]
+    assert len(list_zeitplan_eintraege(conn, r1)) == 1
+
+    _knopf(_zeitplan_spalte(tab, "R1"), "Richter löschen").click()
+    assert _richter_namen(conn) == ["R2"] and _zeitplan_titel(tab) == ["R2"]
+    assert conn.execute("SELECT COUNT(*) FROM zeitplan_eintrag WHERE richter_id = ?", (r1,)).fetchone()[0] == 0
+    assert len(list_zeitplan_eintraege(conn, r2)) == 1
+    assert len(fragen) == 2
+    assert all("„R1“" in text and vorgabe == QMessageBox.No for text, vorgabe in fragen)
+
+
+def test_zeitplan_pruefungsblock_hinzufuegen_mit_echtem_dialog(qtbot, conn, monkeypatch):
+    """Abdeckung 01.11.2026 (B10): „Prüfungsblock hinzufügen…“ baut den echten Dialog mit
+    der Standard-Prüfungsdauer auf, legt den Block mit den gewählten Werten an und zeigt
+    ihn samt Teilnehmer; Abbrechen legt nichts an."""
+    from db import list_zeitplan_eintraege
+    from desktop_dialoge import PruefungsblockDialog
+
+    r1 = add_zeitplan_richter(conn, "R1")
+    _teilnehmer_anlegen(conn, stufe=2, nachname="Blockmann")
+    tab = _zeitplan_tab(qtbot, conn)
+    tab.standard_dauer.setValue(7)
+    vorgaben = []
+
+    def _ausfuellen(dialog):
+        vorgaben.append(dialog.dauer_minuten.value())
+        dialog.art.setCurrentText("ED")
+        dialog.stufe.setCurrentText("2")
+        dialog.disziplin.setCurrentText("Flächensuche")
+        dialog.dauer_minuten.setValue(12)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(PruefungsblockDialog, "exec", _ausfuellen)
+    _knopf(_zeitplan_spalte(tab, "R1"), "Prüfungsblock hinzufügen…").click()
+
+    assert vorgaben == [7]
+    eintraege = list_zeitplan_eintraege(conn, r1)
+    assert [(e["typ"], e["art"], e["stufe"], e["disziplin"], e["dauer_minuten"]) for e in eintraege] == [
+        ("pruefung", "ED", 2, "Flächensuche", 12)
+    ]
+    liste = _zeitplan_liste(_zeitplan_spalte(tab, "R1"))
+    texte = [liste.item(i).text() for i in range(liste.count())]
+    assert len(texte) == 2
+    assert texte[0].startswith("ED LK 2 – Flächensuche  (1 Teilnehmer")
+    assert "Blockmann" in texte[1]
+
+    monkeypatch.setattr(PruefungsblockDialog, "exec", lambda _dialog: QDialog.Rejected)
+    _knopf(_zeitplan_spalte(tab, "R1"), "Prüfungsblock hinzufügen…").click()
+    assert len(list_zeitplan_eintraege(conn, r1)) == 1
+
+
+def test_zeitplan_eintrag_verschieben_bearbeiten_entfernen_ueber_knoepfe(qtbot, conn, monkeypatch):
+    """Abdeckung 01.11.2026 (B10): Hoch/Runter (auch am Rand), Bearbeiten von Pause und
+    Prüfungsblock (jeweils auch Abbrechen) und Entfernen über die Knöpfe einer Spalte; ohne
+    markierte Zeile kommt ein Hinweis bzw. passiert nichts. „Entfernen“ fragt nach (Vorgabe
+    „Nein“, Marcos Entscheidung 01.11.2026)."""
+    from db import add_zeitplan_pause, list_zeitplan_eintraege, zeitplan_eintrag
+    from desktop_dialoge import PauseDialog
+
+    r1 = add_zeitplan_richter(conn, "R1")
+    block = add_zeitplan_pruefungsblock(conn, r1, "ED", 1, "Flächensuche", 10)
+    pause = add_zeitplan_pause(conn, r1, 20, "Mittag")
+    _teilnehmer_anlegen(conn)
+    tab = _zeitplan_tab(qtbot, conn)
+
+    def _reihenfolge():
+        return [e["id"] for e in list_zeitplan_eintraege(conn, r1)]
+
+    def _spalte():
+        return _zeitplan_spalte(tab, "R1")
+
+    def _markieren(eintrag_id):
+        liste = _zeitplan_liste(_spalte())
+        zeile = next(i for i in range(liste.count()) if liste.item(i).data(Qt.UserRole) == eintrag_id)
+        liste.setCurrentRow(zeile)
+
+    def _markiert():
+        item = _zeitplan_liste(_spalte()).currentItem()
+        return item.data(Qt.UserRole) if item is not None else None
+
+    # Ohne markierte Zeile.
+    hinweise = meldungen_sammeln(monkeypatch, "information", merke="titel")
+    assert _markiert() is None
+    for text in ("Hoch", "Runter", "Bearbeiten…", "Entfernen"):
+        _knopf(_spalte(), text).click()
+    assert hinweise == ["Kein Eintrag ausgewählt"] * 2
+    assert _reihenfolge() == [block, pause]
+
+    # Hoch/Runter: die Pause bleibt nach dem Neuaufbau markiert.
+    _markieren(pause)
+    _knopf(_spalte(), "Hoch").click()
+    assert _reihenfolge() == [pause, block] and _markiert() == pause
+    _knopf(_spalte(), "Hoch").click()  # schon ganz oben
+    assert _reihenfolge() == [pause, block] and _markiert() == pause
+    _knopf(_spalte(), "Runter").click()
+    assert _reihenfolge() == [block, pause] and _markiert() == pause
+
+    # Pause bearbeiten (echter Dialog): leere Bezeichnung wird „Pause“; Abbrechen ändert nichts.
+    vorbelegung = []
+
+    def _pause_ausfuellen(dialog):
+        vorbelegung.append((dialog.dauer_minuten.value(), dialog.bezeichnung.text()))
+        dialog.dauer_minuten.setValue(30)
+        dialog.bezeichnung.setText("")
+        return QDialog.Accepted
+
+    monkeypatch.setattr(PauseDialog, "exec", _pause_ausfuellen)
+    _knopf(_spalte(), "Bearbeiten…").click()
+    assert vorbelegung == [(20, "Mittag")]
+    eintrag = zeitplan_eintrag(conn, pause)
+    assert (eintrag["dauer_minuten"], eintrag["bezeichnung"]) == (30, "Pause")
+    assert _markiert() == pause
+    monkeypatch.setattr(PauseDialog, "exec", lambda _dialog: QDialog.Rejected)
+    _knopf(_spalte(), "Bearbeiten…").click()
+    assert zeitplan_eintrag(conn, pause)["dauer_minuten"] == 30
+
+    # Prüfungsblock bearbeiten: neue Dauer je Teilnehmer; Abbrechen ändert nichts.
+    abfragen = []
+    antworten = [(25, True), (99, False)]
+
+    def _zahl(*_a, value=None, **_k):
+        abfragen.append(value)
+        return antworten.pop(0)
+
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getInt", _zahl)
+    _markieren(block)
+    _knopf(_spalte(), "Bearbeiten…").click()
+    assert zeitplan_eintrag(conn, block)["dauer_minuten"] == 25 and _markiert() == block
+    _knopf(_spalte(), "Bearbeiten…").click()
+    assert zeitplan_eintrag(conn, block)["dauer_minuten"] == 25
+    assert abfragen == [10, 25]
+
+    # Entfernen fragt nach; „Nein“ (die Vorgabe) lässt alles stehen.
+    fragen = []
+
+    def _antwort(antwort):
+        def frage(*args, **_k):
+            fragen.append((args[1], args[2], args[4]))
+            return antwort
+        monkeypatch.setattr("app.QMessageBox.question", frage)
+
+    _markieren(pause)
+    _antwort(QMessageBox.No)
+    _knopf(_spalte(), "Entfernen").click()
+    assert _reihenfolge() == [block, pause]
+    titel, text, vorgabe = fragen[0]
+    assert titel == "Eintrag entfernen" and "Pause: Pause" in text and vorgabe == QMessageBox.No
+    # „Ja“: die Pause verschwindet aus Datenbank und Liste, danach ist nichts markiert.
+    _markieren(pause)
+    _antwort(QMessageBox.Yes)
+    _knopf(_spalte(), "Entfernen").click()
+    assert _reihenfolge() == [block]
+    liste = _zeitplan_liste(_spalte())
+    assert all("Pause" not in liste.item(i).text() for i in range(liste.count()))
+    assert _markiert() is None
+    assert hinweise == ["Kein Eintrag ausgewählt"] * 2
+
+
+def _zeitplan_aktionen():
+    """(betroffene db-Funktion, Aufruf der Aktion) für den Fehlerweg-Test unten."""
+    return [
+        ("add_zeitplan_richter", lambda tab, r, liste: tab._richter_hinzufuegen()),
+        ("umbenennen_zeitplan_richter", lambda tab, r, liste: tab._richter_umbenennen(r)),
+        ("verschiebe_zeitplan_richter", lambda tab, r, liste: tab._richter_verschieben(r, 1)),
+        ("loesche_zeitplan_richter", lambda tab, r, liste: tab._richter_loeschen(r, "R1")),
+        ("add_zeitplan_pruefungsblock", lambda tab, r, liste: tab._pruefungsblock_hinzufuegen(r)),
+        ("verschiebe_zeitplan_eintrag", lambda tab, r, liste: tab._eintrag_verschieben(liste, 1)),
+        ("zeitplan_eintrag", lambda tab, r, liste: tab._eintrag_bearbeiten(liste)),
+        ("aktualisiere_zeitplan_eintrag", lambda tab, r, liste: tab._eintrag_bearbeiten(liste)),
+        ("loesche_zeitplan_eintrag", lambda tab, r, liste: tab._eintrag_entfernen(liste)),
+    ]
+
+
+@pytest.mark.parametrize("db_funktion, aktion", _zeitplan_aktionen(), ids=[f for f, _ in _zeitplan_aktionen()])
+def test_zeitplan_aktion_meldet_datenbankfehler(qtbot, conn, monkeypatch, db_funktion, aktion):
+    """Abdeckung 01.11.2026 (B10): Scheitert eine Zeitplan-Aktion an der Datenbank (z. B.
+    gesperrte Datei), erscheint „Datenbankfehler“, der Reiter baut nicht neu auf und der
+    gespeicherte Stand bleibt unverändert."""
+    import sqlite3
+
+    from db import list_zeitplan_eintraege
+    from desktop_dialoge import PruefungsblockDialog
+
+    r1 = add_zeitplan_richter(conn, "R1")
+    block = add_zeitplan_pruefungsblock(conn, r1, "ED", 1, "Flächensuche", 10)
+    tab = _zeitplan_tab(qtbot, conn)
+    liste = _zeitplan_liste(_zeitplan_spalte(tab, "R1"))
+    liste.setCurrentRow(0)
+    assert liste.currentItem().data(Qt.UserRole) == block
+
+    def _gesperrt(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(f"desktop_zeitplan.{db_funktion}", _gesperrt)
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getText", lambda *a, **k: ("Neu", True))
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getInt", lambda *a, **k: (5, True))
+    monkeypatch.setattr(PruefungsblockDialog, "exec", lambda _dialog: QDialog.Accepted)
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
+    aufgebaut = []
+    monkeypatch.setattr(tab, "aktualisieren", lambda: aufgebaut.append(True))
+    fehler = meldungen_sammeln(monkeypatch, "critical", merke="titel")
+
+    aktion(tab, r1, liste)
+
+    assert fehler == ["Datenbankfehler"] and aufgebaut == []
+    monkeypatch.undo()
+    assert _richter_namen(conn) == ["R1"]
+    eintraege = list_zeitplan_eintraege(conn, r1)
+    assert [(e["id"], e["dauer_minuten"]) for e in eintraege] == [(block, 10)]
+
+
+# --- Abdeckung 01.11.2026 (OFFEN B10): Konflikt-Rückfrage beim Wiederherstellen ----------
+
+
+def _sicherung_mit_namenskonflikt(tmp_path, termine) -> str:
+    """Echte Sicherung mit „Pruefung.sqlite“ (Verein „Aus Sicherung“) und „Neu.sqlite“; im
+    Termine-Ordner `termine` liegt schon eine andere „Pruefung.sqlite“ (Verein „Bestand“)."""
+    from db_sicherung import sicherung_erstellen
+
+    quelle = tmp_path / "quelle"
+    quelle.mkdir()
+    for ordner, name, verein in (
+        (quelle, "Pruefung.sqlite", "Aus Sicherung"),
+        (quelle, "Neu.sqlite", "Neu"),
+        (termine, "Pruefung.sqlite", "Bestand"),
+    ):
+        with closing(init_db(str(ordner / name))) as verbindung:
+            set_veranstaltung(verbindung, verein=verein, datum="2026-11-14")
+    zip_pfad = tmp_path / "sicherung.zip"
+    assert sicherung_erstellen(str(zip_pfad), ordner=quelle) == 2
+    return str(zip_pfad)
+
+
+def _vereine_im_ordner(ordner) -> dict:
+    from db import oeffne_termin_lesend
+
+    vereine = {}
+    for pfad in ordner.glob("*.sqlite"):
+        with closing(oeffne_termin_lesend(pfad)) as verbindung:
+            vereine[pfad.name] = get_veranstaltung(verbindung)["verein"]
+    return vereine
+
+
+def _konflikt_box_ersetzen(monkeypatch, knopf):
+    """Ersetzt QMessageBox.exec/clickedButton: merkt Titel, Text, Knöpfe und Vorgabe und
+    „klickt“ den Knopf mit dem Text `knopf` (None: Fenster ohne Knopf geschlossen)."""
+    gefragt = []
+
+    def _exec(box):
+        gefragt.append((box.windowTitle(), box.text(), sorted(b.text() for b in box.buttons()),
+                        box.defaultButton().text()))
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", _exec)
+    monkeypatch.setattr(QMessageBox, "clickedButton",
+                        lambda box: next((b for b in box.buttons() if b.text() == knopf), None))
+    return gefragt
+
+
+@pytest.mark.parametrize("knopf, erwartet, uebersprungen", [
+    ("Überschreiben", {"Pruefung.sqlite": "Aus Sicherung", "Neu.sqlite": "Neu"}, False),
+    ("Als Kopie importieren",
+     {"Pruefung.sqlite": "Bestand", "Pruefung (2).sqlite": "Aus Sicherung", "Neu.sqlite": "Neu"}, False),
+    ("Überspringen", {"Pruefung.sqlite": "Bestand", "Neu.sqlite": "Neu"}, True),
+    (None, {"Pruefung.sqlite": "Bestand", "Neu.sqlite": "Neu"}, True),  # Esc bzw. Fenster geschlossen
+], ids=["ueberschreiben", "kopie", "ueberspringen", "geschlossen"])
+def test_wiederherstellen_konflikt_rueckfrage_entscheidet_ueber_zieldateien(
+    qtbot, tmp_path, monkeypatch, _termine_ordner_schuetzen, knopf, erwartet, uebersprungen,
+):
+    """Abdeckung 01.11.2026 (B10): echte Sicherung, im Termine-Ordner ein gleichnamiger
+    Termin. Die Rückfrage bietet Überschreiben / Als Kopie / Überspringen (Vorgabe
+    Überspringen); nur „Überschreiben“ ersetzt den vorhandenen Termin, sonst bleibt er
+    erhalten. Der Termin ohne Konflikt wird immer ohne Rückfrage übernommen."""
+    termine = _termine_ordner_schuetzen
+    zip_pfad = _sicherung_mit_namenskonflikt(tmp_path, termine)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (zip_pfad, ""))
+    gefragt = _konflikt_box_ersetzen(monkeypatch, knopf)
+    meldungen = meldungen_sammeln(monkeypatch, "information", merke="titel_text")
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: pytest.fail(f"Fehlermeldung: {a[1:3]}"))
+    tab = DatensicherungTab()
+    qtbot.addWidget(tab)
+
+    tab._sicherung_wiederherstellen()
+
+    assert len(gefragt) == 1
+    titel, text, knoepfe, vorgabe = gefragt[0]
+    assert titel == "Termin bereits vorhanden" and "„Pruefung.sqlite“" in text
+    assert knoepfe == sorted(["Überschreiben", "Als Kopie importieren", "Überspringen"])
+    assert vorgabe == "Überspringen"
+    assert _vereine_im_ordner(termine) == erwartet
+    anzahl = 1 if uebersprungen else 2
+    zusatz = ", 1 übersprungen" if uebersprungen else ""
+    assert meldungen == [("Wiederherstellen abgeschlossen", f"{anzahl} Termin(e) wiederhergestellt{zusatz}. "
+                          "Neue Termine erscheinen in der Terminübersicht beim nächsten „Anderen Termin öffnen…“.")]
+    assert tab.status_label.text() == meldungen[0][1]
+
+
+def test_wiederherstellen_konflikt_mit_offenem_termin_bietet_kein_ueberschreiben(
+    qtbot, tmp_path, monkeypatch, _termine_ordner_schuetzen,
+):
+    """Abdeckung 01.11.2026 (B10): Ist der gleichnamige Termin gerade geöffnet, fehlt
+    „Überschreiben“ samt Hinweis; „Als Kopie importieren“ lässt den offenen Termin
+    unverändert."""
+    termine = _termine_ordner_schuetzen
+    zip_pfad = _sicherung_mit_namenskonflikt(tmp_path, termine)
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (zip_pfad, ""))
+    gefragt = _konflikt_box_ersetzen(monkeypatch, "Als Kopie importieren")
+    meldungen_stumm(monkeypatch, "information")
+    monkeypatch.setattr("app.QMessageBox.critical", lambda *a, **k: pytest.fail(f"Fehlermeldung: {a[1:3]}"))
+    offen_pfad = termine / "Pruefung.sqlite"
+    with closing(init_db(str(offen_pfad))) as offen:
+        tab = DatensicherungTab(aktueller_pfad=str(offen_pfad), conn=offen)
+        qtbot.addWidget(tab)
+
+        tab._sicherung_wiederherstellen()
+
+        assert get_veranstaltung(offen)["verein"] == "Bestand"
+    _titel, text, knoepfe, vorgabe = gefragt[0]
+    assert knoepfe == sorted(["Als Kopie importieren", "Überspringen"]) and vorgabe == "Überspringen"
+    assert "gerade im Hauptfenster geöffnet" in text
+    assert _vereine_im_ordner(termine) == {
+        "Pruefung.sqlite": "Bestand", "Pruefung (2).sqlite": "Aus Sicherung", "Neu.sqlite": "Neu",
+    }
+
+
+# --- Abdeckung 01.11.2026 (OFFEN B10): bisher nie aufgebaute Dialoge --------------------
+
+
+def _dialog_knopf(dialog, rolle):
+    return dialog.findChild(QDialogButtonBox).button(rolle)
+
+
+def test_pruefungsblock_dialog_werte_ok_und_abbrechen(qtbot):
+    """Abdeckung 01.11.2026 (B10): PruefungsblockDialog übernimmt die Standarddauer, liefert
+    die gewählten Werte (Leistungsklasse als Zahl) und begrenzt die Dauer auf 1-240 Min.
+    Eine eigene Prüfung hat er nicht - „OK“ nimmt immer an, „Abbrechen“ lehnt ab."""
+    from desktop_dialoge import PruefungsblockDialog
+
+    dialog = PruefungsblockDialog(None, standard_dauer_minuten=7)
+    qtbot.addWidget(dialog)
+    assert dialog.windowTitle() == "Prüfungsblock hinzufügen"
+    assert [dialog.art.itemText(i) for i in range(dialog.art.count())] == ["ED", "DK"]
+    assert [dialog.disziplin.itemText(i) for i in range(dialog.disziplin.count())] == list(ALLE_DISZIPLINEN)
+    assert dialog.werte() == {"art": "ED", "stufe": 1, "disziplin": ALLE_DISZIPLINEN[0], "dauer_minuten": 7}
+
+    dialog.art.setCurrentText("DK")
+    dialog.stufe.setCurrentText("3")
+    dialog.disziplin.setCurrentText(ALLE_DISZIPLINEN[-1])
+    dialog.dauer_minuten.setValue(0)
+    assert dialog.dauer_minuten.value() == 1
+    dialog.dauer_minuten.setValue(500)
+    assert dialog.dauer_minuten.value() == 240
+    _dialog_knopf(dialog, QDialogButtonBox.Ok).click()
+    assert dialog.result() == QDialog.Accepted
+    assert dialog.werte() == {"art": "DK", "stufe": 3, "disziplin": ALLE_DISZIPLINEN[-1], "dauer_minuten": 240}
+
+    abbrechen = PruefungsblockDialog(None)
+    qtbot.addWidget(abbrechen)
+    assert abbrechen.werte()["dauer_minuten"] == 10
+    _dialog_knopf(abbrechen, QDialogButtonBox.Cancel).click()
+    assert abbrechen.result() == QDialog.Rejected
+
+
+def test_sicherung_erstellen_dialog_prueft_passwort(qtbot, monkeypatch):
+    """Abdeckung 01.11.2026 (B10): SicherungErstellenDialog - ohne Häkchen gesperrte
+    Passwortfelder und kein Passwort; mit Häkchen bleibt er bei fehlendem oder
+    abweichendem Passwort mit Warnung offen und nimmt erst gleiche Eingaben an."""
+    from desktop_dialoge import SicherungErstellenDialog
+
+    warnungen = meldungen_sammeln(monkeypatch, "warning", merke="titel")
+
+    ohne = SicherungErstellenDialog(None)
+    qtbot.addWidget(ohne)
+    assert not ohne.passwort_feld.isEnabled() and not ohne.passwort_wiederholen_feld.isEnabled()
+    ohne.passwort_feld.setText("wird ignoriert")
+    _dialog_knopf(ohne, QDialogButtonBox.Ok).click()
+    assert ohne.result() == QDialog.Accepted and ohne.passwort() is None and warnungen == []
+
+    mit = SicherungErstellenDialog(None)
+    qtbot.addWidget(mit)
+    angenommen = []
+    mit.accepted.connect(lambda: angenommen.append(True))
+    mit.passwort_checkbox.setChecked(True)
+    assert mit.passwort_feld.isEnabled() and mit.passwort_wiederholen_feld.isEnabled()
+    ok = _dialog_knopf(mit, QDialogButtonBox.Ok)
+    ok.click()
+    assert warnungen == ["Passwort fehlt"] and angenommen == []
+    mit.passwort_feld.setText("geheim")
+    mit.passwort_wiederholen_feld.setText("anders")
+    ok.click()
+    assert warnungen == ["Passwort fehlt", "Passwörter unterschiedlich"] and angenommen == []
+    assert mit.result() != QDialog.Accepted
+    mit.passwort_wiederholen_feld.setText("geheim")
+    ok.click()
+    assert angenommen == [True] and mit.result() == QDialog.Accepted
+    assert mit.passwort() == "geheim" and len(warnungen) == 2
+
+    # Häkchen wieder weg: kein Passwort, die Felder sind wieder gesperrt.
+    mit.passwort_checkbox.setChecked(False)
+    assert mit.passwort() is None and not mit.passwort_feld.isEnabled()
+
+    abbrechen = SicherungErstellenDialog(None)
+    qtbot.addWidget(abbrechen)
+    _dialog_knopf(abbrechen, QDialogButtonBox.Cancel).click()
+    assert abbrechen.result() == QDialog.Rejected
+
+
+def test_startnummer_tauschen_dialog_listet_partner_und_liefert_auswahl(qtbot):
+    """Abdeckung 01.11.2026 (B10): StartnummerTauschenDialog zeigt die Partner nach
+    Startnummer sortiert (ohne Nummer zuletzt), Namen nur als Klartext, und liefert die
+    gewählte ID. Ohne Partner liefert er None - der Aufrufer öffnet ihn dann gar nicht."""
+    from desktop_dialoge import StartnummerTauschenDialog
+
+    eigener = {"id": 1, "startnummer": None, "nachname": "<b>Fett</b>", "vorname": "Fritz"}
+    andere = [
+        {"id": 4, "startnummer": None, "nachname": "Ohne", "vorname": "Olga"},
+        {"id": 3, "startnummer": 7, "nachname": "Sieben", "vorname": "Sina"},
+        {"id": 2, "startnummer": 2, "nachname": "Zwei", "vorname": "Zora"},
+    ]
+    dialog = StartnummerTauschenDialog(None, eigener, andere)
+    qtbot.addWidget(dialog)
+    eintraege = [dialog.partner_combo.itemText(i) for i in range(dialog.partner_combo.count())]
+    assert eintraege == ["Zwei, Zora (Start-Nr. 2)", "Sieben, Sina (Start-Nr. 7)", "Ohne, Olga (Start-Nr. keine)"]
+    hinweis = next(lbl for lbl in dialog.findChildren(QLabel) if "tauschen mit" in lbl.text())
+    assert hinweis.textFormat() == Qt.PlainText
+    assert hinweis.text() == "Startnummer von <b>Fett</b>, Fritz (aktuell: keine) tauschen mit:"
+    assert dialog.ausgewaehlte_partner_id() == 2
+    dialog.partner_combo.setCurrentIndex(2)
+    _dialog_knopf(dialog, QDialogButtonBox.Ok).click()
+    assert dialog.result() == QDialog.Accepted and dialog.ausgewaehlte_partner_id() == 4
+
+    leer = StartnummerTauschenDialog(None, {**eigener, "startnummer": 5}, [])
+    qtbot.addWidget(leer)
+    assert leer.ausgewaehlte_partner_id() is None
+    _dialog_knopf(leer, QDialogButtonBox.Cancel).click()
+    assert leer.result() == QDialog.Rejected
+
+
+# --- Erscheinungsbild „Beagle“: Kopfbalken, Symbole, kurze Hinweise (Marco 01.11.2026) ------
+
+
+def test_kopfbalken_zeigt_termin_und_aktualisiert_teilnehmerzahl(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    set_veranstaltung(conn, "Musterverein", "2026-11-14", ort="Musterstadt")
+    _teilnehmer_anlegen(conn, nachname="Eins", startnummer=1)
+    nicht_da = _teilnehmer_anlegen(conn, nachname="Zwei", startnummer=2)
+    setze_keine_teilnahme(conn, nicht_da, True)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+
+    kopf = fenster.kopf
+    assert kopf.objectName() == "kopfBalken"
+    assert kopf.titel_label.text() == "Musterverein"
+    # Nur Teilnehmende zählen („keine Teilnahme“ nicht).
+    assert kopf.unterzeile_label.text() == "Sa 14.11.2026  ·  Musterstadt  ·  1 Teilnehmer"
+    assert not kopf.bild_label.pixmap().isNull()
+
+    # Anlegen über den Reiter „Teilnehmer“ - der Kopf zählt sofort mit.
+    def _anlegen(_dialog):
+        _teilnehmer_anlegen(conn, nachname="Drei", startnummer=3)
+        return QDialog.Accepted
+
+    ueberall_ersetzen(monkeypatch, "_ausfuehren", _anlegen)
+    fenster.teilnehmer_tab._teilnehmer_hinzufuegen()
+    assert kopf.unterzeile_label.text().endswith("2 Teilnehmer")
+
+    # Geänderte Veranstaltungsdaten (Reiter „Verwaltung“) landen ebenfalls im Kopf.
+    set_veranstaltung(conn, "Anderer Verein", "2026-11-15", ort="Neustadt")
+    fenster.verwaltung_tab.veranstaltung_geaendert.emit()
+    assert kopf.titel_label.text() == "Anderer Verein"
+    assert kopf.unterzeile_label.text().startswith("So 15.11.2026  ·  Neustadt")
+
+
+def test_kopfbalken_aktualisiert_beim_reiterwechsel(qtbot, termin):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    assert fenster.kopf.unterzeile_label.text().endswith("0 Teilnehmer")
+    _teilnehmer_anlegen(conn, nachname="Still", startnummer=1)  # z. B. aus dem Formular-Import
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    assert fenster.kopf.unterzeile_label.text().endswith("1 Teilnehmer")
+
+
+def test_kopfbalken_knoepfe_mit_symbolen_und_demo_kennzeichnung(qtbot, termin):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad, demo=True)
+    qtbot.addWidget(fenster)
+    texte = {b.text(): b for b in fenster.kopf.findChildren(QPushButton)}
+    assert set(texte) == {"Anderen Termin öffnen…", f"Version {VERSION}", "Demoprüfung", "Hilfe"}
+    assert all(not knopf.icon().isNull() for knopf in texte.values())
+    assert fenster.kopf.unterzeile_label.text().startswith("DEMO")
+
+
+def test_kopf_unterzeile_fehlende_und_unlesbare_angaben():
+    from desktop_gemeinsam import kopf_unterzeile
+
+    assert kopf_unterzeile("2026-11-14", "Ort", 8) == "Sa 14.11.2026  ·  Ort  ·  8 Teilnehmer"
+    assert kopf_unterzeile("2026-11-14", "Ort", 8, demo=True).startswith("DEMO  ·  Sa 14.11.2026")
+    assert kopf_unterzeile(None, None, 0) == "0 Teilnehmer"
+    assert kopf_unterzeile("31.02.2026", "", 1) == "31.02.2026  ·  1 Teilnehmer"
+
+
+def test_kopfbalken_titel_reiner_text(qtbot):
+    """S-1: Vereinsname aus der Termin-Datei nie als HTML deuten."""
+    from desktop_gemeinsam import KopfBalken
+
+    kopf = KopfBalken()
+    qtbot.addWidget(kopf)
+    kopf.termin_setzen('<img src="x.png">Verein', "2026-11-14", "<b>Ort</b>", 1)
+    assert kopf.titel_label.textFormat() == Qt.PlainText
+    assert kopf.unterzeile_label.textFormat() == Qt.PlainText
+
+
+def test_startdialog_mit_kopfbalken_und_symbolen(qtbot, monkeypatch, tmp_path):
+    ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    assert dialog.kopf.titel_label.text() == "SHS-Prüfungsprogramm"
+    assert dialog.kopf.unterzeile_label.text() == "Prüfungen im Spürhundsport verwalten"
+    assert dialog.kopf.bild_label.width() == 52
+    knoepfe = {b.text(): b for b in dialog.findChildren(QPushButton)}
+    assert not knoepfe["Neuen Termin anlegen…"].icon().isNull()
+    assert not knoepfe["Öffnen"].icon().isNull()
+    assert knoepfe["Demoprüfung"].parent() is dialog.kopf
+    assert any(label.text() == "Termin wählen oder neu anlegen:" for label in dialog.findChildren(QLabel))
+
+
+def test_alle_symbole_ergeben_ein_bild():
+    import desktop_gemeinsam as gemeinsam
+
+    for name in gemeinsam.SYMBOL_NAMEN:
+        icon = gemeinsam.symbol(name, "#123456")
+        assert not icon.isNull(), name
+        assert not icon.pixmap(16, 16).isNull(), name
+    # Fehlende Datei: leeres Icon statt Fehler.
+    assert gemeinsam.symbol("gibt-es-nicht").isNull()
+    assert gemeinsam.symbol_png("gibt-es-nicht") is None
+
+
+def test_jedes_verwendete_symbol_ist_aufgefuehrt():
+    """Jeder Name, den der Code an symbol()/symbol_setzen()/symbol_html()/knopf_hinzufuegen()
+    übergibt, steht in SYMBOL_NAMEN - die prüft der Selbsttest der gebauten Fassung - und
+    liegt in symbole/."""
+    import re
+    from pathlib import Path
+
+    import desktop_gemeinsam as gemeinsam
+
+    ordner = Path(__file__).resolve().parent
+    muster = re.compile(
+        r'(?:symbol|symbol_html|symbol_png)\(\s*"([a-z-]+)"'
+        r'|(?:symbol_setzen|knopf_hinzufuegen)\([^,()]+,\s*"([a-z-]+)"'
+    )
+    namen = set()
+    for datei in [ordner / "app.py", *ordner.glob("desktop_*.py")]:
+        for treffer in muster.findall(datei.read_text(encoding="utf-8")):
+            namen.update(n for n in treffer if n)
+    # Dazu die Namen, die erst zur Laufzeit gewählt werden ("a" if … else "b").
+    assert {"chevron-down", "chevron-right", "check", "school"} <= namen
+    assert namen <= set(gemeinsam.SYMBOL_NAMEN), namen - set(gemeinsam.SYMBOL_NAMEN)
+    for name in gemeinsam.SYMBOL_NAMEN:
+        assert (ordner / "symbole" / f"{name}.svg").is_file(), name
+
+
+def test_symbol_png_schreibt_bild_im_programmordner():
+    from pathlib import Path
+
+    import desktop_darstellung as darstellung
+    import desktop_gemeinsam as gemeinsam
+    from PySide6.QtGui import QImage
+
+    pfad = gemeinsam.symbol_png("check", "#2E7D32", 14)
+    assert pfad is not None
+    assert Path(pfad).parent.parent == Path(darstellung._haken_pfad()).parent
+    bild = QImage(pfad)
+    assert not bild.isNull() and bild.width() == 28
+    assert 'width="14"' in gemeinsam.symbol_html("check", "#2E7D32", 14)
+
+
+def test_kleinigkeiten_vor_dem_build_1_0_53(qtbot, conn, monkeypatch, tmp_path):
+    """Marco 01.11.2026 (Build-Vorbereitung): Startfenster ohne Zeilennummern, Zeitplan-
+    Listen brechen lange Blockköpfe um, der KI-Umschalter ist flach, ein langer Pfad im
+    Demo-Erklärfenster bekommt Umbruchstellen."""
+    import desktop_demo
+    from PySide6.QtWidgets import QListWidget, QWidget
+
+    monkeypatch.setattr("app.liste_termine", lambda: [])
+    start = StartDialog()
+    qtbot.addWidget(start)
+    assert not start.tabelle.verticalHeader().isVisible() and start.tabelle.verticalHeader().isHidden()
+
+    add_zeitplan_richter(conn, "R1")
+    tab = _zeitplan_tab(qtbot, conn)
+    listen = tab.findChildren(QListWidget)
+    assert listen and all(l.wordWrap() and l.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff for l in listen)
+
+    fenster = HauptFenster(conn, str(tmp_path / "x.sqlite"))
+    qtbot.addWidget(fenster)
+    stil = fenster.formular_import_tab._ki_umschalter.styleSheet()
+    assert "background: transparent" in stil and "border: none" in stil
+
+    eltern = QWidget()
+    qtbot.addWidget(eltern)
+    panel = desktop_demo.DemoPanel(eltern)
+    panel.hinweis("Gespeichert unter: C:\\Users\\Name\\Ergebnisliste.pdf")
+    assert panel.hinweis_label.text() == "Gespeichert unter: C:\\\u200bUsers\\\u200bName\\\u200bErgebnisliste.pdf"
+    panel.schliessen()
+
+
+def test_symbol_png_ohne_schreibrecht_faellt_auf_text_zurueck(qtbot, conn, monkeypatch):
+    """Verifikation 01.11.2026: Lässt sich das Symbol-Bild nicht schreiben (z. B. Ordner
+    schreibgeschützt), liefert symbol_png None, symbol_html "" - und die Seitenleiste des
+    Zeitplans zeigt wieder die Textzeichen statt eines kaputten Bildes."""
+    import desktop_darstellung as darstellung
+    import desktop_gemeinsam as gemeinsam
+
+    monkeypatch.setattr(darstellung, "_bild_speichern", lambda *_a, **_k: False)
+    monkeypatch.setattr(gemeinsam, "_symbol_png_geschrieben", set())
+    assert gemeinsam.symbol_png("check", "#123456", 14) is None
+    assert gemeinsam.symbol_html("check", "#123456", 14) == ""
+    _teilnehmer_anlegen(conn)
+    tab = _zeitplan_tab(qtbot, conn)
+    text = tab._offene_starts_label.text()
+    assert "✗ " in text and "<img" not in text
+
+
+def test_kurze_hinweise_mit_vollem_tooltip(qtbot, termin):
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    erwartet = {
+        fenster.zeitplan_tab: "Je Richter eine eigene Spalte mit frei sortierbarer Abfolge",
+        fenster.verwaltung_tab: "Über „Veranstaltungsdaten bearbeiten…“ lassen sich Verein",
+        fenster.datensicherung_tab: "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner",
+    }
+    for tab, anfang in erwartet.items():
+        hinweise = tab.findChildren(QLabel, "kurzHinweis")
+        assert len(hinweise) == 1, tab
+        hinweis = hinweise[0]
+        assert len(hinweis.text()) < 140 and len(hinweis.text()) * 2 < len(hinweis.toolTip())
+        assert anfang in hinweis.toolTip()
+        symbol_label = hinweis.parent().findChild(QLabel, "kurzHinweisSymbol")
+        assert symbol_label.toolTip() == hinweis.toolTip()
+        assert not symbol_label.pixmap().isNull()
+    # Der volle Text ist maskiert, damit Qt ihn als umbrechenden Rich Text zeigt.
+    from desktop_gemeinsam import kurzer_hinweis
+    huelle = kurzer_hinweis("kurz", "a <b> & c")
+    qtbot.addWidget(huelle)
+    assert huelle.findChild(QLabel, "kurzHinweis").toolTip() == "<p>a &lt;b&gt; &amp; c</p>"
+
+
+def test_designwechsel_faerbt_kopf_und_knopfsymbole_um(qtbot, termin, darstellung_speicher):
+    import desktop_darstellung as darstellung
+
+    conn, pfad = termin
+    darstellung._darstellung_anwenden(QApplication.instance())  # gespeichert: "hell"
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    wechseln = fenster.wechseln_btn
+    hell_kopf = darstellung._DESIGNS["hell"]["KOPF_TEXT"]
+    assert wechseln.icon().cacheKey() == symbol("folder-open", hell_kopf).cacheKey()
+
+    fenster._design_actions["kontrast"].trigger()
+    assert wechseln.icon().cacheKey() == symbol("folder-open", "#FFFFFF").cacheKey()
+    ki = fenster.formular_import_tab._ki_umschalter
+    kontrast_knopf = darstellung._DESIGNS["kontrast"]["TEXT_BUTTON"]
+    assert ki.icon().cacheKey() == symbol("chevron-right", kontrast_knopf).cacheKey()
+    hilfe = fenster.zeitplan_tab.findChild(QLabel, "kurzHinweisSymbol")
+    assert hilfe.property("shsSymbolFarbe") == "TEXT_GEDAEMPFT"
+
+
+def test_ki_umschalter_wechselt_pfeil(qtbot, conn):
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    zu = tab._ki_umschalter.icon().cacheKey()
+    tab._ki_umschalter.click()
+    assert tab._ki_umschalter.icon().cacheKey() == symbol("chevron-down").cacheKey() != zu
+    assert tab._ki_umschalter.text() == tab._KI_UMSCHALTER_TEXT
+
+
+def test_zahlenfeld_pfeile_werden_geschrieben(darstellung_speicher):
+    import desktop_darstellung as darstellung
+    from PySide6.QtGui import QImage
+
+    darstellung_speicher["design"] = "dunkel"
+    darstellung._darstellung_anwenden(QApplication.instance())
+    farbe = darstellung._DESIGNS["dunkel"]["TEXT_BUTTON"]
+    for richtung in ("hoch", "runter"):
+        bild = QImage(darstellung._pfeil_pfad(richtung, farbe))
+        assert not bild.isNull() and bild.width() == 20
+    assert darstellung._pfeil_pfad("hoch", farbe) in QApplication.instance().styleSheet()
+
+
+def test_bezahlt_zelle_mit_haken_symbol(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Zahler", startnummer=1)
+    setze_bezahlt(conn, list_teilnehmer(conn)[0]["id"], True)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    zelle = tab.tabelle.item(0, 6)
+    assert zelle.text() == "bezahlt"
+    assert zelle.icon().cacheKey() == symbol("check", "ok").cacheKey()
+
+
+def test_demo_weiter_knopf_symbol_rechts(qtbot):
+    from PySide6.QtWidgets import QWidget
+
+    from desktop_demo import DemoPanel
+
+    eltern = QWidget()
+    qtbot.addWidget(eltern)
+    panel = DemoPanel(eltern)
+    assert panel.windowTitle() == "Demoprüfung"
+    assert panel.weiter_btn.layoutDirection() == Qt.RightToLeft
+    assert panel.weiter_btn.icon().cacheKey() == symbol("chevron-right", "#FFFFFF").cacheKey()
+    panel._letzter = True
+    panel.countdown_anzeigen(None)
+    assert panel.weiter_btn.text() == "Fertig"
+    assert panel.weiter_btn.icon().cacheKey() == symbol("check", "#FFFFFF").cacheKey()

@@ -1347,6 +1347,77 @@ class TestLizenzseite(_AppWebTestBasis):
         self.assertIn(b"&lt;script&gt;x&lt;/script&gt; &amp; Co", antwort.data)
 
 
+class TestErscheinungsbild(_AppWebTestBasis):
+    """Kopf mit Beagle und Termin-Angaben, Bild über /static (Marco 01.11.2026,
+    Erscheinungsbild „Beagle“)."""
+
+    def test_beagle_bild_ohne_anmeldung_erreichbar(self):
+        antwort = self.client.get("/static/beagle.png")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort.mimetype, "image/png")
+        self.assertTrue(antwort.data.startswith(b"\x89PNG"))
+        antwort.close()
+
+    def test_anmeldeseite_zeigt_beagle_und_programmnamen(self):
+        self._anmelden()
+        self.client.post("/logout")
+        seite = self.client.get("/").data.decode()
+        self.assertIn("Anmelden", seite)
+        kopf = seite.split("</header>")[0]
+        self.assertIn('<img src="/static/beagle.png"', kopf)
+        self.assertIn("SHS-Prüfungsprogramm", kopf)
+        self.assertIn("Ergebniserfassung", kopf)
+
+    def test_kopf_zeigt_verein_datum_und_ort_des_termins(self):
+        db.set_veranstaltung(self.conn, verein="Hundefreunde Musterstadt", datum="2026-11-14", ort="Musterstadt")
+        self._anmelden()
+        kopf = self.client.get("/teilnehmer").data.decode().split("</header>")[0]
+        self.assertIn("Hundefreunde Musterstadt", kopf)
+        self.assertIn("14.11.2026 · Musterstadt", kopf)
+        self.assertNotIn("Ergebniserfassung", kopf)
+
+    def test_ergebnisseite_zeigt_termin_im_kopf_und_navigation_ohne_trennpunkte(self):
+        """Am Tablet arbeiten die Richter auf der Ergebnisseite - auch dort steht der Termin
+        im Kopf. Die Navigation trennt per CSS statt mit „·“ (blieb beim Umbruch allein am
+        Zeilenende stehen)."""
+        db.set_veranstaltung(self.conn, verein="Hundefreunde Musterstadt", datum="2026-11-14", ort="Musterstadt")
+        tid = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Test", vorname="A", rufname_hund="Rex", art="DK", stufe=1, startnummer=1))
+        self._anmelden()
+        kopf = self.client.get(f"/teilnehmer/{tid}").data.decode().split("</header>")[0]
+        self.assertIn("Hundefreunde Musterstadt", kopf)
+        self.assertIn("14.11.2026 · Musterstadt", kopf)
+        nav = kopf.split("<nav>")[1]
+        self.assertNotIn("·", nav)
+        self.assertIn("Termin wechseln", nav)
+
+    def test_kopf_ohne_ort_zeigt_nur_datum(self):
+        db.set_veranstaltung(self.conn, verein="Testverein", datum="2026-09-19")
+        self._anmelden()
+        kopf = self.client.get("/teilnehmer").data.decode().split("</header>")[0]
+        self.assertRegex(kopf, r'<span class="unterzeile">19\.09\.2026</span>')
+
+    def test_status_bewertet_mit_haken_symbol(self):
+        db.set_veranstaltung(self.conn, verein="Testverein", datum="2026-09-19")
+        fertig_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Fertig", vorname="B", rufname_hund="Bello", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=2,
+        ))
+        db.eintragen_ergebnis(self.conn, fertig_id, "Trümmerfeld", 50, 30)
+        self._anmelden()
+        seite = self.client.get("/teilnehmer").data.decode()
+        self.assertRegex(seite, r'<span class="status status-fertig"><svg [^>]*aria-hidden="true"[^>]*>.*?</svg>bewertet</span>')
+
+    def test_csp_erlaubt_eigene_bilder(self):
+        for pfad in ("/", "/static/beagle.png"):
+            with self.subTest(pfad=pfad):
+                antwort = self.client.get(pfad)
+                csp = antwort.headers["Content-Security-Policy"]
+                self.assertIn("img-src 'self'", csp)
+                self.assertIn("script-src 'none'", csp)
+                antwort.close()
+
+
 class TestCsrfSchutz(_AppWebTestBasis):
     """Prüft den CSRF-Mechanismus selbst (QS-Review 19./20.09., siehe
     app_web._csrf_pruefen/_csrf_token) - bewusst mit dem UNVERÄNDERTEN Flask-Test-Client

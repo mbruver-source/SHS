@@ -140,6 +140,10 @@ _SCHRIFT_ERSATZ = {"Helvetica": _SCHRIFT, "Helvetica-Bold": _SCHRIFT_FETT,
 for _stil in _STYLES.byName.values():
     if hasattr(_stil, "fontName"):
         _stil.fontName = _SCHRIFT_ERSATZ.get(_stil.fontName, _stil.fontName)
+    # Zu lange Doppelnamen am vorhandenen Bindestrich umbrechen ("Müller-" / "Lüdenscheidt")
+    # statt mitten im Wort (A6-Prüfung, Marco 01.11.2026). Steht hier, weil die Stile unten
+    # die Werte ihres Elternstils beim Anlegen übernehmen.
+    _stil.embeddedHyphenation = 1
 _TITEL = ParagraphStyle("SHSTitel", parent=_STYLES["Heading1"], fontSize=14, spaceAfter=2 * mm)
 _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20, spaceAfter=0)
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
@@ -203,12 +207,11 @@ def _schriftgroesse_fuer_breite(
     """Ermittelt die größte Schriftgröße (zwischen `min_groesse` und `start_groesse`, in
     0,5-Schritten), bei der `text` in genau EINER Zeile innerhalb `max_breite_pt` Punkt
     Platz findet - Grundlage für die automatische Schriftverkleinerung langer
-    Vereinsnamen in der leeren Ergebnisliste (Nutzerwunsch 21.09.: Text soll einzeilig
-    bleiben statt in die Nachbarspalte hineinzuragen, keine Zeilenumbrüche in der
-    Zelle). Passt `text` auch bei `min_groesse` nicht (sehr langer Name), wird trotzdem
-    `min_groesse` geliefert statt weiter zu schrumpfen - ein minimal überstehender,
-    aber noch lesbarer Name ist der praktikablere Kompromiss als eine unleserlich
-    kleine Schrift."""
+    Vereinsnamen in der leeren Ergebnisliste und der Kopfangaben des Anmeldeformulars.
+    Passt `text` auch bei `min_groesse` nicht (sehr langer Name), wird trotzdem
+    `min_groesse` geliefert statt weiter zu schrumpfen; die Ergebnisliste bricht dann in der
+    Zelle um (seit 01.11.2026, A6-Prüfung), statt eine unleserlich kleine Schrift zu nutzen.
+    Die Etiketten haben eine eigene Regel (_etikett_verein_stil)."""
     groesse = start_groesse
     while groesse > min_groesse and stringWidth(text, font, groesse) > max_breite_pt:
         groesse -= 0.5
@@ -337,7 +340,9 @@ def _stammdaten_tabelle(t: dict) -> Table:
         [Paragraph("Widerristhöhe:", _TEXT), Paragraph(f"{_p_wert(t['schulterhoehe_cm'])} cm" if t["schulterhoehe_cm"] else "", _TEXT),
          Paragraph("Geschlecht:", _TEXT), Paragraph(_p_wert(t["geschlecht"]), _TEXT)],
     ]
-    tabelle = Table(daten, colWidths=[26 * mm, 62 * mm, 24 * mm, 58 * mm])
+    # 28 mm: "Widerristhöhe:" braucht in DejaVu samt Polster gut 26 mm, bei 26 mm rutschte der
+    # Doppelpunkt in eine eigene Zeile (A6-Prüfung, Marco 01.11.2026).
+    tabelle = Table(daten, colWidths=[28 * mm, 60 * mm, 24 * mm, 58 * mm])
     tabelle.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3 * mm),
@@ -791,6 +796,25 @@ _ETIKETT_DISZIPLIN_KURZ = {
 }
 
 
+def _etikett_verein_stil(verein: str) -> ParagraphStyle:
+    """Stil für den austragenden Verein links oben im Etikett, höchstens zweizeilig: Ein
+    langer Name brauchte drei Zeilen und ragte über die feste Etikettenhöhe bis an die
+    Schnittlinie (A6-Prüfung, Marco 01.11.2026). Die Schrift wird deshalb in 0,5-pt-Schritten
+    bis 6,5 pt verkleinert, bis der Name in zwei Zeilen passt. Reicht auch das nicht (sehr
+    lange Namen), bleibt es bei 6,5 pt und drei Zeilen - die passen noch in die Etikettenhöhe;
+    erst ein noch längerer Name könnte wieder an die Schnittlinie reichen. `verein` ist
+    bereits maskiert."""
+    breite = _ETIKETT_SPALTEN[0] - 12  # Standard-Zellinnenabstand 6 pt links und rechts
+    groesse = _ETIKETT_TEXT.fontSize
+    while True:
+        stil = ParagraphStyle("SHSEtikettVerein", parent=_ETIKETT_TEXT, fontSize=groesse,
+                              leading=groesse * _ETIKETT_TEXT.leading / _ETIKETT_TEXT.fontSize)
+        _breite, hoehe = Paragraph(verein, stil).wrap(breite, 1000)
+        if hoehe <= 2 * stil.leading + 0.01 or groesse <= 6.5:
+            return stil
+        groesse -= 0.5
+
+
 def _etikett_art_lk_text(t: dict) -> str:
     if t["art"] == "DK":
         return f"DK LK {_p_wert(t['stufe'])}"
@@ -831,6 +855,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     zum späteren handschriftlichen Nachtragen, statt Werte zu zeigen."""
     veranstaltung = get_veranstaltung(conn)
     austragender_verein = _p_wert(veranstaltung["verein"]) if veranstaltung else ""
+    verein_stil = _etikett_verein_stil(austragender_verein)
     datum = _datum_kurz(veranstaltung["datum"]) if veranstaltung else ""
 
     fertig, _ausstehend = berechne_auswertung(conn)
@@ -882,7 +907,7 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
 
         daten = [
             [
-                Paragraph(austragender_verein, _ETIKETT_TEXT),
+                Paragraph(austragender_verein, verein_stil),
                 Paragraph(_etikett_art_lk_text(t), _ETIKETT_TEXT),
                 Paragraph(truemmer_text, _ETIKETT_FELD),
                 Paragraph(flaeche_text, _ETIKETT_FELD),
@@ -951,25 +976,24 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
         story.append(Paragraph(_p_wert(label), _ABSCHNITT))
         verein_spalte_breite = 40 * mm
         # Nutzerwunsch (21.09., Screenshot DK LK2/LK3): lange Vereinsnamen ragten bei
-        # fester Schriftgröße 9 in die Nachbarspalte "Gesamtpunkte" hinein - die
-        # Vereins-Zelle ist ein reiner String (kein Paragraph), reportlab bricht solche
-        # Tabellenzellen nicht automatisch um. Entscheidung (Rückfrage beantwortet):
-        # Schrift verkleinern statt umbrechen, bleibt dabei einzeilig. Nur die einzelnen
-        # Vereins-Zellen bekommen bei Bedarf eine kleinere Schrift (per FONTSIZE-Eintrag
-        # gezielt für diese eine Zelle) - alle übrigen Spalten/Zeilen bleiben bei der
-        # üblichen Schriftgröße 9.
+        # fester Schriftgröße 9 in die Nachbarspalte "Gesamtpunkte" hinein. Seit der
+        # breiteren DejaVu-Schrift wurden schon übliche Namen winzig und sehr lange liefen
+        # bei der Mindestgröße weiter über (A6-Prüfung, Marco 01.11.2026: kombiniert). Darum:
+        # erst bis 7,5 pt verkleinern, was dann noch nicht in eine Zeile passt, bricht in der
+        # Zelle um (Paragraph). Die übrigen Spalten bleiben bei Schriftgröße 9.
         _VEREIN_PADDING_PT = 12  # Standard-Zellinnenabstand (6pt links + 6pt rechts)
-        verein_stile = []
         daten = [["Platz", "Start-Nr.", "Name", "Verein", "Gesamtpunkte", "Wertnote"]]
-        for zeile, t in enumerate(gruppe, start=1):
-            verein_text = _wert(t["verein"])
+        for t in gruppe:
             name = Paragraph(f"{_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TABELLE_ZELLE)
-            daten.append(["", _wert(t["startnummer"]), name, verein_text, "", ""])
-            if verein_text and stringWidth(verein_text, _SCHRIFT, 9) > verein_spalte_breite - _VEREIN_PADDING_PT:
+            verein = ""
+            if t["verein"]:
                 groesse = _schriftgroesse_fuer_breite(
-                    verein_text, verein_spalte_breite - _VEREIN_PADDING_PT, start_groesse=9, min_groesse=5.5,
+                    _wert(t["verein"]), verein_spalte_breite - _VEREIN_PADDING_PT, start_groesse=9, min_groesse=7.5,
                 )
-                verein_stile.append(("FONTSIZE", (3, zeile), (3, zeile), groesse))
+                stil = ParagraphStyle("SHSVereinZelle", parent=_TABELLE_ZELLE, fontSize=groesse,
+                                      leading=groesse * 1.2)
+                verein = Paragraph(_p_wert(t["verein"]), stil)
+            daten.append(["", _wert(t["startnummer"]), name, verein, "", ""])
         tabelle = Table(
             daten, colWidths=[16 * mm, 18 * mm, 46 * mm, verein_spalte_breite, 26 * mm, 24 * mm], repeatRows=1,
         )
@@ -982,7 +1006,6 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
             # Schreiben bleibt (reine Kopfzeile bleibt kompakt).
             ("TOPPADDING", (0, 1), (-1, -1), 3.5 * mm),
             ("BOTTOMPADDING", (0, 1), (-1, -1), 3.5 * mm),
-            *verein_stile,
         ]))
         story.append(tabelle)
         story.append(Spacer(1, 4 * mm))

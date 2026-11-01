@@ -17,7 +17,9 @@
         </td>
         <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
           {% if zeile.vollstaendig %}
-            <span class="status status-fertig">bewertet</span>
+            {# Haken aus Tabler Icons (MIT, symbole/LICENSE-Tabler.txt), inline statt als Datei,
+               damit er die Farbe der Pille übernimmt (Marco 01.11.2026, Erscheinungsbild „Beagle“). #}
+            <span class="status status-fertig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5l10 -10"/></svg>bewertet</span>
           {% else %}
             <span class="status status-offen">offen</span>
           {% endif %}

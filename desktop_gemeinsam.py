@@ -1,12 +1,15 @@
 """Gemeinsame Hilfen der Desktop-Oberfläche: Ablageorte und Speicherdialoge für PDF und CSV,
 Fehlermeldungen, responsive Schriftgrößen, Tabellen-Hilfsklassen und Spaltenkonstanten
 der Ergebnistabelle, deutsche Qt-Texte, Absturzprotokoll, Fehlerfenster bei unbehandelten
-Fehlern und die kopierbare Diagnose (ohne Benutzerpfad).
+Fehlern und die kopierbare Diagnose (ohne Benutzerpfad). Seit dem Erscheinungsbild „Beagle“
+(Marco 01.11.2026) auch die Symbole (symbol, symbol_setzen, symbol_png), der KopfBalken und
+kurzer_hinweis; dafür liest es die Farben aus desktop_darstellung (das selbst nichts aus
+desktop_gemeinsam importiert).
 
 Aus app.py ausgelagert (Codex-Architekturprüfung 27.09.2026); rein interne Umstellung,
 Aussehen und Verhalten sind unverändert. Die Abhängigkeiten laufen nur in eine Richtung:
-app -> desktop_dialoge -> desktop_gemeinsam, app -> desktop_darstellung (jeweils -> db/
-pdf_export); keines dieser Module importiert app.
+app -> desktop_dialoge -> desktop_gemeinsam -> desktop_darstellung, app ->
+desktop_darstellung (jeweils -> db/pdf_export); keines dieser Module importiert app.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import errno
+import html
 import inspect
 import os
 import sqlite3
@@ -21,9 +25,13 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QLocale, Qt, QTranslator, QUrl
-from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtCore import QByteArray, QLibraryInfo, QLocale, QRectF, QSize, Qt, QTranslator, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
+# QtSvg ausdrücklich importieren, damit PyInstaller das Modul samt Bibliothek mitnimmt
+# (Symbole, siehe symbol() unten; der Selbsttest prüft es in der gebauten Fassung).
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -34,6 +42,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QTableWidgetItem,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -41,9 +50,11 @@ from db import (
     ALLE_DISZIPLINEN,
     SCHRITTGRENZE_TEXT,
     get_veranstaltung,
+    lies_datum,
     set_veranstaltung,
     zeitplan_ueberschneidungen,
 )
+import desktop_darstellung
 import pdf_export
 
 
@@ -415,7 +426,13 @@ class ResponsiveSchriftMixin:
         if getattr(self, "_schrift_pt", None) == pt:
             return
         self._schrift_pt = pt
-        self.setStyleSheet(f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} QLabel {{ font-size: {pt:.1f}pt; }}")
+        # Der Titel im Kopfbalken (KopfBalken) bleibt etwas größer als die übrigen
+        # Beschriftungen - hier statt per setFont, weil die QLabel-Regel dieses Fenster-
+        # Stylesheets sonst jede eigene Schriftgröße überschreibt (Marco 01.11.2026).
+        self.setStyleSheet(
+            f"QHeaderView::section {{ font-size: {pt:.1f}pt; }} QLabel {{ font-size: {pt:.1f}pt; }} "
+            f"QLabel#kopfTitel {{ font-size: {pt * _KOPF_TITEL_FAKTOR:.1f}pt; font-weight: bold; }}"
+        )
 
 
 def _fehler_anzeigen(parent, exc: Exception) -> None:
@@ -670,6 +687,273 @@ def programmsymbol() -> QIcon:
     """Das Programmsymbol als QIcon; leer, falls die Datei fehlt (dann zeigt das System sein
     Standardsymbol - der Selbsttest der gebauten Fassung prüft, dass sie dabei ist)."""
     return QIcon(programmsymbol_pfad())
+
+
+# --- Symbole und Kopfbalken (Marco 01.11.2026, Erscheinungsbild „Beagle“) -----------------
+# Echte Symbole statt Emojis: Tabler Icons (MIT, siehe symbole/README.md) als SVG, beim
+# Zeichnen in der gewünschten Farbe ("currentColor" wird ersetzt). Emojis sahen je nach
+# Windows-Version anders aus und wirkten verspielt.
+
+#: Alle Symbole, die die Oberfläche verwendet - der Selbsttest der gebauten Fassung und die
+#: GUI-Tests prüfen, dass jedes davon im Bundle liegt und ein Bild ergibt.
+SYMBOL_NAMEN = (
+    "alert-triangle", "check", "chevron-down", "chevron-left", "chevron-right",
+    "device-floppy", "folder-open", "help-circle", "info-circle", "plus", "school", "x",
+)
+
+# (Name, Farbe, Größe) -> QIcon; je Programmlauf nur einmal aus der SVG-Datei gezeichnet.
+_symbol_zwischenspeicher: dict[tuple[str, str, int], QIcon] = {}
+# In diesem Programmlauf schon geschriebene PNG-Dateien (symbol_png).
+_symbol_png_geschrieben: set[str] = set()
+# Dynamische Eigenschaften an Knöpfen/Labels mit Symbol - symbole_auffrischen() färbt sie
+# nach einem Designwechsel neu ein.
+_SYMBOL_EIGENSCHAFT = "shsSymbol"
+_SYMBOL_FARBE_EIGENSCHAFT = "shsSymbolFarbe"
+_SYMBOL_GROESSE_EIGENSCHAFT = "shsSymbolGroesse"
+# Titel im Kopfbalken relativ zur Schrift der übrigen Beschriftungen (ResponsiveSchriftMixin).
+_KOPF_TITEL_FAKTOR = 1.3
+
+
+def symbol_pfad(name: str) -> str:
+    """Pfad zu symbole/<name>.svg, siehe bundle_pfad."""
+    return bundle_pfad("symbole", f"{name}.svg")
+
+
+def _symbol_bild(name: str, farbe: str, pixel: int) -> QImage | None:
+    """Zeichnet das Symbol als Bild mit pixel x pixel Punkten; None, wenn die Datei fehlt
+    oder kein gültiges SVG ist."""
+    try:
+        with open(symbol_pfad(name), encoding="utf-8") as datei:
+            text = datei.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+    renderer = QSvgRenderer(QByteArray(text.replace("currentColor", farbe).encode("utf-8")))
+    if not renderer.isValid():
+        return None
+    bild = QImage(pixel, pixel, QImage.Format_ARGB32_Premultiplied)
+    bild.fill(Qt.transparent)
+    maler = QPainter(bild)
+    maler.setRenderHint(QPainter.Antialiasing)
+    renderer.render(maler)
+    maler.end()
+    return bild
+
+
+def _symbol_farbe(farbe: str | None) -> str:
+    """Farbe als #RRGGBB: None = Knopfschrift des aktiven Designs, ein Schlüssel aus
+    desktop_darstellung._DESIGNS (z. B. "KOPF_TEXT", "ok") oder schon ein Hexwert."""
+    if not farbe:
+        farbe = "TEXT_BUTTON"
+    if farbe.startswith("#"):
+        return farbe.upper()
+    return desktop_darstellung._farbe(farbe).name().upper()
+
+
+def symbol(name: str, farbe: str | None = None, groesse: int = 16) -> QIcon:
+    """Tabler-Symbol als QIcon in der Farbe `farbe` (siehe _symbol_farbe), mit Bildern für
+    100, 150 und 200 % Bildschirmskalierung. Fehlt die Datei, kommt ein leeres Icon statt
+    eines Fehlers - der Knopf zeigt dann nur seinen Text."""
+    farbe = _symbol_farbe(farbe)
+    schluessel = (name, farbe, groesse)
+    icon = _symbol_zwischenspeicher.get(schluessel)
+    if icon is None:
+        icon = QIcon()
+        for faktor in (1, 1.5, 2):
+            bild = _symbol_bild(name, farbe, round(groesse * faktor))
+            if bild is not None:
+                icon.addPixmap(QPixmap.fromImage(bild))
+        _symbol_zwischenspeicher[schluessel] = icon
+    return icon
+
+
+def symbol_png(name: str, farbe: str | None = None, groesse: int = 14) -> str | None:
+    """Pfad zu einer PNG-Datei des Symbols für HTML-Labels (<img src=…>), in doppelter
+    Auflösung im benutzereigenen Programmordner neben dem Häkchen des Stylesheets
+    (desktop_darstellung._haken_pfad), je Programmlauf einmal neu geschrieben. None, wenn
+    das Symbol fehlt oder die Datei nicht geschrieben werden kann - der Aufrufer zeigt dann
+    nur den Text."""
+    farbe = _symbol_farbe(farbe)
+    ordner = os.path.dirname(desktop_darstellung._haken_pfad())
+    pfad = f"{ordner}/symbole/{name}_{farbe.lstrip('#')}_{groesse}.png"
+    if pfad in _symbol_png_geschrieben:
+        return pfad
+    bild = _symbol_bild(name, farbe, groesse * 2)
+    if bild is None or not desktop_darstellung._bild_speichern(bild, pfad):
+        return None
+    _symbol_png_geschrieben.add(pfad)
+    return pfad
+
+
+def symbol_html(name: str, farbe: str | None = None, groesse: int = 14) -> str:
+    """<img>-Tag für ein Symbol in einem Rich-Text-Label; leer, wenn es kein Bild gibt."""
+    pfad = symbol_png(name, farbe, groesse)
+    if pfad is None:
+        return ""
+    return (f'<img src="{html.escape(pfad, quote=True)}" width="{groesse}" height="{groesse}" '
+            'style="vertical-align: middle;"> ')
+
+
+def _symbol_anwenden(widget: QWidget) -> None:
+    name = widget.property(_SYMBOL_EIGENSCHAFT)
+    groesse = int(widget.property(_SYMBOL_GROESSE_EIGENSCHAFT) or 16)
+    icon = symbol(name, widget.property(_SYMBOL_FARBE_EIGENSCHAFT), groesse)
+    if isinstance(widget, QLabel):
+        widget.setPixmap(icon.pixmap(QSize(groesse, groesse), widget.devicePixelRatioF()))
+    else:
+        widget.setIcon(icon)
+
+
+def symbol_setzen(widget: QWidget, name: str, farbe: str | None = "TEXT_BUTTON", groesse: int = 16) -> None:
+    """Gibt einem Knopf (setIcon) oder Label (setPixmap) ein Symbol und merkt es sich am
+    Widget, damit symbole_auffrischen() es nach einem Designwechsel neu einfärbt. `farbe`
+    wie bei _symbol_farbe - ein Design-Schlüssel folgt dem Design, ein Hexwert bleibt."""
+    widget.setProperty(_SYMBOL_EIGENSCHAFT, name)
+    widget.setProperty(_SYMBOL_FARBE_EIGENSCHAFT, farbe or "TEXT_BUTTON")
+    widget.setProperty(_SYMBOL_GROESSE_EIGENSCHAFT, groesse)
+    _symbol_anwenden(widget)
+
+
+def symbole_auffrischen(wurzel: QWidget) -> None:
+    """Färbt alle per symbol_setzen gesetzten Symbole unter `wurzel` (einschließlich) in
+    den Farben des aktiven Designs neu ein."""
+    for widget in (wurzel, *wurzel.findChildren(QWidget)):
+        if widget.property(_SYMBOL_EIGENSCHAFT):
+            _symbol_anwenden(widget)
+
+
+def beagle_rund(groesse: int) -> QPixmap:
+    """Das Programmsymbol (Beagle) kreisrund zugeschnitten, groesse x groesse Punkte, in
+    doppelter Auflösung; leer, falls die Datei fehlt."""
+    quelle = QPixmap(programmsymbol_pfad())
+    if quelle.isNull():
+        return QPixmap()
+    pixel = groesse * 2
+    quelle = quelle.scaled(pixel, pixel, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    bild = QPixmap(pixel, pixel)
+    bild.fill(Qt.transparent)
+    maler = QPainter(bild)
+    maler.setRenderHint(QPainter.Antialiasing)
+    pfad = QPainterPath()
+    pfad.addEllipse(QRectF(0, 0, pixel, pixel))
+    maler.setClipPath(pfad)
+    maler.drawPixmap((pixel - quelle.width()) // 2, (pixel - quelle.height()) // 2, quelle)
+    maler.end()
+    bild.setDevicePixelRatio(2)
+    return bild
+
+
+_WOCHENTAGE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
+def kopf_unterzeile(datum: str | None, ort: str | None, anzahl: int | None, demo: bool = False) -> str:
+    """„Sa 14.11.2026 · Musterstadt · 8 Teilnehmer“, in der Demo mit „DEMO“ davor. Fehlende
+    Angaben fallen weg; ein nicht lesbares Datum erscheint so, wie es gespeichert ist."""
+    teile = []
+    if demo:
+        teile.append("DEMO")
+    try:
+        tag = lies_datum(datum)
+    except ValueError:
+        tag = None
+        if datum:
+            teile.append(str(datum))
+    if tag is not None:
+        teile.append(f"{_WOCHENTAGE[tag.weekday()]} {tag.day:02d}.{tag.month:02d}.{tag.year}")
+    if ort:
+        teile.append(str(ort))
+    if anzahl is not None:
+        teile.append(f"{anzahl} Teilnehmer")
+    return "  ·  ".join(teile)
+
+
+class KopfBalken(QWidget):
+    """Dunkler Balken oben im Hauptfenster und im Startdialog (Marco 01.11.2026,
+    Erscheinungsbild „Beagle“): links der Beagle rund, daneben Titel (fett) und Unterzeile
+    (Termin-Angaben), rechts die Knöpfe. Farben über #kopfBalken im Stylesheet
+    (desktop_darstellung, KOPF/KOPF_TEXT …); die Symbole der Knöpfe färbt
+    farben_aktualisieren() nach einem Designwechsel neu ein. Titel und Unterzeile als
+    reiner Text (S-1: Vereinsname und Ort stammen aus der Termin-Datei)."""
+
+    def __init__(self, titel: str = "", unterzeile: str = "", bildgroesse: int = 40, parent=None):
+        super().__init__(parent)
+        self.setObjectName("kopfBalken")
+        # Ohne das zeichnet ein schlichtes QWidget den Stylesheet-Hintergrund nicht.
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        zeile = QHBoxLayout(self)
+        zeile.setContentsMargins(14, 8, 14, 8)
+        zeile.setSpacing(10)
+        self.bild_label = QLabel()
+        self.bild_label.setPixmap(beagle_rund(bildgroesse))
+        self.bild_label.setFixedSize(bildgroesse, bildgroesse)
+        zeile.addWidget(self.bild_label)
+        self.titel_label = QLabel(titel)
+        self.titel_label.setObjectName("kopfTitel")
+        self.titel_label.setTextFormat(Qt.PlainText)
+        # Gilt, solange kein ResponsiveSchriftMixin-Fenster die Größe vorgibt (dort
+        # QLabel#kopfTitel im Fenster-Stylesheet).
+        schrift = self.titel_label.font()
+        schrift.setBold(True)
+        schrift.setPointSizeF(schrift.pointSizeF() * _KOPF_TITEL_FAKTOR)
+        self.titel_label.setFont(schrift)
+        self.unterzeile_label = QLabel(unterzeile)
+        self.unterzeile_label.setObjectName("kopfUnterzeile")
+        self.unterzeile_label.setTextFormat(Qt.PlainText)
+        texte = QVBoxLayout()
+        texte.setSpacing(0)
+        texte.addWidget(self.titel_label)
+        texte.addWidget(self.unterzeile_label)
+        zeile.addLayout(texte)
+        zeile.addStretch()
+
+    def knopf_hinzufuegen(self, knopf: QAbstractButton, symbol_name: str | None = None) -> None:
+        """Knopf rechts anfügen, optional mit Symbol in der Kopf-Schriftfarbe."""
+        if symbol_name:
+            symbol_setzen(knopf, symbol_name, "KOPF_TEXT")
+        self.layout().addWidget(knopf)
+
+    def text_setzen(self, titel: str, unterzeile: str) -> None:
+        self.titel_label.setText(titel)
+        self.unterzeile_label.setText(unterzeile)
+
+    def termin_setzen(self, verein: str | None, datum: str | None, ort: str | None,
+                      anzahl: int | None, demo: bool = False) -> None:
+        """Titel = Verein, Unterzeile = Wochentag, Datum, Ort und Teilnehmerzahl."""
+        self.text_setzen(verein or "Termin", kopf_unterzeile(datum, ort, anzahl, demo))
+
+    def farben_aktualisieren(self) -> None:
+        """Nach einem Designwechsel: Symbole in der neuen KOPF_TEXT-Farbe."""
+        symbole_auffrischen(self)
+
+
+def kurzer_hinweis(kurz: str, lang: str) -> QWidget:
+    """Erklärtext als eine kurze, gedämpfte Zeile mit Hilfe-Symbol; der volle Text steht im
+    Tooltip von beidem (Marco 01.11.2026: die langen Absätze wirkten erschlagend). Das
+    Label heißt "kurzHinweis" (Stylesheet), das Symbol "kurzHinweisSymbol"."""
+    huelle = QWidget()
+    zeile = QHBoxLayout(huelle)
+    zeile.setContentsMargins(0, 0, 0, 0)
+    zeile.setSpacing(6)
+    # Als Rich Text, weil Qt nur den umbricht - ein langer reiner Text stünde in einer
+    # einzigen, bildschirmbreiten Zeile. Maskiert (S-1), der Text kann Pfade enthalten.
+    tooltip = f"<p>{html.escape(lang, quote=False)}</p>"
+    text = QLabel(kurz)
+    text.setObjectName("kurzHinweis")
+    text.setTextFormat(Qt.PlainText)
+    # Eine Zeile, direkt gefolgt vom Symbol. Ein umbrechendes Label würde Qt neben dem
+    # Dehnraum unnötig schmal machen; so darf es in einem sehr schmalen Fenster nur
+    # abgeschnitten werden (der volle Text steht ohnehin im Tooltip), statt dem Fenster
+    # eine Mindestbreite aufzuzwingen.
+    text.setMinimumWidth(1)
+    text.setToolTip(tooltip)
+    hilfe = QLabel()
+    hilfe.setObjectName("kurzHinweisSymbol")
+    symbol_setzen(hilfe, "help-circle", "TEXT_GEDAEMPFT")
+    hilfe.setToolTip(tooltip)
+    hilfe.setCursor(Qt.WhatsThisCursor)
+    zeile.addWidget(text)
+    zeile.addWidget(hilfe, 0, Qt.AlignVCenter)
+    zeile.addStretch()
+    return huelle
 
 
 def meldungsfenster_als_klartext() -> None:

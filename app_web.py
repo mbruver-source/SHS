@@ -1039,6 +1039,9 @@ def ergebnis_erfassen(conn, teilnehmer_id):
 
     return render_template(
         "ergebnis_erfassen.html",
+        # Kopfbalken mit Verein, Datum und Ort wie in der Teilnehmerliste (Erscheinungsbild
+        # „Beagle“, Marco 01.11.2026) - die Seite, auf der die Richter am Tablet arbeiten.
+        veranstaltung=db.get_veranstaltung(conn),
         teilnehmer=teilnehmer,
         label=db.leistungsklasse_label(teilnehmer),
         zeilen=zeilen,

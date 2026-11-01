@@ -14,7 +14,7 @@ import datetime
 import html
 import sqlite3
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -65,6 +65,10 @@ from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _ja_nein,
     _zeitplan_pdf_exportieren,
+    kurzer_hinweis,
+    symbol,
+    symbol_html,
+    symbol_setzen,
 )
 
 
@@ -166,16 +170,18 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addStretch()
         kopf_zeile.addWidget(export_btn)
 
-        hinweis = QLabel(
+        # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026).
+        hinweis = kurzer_hinweis(
+            "Je Richter eine Spalte – Blöcke und Pausen frei anordnen. „Automatisch "
+            "verteilen…“ ersetzt den Plan aller Richter durch einen Vorschlag.",
             "Je Richter eine eigene Spalte mit frei sortierbarer Abfolge aus "
             "Prüfungsblöcken und Pausen. \"Automatisch verteilen…\" erstellt einen "
             "ausgewogenen Erstvorschlag über ALLE angelegten Richter (ersetzt "
             "dabei deren bisherigen Zeitplan) - die \"Standard-Prüfungsdauer\" ist dabei "
             "nur ein Vorschlagswert und lässt sich je Block einzeln überschreiben. "
             "Pausendauer und -platzierung sind ebenso frei wählbar wie die Reihenfolge "
-            "insgesamt, unabhängig je Richter."
+            "insgesamt, unabhängig je Richter.",
         )
-        hinweis.setWordWrap(True)
 
         self._spalten_layout = QHBoxLayout()
         spalten_container = QWidget()
@@ -306,6 +312,9 @@ class ZeitplanTab(QWidget):
         zeilen = []
         ok = _farbe("ok").name()
         fehler = _farbe("fehler").name()
+        # Symbole als Bild statt „✓“/„✗“ (Marco 01.11.2026); fehlt das Bild, ein Textzeichen.
+        haken = symbol_html("check", ok) or "✓ "
+        kreuz = symbol_html("x", fehler) or "✗ "
         # UX-Test 02.10.2026, U2: Überschneidungen oben und auffällig - vorher war die
         # Seitenleiste auch bei doppelt eingeplanten Teams komplett grün.
         if konflikte:
@@ -317,7 +326,8 @@ class ZeitplanTab(QWidget):
                 for zeile in (k["erste"], k["zweite"]):
                     starts.add((zeile["start"], namen_je_richter.get(zeile["richter_id"], "?")))
             zeilen.append(
-                f'<span style="color:{fehler}; font-weight:bold;">⚠ Überschneidungen ({len(je_team)} Team(s))</span>'
+                f'<span style="color:{fehler}; font-weight:bold;">{symbol_html("alert-triangle", fehler)}'
+                f'Überschneidungen ({len(je_team)} Team(s))</span>'
             )
             for team, starts in je_team.values():
                 nr = team["startnummer"] if team["startnummer"] is not None else "–"
@@ -332,12 +342,12 @@ class ZeitplanTab(QWidget):
             bezeichnung = f"{eintrag['art']} LK {eintrag['stufe']} – {eintrag['disziplin']}"
             if eintrag["eingeplant"]:
                 zeilen.append(
-                    f'<span style="color:{ok};">✓ {html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer)</span>'
+                    f'<span style="color:{ok};">{haken}{html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer)</span>'
                 )
             else:
                 zeilen.append(
                     f'<span style="color:{fehler}; font-weight:bold;">'
-                    f'✗ {html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer) – noch offen</span>'
+                    f'{kreuz}{html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer) – noch offen</span>'
                 )
         self._offene_starts_label.setText("<br>".join(zeilen))
 
@@ -346,10 +356,12 @@ class ZeitplanTab(QWidget):
         box = QGroupBox(richter["name"])
         box.setMinimumWidth(300)
 
-        links_btn = QPushButton("◀")
+        links_btn = QPushButton()
+        symbol_setzen(links_btn, "chevron-left")
         links_btn.setToolTip("Spalte nach links verschieben")
         links_btn.clicked.connect(lambda: self._richter_verschieben(richter_id, -1))
-        rechts_btn = QPushButton("▶")
+        rechts_btn = QPushButton()
+        symbol_setzen(rechts_btn, "chevron-right")
         rechts_btn.setToolTip("Spalte nach rechts verschieben")
         rechts_btn.clicked.connect(lambda: self._richter_verschieben(richter_id, 1))
         umbenennen_btn = QPushButton("Umbenennen…")
@@ -362,6 +374,13 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addStretch()
 
         liste = QListWidget()
+        # Symbole (Blockkopf, Warndreieck) so klein wie die Schrift, nicht in Stil-Größe.
+        liste.setIconSize(QSize(14, 14))
+        # Lange Blockköpfe umbrechen statt rechts abgeschnitten zu werden (schmale Spalten bei
+        # vielen Richtern, Build-Vorbereitung 1.0.53, Marco 01.11.2026).
+        liste.setWordWrap(True)
+        liste.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        liste.setResizeMode(QListWidget.Adjust)
         markierte_zeile = None
         # UX-Test 02.10.2026, U9: je Prüfungsblock eine fette Kopfzeile, die Teilnehmer
         # eingerückt darunter - so ist sichtbar, dass "Hoch"/"Runter"/"Entfernen" den ganzen
@@ -384,10 +403,9 @@ class ZeitplanTab(QWidget):
                     for z in block if z["teilnehmer"] is not None
                 ]
                 hinweise = [h for h in hinweise if h]
-                warnung = "⚠ " if hinweise else ""
-                kopf = QListWidgetItem(
-                    f"▸ {warnung}{zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  ({umfang})"
-                )
+                # Symbol statt „▸ “/„⚠ “ vor dem Text (Marco 01.11.2026).
+                kopf = QListWidgetItem(f"{zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  ({umfang})")
+                kopf.setIcon(symbol("alert-triangle", "fehler") if hinweise else symbol("chevron-right", "TEXT_GEDAEMPFT"))
                 kopf.setData(Qt.UserRole, zeile["eintrag_id"])
                 schrift = kopf.font()
                 schrift.setBold(True)
@@ -460,11 +478,10 @@ class ZeitplanTab(QWidget):
         hinweis = None
         if zeile["typ"] == "pruefung" and zeile.get("teilnehmer") is not None:
             hinweis = self._konflikt_hinweise.get((zeile["eintrag_id"], zeile["teilnehmer"]["id"]))
-        if hinweis:
-            text = "⚠ " + text
         item = QListWidgetItem(text)
         item.setData(Qt.UserRole, zeile["eintrag_id"])
         if hinweis:
+            item.setIcon(symbol("alert-triangle", "fehler"))
             # UX-Test 02.10.2026, U2: betroffene Zeilen rot, Tooltip erklärt die Überschneidung.
             item.setForeground(_farbe("fehler"))
             item.setToolTip(_klartext_tooltip(hinweis))  # S-1: enthält Richternamen
@@ -711,6 +728,11 @@ class ZeitplanTab(QWidget):
         item = liste.currentItem()
         if item is None:
             QMessageBox.information(self, "Kein Eintrag ausgewählt", "Bitte zuerst einen Eintrag in der Liste auswählen.")
+            return
+        # Rückfrage wie bei „Richter löschen“ - ein ganzer Prüfungsblock verschwand sonst mit
+        # einem Klick (Abdeckungstests 01.11.2026, Marcos Entscheidung).
+        bezeichnung = item.text().splitlines()[0] if item.text() else "Eintrag"
+        if not _ja_nein(self, "Eintrag entfernen", f"„{bezeichnung}“ aus dem Zeitplan entfernen?"):
             return
         try:
             loesche_zeitplan_eintrag(self.conn, item.data(Qt.UserRole))

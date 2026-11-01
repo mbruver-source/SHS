@@ -107,6 +107,11 @@ classDiagram
         -_neuer_termin()
         -_termin_loeschen()
     }
+    class KopfBalken {
+        +termin_setzen(verein, datum, ort, anzahl, demo)
+        +farben_aktualisieren()
+        +knopf_hinzufuegen(knopf, symbol_name)
+    }
     class TeilnehmerTab
     class FormularImportTab
     class ErgebnisTab {
@@ -174,6 +179,8 @@ classDiagram
     HauptFenster *-- VerwaltungTab
     HauptFenster *-- ExportTab
     HauptFenster *-- DatensicherungTab
+    HauptFenster *-- KopfBalken
+    StartDialog *-- KopfBalken
     HauptFenster ..> VersionDialog : öffnet
     VersionDialog ..> LizenzDialog : öffnet
     HauptFenster ..> DemoTour : startet

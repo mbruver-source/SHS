@@ -79,6 +79,7 @@ from desktop_gemeinsam import (
     _fehlertext,
     _pfad_anzeige,
     _url_oeffnen,
+    symbol_setzen,
 )
 
 #: Präfix der Temp-Ordner - alte Reste (z. B. nach einem Absturz) werden beim nächsten
@@ -197,7 +198,7 @@ class DemoPanel(QWidget):
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.Tool)
-        self.setWindowTitle("🎓 Demoprüfung")
+        self.setWindowTitle("Demoprüfung")
         self._schliessen_erlaubt = False
         self._extra_aktion: Callable[[], None] | None = None
         self._letzter = False
@@ -211,7 +212,7 @@ class DemoPanel(QWidget):
         self.text_label = QLabel()
         self.hinweis_label = QLabel()
         # Eigene Zeile statt hinweis_label (das z. B. den Speicherort der PDF zeigt).
-        self.pause_label = QLabel("Automatisch weiter angehalten – weiter mit „Weiter ▶“.")
+        self.pause_label = QLabel("Automatisch weiter angehalten – weiter mit „Weiter“.")
         self.pause_label.setVisible(False)
         for label in (self.schritt_label, self.titel_label, self.text_label, self.hinweis_label, self.pause_label):
             label.setTextFormat(Qt.PlainText)
@@ -233,8 +234,13 @@ class DemoPanel(QWidget):
         self.beenden_btn = QPushButton("Beenden")
         self.beenden_btn.setToolTip("Demo abbrechen – der Demo-Termin wird gelöscht.")
         self.beenden_btn.clicked.connect(self.beenden_geklickt)
-        self.weiter_btn = QPushButton("Weiter ▶")
+        self.weiter_btn = QPushButton("Weiter")
         self.weiter_btn.setObjectName("primaerButton")  # siehe _QSS_TEMPLATE
+        # Symbol rechts vom Text (Pfeil nach vorn): Qt setzt das Icon bei umgekehrter
+        # Leserichtung ans Ende; der Text selbst bleibt links nach rechts (Marco 01.11.2026,
+        # Symbole statt „▶“/„✔“).
+        self.weiter_btn.setLayoutDirection(Qt.RightToLeft)
+        symbol_setzen(self.weiter_btn, "chevron-right", "#FFFFFF")
         self.weiter_btn.setDefault(True)
         self.weiter_btn.clicked.connect(self.weiter_geklickt)
 
@@ -255,6 +261,12 @@ class DemoPanel(QWidget):
         self.setMinimumWidth(440)
         self.resize(480, 320)
         self._positioniert = False
+        # Unterkante (Bildschirmkoordinate), an der das Fenster mit seinen Knöpfen stehen
+        # bleibt, solange es nicht verschoben wird - siehe _im_bildschirm_halten.
+        self._unten: int | None = None
+        # True, solange das Programm selbst die Höhe anpasst (_groesse_anpassen) - nur dann
+        # wird die Unterkante festgehalten, nicht wenn der Anwender am Rand zieht.
+        self._eigene_groessenaenderung = False
 
     def anzeigen(self, nummer: int, anzahl: int, schritt: DemoSchritt, letzter: bool) -> None:
         # Nummer 0 = Begrüßung; die übrigen Schritte tragen ihre Nummer auch im Titel.
@@ -267,35 +279,60 @@ class DemoPanel(QWidget):
         self.countdown_anzeigen(None)
         self.angehalten_anzeigen(False)
         self.weiter_btn.setEnabled(True)
-        self.adjustSize()
+        self._groesse_anpassen()
         if not self._positioniert:
             self._positioniert = True
             self._in_ecke_setzen(rechts=True)
-        self._im_bildschirm_halten()
         self.show()
+        # Erst nach show() kennt Qt den Fensterrahmen (Titelleiste) und damit die echte Höhe.
+        self._im_bildschirm_halten()
         self.raise_()
 
     def countdown_anzeigen(self, sekunden: int | None) -> None:
-        """Knopftext „Weiter ▶ (n)“ während des Countdowns, sonst „Weiter ▶“ bzw. im
-        letzten Schritt „Fertig ✔“ (dort gibt es keinen Countdown)."""
+        """Knopftext „Weiter (n)“ während des Countdowns, sonst „Weiter“ bzw. im letzten
+        Schritt „Fertig“ (dort gibt es keinen Countdown) - mit Pfeil bzw. Haken als Symbol."""
+        # Weiß auf der Akzentfarbe (primaerButton).
+        symbol_setzen(self.weiter_btn, "check" if self._letzter else "chevron-right", "#FFFFFF")
         if self._letzter:
-            self.weiter_btn.setText("Fertig ✔")
+            self.weiter_btn.setText("Fertig")
         elif sekunden is None:
-            self.weiter_btn.setText("Weiter ▶")
+            self.weiter_btn.setText("Weiter")
         else:
-            self.weiter_btn.setText(f"Weiter ▶ ({sekunden})")
+            self.weiter_btn.setText(f"Weiter ({sekunden})")
 
     def angehalten_anzeigen(self, angehalten: bool) -> None:
         self.pause_label.setVisible(angehalten)
+        self._groesse_anpassen()
 
     def hinweis(self, text: str | None) -> None:
-        self.hinweis_label.setText(text or "")
+        # Unsichtbare Umbruchstellen nach jedem Pfadtrenner: ein langer Speicherpfad bricht so
+        # im Fenster um, statt rechts abgeschnitten zu werden (Marco 01.11.2026).
+        anzeige = (text or "").replace("\\", "\\​").replace("/", "/​")
+        self.hinweis_label.setText(anzeige)
         self.hinweis_label.setVisible(bool(text))
+        self._groesse_anpassen()
 
     def extra(self, beschriftung: str | None, aktion: Callable[[], None] | None = None) -> None:
         self._extra_aktion = aktion
         self.extra_btn.setText(beschriftung or "")
         self.extra_btn.setVisible(bool(beschriftung))
+        self._groesse_anpassen()
+
+    def _groesse_anpassen(self) -> None:
+        """Höhe passend zum Inhalt, Breite bleibt. Kommt während eines Schritts eine Zeile
+        dazu (z. B. „Gespeichert unter …“), wächst das Fenster mit - sonst quetschte Qt den
+        umbrechenden Erklärtext, er war mitten in der Zeile abgeschnitten (A4-Prüfung am
+        echten Windows, Marco 01.11.2026). Bewusst nicht adjustSize(): das änderte je Schritt
+        auch die Breite (und damit die Lage von „Weiter“) und machte das Fenster für einen
+        langen Speicherpfad so breit, dass es rechts aus dem Bildschirm ragte. Die Unterkante
+        hält danach resizeEvent/_im_bildschirm_halten fest."""
+        hoehe = self.layout().totalHeightForWidth(self.width())
+        if hoehe > 0 and hoehe != self.height():
+            self._eigene_groessenaenderung = True
+            try:
+                self.resize(self.width(), max(hoehe, self.minimumSizeHint().height()))
+            finally:
+                self._eigene_groessenaenderung = False
 
     def fehler(self, text: str) -> None:
         self.hinweis(text)
@@ -325,9 +362,12 @@ class DemoPanel(QWidget):
         return QPoint(max(bildschirm.left(), x), max(bildschirm.top(), y))
 
     def _im_bildschirm_halten(self) -> None:
-        """Unterkante verankern: wächst das Fenster (längerer Text, „Gespeichert unter …“),
-        rückt es nach oben, statt unter den Bildschirmrand bzw. die Taskleiste zu rutschen
-        (Desktop-Prüfung 14.10.2026, Teil 10 Nr. 1)."""
+        """Unterkante verankern: Ändert sich die Höhe (anderer Schritt, „Gespeichert unter …“),
+        wächst oder schrumpft das Fenster nach oben. Die Knöpfe unten, vor allem „Weiter“,
+        bleiben so an derselben Stelle, statt dass man ihnen mit der Maus nachfahren muss
+        (Marco 01.11.2026). Nie unter den Bildschirmrand bzw. die Taskleiste (Desktop-Prüfung
+        14.10.2026, Teil 10 Nr. 1). Verschiebt der Anwender das Fenster, gilt dessen neue
+        Unterkante (moveEvent)."""
         if not self._positioniert:
             return
         # Bildschirm, auf dem das Erklärfenster gerade steht (ggf. vom Anwender auf einen
@@ -335,12 +375,22 @@ class DemoPanel(QWidget):
         bildschirm = self.screen().availableGeometry()
         rahmen = self.frameGeometry()
         unten_max = bildschirm.bottom() - 48
-        if rahmen.bottom() > unten_max:
-            self.move(self.x(), max(bildschirm.top(), unten_max - rahmen.height()))
+        unten = min(self._unten if self._unten is not None else rahmen.bottom(), unten_max)
+        oben = max(bildschirm.top(), unten - rahmen.height() + 1)
+        if oben != rahmen.top():
+            self.move(self.x(), oben)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        if not self._eigene_groessenaenderung and self._positioniert:
+            # Der Anwender zieht selbst am Rand: dort bleiben, die neue Unterkante gilt.
+            self._unten = self.frameGeometry().bottom()
         self._im_bildschirm_halten()
+
+    def moveEvent(self, event) -> None:  # type: ignore[override]
+        super().moveEvent(event)
+        if self._positioniert:
+            self._unten = self.frameGeometry().bottom()
 
     def _in_ecke_setzen(self, rechts: bool) -> None:
         self.move(self._ecke(rechts))

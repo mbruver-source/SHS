@@ -247,6 +247,22 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
 
     schritt("Programmsymbol", symbol)
 
+    def symbole():
+        # Erscheinungsbild „Beagle“ (Marco 01.11.2026): fehlen symbole/*.svg im Bundle
+        # (build.spec, datas) oder QtSvg, zeigen die Knöpfe nur Text - das soll beim Build
+        # auffallen, gerade unter macOS/Linux, wo PyInstaller Qt-Module anders einsammelt.
+        from PySide6.QtWidgets import QApplication
+
+        from desktop_gemeinsam import SYMBOL_NAMEN, symbol, symbol_pfad
+
+        QApplication.instance() or QApplication(sys.argv[:1])
+        fehlend = [name for name in SYMBOL_NAMEN if symbol(name, "#000000").pixmap(16, 16).isNull()]
+        if fehlend:
+            raise AssertionError("Symbole fehlen: " + ", ".join(symbol_pfad(name) for name in fehlend))
+        return f"{len(SYMBOL_NAMEN)} Symbole (QtSvg)"
+
+    schritt("Symbole", symbole)
+
     def lizenztexte():
         # OFFEN B14 (Marco 01.11.2026): das Lizenzfenster zeigt LICENSE und
         # THIRD_PARTY_LICENSES.txt - fehlen sie im Bundle (build.spec, datas), soll das beim

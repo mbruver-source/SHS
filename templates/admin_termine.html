@@ -10,7 +10,7 @@
   </p>
   {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
   {% if veroeffentlicht %}
-    <div class="karte" style="background: #e6f4ea; border-color: var(--gruen);">
+    <div class="karte karte-erfolg">
       Termin veröffentlicht: <strong>{{ veroeffentlicht.verein or "(ohne Vereinsnamen)" }}</strong>
       {% if veroeffentlicht.ort %}, {{ veroeffentlicht.ort }}{% endif %}
       – {{ veroeffentlicht.anzahl_teilnehmer }} Teilnehmer.
@@ -26,7 +26,7 @@
 </div>
 
 {% if zurueckgeholt_bericht %}
-  <div class="karte" style="background: #e6f4ea; border-color: var(--gruen);">
+  <div class="karte karte-erfolg">
     <h2 style="margin-top: 0;">Ergebnisse zurückgeholt</h2>
     <p>
       {{ zurueckgeholt_bericht.aktualisiert }} Teilnehmer mit Ergebnissen aktualisiert.

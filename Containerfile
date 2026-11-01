@@ -22,14 +22,19 @@ RUN pip install --no-cache-dir -r requirements-postgres.txt -r requirements-web.
 
 # Lizenzen der Fremdkomponenten (Python, Flask, waitress, psycopg2 ...), passend zu den eben
 # installierten Paketen (Marco 25.10.2026). Liegt danach unter /app/THIRD_PARTY_LICENSES.txt.
+# Dazu die Lizenz der Tabler Icons (Haken in der Teilnehmerliste, siehe tools/drittlizenzen.py).
 COPY tools/drittlizenzen.py ./tools/
-RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools
+COPY symbole/LICENSE-Tabler.txt ./symbole/
+RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools symbole
 
 # version.py (nicht version.txt/version_info.txt - die dienen nur dem PyInstaller-Build
 # der Desktop-.exe, siehe bump_version.py) liefert dieselbe Versionsnummer wie die
 # Desktop-Version, sichtbar in der Fußzeile jeder Web-Seite (siehe templates/base.html).
 COPY db.py shs_core.py app_web.py version.py ./
 COPY templates/ ./templates/
+# Bilder der Web-Oberfläche (Beagle im Kopf, templates/base.html), ausgeliefert von Flask
+# unter /static (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+COPY static/ ./static/
 # MIT-Lizenz des Programms; die Seite /lizenzen (app_web.py) zeigt sie zusammen mit
 # THIRD_PARTY_LICENSES.txt an (Marco 01.11.2026).
 COPY LICENSE ./

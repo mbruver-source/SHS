@@ -49,6 +49,7 @@ from desktop_gemeinsam import (
     _pfad_anzeige,
     _wartecursor,
     fehler_protokollieren,
+    kurzer_hinweis,
 )
 
 
@@ -69,7 +70,10 @@ class VerwaltungTab(QWidget):
         veranstaltung_btn.setObjectName("primaerButton")  # einzige Aktion dieses Reiters, siehe _QSS_TEMPLATE
         veranstaltung_btn.clicked.connect(self._veranstaltung_bearbeiten)
 
-        hinweis = QLabel(
+        # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026).
+        hinweis = kurzer_hinweis(
+            "Verein, Ort, Datum, Richter, Gebühren, angebotene Prüfungen und Startnummern-"
+            "Bereiche – erscheinen in den PDFs und im Anmeldeformular.",
             "Über „Veranstaltungsdaten bearbeiten…“ lassen sich Verein, Ort und Datum "
             "sowie Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
@@ -77,9 +81,8 @@ class VerwaltungTab(QWidget):
             "„Export“) und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
             "Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des "
             "Anmeldeformulars (Reiter „Export“), die Startnummern-Bereiche die Vergabe der "
-            "Startnummern."
+            "Startnummern.",
         )
-        hinweis.setWordWrap(True)
 
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
@@ -128,14 +131,17 @@ class DatensicherungTab(QWidget):
         # Hauptfensters kollidieren.
         self._aktueller_pfad = aktueller_pfad
 
-        hinweis = QLabel(
+        # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026). Das Wichtigste
+        # - es sind ALLE Termine - steht in der kurzen Zeile.
+        hinweis = kurzer_hinweis(
+            "Sichert ALLE Termine in eine .zip-Datei bzw. stellt sie daraus wieder her. "
+            "Passwort getrennt von der Sicherung aufbewahren.",
             "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner "
             f"(„{termine_ordner()}“) als eine einzige Sicherungsdatei (Endung .zip) - nicht "
             "nur den gerade geöffneten Termin. Das Passwort einer geschützten Sicherung "
             "am besten getrennt von der Sicherungsdatei aufbewahren (z. B. nicht auf "
-            "demselben USB-Stick)."
+            "demselben USB-Stick).",
         )
-        hinweis.setWordWrap(True)
 
         erstellen_btn = QPushButton("Sicherung erstellen…")
         erstellen_btn.clicked.connect(self._sicherung_erstellen)

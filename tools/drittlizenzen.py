@@ -43,8 +43,11 @@ VARIANTEN = {
 # Lizenzbezeichnung für die Übersicht.
 EIGENE_DATEIEN = {
     "desktop": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt",
-                 "Bitstream Vera / Arev Fonts License")],
-    "web": [],
+                 "Bitstream Vera / Arev Fonts License"),
+                # Marco 01.11.2026, Erscheinungsbild „Beagle“ (symbole/README.md).
+                ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
+    # Haken-Symbol in templates/teilnehmerliste.html (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+    "web": [("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
 }
 # Alle Teilpakete von PySide6 (Essentials, Addons, Pdf, WebEngine ...) und Shiboken6. Ihre Wheels
 # enthalten nur den Text der kommerziellen Qt-Lizenz, die hier nicht gilt; der wird weggelassen.

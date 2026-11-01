@@ -127,6 +127,10 @@ class TestDrittlizenzen(unittest.TestCase):
         with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
             desktop = drittlizenzen.erzeugen("desktop").split(drittlizenzen.TRENNER, 1)[0]
         self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", desktop)
+        # Marco 01.11.2026: Symbole der Oberfläche (Tabler Icons) samt Lizenztext.
+        self.assertIn("  Tabler Icons (Symbole der Oberfläche) - MIT", desktop)
+        with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
+            self.assertIn("Copyright (c) 2020-2026 Paweł Kuna", drittlizenzen.erzeugen("desktop"))
 
     def test_python_hinweis_nur_ausserhalb_von_windows(self):
         self.paket("aaa", lizenzen={"LICENSE": MIT})

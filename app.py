@@ -44,6 +44,7 @@ from PySide6.QtCore import (
     QRectF,
     QRegularExpression,
     Qt,
+    Signal,
 )
 from PySide6.QtGui import (
     QAction,
@@ -51,6 +52,7 @@ from PySide6.QtGui import (
     QBrush,
     QCloseEvent,
     QDesktopServices,
+    QIcon,
     QPainter,
     QPalette,
     QPen,
@@ -183,6 +185,10 @@ from desktop_gemeinsam import (
     _responsive_schriftgroesse,
     ResponsiveSchriftMixin,
     _STATUS_SPALTE,
+    KopfBalken,
+    symbol,
+    symbol_setzen,
+    symbole_auffrischen,
 )
 from desktop_dialoge import (
     HilfeDialog,
@@ -360,6 +366,10 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
 
 
 class TeilnehmerTab(QWidget):
+    # Bei jedem Neuladen der Liste (Teilnehmer angelegt, gelöscht, „keine Teilnahme“ …) -
+    # das Hauptfenster aktualisiert damit die Teilnehmerzahl im Kopfbalken.
+    teilnehmer_geaendert = Signal()
+
     def __init__(self, conn, parent=None, pfad: str | None = None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
@@ -976,6 +986,7 @@ class TeilnehmerTab(QWidget):
         self.aktualisieren()
 
     def aktualisieren(self) -> None:
+        self.teilnehmer_geaendert.emit()
         gemerkte_auswahl = set(self._ausgewaehlte_ids())
         self.tabelle.clearSelection()
         teilnehmer = list_teilnehmer(self.conn)
@@ -997,7 +1008,7 @@ class TeilnehmerTab(QWidget):
                 t["rufname_hund"],
                 leistungsklasse_label(t),
                 t["verein"] or "",
-                "✓ bezahlt" if t["bezahlt"] else "",
+                "bezahlt" if t["bezahlt"] else "",
             ]
             for col, wert in enumerate(werte):
                 if col == 0:
@@ -1018,9 +1029,11 @@ class TeilnehmerTab(QWidget):
                 self.tabelle.setItem(row, col, item)
             # Bezahlt-Spalte farblich hervorheben (dezentes Grün, siehe _QSS_TEMPLATE) -
             # nur die Textfarbe, der Zelleninhalt selbst bleibt wie zuvor ("" bei nicht
-            # bezahlt), damit bestehende Tests darauf weiter verlassen können.
+            # bezahlt), damit bestehende Tests darauf weiter verlassen können. Haken als
+            # Symbol statt „✓“ (Marco 01.11.2026, Erscheinungsbild „Beagle“).
             if t["bezahlt"]:
                 bezahlt_item = self.tabelle.item(row, 6)
+                bezahlt_item.setIcon(symbol("check", "ok"))
                 bezahlt_item.setForeground(_farbe("ok"))
                 schrift = bezahlt_item.font()
                 schrift.setBold(True)
@@ -1036,7 +1049,7 @@ class TeilnehmerTab(QWidget):
             # unterscheidet und trotz Spaltenbreite lesbar bleibt). Ein echter Fehler hat
             # Vorrang vor der Info (siehe teilnehmer_gegenstand_hinweis()).
             # UX-Test 02.10.2026, U14 (Marco: nur die Chip-Nr. auffällig): Gegenstände
-            # werden oft erst kurz vor dem Prüfungstag festgelegt - ein oranges ⚠ in fast
+            # werden oft erst kurz vor dem Prüfungstag festgelegt - ein oranges Warnzeichen in fast
             # jeder Zeile wirkte auf Laien, als sei alles falsch. Sie erscheinen jetzt dezent
             # grau als "noch offen"; nur eine fehlende Chip-Nr. bleibt eine Warnung. Bei
             # "keine Teilnahme" entfallen die Gegenstands-Hinweise ganz (K7).
@@ -1048,8 +1061,9 @@ class TeilnehmerTab(QWidget):
                 f"{offen_text} – kann bis zum Prüfungstag nachgetragen werden (Bearbeiten…)."
             )
             if stark:
-                text = "⚠ " + "; ".join(stark) + (f"; {offen_text}" if gegenstand_offen else "")
+                text = "; ".join(stark) + (f"; {offen_text}" if gegenstand_offen else "")
                 vollstaendig_item = QTableWidgetItem(text)
+                vollstaendig_item.setIcon(symbol("alert-triangle", "warnung"))
                 vollstaendig_item.setForeground(_farbe("warnung"))
                 vollstaendig_item.setToolTip(
                     "Fehlt noch: Chip-Nr. (wird am Prüfungstag zur Identifizierung gebraucht)."
@@ -1235,10 +1249,16 @@ class FormularImportTab(QWidget):
         ki_layout.addWidget(self.prompt_feld)
         ki_layout.addLayout(ki_knopfzeile)
         self._ki_bereich.setVisible(False)
-        self._ki_umschalter = QPushButton("▸ " + self._KI_UMSCHALTER_TEXT)
+        self._ki_umschalter = QPushButton(self._KI_UMSCHALTER_TEXT)
+        symbol_setzen(self._ki_umschalter, "chevron-right")
         self._ki_umschalter.setCheckable(True)
         self._ki_umschalter.setFlat(True)
-        self._ki_umschalter.setStyleSheet("text-align: left;")
+        # setFlat allein wirkt nicht, die allgemeine QPushButton-Regel des Stylesheets malt
+        # sonst Fläche und Rahmen (Marco 01.11.2026) - deshalb hier ausdrücklich ohne beides.
+        self._ki_umschalter.setStyleSheet(
+            "QPushButton { text-align: left; background: transparent; border: none; padding: 4px 2px; }"
+            "QPushButton:hover { text-decoration: underline; }"
+        )
         self._ki_umschalter.toggled.connect(self._ki_bereich_umschalten)
 
         layout = QVBoxLayout(self)
@@ -1289,7 +1309,7 @@ class FormularImportTab(QWidget):
 
     def _ki_bereich_umschalten(self, sichtbar: bool) -> None:
         self._ki_bereich.setVisible(sichtbar)
-        self._ki_umschalter.setText(("▾ " if sichtbar else "▸ ") + self._KI_UMSCHALTER_TEXT)
+        symbol_setzen(self._ki_umschalter, "chevron-down" if sichtbar else "chevron-right")
 
     def _oma_importieren(self) -> None:
         """Übernimmt Meldungen aus einem OMA-Export (siehe importiere_teilnehmer_aus_oma in
@@ -2164,10 +2184,11 @@ class ErgebnisTab(QWidget):
         # Punktepaare sowie Disqualifiziert/Abbruch. Die Status-Spalte selbst bleibt außen
         # vor - die bekommt den Restplatz (setStretchLastSection und ausdrücklich unten,
         # siehe "Restplatz ausdrücklich an die Status-Spalte"), dafür wird ihr
-        # längster möglicher Inhalt ("● nicht gespeichert", siehe _aktualisiere_zeilenstatus)
+        # längster möglicher Inhalt ("nicht gespeichert" mit Symbol, siehe _aktualisiere_zeilenstatus)
         # vorab von der verfügbaren Breite abgezogen, damit sie nicht auf (fast) 0
         # zusammengedrückt wird.
-        status_minimum = self.tabelle.fontMetrics().horizontalAdvance("● nicht gespeichert") + 24
+        # + Symbol (16) mit Abstand und Zellenrand.
+        status_minimum = self.tabelle.fontMetrics().horizontalAdvance("nicht gespeichert") + 16 + 44
         breite_fuer_fixspalten = max(breite - status_minimum, 0)
 
         punktespalten = {c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values() for c in paar}
@@ -2502,16 +2523,20 @@ class ErgebnisTab(QWidget):
 
         status_item = self.tabelle.item(row, _STATUS_SPALTE)
         if status_item is not None:
+            # Symbol statt „●“/„✓“ vor dem Text (Marco 01.11.2026, Erscheinungsbild „Beagle“).
             if ungespeichert:
-                status_item.setText("● nicht gespeichert")
+                status_item.setText("nicht gespeichert")
+                status_item.setIcon(symbol("device-floppy", "warnung"))
                 status_item.setForeground(_farbe("warnung"))
             elif self._zeile_ist_leer(row):
                 # UX-Test 02.10.2026, K1: vorher stand auch bei noch leeren Zeilen
-                # "✓ gespeichert" - das wirkte, als seien schon Ergebnisse eingetragen.
+                # "gespeichert" - das wirkte, als seien schon Ergebnisse eingetragen.
                 status_item.setText("noch kein Ergebnis")
+                status_item.setIcon(QIcon())
                 status_item.setForeground(_farbe("gedaempft"))
             else:
-                status_item.setText("✓ gespeichert")
+                status_item.setText("gespeichert")
+                status_item.setIcon(symbol("check", "ok"))
                 status_item.setForeground(_farbe("ok"))
 
     def _zeile_ist_leer(self, row: int) -> bool:
@@ -2797,10 +2822,12 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # blieb aber unsichtbar, weil eine Menüleiste ohne eigene Menüeinträge auf
         # vielen Windows-Stilen auf Höhe 0 kollabiert. Die Kopfzeile hier ist Teil des
         # normalen zentralen Layouts und daher zuverlässig sichtbar.
-        hilfe_btn = QPushButton("❓ Hilfe")
+        # Seit dem Erscheinungsbild „Beagle“ (Marco 01.11.2026) ein dunkler Kopfbalken mit
+        # dem Beagle, Verein und Termin-Angaben (KopfBalken); Symbole statt Emojis.
+        hilfe_btn = QPushButton("Hilfe")
         hilfe_btn.clicked.connect(self._hilfe_anzeigen)
 
-        version_btn = QPushButton(f"ℹ️ Version {VERSION}")
+        version_btn = QPushButton(f"Version {VERSION}")
         version_btn.clicked.connect(self._version_anzeigen)
 
         self._tabs = QTabWidget()
@@ -2811,24 +2838,31 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.wechseln_btn.clicked.connect(self._termin_wechseln)
 
         # Marcos Wunsch 04.10.2026: geführte Demoprüfung mit erfundenen Daten (desktop_demo).
-        self.demo_btn = QPushButton("🎓 Demoprüfung")
+        self.demo_btn = QPushButton("Demoprüfung")
         self.demo_btn.setToolTip(
             "Spielt einmal einen kompletten Prüfungstag mit erfundenen Daten vor – "
             "deine Termine bleiben unverändert."
         )
         self.demo_btn.clicked.connect(self._demo_starten)
 
-        kopf_zeile = QHBoxLayout()
-        kopf_zeile.addStretch()
-        kopf_zeile.addWidget(self.wechseln_btn)
-        kopf_zeile.addWidget(version_btn)
-        kopf_zeile.addWidget(self.demo_btn)
-        kopf_zeile.addWidget(hilfe_btn)
+        self.kopf = KopfBalken()
+        self.kopf.knopf_hinzufuegen(self.wechseln_btn, "folder-open")
+        self.kopf.knopf_hinzufuegen(version_btn, "info-circle")
+        self.kopf.knopf_hinzufuegen(self.demo_btn, "school")
+        self.kopf.knopf_hinzufuegen(hilfe_btn, "help-circle")
+
+        # Kopfbalken randlos über die ganze Breite, die Reiter mit Abstand darunter.
+        reiter_huelle = QWidget()
+        reiter_layout = QVBoxLayout(reiter_huelle)
+        reiter_layout.setContentsMargins(10, 10, 10, 10)
+        reiter_layout.addWidget(self._tabs)
 
         zentral = QWidget()
         zentral_layout = QVBoxLayout(zentral)
-        zentral_layout.addLayout(kopf_zeile)
-        zentral_layout.addWidget(self._tabs)
+        zentral_layout.setContentsMargins(0, 0, 0, 0)
+        zentral_layout.setSpacing(0)
+        zentral_layout.addWidget(self.kopf)
+        zentral_layout.addWidget(reiter_huelle, 1)
         self.setCentralWidget(zentral)
 
         self._termin_setzen(conn, pfad, demo=demo)
@@ -2890,6 +2924,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         with _wartecursor():
             _darstellung_anwenden(QApplication.instance())
             self._farben_auffrischen()
+            self.kopf.farben_aktualisieren()
+            # Übrige Knöpfe mit Symbol (Zeitplan-Pfeile, Formular-Import, Demo-Fenster).
+            symbole_auffrischen(self)
 
     def _farben_auffrischen(self) -> None:
         """Färbt Tabelleninhalte nach einem Darstellungswechsel neu. Teilnehmer,
@@ -2930,7 +2967,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.wechseln_btn.setEnabled(not aktiv)
         if not hasattr(self, "_demo_tooltip"):
             self._demo_tooltip = self.demo_btn.toolTip()
-        self.demo_btn.setText("🎓 Erklärfenster zeigen" if aktiv else "🎓 Demoprüfung")
+        self.demo_btn.setText("Erklärfenster zeigen" if aktiv else "Demoprüfung")
         self.demo_btn.setToolTip(
             "Holt das Erklärfenster der laufenden Demoprüfung wieder nach vorn." if aktiv else self._demo_tooltip
         )
@@ -3099,7 +3136,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         finally:
             self._tabs.blockSignals(False)
         self.verwaltung_tab.veranstaltung_geaendert.connect(self._titel_aktualisieren)
+        self.teilnehmer_tab.teilnehmer_geaendert.connect(self._kopf_aktualisieren)
         self.setWindowTitle(fenstertitel)
+        self._kopf_aktualisieren()
 
         self._vorheriger_tab_index = 0
 
@@ -3108,6 +3147,17 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         statt „None“ (Desktop-Prüfung 14.10.2026, Teil 8 Nr. 3). Auch nach „Veranstaltungs-
         daten bearbeiten…“ aufgerufen (Teil 2 Nr. 5)."""
         self.setWindowTitle(_fenstertitel(self.conn, self.pfad, getattr(self, "_demo_termin", False)))
+        self._kopf_aktualisieren()
+
+    def _kopf_aktualisieren(self) -> None:
+        """Kopfbalken: Verein (ohne Verein der Dateiname wie im Fenstertitel), Datum, Ort und
+        Zahl der Teilnehmenden (ohne „keine Teilnahme“). Nach Terminwechsel, „Veranstaltungs-
+        daten bearbeiten…“ und bei jedem Reiterwechsel (Teilnehmer angelegt/gelöscht)."""
+        veranstaltung = get_veranstaltung(self.conn) or {}
+        verein = veranstaltung.get("verein") or os.path.basename(self.pfad or "") or "Termin"
+        anzahl = len(list_teilnehmer(self.conn, nur_teilnehmende=True))
+        self.kopf.termin_setzen(verein, veranstaltung.get("datum"), veranstaltung.get("ort"),
+                                anzahl, getattr(self, "_demo_termin", False))
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
@@ -3244,6 +3294,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 self.ergebnis_tab.alle_speichern()
 
         self._vorheriger_tab_index = index
+        # Teilnehmerzahl im Kopfbalken (z. B. nach dem Anlegen im Reiter „Teilnehmer“).
+        self._kopf_aktualisieren()
         widget = self._tabs.widget(index)
         if widget is self.ergebnis_tab and self.ergebnis_tab.hat_ungespeicherte_aenderungen():
             # Speichern wurde bewusst abgelehnt - neu laden, ohne diese Eingaben zu
@@ -3288,9 +3340,9 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
     def __init__(self, parent=None, aktueller_pfad: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("SHS Prüfungsprogramm")
-        self.resize(600, 380)
+        self.resize(640, 440)
         self.pfad: str | None = None
-        # "🎓 Demoprüfung" gewählt - der Aufrufer startet dann die Demo (desktop_demo).
+        # "Demoprüfung" gewählt - der Aufrufer startet dann die Demo (desktop_demo).
         self.demo_angefordert = False
         # True, wenn `pfad` eben erst über „Neuen Termin anlegen“ entstanden ist - siehe
         # HauptFenster._neu_angelegten_termin_entfernen.
@@ -3302,6 +3354,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
         self.tabelle = QTableWidget(0, 4)
         self.tabelle.setHorizontalHeaderLabels(["Datum", "Verein", "Ort", "Teilnehmer"])
+        self.tabelle.verticalHeader().setVisible(False)  # keine Zeilennummern „1“, „2“ (Marco 01.11.2026)
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabelle.setSelectionMode(QTableWidget.SingleSelection)
@@ -3314,8 +3367,10 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
         neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_TEMPLATE
+        symbol_setzen(neu_btn, "plus", "#FFFFFF")  # weiß auf der Akzentfarbe
         neu_btn.clicked.connect(self._neuer_termin)
         self.oeffnen_btn = QPushButton("Öffnen")
+        symbol_setzen(self.oeffnen_btn, "folder-open")
         self.oeffnen_btn.clicked.connect(self._termin_oeffnen)
         self.oeffnen_btn.setEnabled(False)
         self.loeschen_btn = QPushButton("Löschen…")
@@ -3339,26 +3394,34 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         )
         hinweis.setWordWrap(True)
 
-        demo_btn = QPushButton("🎓 Demoprüfung")
+        demo_btn = QPushButton("Demoprüfung")
         demo_btn.setToolTip(
             "Spielt einmal einen kompletten Prüfungstag mit erfundenen Daten vor – "
             "deine Termine bleiben unverändert."
         )
         demo_btn.clicked.connect(self._demo_waehlen)
         # Steht im Layout als erster Knopf - ohne das bekäme er beim Öffnen den Fokus und
-        # würde als Standard-Knopf (blau, Enter) hervorgehoben statt "Neuen Termin anlegen…".
+        # würde als Standard-Knopf (Akzentfarbe, Enter) hervorgehoben statt "Neuen Termin anlegen…".
         demo_btn.setAutoDefault(False)
-        kopf_zeile = QHBoxLayout()
-        willkommen = QLabel("Willkommen im SHS Prüfungsprogramm – bitte einen Termin wählen oder neu anlegen:")
+        # Kopfbalken wie im Hauptfenster, mit größerem Beagle (Marco 01.11.2026,
+        # Erscheinungsbild „Beagle“); die Begrüßung darunter nur noch kurz.
+        self.kopf = KopfBalken("SHS-Prüfungsprogramm", "Prüfungen im Spürhundsport verwalten", bildgroesse=52)
+        self.kopf.knopf_hinzufuegen(demo_btn, "school")
+        willkommen = QLabel("Termin wählen oder neu anlegen:")
         willkommen.setWordWrap(True)
-        kopf_zeile.addWidget(willkommen, 1)
-        kopf_zeile.addWidget(demo_btn)
+
+        innen = QVBoxLayout()
+        innen.setContentsMargins(12, 10, 12, 10)
+        innen.addWidget(willkommen)
+        innen.addWidget(self.tabelle)
+        innen.addLayout(button_zeile)
+        innen.addWidget(hinweis)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(kopf_zeile)
-        layout.addWidget(self.tabelle)
-        layout.addLayout(button_zeile)
-        layout.addWidget(hinweis)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.kopf)
+        layout.addLayout(innen, 1)
 
         self.tabelle.setFocus()  # wie vor dem Demo-Knopf: Fokus zuerst auf der Terminliste
         self._aktualisieren()

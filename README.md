@@ -40,11 +40,11 @@ erprobt; Rückmeldungen sind willkommen. Die Mac-Version ist nicht bei Apple reg
 den ersten Start musst du deshalb einmal erlauben – Schritt für Schritt im
 [Handbuch, Kapitel 2](docs/HANDBUCH.md#2-installation-und-updates).
 
-**Updates:** Im Programm oben rechts auf **„ℹ️ Version …“** klicken, dann
+**Updates:** Im Programm oben rechts auf **„Version …“** klicken, dann
 **„Nach Updates suchen“**. Die neue Version einfach
 über die alte installieren – deine Termine bleiben erhalten.
 
-**Ausprobieren:** Der Button **„🎓 Demoprüfung“** spielt einmal einen kompletten Prüfungstag
+**Ausprobieren:** Der Button **„Demoprüfung“** spielt einmal einen kompletten Prüfungstag
 mit erfundenen Daten vor und erklärt jeden Schritt – deine Termine bleiben dabei unberührt
 (siehe [„Demoprüfung“](docs/HANDBUCH.md#demoprüfung)). Mit der
 [Beispiel-CSV mit 20 erfundenen Teilnehmern](docs/beispiel_teilnehmer.csv) lässt sich das

@@ -5,13 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titel %}SHS Prüfung{% endblock %}</title>
 <style>
+  /* Erscheinungsbild „Beagle“ (Marco 01.11.2026): Kopf in Anthrazit mit dem Beagle, lohbrauner
+     Akzent, Creme-Flächen - wie die Desktop-Version. Die Variablennamen (--gruen ...) bleiben,
+     weil die übrigen Templates sie in style-Attributen nutzen; --gruen ist jetzt der Akzent. */
   :root {
-    --gruen: #2e7d32;
-    --gruen-dunkel: #1b5e20;
-    --rot: #c62828;
-    --grau-hell: #f2f2f2;
-    --grau-rand: #ccc;
-    --text: #1a1a1a;
+    --gruen: #8C5A32;
+    --gruen-dunkel: #6A4325;
+    --rot: #b3261e;
+    --grau-hell: #FBF8F3;
+    --grau-rand: #E2D9CB;
+    --text: #2B2620;
+    --gedaempft: #5E5549;
+    --karte: #FFFDF9;
+    --kopf: #2F2B27;
+    --kopf-text: #F4EEE4;
+    --kopf-text2: #CDBFA9;
+    --fertig-hg: #E8F1E8;
+    --fertig: #24592A;
   }
   * { box-sizing: border-box; }
   body {
@@ -22,35 +32,48 @@
     font-size: 18px;
   }
   header {
-    background: var(--gruen-dunkel);
-    color: #fff;
-    padding: 0.8em 1em;
+    background: var(--kopf);
+    color: var(--kopf-text);
+    padding: 0.6em 1em;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.8em;
   }
-  header a { color: #fff; text-decoration: none; }
+  header .marke { display: flex; align-items: center; gap: 0.6em; min-width: 0; }
+  header .marke img { width: 42px; height: 42px; border-radius: 50%; flex: none; }
+  header .titel { font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+  header .unterzeile { display: block; font-weight: 400; font-size: 0.78em; color: var(--kopf-text2);
+                       white-space: nowrap; }
+  header nav { font-size: 0.85em; display: flex; flex-wrap: wrap; justify-content: flex-end;
+               align-items: baseline; column-gap: 1em; row-gap: 0.2em; }
+  header a { color: var(--kopf-text); text-decoration: none; }
+  header a:hover, header a:focus { text-decoration: underline; }
   header form.abmelden { display: inline; margin: 0; }
   header form.abmelden button {
     background: none; border: none; padding: 0; margin: 0;
-    color: #fff; font: inherit; cursor: pointer;
+    color: var(--kopf-text); font: inherit; cursor: pointer;
   }
   header form.abmelden button:hover, header form.abmelden button:focus { text-decoration: underline; }
-  header .titel { font-weight: 600; }
   main {
     max-width: 640px;
     margin: 0 auto;
     padding: 1em;
   }
+  main a:not(.knopf):not(.teilnehmer-zeile) { color: var(--gruen-dunkel); }
+  h1 { margin: 0.2em 0 0.3em; font-size: 1.5em; }
   .karte {
-    background: #fff;
+    background: var(--karte);
     border: 1px solid var(--grau-rand);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 1em;
     margin-bottom: 1em;
+    box-shadow: 0 1px 2px rgba(60, 40, 20, 0.05);
   }
+  /* Erfolgsmeldung (templates/admin_termine.html), grün wie die Status-Pille „bewertet“. */
+  .karte-erfolg { background: var(--fertig-hg); border-color: var(--fertig); }
   .fehler {
-    background: #fdecea;
+    background: #fbeceb;
     border: 1px solid var(--rot);
     color: var(--rot);
     border-radius: 8px;
@@ -68,14 +91,20 @@
     font-size: 1.1em;
     border: 1px solid var(--grau-rand);
     border-radius: 6px;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus-visible, button:focus-visible, .knopf:focus-visible, main a:focus-visible {
+    outline: 2px solid var(--gruen); outline-offset: 1px;
   }
   button, .knopf {
     display: inline-block;
     background: var(--gruen);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 0.8em 1.2em;
+    font-family: inherit;
     font-size: 1.1em;
     cursor: pointer;
     text-decoration: none;
@@ -83,20 +112,26 @@
   }
   button:active, .knopf:active { background: var(--gruen-dunkel); }
   .knopf-sekundaer {
-    background: #fff;
+    background: var(--karte);
     color: var(--text);
     border: 1px solid var(--grau-rand);
   }
+  .knopf-sekundaer:active { background: var(--grau-hell); }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.6em 0.4em; border-bottom: 1px solid var(--grau-rand); }
   .teilnehmer-zeile { text-decoration: none; color: var(--text); display: block; }
-  .status { display: inline-block; padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; }
-  .status-offen { background: #fff3cd; color: #7a5c00; }
-  .status-fertig { background: #e6f4ea; color: var(--gruen-dunkel); }
-  .startnummer { font-weight: 600; color: #555; margin-right: 0.4em; }
+  .status {
+    display: inline-flex; align-items: center; gap: 0.25em;
+    padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; white-space: nowrap;
+  }
+  .status svg { width: 14px; height: 14px; flex: none; }
+  .status-offen { background: #fbf0d9; color: #6d4c00; }
+  .status-fertig { background: var(--fertig-hg); color: var(--fertig); }
+  .startnummer { font-weight: 700; color: var(--gedaempft); margin-right: 0.4em; }
+  small { color: var(--gedaempft); }
   footer {
     text-align: center;
-    color: #888;
+    color: var(--gedaempft);
     font-size: 0.8em;
     padding: 1.5em 1em 2em;
   }
@@ -117,12 +152,23 @@
 </head>
 <body>
 <header>
-  <span class="titel">SHS Prüfung{% if veranstaltung %} – {{ veranstaltung.verein }}{% endif %}</span>
+  {# Kopf mit Beagle und Termin-Angaben wie in der Desktop-Version (Marco 01.11.2026,
+     Erscheinungsbild „Beagle“). Den Termin (veranstaltung) bekommen Teilnehmerliste und Ergebnisseite. #}
+  <span class="marke">
+    <img src="{{ url_for('static', filename='beagle.png') }}" alt="" width="42" height="42">
+    {% if veranstaltung and veranstaltung.verein %}
+      <span class="titel">{{ veranstaltung.verein }}<span class="unterzeile">{{ [veranstaltung.datum | datum, veranstaltung.ort] | select | join(" · ") or "SHS-Prüfungsprogramm" }}</span></span>
+    {% else %}
+      <span class="titel">SHS-Prüfungsprogramm<span class="unterzeile">Ergebniserfassung</span></span>
+    {% endif %}
+  </span>
   {% if session.get('benutzername') %}
     <nav>
-      {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a> ·{% endif %}
-      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a> ·{% endif %}
-      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a> ·{% endif %}
+      {# Abstand per CSS statt „·“ - beim Umbruch am Tablet blieb sonst ein Punkt allein am
+         Zeilenende stehen (Erscheinungsbild „Beagle“, Marco 01.11.2026). #}
+      {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a>{% endif %}
+      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a>{% endif %}
+      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a>{% endif %}
       <form class="abmelden" method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit">Abmelden ({{ session.get('benutzername') }})</button>

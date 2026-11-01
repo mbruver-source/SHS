@@ -5,15 +5,15 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.52. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.53. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
   an. Unbekannte Wörter erklärt das [Glossar in Kapitel 15](#15-glossar-wörter-kurz-erklärt).
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
-- Kurzhilfe im Programm: Button **„❓ Hilfe“** oben rechts
-- Programm vorher ausprobieren: Button **„🎓 Demoprüfung“** spielt einen kompletten
+- Kurzhilfe im Programm: Button **„Hilfe“** oben rechts
+- Programm vorher ausprobieren: Button **„Demoprüfung“** spielt einen kompletten
   Prüfungstag vor, siehe [Demoprüfung](#demoprüfung); dazu eine Beispiel-CSV mit 20
   erfundenen Teilnehmern, siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
 
@@ -117,7 +117,7 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
       `sudo apt install ./shs-pruefungsprogramm_X.Y.Z_amd64.deb`. Entfernen mit
       `sudo apt remove shs-pruefungsprogramm`, die Termine bleiben dabei erhalten.
 
-- **Version prüfen und aktualisieren:** Oben rechts auf **„ℹ️ Version …“** klicken, dann
+- **Version prüfen und aktualisieren:** Oben rechts auf **„Version …“** klicken, dann
   **„Nach Updates suchen“**. Gibt es eine neuere Version, erscheint
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
   installieren – deine Termine bleiben erhalten. Unter macOS die App im Ordner „Programme“
@@ -136,12 +136,16 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
   bittet, es zu schließen. Meldet das Setup „Fehler beim Ersetzen einer vorhandenen Datei …
   Zugriff verweigert“, läuft das Programm noch: Programm schließen, dann
   **„Nochmals versuchen“** klicken.
-- **Aussehen:** Im Menü **„Ansicht“** gibt es zwei Einstellungen, die sich frei kombinieren
-  lassen und gespeichert werden:
-  - **„Hintergrund“:** Hell (Standard), Warm / Sand, Dunkel oder Hoher Kontrast. Hoher
-    Kontrast eignet sich z. B. für einen Laptop draußen am Prüfungstag.
-  - **„Akzentfarbe“:** Blau, Grün oder Violett, die Farbe der Haupt-Schaltflächen und der
-    Markierungen.
+- **Aussehen:** Oben im Fenster zeigt der dunkle Kopfbalken den Beagle, den Verein und
+  darunter Datum, Ort und die Zahl der Teilnehmer des geöffneten Termins. Kurze Hinweise in den
+  Reitern haben ein kleines **„?“**; bleibt die Maus darauf, erscheint die ausführliche
+  Erklärung. Im Menü **„Ansicht“** gibt es zwei Einstellungen, die sich frei kombinieren lassen
+  und gespeichert werden:
+  - **„Hintergrund“:** Beagle (Standard, warmes Creme), Hell (Weiß), Dunkel oder Hoher
+    Kontrast. Hoher Kontrast eignet sich z. B. für einen Laptop draußen am Prüfungstag. Wer
+    früher „Warm / Sand“ gewählt hatte, bekommt automatisch „Beagle“.
+  - **„Akzentfarbe“:** Lohbraun (Standard), Blau, Grün oder Violett, die Farbe der
+    Haupt-Schaltflächen und der Markierungen.
 
   Unter Windows bleibt beim Design Dunkel das Fenster zum Öffnen und Speichern von Dateien
   hell. Dieses Fenster stammt von Windows selbst.
@@ -167,7 +171,7 @@ steht oben.
 | **„Öffnen“** (oder Doppelklick bzw. Enter) | Öffnet den markierten Termin. |
 | **„Löschen…“** | Verschiebt den markierten Termin nach Rückfrage mit allen Teilnehmer- und Ergebnisdaten in den **Papierkorb**. Geht das nicht (z. B. auf einem USB-Stick oder Netzlaufwerk), fragt das Programm, ob der Termin **endgültig** gelöscht werden soll. Der gerade geöffnete Termin lässt sich nicht löschen. Bereits erzeugte PDFs im Ordner `Ausdrucke` bleiben bewusst erhalten – bei Bedarf dort von Hand löschen. |
 | **„Andere Termin-Datei öffnen…“** | Öffnet eine Termin-Datei (`*.sqlite`) von einem anderen Ort, z. B. einem USB-Stick. |
-| **„🎓 Demoprüfung“** (oben rechts) | Spielt einen kompletten Prüfungstag mit erfundenen Daten vor, siehe [Demoprüfung](#demoprüfung). |
+| **„Demoprüfung“** (oben rechts) | Spielt einen kompletten Prüfungstag mit erfundenen Daten vor, siehe [Demoprüfung](#demoprüfung). |
 
 Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“** oben rechts.
 
@@ -175,8 +179,8 @@ Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“**
 
 ![Demoprüfung beim Eintragen der Ergebnisse](bilder/handbuch_demo.png)
 
-Der Button **„🎓 Demoprüfung“** steht im Startbildschirm und im Hauptfenster oben rechts neben
-**„❓ Hilfe“**. Die Demo spielt einmal einen ganz normalen Prüfungstag vor:
+Der Button **„Demoprüfung“** steht im Startbildschirm und im Hauptfenster oben rechts neben
+**„Hilfe“**. Die Demo spielt einmal einen ganz normalen Prüfungstag vor:
 
 1. Termin anlegen (das Fenster „Neuen Termin anlegen“ füllt sich von selbst),
 2. einen Teilnehmer in der Erfassungsmaske eintragen, sieben weitere Meldungen kommen dazu,
@@ -190,30 +194,30 @@ Der Button **„🎓 Demoprüfung“** steht im Startbildschirm und im Hauptfens
 
 Das Programm klickt und tippt dabei selbst. Ein kleines Fenster erklärt jeden Schritt: was
 gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du klickst auf
-**„Weiter ▶“** oder lässt die Demo laufen, mit **„Beenden“** brichst du jederzeit ab.
+**„Weiter“** oder lässt die Demo laufen, mit **„Beenden“** brichst du jederzeit ab.
 
 Das Programm tippt in normalem Tempo, wie von Hand. Wer es eilig hat, drückt einfach
-**„Weiter ▶“**: Dann wird der laufende Schritt sofort fertig ausgefüllt.
+**„Weiter“**: Dann wird der laufende Schritt sofort fertig ausgefüllt.
 
-Ist ein Schritt fertig, zählt der Knopf zehn Sekunden herunter („Weiter ▶ (10)“) und
+Ist ein Schritt fertig, zählt der Knopf zehn Sekunden herunter („Weiter (10)“) und
 schaltet dann von allein weiter. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst
-klickt, nimmt den Haken bei **„Automatisch weiter“** heraus. „Weiter ▶“ bleibt dabei an
+klickt, nimmt den Haken bei **„Automatisch weiter“** heraus. „Weiter“ bleibt dabei an
 derselben Stelle: Das Erklärfenster wächst mit längeren Texten nach oben. Wo du es
 hinschiebst, bleibt es.
 
 - Schaust du die Ergebnisliste über **„PDF öffnen“** an oder tippst bzw. klickst du selbst in
   einem Fenster der Demo, hält der Countdown für diesen Schritt an. Im Erklärfenster steht
-  dann „Automatisch weiter angehalten“, weiter geht es mit **„Weiter ▶“**.
+  dann „Automatisch weiter angehalten“, weiter geht es mit **„Weiter“**.
 - Ist eine Meldung oder Rückfrage des Programms offen, wartet der Countdown nur. Nach dem
   Schließen zählt er von allein weiter, mit mindestens drei Sekunden Vorlauf.
-- Im letzten Schritt wartet die Demo, bis du auf **„Fertig ✔“** klickst.
+- Im letzten Schritt wartet die Demo, bis du auf **„Fertig“** klickst.
 
 Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem temporären Ordner, nicht
 bei deinen Terminen, und wird am Ende samt PDF gelöscht. Ist die Ergebnisliste dann noch in
 einem PDF-Programm geöffnet, räumt das Programm sie beim nächsten Start weg. Deine echten Termine bleiben
 unberührt. Der Reiter **„Datensicherung“** ist während der Demo gesperrt, weil er immer mit
 deinen echten Terminen arbeitet. Ist das Erklärfenster verdeckt oder verschoben, holt der Knopf
-**„🎓 Erklärfenster zeigen“** (sonst „Demoprüfung“) es wieder nach vorn. Startest du die Demo aus dem Hauptfenster, bist du danach
+**„Erklärfenster zeigen“** (sonst „Demoprüfung“) es wieder nach vorn. Startest du die Demo aus dem Hauptfenster, bist du danach
 wieder in deinem vorherigen Termin. Gibt es dort noch nicht gespeicherte Ergebnisse, fragt die
 Demo in Schritt 2 vor dem Umschalten auf den Demo-Termin wie beim Terminwechsel nach.
 
@@ -267,7 +271,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die Startnummer bleibt zunächst offen (siehe unten). Beim Speichern fragt das Programm nach, wenn die Prüfung im Termin nicht angeboten wird oder Geburtsdatum bzw. Wurftag in der Zukunft liegen. |
 | **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer – ebenso ein Doppelklick auf die Zeile. |
 | **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. |
-| **„Bezahlt umschalten“** | Setzt oder entfernt „✓ bezahlt“ sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
+| **„Bezahlt umschalten“** | Setzt oder entfernt „bezahlt“ (mit Haken) sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
 | **„Keine Teilnahme“** | Markiert nicht erschienene Teilnehmer (siehe unten), auch mehrere auf einmal. Sind alle markierten bereits so vermerkt, heißt der Button **„Teilnahme wiederherstellen“**. |
 | **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen. |
 | **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung, bei gesetztem „Filter Art/LK“ nur in dieser Prüfung (siehe unten). |
@@ -371,12 +375,12 @@ Gegenstände je Leistungsklasse:
 
 ### Spalte „Anmerkungen“
 
-Die Spalte zeigt, ob für die Prüfung noch etwas fehlt. **Warnungen** (orange, fett, mit ⚠)
+Die Spalte zeigt, ob für die Prüfung noch etwas fehlt. **Warnungen** (orange, fett, mit Warndreieck)
 solltest du vor dem Prüfungstag beheben; **Hinweise** (klein) sind nur Erinnerungen.
 
 | Meldung | Art | Bedeutung |
 |---|---|---|
-| ⚠ Chip-Nr. fehlt | Warnung (orange) | Keine Chipnummer eingetragen – wird am Prüfungstag zur Identifizierung gebraucht. |
+| Chip-Nr. fehlt | Warnung (orange) | Keine Chipnummer eingetragen – wird am Prüfungstag zur Identifizierung gebraucht. |
 | Gegenstand noch offen | Hinweis (grau) | ED ohne Gegenstand. Kann bis zum Prüfungstag nachgetragen werden. |
 | Gegenstände noch offen | Hinweis (grau) | DK mit weniger verschiedenen Gegenständen als die Mindestanzahl. Kann bis zum Prüfungstag nachgetragen werden. |
 | Gegenstände den Suchdisziplinen nicht vollständig zugeordnet | Hinweis | DK: Die Zuordnung ist begonnen, deckt aber nicht alle drei Disziplinen ab. |
@@ -577,12 +581,12 @@ Der Zeitplan hat eine Spalte je Richter.
 5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block
-existiert (grün ✓) oder noch fehlt (rot ✗ „noch offen“).
+existiert (grün mit Haken) oder noch fehlt (rot mit Kreuz, „noch offen“).
 
 **Überschneidungen:** Steht ein Team gleichzeitig oder mit weniger als dem Mindestabstand an zwei
-Stellen – etwa nach dem Verschieben von Hand –, sind die betroffenen Zeilen rot mit ⚠ markiert
+Stellen – etwa nach dem Verschieben von Hand –, sind die betroffenen Zeilen rot mit Warndreieck markiert
 (der Tooltip nennt die andere Stelle), und oben in der Seitenleiste steht
-**„⚠ Überschneidungen“** mit allen betroffenen Teams. Vor dem Zeitplan-PDF fragt das Programm
+**„Überschneidungen“** (mit Warndreieck) mit allen betroffenen Teams. Vor dem Zeitplan-PDF fragt das Programm
 dann nach. Beheben lässt sich das durch Verschieben der Blöcke, eine Pause oder erneutes
 „Automatisch verteilen…“.
 
@@ -938,7 +942,7 @@ anklickst. Ein **„Reiter“** ist eine der Registerkarten oben im Programmfens
 („Teilnehmer“, „Formular-Import“, „Zeitplan“ …) – ein Klick darauf zeigt die jeweilige Seite.
 
 > **Tipp für den Anfang:** Schau dir zuerst die [Demoprüfung](#demoprüfung) an (Button
-> **„🎓 Demoprüfung“**). Sie zeigt den ganzen Ablauf in wenigen Minuten. Danach probierst du
+> **„Demoprüfung“**). Sie zeigt den ganzen Ablauf in wenigen Minuten. Danach probierst du
 > alles einmal gefahrlos mit erfundenen Teilnehmern selbst aus, bevor es ernst wird (siehe
 > [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)). Den Probe-Termin
 > löschst du danach einfach wieder.
@@ -1011,7 +1015,7 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
    **„Startzeit speichern“** klicken.
 3. Auf **„Automatisch verteilen…“** klicken. Das Programm verteilt alle Teilnehmer auf die
    Richter.
-4. Ist eine Zeile **rot mit ⚠**, steht ein Team zur selben Zeit an zwei Stellen. Dann die
+4. Ist eine Zeile **rot mit Warndreieck**, steht ein Team zur selben Zeit an zwei Stellen. Dann die
    Blöcke mit **„Hoch“** / **„Runter“** verschieben.
 5. Mittagspause: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den Haken bei
    **„Bei allen Richtern einfügen, um“** setzen, die Uhrzeit (z. B. 12:00) eintragen und
@@ -1055,7 +1059,7 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
 3. Als Speicherort z. B. den USB-Stick wählen und **„Speichern“** klicken.
 
 Geschafft! Wenn unterwegs etwas nicht klappt, hilft [Kapitel 13](#13-häufige-fragen-und-probleme)
-oder der Button **„❓ Hilfe“** oben rechts im Programm.
+oder der Button **„Hilfe“** oben rechts im Programm.
 
 ## 15. Glossar: Wörter kurz erklärt
 

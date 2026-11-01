@@ -298,6 +298,92 @@ class TestPdfExport(unittest.TestCase):
                     self.assertLessEqual(ende, spalten_ende, text)
                 self.assertIn("Maria", _text(ziel))
 
+    def test_leere_liste_vereinsname_bleibt_lesbar_und_in_der_spalte(self):
+        """A6-Prüfung (Marco 01.11.2026, kombiniert): Vereinsnamen werden höchstens bis
+        7,5 pt verkleinert, längere brechen in der Zelle um statt in die Spalte
+        „Gesamtpunkte“ zu ragen (Spaltenende 18 mm Rand + 16 + 18 + 46 + 40 mm)."""
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        vereine = {1: "Hundesportverein Grünwald-Süd e. V.",
+                   2: "Verein für Schutz- und Gebrauchshunde Oberschleißheim"}
+        for nr, verein in vereine.items():
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"N{nr}", vorname="V", rufname_hund="Rex", art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr, verein=verein))
+        ziel = self._pfad("verein_lang.pdf")
+        pdf_export.erstelle_leere_ergebnisliste_pdf(self.conn, ziel)
+        stuecke = []
+
+        def merken(text, _cm, tm, _font, groesse):
+            if any(teil in text for teil in ("Hundesport", "Grünwald", "Schutz", "Gebrauchshunde", "Oberschleißheim")):
+                stuecke.append((text, groesse * tm[0],
+                                tm[4] + stringWidth(text.strip(), pdf_export._SCHRIFT, groesse * tm[0])))
+
+        PdfReader(ziel).pages[0].extract_text(visitor_text=merken)
+        self.assertTrue(stuecke)
+        for text, groesse, ende in stuecke:
+            self.assertGreaterEqual(groesse, 7.5, text)
+            self.assertLessEqual(ende, (18 + 16 + 18 + 46 + 40) * mm, text)
+        self.assertIn("Oberschleißheim", _text(ziel))
+
+    def test_bewertungsbogen_beschriftung_widerristhoehe_einzeilig(self):
+        """A6-Prüfung (Marco 01.11.2026): bei 26 mm Spaltenbreite rutschte der Doppelpunkt
+        von „Widerristhöhe:“ in DejaVu in eine eigene Zeile."""
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Test", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1, schulterhoehe_cm=45))
+        ziel = self._pfad("bogen_widerrist.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, ziel)
+        self.assertIn("Widerristhöhe:", _text(ziel))
+
+    def test_doppelnamen_brechen_am_bindestrich_um(self):
+        """A6-Prüfung (Marco 01.11.2026): zu lange Doppelnamen brechen am Bindestrich um
+        („Müller-“ / „Lüdenscheidt-“) statt mitten im Wort („Lüdensc“ / „heidt“)."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Müller-Lüdenscheidt-Großkopf", vorname="Anne-Kathrin", rufname_hund="Rex",
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1))
+        ziel = self._pfad("doppelname.pdf")
+        pdf_export.erstelle_pruefungsleitung_uebersicht_pdf(self.conn, ziel)
+        text = _text(ziel)
+        for teil in ("Müller-", "Lüdenscheidt-", "Großkopf"):
+            self.assertIn(teil, text)
+
+    def test_etikett_vereinsname_wird_hoechstens_zweizeilig(self):
+        """A6-Prüfung (Marco 01.11.2026): der austragende Verein links oben im Etikett wird
+        verkleinert, bis er in zwei Zeilen passt (Mindestgröße 6,5 pt); kurze Namen bleiben
+        bei 8,5 pt."""
+        from reportlab.platypus import Paragraph
+
+        breite = pdf_export._ETIKETT_SPALTEN[0] - 12
+        self.assertEqual(pdf_export._etikett_verein_stil("SGV Köppern e.V.").fontSize, 8.5)
+        lang = "SV Musterstadt-Nord Hundesport e. V."
+        _b, hoehe = Paragraph(lang, pdf_export._ETIKETT_TEXT).wrap(breite, 1000)
+        self.assertGreater(hoehe, 2 * pdf_export._ETIKETT_TEXT.leading)  # bei 8,5 pt dreizeilig
+        stil = pdf_export._etikett_verein_stil(lang)
+        self.assertLess(stil.fontSize, 8.5)
+        self.assertGreaterEqual(stil.fontSize, 6.5)
+        _b, hoehe = Paragraph(lang, stil).wrap(breite, 1000)
+        self.assertLessEqual(hoehe, 2 * stil.leading + 0.01)
+        sehr_lang = "Verein für Schutz- und Gebrauchshunde Oberschleißheim und Umgebung e. V."
+        self.assertEqual(pdf_export._etikett_verein_stil(sehr_lang).fontSize, 6.5)
+
+        # Die Etiketten-PDF nutzt den Stil auch wirklich.
+        set_veranstaltung(self.conn, verein=lang, datum="2026-09-19")
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Test", vorname="A", rufname_hund="Rex",
+                                                  art="DK", stufe=1, startnummer=1))
+        ziel = self._pfad("etikett_verein.pdf")
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, ziel)
+        groessen = []
+
+        def merken(text, _cm, tm, _font, groesse):
+            if "Musterstadt" in text or "Hundesport" in text:
+                groessen.append(round(groesse * tm[0], 1))
+
+        PdfReader(ziel).pages[0].extract_text(visitor_text=merken)
+        self.assertTrue(groessen)
+        self.assertTrue(all(g == stil.fontSize for g in groessen), groessen)
+
     def test_alle_pdfs_maskieren_markup_in_allen_feldern(self):
         """Sicherheitsprüfung 03.10.2026, S-4 (Codex-Nachweis): reportlab-Markup in
         Vereins-, Richter- oder Teilnehmerdaten (z. B. aus einer fremden Termin-Datei) darf

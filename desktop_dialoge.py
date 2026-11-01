@@ -1197,7 +1197,7 @@ unwiderruflich (mit Rückfrage). Im Hauptfenster kannst du über "Anderen Termin
 jederzeit wechseln.</p>
 
 <h3>Demoprüfung</h3>
-<p>Der Knopf "🎓 Demoprüfung" (oben rechts im Hauptfenster und im Startbildschirm) spielt
+<p>Der Knopf "Demoprüfung" mit dem Doktorhut (oben rechts im Hauptfenster und im Startbildschirm) spielt
 einmal einen kompletten Prüfungstag mit erfundenen Daten vor: Termin anlegen, Teilnehmer,
 Startnummern, Bezahlt, Zeitplan, Ergebnisse, Disqualifikation, Auswertung mit Stechen und
 die Ergebnisliste als PDF. Das Programm klickt selbst, ein kleines Fenster erklärt jeden
@@ -1220,7 +1220,7 @@ folgt automatisch der ED-Disziplin. Bei DK sind mindestens 1 (LK1), 2 (LK2) bzw.
 verschiedene Gegenstände nötig. Alle auf "frei" zu lassen ist in Ordnung; ordnest du
 Disziplinen zu, sollten alle drei belegt sein (derselbe Gegenstand darf in mehreren Feldern
 stehen, jede Disziplin aber nur einmal vorkommen).</p>
-<p><b>Spalte "Anmerkungen":</b> Die Warnung "⚠ Chip-Nr. fehlt" (orange) solltest du vor dem
+<p><b>Spalte "Anmerkungen":</b> Die Warnung "Chip-Nr. fehlt" (orange, mit Warndreieck) solltest du vor dem
 Prüfungstag beheben. Graue Hinweise wie "Gegenstand noch offen" sind nur Erinnerungen –
 Gegenstände können bis zum Prüfungstag nachgetragen werden.</p>
 <p>"Bezahlt umschalten" setzt den Zahlungsstatus des markierten Teilnehmers, ohne den ganzen
@@ -1268,13 +1268,13 @@ zeigt je Art/Leistungsklasse/Disziplin, ob dafür schon ein Prüfungsblock angel
 (grün) oder noch fehlt (rot, "noch offen") – bleibt auch beim seitlichen Scrollen durch
 viele Richter-Spalten sichtbar. Dreikampf-Teams setzt der Vorschlag nie gleichzeitig an und
 hält den "Mindestabstand Team" ein; steht ein Team doch doppelt (z. B. nach dem Verschieben),
-sind die Zeilen rot mit ⚠ markiert und oben in der Seitenleiste aufgeführt.
+sind die Zeilen rot mit einem Warndreieck markiert und oben in der Seitenleiste aufgeführt.
 "Zeitplan (PDF)…" exportiert eine Seite je Richter.</p>
 <p><b>Wichtig zu "Entfernen":</b> Ein Prüfungsblock speichert nur Art/Leistungsklasse/
 Disziplin und die Dauer je Teilnehmer – WER genau darin geprüft wird, wird bei jeder
 Anzeige automatisch aus den aktuellen Teilnehmerdaten ermittelt, nicht einzeln gespeichert.
-"Entfernen" löscht deshalb immer den GANZEN Block (alle darin zusammengefassten
-Teilnehmer), nicht nur einen einzelnen Teilnehmer. Fällt z. B. ein Teilnehmer kurzfristig
+"Entfernen" löscht deshalb nach einer Rückfrage immer den GANZEN Block (alle darin
+zusammengefassten Teilnehmer), nicht nur einen einzelnen Teilnehmer. Fällt z. B. ein Teilnehmer kurzfristig
 aus (Krankmeldung), muss im Zeitplan nichts angefasst werden: im Reiter "Teilnehmer"
 mit "Keine Teilnahme" markieren (nicht löschen) – der Block bleibt bestehen und zeigt beim
 nächsten Öffnen des Zeitplans automatisch einen Teilnehmer (und entsprechend weniger Zeit)
@@ -1350,11 +1350,15 @@ Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen). "Protokoll-Ordner öff
 Datei. Bei einem unerwarteten Fehler erscheint ein Fenster mit denselben Möglichkeiten.</p>
 
 <h3>Aussehen (Menü "Ansicht")</h3>
-<p>Unter "Hintergrund" wählst du das Design: Hell (Standard), Warm / Sand, Dunkel oder Hoher
-Kontrast. Unter "Akzentfarbe" legst du die Farbe der Haupt-Schaltflächen und Markierungen fest
-(Blau, Grün, Violett). Beides lässt sich frei kombinieren, wirkt sofort und wird gespeichert;
-noch nicht gespeicherte Ergebnisse bleiben dabei erhalten. Im Design Dunkel bleibt das
-Fenster des Systems zum Öffnen/Speichern von Dateien unter Windows hell.</p>
+<p>Unter "Hintergrund" wählst du das Design: Beagle (Standard, warme Creme-Töne), Hell,
+Dunkel oder Hoher Kontrast. Unter "Akzentfarbe" legst du die Farbe der Haupt-Schaltflächen und
+Markierungen fest (Lohbraun als Standard, Blau, Grün, Violett). Beides lässt sich frei
+kombinieren, wirkt sofort und wird gespeichert; noch nicht gespeicherte Ergebnisse bleiben dabei
+erhalten. Im Design Dunkel bleibt das Fenster des Systems zum Öffnen/Speichern von Dateien unter
+Windows hell.</p>
+<p>Der dunkle Balken oben zeigt Verein, Datum, Ort und die Zahl der Teilnehmer des geöffneten
+Termins. Steht hinter einer kurzen grauen Erklärung ein Fragezeichen-Symbol, erscheint der
+ausführliche Text, wenn du die Maus darüber hältst.</p>
 
 <h3>Ausführliches Handbuch</h3>
 <p>Ein ausführliches Benutzerhandbuch mit Screenshots (auch als PDF zum Ausdrucken) steht auf

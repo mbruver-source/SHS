@@ -8216,3 +8216,128 @@ venv im Scratchpad, das Anaconda-Python blieb unverändert.
   `Abdeckung-2026-11.md`.
 - `docs/HANDBUCH.md` und die Programmhilfe nennen die Rückfrage beim Entfernen, das Handbuch die feste Lage von „Weiter“. Neue Bilder sind vor dem Build nicht nötig. `handbuch_demo.png` zeigt das
   Erklärfenster unverändert an derselben Ecke.
+
+
+## 01.11.2026: Neues Erscheinungsbild „Beagle“ (Marco)
+
+**Anlass:** Marco empfand die Oberfläche als „langweilig, steril und KI-mäßig“. Die Analyse
+nannte fünf Ursachen:
+- keine Identität (der Beagle nur als Taskleisten-Symbol, der Termin nur im Fenstertitel);
+- das generische Standardblau #2F6FED;
+- Emojis als Symbole;
+- gleichförmige Knöpfe;
+- viele Erklärabsätze in der Oberfläche.
+
+**Vorgehen:**
+- **Phase 1:** Entwürfe nur im Scratchpad, zwei Varianten als Bilder neben dem heutigen
+  Stand.
+- **Marco wählte** Variante A „Beagle“ ohne Einzelwünsche. Lohbraun wird Standard, Blau,
+  Grün und Violett bleiben wählbar. „Beagle“ ersetzt den Hintergrund „Warm / Sand“. Die Web-Version
+  zieht mit. Alles kommt zusammen mit den heute schon wartenden Korrekturen in einen Build.
+
+**Desktop**
+- **Farben und Designs** (`desktop_darstellung.py`):
+  - neues Theme `lohbraun` („Lohbraun (Standard)“, #8C5A32);
+  - neues Design `beagle` („Beagle (Standard)“, Creme #FBF8F3, Kopf Anthrazit #2F2B27). Es
+    ersetzt `sand`; ein gespeichertes `sand` wird zu `beagle`;
+  - „Hell“ (ohne Zusatz), „Dunkel“ und „Hoher Kontrast“ bleiben und bekommen eigene Kopffarben;
+  - neue Schlüssel KOPF, KOPF_TEXT, KOPF_TEXT2, KOPF_RAND, KOPF_HOVER, KARTE, GRUPPE_TITEL sowie
+    der Schalter `eigene_haken`;
+  - Gruppen erscheinen als Karten mit braunem Titel, die Reiter-Linie ist 3 px breit;
+  - Zahlenfelder haben eigene Pfeile;
+  - ein nicht als Text gespeicherter Registry-Wert ergibt jetzt den Standard statt eines
+    TypeError.
+- **Kopfbalken** (`KopfBalken` in `desktop_gemeinsam.py`):
+  - links der Beagle, rund, dann Verein, darunter Datum · Ort · Teilnehmerzahl (in der Demo mit
+    „DEMO“ davor);
+  - rechts die Knöpfe mit Symbolen;
+  - er aktualisiert sich beim Terminwechsel, nach dem Bearbeiten der Veranstaltung, beim
+    Reiterwechsel und nach Änderungen an Teilnehmern;
+  - das Startfenster hat ihn ebenfalls („SHS-Prüfungsprogramm – Prüfungen im Spürhundsport
+    verwalten“).
+- **Symbole statt Emojis:**
+  - Tabler Icons 3.49.0 (MIT, unverändert) liegen im neuen Ordner `symbole/`, werden je Design
+    eingefärbt (`symbol()`, `symbol_html()`), über `build.spec` gebündelt und in
+    `THIRD_PARTY_LICENSES.txt` aufgeführt (Desktop und Web);
+  - der Selbsttest hat den neuen Schritt „Symbole“;
+  - ersetzt wurden die Emojis in Kopf- und Demo-Knöpfen, an „bezahlt“, an der Chip-Warnung, im
+    Speicher-Status, in den Zeitplan-Pfeilen und -Blockköpfen, in den „Offenen Starts“ und am
+    KI-Umschalter.
+- **Kurze Hinweise:** Zeitplan, Verwaltung und Datensicherung zeigen statt langer Absätze eine
+  Zeile mit „?“; der volle Text steht im Tooltip (`kurzer_hinweis()`).
+
+**Web**
+- Der Kopf zeigt den Beagle (`static/beagle.png`, 96 px), den Verein und darunter Datum · Ort.
+  Das gilt für die Teilnehmerliste und, neu, für die Ergebnisseite.
+- Farben wie am Desktop, Karten mit leichtem Schatten, „bewertet“ mit Haken.
+- Die Navigation trennt per Abstand statt mit „·“, weil bei Umbruch am Tablet sonst ein Punkt
+  allein am Zeilenende stand.
+- Das Containerfile kopiert `static/` und die Tabler-Lizenz.
+
+**Tests, Prüfung, Doku**
+- **Tests:**
+  - `test_theme.py`: Referenz-Stylesheet für den neuen Standard, Umzug sand→beagle, Kontraste
+    der neuen Farben in allen Designs;
+  - `test_app_gui.py`: 16 neue Tests (Kopfbalken, Symbole, kurze Hinweise, Umfärben beim
+    Designwechsel, Selbsttest „Symbole“), Emoji-Texte angepasst;
+  - `test_app_web.py`: `TestErscheinungsbild` mit 7 Tests;
+  - `test_drittlizenzen.py`: Tabler in der Übersicht.
+- **Ergebnis:** Lokal grün, 704 Unittests und 465 GUI-Tests. Der Selbsttest aus dem
+  Quellstand ist vollständig OK, einschließlich „Symbole“.
+- **Am echten Windows angesehen:** alle vier Hintergründe mit Lohbraun; alle lesbar.
+- **Bilder:** Alle 20 Handbuch-Bilder sind neu.
+  - Die 15 Desktop-Bilder entstanden mit `tools/screenshots.py`.
+  - Die 5 Web-Bilder entstanden aus dem Testaufbau von `test_app_web.py` (SQLite statt
+    PostgreSQL), aufgenommen mit Edge headless in den bisherigen Größen. Das Skript dafür lag
+    nur im Scratchpad.
+- **Doku:**
+  - `docs/HANDBUCH.md`: Kopfbalken, „?“-Hinweise, Menü „Ansicht“, Emoji-Namen entfernt;
+  - README, `docs/index.html` (geht erst mit dem Release online), `Architektur.md`
+    (`symbole/`, `static/`, neue Helfer), `UML.md` (`KopfBalken`, Mermaid geprüft).
+- Programmcode und Bilder bleiben bis zum Build uncommittet.
+- **Verifikation** (Agent `verifikation`): kein funktionaler Fehler.
+  - **Direkt nachgezogen:**
+    - Handbuch („Weiter“/„Fertig“ ohne Zeichen);
+    - ein Theme-Wert, der kein Text ist, ergibt den Standard (wie beim Design), mit Test;
+    - Test für ein nicht schreibbares Symbol-Bild: Die Zeitplan-Seitenleiste fällt auf die
+      Zeichen ✓/✗ zurück;
+    - die 7 ungenutzten SVGs entfernt (es bleiben 12);
+    - veraltete Kommentare (Akzentfarbe statt „blau“, Termin auf der Ergebnisseite,
+      Abhängigkeiten von `desktop_gemeinsam`), Typangabe `_pfeil_farben`, UML-Signatur.
+  - **Bewusst so gelassen:** `PySide6.QtSvg` wird auf Modulebene importiert, damit PyInstaller
+    es sicher mitnimmt; fehlt es, startet das Programm nicht, und der Selbsttest der
+    gebauten Fassung fällt das vorher auf. Die Komponentendiagramme zeigen die Abhängigkeit
+    `desktop_gemeinsam` → `desktop_darstellung` nicht; sie waren schon vorher nicht
+    vollständig.
+- **Lokal nicht prüfbar:** PyInstaller-Build und Container-Build. Beides prüft die CI beim
+  nächsten Build bzw. Probelauf; der Selbsttest-Schritt „Symbole“ zeigt dabei, ob QtSvg und
+  die SVGs gebündelt sind.
+- **Build-Vorbereitung 1.0.53 (Marco):**
+  - **Vorher umgesetzt:** vier ältere Kleinigkeiten, die auf den neuen Bildern sichtbar waren:
+    - Zeitplan-Listen brechen lange Blockköpfe um;
+    - das Startfenster hat keine Zeilennummern mehr;
+    - der KI-Umschalter ist wirklich flach;
+    - lange Pfade im Demo-Erklärfenster bekommen Umbruchstellen.
+    Dazu ein gemeinsamer Test.
+  - **So belassen:** QtSvg-Import auf Modulebene, Diagramme, Kurztexte, Symbole,
+    Kopffarben, Web-Datum ohne Wochentag.
+  - **CI-Probelauf vor dem Tag:** Marco pusht `main` ohne Tag und startet „Installer bauen“
+    per „Run workflow“. Getaggt wird erst, wenn alles grün ist.
+
+
+## Version 1.0.53
+
+**Gebündelt sind** (Details in den Abschnitten vom 01.11.2026 oben):
+- **Lizenzen:** Lizenzfenster im Versionsfenster, Lizenzseite im Windows-Setup,
+  Lizenzvereinbarung in der .dmg, `LICENSE` in allen Paketen, Web-Seite `/lizenzen`.
+- **Durchgang der offenen Punkte:**
+  - PDF-Layout: Vereinsspalte, Widerristhöhe, Bindestrich-Trennung, Etiketten;
+  - Erklärfenster der Demo: Text vollständig, „Weiter“ an fester Stelle;
+  - Rückfrage beim Entfernen im Zeitplan;
+  - neue Tests für Zeitplan, Datensicherung und Dialoge.
+- **Neues Erscheinungsbild „Beagle“** für Desktop und Web, dazu vier Kleinigkeiten aus der
+  Build-Vorbereitung.
+- `RELEASE_NOTES.md` ist neu geschrieben, die Version ist erhöht, und alle 20 Handbuch-Bilder
+  sowie `docs/HANDBUCH.pdf` sind neu.
+- **Tests lokal:** 704 Unittests (175 übersprungen) und 466 GUI-Tests grün.
+- Vor dem Tag folgt der CI-Probelauf auf `main`; siehe die Build-Vorbereitung oben.

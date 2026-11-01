@@ -62,6 +62,10 @@ a = Analysis(
     # zur Laufzeit; der Selbsttest prüft, dass es im Bundle liegt.
     datas=[
         ("symbol/programmsymbol.png", "symbol"),
+        # Symbole der Oberfläche (Tabler Icons, MIT, siehe symbole/README.md) statt Emojis -
+        # Marco 01.11.2026, Erscheinungsbild „Beagle“; der Selbsttest prüft sie und QtSvg.
+        ("symbole/*.svg", "symbole"),
+        ("symbole/LICENSE-Tabler.txt", "symbole"),
         # Desktop-Prüfung Teil 6 Nr. 2: Unicode-Schrift für die PDFs (siehe pdf_export).
         ("fonts/DejaVuSansCondensed.ttf", "fonts"),
         ("fonts/DejaVuSansCondensed-Bold.ttf", "fonts"),
