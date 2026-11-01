@@ -8614,3 +8614,21 @@ nannte fünf Ursachen:
   neu, `RELEASE_NOTES.md` ist neu geschrieben.
 - **Tests lokal:** 717 Unittests (177 übersprungen) und 483 GUI-Tests grün, UML mit mmdc geprüft.
 - Vor dem Tag folgt ein CI-Probelauf auf `probe-1.0.55`.
+
+
+## 01.11.2026: 1.0.55 ausgeliefert, Quellcode-Spiegel auf 1.0.55
+
+- Marco hat den Probelauf grün abgeschlossen, `main` gepusht und `v1.0.55` getaggt.
+  - Das Release v1.0.55 ist mit allen 5 Dateien veröffentlicht (Windows-Setup, 2× .dmg,
+    AppImage, .deb).
+  - „Installer bauen“, „Tests“ und „Container bauen“ sind grün.
+  - Der Branch `probe-1.0.55` besteht noch (Löschen ist Marcos Aktion).
+- `PO_01012027.md` (PO1, R6, R7) und `OFFEN.md` stehen auf „ausgeliefert mit 1.0.55“.
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen: alle Dateien aus
+  Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner, im Spiegel nichts gelöscht.
+  - 6 Dateien sind neu: `PO_01012027.md`, `docs/assets/beagle.png` und
+    `testdaten/altversionen/v1.0.55/` mit 4 Dateien.
+  - 45 Dateien sind geändert.
+  - Der Byte-Abgleich danach ist identisch.
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
+  `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
