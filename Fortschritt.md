@@ -8341,3 +8341,18 @@ nannte fünf Ursachen:
   sowie `docs/HANDBUCH.pdf` sind neu.
 - **Tests lokal:** 704 Unittests (175 übersprungen) und 466 GUI-Tests grün.
 - Vor dem Tag folgt der CI-Probelauf auf `main`; siehe die Build-Vorbereitung oben.
+- **CI-Probelauf 1.0.53, erster Versuch:** Der Job `test-windows` schlug in
+  `test_screenshot_skript_erzeugt_alle_bilder` fehl. Alle 15 Bilder entstanden, das Skript
+  endete aber mit 0xC0000005 (Zugriffsverletzung beim Beenden von Python).
+  - **Nachgestellt** mit Python 3.12 und PySide6 6.12.0 (wie in der CI) in einer eigenen venv
+    im Scratchpad. Der Absturz trat in etwa jedem zweiten Lauf auf, nur beim Startfenster-Bild
+    und erst seit dem neuen Erscheinungsbild. Der Stand davor stürzte in 10 Läufen nie ab.
+  - **Ausgeschlossen:** Symbol-Zwischenspeicher, Kopfbalken, Symbole, QtSvg-Import,
+    Stylesheet-Bilder und Design (auch „Hell“ stürzt ab).
+  - **Ursache:** Ohne Ereignisschleife löscht `deleteLater()` die Fenster nie. Sie blieben bis
+    zum Aufräumen von Python nach der QApplication liegen.
+  - **Behebung:** `tools/screenshots.py` löscht am Ende alle Fenster und fährt Qt geordnet
+    herunter (`_sauber_beenden`). Danach endeten 8 von 8 Läufen sauber.
+  - **Das Programm selbst ist nicht betroffen:** Der echte Ablauf (Startfenster mit Terminen,
+    Hauptfenster, Schließen) und der Selbsttest endeten unter PySide6 6.12 jeweils 6 bis 8
+    Mal sauber.

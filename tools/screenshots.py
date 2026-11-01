@@ -499,5 +499,25 @@ def main(argv: list[str] | None = None) -> list[Path]:
     return erzeugt
 
 
+def _sauber_beenden() -> None:
+    """Ohne Ereignisschleife löscht deleteLater() die Fenster nie; sie blieben bis zum
+    Aufräumen von Python liegen, nach der QApplication. Mit PySide6 6.12 stürzte das Skript
+    dabei unter Windows gelegentlich ab (0xC0000005, CI 01.11.2026, Build 1.0.53) - die
+    Bilder waren fertig, der Rückgabewert aber falsch. Deshalb hier alle Fenster löschen und
+    Qt geordnet herunterfahren, solange Python noch vollständig ist."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    for fenster in app.topLevelWidgets():
+        fenster.close()
+        fenster.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    if hasattr(app, "shutdown"):  # QCoreApplication.shutdown gibt es erst in neueren PySide6
+        app.shutdown()
+
+
 if __name__ == "__main__":
     main()
+    _sauber_beenden()
