@@ -18,6 +18,11 @@ suchen.
 | A2 | Update-Prüfung am echten Mac: klappt HTTPS (CA-Zertifikate im Bundle)? Der Selbsttest zeigt die Anzahl | 15.10.2026 | F:6380 |
 | A6 | PDF-Ausdrucke auf Papier ansehen, vor allem Etiketten auf Klebepapier (Bildschirmprüfung am 01.11.2026 erledigt) | 15.10.2026 | F:6403, F:8128 |
 
+## PO. Neue Prüfungsordnung ab 01.01.2027
+
+Eigene ToDo-Liste: `PO_01012027.md` (seit 01.11.2026). Dort stehen die Punkte (PO1: Stechen
+entfällt) mit Status und offenen Fachfragen.
+
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
 | Nr. | Punkt | Entscheidung | Fundstelle |

@@ -9,6 +9,8 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
 - **Offene, zurückgestellte und akzeptierte Punkte auf einen Blick:** `OFFEN.md` - vor jeder
   Planung und bevor du einen Befund meldest dort nachsehen; Fundstellen verweisen in
   `Fortschritt.md`.
+- **Neue Prüfungsordnung ab 01.01.2027:** `PO_01012027.md` - ToDo-Liste der nötigen Anpassungen
+  (Umschaltung über das Prüfungsdatum).
 - **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
   `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
   besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.

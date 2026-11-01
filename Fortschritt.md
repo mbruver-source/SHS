@@ -8424,3 +8424,14 @@ nannte fünf Ursachen:
   22 sind geändert. Der Byte-Abgleich danach ist identisch.
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
   `Fortschritt.md` neu hoch; `Architektur.md` und `Grobkonzept.md` sind unverändert.
+
+
+## 01.11.2026: ToDo-Liste PO_01012027 (neue Prüfungsordnung, Marco)
+
+- Ab 01.01.2027 kommt voraussichtlich eine neue PO. Die nötigen Anpassungen sammelt die neue
+  Datei `PO_01012027.md`, auf die `OFFEN.md` (Abschnitt PO), `CLAUDE.md` und `AGENTS.md` verweisen.
+- Punkt PO1: Das Stechen bei Gleichstand um Platz 1 (S1, 03.10.2026) entfällt. Marcos Entscheidungen:
+  - Die Umschaltung erfolgt über das Veranstaltungsdatum (ab 01.01.2027 gilt die neue PO), ältere
+    Prüfungen behalten ihr Stechen. Die Vorbereitung kann deshalb schon jetzt eingebaut werden.
+  - Die Gleichstandsregel der neuen PO ist noch unbekannt. Bis dahin gilt ein geteilter Platz 1.
+- Die Umsetzung ist geplant (Ablauf in `PO_01012027.md`) und erfolgt in einem eigenen Schritt.
