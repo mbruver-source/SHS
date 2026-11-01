@@ -197,6 +197,7 @@ from desktop_dialoge import (
     TerminImportDialog,
     VeranstaltungsDialog,
 )
+from desktop_beagle import BeagleKlickZaehler
 from desktop_demo import DemoTour, demo_ohne_termin_ausfuehren, demo_reste_aufraeumen
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 from desktop_zeitplan import ZeitplanTab
@@ -2850,6 +2851,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.kopf.knopf_hinzufuegen(version_btn, "info-circle")
         self.kopf.knopf_hinzufuegen(self.demo_btn, "school")
         self.kopf.knopf_hinzufuegen(hilfe_btn, "help-circle")
+        self._beagle_zaehler = BeagleKlickZaehler(self, self.kopf.bild_label)  # siehe desktop_beagle
 
         # Kopfbalken randlos über die ganze Breite, die Reiter mit Abstand darunter.
         reiter_huelle = QWidget()

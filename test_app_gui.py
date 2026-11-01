@@ -27,7 +27,7 @@ import sys
 
 import pytest
 from contextlib import closing
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QPoint, QPointF, QSize, Qt
 from PySide6.QtGui import QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
@@ -9492,3 +9492,162 @@ def test_demo_weiter_knopf_symbol_rechts(qtbot):
     panel.countdown_anzeigen(None)
     assert panel.weiter_btn.text() == "Fertig"
     assert panel.weiter_btn.icon().cacheKey() == symbol("check", "#FFFFFF").cacheKey()
+
+
+# --- Kleine Überraschung (desktop_beagle, Marco 01.11.2026) ---------------------------
+
+
+def _beagle_fenster(qtbot, termin, monkeypatch):
+    import desktop_beagle
+
+    jetzt = {"t": 100.0}
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.resize(900, 600)
+    fenster.show()
+    qtbot.waitExposed(fenster)
+    # Zähler mit der austauschbaren Uhr neu anlegen (der des Fensters nutzt die echte).
+    fenster.kopf.bild_label.removeEventFilter(fenster._beagle_zaehler)
+    zaehler = desktop_beagle.BeagleKlickZaehler(fenster, fenster.kopf.bild_label, uhr=lambda: jetzt["t"])
+    return fenster, zaehler, jetzt
+
+
+def _beagle_klicks(qtbot, fenster, jetzt, anzahl, pause=0.3):
+    for _ in range(anzahl):
+        jetzt["t"] += pause
+        qtbot.mouseClick(fenster.kopf.bild_label, Qt.LeftButton)
+
+
+def test_beagle_zehn_schnelle_klicks_starten_die_ueberraschung(qtbot, termin, monkeypatch):
+    import desktop_beagle
+
+    fenster, zaehler, jetzt = _beagle_fenster(qtbot, termin, monkeypatch)
+    _beagle_klicks(qtbot, fenster, jetzt, 9)
+    assert zaehler.explosion is None
+    _beagle_klicks(qtbot, fenster, jetzt, 1)
+    explosion = zaehler.explosion
+    assert isinstance(explosion, desktop_beagle.BeagleExplosion) and explosion.isVisible()
+    assert explosion.testAttribute(Qt.WA_TransparentForMouseEvents)  # Programm bleibt bedienbar
+    assert explosion.geometry() == fenster.rect()
+    # Während sie läuft, startet keine zweite.
+    _beagle_klicks(qtbot, fenster, jetzt, 10)
+    assert zaehler.explosion is explosion
+    explosion._takt.stop()
+
+
+def test_beagle_zoegern_setzt_die_zaehlung_zurueck(qtbot, termin, monkeypatch):
+    fenster, zaehler, jetzt = _beagle_fenster(qtbot, termin, monkeypatch)
+    _beagle_klicks(qtbot, fenster, jetzt, 9)
+    _beagle_klicks(qtbot, fenster, jetzt, 1, pause=2.0)  # zu lange gewartet: zählt als erster
+    assert zaehler.explosion is None
+    _beagle_klicks(qtbot, fenster, jetzt, 9)
+    assert zaehler.explosion is not None
+    zaehler.explosion._takt.stop()
+
+
+def test_beagle_teilchen_bleiben_im_fenster_und_alles_verschwindet_nach_20_s(qtbot, termin):
+    """Boden, Wände und (Marco 01.11.2026) Decke halten die Teilchen im Fenster."""
+    import desktop_beagle
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.resize(900, 600)
+    fenster.show()
+    explosion = desktop_beagle.BeagleExplosion(fenster, QPointF(30, 30), seed=7)
+    explosion._takt.stop()  # Zeit von Hand vorgeben
+    explosion._schritt(0.4)
+    assert explosion._teilchen == [] and explosion.deckkraft() == 1.0
+    explosion._schritt(0.5)  # über 0,8 s: zersprungen
+    assert len(explosion._teilchen) == desktop_beagle.TEILCHEN
+    for _ in range(int(16 / 0.02)):
+        explosion._schritt(0.02)
+    for t in explosion._teilchen:
+        r = t.groesse / 2
+        assert r - 0.01 <= t.x <= explosion.width() - r + 0.01
+        assert r - 0.01 <= t.y <= explosion.height() - r + 0.01
+    assert explosion.deckkraft() == 1.0
+    explosion._schritt(2.0)  # 18,9 s: blendet aus
+    assert 0.0 < explosion.deckkraft() < 1.0
+    explosion._schritt(1.5)
+    assert explosion.beendet and not explosion.isVisible()
+
+
+def test_beagle_zaehler_haengt_am_kopfbild_des_hauptfensters(qtbot, termin):
+    import desktop_beagle
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    zaehler = fenster._beagle_zaehler
+    assert isinstance(zaehler, desktop_beagle.BeagleKlickZaehler)
+    assert zaehler._bild is fenster.kopf.bild_label and zaehler.parent() is fenster
+    for _ in range(desktop_beagle.KLICKS):
+        zaehler.klick()
+    assert zaehler.explosion is not None
+    zaehler.explosion._takt.stop()
+
+
+def test_beagle_zaehler_haelt_das_hauptfenster_nicht_am_leben(qtbot, termin):
+    """Fenster -> Zähler -> Fenster als Python-Referenz hielt geschlossene Hauptfenster bis zur
+    nächsten Speicherbereinigung am Leben (fiel in anderen Tests auf)."""
+    import gc
+    import weakref
+
+    import desktop_beagle
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    zaehler = fenster._beagle_zaehler
+    for _ in range(desktop_beagle.KLICKS):
+        zaehler.klick()
+    zaehler.explosion._takt.stop()
+    ref = weakref.ref(fenster)
+    gc.disable()
+    try:
+        del fenster, zaehler
+        assert ref() is None
+    finally:
+        gc.enable()
+
+
+def test_beagle_langer_takt_groessenaenderung_neustart_und_ohne_bild(qtbot, termin, monkeypatch):
+    """Verifikation 01.11.2026: Ein einziger langer Takt (z. B. hängendes System) beendet
+    die Explosion trotzdem nach 20 s; eine Größenänderung des Fensters nimmt sie mit; nach
+    dem Ende lässt sie sich neu starten; ohne Programmsymbol startet sie gar nicht."""
+    import desktop_beagle
+    from PySide6.QtGui import QPixmap
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.resize(900, 600)
+    fenster.show()
+    zaehler = fenster._beagle_zaehler
+    for _ in range(desktop_beagle.KLICKS):
+        zaehler.klick()
+    explosion = zaehler.explosion
+    explosion._takt.stop()
+    explosion._schritt(1.0)
+    fenster.resize(700, 500)
+    assert explosion.geometry() == fenster.rect()
+    explosion._schritt(0.02)
+    assert all(t.x <= explosion.width() - t.groesse / 2 + 0.01 for t in explosion._teilchen)
+
+    class _LangeUhr:
+        def restart(self):
+            return 25_000  # Millisekunden in einem einzigen Takt
+
+    explosion._uhr = _LangeUhr()
+    explosion._ticken()
+    assert explosion.beendet and not explosion.isVisible()
+
+    for _ in range(desktop_beagle.KLICKS):
+        zaehler.klick()
+    assert zaehler.explosion is not explosion and not zaehler.explosion.beendet
+    zaehler.explosion._takt.stop()
+
+    monkeypatch.setattr(desktop_beagle, "beagle_rund", lambda groesse: QPixmap())
+    leer = desktop_beagle.BeagleExplosion(fenster, QPointF(10, 10))
+    assert leer.beendet and not leer._takt.isActive() and not leer.isVisible()

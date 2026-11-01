@@ -8393,3 +8393,18 @@ nannte fünf Ursachen:
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
   `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
 - Marco hat die claude.ai-Ablage „SHS“ aktualisiert. Damit ist 1.0.53 vollständig abgeschlossen.
+
+
+## 01.11.2026: Kleine Überraschung für Kenner (Marco)
+
+- Auf Marcos Wunsch bewusst nirgends sonst dokumentiert, Details im Code (`desktop_beagle.py`,
+  eingebunden im HauptFenster). Verifiziert, die Punkte der Verifikation sind umgesetzt.
+
+
+## Version 1.0.54
+
+- Kleine Erweiterung der Desktop-Oberfläche (siehe Abschnitt oben); Release Notes bewusst
+  allgemein.
+- Version erhöht, Handbuch-Bilder und `docs/HANDBUCH.pdf` mit der neuen Versionsnummer neu.
+- **Tests lokal:** 704 Unittests (175 übersprungen) und 473 GUI-Tests grün.
+- Vor dem Tag folgt ein CI-Probelauf auf `probe-1.0.54`.
