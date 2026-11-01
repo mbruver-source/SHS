@@ -1,6 +1,6 @@
 # Offene, zurückgestellte und akzeptierte Punkte
 
-Stand: 26.10.2026, nach Release 1.0.52. Die Datei fasst zusammen, was in `Fortschritt.md` über
+Stand: 01.11.2026, nach dem Durchgang aller offenen Punkte mit Marco. Die Datei fasst zusammen, was in `Fortschritt.md` über
 viele Abschnitte verteilt steht. Maßgeblich bleibt `Fortschritt.md`; die Fundstellen (F:Zeile)
 zeigen auf den entscheidenden Absatz. Bevor ein Punkt als neuer Befund gemeldet oder neu
 geplant wird, hier nachsehen.
@@ -14,13 +14,10 @@ suchen.
 
 | Nr. | Punkt | Seit | Fundstelle |
 |---|---|---|---|
-| A1 | Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten | 07.10.2026 | F:5352, F:7617 |
+| A1 | Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten, dazu die Lizenzabfrage beim Öffnen der .dmg ansehen (seit 01.11.2026) | 07.10.2026 | F:5352, F:7617, F:8124 |
 | A2 | Update-Prüfung am echten Mac: klappt HTTPS (CA-Zertifikate im Bundle)? Der Selbsttest zeigt die Anzahl | 15.10.2026 | F:6380 |
-| A3 | Design „Hell“ bei Windows-Einstellung „Apps: dunkel“ am echten Rechner ansehen | 14.10.2026 | F:5980 |
-| A4 | Erklärfenster der Demo über der Taskleiste am echten Windows ansehen | 14.10.2026 | F:6159 |
-| A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
-| A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
-| A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
+| A6 | PDF-Ausdrucke auf Papier ansehen, vor allem Etiketten auf Klebepapier (Bildschirmprüfung am 01.11.2026 erledigt) | 15.10.2026 | F:6403, F:8128 |
+| A10 | Lizenzseite im echten Windows-Setup ansehen: beim nächsten Update über die eigene Installation | 01.11.2026 | F:8124, F:8128 |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 
@@ -30,7 +27,7 @@ suchen.
 | B7 | Sicherheitsprüfung S-5 (gering): Web-App nutzt das DB-Eigentümerkonto; Nutzen gering bei hohem Umbau | 03.10.2026 | F:4510 |
 | B8 | SignPath Foundation (Code-Signatur): erst wieder, wenn das Programm weiter verbreitet ist | 05.10.2026 | F:4770 |
 | B9 | Englische Sprachumschaltung: nur geschätzt (Desktop 5–6, alles 9–11 Fenster), Weg beschrieben | 15.10.2026 | F:6605 |
-| B10 | Weitere Testarten (Windows in der CI erledigt 19.10.2026, V2): gleichzeitige Web-Eingaben, Abdeckung, bandit/ZAP/XSS, Generalprobe, Barrierefreiheit | 03.10.2026 | F:4198 |
+| B10 | Weitere Testarten (erledigt: Windows in der CI 19.10.2026, V2; Abdeckung und bandit 01.11.2026): gleichzeitige Web-Eingaben, ZAP/XSS, Generalprobe, Barrierefreiheit | 03.10.2026 | F:4198, F:8128 |
 | B11 | Altdaten-Tests erweitern (Web-Sync, CSV-Export, Anmeldeformular mit Altdaten) | 03.10.2026 | F:4383 |
 | B12 | `app.py` nicht weiter aufteilen: Teilnehmer-, Formular-Import-, Ergebnis-Reiter, Hauptfenster, StartDialog und `main` bleiben dort | 18.10.2026 | F:6474 |
 | B13 | Python-Version anheben (heute 3.11 in CI, Installer, Paketen, Container; Sicherheitsupdates bis Oktober 2027): etwa Mitte 2027 direkt auf 3.13/3.14, nicht über 3.12. Dabei sqlite3-Datumsumwandlungen prüfen (heute ungenutzt) | 19.10.2026 | F:7861 |
@@ -48,6 +45,7 @@ suchen.
 | C5 | Disqualifiziert/Abbruch nur am Desktop, nicht im Web und nicht beim Zurückholen | 21.09.2026 | F:566 |
 | C6 | Keine eigene PostgreSQL-Sicherung; maßgeblich sind Termin-Datei und ZIP-Sicherung | 05.10.2026 | F:4764 |
 | C7 | Gleichzeitiges Speichern: zuletzt gespeichert gewinnt still, Konflikte je Disziplin statt je Feld | 18.10.2026 | F:6997 |
+| C36 | `/lizenzen` prüft die Sitzung nicht gegen die Datenbank: bei veralteter Sitzung erscheint dort noch die Navigation (die Links dahinter prüfen wieder) | 01.11.2026 | F:8104, F:8128 |
 
 **Bewertung, Stechen, PDFs**
 
@@ -95,3 +93,4 @@ suchen.
 | C31 | Kontaktadresse im Klartext in SECURITY.md, CODE_OF_CONDUCT.md, CODE_SIGNING_POLICY.md | 23.09.2026 | F:1948 |
 | C32 | Website- und Projekt-Kleinigkeiten (Website F2/F4, Review-Historie im Docstring, Chrome-Tipp, Maintainer-Adresse im .deb, Selbsttest legt evtl. leeren Termine-Ordner an) | 30.09.–08.10.2026 | F:2949, F:5172, F:5311, F:5367, F:4457 |
 | C33 | Alte `haken.png` im TEMP-Ordner wird nicht aufgeräumt | 14.10.2026 | Desktop-Pruefung-2026-10/aufgaben.md:7 |
+| C37 | dmgbuild nutzt intern das von Apple als veraltet geführte `hdiutil udifrez`; fällt es weg, schlägt der dmg-Schritt fehl und wird dann ersetzt | 01.11.2026 | F:8076, F:8128 |

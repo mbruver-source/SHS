@@ -197,7 +197,9 @@ Das Programm tippt in normalem Tempo, wie von Hand. Wer es eilig hat, drückt ei
 
 Ist ein Schritt fertig, zählt der Knopf zehn Sekunden herunter („Weiter ▶ (10)“) und
 schaltet dann von allein weiter. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst
-klickt, nimmt den Haken bei **„Automatisch weiter“** heraus.
+klickt, nimmt den Haken bei **„Automatisch weiter“** heraus. „Weiter ▶“ bleibt dabei an
+derselben Stelle: Das Erklärfenster wächst mit längeren Texten nach oben. Wo du es
+hinschiebst, bleibt es.
 
 - Schaust du die Ergebnisliste über **„PDF öffnen“** an oder tippst bzw. klickst du selbst in
   einem Fenster der Demo, hält der Countdown für diesen Schritt an. Im Erklärfenster steht
@@ -586,7 +588,7 @@ dann nach. Beheben lässt sich das durch Verschieben der Blöcke, eine Pause ode
 
 > **Wichtig zu „Entfernen“:** Ein Prüfungsblock merkt sich nur Art, Leistungsklasse, Disziplin
 > und Dauer. Wer darin geprüft wird, ergibt sich jedes Mal neu aus der Teilnehmerliste.
-> „Entfernen“ löscht deshalb immer den **ganzen Block**. Fällt ein Teilnehmer aus, ihn im
+> „Entfernen“ löscht deshalb immer den **ganzen Block** (nach einer Rückfrage). Fällt ein Teilnehmer aus, ihn im
 > Reiter „Teilnehmer“ mit **„Keine Teilnahme“** markieren (siehe Kapitel 4) – nicht löschen.
 > Der Zeitplan passt sich von selbst an.
 

@@ -8123,3 +8123,96 @@ Lizenzvereinbarung beim Öffnen der Mac-.dmg.
 - Die Push-Läufe `Container bauen` und `Tests` (Linux-Job) sind ebenfalls grün.
 - OFFEN.md A9 ist gestrichen. Noch nicht von Hand angesehen: die Lizenzseite im echten
   Windows-Setup und die Lizenzabfrage beim Öffnen der .dmg am Mac (gehört zu A1).
+
+
+## 01.11.2026: Durchgang aller offenen Punkte mit Marco
+
+Marco ist jeden Punkt aus `OFFEN.md` einzeln durchgegangen. Was sich an seinem Windows-Rechner
+prüfen ließ, hat die Sitzung dort selbst geprüft, mit Testdaten in einem Temp-Ordner und
+nie mit den echten Terminen. Werkzeuge (coverage, bandit, pypdfium2) liefen in einer eigenen
+venv im Scratchpad, das Anaconda-Python blieb unverändert.
+
+**Entscheidungen**
+- **A1** bleibt offen und umfasst jetzt auch die Lizenzabfrage beim Öffnen der .dmg. **A2**
+  bleibt offen.
+- **A5** (Papierkorb) und **A7** (Praxistests vom September) sind gestrichen.
+- **A10** ist neu: Die Lizenzseite im echten Windows-Setup sieht Marco beim nächsten Update.
+- **B3, B7, B8, B9, B11, B12, B13** bleiben unverändert zurückgestellt.
+- **B10:** Abdeckungsmessung und bandit kommen jetzt dran, der Rest bleibt zurückgestellt.
+- **C36** (`/lizenzen` bei veralteter Sitzung) und **C37** (`hdiutil udifrez` in dmgbuild) sind
+  neu als akzeptierte Restrisiken eingetragen.
+
+**A3, Design „Hell“ bei „Apps: dunkel“: erledigt.**
+- Windows wurde kurz auf „Apps: dunkel“ gestellt (Registry `AppsUseLightTheme`, per
+  `try/finally` zurückgesetzt und nachgeprüft).
+- Das Programm lief mit der echten Windows-Darstellung. Hauptfenster, Tabellen, Kontextmenü,
+  Aufklappliste, Zeitplan und Hilfe sind hell und gut lesbar. Qt meldet für das Programm das
+  helle Farbschema.
+
+**A4, Erklärfenster der Demo: erledigt.**
+- In keinem der 16 Schritte ragt das Fenster in die Taskleiste. Gemessen wurde der Rahmen
+  gegen `availableGeometry`, mit Bildschirmfotos.
+- Dabei fiel auf: In Schritt 13 war der Erklärtext mitten in der Zeile abgeschnitten. Das
+  Fenster wuchs nicht mit, als „Gespeichert unter …“ und „PDF öffnen“ dazukamen. Behoben in
+  `DemoPanel._groesse_anpassen`: nur die Höhe passt sich an. Mit `adjustSize()` wurde das
+  Fenster für den langen Pfad so breit, dass es rechts aus dem Bildschirm ragte.
+- **Marcos Beobachtung (in 1.0.52):** Das Fenster ändert je Schritt Größe und Lage, und man
+  muss „Weiter“ jedes Mal suchen. Ursache: Die Oberkante blieb fest, und `adjustSize()` änderte
+  Höhe und Breite.
+- **Jetzt:** Die Unterkante ist verankert (`_unten`, `moveEvent`), die Breite bleibt fest, und
+  das Fenster wächst nach oben.
+  - Am echten Bildschirm steht „Weiter“ in allen Schritten auf (1450, 741). Nur „Fertig ✔“ im
+    letzten Schritt ist schmaler.
+  - Verschiebt der Anwender das Fenster oder zieht es am Rand größer, gilt die neue Unterkante.
+    Den Hinweis dazu gab die Verifikation.
+  - Das Ausweichen in die andere Ecke, wenn das Fenster das gezeigte Element verdeckt,
+    bleibt wie bisher.
+- Rest, schon vorher vorhanden: Ein Abschnitt des Speicherpfads ohne Umbruchmöglichkeit kann
+  rechts leicht angeschnitten sein.
+
+**A6, PDF-Schrift: Bildschirmteil erledigt, Papierausdruck bleibt offen (A6 angepasst).**
+- Alle zehn PDF-Arten wurden mit Sonderzeichen-Testdaten erzeugt (polnisch, tschechisch,
+  dänisch, türkisch, vietnamesisch, griechisch) und als Bild angesehen. Alle Zeichen sind
+  richtig, eingebettet ist DejaVu.
+- Vier Layout-Befunde, alle von Marco zur Umsetzung freigegeben:
+  1. **Ergebnisliste zum Ausfüllen:** Die Vereinsspalte wurde schon bei üblichen Namen
+     winzig, sehr lange liefen über den Rand in „Gesamtpunkte“. Marco wählte „kombiniert“:
+     erst bis 7,5 pt verkleinern, dann in der Zelle umbrechen. Das hebt die Entscheidung vom
+     21.09. auf, die nur verkleinerte (mindestens 5,5 pt).
+  2. **Bewertungsbogen:** Bei „Widerristhöhe:“ rutschte der Doppelpunkt in eine eigene Zeile.
+     Die Beschriftungsspalte ist jetzt 28 statt 26 mm breit, die Wertspalte 60 statt 62 mm.
+  3. **Doppelnamen:** Sie wurden mitten im Wort getrennt („Müller-Lüdensc|heidt“). Jetzt
+     trennt reportlab am vorhandenen Bindestrich (`embeddedHyphenation`, zentral für alle
+     Stile).
+  4. **Etiketten:** Ein langer austragender Verein brauchte drei Zeilen und reichte bis an
+     die Schnittlinie. Jetzt wird er bis 6,5 pt verkleinert, bis er zweizeilig passt
+     (`_etikett_verein_stil`). Das hilft schon bei üblichen Namen wie „Gebrauchshundeverein
+     Köppern e. V.“. Sehr lange Namen bleiben dreizeilig, passen aber in die Etikettenhöhe.
+
+**B10, Abdeckung und bandit: erledigt.**
+- **Abdeckung lokal 91 %** (Bericht `Abdeckung-2026-11.md`). Marco gab alle drei
+  empfohlenen Lücken frei; sie sind als GUI-Tests geschlossen:
+  - Zeitplan-Bearbeitung über die Knöpfe: 80 % → 96 %;
+  - Konflikt-Rückfrage beim Wiederherstellen einer Sicherung: `desktop_verwaltung` 81 % → 90 %;
+  - drei nie aufgebaute Dialoge: `desktop_dialoge` 89 % → 98 %.
+- Die Tests fanden keinen Fehler. Eine Auffälligkeit gab es: „Entfernen“ im Zeitplan löschte
+  einen Prüfungsblock ohne Rückfrage. Marco: Rückfrage ergänzen. Jetzt „Eintrag entfernen“ mit
+  Vorgabe „Nein“, wie bei „Richter löschen“.
+- **bandit 1.9.4** über alle Programm-Module: 23 Hinweise. Nach Prüfung am Code gibt es keinen
+  Fund mit Handlungsbedarf (Fehlalarme bzw. bewusst so). Der Bericht liegt in
+  `_unveroeffentlicht/bandit-2026-11-01.md`.
+
+**Tests und Prüfung**
+- Neu sind 4+1 PDF-Tests, 3 Demo-Tests, die Abdeckungstests (22 Läufe) und die Rückfrage
+  beim Entfernen.
+- Jede Gegenprobe ohne die jeweilige Änderung schlägt fehl.
+- Lokal grün: 697 Unittests (175 übersprungen) sowie 441 GUI-Tests mit `test_theme.py`
+  (1 übersprungen, 1 xfail).
+- Verifikation (Agent `verifikation`): kein funktionaler Fehler. Nachgezogen wurden Docstrings,
+  das Ziehen am Rand des Erklärfensters, ein Test, dass die Etiketten-PDF den neuen Stil nutzt,
+  und ein Test für das vom Anwender verschobene Fenster.
+- Programmcode (`pdf_export.py`, `desktop_demo.py`, `desktop_zeitplan.py`) und Tests bleiben bis
+  zum nächsten Build uncommittet. Committet sind nur `OFFEN.md`, `Fortschritt.md` und
+  `Abdeckung-2026-11.md`.
+- `docs/HANDBUCH.md` und die Programmhilfe nennen die Rückfrage beim Entfernen, das Handbuch die feste Lage von „Weiter“. Neue Bilder sind vor dem Build nicht nötig. `handbuch_demo.png` zeigt das
+  Erklärfenster unverändert an derselben Ecke.
