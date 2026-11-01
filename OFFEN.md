@@ -17,7 +17,6 @@ suchen.
 | A1 | Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten, dazu die Lizenzabfrage beim Öffnen der .dmg ansehen (seit 01.11.2026) | 07.10.2026 | F:5352, F:7617, F:8124 |
 | A2 | Update-Prüfung am echten Mac: klappt HTTPS (CA-Zertifikate im Bundle)? Der Selbsttest zeigt die Anzahl | 15.10.2026 | F:6380 |
 | A6 | PDF-Ausdrucke auf Papier ansehen, vor allem Etiketten auf Klebepapier (Bildschirmprüfung am 01.11.2026 erledigt) | 15.10.2026 | F:6403, F:8128 |
-| A10 | Lizenzseite im echten Windows-Setup ansehen: beim nächsten Update über die eigene Installation | 01.11.2026 | F:8124, F:8128 |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 

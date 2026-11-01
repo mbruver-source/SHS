@@ -8374,3 +8374,21 @@ nannte fünf Ursachen:
   - A10: Lizenzseite beim nächsten Update im echten Setup ansehen;
   - A1 (Mac/Linux, jetzt auch die .dmg-Lizenzabfrage);
   - Quellcode-Spiegel und claude.ai-Ablage nachziehen.
+
+
+## 01.11.2026: A10 erledigt, Quellcode-Spiegel auf 1.0.53
+
+- Marco hat die Lizenzseite im echten Windows-Setup von 1.0.53 angesehen: erledigt.
+  `OFFEN.md` A10 ist gestrichen.
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen: alle Dateien aus
+  Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner. Im Spiegel wurde nichts
+  gelöscht.
+- **22 Dateien sind neu:**
+  - `symbole/` (14);
+  - `static/beagle.png`, `templates/lizenzen.html`, `tools/dmg_einstellungen.py`,
+    `Abdeckung-2026-11.md`;
+  - `testdaten/altversionen/v1.0.53/` (4).
+- **61 Dateien sind geändert**, dazu `build-installer.yml` im Wurzelordner. Der Byte-Abgleich
+  danach ist identisch.
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
+  `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
