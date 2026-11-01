@@ -8356,3 +8356,21 @@ nannte fünf Ursachen:
   - **Das Programm selbst ist nicht betroffen:** Der echte Ablauf (Startfenster mit Terminen,
     Hauptfenster, Schließen) und der Selbsttest endeten unter PySide6 6.12 jeweils 6 bis 8
     Mal sauber.
+
+
+## 01.11.2026: 1.0.53 ausgeliefert
+
+- **CI-Probelauf:** Marco hat den Branch `probe-1.0.53` mit dem Nachtrag `9aad480` gepusht.
+  „Installer bauen“ (41315235161) und „Tests“ waren grün, `test-windows` eingeschlossen.
+- **Danach** hat Marco `main` gepusht, `v1.0.53` getaggt und den Probe-Branch gelöscht.
+- **Tag-Lauf:** „Installer bauen“ (41316999967) ist mit allen Jobs grün: build, build-macos
+  für Apple Silicon und Intel, build-linux, release. „Tests“ und „Container bauen“ sind
+  ebenfalls grün.
+- **Release v1.0.53** ist veröffentlicht mit Setup, zwei .dmg, AppImage und .deb.
+- **Selbsttests:** Jeder meldet „OK Symbole“, unter Windows, auf beiden Macs und unter Linux
+  (gebauter Ordner, AppImage, .deb). QtSvg und die SVGs sind also überall gebündelt.
+- **Mit dem Release ist auch die Website online:** Handbuch, Bilder und neuer Look.
+- **Offen:**
+  - A10: Lizenzseite beim nächsten Update im echten Setup ansehen;
+  - A1 (Mac/Linux, jetzt auch die .dmg-Lizenzabfrage);
+  - Quellcode-Spiegel und claude.ai-Ablage nachziehen.
