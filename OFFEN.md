@@ -21,7 +21,6 @@ suchen.
 | A5 | Löschen in den Papierkorb am echten Windows (lokal nur mit Attrappe getestet) | 15.10.2026 | F:6488 |
 | A6 | PDF-Schrift DejaVu in den Ausdrucken am Gerät ansehen | 15.10.2026 | F:6403, F:6904 |
 | A7 | Praxistests vom September: wohl überholt, bei Gelegenheit mit Marco streichen | 18.10.2026 | F:6904 |
-| A9 | Probelauf `build-installer.yml` auf einem Branch: .dmg mit Lizenzvereinbarung (dmgbuild), Einbinden im Selbsttest, `copyright` im .deb, Lizenzseite im Setup | 01.11.2026 | F:8044 |
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 

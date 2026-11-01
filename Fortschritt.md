@@ -8105,3 +8105,21 @@ Lizenzvereinbarung beim Öffnen der Mac-.dmg.
     Sitzung zeigt die Seite noch die Navigation, die Links dahinter prüfen die Sitzung wieder.
   - CI-Probelauf (A9, Marco ok): Der Stand liegt als Commit auf dem Branch `lizenzen`, nicht auf
     `main`. Marco pusht ihn und startet `build-installer.yml` darauf.
+
+
+## 01.11.2026: CI-Probelauf der Lizenz-Änderungen (A9 erledigt)
+
+- Marco hat den Branch `lizenzen` (Commit `0f98bb7`) gepusht und `build-installer.yml` darauf
+  gestartet (Lauf 41295326815). Alle vier Build-Jobs sind grün, `release` wie vorgesehen
+  übersprungen.
+- Belege aus dem Protokoll:
+  - Windows: Inno meldet „Reading file (LicenseFile)“ und packt `LICENSE` ein; der Selbsttest
+    der .exe und der still installierten Fassung zeigt „OK Lizenztexte“.
+  - macOS (Apple Silicon und Intel): dmgbuild 1.6.7 mit ds_store 1.3.3 und mac_alias 2.2.3
+    installiert, die Prüfung auf die Lizenz-Ressource besteht, und die App aus der
+    eingebundenen .dmg läuft durch den Selbsttest. Das Einbinden trotz Lizenzabfrage
+    funktioniert also nicht-interaktiv.
+  - Linux: „OK Lizenztexte“ im gebauten Ordner, im AppImage und im installierten .deb.
+- Die Push-Läufe `Container bauen` und `Tests` (Linux-Job) sind ebenfalls grün.
+- OFFEN.md A9 ist gestrichen. Noch nicht von Hand angesehen: die Lizenzseite im echten
+  Windows-Setup und die Lizenzabfrage beim Öffnen der .dmg am Mac (gehört zu A1).
