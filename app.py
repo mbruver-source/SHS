@@ -44,6 +44,7 @@ from PySide6.QtCore import (
     QRectF,
     QRegularExpression,
     Qt,
+    QTimer,
     Signal,
 )
 from PySide6.QtGui import (
@@ -139,6 +140,7 @@ from db_import import (
 )
 import pdf_export
 from shs_core import (
+    ABBRUCH_GRUENDE,
     ANZEIGE_MAX,
     SUCHE_MAX,
 )
@@ -1413,7 +1415,8 @@ class _PunkteItem(QTableWidgetItem):
 
 
 class _HakenItem(QTableWidgetItem):
-    """Disqualifiziert-/Abbruch-Zelle mit Häkchen; isChecked/setChecked wie bei QCheckBox."""
+    """Disqualifiziert-Zelle mit Häkchen; isChecked/setChecked wie bei QCheckBox (Abbruch
+    seit R7: _AbbruchItem)."""
 
     def __init__(self, an: bool):
         super().__init__("")
@@ -1425,6 +1428,105 @@ class _HakenItem(QTableWidgetItem):
 
     def setChecked(self, an: bool) -> None:  # noqa: N802
         self.setCheckState(Qt.Checked if an else Qt.Unchecked)
+
+
+#: R7 (Marco 01.11.2026): Abbruch aus Daten vor R7, ohne Grund - verhält sich wie bisher
+#: (Punkte gesperrt, keine Teilbewertung) und wird in der Auswahlliste nur dann angeboten.
+_ABBRUCH_OHNE_GRUND = "ohne_grund"
+
+
+def _abbruch_bezeichnung(grund: str | None) -> str:
+    if not grund:
+        return ""
+    if grund == _ABBRUCH_OHNE_GRUND:
+        return "Abbruch"
+    return ABBRUCH_GRUENDE[grund][0]
+
+
+def _abbruch_grund_aus_db(ergebnis: dict) -> str | None:
+    """Grund wie in der Tabelle: None (kein Abbruch), Code aus ABBRUCH_GRUENDE oder
+    _ABBRUCH_OHNE_GRUND für einen Abbruch ohne (gültigen) Grund."""
+    if not ergebnis.get("abbruch"):
+        return None
+    grund = ergebnis.get("abbruch_grund")
+    return grund if grund in ABBRUCH_GRUENDE else _ABBRUCH_OHNE_GRUND
+
+
+class _AbbruchItem(QTableWidgetItem):
+    """Abbruch-Zelle (R7, Marco 01.11.2026): leer oder ein Grund aus ABBRUCH_GRUENDE, gewählt
+    über eine Auswahlliste (_AbbruchDelegate). isChecked/setChecked wie bei _HakenItem:
+    irgendein Abbruch gesetzt bzw. Abbruch ohne Grund setzen/entfernen."""
+
+    def __init__(self, grund: str | None):
+        super().__init__("")
+        self.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
+        self.setTextAlignment(Qt.AlignCenter)
+        self.setGrund(grund)
+
+    def grund(self) -> str | None:
+        return self.data(Qt.UserRole) or None
+
+    def setGrund(self, grund: str | None) -> None:  # noqa: N802
+        self.setData(Qt.UserRole, grund or "")
+        self.setText(_abbruch_bezeichnung(grund))
+
+    def isChecked(self) -> bool:  # noqa: N802
+        return self.grund() is not None
+
+    def setChecked(self, an: bool) -> None:  # noqa: N802
+        if not an:
+            self.setGrund(None)
+        elif self.grund() is None:
+            self.setGrund(_ABBRUCH_OHNE_GRUND)
+
+
+class _AbbruchAuswahl(QComboBox):
+    """Auswahlliste des Abbruchgrunds (R7, Verifikation Befund 2): Im zugeklappten Feld
+    blättern Pfeiltasten, Bild-Tasten, Buchstaben und das Mausrad NICHT durch die Gründe -
+    sonst würde jede Zwischenstufe sofort übernommen. Sie klappen die Liste auf; übernommen
+    wird erst die Wahl in der Liste (Klick oder Enter)."""
+
+    def keyPressEvent(self, event):  # noqa: N802
+        # Durchreichen: Übernehmen/Abbrechen/Weiterspringen, reine Umschalt-/Strg-/Alt-Tasten
+        # und Kürzel mit Strg/Alt (z. B. Strg+S, Umschalt+Tab) - Vor-Build-Verifikation 1.0.55,
+        # Befund 4. Alt+Pfeil runter klappt die Liste wie gewohnt über Qt selbst auf.
+        if (event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Escape, Qt.Key_Tab, Qt.Key_Backtab,
+                            Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_AltGr)
+                or event.modifiers() & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)):
+            super().keyPressEvent(event)
+            return
+        self.showPopup()
+
+    def wheelEvent(self, event):  # noqa: N802
+        event.ignore()
+
+
+class _AbbruchDelegate(QStyledItemDelegate):
+    """Auswahlliste für den Abbruchgrund (R7). Sie klappt beim Öffnen gleich auf; die Wahl
+    in der Liste gilt sofort (wie ein Häkchen)."""
+
+    def createEditor(self, parent, option, index):  # noqa: N802
+        combo = _AbbruchAuswahl(parent)
+        combo.addItem("kein Abbruch", "")
+        for code, (text, eintrag) in ABBRUCH_GRUENDE.items():
+            combo.addItem(text, code)
+            combo.setItemData(combo.count() - 1, eintrag, Qt.ToolTipRole)
+        if index.data(Qt.UserRole) == _ABBRUCH_OHNE_GRUND:
+            combo.addItem("Abbruch (ohne Grund)", _ABBRUCH_OHNE_GRUND)
+        combo.activated.connect(lambda _i: (self.commitData.emit(combo), self.closeEditor.emit(combo)))
+        # Mit Kontextobjekt: Wird das Feld vorher geschlossen, entfällt der Aufruf (Befund 5).
+        QTimer.singleShot(0, combo, lambda: combo.isVisible() and combo.showPopup())
+        return combo
+
+    def setEditorData(self, editor, index):  # noqa: N802
+        editor.setCurrentIndex(max(editor.findData(index.data(Qt.UserRole) or ""), 0))
+
+    def setModelData(self, editor, model, index):  # noqa: N802
+        grund = editor.currentData() or ""
+        if grund == (index.data(Qt.UserRole) or ""):
+            return
+        model.setData(index, grund, Qt.UserRole)
+        model.setData(index, _abbruch_bezeichnung(grund), Qt.DisplayRole)
 
 
 class _PunkteDelegate(QStyledItemDelegate):
@@ -1528,7 +1630,7 @@ class _PunkteDelegate(QStyledItemDelegate):
 
 
 class _HakenDelegate(QStyledItemDelegate):
-    """Häkchen mittig in der Zelle (Disqualifiziert/Abbruch). Umschalten per Klick in die
+    """Häkchen mittig in der Zelle (Disqualifiziert). Umschalten per Klick in die
     Zelle oder mit der Leertaste; gesperrt nur, wenn die Zelle nicht aktiv ist."""
 
     def paint(self, painter, option, index):
@@ -1591,6 +1693,10 @@ class _ErgebnisTabelle(QTableWidget):
             # Entf/Rücktaste leeren eine markierte Punktezelle direkt - wie früher im
             # Eingabefeld (Verifikation O9).
             item = self.currentItem()
+            if isinstance(item, _AbbruchItem):
+                item.setGrund(None)  # R7: Entf nimmt den Abbruch zurück
+                event.accept()
+                return
             if item is not None and item.flags() & Qt.ItemIsEditable and item.flags() & Qt.ItemIsEnabled:
                 item.setText("")
                 event.accept()
@@ -1652,10 +1758,11 @@ class ErgebnisTab(QWidget):
         # Seit O8 (19.10.2026) Zellen statt Eingabefelder, siehe _PunkteItem/_HakenItem.
         self._boxen_je_zeile: list[dict[str, tuple[_PunkteItem, _PunkteItem]]] = []
         self._geladen_je_zeile: list[dict[str, tuple[int | None, int | None]]] = []
-        # Nutzerwunsch (21.09.): analog zu den Punktezellen oben, aber für die beiden
-        # Häkchen "Disqualifiziert"/"Abbruch" je Zeile.
-        self._status_boxen_je_zeile: list[tuple[_HakenItem, _HakenItem]] = []
-        self._status_geladen_je_zeile: list[tuple[bool, bool]] = []
+        # Nutzerwunsch (21.09.): analog zu den Punktezellen oben, aber für "Disqualifiziert"
+        # (Häkchen) und "Abbruch" (Auswahlliste mit Grund, R7) je Zeile; geladen als
+        # (Disqualifiziert, Abbruchgrund oder None).
+        self._status_boxen_je_zeile: list[tuple[_HakenItem, _AbbruchItem]] = []
+        self._status_geladen_je_zeile: list[tuple[bool, str | None]] = []
         # Zählt jeden Neuaufbau der Zeilen (offene Punkte O7): Tests prüfen damit „nicht neu
         # aufgebaut“, ohne sich auf einzelne Eingabe-Widgets zu verlassen.
         self.aufbau_kennung = 0
@@ -1687,7 +1794,8 @@ class ErgebnisTab(QWidget):
         # Infospalten (Start-Nr., Name, Hund, Prüfung) sind nur Anzeige (Flags ohne
         # ItemIsEditable). Bearbeiten (O8, Marco 18.10.2026): in einer markierten Zelle
         # lostippen, Doppelklick, zweiter Klick oder F2; Enter übernimmt und bleibt in der
-        # Zelle, die Leertaste schaltet ein Häkchen. Tab springt durch die bedienbaren Zellen
+        # Zelle, die Leertaste schaltet das Häkchen „Disqualifiziert“ bzw. klappt die
+        # Abbruch-Auswahlliste auf (R7). Tab springt durch die bedienbaren Zellen
         # (siehe _ErgebnisTabelle.moveCursor).
         self.tabelle.setEditTriggers(
             QAbstractItemView.AnyKeyPressed | QAbstractItemView.DoubleClicked
@@ -1701,7 +1809,7 @@ class ErgebnisTab(QWidget):
             self.tabelle.setItemDelegateForColumn(spalte, punkte_delegate)
         haken_delegate = _HakenDelegate(self.tabelle)
         self.tabelle.setItemDelegateForColumn(_DQ_SPALTE, haken_delegate)
-        self.tabelle.setItemDelegateForColumn(_ABBRUCH_SPALTE, haken_delegate)
+        self.tabelle.setItemDelegateForColumn(_ABBRUCH_SPALTE, _AbbruchDelegate(self.tabelle))
         self.tabelle.itemChanged.connect(self._zelle_geaendert)
         # Sortierpfeil wie im Teilnehmer-Reiter (Teil 3 Nr. 7) - die Richtung setzt
         # _spalte_geklickt selbst, weil die Sortierung hier eigene Logik hat.
@@ -1861,14 +1969,34 @@ class ErgebnisTab(QWidget):
         dq_box, abbruch_box = self._status_boxen_je_zeile[zeile]
         return dq_box.isChecked(), abbruch_box.isChecked()
 
-    def status_setzen(self, zeile: int, dq: bool | None = None, abbruch: bool | None = None) -> None:
-        """Setzt Disqualifiziert/Abbruch wie ein Klick des Anwenders (None = unverändert)."""
+    def abbruch_grund(self, zeile: int) -> str | None:
+        """R7: angezeigter Abbruchgrund (Code aus ABBRUCH_GRUENDE, "ohne_grund" oder None)."""
+        return self._status_boxen_je_zeile[zeile][1].grund()
+
+    def status_setzen(self, zeile: int, dq: bool | None = None, abbruch: bool | str | None = None) -> None:
+        """Setzt Disqualifiziert/Abbruch wie ein Klick des Anwenders (None = unverändert).
+        `abbruch` als Code aus ABBRUCH_GRUENDE wählt einen Grund (R7), True/False wie ein
+        Häkchen (True = Abbruch ohne Grund)."""
         self.tabelle.offenen_editor_beenden()
         dq_box, abbruch_box = self._status_boxen_je_zeile[zeile]
         if dq is not None:
             dq_box.setChecked(dq)
-        if abbruch is not None:
+        if isinstance(abbruch, str):
+            abbruch_box.setGrund(abbruch)
+        elif abbruch is not None:
             abbruch_box.setChecked(abbruch)
+
+    def _status_der_zeile(self, row: int) -> tuple[bool, str | None]:
+        """(Disqualifiziert, Abbruchgrund) wie angezeigt - Vergleichsform zu
+        _status_geladen_je_zeile (R7)."""
+        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
+        return dq_box.isChecked(), abbruch_box.grund()
+
+    @staticmethod
+    def _punkte_gesperrt(status: tuple[bool, str | None]) -> bool:
+        """Punkte gesperrt bei Disqualifiziert und Abbruch ohne Grund; mit Grund gilt eine
+        Teilbewertung, die Punkte bleiben eingebbar (R7, Marco 01.11.2026)."""
+        return bool(status[0]) or status[1] == _ABBRUCH_OHNE_GRUND
 
     def zelle_gesperrt(self, zeile: int, disziplin: str) -> bool:
         """True, solange BEIDE Punktezellen der Disziplin wegen Disqualifiziert/Abbruch
@@ -1981,7 +2109,7 @@ class ErgebnisTab(QWidget):
     def _zeilen_aufbauen(
         self,
         werte_override: dict[int, dict[str, tuple[int | None, int | None]]] | None = None,
-        status_override: dict[int, tuple[bool, bool]] | None = None,
+        status_override: dict[int, tuple[bool, str | None]] | None = None,
     ) -> list[str]:
         """Baut die Tabellenzeilen aus `self._teilnehmer_je_zeile` (in dessen aktueller
         Reihenfolge) komplett neu auf - gemeinsam genutzt von _neu_laden() (also
@@ -2108,17 +2236,18 @@ class ErgebnisTab(QWidget):
             self._boxen_je_zeile.append(boxen)
             self._geladen_je_zeile.append(geladen)
 
-            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): zwei unabhängige Häkchen, mittig
-            # gezeichnet von _HakenDelegate.
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): zwei unabhängige Status -
+            # Disqualifiziert als Häkchen (_HakenDelegate), Abbruch mit Grund (R7,
+            # _AbbruchItem/_AbbruchDelegate).
             db_disqualifiziert = bool(aktuell.get("disqualifiziert"))
-            db_abbruch = bool(aktuell.get("abbruch"))
+            db_abbruch = _abbruch_grund_aus_db(aktuell)  # R7: Grund statt Häkchen
             angezeigt_dq, angezeigt_abbruch = status_override.get(
                 t["id"], (db_disqualifiziert, db_abbruch)
             )
 
             dq_box = _HakenItem(angezeigt_dq)
             self.tabelle.setItem(row, _DQ_SPALTE, dq_box)
-            abbruch_box = _HakenItem(angezeigt_abbruch)
+            abbruch_box = _AbbruchItem(angezeigt_abbruch)
             self.tabelle.setItem(row, _ABBRUCH_SPALTE, abbruch_box)
 
             self._status_boxen_je_zeile.append((dq_box, abbruch_box))
@@ -2128,13 +2257,13 @@ class ErgebnisTab(QWidget):
 
             # Punkteeingabe sperren/leeren, wenn Disqualifiziert/Abbruch bereits gesetzt
             # ist (auch direkt nach dem Aufbau, nicht erst bei der nächsten Umschaltung).
-            if punkte_override and (angezeigt_dq or angezeigt_abbruch):
+            if punkte_override and self._punkte_gesperrt((angezeigt_dq, angezeigt_abbruch)):
                 # Ungespeicherte Punkte, aber inzwischen DQ/Abbruch in der DB - die Eingabe
                 # wird verworfen; der Aufrufer meldet das (Marco, 02.10.2026).
                 gruende.append("inzwischen „Disqualifiziert“ oder „Abbruch“ gespeichert")
             if gruende:
                 verworfen.append(f"{nummer}{t['nachname']}, {t['vorname']} ({'; '.join(gruende)})")
-            self._punkteeingabe_sperren(row, angezeigt_dq or angezeigt_abbruch)
+            self._punkteeingabe_sperren(row, self._punkte_gesperrt((angezeigt_dq, angezeigt_abbruch)))
             self._aktualisiere_zeilenstatus(row)
         return verworfen
 
@@ -2224,9 +2353,15 @@ class ErgebnisTab(QWidget):
             if c in punktespalten:
                 minima.append(max(minimum_punkte, header_zeilen_breite(c)))
                 harte_minima.append(minimum_punkte)
-            elif c in (_DQ_SPALTE, _ABBRUCH_SPALTE):
+            elif c == _DQ_SPALTE:
                 minima.append(max(44, header_zeilen_breite(c)))
                 harte_minima.append(44)
+            elif c == _ABBRUCH_SPALTE:
+                # R7: Platz für den Grund ("Verletzung Hund").
+                # + Pfeil der offenen Auswahlliste (Verifikation R7, Befund 8).
+                abbruch_breite = self.tabelle.fontMetrics().horizontalAdvance("Verletzung Hund") + 36
+                minima.append(max(abbruch_breite, header_zeilen_breite(c)))
+                harte_minima.append(abbruch_breite)
             else:
                 # Start-Nr./Name/Hund/Art-LK: reiner Text ohne Eingabefeld, schrumpft nicht
                 # unter die eigene natürliche Breite (soll nicht abgeschnitten werden).
@@ -2289,7 +2424,7 @@ class ErgebnisTab(QWidget):
         if spalte == _DQ_SPALTE:
             return self._status_boxen_je_zeile[row][0].isChecked()
         if spalte == _ABBRUCH_SPALTE:
-            return self._status_boxen_je_zeile[row][1].isChecked()
+            return self._status_boxen_je_zeile[row][1].text()
         if spalte == _STATUS_SPALTE:
             item = self.tabelle.item(row, spalte)
             return item.text() if item is not None else ""
@@ -2324,7 +2459,7 @@ class ErgebnisTab(QWidget):
 
     def _eingaben_je_id(self) -> tuple[dict, dict]:
         """Nur die tatsächlich noch NICHT gespeicherten Eingaben (Punkte je Disziplin,
-        DQ/Abbruch-Häkchen) je Teilnehmer-ID - als Overrides für _zeilen_aufbauen().
+        DQ-Häkchen/Abbruchgrund) je Teilnehmer-ID - als Overrides für _zeilen_aufbauen().
         Bewusst nicht einfach alle angezeigten Werte: _zeilen_aufbauen() liest die
         gespeicherten Werte frisch aus der DB, ein unveränderter, aber veralteter
         Anzeigewert würde sonst als "ungespeichert" gelten und beim nächsten Speichern
@@ -2334,11 +2469,10 @@ class ErgebnisTab(QWidget):
         werte_je_id: dict = {}
         status_je_id: dict = {}
         for row, t in enumerate(self._teilnehmer_je_zeile):
-            dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-            status = (dq_box.isChecked(), abbruch_box.isChecked())
+            status = self._status_der_zeile(row)
             if status != self._status_geladen_je_zeile[row]:
                 status_je_id[t["id"]] = status
-            if status[0] or status[1]:
+            if self._punkte_gesperrt(status):
                 continue  # Punktefelder sind gesperrt/geleert - nichts zu übernehmen
             geladen = self._geladen_je_zeile[row]
             for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
@@ -2409,9 +2543,9 @@ class ErgebnisTab(QWidget):
             return None
 
     def _zeile_ist_ungespeichert(self, row: int) -> bool:
-        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-        status_geaendert = (dq_box.isChecked(), abbruch_box.isChecked()) != self._status_geladen_je_zeile[row]
-        if dq_box.isChecked() or abbruch_box.isChecked():
+        status = self._status_der_zeile(row)
+        status_geaendert = status != self._status_geladen_je_zeile[row]
+        if self._punkte_gesperrt(status):
             # Punkte-Felder sind gesperrt und geleert (siehe _punkteeingabe_sperren) - ihr
             # (leerer) Inhalt sagt nichts über einen noch zu speichernden Punkte-Stand aus,
             # sonst würde eine bereits gespeicherte Disqualifiziert-/Abbruch-Zeile mit
@@ -2427,16 +2561,17 @@ class ErgebnisTab(QWidget):
         return punkte_geaendert or status_geaendert
 
     def _status_umgeschaltet(self, row: int) -> None:
-        """Reagiert auf das Umschalten eines Disqualifiziert-/Abbruch-Häkchens: sperrt/
-        leert bei Bedarf die Punktezellen dieser Zeile und aktualisiert den
-        Gespeichert-Status. Beim Entsperren (Häkchen entfernt) werden die Felder zuvor
-        wieder mit dem zuletzt aus der DB geladenen Stand befüllt statt leer zu bleiben -
-        die zugehörigen Punkte wurden beim Sperren NICHT gelöscht (siehe alle_speichern),
-        das Feld soll also wieder den tatsächlichen, in der DB stehenden Wert zeigen."""
-        dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-        sperren = dq_box.isChecked() or abbruch_box.isChecked()
+        """Reagiert auf eine Änderung von Disqualifiziert (Häkchen) bzw. Abbruch
+        (Auswahlliste, R7): sperrt/leert bei Bedarf die Punktezellen dieser Zeile und
+        aktualisiert den Gespeichert-Status. Nur beim Übergang gesperrt -> entsperrt werden
+        die Felder zuvor wieder mit dem zuletzt aus der DB geladenen Stand befüllt statt leer
+        zu bleiben - die Punkte wurden beim Sperren NICHT gelöscht (siehe alle_speichern).
+        Bleibt die Zeile offen (z. B. ein Abbruchgrund gewählt oder gewechselt), bleiben
+        ungespeicherte Eingaben unangetastet (Verifikation R7, Befund 1)."""
+        sperren = self._punkte_gesperrt(self._status_der_zeile(row))
+        war_gesperrt = not any(f.isEnabled() for paar in self._boxen_je_zeile[row].values() for f in paar)
         with self._intern():
-            if not sperren:
+            if not sperren and war_gesperrt:
                 geladen = self._geladen_je_zeile[row]
                 for disziplin, (suche_feld, anzeige_feld) in self._boxen_je_zeile[row].items():
                     suche_wert, anzeige_wert = geladen[disziplin]
@@ -2447,7 +2582,8 @@ class ErgebnisTab(QWidget):
 
     def _punkteeingabe_sperren(self, row: int, sperren: bool) -> None:
         """Sperrt (und leert) die Punktezellen einer Zeile, solange Disqualifiziert
-        oder Abbruch gesetzt ist - eine Punkteeingabe wäre dann ohnehin irrelevant, da
+        oder ein Abbruch ohne Grund gesetzt ist (mit Grund gilt die Teilbewertung, R7) -
+        eine Punkteeingabe wäre dann ohnehin irrelevant, da
         berechne_auswertung() für einen solchen Teilnehmer keine aus Punkten berechnete
         Wertnote mehr bildet (siehe db.py). Rührt beim Entsperren den Feldinhalt bewusst
         NICHT an (siehe _status_umgeschaltet für die interaktive Wiederherstellung) - beim
@@ -2613,9 +2749,8 @@ class ErgebnisTab(QWidget):
                 name = f"{t['nachname']}, {t['vorname']}"
                 boxen = self._boxen_je_zeile[row]
                 geladen = self._geladen_je_zeile[row]
-                dq_box, abbruch_box = self._status_boxen_je_zeile[row]
-                status_wert = (dq_box.isChecked(), abbruch_box.isChecked())
-                punkte_gesperrt = status_wert[0] or status_wert[1]
+                status_wert = self._status_der_zeile(row)
+                punkte_gesperrt = self._punkte_gesperrt(status_wert)
 
                 if not punkte_gesperrt:
                     for disziplin, (suche_feld, anzeige_feld) in boxen.items():
@@ -2674,7 +2809,9 @@ class ErgebnisTab(QWidget):
 
                 if status_wert != self._status_geladen_je_zeile[row]:
                     setze_ergebnis_status(
-                        self.conn, t["id"], status_wert[0], status_wert[1], commit=not gesammelt
+                        self.conn, t["id"], status_wert[0], status_wert[1] is not None,
+                        abbruch_grund=status_wert[1] if status_wert[1] in ABBRUCH_GRUENDE else None,
+                        commit=not gesammelt,
                     )
                     self._status_geladen_je_zeile[row] = status_wert
                     gespeichert += 1

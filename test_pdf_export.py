@@ -1076,6 +1076,44 @@ class TestPdfExport(unittest.TestCase):
         pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
         self.assertIn("Gesamt: ABBR", _text(pfad))
 
+    def test_abbruch_mit_grund_zeigt_teilbewertung_in_allen_ausdrucken(self):
+        """R7 (Marco 01.11.2026): Ergebnisliste, Etiketten und Bewertungsbogen zeigen bei
+        einem Abbruch mit Grund die Teilpunkte und den Eintrag laut PO."""
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Teil", vorname="T", rufname_hund="H", art="DK", stufe=1, startnummer=1))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", 55, 35)
+        eintragen_ergebnis(self.conn, tid, "Flächensuche", 50, 30)
+        setze_ergebnis_status(self.conn, tid, False, True, abbruch_grund="verletzung_hf")
+
+        pfad = self._pfad("ergebnisliste_teil.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertIn("170", text)
+        self.assertIn("Abbruch wegen Verletzung des Hundeführers (ABBR)", text)
+
+        pfad = self._pfad("etiketten_teil.pdf")
+        pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad)
+        text = _text(pfad)
+        for teil in ("Trümmer: 90", "Fläche: 80", "Behältnis: -", "Gesamt: ABBR"):
+            self.assertIn(teil, text)
+
+        pfad = self._pfad("bogen_teil.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertIn("170 (ABBR)", text)
+        self.assertIn("Abbruch wegen Verletzung des Hundeführers", text)
+
+    def test_bewertungsbogen_ed_abbruch_mit_grund(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Krank", vorname="K", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", suche=30, anzeige=5)
+        setze_ergebnis_status(self.conn, tid, False, True, abbruch_grund="krankheit")
+        pfad = self._pfad("bogen_ed_krank.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertIn("35 Punkte – Abbruch wegen Krankheit (ABBR)", text)
+
     def test_ergebnisliste_bei_abbruch_bindestrich_statt_null_punkte(self):
         tid = self._dk_mit_vollen_punkten("Abbrecher", 1)
         setze_ergebnis_status(self.conn, tid, disqualifiziert=False, abbruch=True)
@@ -1119,6 +1157,18 @@ class TestPdfExport(unittest.TestCase):
         text = " ".join(_text(pfad).split())
         self.assertIn("1. von 2 (nach Stechen)", text)
         self.assertIn("2. von 2", text)
+
+    def test_ergebnisliste_ab_neuer_po_ohne_stechen(self):
+        # PO1 (PO_01012027.md): Veranstaltung ab 01.01.2027 -> beide 1., kein Vermerk.
+        set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2027-01-02", ort="Köppern")
+        a = self._dk_mit_vollen_punkten("Erster", 1)
+        b = self._dk_mit_vollen_punkten("Zweiter", 2)
+        setze_stechen_sieger(self.conn, b, [a, b])
+        pfad = self._pfad("ergebnisliste_neue_po.pdf")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad)
+        text = " ".join(_text(pfad).split())
+        self.assertEqual(text.count("1. von 2"), 2)
+        self.assertNotIn("Stechen", text)
 
     def test_ergebnisliste_platz_spalte_disq_statt_nb(self):
         # UX-Test 02.10.2026, K3.

@@ -141,8 +141,22 @@ classDiagram
         +paint()
         +editorEvent()
     }
+    class _AbbruchDelegate {
+        +createEditor()
+        +setEditorData()
+        +setModelData()
+    }
+    class _AbbruchAuswahl {
+        +keyPressEvent()
+        +wheelEvent()
+    }
     class _PunkteItem
     class _HakenItem
+    class _AbbruchItem {
+        +grund()
+        +setGrund()
+    }
+    _AbbruchDelegate ..> _AbbruchAuswahl : erzeugt
     class AuswertungTab
     class TeilnehmerUebersichtTab
     class ExportTab
@@ -189,8 +203,10 @@ classDiagram
     ErgebnisTab *-- _ErgebnisTabelle
     _ErgebnisTabelle o-- _PunkteItem
     _ErgebnisTabelle o-- _HakenItem
+    _ErgebnisTabelle o-- _AbbruchItem
     _ErgebnisTabelle --> _PunkteDelegate : Punktespalten
-    _ErgebnisTabelle --> _HakenDelegate : DQ / Abbruch
+    _ErgebnisTabelle --> _HakenDelegate : DQ
+    _ErgebnisTabelle --> _AbbruchDelegate : Abbruchgrund
 
     TeilnehmerTab ..> TeilnehmerDialog
     TeilnehmerTab ..> TerminImportDialog
@@ -232,7 +248,7 @@ flowchart TD
     tag -.->|mehrere Richter| webv[Termin im Web veröffentlichen<br/>Richter erfassen im Browser<br/>Ergebnisse zurückholen]
     webv -.-> erf
     erf --> ausw[Auswertung<br/>Wertnoten, Plätze]
-    ausw --> stech{Gleichstand<br/>um einen Platz?}
+    ausw --> stech{Gleichstand um Platz 1<br/>und Prüfung vor 01.01.2027?}
     stech -->|ja| stechen[„Stechen-Sieger festlegen…“]
     stech -->|nein| druck2
     stechen --> druck2[Ergebnisliste, Statistik,<br/>Übersicht Prüfungsleitung als PDF]
@@ -428,10 +444,15 @@ sequenceDiagram
     DG->>TB: setModelData
     TB->>E: itemChanged → _zelle_geaendert
     E->>E: Zeile gelb „nicht gespeichert“,<br/>zu hoch → roter Rahmen
-    opt Haken DQ / Abbruch (Klick oder Leertaste)
+    opt Haken DQ (Klick oder Leertaste)
         N->>TB: Haken setzen (_HakenDelegate.editorEvent)
         TB->>E: itemChanged → _zelle_geaendert → _status_umgeschaltet
         E->>E: Punktezellen leeren und sperren
+    end
+    opt Abbruchgrund (Auswahlliste, Leertaste klappt auf)
+        N->>TB: Grund wählen (_AbbruchDelegate.setModelData)
+        TB->>E: itemChanged → _zelle_geaendert → _status_umgeschaltet
+        E->>E: Punktezellen bleiben offen (Teilbewertung),<br/>nur Abbruch ohne Grund sperrt
     end
     N->>E: „Alle Ergebnisse speichern“ / Strg+S
     E->>TB: offenen_editor_beenden (übernehmen)
@@ -468,10 +489,10 @@ sequenceDiagram
     N->>AT: Reiter öffnen / Filter
     AT->>D: berechne_auswertung(conn)
     D->>C: berechne_wertnote_ed / berechne_wertnote_dk
-    D->>C: berechne_rangliste (DQ/Abbruch ohne Platz)
+    D->>C: berechne_rangliste (DQ/Abbruch ohne Platz, Stechen nur vor 01.01.2027)
     C-->>D: Teilnehmerergebnisse
     D-->>AT: Ergebnisse + Stechen-Gruppen
-    opt Gleichstand
+    opt Gleichstand um Platz 1, Prüfung vor 01.01.2027
         N->>AT: „Stechen-Sieger festlegen…“
         AT->>D: Stechen-Sieger speichern
         AT->>D: berechne_auswertung (neu)

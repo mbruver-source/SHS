@@ -973,6 +973,38 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     assert "Stechen nötig" not in tab.ausstehend_label.text()
 
 
+def test_auswertung_ab_neuer_po_ohne_stechen(qtbot, conn, monkeypatch):
+    """PO1 (PO_01012027.md): Veranstaltung ab 01.01.2027 -> geteilter Platz 1, kein Hinweis,
+    kein Knopf, keine Rückfrage vor der Rangliste."""
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2027-01-02")
+    a = _teilnehmer_anlegen(conn, nachname="Anna", vorname="A", disziplin="Trümmerfeld", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="Ben", vorname="B", disziplin="Trümmerfeld", startnummer=2)
+    eintragen_ergebnis(conn, a, "Trümmerfeld", 58, 37)
+    eintragen_ergebnis(conn, b, "Trümmerfeld", 55, 40)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.aktualisieren()
+
+    platz_spalte = tab.tabelle.columnCount() - 1
+    plaetze = {tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
+    assert plaetze == {"1. von 2"}
+    assert "Stechen" not in tab.ausstehend_label.text()
+    assert not tab.stechen_btn.isVisible()
+
+    # Keine Rückfrage zum Stechen: es geht direkt zur Dateiauswahl (hier abgebrochen).
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
+    gewaehlt = []
+    monkeypatch.setattr("desktop_gemeinsam._speicherort_waehlen", lambda *x, **k: gewaehlt.append(1))
+    tab._rangliste_drucken()
+    assert fragen == [] and gewaehlt == [1]
+
+    # Vor dem Stichtag ist der Knopf wieder da.
+    set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-12-31")
+    tab.aktualisieren()
+    assert tab.stechen_btn.isVisible() and tab.stechen_btn.isEnabled()
+
+
 def test_selbsttest_erfolg_und_fehlerfall(qtbot, tmp_path, monkeypatch):
     """T1 (Marco 03.10.2026): "--selbsttest" liefert 0 und ein Protokoll; scheitert ein
     Schritt (z. B. ein in der EXE fehlendes Modul), Exit-Code 1 mit Fehlerzeile."""
@@ -6881,16 +6913,185 @@ def test_ergebnis_entf_leert_die_markierte_punktezelle(qtbot, conn):
 
 
 def test_ergebnis_leertaste_schaltet_haekchen(qtbot, conn):
+    # Seit R7 (01.11.2026) ist nur noch „Disqualifiziert“ ein Häkchen.
     _teilnehmer_anlegen(conn, disziplin="Flächensuche")
     tab = _ergebnis_tab_gezeigt(qtbot, conn)
-    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+    tab.tabelle.setCurrentCell(0, _DQ_SPALTE)
 
     qtbot.keyClick(tab.tabelle, Qt.Key_Space)
-    assert tab.status(0) == (False, True)
+    assert tab.status(0) == (True, False)
     assert tab.zelle_gesperrt(0, "Flächensuche")
     qtbot.keyClick(tab.tabelle, Qt.Key_Space)
     assert tab.status(0) == (False, False)
     assert not tab.zelle_gesperrt(0, "Flächensuche")
+
+
+def _abbruch_auswahl(qtbot, tab, zeile: int, text: str) -> None:
+    """Öffnet die Auswahlliste der Abbruch-Zelle per Leertaste und wählt `text` (R7)."""
+    from PySide6.QtWidgets import QComboBox
+
+    tab.tabelle.setCurrentCell(zeile, _ABBRUCH_SPALTE)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    # Ein zuvor geschlossener Editor kann noch auf deleteLater warten - nur der sichtbare zählt.
+    editoren = [c for c in tab.tabelle.viewport().findChildren(QComboBox) if c.isVisible()]
+    assert len(editoren) == 1, "Auswahlliste erwartet"
+    combo = editoren[0]
+    index = combo.findText(text)
+    assert index >= 0, [combo.itemText(i) for i in range(combo.count())]
+    combo.setCurrentIndex(index)
+    combo.activated.emit(index)
+
+
+def test_ergebnis_abbruch_mit_grund_laesst_punkte_offen_und_speichert(qtbot, conn):
+    """R7 (Marco 01.11.2026): Abbruchgrund per Auswahlliste; mit Grund bleiben die Punkte
+    eingebbar (Teilbewertung), gespeichert werden Grund und Punkte."""
+    from db import berechne_auswertung, ergebnisse_je_teilnehmer
+
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    assert [tab.tabelle.item(0, _ABBRUCH_SPALTE).text()] == [""]
+
+    _abbruch_auswahl(qtbot, tab, 0, "Verletzung Hund")
+    assert tab.status(0) == (False, True)
+    assert tab.abbruch_grund(0) == "verletzung_hund"
+    assert tab.tabelle.item(0, _ABBRUCH_SPALTE).text() == "Verletzung Hund"
+    assert not tab.zelle_gesperrt(0, "Flächensuche")
+    tab.punkte_eintragen(0, "Flächensuche", suche=30, anzeige=10)
+    assert tab.zeile_ungespeichert(0)
+    tab.alle_speichern(meldungen=False)
+    assert not tab.zeile_ungespeichert(0)
+
+    e = ergebnisse_je_teilnehmer(conn)[tid]
+    assert (e["abbruch"], e["abbruch_grund"], e["suche_flaechensuche"], e["anzeige_flaechensuche"]) == (
+        1, "verletzung_hund", 30, 10)
+    (t,), _ = berechne_auswertung(conn)
+    assert (t.wertnote.notentext, t.gesamtpunkte, t.platzierung) == ("Abbruch wegen Verletzung des Hundes", 40, None)
+
+    # Neu geladen: Grund steht wieder da; Entf nimmt den Abbruch zurück.
+    tab.aktualisieren()
+    assert tab.abbruch_grund(0) == "verletzung_hund"
+    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
+    assert tab.status(0) == (False, False)
+    assert tab.zeile_ungespeichert(0)
+
+
+def test_auswertung_zeigt_teilbewertung(qtbot, conn):
+    """Vor-Build-Verifikation 1.0.55, Befund 6: Der Reiter „Auswertung“ zeigt bei einem
+    Abbruch mit Grund die Teilpunkte und den Eintrag laut PO statt „–“."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", 30, 10)
+    setze_ergebnis_status(conn, tid, False, True, abbruch_grund="krankheit")
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.aktualisieren()
+    zeile = [tab.tabelle.item(0, c).text() for c in range(tab.tabelle.columnCount())]
+    assert "40" in zeile
+    assert "Abbruch wegen Krankheit" in zeile
+    assert "–" not in zeile
+    assert zeile[-1].startswith("Abbruch (von 1 Starter")
+
+
+def test_ergebnis_alter_abbruch_ohne_grund_bleibt_gesperrt(qtbot, conn):
+    """R7: Ein Abbruch aus Daten vor R7 (ohne Grund) sperrt die Punkte weiter; die
+    Auswahlliste bietet ihn nur für diese Zeile an, ein Grund hebt die Sperre auf."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    eintragen_ergebnis(conn, tid, "Flächensuche", 40, 30)
+    setze_ergebnis_status(conn, tid, False, True)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    assert tab.abbruch_grund(0) == "ohne_grund"
+    assert tab.tabelle.item(0, _ABBRUCH_SPALTE).text() == "Abbruch"
+    assert tab.zelle_gesperrt(0, "Flächensuche")
+
+    _abbruch_auswahl(qtbot, tab, 0, "Krankheit")
+    assert not tab.zelle_gesperrt(0, "Flächensuche")
+    assert tab.punkte(0, "Flächensuche") == ("40", "30")  # gespeicherte Punkte wieder da
+
+
+def test_ergebnis_abbruchgrund_nach_punkten_behaelt_eingaben(qtbot, conn):
+    """Verifikation R7, Befund 1: erst Punkte eintragen, dann den Grund wählen bzw. wechseln
+    oder zurücknehmen - die ungespeicherten Punkte bleiben stehen."""
+    _teilnehmer_anlegen(conn, art="DK", disziplin=None)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.punkte_eintragen(0, "Trümmerfeld", suche=55, anzeige=35)
+    tab.punkte_eintragen(0, "Flächensuche", suche=50, anzeige=30)
+
+    _abbruch_auswahl(qtbot, tab, 0, "Ungehorsam")
+    assert tab.punkte(0, "Trümmerfeld") == ("55", "35")
+    assert tab.punkte(0, "Flächensuche") == ("50", "30")
+    _abbruch_auswahl(qtbot, tab, 0, "Verletzung HF")
+    assert tab.abbruch_grund(0) == "verletzung_hf"
+    assert tab.punkte(0, "Trümmerfeld") == ("55", "35")
+    _abbruch_auswahl(qtbot, tab, 0, "kein Abbruch")
+    assert tab.status(0) == (False, False)
+    assert tab.punkte(0, "Flächensuche") == ("50", "30")
+
+    # DQ sperrt und leert weiterhin; danach kommt der gespeicherte (leere) Stand zurück.
+    tab.status_setzen(0, dq=True)
+    assert tab.zelle_gesperrt(0, "Trümmerfeld")
+    tab.status_setzen(0, dq=False)
+    assert tab.punkte(0, "Trümmerfeld") == ("", "")
+
+
+def test_ergebnis_abbruchliste_pfeiltaste_uebernimmt_nichts(qtbot, conn):
+    """Verifikation R7, Befund 2: Im zugeklappten Feld wählt eine Pfeiltaste keinen Grund
+    aus, sondern klappt die Liste auf."""
+    from PySide6.QtWidgets import QComboBox
+
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    (combo,) = tab.tabelle.viewport().findChildren(QComboBox)
+    combo.hidePopup()
+    qtbot.keyClick(combo, Qt.Key_Down)
+    assert combo.currentIndex() == 0
+    assert tab.abbruch_grund(0) is None
+    assert tab.tabelle.viewport().findChildren(QComboBox) == [combo]  # Editor noch offen
+    combo.hidePopup()
+
+
+def test_ergebnis_abbruchliste_modifier_und_kuerzel_klappen_nicht_auf(qtbot, conn):
+    """Vor-Build-Verifikation 1.0.55, Befund 4: Umschalt/Strg/Alt allein und Kürzel wie
+    Strg+S klappen die Liste nicht auf, eine Pfeiltaste schon."""
+    from PySide6.QtWidgets import QComboBox
+
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    (combo,) = [c for c in tab.tabelle.viewport().findChildren(QComboBox) if c.isVisible()]
+    combo.hidePopup()
+    aufgeklappt = []
+    combo.showPopup = lambda: aufgeklappt.append(True)
+    for taste in (Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt):
+        qtbot.keyClick(combo, taste)
+    qtbot.keyClick(combo, Qt.Key_S, Qt.ControlModifier)
+    assert aufgeklappt == []
+    qtbot.keyClick(combo, Qt.Key_Down)
+    assert aufgeklappt == [True]
+    assert tab.abbruch_grund(0) is None
+
+
+def test_ergebnis_abbruchliste_enter_uebernimmt_grund(qtbot, conn):
+    """Nachprüfung R7: Leertaste klappt die Liste auf, Pfeiltasten wählen, erst Enter
+    übernimmt den Grund und schließt die Auswahl."""
+    from PySide6.QtWidgets import QComboBox
+
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.tabelle.setCurrentCell(0, _ABBRUCH_SPALTE)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Space)
+    qtbot.wait(50)
+    (combo,) = [c for c in tab.tabelle.viewport().findChildren(QComboBox) if c.isVisible()]
+    liste = combo.view()
+    qtbot.keyClick(liste, Qt.Key_Down)
+    qtbot.keyClick(liste, Qt.Key_Down)
+    assert tab.abbruch_grund(0) is None  # Blättern übernimmt nichts
+    qtbot.keyClick(liste, Qt.Key_Return)
+    qtbot.wait(50)
+    assert tab.abbruch_grund(0) == "verletzung_hund"
+    assert tab.tabelle.state() != tab.tabelle.State.EditingState
 
 
 def test_ergebnis_klick_in_die_haekchenzelle_schaltet(qtbot, conn):
@@ -7878,7 +8079,20 @@ def test_startdialog_schleife_zeigt_nach_demo_wieder_den_startdialog(monkeypatch
     assert _StartAttrappe.aufrufe == 2
 
 
-def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_umgebung):
+@pytest.mark.parametrize("heute", [datetime.date(2026, 12, 31), datetime.date(2027, 1, 2)])
+def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_umgebung, monkeypatch, heute):
+    """Die Demo spielt "heute" - PO1 (PO_01012027.md): vor dem Stichtag mit Stechen, danach
+    ohne (Schritt 12 erklärt dann nur)."""
+    import types
+
+    import desktop_demo
+
+    class _Datum(datetime.date):
+        @classmethod
+        def today(cls):
+            return heute
+
+    monkeypatch.setattr(desktop_demo, "datetime", types.SimpleNamespace(date=_Datum))
     from db import (
         berechne_auswertung,
         list_zeitplan_eintraege,
@@ -7932,7 +8146,13 @@ def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_
             fertig, ausstehend = berechne_auswertung(demo_conn)
             assert ausstehend == []
             assert sorted(t.wertnote.abkuerzung for t in fertig) == ["DISQ", "G", "G", "SG", "SG", "V", "V", "nB"]
-            assert [t.name for t in fertig if t.stechen == "gewonnen"] == ["Albers, Anna"]
+            if heute.year < 2027:
+                assert [t.name for t in fertig if t.stechen == "gewonnen"] == ["Albers, Anna"]
+            else:
+                assert all(t.stechen is None for t in fertig)
+                assert sorted(t.name for t in fertig if t.platzierung == 1 and t.wertnote.abkuerzung == "V") == [
+                    "Albers, Anna", "Brandt, Ben"]
+            assert get_veranstaltung(demo_conn)["datum"] == heute.isoformat()
         elif titel.startswith("13."):
             assert tour.pdf_pfad and os.path.isfile(tour.pdf_pfad)
             assert tour.pdf_pfad.startswith(demo_ordner)

@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.54. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.55. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -187,7 +187,7 @@ Der Button **„Demoprüfung“** steht im Startbildschirm und im Hauptfenster o
 3. Startnummern vergeben und abhaken, wer bezahlt hat,
 4. den Zeitplan automatisch verteilen,
 5. Ergebnisse eintragen, eine Disqualifikation setzen und speichern,
-6. die Auswertung ansehen und ein Stechen entscheiden,
+6. die Auswertung ansehen und ein Stechen entscheiden (bei Prüfungen bis Ende 2026),
 7. die Ergebnisliste als PDF erzeugen (**„PDF öffnen“** zeigt sie),
 8. ein Hinweis, wie Richter am Tablet eintragen können,
 9. den Demo-Termin wieder löschen.
@@ -610,8 +610,18 @@ gesperrt.
 - Suche **und** Anzeige gehören zusammen. Ist nur eine der beiden Zellen ausgefüllt, wird die
   Zeile nicht gespeichert: „Bitte Suche UND Anzeige eintragen oder beide Felder leer lassen.“
 - **Ergebnis entfernen:** beide Zellen leeren und speichern.
-- **„Disqualifiziert“** bzw. **„Abbruch“** ankreuzen leert und sperrt die Punktezellen (sie
-  erscheinen dann als abgesetzte Fläche ohne Rahmen).
+- **„Disqualifiziert“** ankreuzen leert und sperrt die Punktezellen (sie erscheinen dann als
+  abgesetzte Fläche ohne Rahmen).
+- **„Abbruch“** ist eine Auswahlliste mit dem Grund laut Prüfungsordnung: **Ungehorsam**,
+  **Verletzung Hund**, **Krankheit** oder **Verletzung HF** (Hundeführer). Die Punktezellen bleiben
+  dabei offen, denn es gilt eine **Teilbewertung**: Trag die Punkte der fertigen Disziplinen ein
+  und bei Verletzung oder Krankheit auch die der abgebrochenen bis zum Abbruch (Suche und Anzeige
+  gehören auch hier zusammen, fehlt ein Teil, trag 0 ein). Bei Ungehorsam
+  entfallen die Punkte der laufenden Disziplin, lass sie also leer. Ausgewertet wird die Summe der
+  eingetragenen Punkte mit dem Eintrag laut PO (z. B. „Abbruch wegen Verletzung des Hundes“), nie
+  bestanden und ohne Platz. **„kein Abbruch“** oder **Entf** nimmt den Abbruch zurück. Ein
+  Abbruch aus einer älteren Programmversion ohne Grund heißt dort nur „Abbruch“ und sperrt die
+  Punkte wie bisher, bis du einen Grund wählst.
 - Die Filter blenden nur aus, ungespeicherte Eingaben bleiben erhalten. **„Liste aktualisieren“**
   fragt vorher nach, wenn noch etwas ungespeichert ist.
 - Ein Klick auf einen **Spaltenkopf** sortiert nach dieser Spalte (Pfeil im Kopf), ein zweiter
@@ -622,7 +632,9 @@ gesperrt.
 - Mit der **Tab-Taste** springst du zur nächsten Eingabe: Suche → Anzeige → nächste Disziplin →
   „Disqualifiziert“ → „Abbruch“ → nächste Zeile (Umschalt+Tab zurück). Gesperrte Zellen und
   „–“ werden übersprungen. Die **Leertaste** (oder ein Klick) setzt bzw. entfernt das Häkchen bei
-  „Disqualifiziert“ und „Abbruch“.
+  „Disqualifiziert“ und klappt bei „Abbruch“ die Auswahlliste auf. Dort wählst du mit den
+  Pfeiltasten und übernimmst mit **Enter** (oder per Klick), **Esc** bricht ab. Ist die Liste
+  aufgeklappt, schließt der erste Druck auf **Tab** nur die Liste, der zweite springt weiter.
 - Gelb bzw. der rote Rahmen bei zu hohen Punkten erscheinen, sobald du die Zelle verlässt oder
   Enter drückst. Eine gerade getippte Zahl geht beim Speichern, Reiterwechsel oder Schließen nie
   verloren.
@@ -675,6 +687,11 @@ Startnummer wird dabei nicht berücksichtigt.
   die Wahl zurücknehmen. Ändern sich danach die Punkte und es gibt keinen Gleichstand mehr,
   zählt die Wahl nicht mehr. Solange ein Stechen offen ist, fragt das Programm vor der
   Ergebnisliste bzw. Rangliste nach.
+- **Ab 01.01.2027 kein Stechen mehr:** Für Prüfungen mit einem Veranstaltungsdatum ab dem
+  01.01.2027 gilt voraussichtlich eine neue Prüfungsordnung ohne Stechen. Das Programm richtet
+  sich dafür nach dem Veranstaltungsdatum: Punktgleiche teilen sich dann Platz 1 (1., 1., 3.),
+  der Knopf „Stechen-Sieger festlegen…“ und der Hinweis „Stechen nötig“ entfallen. Ältere
+  Prüfungen werden weiter mit Stechen ausgewertet.
 
 ### Übersicht
 
@@ -1065,7 +1082,7 @@ oder der Button **„Hilfe“** oben rechts im Programm.
 
 | Wort | Bedeutung |
 |---|---|
-| **Abbruch (Abbr.)** | Die Prüfung wurde abgebrochen. Kein Platz und keine Punkte, das Team zählt aber bei „von x“ mit. |
+| **Abbruch (Abbr.)** | Die Prüfung wurde abgebrochen, mit Grund laut PO (Ungehorsam, Verletzung des Hundes, Krankheit, Verletzung des Hundeführers). Es zählen die bis dahin eingetragenen Punkte (Teilbewertung), aber kein Platz; das Team zählt bei „von x“ mit. |
 | **Ablageort / Ordner „Ausdrucke“** | Der Ordner, in dem das Programm deine PDFs vorschlägt: `Termine\Ausdrucke\<Termin>`. |
 | **Anmerkungen** | Spalte im Reiter „Teilnehmer“, die zeigt, was bei einem Teilnehmer noch fehlt. |
 | **Behältnisstrecke, Flächensuche, Trümmerfeld** | Die drei Suchdisziplinen. |
@@ -1086,7 +1103,7 @@ oder der Button **„Hilfe“** oben rechts im Programm.
 | **Reiter** | Die Registerkarten oben im Programmfenster („Teilnehmer“, „Zeitplan“ …). |
 | **SH-R** | Spürhundesport-Richter. Das Feld „SH-R“ auf den Etiketten ist für seinen Stempel. |
 | **Sicherungsdatei** | Eine Datei (Endung `.zip`), in der alle Termine stecken – zum Aufbewahren, z. B. auf einem USB-Stick. |
-| **Stechen** | Entscheidet bei Punktgleichheit auf Platz 1, wer gewinnt. Den Sieger trägst du im Reiter „Auswertung“ ein. |
+| **Stechen** | Entscheidet bei Punktgleichheit auf Platz 1, wer gewinnt. Den Sieger trägst du im Reiter „Auswertung“ ein. Entfällt für Prüfungen ab 01.01.2027. |
 | **Starter / „1. von 2“** | „von 2“ zählt die Teams einer Leistungsklasse, deren Ergebnis schon vollständig eingetragen ist. |
 | **Startnummern-Bereich** | Welche Startnummern zu welcher Prüfung gehören, z. B. 1 bis 20 für DK LK 1. |
 | **Termin / Termin-Datei** | Eine Prüfung mit allen Teilnehmern und Ergebnissen. Jede Prüfung ist eine eigene Datei. |

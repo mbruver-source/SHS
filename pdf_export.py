@@ -89,6 +89,7 @@ from db import (
 )
 from shs_core import (
     ABBRUCH_ABK,
+    ABBRUCH_GRUENDE,
     ABBRUCH_TEXT,
     DISQUALIFIZIERT_ABK,
     DISQUALIFIZIERT_TEXT,
@@ -169,6 +170,7 @@ _STAT_MATRIX_ZELLE = ParagraphStyle("SHSStatMatrixZelle", parent=_STYLES["Normal
 # Namen in Ergebnislisten als Paragraph, damit lange Doppelnamen umbrechen statt in die
 # Nachbarspalte zu ragen (Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4).
 _TABELLE_ZELLE = ParagraphStyle("SHSTabelleZelle", parent=_STYLES["Normal"], fontSize=9, leading=11)
+_ZELLE_KLEIN_MITTIG = ParagraphStyle("SHSZelleKleinMittig", parent=_STYLES["Normal"], fontSize=7.5, leading=9, alignment=1)
 
 _WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 _MONATE = [
@@ -261,6 +263,25 @@ def _status_abkuerzung(ergebnis: dict | None) -> str | None:
     if ergebnis.get("abbruch"):
         return ABBRUCH_ABK
     return None
+
+
+def _abbruch_grund_text(ergebnis: dict | None) -> str | None:
+    """R7 (Marco 01.11.2026): Eintrag laut PO ("Abbruch wegen …") bei einem Abbruch mit
+    Grund (Teilbewertung), sonst None - dann gilt _STATUS_TEXT wie bisher."""
+    if not ergebnis or ergebnis.get("disqualifiziert") or not ergebnis.get("abbruch"):
+        return None
+    grund = ABBRUCH_GRUENDE.get(ergebnis.get("abbruch_grund"))
+    return grund[1] if grund else None
+
+
+def _teil_text(ergebnis: dict, disziplin: str) -> str:
+    """R7: Punkte einer Disziplin bei Teilbewertung - auch nur teilweise erfasst (leeres Feld
+    zählt 0); "-", wenn für die Disziplin gar nichts eingetragen ist."""
+    s_spalte, a_spalte = DISZIPLIN_SPALTEN[disziplin]
+    suche, anzeige = ergebnis.get(s_spalte), ergebnis.get(a_spalte)
+    if suche is None and anzeige is None:
+        return "-"
+    return str((suche or 0) + (anzeige or 0))
 
 
 def _p_wert(v) -> str:
@@ -585,7 +606,12 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         werte_zeile = [
             _wert(sum(einzelpunkte[d]) if None not in einzelpunkte[d] else None) for d in ALLE_DISZIPLINEN
         ]
-        if status_abk is not None:
+        grund_text = _abbruch_grund_text(ergebnis)
+        if grund_text is not None:
+            # R7: Teilbewertung - Summe der eingetragenen Punkte und Eintrag laut PO.
+            summe = sum(v or 0 for d in ALLE_DISZIPLINEN for v in einzelpunkte[d])
+            werte_zeile.append(Paragraph(f"{summe} ({status_abk})<br/>{grund_text}", _ZELLE_KLEIN_MITTIG))
+        elif status_abk is not None:
             # Disqualifiziert/Abbruch (Codeprüfung 22.09., M3): keine aus Punkten berechnete
             # Wertnote - wie in berechne_auswertung(). Die Einzelpunkte oben bleiben als
             # Dokumentation der Richterbewertung bewusst stehen (Marcos Entscheidung).
@@ -605,6 +631,8 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
             ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            # R7: Die GESAMT-Zelle mit Abbruchgrund ist mehrzeilig - Nachbarwerte mittig.
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
         story.append(KeepTogether([gesamt_tabelle, Spacer(1, 2 * mm), _wertungsnoten_tabelle_dk()]))
         return story
@@ -616,8 +644,14 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         # stehen, darunter derselbe Status wie im DK-GESAMT-Feld - sonst sähe der Bogen
         # wie ein normal bewerteter aus.
         story.append(Spacer(1, 3 * mm))
+        grund_text = _abbruch_grund_text(ergebnis)
+        if grund_text is not None:  # R7: Teilbewertung
+            summe = sum(v or 0 for v in einzelpunkte[t["disziplin"]])
+            status_inhalt = f"{summe} Punkte – {grund_text} ({status_abk})"
+        else:
+            status_inhalt = f"{_STATUS_TEXT[status_abk]} ({status_abk})"
         status_tabelle = Table(
-            [["ERGEBNIS", f"{_STATUS_TEXT[status_abk]} ({status_abk})"]],
+            [["ERGEBNIS", status_inhalt]],
             colWidths=[42.5 * mm, 127.5 * mm],
         )
         status_tabelle.setStyle(TableStyle([
@@ -717,8 +751,14 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
             platz = platz_text(t) or _PLATZ_OHNE_RANG.get(t.wertnote.abkuerzung, NICHT_BESTANDEN_ABK)
             # Bei Disqualifiziert/Abbruch "–" statt einer irreführenden "0" (wie im
             # Auswertungs-Tab der Desktop-App).
-            punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
-            daten.append([platz, _wert(startnummer_je_id.get(t.id)), Paragraph(_p_wert(t.name), _TABELLE_ZELLE), punkte, f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"])
+            # R7: bei Teilbewertung (Abbruch mit Grund) die Summe der Teilpunkte.
+            if t.wertnote.teilbewertung:
+                punkte = str(t.gesamtpunkte)
+                wertnote_text = Paragraph(_p_wert(f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"), _TABELLE_ZELLE)
+            else:
+                punkte = "–" if t.wertnote.abkuerzung in _STATUS_TEXT else str(t.gesamtpunkte)
+                wertnote_text = f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"
+            daten.append([platz, _wert(startnummer_je_id.get(t.id)), Paragraph(_p_wert(t.name), _TABELLE_ZELLE), punkte, wertnote_text])
         if len(daten) > 1:
             tabelle = Table(daten, colWidths=[40 * mm, 18 * mm, 46 * mm, 27 * mm, 39 * mm], repeatRows=1)
             tabelle.setStyle(TableStyle([
@@ -881,7 +921,15 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
         )
 
         gesamt_stil = _ETIKETT_FELD
-        if erg is not None and erg.wertnote.abkuerzung in _STATUS_TEXT:
+        if erg is not None and erg.wertnote.teilbewertung:
+            # R7: Abbruch mit Grund - Teilpunkte je Disziplin; im Gesamtfeld bleibt
+            # "ABBR" (mit Summe wäre es im 7-pt-Feld zu breit, siehe Test "einzeilig").
+            truemmer_text = f"Trümmer: {_teil_text(ergebnis, 'Trümmerfeld')}"
+            flaeche_text = f"Fläche: {_teil_text(ergebnis, 'Flächensuche')}"
+            behaeltnis_text = f"Behältnis: {_teil_text(ergebnis, 'Behältnisstrecke')}"
+            gesamt_text = f"Gesamt: {ABBRUCH_ABK}"
+            gesamt_stil = _ETIKETT_FELD_STATUS
+        elif erg is not None and erg.wertnote.abkuerzung in _STATUS_TEXT:
             # Disqualifiziert/Abbruch (Codeprüfung 22.09., M3, Marcos Entscheidung): keine
             # Punkte auf dem offiziellen Etikett, nur der Status statt "Gesamt: 0".
             truemmer_text = "Trümmer: -"

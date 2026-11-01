@@ -8435,3 +8435,182 @@ nannte fünf Ursachen:
     Prüfungen behalten ihr Stechen. Die Vorbereitung kann deshalb schon jetzt eingebaut werden.
   - Die Gleichstandsregel der neuen PO ist noch unbekannt. Bis dahin gilt ein geteilter Platz 1.
 - Die Umsetzung ist geplant (Ablauf in `PO_01012027.md`) und erfolgt in einem eigenen Schritt.
+
+
+## 01.11.2026: PO1 umgesetzt: Stechen entfällt ab 01.01.2027 (vorbereitet, noch inaktiv)
+
+- `shs_core.py`: `PO_2027_STICHTAG` und `stechen_gilt(datum)` sind neu (ohne Datum gilt weiter das
+  Stechen). `berechne_rangliste(..., mit_stechen=True)` lässt bei `False` den Stechen-Block weg,
+  dann gilt geteilter Platz 1 (1., 1., 3.). `stechen_gruppen()` liefert nur noch Gruppen mit
+  Stechen-Vermerk, ohne Stechen also nichts.
+- `db.py`: `stechen_gilt_fuer_veranstaltung(conn)` liest das Veranstaltungsdatum, ein unlesbares
+  Datum zählt wie keines. `berechne_auswertung()` übergibt das Ergebnis. Schema und Migration sind
+  unverändert, ein gespeicherter `stechen_sieger` wird ab der neuen PO nur nicht ausgewertet.
+- Desktop: Der Knopf „Stechen-Sieger festlegen…“ ist ab der neuen PO ausgeblendet. Hinweis und
+  Rückfrage vor dem Druck entfallen über `stechen_gruppen()` von selbst. Hilfetext ist ergänzt.
+- Demo (Marcos Entscheidung): Sie spielt weiter „heute“ und nutzt dieses Datum jetzt durchgehend
+  (`self._heute`). Ab 01.01.2027 erklärt Schritt 12 den geteilten Platz 1 statt einen Sieger
+  einzutragen. Ohne diese Änderung wäre die Demo ab 2027 bei Schritt 12 mit „kein offenes Stechen“
+  abgebrochen.
+- PDF und Weboberfläche brauchen keine eigene Änderung (`platz_text()` ohne Vermerk).
+- Dokumentation: `docs/HANDBUCH.md` (Auswertung, Glossar), `Architektur.md`, `UML.md` (Mermaid
+  mit mmdc geprüft) und `PO_01012027.md` sind nachgezogen. Handbuch-Screenshots sind nicht
+  betroffen, weil sich vor dem Stichtag nichts Sichtbares ändert.
+- Tests: Stichtag-Grenzen, Rangliste mit und ohne Stechen (`test_shs_core`), Demodaten auf beiden
+  Seiten des Stichtags samt ignoriertem Sieger (`test_db`, der bisherige Demo-Stechen-Test ist jetzt
+  fest auf den 31.12.2026 datiert, sonst wäre er ab 2027 rot geworden), PDF-Ergebnisliste ab 2027
+  (`test_pdf_export`), Auswertung ab 2027 ohne Knopf und Rückfrage sowie der Demo-Durchlauf für
+  31.12.2026 und 02.01.2027 (`test_app_gui`). Die Gegenprobe mit umgedrehtem Datumsvergleich
+  scheitert wie erwartet.
+- **Tests lokal:** 710 Unittests (175 übersprungen) und 476 GUI-Tests grün.
+- Nicht committet und nicht ausgeliefert, bis Marco einen Build anfordert.
+- Verifikation (Subagent `verifikation`): kein Logikfehler, 710 Unittests und 477 GUI-Tests grün.
+  Alle vier Kleinpunkte setzt Marco um (01.11.2026): fehlendes Leerzeichen in `shs_core.py`,
+  Handbuch-Demoliste mit „(bei Prüfungen bis Ende 2026)“, neutraler Demo-Text ab 2027 („entfällt
+  das Stechen“ statt „gilt die neue Prüfungsordnung“, Schritttitel „12. Stechen“ bleibt) und ein
+  Test für ein unlesbares Veranstaltungsdatum.
+
+
+## 01.11.2026: Abgleich der aktuellen PO (01.07.2022) mit dem Programm
+
+- Marco hat die VDH-Spürhundesport-PO vom 01.07.2022 bereitgestellt. Sie liegt nur lokal in
+  `_unveroeffentlicht/PO/` (öffentliches Repo, fremdes Dokument).
+- Der Regelkatalog R1–R24 steht in `PO_01012027.md`. Je Regel sind Fundstelle, Umsetzung im
+  Programm und Status eingetragen.
+- Ergebnis: Bewertung, Punktgrenzen, Prüfungsarten, Behältnis-Anzahl, 36 Abteilungen je Richter
+  und das Anmeldeformular passen. Die Notengrenzen stehen nicht in der PO, sie stammen aus den
+  Bewertungsbögen.
+- Viele organisatorische Regeln sind bewusst nicht abgebildet. Die Prüfungsleitung regelt sie selbst,
+  zum Beispiel Mindestalter, 2 Hunde je Hundeführer, 8 Teilnehmer und läufige Hündinnen.
+- Marcos Entscheidungen:
+  - R4: Die PO kennt kein Stechen (gleich platzieren, frei gewordene Plätze nicht vergeben).
+    Das Stechen bleibt trotzdem bis Ende 2026 und entfällt ab 01.01.2027 wie in PO1 geplant.
+  - R5: Ein Team startet nur in einem Wettkampf. „Alle Starts“ in der PO meint die drei Teile
+    eines Dreikampfs. Das Programm setzt das schon um, weil eine Disqualifikation für den ganzen
+    Start gilt.
+- Noch offen: R7 (Abbruch wegen Verletzung/Krankheit mit Teilbewertung) und, ob einzelne
+  „nicht abgebildet“-Punkte als Hinweis sinnvoll wären. Außerdem sind die Seiten 23–24 der PO ein
+  Entwurfsanhang (Sozialverträglichkeit, Siegerehrung, Teilnahmebedingungen mit Fragezeichen).
+  Laut Marco sind das keine Vorarbeiten zur neuen PO.
+- Marco 01.11.2026: R7 (Abbruchgründe mit Teilbewertung) wird schon jetzt eingebaut, unabhängig
+  von der neuen PO. Die fachlichen Rückfragen dazu folgen vor der Umsetzung.
+
+
+## 01.11.2026: R7 umgesetzt: Abbruchgründe mit Teilbewertung (PO II.3.4/II.3.5)
+
+- Marcos Entscheidungen:
+  - Gründe: Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF, mit dem Eintrag laut PO.
+  - Teilbewertung: Die bis dahin eingetragenen Punkte werden samt Summe gezeigt, nie bestanden,
+    keine Note, kein Platz.
+  - Ungehorsam: Fertige Disziplinen behalten ihre Punkte, die abgebrochene bleibt leer.
+  - Eingabe: Auswahlliste statt Häkchen.
+- Daten: neue Spalte `ergebnisse.abbruch_grund` mit CHECK auf die vier Codes. Der CHECK gilt
+  nur in neu angelegten Termin-Dateien, denn die Migration über `_ERGEBNISSE_NEUE_SPALTEN`
+  ergänzt nur die Spalte. Für bestehende Dateien prüfen `setze_ergebnis_status` und die Leser,
+  die unbekannte Codes als „ohne Grund“ behandeln. `abbruch` bleibt zusätzlich 1, damit ältere Versionen „Abbruch“
+  zeigen. `setze_ergebnis_status(..., abbruch_grund=)` prüft den Code.
+  `berechne_auswertung()` bildet mit Grund eine Teilbewertung (`Wertnote.teilbewertung`,
+  Summe über `_teilpunkte`, leere Felder 0, Text aus `shs_core.ABBRUCH_GRUENDE`).
+  Disqualifiziert geht weiter vor.
+- Daten vor R7 (Abbruch ohne Grund) bleiben wie bisher: Punkte gesperrt, „–“. In der
+  Auswahlliste heißt das „Abbruch (ohne Grund)“ und wird nur in solchen Zeilen angeboten.
+- Desktop-Erfassung (`app.py`): `_AbbruchItem`/`_AbbruchDelegate` (Auswahlliste, Leertaste öffnet
+  sie, Entf nimmt den Abbruch zurück). Gesperrt sind die Punkte nur noch bei Disqualifiziert und
+  Abbruch ohne Grund (`_punkte_gesperrt`). Die Spalte ist breiter („Verletzung Hund“).
+- Auswertung und PDFs: Punkte und Eintrag laut PO in Auswertung, Ergebnisliste und Bewertungsbogen
+  (ED: „35 Punkte – Abbruch wegen Krankheit (ABBR)“, DK-GESAMT: Summe mit Eintrag). Etiketten
+  zeigen die Teilpunkte je Disziplin. Im Gesamtfeld bleibt „ABBR“, weil eine Summe im 7-pt-Feld
+  umbrechen würde. Die Statistik zählt weiter eine Zeile „Abbruch“.
+- Web: unverändert (C5, Status nur am Desktop). Zurückholen übernimmt weiter nur Punkte.
+- Tests: Teilbewertung DK/ED, Vorrang DQ, ungültiger Code, CHECK (`test_db`, auch PostgreSQL in
+  der CI), Ergebnisliste, Etiketten und Bewertungsbögen (`test_pdf_export`), Altdaten-Spalte seit
+  1.0.55 (`test_altversionen`), Auswahlliste, offene Punkte, Speichern, Neuladen, Entf und alter
+  Abbruch ohne Grund (`test_app_gui`). Der Leertasten-Test prüft jetzt die DQ-Spalte. Die
+  Gegenprobe (Teilbewertung bzw. offene Punkte abgeschaltet) scheitert wie erwartet.
+- **Tests lokal:** 717 Unittests (177 übersprungen) und 478 GUI-Tests grün.
+- Vor dem Build: Handbuch-Screenshot der Ergebniserfassung neu aufnehmen, weil die Abbruch-Spalte
+  jetzt Text statt Häkchen zeigt.
+- Verifikation (Subagent `verifikation`): Marco hat alle Befunde zur Umsetzung freigegeben
+  (01.11.2026).
+  - 1 (hoch): Wer erst Punkte eintrug und dann einen Grund wählte, verlor die ungespeicherten
+    Punkte. `_status_umgeschaltet` füllt jetzt nur beim Übergang gesperrt → entsperrt aus der
+    DB auf.
+  - 2: Pfeiltasten, Buchstaben und Mausrad im zugeklappten Feld übernehmen keinen Grund mehr
+    (`_AbbruchAuswahl`). Die Liste klappt gleich auf, übernommen wird mit Enter oder Klick.
+  - 3: Demo-Schritt 9 beschreibt Auswahlliste und Teilbewertung.
+  - 4: Die UML-Diagramme zeigen `_AbbruchItem`/`_AbbruchDelegate`.
+  - 5: Der CHECK gilt nur in neuen Dateien (oben klargestellt).
+  - 7: Typangaben, Kommentare und Docstrings in `app.py` sind berichtigt.
+  - 8: Die Abbruch-Spalte ist breiter, damit die offene Auswahlliste Platz hat.
+  - 9: Die GESAMT-Zeile im DK-Bogen ist senkrecht mittig ausgerichtet.
+  - 6 (Marcos Entscheidung): Suche und Anzeige gehören auch bei einer Teilbewertung zusammen.
+    Ein fehlender Teil wird mit 0 eingetragen, Handbuch und Hilfetext sagen das.
+  - Neue Tests: „erst Punkte, dann Grund wählen/wechseln/zurücknehmen“ und „Pfeiltaste im
+    zugeklappten Feld übernimmt nichts“. Die Gegenprobe für beide Befunde scheitert wie erwartet.
+  - **Tests lokal danach:** 717 Unittests (177 übersprungen) und 480 GUI-Tests grün, UML mit mmdc
+    geprüft.
+- Nachprüfung (Subagent `verifikation`): Befunde 1–9 sind korrekt behoben, kein neuer Fehler.
+  Die drei Kleinigkeiten setzt Marco um:
+  - Handbuch: Satz zu Tab bei aufgeklappter Liste (der erste Tab schließt nur die Liste);
+  - zwei veraltete Kommentare in `app.py`;
+  - GUI-Test „Enter in der aufgeklappten Liste übernimmt den Grund“.
+  - Alle drei sind umgesetzt. Danach waren 481 GUI-Tests grün, die Gegenprobe zum Enter-Test
+    scheitert wie erwartet.
+
+
+## 01.11.2026: Projektwebseite an das Erscheinungsbild „Beagle“ angeglichen (Marco)
+
+- `docs/assets/site.css`:
+  - Farben aus Programm und Weboberfläche: Creme #FBF8F3, Lohbraun #8C5A32, dunkles Lohbraun
+    #6A4325 für Links und Wertnoten, Kopf Anthrazit #2F2B27;
+  - warme dunkle Variante;
+  - Kopf in Anthrazit mit 3-px-Lohbraun-Linie;
+  - Funktionen als Karten mit leichtem Schatten.
+- Der runde Beagle (`docs/assets/beagle.png`, Kopie von `static/beagle.png`) ersetzt das Kürzel
+  „SHS“ im Kopf aller fünf Seiten. Die Behältnis-Seite (3D-Werkzeug) behält ihren eigenen Stil.
+- Kontraste nach WCAG geprüft: hell mindestens 5,5:1, dunkel mindestens 7,1:1.
+- Vorher/Nachher hell, dunkel und Handy mit Edge headless angesehen.
+- Commit aa21fc6 ist gepusht. Das ist eine reine Website-Änderung, das Design ist seit 1.0.53
+  ausgeliefert. `docs/HANDBUCH.md` blieb bewusst draußen, weil die Datei die noch nicht
+  ausgelieferten R7-Änderungen enthält.
+
+
+## 01.11.2026: Vor-Build-Verifikation 1.0.55 und Marcos Entscheidungen
+
+- Die Verifikation über alles seit 1.0.54 findet keinen Logikfehler. Marco hat alle Auffälligkeiten
+  zur Umsetzung freigegeben:
+  - 1 + 2: Alle Desktop-Screenshots werden neu aufgenommen. In den Testdaten von
+    `tools/screenshots.py` hat Greta (ED LK 2 Fläche) einen Abbruch „Verletzung Hund“ mit
+    Teilpunkten.
+  - 3: R6 im Regelkatalog ist jetzt „umgesetzt (über R7)“.
+  - 4: In der Abbruch-Liste klappen Umschalt, Strg, Alt allein und Kürzel mit Strg/Alt die Liste
+    nicht mehr auf, sie werden durchgereicht (Strg+S, Umschalt+Tab). Neuer GUI-Test.
+  - 5: `QTimer.singleShot` hat das Auswahlfeld als Kontextobjekt.
+  - 6: GUI-Test für die Teilbewertung im Reiter „Auswertung“.
+  - 7: `tools/altdaten_erzeugen.py`: Emil bekommt ab 1.0.55 einen Abbruch „Verletzung Hund“ mit
+    Teilbewertung (neuer `kann`-Schlüssel `abbruchgrund`). `test_altversionen` prüft das, ältere
+    Altdaten bleiben „ausstehend“.
+  - 8: Der Selbsttest legt einen dritten Teilnehmer mit Abbruch und Grund an und druckt dessen
+    Bewertungsbogen. Erwartet werden V/SG/ABBR, die CSV- und Sicherungsprüfungen zählen jetzt 3.
+  - 9 + 10: `Architektur.md` und das UML-Klassendiagramm kennen `_AbbruchItem`,
+    `_AbbruchDelegate` und `_AbbruchAuswahl` (Mermaid geprüft).
+  - 11: Drei veraltete Kommentare in `db.py` und `desktop_auswertung.py` sind berichtigt.
+  - 12: Die Restpunkte sind oben als erledigt vermerkt.
+  - 13: Die Release Notes nennen die Etiketten.
+- Die Gegenproben für die neuen Tests zu 4 und 6 scheitern wie erwartet.
+
+
+## Version 1.0.55
+
+- **R7 Abbruchgründe mit Teilbewertung** nach der PO (Ungehorsam, Verletzung Hund, Krankheit,
+  Verletzung HF), Auswahlliste in der Ergebniserfassung, Teilpunkte auf Auswertung, Ergebnisliste,
+  Bewertungsbogen und Etiketten. Neue Spalte `ergebnisse.abbruch_grund`.
+- **PO1:** Ab Veranstaltungsdatum 01.01.2027 entfällt das Stechen um Platz 1 (vorbereitet,
+  bis dahin wirkungslos).
+- **Regelkatalog** aktuelle PO ↔ Programm in `PO_01012027.md`.
+- Alle Befunde der Vor-Build-Verifikation sind umgesetzt (siehe Abschnitt oben).
+- Die Version ist erhöht. Alle 15 Desktop-Screenshots sind neu, darunter die Ergebniserfassung
+  mit der Abbruch-Auswahlliste und die Auswertung mit Teilbewertung. `docs/HANDBUCH.pdf` ist
+  neu, `RELEASE_NOTES.md` ist neu geschrieben.
+- **Tests lokal:** 717 Unittests (177 übersprungen) und 483 GUI-Tests grün, UML mit mmdc geprüft.
+- Vor dem Tag folgt ein CI-Probelauf auf `probe-1.0.55`.

@@ -1287,7 +1287,10 @@ und Anzeigeleistung (0–40) eintragen. Noch nicht gespeicherte Zeilen werden ge
 ungespeicherte Eingaben gehen dabei nicht verloren. Um ein bereits gespeichertes Ergebnis
 wieder zu entfernen, beide Felder (Suche und Anzeige) leeren und anschließend speichern –
 ist nur eines der beiden Felder leer, gilt das als unvollständig und wird beim Speichern
-zurückgewiesen. "Disqualifiziert" bzw. "Abbruch" ankreuzen leert und sperrt die Punktefelder.
+zurückgewiesen. "Disqualifiziert" ankreuzen leert und sperrt die Punktefelder. Bei "Abbruch"
+den Grund wählen (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF): die Punktefelder
+bleiben offen für die Teilbewertung (bei Ungehorsam die abgebrochene Disziplin leer lassen,
+sonst einen fehlenden Teil mit 0 eintragen).
 Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespeichert.</p>
 
 <h3>Reiter "Auswertung"</h3>
@@ -1297,7 +1300,9 @@ Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualis
 Anzeige. "Rangliste drucken (PDF)…" speichert die Rangliste als PDF - ist im Filter eine
 Art/Leistungsklasse gewählt, nur diese, sonst alle (der Startnummer-Filter wird dabei nicht
 berücksichtigt). Sind mehrere punktgleich auf Platz 1, steht dort "Stechen offen": nach dem
-Stechen mit "Stechen-Sieger festlegen…" den Sieger wählen - er wird 1., die anderen 2.</p>
+Stechen mit "Stechen-Sieger festlegen…" den Sieger wählen - er wird 1., die anderen 2.
+Für Prüfungen ab dem 01.01.2027 (voraussichtlich neue Prüfungsordnung) entfällt das Stechen:
+Punktgleiche teilen sich dann Platz 1, der Knopf "Stechen-Sieger festlegen…" fehlt.</p>
 
 <h3>Reiter "Übersicht"</h3>
 <p>Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen und die

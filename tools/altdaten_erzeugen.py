@@ -94,9 +94,15 @@ kann = {
     "halter": "halter_nachname" in felder,
     "geburtsdatum": "geburtsdatum" in felder,
     "anmeldeformular": "angebotene_pruefungen" in inspect.signature(db.set_veranstaltung).parameters,
+    # R7 (1.0.55): Abbruch mit Grund und Teilbewertung.
+    "abbruchgrund": hasattr(db, "setze_ergebnis_status")
+    and "abbruch_grund" in inspect.signature(db.setze_ergebnis_status).parameters,
 }
 if kann["disqualifikation"]:
     db.setze_ergebnis_status(conn, ids["Frieda"], disqualifiziert=True, abbruch=False)
+if kann["abbruchgrund"]:
+    # Emil (DK, nur Trümmerfeld 80) bricht wegen Verletzung des Hundes ab -> Teilbewertung.
+    db.setze_ergebnis_status(conn, ids["Emil"], False, True, abbruch_grund="verletzung_hund")
 if kann["keine_teilnahme"]:
     db.setze_keine_teilnahme(conn, ids["Gerd"], True)
 

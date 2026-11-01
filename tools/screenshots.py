@@ -115,8 +115,12 @@ ERGEBNISSE_VORHANDEN = {
     "Testuser1": {"Trümmerfeld": (55, 36), "Flächensuche": (52, 34), "Behältnisstrecke": (58, 38)},
     "Testuser4": {"Trümmerfeld": (56, 37)},
     "Testuser6": {"Trümmerfeld": (40, 25)},
+    "Testuser7": {"Flächensuche": (30, 10)},
 }
 DISQUALIFIZIERT = {"Testuser8"}
+#: R7: Abbruch mit Grund (Teilbewertung), damit Auswahlliste und Teilpunkte im Handbuch zu
+#: sehen sind (Vor-Build-Verifikation 1.0.55, Befund 2).
+ABBRUCH = {"Testuser7": "verletzung_hund"}
 #: In der Ergebniserfassung eingetippt, aber (noch) nicht gespeichert -> gelbe Zeile.
 ERGEBNISSE_UNGESPEICHERT = {
     "Testuser3": {"Trümmerfeld": (50, 32), "Flächensuche": (47, 30)},
@@ -212,6 +216,8 @@ class _Termine:
                         db.eintragen_ergebnis(conn, ids[name], disziplin, suche, anzeige)
             for name in DISQUALIFIZIERT:
                 db.setze_ergebnis_status(conn, ids[name], True, False)
+            for name, grund in ABBRUCH.items():
+                db.setze_ergebnis_status(conn, ids[name], False, True, abbruch_grund=grund)
         return conn, str(pfad), ids
 
 

@@ -21,7 +21,10 @@ suchen.
 ## PO. Neue Prüfungsordnung ab 01.01.2027
 
 Eigene ToDo-Liste: `PO_01012027.md` (seit 01.11.2026). Dort stehen die Punkte (PO1: Stechen
-entfällt) mit Status und offenen Fachfragen.
+entfällt ab 01.01.2027, vorbereitet in 1.0.55) mit Status und offenen Fachfragen sowie der
+Regelkatalog „aktuelle PO (01.07.2022) ↔ Programm“ (R1–R24; R7 Abbruchgründe umgesetzt in
+1.0.55). Offen: Gleichstandsregel der neuen PO, sobald der Text vorliegt; ob einzelne „nicht
+abgebildete“ Regeln (R10 Mindestalter, R14, R16, R18) einen Hinweis bekommen.
 
 ## B. Bewusst zurückgestellt (Marcos Entscheidung)
 

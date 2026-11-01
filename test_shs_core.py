@@ -14,15 +14,20 @@ Drei Ebenen:
    die Originaldatei unter ODS_PATH gefunden wird (siehe unten), wird sonst übersprungen.
 """
 
+import datetime
 import os
 import unittest
 
 from shs_core import (
     MINDESTPUNKTE_JE_DISZIPLIN,
+    PO_2027_STICHTAG,
     Teilnehmerergebnis,
     berechne_rangliste,
     berechne_wertnote_dk,
     berechne_wertnote_ed,
+    platz_text,
+    stechen_gilt,
+    stechen_gruppen,
 )
 
 ODS_PATH = os.environ.get(
@@ -253,6 +258,43 @@ class TestRangliste(unittest.TestCase):
         rangliste = berechne_rangliste(teilnehmer)
         self.assertTrue(all(t.platzierung is None for t in rangliste))
         self.assertTrue(all(t.von_startern == 2 for t in rangliste))
+
+
+class TestNeuePO2027OhneStechen(unittest.TestCase):
+    """PO1 (PO_01012027.md, Marco 01.11.2026): ab der neuen PO entfällt das Stechen."""
+
+    def test_stichtag_entscheidet(self):
+        self.assertEqual(PO_2027_STICHTAG, datetime.date(2027, 1, 1))
+        self.assertTrue(stechen_gilt(datetime.date(2026, 12, 31)))
+        self.assertFalse(stechen_gilt(datetime.date(2027, 1, 1)))
+        self.assertFalse(stechen_gilt(datetime.date(2027, 6, 1)))
+        self.assertTrue(stechen_gilt(None))  # ohne Datum bleibt es beim Stechen
+
+    def _gleichstand_um_platz_1(self):
+        return [
+            Teilnehmerergebnis("1", "A", "ED LK 1 Trümmerfeld", _wn(96)),
+            Teilnehmerergebnis("2", "B", "ED LK 1 Trümmerfeld", _wn(96)),
+            Teilnehmerergebnis("3", "C", "ED LK 1 Trümmerfeld", _wn(90)),
+        ]
+
+    def test_ohne_stechen_teilen_sich_punktgleiche_platz_1(self):
+        # Auch ein (aus der Zeit vor dem Stichtag) gespeicherter Sieger wird ignoriert.
+        rangliste = berechne_rangliste(self._gleichstand_um_platz_1(), {"1"}, mit_stechen=False)
+        by_name = {t.name: t for t in rangliste}
+        self.assertEqual({n: (t.platzierung, t.stechen) for n, t in by_name.items()},
+                         {"A": (1, None), "B": (1, None), "C": (3, None)})
+        self.assertEqual(platz_text(by_name["A"]), "1. von 3")
+        self.assertEqual(stechen_gruppen(rangliste), {})
+
+    def test_mit_stechen_unveraendert(self):
+        rangliste = berechne_rangliste(self._gleichstand_um_platz_1())
+        self.assertEqual({t.name: t.stechen for t in rangliste}, {"A": "offen", "B": "offen", "C": None})
+        self.assertEqual(list(stechen_gruppen(rangliste)), ["ED LK 1 Trümmerfeld"])
+        rangliste = berechne_rangliste(self._gleichstand_um_platz_1(), {"2"})
+        by_name = {t.name: t for t in rangliste}
+        self.assertEqual({n: t.platzierung for n, t in by_name.items()}, {"A": 2, "B": 1, "C": 3})
+        # Nach entschiedenem Stechen bleibt die Gruppe erhalten (Auswahl wieder änderbar).
+        self.assertEqual({t.name for t in stechen_gruppen(rangliste)["ED LK 1 Trümmerfeld"]}, {"A", "B"})
 
 
 if __name__ == "__main__":

@@ -53,6 +53,8 @@ from shs_core import (
     berechne_rangliste,
     berechne_wertnote_dk,
     berechne_wertnote_ed,
+    stechen_gilt,
+    ABBRUCH_GRUENDE,
 )
 
 SCHEMA = """
@@ -178,6 +180,10 @@ CREATE TABLE IF NOT EXISTS ergebnisse (
     -- unten). Boolean-Konvention wie teilnehmer.bezahlt (INTEGER 0/1).
     disqualifiziert INTEGER NOT NULL DEFAULT 0 CHECK (disqualifiziert IN (0, 1)),
     abbruch INTEGER NOT NULL DEFAULT 0 CHECK (abbruch IN (0, 1)),
+    -- R7 (Marco 01.11.2026): Grund eines Abbruchs (shs_core.ABBRUCH_GRUENDE), NULL = ohne
+    -- Grund (Daten vor R7). abbruch bleibt zusätzlich 1, damit ältere Versionen ihn erkennen.
+    abbruch_grund TEXT CHECK (abbruch_grund IS NULL OR abbruch_grund IN
+        ('ungehorsam', 'verletzung_hund', 'krankheit', 'verletzung_hf')),
     -- S1 (Marco 03.10.2026): Sieger eines Stechens bei Gleichstand um Platz 1 (0/1).
     -- Gilt nur, solange der Gleichstand besteht (siehe shs_core.berechne_rangliste).
     stechen_sieger INTEGER NOT NULL DEFAULT 0 CHECK (stechen_sieger IN (0, 1))
@@ -543,6 +549,7 @@ _ERGEBNISSE_NEUE_SPALTEN = [
     ("disqualifiziert", "INTEGER NOT NULL DEFAULT 0"),
     ("abbruch", "INTEGER NOT NULL DEFAULT 0"),
     ("stechen_sieger", "INTEGER NOT NULL DEFAULT 0"),  # S1, 03.10.2026
+    ("abbruch_grund", "TEXT"),  # R7, 01.11.2026
 ]
 
 
@@ -1306,18 +1313,23 @@ def eintragen_ergebnis(
 @_mit_rollback
 def setze_ergebnis_status(
     conn: sqlite3.Connection, teilnehmer_id: int, disqualifiziert: bool, abbruch: bool,
-    *, commit: bool = True,
+    *, abbruch_grund: str | None = None, commit: bool = True,
 ) -> None:
     """Setzt die beiden unabhängigen Status "Disqualifiziert"/"Abbruch" eines Teilnehmers
-    (Nutzerwunsch 21.09., siehe ErgebnisTab in app.py). Ist mindestens einer der beiden
-    gesetzt, bildet berechne_auswertung() unten KEINE aus den Punktwerten berechnete
-    Wertnote mehr - eine ggf. weiterhin in suche_*/anzeige_*-Spalten stehende Punktzahl
-    bleibt dabei unangetastet (die GUI leert/sperrt die Eingabe zwar, siehe
-    ErgebnisTab._punkteeingabe_sperren, ein direkter DB-Zugriff wie z.B. sync_termin.py
-    könnte sie aber weiterhin enthalten). commit=False wie bei eintragen_ergebnis()."""
+    (Nutzerwunsch 21.09., siehe ErgebnisTab in app.py). Bei Disqualifiziert und bei einem
+    Abbruch ohne Grund bildet berechne_auswertung() unten KEINE Wertnote aus den Punktwerten -
+    eine ggf. weiterhin in suche_*/anzeige_*-Spalten stehende Punktzahl bleibt dabei
+    unangetastet (die GUI leert/sperrt in diesen Fällen die Eingabe, siehe
+    ErgebnisTab._punkteeingabe_sperren, ein direkter DB-Zugriff könnte sie aber weiterhin
+    enthalten). commit=False wie bei eintragen_ergebnis().
+
+    R7: `abbruch_grund` (Code aus shs_core.ABBRUCH_GRUENDE) gilt nur zusammen mit abbruch;
+    mit Grund bildet berechne_auswertung() eine Teilbewertung aus den eingetragenen Punkten."""
+    if abbruch_grund is not None and abbruch_grund not in ABBRUCH_GRUENDE:
+        raise ValueError(f"Unbekannter Abbruchgrund: {abbruch_grund!r}")
     conn.execute(
-        "UPDATE ergebnisse SET disqualifiziert = ?, abbruch = ? WHERE teilnehmer_id = ?",
-        (int(disqualifiziert), int(abbruch), teilnehmer_id),
+        "UPDATE ergebnisse SET disqualifiziert = ?, abbruch = ?, abbruch_grund = ? WHERE teilnehmer_id = ?",
+        (int(disqualifiziert), int(abbruch), abbruch_grund if abbruch else None, teilnehmer_id),
     )
     if commit:
         conn.commit()
@@ -1344,6 +1356,13 @@ def _disziplin_punkte(ergebnis: dict, disziplin: str) -> int | None:
     if suche is None or anzeige is None:
         return None
     return suche + anzeige
+
+
+def _teilpunkte(teilnehmer: dict, ergebnis: dict) -> int:
+    """R7: Summe aller eingetragenen Punkte der Disziplinen des Teilnehmers (leere Felder
+    zählen 0) - für die Teilbewertung nach einem Abbruch mit Grund."""
+    disziplinen = [teilnehmer["disziplin"]] if teilnehmer["art"] == "ED" else ALLE_DISZIPLINEN
+    return sum(ergebnis.get(spalte) or 0 for d in disziplinen for spalte in DISZIPLIN_SPALTEN[d])
 
 
 def _wertnote(teilnehmer: dict, ergebnis: dict):
@@ -1703,6 +1722,18 @@ def ist_jugendlicher(geburtsdatum: str | None, stichtag: str | None) -> bool:
     return alter < JUGENDLICHE_ALTERSGRENZE
 
 
+def stechen_gilt_fuer_veranstaltung(conn: sqlite3.Connection) -> bool:
+    """PO1 (PO_01012027.md, Marco 01.11.2026): gilt für die Veranstaltung dieses Termins noch
+    das Stechen um Platz 1? Entscheidet das Veranstaltungsdatum (shs_core.stechen_gilt). Ohne
+    Veranstaltung oder mit unlesbarem Datum gilt weiter das Stechen."""
+    veranstaltung = get_veranstaltung(conn)
+    try:
+        datum = lies_datum(veranstaltung.get("datum") if veranstaltung else None)
+    except ValueError:
+        datum = None
+    return stechen_gilt(datum)
+
+
 def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebnis], list[dict]]:
     """Liefert (gerankte Teilnehmer mit Ergebnis, Teilnehmer ohne vollständiges Ergebnis)."""
     teilnehmer_rows = list_teilnehmer(conn, nur_teilnehmende=True)
@@ -1727,18 +1758,26 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
             ausstehend.append(t)
             continue
         if ergebnis.get("disqualifiziert") or ergebnis.get("abbruch"):
-            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): unabhängig davon, ob
-            # (versehentlich oder über einen direkten DB-Zugriff) noch Punktwerte
-            # hinterlegt sind, wird KEINE aus Punkten berechnete Wertnote gebildet -
+            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): keine Wertnote aus den Punkten
+            # (bei Disqualifiziert und Abbruch ohne Grund werden auch hinterlegte Punkte
+            # ignoriert; ein Abbruch mit Grund zählt sie als Teilbewertung, R7) -
             # stattdessen eine Platzhalter-Wertnote mit dem jeweiligen Status-Text, damit
             # der Teilnehmer wie ein "nicht bestanden"-Teilnehmer in der Rangliste
             # erscheint (keine Platzierung, zählt aber als Starter, siehe
             # berechne_rangliste()) statt fälschlich als "noch ausstehend" zu gelten.
             if ergebnis.get("disqualifiziert"):
-                notentext, abkuerzung = DISQUALIFIZIERT_TEXT, DISQUALIFIZIERT_ABK
+                wertnote = Wertnote(punkte=0, notentext=DISQUALIFIZIERT_TEXT,
+                                    abkuerzung=DISQUALIFIZIERT_ABK, bestanden=False)
+            elif ergebnis.get("abbruch_grund") in ABBRUCH_GRUENDE:
+                # R7 (Marco 01.11.2026): Teilbewertung - die eingetragenen Punkte zählen
+                # (leere Felder als 0), Text laut PO, nie bestanden.
+                wertnote = Wertnote(
+                    punkte=_teilpunkte(t, ergebnis),
+                    notentext=ABBRUCH_GRUENDE[ergebnis["abbruch_grund"]][1],
+                    abkuerzung=ABBRUCH_ABK, bestanden=False, teilbewertung=True,
+                )
             else:
-                notentext, abkuerzung = ABBRUCH_TEXT, ABBRUCH_ABK
-            wertnote = Wertnote(punkte=0, notentext=notentext, abkuerzung=abkuerzung, bestanden=False)
+                wertnote = Wertnote(punkte=0, notentext=ABBRUCH_TEXT, abkuerzung=ABBRUCH_ABK, bestanden=False)
         else:
             wertnote = _wertnote(t, ergebnis)
             if wertnote is None:
@@ -1753,7 +1792,9 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
             )
         )
 
-    return berechne_rangliste(fertig, stechen_sieger), ausstehend
+    # PO1: ab der neuen PO (Veranstaltungsdatum ab 01.01.2027) kein Stechen mehr; ein früher
+    # gespeicherter stechen_sieger bleibt in der Datenbank, wird dann aber nicht ausgewertet.
+    return berechne_rangliste(fertig, stechen_sieger, stechen_gilt_fuer_veranstaltung(conn)), ausstehend
 
 
 # --- Zeitplan --------------------------------------------------------------

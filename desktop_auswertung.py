@@ -45,6 +45,7 @@ from db import (
     leistungsklasse_label,
     list_teilnehmer,
     setze_stechen_sieger,
+    stechen_gilt_fuer_veranstaltung,
     termine_ordner,
 )
 from db_import import exportiere_teilnehmer_csv
@@ -308,7 +309,8 @@ class AuswertungTab(QWidget):
         for row, t in enumerate(fertig_gefiltert):
             # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): db.berechne_auswertung() gibt
             # solchen Teilnehmern eine Platzhalter-Wertnote mit abkuerzung=DISQUALIFIZIERT_ABK/
-            # ABBRUCH_ABK statt einer aus Punkten berechneten - hier ähnlich der bestehenden
+            # ABBRUCH_ABK (bei einem Abbruch mit Grund mit den Teilpunkten, R7) statt einer
+            # Wertnote - hier ähnlich der bestehenden
             # "nicht bestanden"-Behandlung (keine Platzierung, zählt als Starter, rot
             # markiert über t.bestanden weiter unten), aber mit eigenem Text statt "nB"/
             # Wertnote.
@@ -316,8 +318,9 @@ class AuswertungTab(QWidget):
             ist_abbruch = t.wertnote.abkuerzung == ABBRUCH_ABK
             if ist_disqualifiziert or ist_abbruch:
                 status_text = DISQUALIFIZIERT_TEXT if ist_disqualifiziert else ABBRUCH_TEXT
-                wertnote_text = status_text
-                punkte_text = "–"
+                # R7 (Marco 01.11.2026): Abbruch mit Grund -> Eintrag laut PO und Teilpunkte.
+                wertnote_text = t.wertnote.notentext if t.wertnote.teilbewertung else status_text
+                punkte_text = str(t.gesamtpunkte) if t.wertnote.teilbewertung else "–"
             else:
                 # nicht bestanden (mind. eine Disziplin unter 70 Punkten) -> keine
                 # Platzierung, entspricht im Original dem Kürzel "nB" in der Rankingliste.
@@ -361,6 +364,9 @@ class AuswertungTab(QWidget):
         alle_gruppen = stechen_gruppen(self._fertig)
         gruppen = {lk: g for lk, g in alle_gruppen.items() if lk in sichtbare_lk}
         self.stechen_btn.setEnabled(bool(alle_gruppen))
+        # PO1 (PO_01012027.md): ab der neuen PO (Veranstaltung ab 01.01.2027) gibt es kein
+        # Stechen mehr - der Knopf entfällt dann ganz.
+        self.stechen_btn.setVisible(stechen_gilt_fuer_veranstaltung(self.conn))
         von_hinweise = [
             f"Stechen nötig in {lk}: "
             + ", ".join(self._stechen_bezeichnung(t) for t in g)

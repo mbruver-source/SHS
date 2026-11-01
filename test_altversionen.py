@@ -54,9 +54,9 @@ class TestAltversionen(unittest.TestCase):
         import sqlite3
 
         spalte_seit = {"keine_teilnahme": "1.0.39", "startnummer_bereiche": "1.0.40", "strasse": "1.0.3",
-                       "disqualifiziert": "1.0.21"}
+                       "disqualifiziert": "1.0.21", "abbruch_grund": "1.0.55"}
         tabelle = {"keine_teilnahme": "teilnehmer", "startnummer_bereiche": "veranstaltung",
-                   "strasse": "teilnehmer", "disqualifiziert": "ergebnisse"}
+                   "strasse": "teilnehmer", "disqualifiziert": "ergebnisse", "abbruch_grund": "ergebnisse"}
         for ordner in VERSIONEN:
             version = [int(x) for x in ordner.name.lstrip("v").split(".")]
             roh = sqlite3.connect((ordner / "termin.sqlite").as_uri() + "?mode=ro", uri=True)
@@ -121,7 +121,13 @@ class TestAltversionen(unittest.TestCase):
                     self.assertEqual((erg["Clara"].wertnote.abkuerzung, erg["Clara"].platzierung), ("nB", None))
                     self.assertEqual((erg["Dieter"].wertnote.abkuerzung, erg["Dieter"].gesamtpunkte), ("SG", 270))
                     ausstehend_namen = [t["nachname"] for t in ausstehend]
-                    self.assertIn("Emil", ausstehend_namen)
+                    if kann.get("abbruchgrund"):
+                        # Ab 1.0.55 (R7): Abbruch wegen Verletzung mit Teilbewertung.
+                        self.assertEqual(
+                            (erg["Emil"].wertnote.notentext, erg["Emil"].gesamtpunkte, erg["Emil"].platzierung),
+                            ("Abbruch wegen Verletzung des Hundes", 80, None))
+                    else:
+                        self.assertIn("Emil", ausstehend_namen)
                     if kann["disqualifikation"]:
                         self.assertEqual(erg["Frieda"].wertnote.abkuerzung, "DISQ")
                     else:

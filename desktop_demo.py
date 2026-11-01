@@ -70,7 +70,7 @@ from db import (
     zeitplan_richter_aus_veranstaltung_anlegen,
 )
 from desktop_dialoge import TeilnehmerDialog, VeranstaltungsDialog
-from shs_core import stechen_gruppen
+from shs_core import stechen_gilt, stechen_gruppen
 from desktop_gemeinsam import (
     _DQ_SPALTE,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
@@ -492,7 +492,11 @@ class DemoTour(QObject):
             raise
 
     def _starten(self) -> None:
-        datum = datetime.date.today().isoformat()
+        heute = self._heute = datetime.date.today()
+        # PO1 (PO_01012027.md): Die Demo findet "heute" statt - ab der neuen PO (01.01.2027)
+        # ohne Stechen. Schritte 11/12 richten sich danach.
+        self._mit_stechen = stechen_gilt(heute)
+        datum = heute.isoformat()
         self.pfad = str(self._ordner / dateiname_vorschlagen(demo_daten.VERANSTALTUNG["verein"], datum))
         if _liegt_im_termine_ordner(self.pfad):  # darf nie passieren - echte Termine schützen
             raise RuntimeError("Demo-Termin läge im Termine-Ordner - Demo abgebrochen.")
@@ -962,11 +966,14 @@ class DemoTour(QObject):
             ),
             DemoSchritt(
                 "9. Disqualifikation",
-                "Wird ein Team disqualifiziert oder bricht ab, setzt man den Haken "
-                "„Disqualifiziert“ bzw. „Abbruch“ (per Klick oder mit der Leertaste). Die "
-                "Punktezellen werden dann geleert und gesperrt (abgesetzte Fläche).\n\n"
-                "Das Team bekommt keine Wertnote und keinen Platz, zählt aber bei der Zahl "
-                "der Starter mit.",
+                "Wird ein Team disqualifiziert, setzt man den Haken „Disqualifiziert“ (per "
+                "Klick oder mit der Leertaste). Die Punktezellen werden dann geleert und "
+                "gesperrt (abgesetzte Fläche).\n\n"
+                "Bricht ein Team ab, wählt man in der Spalte „Abbruch“ den Grund "
+                "(Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF). Die bis dahin "
+                "erreichten Punkte bleiben eintragbar und zählen als Teilbewertung.\n\n"
+                "In beiden Fällen gibt es keine Wertnote und keinen Platz, das Team zählt "
+                "aber bei der Zahl der Starter mit.",
                 self._aktionen_disqualifikation,
             ),
             DemoSchritt(
@@ -984,16 +991,21 @@ class DemoTour(QObject):
                 "70 Befriedigend. Dreikampf (höchstens 300): ab 286, 270, 240 bzw. 210 – und "
                 "in jeder Disziplin mindestens 70 Punkte.\n\n"
                 "Darunter heißt es „nicht Bestanden“ (rot, ohne Platz). Anna Albers und Ben "
-                "Brandt sind mit je 96 Punkten gleichauf auf Platz 1 – dort steht "
-                "„Stechen offen“.",
+                "Brandt sind mit je 96 Punkten gleichauf auf Platz 1"
+                + (" – dort steht „Stechen offen“." if self._mit_stechen else "."),
                 self._aktionen_auswertung,
             ),
             DemoSchritt(
                 "12. Stechen",
-                "Bei Gleichstand auf Platz 1 entscheidet ein Stechen auf dem Platz. Das "
-                "Ergebnis trägt man mit „Stechen-Sieger festlegen…“ ein: Der Sieger wird 1., "
-                "die anderen werden 2.\n\n"
-                "In der Demo gewinnt Anna Albers.",
+                (
+                    "Bei Gleichstand auf Platz 1 entscheidet ein Stechen auf dem Platz. Das "
+                    "Ergebnis trägt man mit „Stechen-Sieger festlegen…“ ein: Der Sieger wird 1., "
+                    "die anderen werden 2.\n\n"
+                    "In der Demo gewinnt Anna Albers."
+                    if self._mit_stechen else
+                    "Für Prüfungen ab dem 01.01.2027 entfällt das Stechen. Punktgleiche "
+                    "teilen sich den Platz – Anna Albers und Ben Brandt sind beide 1."
+                ),
                 self._aktionen_stechen,
             ),
             DemoSchritt(
@@ -1050,7 +1062,7 @@ class DemoTour(QObject):
             *self._eintragen(dialog.verein, werte["verein"]),
             *self._eintragen(dialog.vereins_nr, werte["vereins_nr"]),
             *self._eintragen(dialog.ort, werte["ort"]),
-            *self._eintragen(dialog.datum, datetime.date.today().strftime("%d.%m.%Y")),
+            *self._eintragen(dialog.datum, self._heute.strftime("%d.%m.%Y")),
             *self._eintragen(dialog.pruefungsnummer, werte["pruefungsnummer"]),
             *self._eintragen(dialog.pruefungsleiter, werte["pruefungsleiter"]),
             *self._eintragen(dialog.wertungsrichter_1, werte["wertungsrichter_1"]),
@@ -1320,6 +1332,8 @@ class DemoTour(QObject):
             tab.aktualisieren()
             self._markieren(tab.tabelle)
 
+        if not self._mit_stechen:  # PO1: neue PO, nichts festzulegen
+            return [lambda: self._markieren(tab.tabelle)]
         return [lambda: self._markieren(tab.stechen_btn), festlegen]
 
     def _aktionen_pdf(self) -> list[Callable[[], None]]:

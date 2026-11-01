@@ -637,6 +637,53 @@ class TestDatenbank(unittest.TestCase):
         self.assertIsNone(ergebnis.platzierung)
         self.assertEqual(ergebnis.von_startern, 1)
 
+    def test_abbruch_mit_grund_ergibt_teilbewertung(self):
+        """R7 (Marco 01.11.2026): Abbruch mit Grund - die eingetragenen Punkte zählen als
+        Teilbewertung (Text laut PO), nie bestanden, kein Platz, aber Starter."""
+        dk = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="DK", vorname="D", rufname_hund="H", art="DK", stufe=1, startnummer=61))
+        eintragen_ergebnis(self.conn, dk, "Trümmerfeld", 55, 35)    # fertig: 90
+        eintragen_ergebnis(self.conn, dk, "Flächensuche", 50, 30)   # fertig: 80
+        # Behältnisstrecke wegen Ungehorsam abgebrochen -> bleibt leer.
+        setze_ergebnis_status(self.conn, dk, False, True, abbruch_grund="ungehorsam")
+        ed = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="ED", vorname="E", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=62))
+        eintragen_ergebnis(self.conn, ed, "Trümmerfeld", 20, 0)
+        setze_ergebnis_status(self.conn, ed, False, True, abbruch_grund="verletzung_hf")
+
+        fertig, ausstehend = berechne_auswertung(self.conn)
+        self.assertEqual(ausstehend, [])
+        je_id = {e.id: e for e in fertig}
+        self.assertEqual(
+            (je_id[str(dk)].wertnote.notentext, je_id[str(dk)].gesamtpunkte, je_id[str(dk)].wertnote.abkuerzung),
+            ("Abbruch wegen Ungehorsams des Hundes", 170, ABBRUCH_ABK))
+        self.assertEqual(
+            (je_id[str(ed)].wertnote.notentext, je_id[str(ed)].gesamtpunkte),
+            ("Abbruch wegen Verletzung des Hundeführers", 20))
+        for e in fertig:
+            self.assertTrue(e.wertnote.teilbewertung)
+            self.assertFalse(e.bestanden)
+            self.assertIsNone(e.platzierung)
+            self.assertEqual(e.von_startern, 1)
+
+        # Disqualifiziert geht weiter vor; ohne Abbruch wird der Grund verworfen.
+        setze_ergebnis_status(self.conn, ed, True, True, abbruch_grund="krankheit")
+        e = {x.id: x for x in berechne_auswertung(self.conn)[0]}[str(ed)]
+        self.assertEqual((e.wertnote.abkuerzung, e.wertnote.teilbewertung), ("DISQ", False))
+        setze_ergebnis_status(self.conn, ed, False, False, abbruch_grund="krankheit")
+        self.assertIsNone(get_ergebnis(self.conn, ed)["abbruch_grund"])
+        with self.assertRaises(ValueError):
+            setze_ergebnis_status(self.conn, ed, False, True, abbruch_grund="unbekannt")
+
+    def test_abbruch_grund_check_in_der_datenbank(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="X", vorname="X", rufname_hund="H", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=63))
+        with self.assertRaises(Exception):
+            self.conn.execute("UPDATE ergebnisse SET abbruch_grund = 'quatsch' WHERE teilnehmer_id = ?", (tid,))
+        self.conn.rollback()
+
     def test_setze_ergebnis_status_disqualifiziert_und_abbruch_sind_unabhaengig(self):
         tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="D", vorname="D", rufname_hund="Hund D", art="ED", stufe=1,
@@ -4740,7 +4787,16 @@ class TestDemoDaten(unittest.TestCase):
             for suche, anzeige in eintrag.get("ergebnis", {}).values():
                 self.assertTrue(0 <= suche <= SUCHE_MAX and 0 <= anzeige <= ANZEIGE_MAX)
 
+    def _datum_setzen(self, datum):
+        import datetime
+
+        from db import set_veranstaltung
+
+        set_veranstaltung(self.conn, **self.demo.veranstaltung(datetime.date.fromisoformat(datum)))
+
     def test_wertnoten_und_genau_ein_stechen(self):
+        # Fest vor dem Stichtag der neuen PO (PO1), sonst hinge der Test am heutigen Datum.
+        self._datum_setzen("2026-12-31")
         fertig, ausstehend = berechne_auswertung(self.conn)
         self.assertEqual(ausstehend, [])
         noten = {t.name.split(",")[0]: t.wertnote.abkuerzung for t in fertig}
@@ -4751,6 +4807,44 @@ class TestDemoDaten(unittest.TestCase):
         offen = sorted(t.name.split(",")[0] for t in fertig if t.stechen == "offen")
         self.assertEqual(offen, ["Albers", "Brandt"])
         self.assertIn(self.demo.STECHEN_SIEGER, offen)
+
+    def test_ab_neuer_po_kein_stechen(self):
+        """PO1 (PO_01012027.md): Veranstaltung ab 01.01.2027 -> kein Stechen, Albers und Brandt
+        teilen Platz 1; ein früher gespeicherter Sieger zählt nicht."""
+        from db import setze_stechen_sieger, stechen_gilt_fuer_veranstaltung
+
+        albers, brandt = self.ids["Albers"], self.ids["Brandt"]
+        setze_stechen_sieger(self.conn, albers, [albers, brandt])
+        self._datum_setzen("2026-12-31")
+        self.assertTrue(stechen_gilt_fuer_veranstaltung(self.conn))
+        fertig = {t.name.split(",")[0]: t for t in berechne_auswertung(self.conn)[0]}
+        self.assertEqual((fertig["Albers"].platzierung, fertig["Brandt"].platzierung), (1, 2))
+
+        self._datum_setzen("2027-01-01")
+        self.assertFalse(stechen_gilt_fuer_veranstaltung(self.conn))
+        fertig = {t.name.split(",")[0]: t for t in berechne_auswertung(self.conn)[0]}
+        self.assertEqual(
+            [(fertig[n].platzierung, fertig[n].stechen) for n in ("Albers", "Brandt")],
+            [(1, None), (1, None)],
+        )
+        # Die Spalte bleibt erhalten: zurück vor den Stichtag gilt der Sieger wieder.
+        self._datum_setzen("2026-12-31")
+        fertig = {t.name.split(",")[0]: t for t in berechne_auswertung(self.conn)[0]}
+        self.assertEqual(fertig["Albers"].stechen, "gewonnen")
+
+    def test_stechen_gilt_ohne_veranstaltung(self):
+        from db import stechen_gilt_fuer_veranstaltung
+
+        self.conn.execute("DELETE FROM veranstaltung")
+        self.assertTrue(stechen_gilt_fuer_veranstaltung(self.conn))
+
+    def test_stechen_gilt_bei_unlesbarem_datum(self):
+        # Verifikation PO1, Punkt 4: ein unlesbares Datum zählt wie keines -> weiter Stechen,
+        # auch wenn es nach 2027 aussieht.
+        from db import stechen_gilt_fuer_veranstaltung
+
+        self.conn.execute("UPDATE veranstaltung SET datum = '31.02.2027' WHERE id = 1")
+        self.assertTrue(stechen_gilt_fuer_veranstaltung(self.conn))
 
     def test_anmerkungen_zeigen_nur_die_fehlende_chip_nummer(self):
         """Die Erklärung zu Schritt 4 kündigt nur Hansens fehlende Chip-Nr. an - sonst darf

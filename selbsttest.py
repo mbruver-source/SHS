@@ -139,14 +139,21 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         db.eintragen_ergebnis(conn, ed, "Trümmerfeld", 58, 38)
         for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
             db.eintragen_ergebnis(conn, dk, disziplin, 55, 35)
+        # R7: ein Abbruch mit Grund (Teilbewertung), damit die PDFs unten auch diesen Zweig
+        # erzeugen (Vor-Build-Verifikation 1.0.55, Befund 8).
+        abbr = db.add_teilnehmer(conn, db.NeuerTeilnehmer(
+            nachname="Abbruch", vorname="Anke", rufname_hund="Kira", art="DK", stufe=1, startnummer=3))
+        db.eintragen_ergebnis(conn, abbr, "Trümmerfeld", 50, 30)
+        db.setze_ergebnis_status(conn, abbr, False, True, abbruch_grund="verletzung_hf")
         richter = [db.add_zeitplan_richter(conn, "Richter A"), db.add_zeitplan_richter(conn, "Richter B")]
         db.automatische_zeitplan_verteilung(conn, richter, 10)
         fertig, _ = db.berechne_auswertung(conn)
         noten = sorted(t.wertnote.abkuerzung for t in fertig)
-        if noten != ["SG", "V"]:
+        if noten != ["ABBR", "SG", "V"]:
             raise AssertionError(f"unerwartete Wertnoten {noten}")
         zustand["ed"] = ed
-        return "2 Teilnehmer, Auswertung V/SG"
+        zustand["abbr"] = abbr
+        return "3 Teilnehmer, Auswertung V/SG/ABBR"
 
     schritt("Termin, Teilnehmer, Ergebnisse, Zeitplan", termin_anlegen)
 
@@ -155,6 +162,7 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
             "Ergebnisliste": lambda p: pdf_export.erstelle_ergebnisliste_pdf(conn, p),
             "Etiketten": lambda p: pdf_export.erstelle_ergebnisliste_etiketten_pdf(conn, p),
             "Bewertungsbogen": lambda p: pdf_export.erstelle_bewertungsbogen_pdf(conn, zustand["ed"], p),
+            "Bewertungsbogen Abbruch": lambda p: pdf_export.erstelle_bewertungsbogen_pdf(conn, zustand["abbr"], p),
             "Statistik": lambda p: pdf_export.erstelle_statistik_pdf(conn, p),
             "Zeitplan": lambda p: pdf_export.erstelle_zeitplan_pdf(conn, p),
             "Anmeldeformular": lambda p: pdf_export.erstelle_anmeldeformular_pdf(conn, p),
@@ -182,7 +190,7 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         ziel = ordner / "liste.csv"
         db_import.exportiere_teilnehmer_csv(conn, str(ziel))
         ergebnis = db_import.importiere_teilnehmer_aus_csv(conn, str(ziel))
-        if ergebnis.importiert != 0 or len(ergebnis.uebersprungen) != 2:
+        if ergebnis.importiert != 0 or len(ergebnis.uebersprungen) != 3:
             raise AssertionError(f"unerwartetes Ergebnis {ergebnis}")
         return "Export + Doppel-Erkennung"
 
@@ -201,7 +209,7 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
         )
         kopie = db.init_db(str(ziel / pfad.name))
         try:
-            if len(db.list_teilnehmer(kopie)) != 2:
+            if len(db.list_teilnehmer(kopie)) != 3:
                 raise AssertionError("Sicherung unvollständig")
         finally:
             kopie.close()

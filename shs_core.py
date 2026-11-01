@@ -23,6 +23,7 @@ wird für "nicht Bestanden"-Teilnehmer statt einer Platzierung ("RANK.EQ") das K
 "Anzahl Starter" mitgezählt).
 """
 
+import datetime
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -78,6 +79,18 @@ DISQUALIFIZIERT_ABK = "DISQ"
 ABBRUCH_TEXT = "Abbruch"
 ABBRUCH_ABK = "ABBR"
 
+#: R7 (PO 01.07.2022, II.3.4/II.3.5, Marco 01.11.2026): Grund eines Abbruchs - Code in
+#: ergebnisse.abbruch_grund -> (Text der Auswahlliste, Eintrag laut PO). Mit Grund gilt eine
+#: Teilbewertung: die eingetragenen Punkte (bei Ungehorsam nur die der fertigen Disziplinen)
+#: werden samt Summe gezeigt, nie bestanden, kein Platz. Ein Abbruch ohne Grund (Daten vor
+#: R7) bleibt wie bisher ohne Punkte.
+ABBRUCH_GRUENDE: dict[str, tuple[str, str]] = {
+    "ungehorsam": ("Ungehorsam", "Abbruch wegen Ungehorsams des Hundes"),
+    "verletzung_hund": ("Verletzung Hund", "Abbruch wegen Verletzung des Hundes"),
+    "krankheit": ("Krankheit", "Abbruch wegen Krankheit"),
+    "verletzung_hf": ("Verletzung HF", "Abbruch wegen Verletzung des Hundeführers"),
+}
+
 
 @dataclass(frozen=True)
 class Wertnote:
@@ -85,6 +98,9 @@ class Wertnote:
     notentext: str
     abkuerzung: str
     bestanden: bool = True
+    #: R7: Abbruch mit Grund - `punkte` ist die Summe der eingetragenen Teilpunkte und wird
+    #: angezeigt (sonst steht bei DISQ/ABBR "–").
+    teilbewertung: bool = False
 
 
 def _wertnote_aus_tabelle(punkte: int, tabelle: list[tuple[int, str, str]]) -> tuple[str, str]:
@@ -171,8 +187,23 @@ class Teilnehmerergebnis:
         return self.wertnote.bestanden
 
 
+#: PO1 (PO_01012027.md, Marco 01.11.2026): Ab diesem Veranstaltungsdatum gilt voraussichtlich
+#: die neue Prüfungsordnung - das Stechen um Platz 1 entfällt. Verschiebt sich die PO, nur hier
+#: ändern.
+PO_2027_STICHTAG = datetime.date(2027, 1, 1)
+
+
+def stechen_gilt(veranstaltungsdatum: datetime.date | None) -> bool:
+    """PO1: True, wenn für eine Prüfung an diesem Datum noch das Stechen um Platz 1 gilt (alte
+    PO, vor PO_2027_STICHTAG). Ohne Datum gilt weiter das Stechen, damit sich ohne lesbares
+    Datum nichts ändert."""
+    return veranstaltungsdatum is None or veranstaltungsdatum < PO_2027_STICHTAG
+
+
 def berechne_rangliste(
-    teilnehmer: list[Teilnehmerergebnis], stechen_sieger: set[str] | frozenset[str] = frozenset()
+    teilnehmer: list[Teilnehmerergebnis],
+    stechen_sieger: set[str] | frozenset[str] = frozenset(),
+    mit_stechen: bool = True,
 ) -> list[Teilnehmerergebnis]:
     """Berechnet die Platzierung je Leistungsklasse (höhere Punktzahl = besserer Rang).
 
@@ -194,6 +225,11 @@ def berechne_rangliste(
     1. (stechen="gewonnen") und die übrigen Punktgleichen teilen Platz 2; sonst bleiben alle
     auf Platz 1 mit stechen="offen". Die Plätze danach zählen wie bisher weiter (1., 2., 2.,
     4.). Gleichstand auf anderen Plätzen: unverändert, kein Stechen.
+
+    Ohne Stechen (`mit_stechen=False`, neue PO ab PO_2027_STICHTAG, siehe stechen_gilt()):
+    Punktgleiche auf Platz 1 teilen ihn wie jeden anderen Platz (1., 1., 3.), `stechen_sieger`
+    wird ignoriert. Die endgültige Gleichstandsregel der neuen PO ist noch offen
+    (PO_01012027.md, PO1) und käme an dieser Stelle hinzu.
     """
     ergebnis: list[Teilnehmerergebnis] = []
     leistungsklassen = sorted({t.leistungsklasse for t in teilnehmer})
@@ -217,7 +253,7 @@ def berechne_rangliste(
             ergebnis.append(t)
 
         spitze = [t for t in bestandene if t.platzierung == 1]
-        if len(spitze) > 1:
+        if mit_stechen and len(spitze) > 1:
             sieger = [t for t in spitze if t.id in stechen_sieger]
             for t in spitze:
                 if len(sieger) == 1:
@@ -248,7 +284,10 @@ def platz_text(t: Teilnehmerergebnis) -> str | None:
 
 def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis]) -> dict[str, list[Teilnehmerergebnis]]:
     """Leistungsklassen mit Gleichstand um Platz 1 (Stechen offen ODER schon entschieden) -
-    für Hinweis, Auswahl des Siegers und die Rückfrage vor dem Druck."""
+    für Hinweis, Auswahl des Siegers und die Rückfrage vor dem Druck.
+
+    Erwartet das Ergebnis von berechne_rangliste(). Wurde dort ohne Stechen gerechnet (PO1,
+    neue PO), hat niemand einen Stechen-Vermerk und das Ergebnis ist leer."""
     gruppen: dict[str, list[Teilnehmerergebnis]] = {}
     for lk in sorted({t.leistungsklasse for t in ergebnisse}):
         gruppe = [t for t in ergebnisse if t.leistungsklasse == lk and t.bestanden]
@@ -256,7 +295,8 @@ def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis]) -> dict[str, list[Teil
             continue
         hoechste = max(t.gesamtpunkte for t in gruppe)
         spitze = [t for t in gruppe if t.gesamtpunkte == hoechste]
-        if len(spitze) > 1:
+        # Nach entschiedenem Stechen trägt nur der Sieger einen Vermerk ("gewonnen").
+        if len(spitze) > 1 and any(t.stechen is not None for t in spitze):
             gruppen[lk] = spitze
     return gruppen
 
