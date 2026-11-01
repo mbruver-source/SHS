@@ -63,6 +63,10 @@ SolidCompression=yes
 WizardStyle=modern
 ; Programmsymbol (Beagle, Marco 07.10.2026) auch für die Setup-Datei selbst.
 SetupIconFile=symbol\programmsymbol.ico
+; MIT-Lizenz (englisches Original aus LICENSE) als eigene Seite im Assistenten, die erst nach
+; "Ich akzeptiere die Vereinbarung" weitergeht (Marco 01.11.2026). Die Texte der Seite kommen
+; aus German.isl; Inno zeigt sie bei jedem Lauf, also auch bei einem Update.
+LicenseFile=LICENSE
 ; Deinstallations-Einträge tragen ebenfalls die AppVersion, damit man in der
 ; Windows-Systemsteuerung sieht, welche Version installiert ist.
 UninstallDisplayName={#MyAppName}
@@ -97,9 +101,11 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "Desktop-Verknüpfung anlegen"; GroupDescription: "Zusätzliche Symbole:"
 
 [Files]
-; --onefile-Build aus build.spec: genau eine .exe, keine losen Zusatzdateien außer der
-; Lizenzdatei - das ist es, was ein Update so einfach macht (eine Datei ersetzt die andere).
+; --onefile-Build aus build.spec: genau eine .exe, keine losen Zusatzdateien außer den
+; Lizenzdateien - das ist es, was ein Update so einfach macht (eine Datei ersetzt die andere).
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; MIT-Lizenz des Programms selbst (Marco 01.11.2026), als .txt für den Doppelklick unter Windows.
+Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 ; Lizenzen der Fremdkomponenten (Qt/PySide6, Python, reportlab ...), erzeugt von build.spec.
 Source: "build\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}"; Flags: ignoreversion
 

@@ -203,18 +203,39 @@ jobs:
           exit $status
 
       - name: .dmg erstellen und die App daraus testen
-        # Die App liegt im Abbild neben einer Verknüpfung auf "Programme" zum Hineinziehen.
+        # Die App liegt im Abbild neben einer Verknüpfung auf "Programme" zum Hineinziehen,
+        # dazu LICENSE.txt und THIRD_PARTY_LICENSES.txt. Beim Öffnen zeigt macOS die MIT-Lizenz
+        # und hängt das Abbild erst nach "Akzeptieren" ein (Marco 01.11.2026). Das kann
+        # `hdiutil create` nicht; dmgbuild baut das Abbild und hängt die Lizenz an (Einstellungen
+        # in tools/dmg_einstellungen.py). Erst hier installiert, damit es nicht in die Liste der
+        # Fremdkomponenten des PyInstaller-Builds gerät.
         env:
           MAC_TYP: ${{ matrix.typ }}
         run: |
+          # Feste Versionen von dmgbuild und seinen beiden Abhängigkeiten (Stand 01.11.2026,
+          # Marco: auch die Abhängigkeiten festlegen) - Updates bewusst hier anheben.
+          pip install dmgbuild==1.6.7 ds_store==1.3.3 mac_alias==2.2.3
           version="$(tr -d '[:space:]' < version.txt)"
-          mkdir -p dmg Output
-          cp -R dist/SHS-Pruefungsprogramm.app dmg/
-          cp build/THIRD_PARTY_LICENSES.txt dmg/
-          ln -s /Applications dmg/Applications
+          mkdir -p Output
           dmg="Output/SHS-Pruefungsprogramm-$version-macOS-$MAC_TYP.dmg"
-          hdiutil create -volname "SHS-Pruefungsprogramm" -srcfolder dmg -ov -format UDZO "$dmg"
-          laufwerk="$(hdiutil attach -nobrowse -readonly "$dmg" | tail -1 | cut -f3)"
+          dmgbuild -s tools/dmg_einstellungen.py \
+            -D app=dist/SHS-Pruefungsprogramm.app \
+            -D lizenz=LICENSE \
+            -D drittlizenzen=build/THIRD_PARTY_LICENSES.txt \
+            "SHS-Pruefungsprogramm" "$dmg"
+          # Die Lizenz steckt als Ressource (LPic/TEXT/STR#) im Abbild - fehlt sie, schlägt der
+          # Schritt fehl, statt still ein Abbild ohne Lizenzabfrage zu liefern.
+          hdiutil udifderez -xml "$dmg" > "$RUNNER_TEMP/dmg_ressourcen.plist"
+          grep -q "<key>LPic</key>" "$RUNNER_TEMP/dmg_ressourcen.plist"
+          # Mit Lizenz fragt `hdiutil attach` vor dem Einhängen nach: Es zeigt den Text über
+          # $PAGER und liest dann die Zustimmung von stdin. PAGER=cat gibt den Text ohne
+          # Blättern aus, `yes` beantwortet die Frage mit "y". `yes` per Prozess-Ersetzung statt
+          # per Pipe: endet hdiutil, bricht `yes` mit SIGPIPE ab, was bei `-o pipefail` den
+          # Schritt scheitern ließe. Der Lizenztext landet mit auf stdout, die Einhängezeile
+          # bleibt aber die letzte Zeile.
+          laufwerk="$(PAGER=cat hdiutil attach -nobrowse -readonly "$dmg" < <(yes) | tail -1 | cut -f3)"
+          test -f "$laufwerk/LICENSE.txt"
+          test -f "$laufwerk/THIRD_PARTY_LICENSES.txt"
           protokoll="$RUNNER_TEMP/selbsttest_dmg.log"
           status=0
           "$laufwerk/SHS-Pruefungsprogramm.app/Contents/MacOS/SHS-Pruefungsprogramm" --selbsttest "$protokoll" || status=$?

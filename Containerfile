@@ -30,6 +30,9 @@ RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools
 # Desktop-Version, sichtbar in der Fußzeile jeder Web-Seite (siehe templates/base.html).
 COPY db.py shs_core.py app_web.py version.py ./
 COPY templates/ ./templates/
+# MIT-Lizenz des Programms; die Seite /lizenzen (app_web.py) zeigt sie zusammen mit
+# THIRD_PARTY_LICENSES.txt an (Marco 01.11.2026).
+COPY LICENSE ./
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1

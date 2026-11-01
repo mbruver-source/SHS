@@ -1006,6 +1006,31 @@ def test_programmsymbol_und_selbsttest_schritt(qtbot, tmp_path, monkeypatch):
     assert "FEHLER  Programmsymbol" in protokoll.read_text(encoding="utf-8")
 
 
+def test_selbsttest_schritt_lizenztexte(qtbot, tmp_path, monkeypatch):
+    """OFFEN B14 (Marco 01.11.2026): im Quellcode-Ordner fehlt THIRD_PARTY_LICENSES.txt nur
+    als Hinweis; in der gebauten Fassung (sys.frozen) ist das ein Fehler, ebenso eine leere
+    LICENSE."""
+    import desktop_gemeinsam
+    import selbsttest
+
+    ordner = tmp_path / "bundle"
+    ordner.mkdir()
+    (ordner / "LICENSE").write_text("MIT License\n", encoding="utf-8")
+    monkeypatch.setattr(desktop_gemeinsam, "bundle_pfad", lambda *teile: str(ordner.joinpath(*teile)))
+
+    def zeile(log):
+        selbsttest.fuehre_selbsttest_aus(str(log))
+        return next(z for z in log.read_text(encoding="utf-8").splitlines() if "Lizenztexte" in z)
+
+    assert zeile(tmp_path / "quelle.log").startswith("OK      Lizenztexte (HINWEIS: THIRD_PARTY_LICENSES.txt fehlt")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert zeile(tmp_path / "gebaut.log") == "FEHLER  Lizenztexte"
+    (ordner / "THIRD_PARTY_LICENSES.txt").write_text("Übersicht / Overview:\n", encoding="utf-8")
+    assert zeile(tmp_path / "komplett.log") == "OK      Lizenztexte (LICENSE, THIRD_PARTY_LICENSES.txt)"
+    (ordner / "LICENSE").write_text("", encoding="utf-8")
+    assert zeile(tmp_path / "leer.log") == "FEHLER  Lizenztexte"
+
+
 def test_fremdobjekte_meldung(qtbot, monkeypatch):
     """H-1: Nach dem Entfernen fremder Trigger/Views erscheint ein Hinweis, sonst nicht."""
     import app as app_modul
@@ -2533,6 +2558,51 @@ def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugrif
 
     assert geoeffnete_urls == [desktop_programm.GITHUB_RELEASES_URL]
     assert "ja" not in aufgerufen
+
+
+def test_versiondialog_lizenz_zeile_und_button_oeffnet_lizenzdialog(qtbot, monkeypatch):
+    """OFFEN B14 (Marco 01.11.2026): das Versionsfenster nennt die MIT-Lizenz, der Button
+    "Lizenzen anzeigen" öffnet das Lizenzfenster."""
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    assert any(l.text() == "Lizenz: MIT (© 2026 Marco)" for l in dialog.findChildren(QLabel))
+
+    geoeffnet = []
+    monkeypatch.setattr(desktop_programm.LizenzDialog, "exec", lambda self: geoeffnet.append(self) or QDialog.Accepted)
+    lizenz_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Lizenzen anzeigen")
+    qtbot.mouseClick(lizenz_btn, Qt.MouseButton.LeftButton)
+
+    assert len(geoeffnet) == 1
+    assert isinstance(geoeffnet[0], desktop_programm.LizenzDialog)
+    assert geoeffnet[0].windowTitle() == "Lizenzen"
+
+
+def test_lizenzdialog_zeigt_eigene_lizenz_und_fremdkomponenten(qtbot, tmp_path, monkeypatch):
+    """OFFEN B14: oben die echte LICENSE aus dem Repo, darunter THIRD_PARTY_LICENSES.txt;
+    fehlt diese (Quellcode-Fassung), steht dort ein Hinweis statt eines Fehlers."""
+    monkeypatch.setattr(desktop_programm, "_drittlizenzen_pfad", lambda: str(tmp_path / "fehlt.txt"))
+    dialog = desktop_programm.LizenzDialog()
+    qtbot.addWidget(dialog)
+    text = dialog.text_feld.toPlainText()
+    assert dialog.text_feld.isReadOnly()
+    assert "MIT License" in text and "Copyright (c) 2026 Marco" in text
+    assert "THIRD_PARTY_LICENSES.txt) wird beim Bauen des Programms erzeugt" in text
+    assert text.index("MIT License") < text.index("THIRD_PARTY_LICENSES.txt")
+
+    drittlizenzen = tmp_path / "THIRD_PARTY_LICENSES.txt"
+    drittlizenzen.write_text("Übersicht / Overview:\n  PySide6 6.9.0 - LGPL-3.0\n<b>kein HTML</b>\n", encoding="utf-8")
+    monkeypatch.setattr(desktop_programm, "_drittlizenzen_pfad", lambda: str(drittlizenzen))
+    dialog = desktop_programm.LizenzDialog()
+    qtbot.addWidget(dialog)
+    text = dialog.text_feld.toPlainText()
+    assert "Übersicht / Overview:\n  PySide6 6.9.0 - LGPL-3.0" in text
+    assert "<b>kein HTML</b>" in text
+    assert "wird beim Bauen des Programms erzeugt" not in text
+
+    monkeypatch.setattr(desktop_programm, "_lizenz_pfad", lambda: str(tmp_path))  # Ordner: OSError
+    dialog = desktop_programm.LizenzDialog()
+    qtbot.addWidget(dialog)
+    assert "Der Lizenztext (LICENSE) fehlt" in dialog.text_feld.toPlainText()
 
 
 # --- Automatisches Speichern beim Beenden -------------------------------------------

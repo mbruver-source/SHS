@@ -16,21 +16,25 @@ import sys
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
 )
 
 from db import termine_ordner
 from desktop_gemeinsam import (
+    _ausfuehren,
     _ja_nein,
     _ordner_zeigen,
     _url_oeffnen,
     absturzprotokoll_pfad,
+    bundle_pfad,
     diagnose_text,
 )
 
@@ -115,6 +119,74 @@ def _neueste_version_pruefen() -> tuple[str | None, str | None]:
     return tag.lstrip("vV"), None
 
 
+def _lizenz_pfad() -> str:
+    """Lizenz des Programms selbst (LICENSE, per build.spec mitgeliefert)."""
+    return bundle_pfad("LICENSE")
+
+
+def _drittlizenzen_pfad() -> str:
+    """Lizenzen der Fremdkomponenten - erzeugt build.spec beim Bauen über
+    tools/drittlizenzen.py; im Quellcode-Ordner fehlt die Datei deshalb normalerweise."""
+    return bundle_pfad("THIRD_PARTY_LICENSES.txt")
+
+
+def _text_lesen(pfad: str, ersatz: str) -> str:
+    """Liest eine Lizenzdatei; fehlt sie oder ist sie nicht lesbar, kommt der Ersatztext."""
+    try:
+        with open(pfad, encoding="utf-8", errors="replace") as datei:
+            return datei.read()
+    except OSError:
+        return ersatz
+
+
+class LizenzDialog(QDialog):
+    """Lizenzübersicht (OFFEN B14, Marco 01.11.2026): erst die MIT-Lizenz des Programms
+    (LICENSE), dann die Übersicht und Lizenztexte der mitgelieferten Fremdkomponenten
+    (THIRD_PARTY_LICENSES.txt). Reiner Text in einem schreibgeschützten Feld; fehlt eine der
+    Dateien, steht dort ein Hinweis statt eines Fehlers."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Lizenzen")
+
+        einleitung = QLabel(
+            "Das SHS Prüfungsprogramm steht unter der MIT-Lizenz. Darunter folgen die "
+            "mitgelieferten Fremdkomponenten mit Version und Lizenz sowie deren Lizenztexte."
+        )
+        einleitung.setWordWrap(True)
+
+        eigene = _text_lesen(
+            _lizenz_pfad(),
+            "Der Lizenztext (LICENSE) fehlt in dieser Fassung. Das Programm steht unter der "
+            "MIT-Lizenz, Copyright (c) 2026 Marco; der Text steht auch unter "
+            "https://github.com/mbruver-source/SHS.",
+        )
+        fremde = _text_lesen(
+            _drittlizenzen_pfad(),
+            "Die Liste der Fremdkomponenten (THIRD_PARTY_LICENSES.txt) wird beim Bauen des "
+            "Programms erzeugt und fehlt in dieser Fassung. Sie steht auch unter "
+            "https://github.com/mbruver-source/SHS.",
+        )
+        trenner = "\n\n" + "=" * 72 + "\n\n"
+
+        self.text_feld = QPlainTextEdit()
+        self.text_feld.setReadOnly(True)
+        self.text_feld.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        self.text_feld.setPlainText(eigene.rstrip() + trenner + fremde.rstrip() + "\n")
+
+        schliessen_btn = QPushButton("Schließen")
+        schliessen_btn.clicked.connect(self.accept)
+        schliessen_zeile = QHBoxLayout()
+        schliessen_zeile.addStretch()
+        schliessen_zeile.addWidget(schliessen_btn)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(einleitung)
+        layout.addWidget(self.text_feld)
+        layout.addLayout(schliessen_zeile)
+        self.resize(720, 600)
+
+
 class _UpdateBote(QObject):
     """Überbringt das Ergebnis der Update-Prüfung aus dem Hintergrund-Thread an das Fenster."""
     ergebnis = Signal(int, object)
@@ -126,7 +198,8 @@ class VersionDialog(QDialog):
     per GitHub-API prüft, ob eine neuere Version veröffentlicht wurde (siehe
     _neueste_version_pruefen oben; im Hintergrund-Thread mit Gesamtzeitgrenze). Wird über
     den Version-Button im Hauptfenster geöffnet, in der Kopfzeile oben rechts (siehe
-    HauptFenster._version_anzeigen)."""
+    HauptFenster._version_anzeigen). Unter der Versionszeile stehen die Lizenz des Programms
+    und ein Button, der alle Lizenztexte zeigt (LizenzDialog, Marco 01.11.2026, OFFEN B14)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -140,6 +213,16 @@ class VersionDialog(QDialog):
 
         version_zeile = QLabel(f"Version {VERSION}")
         version_zeile.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        # OFFEN B14 (Marco 01.11.2026): Lizenz des Programms und Lizenzübersicht samt
+        # Fremdkomponenten (LizenzDialog unten).
+        lizenz_zeile = QLabel("Lizenz: MIT (© 2026 Marco)")
+        lizenz_btn = QPushButton("Lizenzen anzeigen")
+        lizenz_btn.clicked.connect(lambda: _ausfuehren(LizenzDialog(self)))
+        lizenz_layout = QHBoxLayout()
+        lizenz_layout.addWidget(lizenz_zeile)
+        lizenz_layout.addWidget(lizenz_btn)
+        lizenz_layout.addStretch()
 
         hinweis = QLabel(
             "Der Button unten fragt beim Klick die GitHub-Releases-Seite dieses "
@@ -201,6 +284,7 @@ class VersionDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(titel)
         layout.addWidget(version_zeile)
+        layout.addLayout(lizenz_layout)
         layout.addSpacing(8)
         layout.addWidget(hinweis)
         layout.addWidget(self._updates_btn)

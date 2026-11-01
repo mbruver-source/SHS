@@ -65,7 +65,9 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 [Fehler melden](#fehler-melden-oder-wunsch-äußern)).
 
 - **Windows:** Die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
-  Administratorrechte sind nicht nötig. Weil die Datei noch nicht digital signiert ist, kann
+  Administratorrechte sind nicht nötig. Das Setup zeigt zuerst die Lizenz des Programms (MIT,
+  englischer Originaltext). Mit **„Ich akzeptiere die Vereinbarung“** geht es weiter; die
+  Seite erscheint auch bei jedem Update. Weil die Datei noch nicht digital signiert ist, kann
   es zwei einmalige Warnungen geben:
 
     1. **Der Browser blockiert den Download.** Das Programm ist neu und wird selten
@@ -93,8 +95,8 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
   `SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg`, bei „Prozessor Intel …“ die Datei
   `…-macOS-Intel.dmg`.
 
-    1. Die `.dmg`-Datei öffnen und **SHS-Pruefungsprogramm** auf den Ordner **„Programme“**
-       ziehen.
+    1. Die `.dmg`-Datei öffnen, die Lizenz (MIT) mit **„Akzeptieren“** bestätigen und
+       **SHS-Pruefungsprogramm** auf den Ordner **„Programme“** ziehen.
     2. Das Programm ist nicht bei Apple registriert. Beim ersten Start meldet macOS deshalb,
        dass es nicht überprüft werden kann. Auf **„Fertig“** klicken.
     3. **Systemeinstellungen** → **„Datenschutz & Sicherheit“** öffnen, ganz nach unten
@@ -122,6 +124,10 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
   ersetzen, beim AppImage die alte Datei durch die neue. Eine automatische Suche im
   Hintergrund gibt es bewusst nicht. Antwortet GitHub nicht innerhalb von 15 Sekunden, meldet
   das Fenster das.
+- **Lizenzen:** Im selben Fenster steht die Lizenz des Programms (MIT). **„Lizenzen anzeigen“**
+  öffnet den vollständigen Lizenztext und darunter eine Übersicht aller mitgelieferten
+  Fremdkomponenten (Name, Version, Lizenz) samt deren Lizenztexten. In der Web-Version führt
+  der Link **„Lizenzen“** in der Fußzeile zur selben Übersicht.
 - **Programm schon geöffnet:** Startest du das Programm ein zweites Mal, fragt es, ob wirklich
   ein weiteres Fenster aufgehen soll. Arbeiten zwei Fenster am selben Termin, können sich
   Änderungen gegenseitig überschreiben.

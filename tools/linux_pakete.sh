@@ -31,6 +31,7 @@ trap 'rm -rf "$ARBEIT"' EXIT
 
 test -x "$QUELLE/$NAME" || { echo "$QUELLE/$NAME fehlt - zuerst 'pyinstaller build.spec'" >&2; exit 1; }
 test -f build/THIRD_PARTY_LICENSES.txt || { echo "build/THIRD_PARTY_LICENSES.txt fehlt" >&2; exit 1; }
+test -f LICENSE || { echo "LICENSE fehlt" >&2; exit 1; }
 mkdir -p "$AUSGABE"
 
 desktop_datei() {  # $1 = Exec-Zeile
@@ -61,6 +62,9 @@ desktop_datei "$NAME" > "$APPDIR/$PAKET.desktop"
 cp "$APPDIR/$PAKET.desktop" "$APPDIR/usr/share/applications/"
 cp symbol/programmsymbol.png "$APPDIR/$PAKET.png"
 cp symbol/programmsymbol.png "$APPDIR/usr/share/icons/hicolor/512x512/apps/$PAKET.png"
+# MIT-Lizenz und Lizenzen der Fremdkomponenten auch im AppImage (Marco 01.11.2026).
+mkdir -p "$APPDIR/usr/share/doc/$PAKET"
+cp LICENSE build/THIRD_PARTY_LICENSES.txt "$APPDIR/usr/share/doc/$PAKET/"
 
 # --appimage-extract-and-run: auf den CI-Runnern gibt es kein FUSE.
 ARCH=x86_64 "$APPIMAGETOOL" --appimage-extract-and-run --runtime-file "$RUNTIME" \
@@ -76,9 +80,11 @@ ln -s "/opt/$PAKET/$NAME" "$PKG/usr/bin/$PAKET"
 # (X11, StartupWMClass) aus dem Programmnamen ab, der Link heißt kleingeschrieben.
 desktop_datei "/opt/$PAKET/$NAME" > "$PKG/usr/share/applications/$PAKET.desktop"
 cp symbol/programmsymbol.png "$PKG/usr/share/icons/hicolor/512x512/apps/$PAKET.png"
-# Lizenzen der Fremdkomponenten (erzeugt von build.spec) an der unter Debian üblichen Stelle.
+# Lizenzen der Fremdkomponenten (erzeugt von build.spec) an der unter Debian üblichen Stelle,
+# die MIT-Lizenz des Programms als "copyright" wie bei Debian-Paketen üblich (Marco 01.11.2026).
 mkdir -p "$PKG/usr/share/doc/$PAKET"
 cp build/THIRD_PARTY_LICENSES.txt "$PKG/usr/share/doc/$PAKET/"
+cp LICENSE "$PKG/usr/share/doc/$PAKET/copyright"
 GROESSE_KB="$(du -sk "$PKG" | cut -f1)"
 # Qt (xcb) braucht diese Systembibliotheken; PySide6 bringt Qt selbst mit.
 cat > "$PKG/DEBIAN/control" <<EOF

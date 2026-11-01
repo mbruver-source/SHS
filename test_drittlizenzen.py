@@ -98,6 +98,7 @@ class TestDrittlizenzen(unittest.TestCase):
                    lizenzen={"LicenseRef-Qt-Commercial.txt": "Qt kommerziell\n"})
         text = self.erzeugen("PySide6_Essentials")
         self.assertNotIn("Qt kommerziell", text)
+        self.assertIn("  PySide6_Essentials 1.0 - LGPL-3.0-only\n", text)
         self.assertIn("GNU Lesser General Public License Version 3 (LGPL-3.0)", text)
         self.assertIn("GNU LESSER GENERAL PUBLIC LICENSE", text)
         self.assertIn("GNU GENERAL PUBLIC LICENSE", text)
@@ -112,6 +113,20 @@ class TestDrittlizenzen(unittest.TestCase):
     def test_lizenzbezeichnung_aus_metadaten(self):
         self.paket("aaa", lizenzen={"LICENSE": MIT}, kopf="License-Expression: MIT\n")
         self.assertIn("Lizenz: MIT\n", self.erzeugen("aaa"))
+
+    def test_uebersicht_vorne_mit_version_und_lizenz(self):
+        """Marco 01.11.2026: Übersicht je Komponente, vor den Volltexten und sortiert."""
+        self.paket("bbb", lizenzen={"LICENSE": "B\n"}, kopf="License-Expression: BSD-3-Clause\n")
+        self.paket("aaa", lizenzen={"LICENSE": MIT}, kopf="License-Expression: MIT\n")
+        text = self.erzeugen("bbb", "aaa")
+        uebersicht = text.split(drittlizenzen.TRENNER, 1)[0]
+        self.assertIn("Übersicht / Overview:", uebersicht)
+        self.assertIn("  Python ", uebersicht)
+        self.assertLess(uebersicht.index("  aaa 1.0 - MIT\n"),
+                        uebersicht.index("  bbb 1.0 - BSD-3-Clause\n"))
+        with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
+            desktop = drittlizenzen.erzeugen("desktop").split(drittlizenzen.TRENNER, 1)[0]
+        self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", desktop)
 
     def test_python_hinweis_nur_ausserhalb_von_windows(self):
         self.paket("aaa", lizenzen={"LICENSE": MIT})

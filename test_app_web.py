@@ -1287,6 +1287,66 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertTrue(antwort.headers["Location"].endswith("/"))
 
 
+class TestLizenzseite(_AppWebTestBasis):
+    """Öffentliche Seite /lizenzen mit der MIT-Lizenz und den Lizenzen der Fremdkomponenten,
+    verlinkt in der Fußzeile jeder Seite (Marco 01.11.2026)."""
+
+    def _datei(self, inhalt: str) -> str:
+        fd, pfad = tempfile.mkstemp(suffix=".txt")
+        with os.fdopen(fd, "w", encoding="utf-8") as datei:
+            datei.write(inhalt)
+        self.addCleanup(os.remove, pfad)
+        return pfad
+
+    def test_lizenzseite_ohne_anmeldung_erreichbar(self):
+        antwort = self.client.get("/lizenzen")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(b"MIT License", antwort.data)
+        self.assertIn(b"Copyright (c) 2026 Marco", antwort.data)
+        # Dieselben Schutz-Header wie jede andere Seite (S-6).
+        self.assertIn("script-src 'none'", antwort.headers["Content-Security-Policy"])
+
+    def test_lizenzseite_auch_angemeldet_erreichbar(self):
+        self._anmelden()
+        antwort = self.client.get("/lizenzen")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(b"MIT License", antwort.data)
+
+    def test_fusszeile_verlinkt_lizenzseite(self):
+        # Ersteinrichtung (noch kein Administrator) ...
+        self.assertIn(b'href="/lizenzen"', self.client.get("/").data)
+        # ... und die normale Anmeldeseite nach dem Abmelden.
+        self._anmelden()
+        self.client.post("/logout")
+        antwort = self.client.get("/")
+        self.assertIn("Anmelden".encode(), antwort.data)
+        self.assertIn(b'href="/lizenzen"', antwort.data)
+
+    def test_fehlende_drittlizenzen_zeigen_hinweis_statt_fehler(self):
+        fehlt = os.path.join(tempfile.gettempdir(), "gibt-es-nicht-" + secrets.token_hex(8) + ".txt")
+        with patch.object(app_web, "DRITTLIZENZEN_DATEI", fehlt):
+            antwort = self.client.get("/lizenzen")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("wird beim Bauen des Container-Images erzeugt".encode(), antwort.data)
+        # Die MIT-Lizenz bleibt trotzdem sichtbar.
+        self.assertIn(b"MIT License", antwort.data)
+
+    def test_fehlende_lizenzdatei_zeigt_hinweis_statt_fehler(self):
+        fehlt = os.path.join(tempfile.gettempdir(), "gibt-es-nicht-" + secrets.token_hex(8))
+        with patch.object(app_web, "LIZENZ_DATEI", fehlt):
+            antwort = self.client.get("/lizenzen")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(b"Die Lizenzdatei (LICENSE) fehlt", antwort.data)
+
+    def test_lizenztexte_werden_maskiert(self):
+        pfad = self._datei("Paket <script>x</script> & Co")
+        with patch.object(app_web, "DRITTLIZENZEN_DATEI", pfad):
+            antwort = self.client.get("/lizenzen")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertNotIn(b"<script>x</script>", antwort.data)
+        self.assertIn(b"&lt;script&gt;x&lt;/script&gt; &amp; Co", antwort.data)
+
+
 class TestCsrfSchutz(_AppWebTestBasis):
     """Prüft den CSRF-Mechanismus selbst (QS-Review 19./20.09., siehe
     app_web._csrf_pruefen/_csrf_token) - bewusst mit dem UNVERÄNDERTEN Flask-Test-Client

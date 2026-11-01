@@ -247,6 +247,27 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
 
     schritt("Programmsymbol", symbol)
 
+    def lizenztexte():
+        # OFFEN B14 (Marco 01.11.2026): das Lizenzfenster zeigt LICENSE und
+        # THIRD_PARTY_LICENSES.txt - fehlen sie im Bundle (build.spec, datas), soll das beim
+        # Build auffallen. THIRD_PARTY_LICENSES.txt entsteht erst beim Bauen; im
+        # Quellcode-Ordner (Tests, `python app.py --selbsttest`) gibt es dafür nur einen Hinweis.
+        from desktop_gemeinsam import bundle_pfad
+
+        gebuendelt = getattr(sys, "frozen", False)
+        hinweise = []
+        for name in ("LICENSE", "THIRD_PARTY_LICENSES.txt"):
+            pfad = bundle_pfad(name)
+            if os.path.isfile(pfad) and os.path.getsize(pfad) > 0:
+                continue
+            if name == "THIRD_PARTY_LICENSES.txt" and not gebuendelt:
+                hinweise.append(f"HINWEIS: {name} fehlt (nur in der gebauten Fassung)")
+                continue
+            raise AssertionError(f"Lizenztext fehlt oder ist leer: {pfad}")
+        return "; ".join(hinweise) or "LICENSE, THIRD_PARTY_LICENSES.txt"
+
+    schritt("Lizenztexte", lizenztexte)
+
     def diagnose():
         # diagnose_text fängt fehlende Angaben selbst ab ("(unbekannt)") - im Bundle soll ein
         # fehlendes Modul trotzdem auffallen.

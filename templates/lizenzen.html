@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titel %}Lizenzen – SHS Prüfung{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Lizenzen</h1>
+  <p>Das SHS-Prüfungsprogramm steht unter der MIT-Lizenz (englisches Original):</p>
+  <pre class="lizenztext">{{ lizenz }}</pre>
+</div>
+<div class="karte">
+  <h2>Fremdkomponenten</h2>
+  <p>Die Web-Version nutzt Komponenten anderer Projekte, jeweils unter deren eigener Lizenz:</p>
+  <pre class="lizenztext">{{ drittlizenzen }}</pre>
+</div>
+{% if not session.get('benutzername') %}<p><a href="{{ url_for('login') }}">Zur Anmeldung</a></p>{% endif %}
+{% endblock %}

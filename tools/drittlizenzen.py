@@ -39,9 +39,11 @@ VARIANTEN = {
     "desktop": ["requirements.txt"],
     "web": ["requirements-postgres.txt", "requirements-web.txt"],
 }
-# Zusätzlich mitgelieferte Dateien, die nicht aus einem Python-Paket stammen.
+# Zusätzlich mitgelieferte Dateien, die nicht aus einem Python-Paket stammen: Titel, Datei und
+# Lizenzbezeichnung für die Übersicht.
 EIGENE_DATEIEN = {
-    "desktop": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt")],
+    "desktop": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt",
+                 "Bitstream Vera / Arev Fonts License")],
     "web": [],
 }
 # Alle Teilpakete von PySide6 (Essentials, Addons, Pdf, WebEngine ...) und Shiboken6. Ihre Wheels
@@ -181,24 +183,27 @@ def erzeugen(variante: str) -> str:
         python_texte.insert(0, CONTAINER_HINWEIS)
     elif sys.platform != "win32":
         python_texte.insert(0, PYTHON_BIBLIOTHEKEN_HINWEIS)
+    python_lizenz = "PSF-2.0 (Python Software Foundation License)"
+    # Übersicht (Marco 01.11.2026): eine Zeile je Komponente, vorne in der Datei - das
+    # Lizenzfenster der Desktopversion und die Web-Seite /lizenzen zeigen die Datei unverändert.
+    uebersicht = [f"  Python {sys.version.split()[0]} - {python_lizenz}"]
     abschnitte = [
-        "Lizenzen der Komponenten Dritter im SHS-Prüfungsprogramm\n"
-        "Third-party licenses of the SHS-Prüfungsprogramm\n\n"
-        f"Das SHS-Prüfungsprogramm selbst steht unter der MIT-Lizenz (LICENSE, {REPO}).\n"
-        "Es enthält die folgenden Komponenten Dritter, jeweils unter ihrer eigenen Lizenz.\n",
-        _abschnitt(f"Python {sys.version.split()[0]}",
-                   ["Lizenz: PSF-2.0 (Python Software Foundation License)"],
+        _abschnitt(f"Python {sys.version.split()[0]}", [f"Lizenz: {python_lizenz}"],
                    python_texte),
     ]
     ohne_lizenz = []
     gesehen: dict[str, str] = {}  # Prüfsumme -> Paket, in dem der Text zuerst steht
     qt_dabei = False
     for name, verteilung in sorted(_pakete(_wurzeln(variante)).items()):
-        kopf = [f"Version: {verteilung.version}",
-                f"Lizenz: {_lizenz_bezeichnung(verteilung)}"]
+        qt = bool(QT_PAKET.match(name))
+        # Für Qt gilt hier die LGPL-3.0 (siehe QT_HINWEIS), nicht die in den Metadaten mit
+        # angebotene kommerzielle Lizenz.
+        lizenz = "LGPL-3.0-only" if qt else _lizenz_bezeichnung(verteilung)
+        version = verteilung.version.strip()
+        uebersicht.append(f"  {verteilung.metadata['Name']} {version} - {lizenz}")
+        kopf = [f"Version: {version}", f"Lizenz: {lizenz}"]
         if verteilung.metadata.get("Home-page"):
             kopf.append(f"Projekt: {verteilung.metadata['Home-page']}")
-        qt = bool(QT_PAKET.match(name))
         texte = []
         for datei, text in _lizenz_texte(verteilung, qt):
             pruefsumme = hashlib.sha256(text.encode()).hexdigest()
@@ -218,14 +223,22 @@ def erzeugen(variante: str) -> str:
     if ohne_lizenz:
         raise SystemExit("Keine Lizenzdatei gefunden für: " + ", ".join(ohne_lizenz)
                          + " - Lizenztext in tools/drittlizenzen.py ergänzen")
-    for titel, datei in EIGENE_DATEIEN[variante]:
+    for titel, datei, lizenz in EIGENE_DATEIEN[variante]:
+        uebersicht.append(f"  {titel} - {lizenz}")
         abschnitte.append(_abschnitt(titel, [], [(PROJEKT / datei).read_text(encoding="utf-8")]))
     if qt_dabei:
         for titel, datei in [("GNU Lesser General Public License, Version 3", "LGPL-3.0.txt"),
                              ("GNU General Public License, Version 3", "GPL-3.0.txt")]:
             text = (PROJEKT / "lizenzen" / datei).read_text(encoding="utf-8")
             abschnitte.append(_abschnitt(titel, [], [text]))
-    return "\n\n".join(abschnitte)
+    einleitung = (
+        "Lizenzen der Komponenten Dritter im SHS-Prüfungsprogramm\n"
+        "Third-party licenses of the SHS-Prüfungsprogramm\n\n"
+        f"Das SHS-Prüfungsprogramm selbst steht unter der MIT-Lizenz (LICENSE, {REPO}).\n"
+        "Es enthält die folgenden Komponenten Dritter, jeweils unter ihrer eigenen Lizenz.\n\n"
+        "Übersicht / Overview:\n" + "\n".join(uebersicht) + "\n"
+    )
+    return "\n\n".join([einleitung, *abschnitte])
 
 
 def main(argumente: list[str]) -> None:

@@ -653,11 +653,17 @@ def _qt_uebersetzungs_ordner() -> list[str]:
     return ordner
 
 
-def programmsymbol_pfad() -> str:
-    """Pfad zu symbol/programmsymbol.png - im PyInstaller-Bundle unter sys._MEIPASS (dort per
-    build.spec mitgeliefert), sonst neben diesem Modul (Marco 07.10.2026, Beagle-Symbol)."""
+def bundle_pfad(*teile: str) -> str:
+    """Pfad zu einer mitgelieferten Datei - im PyInstaller-Bundle unter sys._MEIPASS (dort per
+    build.spec, datas, mitgeliefert), sonst neben diesem Modul im Quellcode-Ordner.
+    Gemeinsame Grundlage für Programmsymbol und Lizenztexte (Marco 01.11.2026, OFFEN B14)."""
     basis = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(basis, "symbol", "programmsymbol.png")
+    return os.path.join(basis, *teile)
+
+
+def programmsymbol_pfad() -> str:
+    """Pfad zu symbol/programmsymbol.png (Marco 07.10.2026, Beagle-Symbol), siehe bundle_pfad."""
+    return bundle_pfad("symbol", "programmsymbol.png")
 
 
 def programmsymbol() -> QIcon:

@@ -145,6 +145,7 @@ classDiagram
     class VerwaltungTab
     class DatensicherungTab
     class VersionDialog
+    class LizenzDialog
     class SitzungsendeFilter
     class DemoTour {
         +starten()
@@ -174,6 +175,7 @@ classDiagram
     HauptFenster *-- ExportTab
     HauptFenster *-- DatensicherungTab
     HauptFenster ..> VersionDialog : öffnet
+    VersionDialog ..> LizenzDialog : öffnet
     HauptFenster ..> DemoTour : startet
     HauptFenster ..> SitzungsendeFilter : über sitzungsende_einrichten
 

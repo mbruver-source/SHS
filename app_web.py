@@ -474,6 +474,43 @@ def logout():
     return redirect(url_for("login"))
 
 
+# Lizenzseite (Marco 01.11.2026): MIT-Lizenz des Programms und Lizenzen der Fremdkomponenten,
+# verlinkt in der Fußzeile jeder Seite (templates/base.html). Beide Dateien liegen neben
+# app_web.py, im Container also unter /app (siehe Containerfile: COPY LICENSE, und
+# THIRD_PARTY_LICENSES.txt erzeugt tools/drittlizenzen.py beim Bauen des Images). Als
+# Modulvariablen, damit Tests sie umlenken können.
+_PROGRAMMORDNER = os.path.dirname(os.path.abspath(__file__))
+LIZENZ_DATEI = os.path.join(_PROGRAMMORDNER, "LICENSE")
+DRITTLIZENZEN_DATEI = os.path.join(_PROGRAMMORDNER, "THIRD_PARTY_LICENSES.txt")
+
+
+def _lizenztext_lesen(pfad: str, hinweis: str) -> str:
+    """Liest eine Lizenzdatei; fehlt sie oder ist sie nicht lesbar, kommt der Hinweistext
+    statt eines Fehlers 500 (z. B. beim Start aus dem Quellcode ohne Image-Build)."""
+    try:
+        with open(pfad, encoding="utf-8", errors="replace") as datei:
+            return datei.read()
+    except OSError:
+        return hinweis
+
+
+@app.route("/lizenzen")
+def lizenzen():
+    """Öffentlich wie die Anmeldeseite (kein _login_erforderlich): Die Lizenzen sollen auch
+    ohne Konto einsehbar sein. Die Texte werden im Template automatisch maskiert."""
+    return render_template(
+        "lizenzen.html",
+        lizenz=_lizenztext_lesen(
+            LIZENZ_DATEI, "Die Lizenzdatei (LICENSE) fehlt in dieser Fassung."
+        ),
+        drittlizenzen=_lizenztext_lesen(
+            DRITTLIZENZEN_DATEI,
+            "Die Liste der Fremdkomponenten wird beim Bauen des Container-Images erzeugt und "
+            "fehlt in dieser Fassung.",
+        ),
+    )
+
+
 def _pruefe_benutzername_und_passwort(
     benutzername: str, passwort: str, passwort_wiederholung: str | None = None
 ) -> str | None:

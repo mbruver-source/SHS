@@ -68,6 +68,9 @@ a = Analysis(
         ("fonts/DejaVuSansCondensed-Oblique.ttf", "fonts"),
         ("fonts/LICENSE-DejaVu.txt", "fonts"),
         (str(DRITTLIZENZEN), "."),
+        # OFFEN B14 (Marco 01.11.2026): eigene MIT-Lizenz für das Lizenzfenster
+        # (desktop_programm.LizenzDialog); der Selbsttest prüft beide Lizenzdateien.
+        ("LICENSE", "."),
     ],
     # pyzipper (Datensicherung, siehe db_sicherung.py) importiert pycryptodomex für die
     # AES-Verschlüsselung - PyInstaller bringt dafür über pyinstaller-hooks-contrib

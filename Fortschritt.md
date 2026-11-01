@@ -8039,3 +8039,69 @@ claude.ai-Ablage, die Marco am 19.10. abgeglichen hat.
   sie gelöscht. Ursache: Der Dialog bekam damals wohl nur einen Dateinamen und öffnete im
   Arbeitsordner. Das ist nicht mehr nachprüfbar, und seit v1.0.0 bekommt der Dialog immer einen
   vollständigen Pfad.
+
+
+## 01.11.2026: Lizenzen im Versionsfenster und Lizenzseite im Installer (Marco)
+
+Marcos Rückmeldung: (1) Im Versionsfenster fehlt eine Übersicht über die Lizenzen (war als
+OFFEN B14 zurückgestellt). (2) Bei der Installation wird die MIT-Lizenz nicht abgefragt, anders
+als z. B. bei OneDrive. Entscheidungen im Planmodus: eigenes Lizenzfenster, Installer zeigt den
+englischen MIT-Originaltext, `LICENSE` in alle Pakete, Lizenz-Link in der Web-Fußzeile und
+Lizenzvereinbarung beim Öffnen der Mac-.dmg.
+
+- `tools/drittlizenzen.py`: `THIRD_PARTY_LICENSES.txt` beginnt jetzt mit „Übersicht /
+  Overview“, eine Zeile je Komponente (Name Version - Lizenz), danach wie bisher die Volltexte.
+  Für PySide6/Shiboken6 steht fest `LGPL-3.0-only`, nicht die in den Metadaten mit angebotene
+  kommerzielle Lizenz. Neuer Test in `test_drittlizenzen.py`.
+- Desktop (`desktop_programm.py`): Das Versionsfenster zeigt „Lizenz: MIT (© 2026 Marco)“ und
+  den Button „Lizenzen anzeigen“. Der öffnet `LizenzDialog`: `LICENSE`, darunter
+  `THIRD_PARTY_LICENSES.txt`, schreibgeschützt in Festbreitenschrift. Fehlt eine Datei (etwa
+  beim Start aus dem Quellcode), steht dort ein Hinweis statt eines Fehlers. Pfade über das neue
+  `bundle_pfad()` in `desktop_gemeinsam.py`. `build.spec` bündelt jetzt auch `LICENSE`.
+  `selbsttest.py` hat den Schritt „Lizenztexte“: In der gebauten Fassung müssen beide Dateien
+  da sein, aus dem Quellstand gibt es für die Drittlizenz-Datei nur einen Hinweis. Drei neue
+  GUI-Tests.
+- Windows-Installer: `LicenseFile=LICENSE` zeigt die Seite „Lizenzvereinbarung“ mit
+  „Ich akzeptiere die Vereinbarung“ (Texte aus German.isl). Inno zeigt sie bei jedem Lauf, also
+  auch bei Updates. `LICENSE` wird als `LICENSE.txt` in den Programmordner gelegt.
+  `README_INSTALLER.md` nachgezogen.
+- Linux (`tools/linux_pakete.sh`): `.deb` legt `LICENSE` als `/usr/share/doc/shs-pruefungsprogramm/copyright`
+  ab (Debian-Konvention), das AppImage beide Lizenzdateien unter `usr/share/doc/…`.
+- macOS (`build-installer.yml`, neu `tools/dmg_einstellungen.py`): Die .dmg entsteht mit
+  `dmgbuild==1.6.7` statt `hdiutil create` und enthält eine Lizenzvereinbarung (englischer Text,
+  deutsche Buttons auf deutschen Macs) sowie `LICENSE.txt` und `THIRD_PARTY_LICENSES.txt`.
+  dmgbuild wird erst nach dem PyInstaller-Build installiert und taucht deshalb nicht in der
+  Drittlizenz-Liste auf. Der Schritt prüft per `hdiutil udifderez`, dass die Lizenz-Ressource
+  drin ist. Das Einbinden für den Selbsttest beantwortet die Lizenzfrage mit `yes` (per
+  Prozess-Substitution wegen `pipefail`) und `PAGER=cat`. Hinweis: dmgbuild nutzt intern
+  `hdiutil udifrez`, das Apple als veraltet führt; fällt es weg, schlägt der dmg-Schritt fehl.
+  Nur in der CI prüfbar, siehe OFFEN A9.
+- Container: `LICENSE` liegt jetzt unter `/app/LICENSE`.
+- Web (`app_web.py`, neu `templates/lizenzen.html`): Die öffentliche Seite `/lizenzen` (ohne
+  Anmeldung) zeigt `LICENSE` und `THIRD_PARTY_LICENSES.txt`, autoescaped. Fehlt eine Datei,
+  erscheint ein Hinweis statt eines Fehlers. Die Fußzeile aller Seiten hat den Link „Lizenzen“.
+  Sechs neue Tests (`TestLizenzseite`).
+- Doku: `docs/HANDBUCH.md` (Lizenzseite im Setup, Lizenz in der .dmg, Lizenzen im
+  Versionsfenster), `Architektur.md`, `OFFEN.md` (B14 gestrichen, A9 neu). Das Versionsfenster
+  hat keinen eigenen Handbuch-Screenshot, deshalb sind keine Bilder neu aufzunehmen.
+- Tests lokal: die Unittest-Suite mit 693 Tests ist grün (175 übersprungen); `test_app_gui.py`
+  und `test_theme.py` sind grün (417 bestanden). Die Gegenprobe ohne den Programmcode ergibt
+  fehlschlagende neue Tests (Web 6, GUI 3, Drittlizenzen 1).
+- Kein Commit des Programmcodes und kein Versionsbump, bis Marco einen Build anfordert. Vorher
+  muss der CI-Probelauf auf einem Branch laufen (A9), wie bei A8 am 26.10.2026.
+- Verifikation (Agent `verifikation`): keine funktionalen Fehler. Direkt nachgezogen:
+  `UML.md` (`LizenzDialog`, Kante vom `VersionDialog`, Mermaid lokal geprüft),
+  `README_INSTALLER.md` (dmgbuild, Lizenzdateien in .dmg/.deb/AppImage) und `app_web.py`
+  (liest die Lizenzdateien wie die Desktopversion mit `errors="replace"`).
+  Weitere Punkte aus der Verifikation, mit Marco geklärt:
+  - Web-Screenshots: Marco wollte sie neu aufnehmen lassen. Keines der fünf Bilder
+    `docs/bilder/handbuch_web_*.png` zeigt aber die Fußzeile, sie liegt jeweils unterhalb des
+    Ausschnitts. Neu aufnehmen ändert also nichts; die Bilder bleiben.
+  - dmgbuild (Marco: Variante B): Neben `dmgbuild==1.6.7` sind jetzt auch dessen Abhängigkeiten
+    fest, `ds_store==1.3.3` und `mac_alias==2.2.3`. Alle drei sind auf PyPI seit Monaten
+    veröffentlicht. Prüfsummen (Variante C) bewusst nicht, weil jedes Update neue Prüfsummen
+    bräuchte.
+  - Zur Kenntnis: `/lizenzen` prüft die Sitzung nicht gegen die Datenbank. Bei einer veralteten
+    Sitzung zeigt die Seite noch die Navigation, die Links dahinter prüfen die Sitzung wieder.
+  - CI-Probelauf (A9, Marco ok): Der Stand liegt als Commit auf dem Branch `lizenzen`, nicht auf
+    `main`. Marco pusht ihn und startet `build-installer.yml` darauf.

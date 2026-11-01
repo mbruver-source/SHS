@@ -100,6 +100,19 @@
     font-size: 0.8em;
     padding: 1.5em 1em 2em;
   }
+  footer a { color: inherit; }
+  /* Lizenztexte (templates/lizenzen.html): Zeilen umbrechen statt seitlich zu scrollen. */
+  pre.lizenztext {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.75em;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--grau-hell);
+    border: 1px solid var(--grau-rand);
+    border-radius: 6px;
+    padding: 0.8em;
+  }
 </style>
 </head>
 <body>
@@ -120,6 +133,6 @@
 <main>
 {% block inhalt %}{% endblock %}
 </main>
-<footer>SHS-Prüfungsprogramm{% if version %} · Version {{ version }}{% endif %}</footer>
+<footer>SHS-Prüfungsprogramm{% if version %} · Version {{ version }}{% endif %} · <a href="{{ url_for('lizenzen') }}">Lizenzen</a></footer>
 </body>
 </html>
