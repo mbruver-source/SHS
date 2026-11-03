@@ -103,7 +103,7 @@ def gespeichert_meldungen(monkeypatch):
     ueberall_ersetzen(monkeypatch, "_datei_gespeichert_melden", _aufzeichnen)
     # UX-Test U1: nach Importen wird die Sammelvergabe per Rückfrage angeboten - in den
     # Tests nur aufzeichnen (eigener Test unten nutzt die echte Funktion).
-    monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda parent, conn: meldungen.append(("import", None, None)))
+    monkeypatch.setattr("app._startnummern_nach_import_anbieten", lambda parent, conn, *_vorher: meldungen.append(("import", None, None)))
     return meldungen
 
 
@@ -159,6 +159,14 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
     Aufruf den Teil `merke`."""
     gesammelt = []
     monkeypatch.setattr(f"app.QMessageBox.{art}", lambda *a, **_k: gesammelt.append(_DIALOG_TEIL[merke](a)))
+    return gesammelt
+
+
+def import_meldungen_sammeln(monkeypatch):
+    """Wie meldungen_sammeln(..., "information"), fängt aber auch die Importmeldung mit Knopf
+    „Meldung kopieren und schließen“ und Warnsymbol ab (UX-Test 03.11.2026, X10: eigenes QMessageBox-Fenster)."""
+    gesammelt = meldungen_sammeln(monkeypatch, "information")
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: gesammelt.append(box.text()) or 0)
     return gesammelt
 
 
@@ -2157,11 +2165,7 @@ def test_formular_import_tab_csv_import_legt_teilnehmer_an_und_zeigt_zusammenfas
         encoding="utf-8",
     )
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(pfad), "CSV-Datei (*.csv)"))
-    meldung = {}
-    monkeypatch.setattr(
-        "app.QMessageBox.information",
-        lambda parent, titel, text: meldung.setdefault("text", text),
-    )
+    _gesammelt = import_meldungen_sammeln(monkeypatch)
 
     tab = FormularImportTab(conn)
     qtbot.addWidget(tab)
@@ -2174,8 +2178,8 @@ def test_formular_import_tab_csv_import_legt_teilnehmer_an_und_zeigt_zusammenfas
 
     namen = {t["nachname"] for t in list_teilnehmer(conn)}
     assert namen == {"Holst"}
-    assert "1 Teilnehmer importiert" in meldung["text"]
-    assert "1 Zeile(n) übersprungen" in meldung["text"]
+    assert "1 Teilnehmer importiert" in _gesammelt[0]
+    assert "1 Zeile(n) übersprungen" in _gesammelt[0]
 
 
 def test_formular_import_tab_oma_import_legt_teilnehmer_an_und_meldet_dubletten(qtbot, conn, tmp_path, monkeypatch):
@@ -2191,11 +2195,7 @@ def test_formular_import_tab_oma_import_legt_teilnehmer_an_und_meldet_dubletten(
         "3\tJan\tMeier\tRex\t1\tLK9 Unbekannt\r\n"
     ).encode("cp1252"))
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(pfad), ""))
-    meldung = {}
-    monkeypatch.setattr(
-        "app.QMessageBox.information",
-        lambda parent, titel, text: meldung.setdefault("text", text),
-    )
+    _gesammelt = import_meldungen_sammeln(monkeypatch)
 
     tab = FormularImportTab(conn)
     qtbot.addWidget(tab)
@@ -2208,9 +2208,9 @@ def test_formular_import_tab_oma_import_legt_teilnehmer_an_und_meldet_dubletten(
 
     teilnehmer = list_teilnehmer(conn)
     assert [(t["nachname"], t["rufname_hund"], t["geschlecht"]) for t in teilnehmer] == [("Mustermann", "Bella", "Hündin")]
-    assert "1 Teilnehmer importiert" in meldung["text"]
-    assert "1 Meldung(en) bereits vorhanden" in meldung["text"]
-    assert "1 Zeile(n) übersprungen" in meldung["text"]
+    assert "1 Teilnehmer importiert" in _gesammelt[0]
+    assert "1 Meldung(en) bereits vorhanden" in _gesammelt[0]
+    assert "1 Zeile(n) übersprungen" in _gesammelt[0]
 
 
 # --- Ausfüllbares Anmeldeformular (Nutzerwunsch 28.09.2026) -------------------------
@@ -2339,8 +2339,7 @@ def test_formular_import_tab_anmeldeformulare_importieren_zeigt_zusammenfassung(
         return CsvImportErgebnis(importiert=1, fehler=["c.pdf: kein Anmeldeformular"], uebersprungen=["b.pdf: Muster"])
 
     monkeypatch.setattr("app.importiere_anmeldeformular_pdf", _import_stub)
-    meldung = {}
-    monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: meldung.setdefault("text", text))
+    _gesammelt = import_meldungen_sammeln(monkeypatch)
 
     tab = FormularImportTab(conn)
     qtbot.addWidget(tab)
@@ -2351,10 +2350,10 @@ def test_formular_import_tab_anmeldeformulare_importieren_zeigt_zusammenfassung(
     )
 
     assert aufrufe == [pfade]
-    assert "1 Teilnehmer importiert" in meldung["text"]
-    assert "1 Meldung(en) bereits vorhanden" in meldung["text"]
-    assert "1 Datei(en) nicht importiert" in meldung["text"]
-    assert "c.pdf: kein Anmeldeformular" in meldung["text"]
+    assert "1 Teilnehmer importiert" in _gesammelt[0]
+    assert "1 Meldung(en) bereits vorhanden" in _gesammelt[0]
+    assert "1 Datei(en) nicht importiert" in _gesammelt[0]
+    assert "c.pdf: kein Anmeldeformular" in _gesammelt[0]
 
 
 # --- Hilfe-Button ---------------------------------------------------------------
@@ -5090,6 +5089,53 @@ def test_aus_anderem_termin_importieren_weist_auf_nicht_angebotene_pruefung_hin(
     assert meldungen[0].startswith("2 Teilnehmer importiert.")
     assert "1 Teilnehmer in hier nicht angebotenen Prüfungen" in meldungen[0]
     assert "Fremd, F – ED LK 1 Trümmerfeld" in meldungen[0] and "Angeboten" not in meldungen[0]
+
+
+def test_importmeldung_mit_ablehnungen_warnt_rat_und_liste_kopieren(qtbot, monkeypatch):
+    """UX-Test 03.11.2026, X10: Bei abgelehnten Meldungen Warnsymbol statt „i“, ein Rat, was zu
+    tun ist, und „Liste kopieren“ (die Liste war nach „OK“ sonst weg)."""
+    import app as app_modul
+    from db_import import CsvImportErgebnis
+
+    boxen = []
+
+    def _zeigen(box):
+        boxen.append(box)
+        assert box.escapeButton() is box.button(QMessageBox.Ok)  # Esc schließt (Befund 1)
+        knopf = next(b for b in box.buttons() if b.text() == "Meldung kopieren und schließen")
+        knopf.click()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", _zeigen)
+    QApplication.clipboard().clear()
+    ergebnis = CsvImportErgebnis(importiert=1, fehler=["Pfeiffer.pdf: mehrere Prüfungen angekreuzt"])
+    app_modul._import_ergebnis_melden(None, ergebnis, "Datei(en) nicht importiert:")
+    (box,) = boxen
+    assert box.icon() == QMessageBox.Warning
+    assert "Was tun?" in box.text() and "von Hand erfassen" in box.text()
+    assert "Pfeiffer.pdf" in QApplication.clipboard().text()
+
+    # Nur Duplikate: Knopf ja, aber Informationssymbol und kein „Was tun?“.
+    boxen.clear()
+    app_modul._import_ergebnis_melden(None, CsvImportErgebnis(importiert=0, fehler=[], uebersprungen=["Müller"]))
+    (box,) = boxen
+    assert box.icon() == QMessageBox.Information and "Was tun?" not in box.text()
+
+
+def test_startnummern_rueckfrage_nur_bei_neuen_ohne_nummer_und_einzahl(qtbot, conn, monkeypatch):
+    """UX-Test 03.11.2026 (L-B): keine erneute Rückfrage, wenn der Import keine neuen
+    Teilnehmer ohne Nummer gebracht hat; „1 Teilnehmer hat“ in der Einzahl."""
+    import app as app_modul
+
+    monkeypatch.undo()  # echte Funktion statt der Aufzeichnung aus der autouse-Fixture
+    tid = _teilnehmer_anlegen(conn, nachname="Alt", startnummer=None)
+    meldungen = meldungen_sammeln(monkeypatch, "information")
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
+    app_modul._startnummern_nach_import_anbieten(None, conn, {tid})
+    assert meldungen == [] and fragen == []
+    app_modul._startnummern_nach_import_anbieten(None, conn, set())
+    text = (meldungen + fragen)[0]
+    assert text.startswith("1 Teilnehmer hat noch keine Startnummer")
 
 
 def test_lange_namenslisten_werden_gekuerzt_mit_details(qtbot, monkeypatch):
@@ -8096,7 +8142,7 @@ def test_teilnehmerliste_als_csv_exportieren_und_im_teilnehmer_reiter_einlesen(q
     # Dieselbe Datei im Reiter "Teilnehmer" wieder einlesen -> wird erkannt, kein zweiter
     # Müller (UX-Nachtest N1), und die Meldung nennt ihn als bereits vorhanden.
     monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(ziel), ""))
-    meldungen = meldungen_sammeln(monkeypatch, "information")
+    meldungen = import_meldungen_sammeln(monkeypatch)
     next(b for b in fenster.teilnehmer_tab.findChildren(QPushButton) if b.text() == "Teilnehmerliste einlesen (Excel/CSV)…").click()
     assert [t["nachname"] for t in list_teilnehmer(conn)].count("Müller") == 1
     assert "bereits vorhanden" in meldungen[0]

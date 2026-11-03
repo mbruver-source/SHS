@@ -411,7 +411,10 @@ Termin nicht anbietet, werden trotzdem übernommen; die Meldung danach nennt sie
 Leistungsklasse mit „Bearbeiten…“ anpassen kannst.
 
 Meldungen nach einem Import oder der Startnummernvergabe zeigen je Liste höchstens 15 Namen; die
-vollständige Liste steht unter **„Details“**.
+vollständige Liste steht unter **„Details“**. Wurden beim Import Meldungen abgelehnt oder
+übersprungen, legt **„Meldung kopieren und schließen“** die ganze Meldung samt vollständiger Listen
+in die Zwischenablage (z. B. zum Einfügen in eine E-Mail); die Meldung sagt dann auch, was zu tun ist. Nach einem Import fragt das Programm
+nur dann nach der Startnummernvergabe, wenn neue Teilnehmer ohne Nummer dazugekommen sind.
 
 ## 5. Formular-Import
 

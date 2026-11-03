@@ -256,10 +256,13 @@ def _fehlende_startnummern_vergeben_mit_meldung(
 _MELDUNG_LISTE_MAX = 15
 
 
-def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tuple[str, list[str]]]) -> None:
+def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tuple[str, list[str]]],
+                        warnung: bool = False, kopieren: bool = False) -> None:
     """Informationsmeldung aus `einleitung` und Abschnitten (Überschrift, Einträge); leere
     Abschnitte entfallen. Ist eine Liste länger als _MELDUNG_LISTE_MAX, wird sie gekürzt
-    und die vollständige Fassung über „Details“ angeboten."""
+    und die vollständige Fassung über „Details“ angeboten. UX-Test 03.11.2026, X10:
+    `warnung` zeigt das Warnsymbol statt „i“, `kopieren` einen Knopf „Meldung kopieren und schließen“ - die
+    Liste war nach „OK“ sonst nirgends mehr nachzulesen."""
     kurz = voll = einleitung
     gekuerzt = False
     for ueberschrift, eintraege in abschnitte:
@@ -271,17 +274,32 @@ def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tu
             gekuerzt = True
         kurz += f"\n\n{ueberschrift}\n" + "\n".join(zeilen)
         voll += f"\n\n{ueberschrift}\n" + "\n".join(eintraege)
-    if not gekuerzt:
+    if not (gekuerzt or warnung or kopieren):
         QMessageBox.information(parent, titel, kurz)
         return
     box = QMessageBox(parent)
     box.setTextFormat(Qt.PlainText)
-    box.setIcon(QMessageBox.Information)
+    box.setIcon(QMessageBox.Warning if warnung else QMessageBox.Information)
     box.setWindowTitle(titel)
     box.setText(kurz)
-    box.setDetailedText(voll)
+    if gekuerzt:
+        box.setDetailedText(voll)
     box.setStandardButtons(QMessageBox.Ok)
+    kopieren_btn = box.addButton("Meldung kopieren und schließen", QMessageBox.ActionRole) if kopieren else None
+    box.setDefaultButton(QMessageBox.Ok)
+    # Mit dem Zusatzknopf findet Qt sonst keine Esc-Taste mehr (Verifikation A8, Befund 1).
+    box.setEscapeButton(QMessageBox.Ok)
     _ausfuehren(box)
+    if kopieren_btn is not None and box.clickedButton() is kopieren_btn:
+        QApplication.clipboard().setText(voll)
+
+
+#: UX-Test 03.11.2026, X10: was mit abgelehnten Meldungen zu tun ist (vorher fehlte der Rat).
+_RAT_BEI_ABLEHNUNG = ("Abgelehnte Meldungen: beim Teilnehmer nachfragen und von Hand erfassen "
+                      "(„Teilnehmer hinzufügen…“) oder korrigiert erneut einlesen – bereits "
+                      "übernommene Meldungen werden dabei nicht doppelt angelegt. Ist die ganze "
+                      "Datei betroffen, die Datei prüfen und erneut einlesen. Mit „Meldung "
+                      "kopieren und schließen“ lässt sich alles z. B. in eine E-Mail einfügen.")
 
 
 def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(n) übersprungen:") -> None:
@@ -291,8 +309,9 @@ def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(
         (f"{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:",
          ergebnis.uebersprungen),
         (f"{len(ergebnis.fehler)} {fehler_ueberschrift}", ergebnis.fehler),
+        ("Was tun?", [_RAT_BEI_ABLEHNUNG] if ergebnis.fehler else []),
         ("Hinweis:", ergebnis.hinweise),
-    ])
+    ], warnung=bool(ergebnis.fehler), kopieren=bool(ergebnis.fehler or ergebnis.uebersprungen))
 
 
 _NICHTS_ZU_TAUSCHEN = ("Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
@@ -306,24 +325,37 @@ def _teilnehmerzahl(conn) -> int | None:
         return None
 
 
-def _startnummern_nach_import_anbieten(parent, conn) -> None:
+def _ohne_startnummer_ids(conn) -> set[int] | None:
+    """IDs der Teilnehmenden ohne Startnummer - vor einem Import gemerkt, damit die Rückfrage
+    danach nur kommt, wenn der Import selbst neue Teilnehmer ohne Nummer gebracht hat."""
+    try:
+        return {t["id"] for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None}
+    except sqlite3.Error:
+        return None
+
+
+def _startnummern_nach_import_anbieten(parent, conn, vorher_ohne: set[int] | None = None) -> None:
     """UX-Test 02.10.2026, U1: Nach einem Import fehlen die Startnummern meist - direkt
     anbieten, sie gesammelt zu vergeben. Bewusst immer für alle Prüfungen, auch wenn im
-    Reiter "Teilnehmer" ein Filter Art/LK gesetzt ist (Marco 09.10.2026)."""
+    Reiter "Teilnehmer" ein Filter Art/LK gesetzt ist (Marco 09.10.2026). UX-Test 03.11.2026
+    (X10/L-B): nur, wenn der Import neue Teilnehmer ohne Nummer gebracht hat (`vorher_ohne`)."""
     ohne = [t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None]
     if not ohne:
         return
+    if vorher_ohne is not None and all(t["id"] in vorher_ohne for t in ohne):
+        return
+    haben = "hat" if len(ohne) == 1 else "haben"
     if not startnummer_bereiche(get_veranstaltung(conn)):
         QMessageBox.information(
             parent, "Startnummern fehlen",
-            f"{len(ohne)} Teilnehmer haben noch keine Startnummer. Für die gesammelte Vergabe "
+            f"{len(ohne)} Teilnehmer {haben} noch keine Startnummer. Für die gesammelte Vergabe "
             "(„Fehlende Startnummern vergeben…“ im Reiter „Teilnehmer“) zuerst je Prüfung einen "
             "Startnummern-Bereich in den Veranstaltungsdaten eintragen (Reiter „Verwaltung“).",
         )
         return
     if _ja_nein(
         parent, "Startnummern fehlen",
-        f"{len(ohne)} Teilnehmer haben noch keine Startnummer.\n\nJetzt „Fehlende "
+        f"{len(ohne)} Teilnehmer {haben} noch keine Startnummer.\n\nJetzt „Fehlende "
         "Startnummern vergeben“? (Bereits vergebene Nummern bleiben unverändert.)",
         vorgabe_ja=True,
     ):
@@ -356,6 +388,7 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
         return
     _import_ordner_merken(pfad)
     vorher = _teilnehmerzahl(conn)
+    vorher_ohne = _ohne_startnummer_ids(conn)
     try:
         ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
     except OSError as exc:
@@ -370,7 +403,7 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
         return
     _import_ergebnis_melden(parent, ergebnis)
     if ergebnis.importiert:
-        _startnummern_nach_import_anbieten(parent, conn)
+        _startnummern_nach_import_anbieten(parent, conn, vorher_ohne)
 
 
 class TeilnehmerTab(QWidget):
@@ -860,6 +893,7 @@ class TeilnehmerTab(QWidget):
                     )
                 elif ausgewaehlt:
                     vorher = _teilnehmerzahl(self.conn)
+                    vorher_ohne = _ohne_startnummer_ids(self.conn)
                     try:
                         # Vor dem Import lesen: so gilt ein Lesefehler hier noch als Abbruch.
                         uebernommen = [t for t in (get_teilnehmer(quelle, i) for i in ausgewaehlt) if t is not None]
@@ -888,7 +922,7 @@ class TeilnehmerTab(QWidget):
                          [f"{t['nachname']}, {t['vorname']} – {leistungsklasse_label(t)}" for t in fremde]),
                     ])
                     if anzahl:
-                        _startnummern_nach_import_anbieten(self, self.conn)
+                        _startnummern_nach_import_anbieten(self, self.conn, vorher_ohne)
                         self.aktualisieren()
         finally:
             # Die zweite, nur für den Import geöffnete Verbindung muss in jedem Fall
@@ -1329,6 +1363,7 @@ class FormularImportTab(QWidget):
             return
         _import_ordner_merken(pfad)
         vorher = _teilnehmerzahl(self.conn)
+        vorher_ohne = _ohne_startnummer_ids(self.conn)
         try:
             ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         except OSError as exc:
@@ -1341,7 +1376,7 @@ class FormularImportTab(QWidget):
             return
         _import_ergebnis_melden(self, ergebnis)
         if ergebnis.importiert:
-            _startnummern_nach_import_anbieten(self, self.conn)
+            _startnummern_nach_import_anbieten(self, self.conn, vorher_ohne)
 
     def _anmeldeformulare_importieren(self) -> None:
         """Liest ausgefüllte Anmeldeformulare (siehe pdf_export.erstelle_anmeldeformular_pdf)
@@ -1356,6 +1391,7 @@ class FormularImportTab(QWidget):
         # Lesefehler je Datei fängt der Import selbst ab und meldet sie in ergebnis.fehler
         # (Verifikation 28.09.2026, Befund 7a); hier bleiben nur Schreibfehler der Termin-Datei.
         vorher = _teilnehmerzahl(self.conn)
+        vorher_ohne = _ohne_startnummer_ids(self.conn)
         try:
             ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
         except sqlite3.Error as exc:
@@ -1364,7 +1400,7 @@ class FormularImportTab(QWidget):
             return
         _import_ergebnis_melden(self, ergebnis, "Datei(en) nicht importiert:")
         if ergebnis.importiert:
-            _startnummern_nach_import_anbieten(self, self.conn)
+            _startnummern_nach_import_anbieten(self, self.conn, vorher_ohne)
 
 
 # Höchstpunktzahlen je Disziplin (entsprechen den CHECK-Constraints in db.py). UX-Test

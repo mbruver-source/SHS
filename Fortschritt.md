@@ -8695,7 +8695,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | umgesetzt (A2, Arbeitsstand) |
 | X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | umgesetzt (A2, Arbeitsstand) |
 | X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | umgesetzt (A7, Arbeitsstand) |
-| X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | geplant (aufgaben.md) |
+| X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | umgesetzt (A8, Arbeitsstand) |
 | X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | umgesetzt (A3, Arbeitsstand) |
 | X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | umgesetzt (A3, Arbeitsstand) |
 | X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | umgesetzt (A7, Arbeitsstand) |
@@ -8909,4 +8909,32 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   weiter die Gesamtzahl (Postgres-Variante, nicht Teil des UX-Tests).
 - Vor dem nächsten Build ist der Screenshot `handbuch_start` neu nötig (zeigt jetzt
   „(+1 abgemeldet)“).
+
+### ux_test_2026_11 A8 (X10) – umgesetzt (03.11.2026)
+
+- **Problem:** Die Liste abgelehnter bzw. übersprungener Import-Meldungen war nach „OK“ weg. Das
+  Symbol war immer „i“, auch bei Ablehnungen, und für Pfeiffer (zwei Prüfungen angekreuzt)
+  fehlte der Rat, was zu tun ist. Dazu kamen „1 Teilnehmer haben“ und eine Startnummern-Rückfrage
+  nach jedem Einzelimport.
+- **Lösung** (`app.py`):
+  - `_meldung_mit_listen` kann ein Warnsymbol (`warnung`) und den Knopf „Meldung kopieren und
+    schließen“ (`kopieren`, Zwischenablage mit den ungekürzten Listen). OK bleibt Vorgabe, Esc
+    schließt (`setEscapeButton`).
+  - `_import_ergebnis_melden`: Warnsymbol bei Ablehnungen, ein Abschnitt „Was tun?“
+    (`_RAT_BEI_ABLEHNUNG`), Kopierknopf bei Ablehnungen oder Duplikaten.
+  - `_startnummern_nach_import_anbieten(…, vorher_ohne)`: Die Rückfrage kommt nur, wenn der
+    Import neue Teilnehmer ohne Nummer gebracht hat (`_ohne_startnummer_ids` vor dem Import, an
+    allen vier Aufrufern). Die Meldung steht in der Einzahl „hat“.
+- **Handbuch** (Abschnitt Import-Meldungen) ergänzt.
+- **Tests:**
+  - neu: Warnung, Rat und Kopieren samt Esc-Knopf, nur Duplikate; Rückfrage nur bei neuen,
+    Einzahl;
+  - angepasst: vier Import-Tests über `import_meldungen_sammeln`, Stub-Signatur der
+    autouse-Fixture.
+  Die Gegenprobe scheitert. Lokal 502 GUI- und 721 Unittests grün.
+- **Verifikation** (Agent `verifikation`): Ein echter Fehler (Esc schloss das Fenster mit
+  Zusatzknopf nicht) ist behoben. Außerdem: Knopftext „Meldung kopieren und schließen“ statt
+  „Liste kopieren“ (er schließt und kopiert die ganze Meldung) und ein neutralerer Rat, der auch
+  ganz abgelehnte Dateien abdeckt. Nicht eigens getestet ist der Rückfall `vorher_ohne=None`
+  (alte Rückfrage).
 
