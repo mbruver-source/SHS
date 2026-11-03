@@ -21,6 +21,8 @@ A2 M ≈ 19 %).
 | A6 | X6 Demo-Tempo | S | 2 | erledigt | 0ea6129 | 39 → 54 % | R4; Screenshot handbuch_demo vor Build |
 | A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | erledigt | f75356a | 54 → 66 % | Screenshot handbuch_start vor Build |
 | A8 | X10 Import-Meldungen | S | 3 | erledigt | cba451d | 66 → 87 % | |
+| A3b | X4 nach R5: gesperrte Gegenstand-Felder 2/3 bei ED ausblenden | S | 3 | offen | | | R5 |
+| A5b | X2 nach R6: Ergebnistabelle bei „Sehr groß“ und nicht maximiertem Fenster auf Faktor 1,15 begrenzen | S | 3 | offen | | | R6 |
 | A9 | X14, X15 Hilfe und Kleinigkeiten | M | 3 | offen | | | |
 | A10 | X16 Installationstexte (ohne Signatur) | S | 3 | offen | | | Website erst mit dem Release online |
 | A11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, Bericht | L | 4 | offen | | | |
@@ -120,11 +122,11 @@ Normal ohne Handbuch (Tobias), Szenario wie 03.11., Bericht `Nachtest.md`.
 - R4 (X6), Marco 03.11.: **Nur Text zurück.** Ein Knopf „Vorigen Text zeigen“ blättert die
   Erklärung zurück, die Demo läuft vorwärts. Dazu kommt der Countdown nach Textlänge.
 - Start, Marco 03.11.: **jetzt, limitgesteuert.**
+- R5 (X4), Marco 03.11.: **ausblenden.** Bei ED werden Gegenstand 2 und 3 samt Zuordnung
+  ausgeblendet (Hinweis unter Gegenstand 1 bleibt). → A3b
+- R6 (X2), Marco 03.11.: **wenn nicht maximiert, begrenzen.** Bei „Sehr groß“ nutzt die
+  Ergebnistabelle nur Faktor 1,15, solange das Hauptfenster nicht maximiert ist. → A5b
 
 ## Rückfragen an Marco
 
-- **R5 (X4):** Reichen Hinweis und Tooltip, oder sollen die gesperrten Gegenstand-Felder
-  bei ED zusätzlich deutlicher aussehen bzw. ganz ausgeblendet werden?
-- **R6 (X2):** Bei „Sehr groß“ in einem nicht maximierten Fenster werden die Kopfzeilen der
-  Ergebniserfassung abgeschnitten. So lassen (Handbuch rät zum Maximieren) oder den Faktor
-  nur für die Ergebnistabelle auf 1,15 begrenzen?
+- (keine offen)

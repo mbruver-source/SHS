@@ -8938,3 +8938,10 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   ganz abgelehnte Dateien abdeckt. Nicht eigens getestet ist der Rückfall `vorher_ohne=None`
   (alte Rückfrage).
 
+### ux_test_2026_11: Rückfragen R5 und R6 entschieden (Marco 03.11.2026)
+
+- **R5 (X4):** Bei ED werden Gegenstand 2 und 3 samt Zuordnung **ausgeblendet** statt nur
+  gesperrt; der Hinweis unter Gegenstand 1 bleibt (Aufgabe A3b).
+- **R6 (X2):** Bei „Sehr groß“ nutzt die Ergebnistabelle nur Faktor 1,15, **solange das
+  Hauptfenster nicht maximiert ist**; maximiert gilt der volle Faktor (Aufgabe A5b).
+
