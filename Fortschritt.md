@@ -8674,21 +8674,31 @@ Marcos Wunsch: Seit dem UX-Test vom Oktober hat sich viel geändert, deshalb ein
 Alle Punkte aus `UX-Test-2026-11/Bericht.md`. Wie beim Oktober-Test: erst alle Punkte einzeln mit
 Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 
+**Planung 03.11.2026 (Marco):** Alle Punkte werden umgesetzt, ausgenommen ist die Code-Signatur
+(X16, mit dem Installer derzeit nicht lösbar). Abarbeitung limitgesteuert nach dem Skill
+`aufgaben-abarbeitung`; Aufgabenliste A1–A12 mit Größen und Entscheidungen in
+`UX-Test-2026-11/aufgaben.md`. Entscheidungen:
+- X1: Erreicht der Plan eines Richters die Pausenzeit nicht, bekommt er keine Pause; die Meldung
+  nennt, bei wem sie fehlt. Das ersetzt N3.
+- X12: Die erste angebotene Prüfung wird vorbelegt, dazu Klartext „angeboten / nicht angeboten“.
+- X6: „Vorigen Text zeigen“ statt eines echten Zurück, dazu der Countdown nach Textlänge.
+- Zum Schluss ein Nachtest mit zwei Personas.
+
 | Nr | Punkt | Status |
 |---|---|---|
-| X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | offen |
-| X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | offen |
-| X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | offen |
-| X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | offen |
-| X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | offen |
-| X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | offen |
-| X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | offen |
-| X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | offen |
-| X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | offen |
-| X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | offen |
-| X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | offen |
-| X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | offen |
-| X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | offen |
-| X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | offen |
-| X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | offen |
-| X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | offen |
+| X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | geplant (aufgaben.md) |
+| X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
+| X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | geplant (aufgaben.md) |
+| X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | geplant (aufgaben.md) |
+| X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | geplant (aufgaben.md) |
+| X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | geplant (aufgaben.md) |
+| X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | geplant (aufgaben.md) |
+| X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | geplant (aufgaben.md) |
+| X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | geplant (aufgaben.md) |
+| X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | geplant (aufgaben.md) |
+| X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | geplant (aufgaben.md) |
+| X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | geplant (aufgaben.md) |
+| X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | geplant (aufgaben.md) |
+| X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | geplant (aufgaben.md) |
+| X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | geplant (aufgaben.md) |
+| X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | geplant (aufgaben.md) |
