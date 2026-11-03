@@ -8690,10 +8690,10 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
 | X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
 | X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | geplant (aufgaben.md) |
-| X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | geplant (aufgaben.md) |
+| X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | umgesetzt (A2, Arbeitsstand) |
 | X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | geplant (aufgaben.md) |
-| X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | geplant (aufgaben.md) |
-| X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | geplant (aufgaben.md) |
+| X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | umgesetzt (A2, Arbeitsstand) |
+| X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | umgesetzt (A2, Arbeitsstand) |
 | X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | geplant (aufgaben.md) |
 | X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | geplant (aufgaben.md) |
 | X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | geplant (aufgaben.md) |
@@ -8720,4 +8720,39 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 - **Verifikation** (Agent `verifikation`): Code korrekt, CSV/OMA nicht betroffen (übernehmen keine
   Gegenstände), 38 gefilterte GUI-Tests grün. Ihre Kleinpunkte (Handbuch Z. ~454, Kommentar,
   versionsfreie Formulierung, Test für Feld 2) sind eingearbeitet.
+
+### ux_test_2026_11 A2 (X5, X7, X8) – umgesetzt (03.11.2026)
+
+- **X5 Abbruch-Zelle:**
+  - Sie ist jetzt als Auswahlfeld gezeichnet: umrandet wie die Punktefelder, Dreieck rechts,
+    gelb in ungespeicherten Zeilen (`_AbbruchDelegate.paint`).
+  - Die Auswahl öffnet schon beim ersten Klick (`ErgebnisTab._abbruch_mit_einem_klick` an
+    `tabelle.clicked`).
+  - Tooltip mit vollem Grund bzw. „Klicken: Abbruch mit Grund auswählen“.
+  - Die Spalte ist 12 px breiter.
+- **X7 Wert über dem Maximum:**
+  - Zum roten Rahmen kommt ein eigenes rotes Label unter den Knöpfen: „Rot umrandet, so nicht
+    speicherbar - bitte korrigieren: Nr. 1 Muster: Flächensuche Suche höchstens 60 Punkte
+    (eingegeben: 65)“.
+  - Gemerkt wird je Teilnehmer-ID (`_zu_hoch_merken`, übersteht Sortieren), es zeigt höchstens
+    drei Einträge und wird beim Neuaufbau geleert.
+- **X8 Komma:**
+  - Der Hinweis bleibt stehen, bis die nächste Zelle bearbeitet wird. Vorher nahm die nächste
+    Ziffer ihn weg; bei „4,5“ wurde unbemerkt 45 daraus.
+  - Der Text ergänzt „bitte den Wert in der Zelle prüfen“.
+- **Handbuch** (Ergebniserfassung) und **UML** (`_AbbruchDelegate.paint`, Ablauf) angepasst,
+  Mermaid mit mmdc geprüft.
+- **Tests:** drei neue GUI-Tests:
+  - ein Klick öffnet, Tooltip;
+  - Klartext mit zwei Zeilen, Komma nebenher, Bearbeiten anderer Zellen;
+  - Komma-Hinweis bleibt nach der nächsten Ziffer.
+  Dazu kommt ein Test für den Neuaufbau, ein bestehender Test ist angepasst. Die Gegenprobe ohne
+  Fix scheitert dreimal. Lokal laufen 488 GUI- und 718 Unittests grün.
+- **Verifikation** (Agent `verifikation`): Ihre Befunde sind eingearbeitet:
+  - X7 als eigenes Label je Teilnehmer statt eines gemeinsamen Hinweises; das behebt mehrere rote
+    Zeilen, Tabwechsel, Neuaufbau und das Überschreiben durch den Komma-Hinweis;
+  - gelbe Füllung, Kommentare, Handbuchtext, UML, Name im Hinweis.
+  - Nicht eigens getestet: ein Doppelklick auf die Abbruch-Zelle (der erste Klick öffnet schon) –
+    beim nächsten Gerätetest ansehen.
+- Vor dem nächsten Build ist der Screenshot `handbuch_ergebniserfassung` neu nötig.
 

@@ -40,6 +40,7 @@ from PySide6.QtCore import (
     QItemSelectionModel,
     QModelIndex,
     QPoint,
+    QPointF,
     QRect,
     QRectF,
     QRegularExpression,
@@ -57,6 +58,7 @@ from PySide6.QtGui import (
     QPainter,
     QPalette,
     QPen,
+    QPolygonF,
     QRegularExpressionValidator,
     QKeySequence,
     QShortcut,
@@ -1469,6 +1471,10 @@ class _AbbruchItem(QTableWidgetItem):
     def setGrund(self, grund: str | None) -> None:  # noqa: N802
         self.setData(Qt.UserRole, grund or "")
         self.setText(_abbruch_bezeichnung(grund))
+        # UX-Test 03.11.2026, X5: voller Grund als Tooltip (die Spalte kann ihn abschneiden),
+        # bei leerer Zelle der Hinweis, dass sich hier eine Auswahl öffnet.
+        self.setToolTip(ABBRUCH_GRUENDE[grund][1] if grund in ABBRUCH_GRUENDE
+                        else ("Abbruch ohne Grund" if grund else "Klicken: Abbruch mit Grund auswählen"))
 
     def isChecked(self) -> bool:  # noqa: N802
         return self.grund() is not None
@@ -1504,6 +1510,41 @@ class _AbbruchAuswahl(QComboBox):
 class _AbbruchDelegate(QStyledItemDelegate):
     """Auswahlliste für den Abbruchgrund (R7). Sie klappt beim Öffnen gleich auf; die Wahl
     in der Liste gilt sofort (wie ein Häkchen)."""
+
+    def paint(self, painter, option, index):  # noqa: N802
+        # UX-Test 03.11.2026, X5: wie ein zugeklapptes Auswahlfeld zeichnen (umrandet wie die
+        # Punktefelder, Dreieck rechts) - vorher sah eine leere Zelle wie ein leeres Kästchen aus.
+        if not (index.flags() & Qt.ItemIsEnabled and index.flags() & Qt.ItemIsEditable):
+            super().paint(painter, option, index)
+            return
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        widget = opt.widget
+        style = widget.style() if widget is not None else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
+        feld = QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        fokus = bool(opt.state & QStyle.State_HasFocus)
+        painter.setPen(QPen(opt.palette.color(QPalette.Link), 2) if fokus else QPen(_farbe("RAND"), 1))
+        # Gelb wie die Punktefelder, solange die Zeile ungespeichert ist (_zeilenstatus_setzen
+        # setzt den Zeilenhintergrund auf jede Zelle).
+        hintergrund = index.data(Qt.BackgroundRole)
+        ungespeichert = isinstance(hintergrund, QBrush) and hintergrund.color() == _farbe("ungespeichert_bg")
+        painter.setBrush(_farbe("ungespeichert_bg") if ungespeichert else _farbe("FLAECHE"))
+        painter.drawRoundedRect(feld, 4, 4)
+        textfarbe = opt.palette.color(QPalette.Text)
+        cx, cy = feld.right() - 10, feld.center().y()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(textfarbe)
+        painter.drawPolygon(QPolygonF([QPointF(cx - 4, cy - 2), QPointF(cx + 4, cy - 2), QPointF(cx, cy + 3)]))
+        if text:
+            painter.setFont(opt.font)
+            painter.setPen(textfarbe)
+            painter.drawText(feld.adjusted(4, 0, -18, 0), int(Qt.AlignCenter), text)
+        painter.restore()
 
     def createEditor(self, parent, option, index):  # noqa: N802
         combo = _AbbruchAuswahl(parent)
@@ -1548,10 +1589,11 @@ class _PunkteDelegate(QStyledItemDelegate):
         editor.setStyleSheet("padding: 0px 2px;")
         maximum = self._tab._maximum_der_spalte(index.column())
         # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend schlucken,
-        # sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5); die nächste gültige
-        # Eingabe nimmt ihn wieder weg.
+        # sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5). UX-Test 03.11.2026, X8: Er
+        # bleibt stehen, bis die nächste Zelle bearbeitet wird - vorher nahm ihn die nächste
+        # Ziffer gleich wieder weg, bei "4,5" also die "5", und aus 4,5 wurde unbemerkt 45.
+        self._tab._eingabe_hinweis_ausblenden()
         editor.inputRejected.connect(lambda: self._tab._eingabe_abgelehnt(editor, maximum))
-        editor.textEdited.connect(lambda _text: self._tab._eingabe_hinweis_ausblenden())
         return editor
 
     def setEditorData(self, editor, index):  # noqa: N802
@@ -1810,6 +1852,9 @@ class ErgebnisTab(QWidget):
         haken_delegate = _HakenDelegate(self.tabelle)
         self.tabelle.setItemDelegateForColumn(_DQ_SPALTE, haken_delegate)
         self.tabelle.setItemDelegateForColumn(_ABBRUCH_SPALTE, _AbbruchDelegate(self.tabelle))
+        # UX-Test 03.11.2026, X5: Die Abbruch-Auswahl öffnet schon beim ERSTEN Klick (vorher
+        # markierte der erste Klick nur, 5 von 6 Personas suchten danach).
+        self.tabelle.clicked.connect(self._abbruch_mit_einem_klick)
         self.tabelle.itemChanged.connect(self._zelle_geaendert)
         # Sortierpfeil wie im Teilnehmer-Reiter (Teil 3 Nr. 7) - die Richtung setzt
         # _spalte_geklickt selbst, weil die Sortierung hier eigene Logik hat.
@@ -1865,6 +1910,12 @@ class ErgebnisTab(QWidget):
         self.hinweis_label.setWordWrap(True)
         self.hinweis_label.hide()
         self._eingabe_hinweis: str | None = None
+        # UX-Test 03.11.2026, X7: eigenes Label für Werte über dem Maximum (je Teilnehmer-ID).
+        self.zu_hoch_label = QLabel("")
+        self.zu_hoch_label.setTextFormat(Qt.PlainText)
+        self.zu_hoch_label.setWordWrap(True)
+        self.zu_hoch_label.hide()
+        self._zu_hoch_je_teilnehmer: dict[int, str] = {}
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -1890,6 +1941,7 @@ class ErgebnisTab(QWidget):
         layout.addWidget(hinweis)
         layout.addWidget(self.tabelle)
         layout.addLayout(button_zeile)
+        layout.addWidget(self.zu_hoch_label)
         layout.addWidget(self.hinweis_label)
         layout.addWidget(self.status_label)
 
@@ -2159,7 +2211,7 @@ class ErgebnisTab(QWidget):
             self._status_umgeschaltet(row)
         elif col in _PUNKTESPALTEN:
             # Die Übernahme aus dem Eingabefeld ist keine neue Eingabe - ein Komma-Hinweis
-            # von gerade eben bleibt stehen (er geht mit der nächsten gültigen Taste weg).
+            # von gerade eben bleibt stehen (er geht, wenn die nächste Zelle bearbeitet wird).
             self._aktualisiere_zeilenstatus(row, hinweis_ausblenden=not self._aus_editor)
 
     @staticmethod
@@ -2174,6 +2226,9 @@ class ErgebnisTab(QWidget):
         self._status_boxen_je_zeile = []
         self._status_geladen_je_zeile = []
         self.aufbau_kennung += 1
+        # X7: neu aufbauen - jede Zeile meldet sich beim Füllen selbst wieder an.
+        self._zu_hoch_je_teilnehmer.clear()
+        self._zu_hoch_label_zeigen()
 
         self.tabelle.setRowCount(len(self._teilnehmer_je_zeile))
         for row, t in enumerate(self._teilnehmer_je_zeile):
@@ -2359,7 +2414,8 @@ class ErgebnisTab(QWidget):
             elif c == _ABBRUCH_SPALTE:
                 # R7: Platz für den Grund ("Verletzung Hund").
                 # + Pfeil der offenen Auswahlliste (Verifikation R7, Befund 8).
-                abbruch_breite = self.tabelle.fontMetrics().horizontalAdvance("Verletzung Hund") + 36
+                # UX-Test 03.11.2026, X5: + Platz für den Pfeil der zugeklappten Zelle.
+                abbruch_breite = self.tabelle.fontMetrics().horizontalAdvance("Verletzung Hund") + 48
                 minima.append(max(abbruch_breite, header_zeilen_breite(c)))
                 harte_minima.append(abbruch_breite)
             else:
@@ -2601,13 +2657,14 @@ class ErgebnisTab(QWidget):
     def _eingabe_abgelehnt(self, feld: QLineEdit, maximum: int) -> None:
         """Hinweis, wenn der Validator ein Zeichen ablehnt (Komma, Buchstabe, dritte
         Ziffer) - sonst wirkt es, als würde die Eingabe einfach verschluckt."""
-        hinweis = f"Nur ganze Punkte von 0 bis {maximum} eingeben (keine Kommazahlen)."
+        hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben (keine Kommazahlen) - "
+                   "das Zeichen wurde nicht übernommen, bitte den Wert in der Zelle prüfen.")
         QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
         # UX-Nachtest 03.10.2026, N6 (ersetzt den 8-Sekunden-Timer aus U5b): der Hinweis wurde
-        # leicht übersehen - er steht orange und fett über der Statuszeile, bis die nächste
-        # gültige Eingabe kommt. Seit der Desktop-Prüfung (14.10.2026, Teil 3 Nr. 2) in einem
-        # eigenen Label als Klartext mit Stylesheet, damit Statusmeldungen davon unberührt
-        # bleiben und kein Rich Text nötig ist.
+        # leicht übersehen - er steht orange und fett über der Statuszeile, seit dem UX-Test
+        # 03.11.2026 (X8) bis die nächste Zelle bearbeitet wird. Seit der Desktop-Prüfung
+        # (14.10.2026, Teil 3 Nr. 2) in einem eigenen Label als Klartext mit Stylesheet, damit
+        # Statusmeldungen davon unberührt bleiben und kein Rich Text nötig ist.
         self._eingabe_hinweis = hinweis
         self.hinweis_label.setStyleSheet(f"color: {_farbe('warnung').name()}; font-weight: bold;")
         self.hinweis_label.setText(hinweis)
@@ -2626,9 +2683,55 @@ class ErgebnisTab(QWidget):
         über dem Maximum bekommen zusätzlich einen roten Rahmen (_ZU_HOCH_ROLLE, gezeichnet
         von _PunkteDelegate) und einen Tooltip."""
         if hinweis_ausblenden:
-            self._eingabe_hinweis_ausblenden()  # gültige Eingabe: Komma-Hinweis (U5b) weg
+            self._eingabe_hinweis_ausblenden()  # neue Eingabe von außen: Komma-Hinweis (U5b) weg
         with self._intern():
             self._zeilenstatus_setzen(row)
+        self._zu_hoch_merken(row)
+
+    def _abbruch_mit_einem_klick(self, index) -> None:
+        if index.column() != _ABBRUCH_SPALTE:
+            return
+        flags = index.flags()
+        if flags & Qt.ItemIsEnabled and flags & Qt.ItemIsEditable:
+            self.tabelle.edit(index)
+
+    def _zu_hoch_merken(self, row: int) -> None:
+        """UX-Test 03.11.2026, X7: Zum roten Rahmen eines Werts über dem Maximum gehört ein
+        sichtbarer Klartext (vorher nur Tooltip und erst beim Speichern eine Meldung). Gemerkt
+        je Teilnehmer-ID (übersteht Sortieren), angezeigt im eigenen zu_hoch_label - getrennt
+        vom Komma-Hinweis, damit sich beide nicht gegenseitig überschreiben."""
+        if not (0 <= row < len(self._teilnehmer_je_zeile) and row < len(self._boxen_je_zeile)):
+            return
+        t = self._teilnehmer_je_zeile[row]
+        zu_hoch = []
+        for disziplin in self._boxen_je_zeile[row]:
+            for teil, spalte, maximum in zip(
+                ("Suche", "Anzeige"), _ERGEBNIS_SPALTEN_JE_DISZIPLIN[disziplin], (SUCHE_MAX, ANZEIGE_MAX)
+            ):
+                item = self.tabelle.item(row, spalte)
+                if item is not None and item.data(_ZU_HOCH_ROLLE):
+                    zu_hoch.append(f"{disziplin} {teil} höchstens {maximum} Punkte "
+                                   f"(eingegeben: {self._feldwert(item)})")
+        if zu_hoch:
+            nummer = t.get("startnummer")
+            wer = f"Nr. {nummer} {t.get('nachname', '')}" if nummer is not None else t.get("nachname", "")
+            self._zu_hoch_je_teilnehmer[t["id"]] = f"{wer}: " + ", ".join(zu_hoch)
+        elif self._zu_hoch_je_teilnehmer.pop(t["id"], None) is None:
+            return
+        self._zu_hoch_label_zeigen()
+
+    def _zu_hoch_label_zeigen(self) -> None:
+        eintraege = list(self._zu_hoch_je_teilnehmer.values())
+        if not eintraege:
+            self.zu_hoch_label.clear()
+            self.zu_hoch_label.hide()
+            return
+        if len(eintraege) > 3:
+            eintraege = eintraege[:3] + [f"… und {len(eintraege) - 3} weitere"]
+        self.zu_hoch_label.setStyleSheet(f"color: {_farbe('fehler').name()}; font-weight: bold;")
+        self.zu_hoch_label.setText("Rot umrandet, so nicht speicherbar - bitte korrigieren: "
+                                   + "; ".join(eintraege))
+        self.zu_hoch_label.show()
 
     def _zeilenstatus_setzen(self, row: int) -> None:
         ungespeichert = self._zeile_ist_ungespeichert(row)

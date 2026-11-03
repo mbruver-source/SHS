@@ -6,14 +6,15 @@ ausgenommen (Marco 03.11.2026: mit dem Installer derzeit nicht lösbar).
 
 **Limit:** Die Statuszeilen-Datei `shs-limit.json` wird in der Desktop-App nicht geschrieben. Das
 Limit kommt deshalb aus `mcp__ccd_session_mgmt__get_usage` (5-h- und Wochenwert). Regel: Nutzung
-+ Schätzung + 3 % ≤ 100 %. Schätzwerte: S ≈ 15 %, M ≈ 20 %, L ≈ 30 % des 5-h-Fensters.
++ Schätzung + 3 % ≤ 100 %. Schätzwerte: S ≈ 15 %, M ≈ 20 %, L ≈ 30 % des 5-h-Fensters (gemessen 03.11.: A1 S ≈ 6 %,
+A2 M ≈ 14 %).
 
 ## Status
 
 | Aufgabe | Punkte | Größe | Fenster | Status | Commit | Limit vorher → nachher | Bemerkung |
 |---|---|---|---|---|---|---|---|
 | A1 | X3 ED-Gegenstand nach PDF-Import | S | 1 | erledigt | (dieser) | 64 → 70 % | R1; real ≈ 6 % |
-| A2 | X5, X7, X8 Ergebniserfassung | M | 1 | offen | | | |
+| A2 | X5, X7, X8 Ergebniserfassung | M | 1 | erledigt | (dieser) | 70 → ~84 % | real ≈ 14 %; Screenshot Ergebniserfassung vor Build |
 | A3 | X4, X11, X12 Teilnehmer-Dialog | M | 1 | offen | | | R2: vorbelegen + markieren |
 | A4 | X1 Mittagspause | S | 2 | offen | | | R3: weglassen |
 | A5 | X2 Schriftgröße | L | 2 | offen | | | |

@@ -608,6 +608,10 @@ gesperrt.
 - **Gelbe Zeilen** mit „● nicht gespeichert“ enthalten Änderungen, die noch nicht gesichert sind.
 - **„Alle Ergebnisse speichern“** sichert alle Änderungen auf einmal. Speichere am Prüfungstag
   regelmäßig.
+- Ein Wert über dem Höchstwert (z. B. 65 bei der Suche) bekommt einen **roten Rahmen**; unter den
+  Knöpfen steht in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert. Ein **Komma** nimmt das
+  Programm nicht an (nur ganze Punkte) – der orange Hinweis bleibt stehen, bis du die nächste
+  Zelle bearbeitest. Prüfe dann den Wert in der Zelle.
 - Suche **und** Anzeige gehören zusammen. Ist nur eine der beiden Zellen ausgefüllt, wird die
   Zeile nicht gespeichert: „Bitte Suche UND Anzeige eintragen oder beide Felder leer lassen.“
 - **Ergebnis entfernen:** beide Zellen leeren und speichern.
@@ -633,7 +637,7 @@ gesperrt.
 - Mit der **Tab-Taste** springst du zur nächsten Eingabe: Suche → Anzeige → nächste Disziplin →
   „Disqualifiziert“ → „Abbruch“ → nächste Zeile (Umschalt+Tab zurück). Gesperrte Zellen und
   „–“ werden übersprungen. Die **Leertaste** (oder ein Klick) setzt bzw. entfernt das Häkchen bei
-  „Disqualifiziert“ und klappt bei „Abbruch“ die Auswahlliste auf. Dort wählst du mit den
+  „Disqualifiziert“ und klappt bei „Abbruch“ (Feld mit Pfeil ▾) die Auswahlliste auf. Dort wählst du mit den
   Pfeiltasten und übernimmst mit **Enter** (oder per Klick), **Esc** bricht ab. Ist die Liste
   aufgeklappt, schließt der erste Druck auf **Tab** nur die Liste, der zweite springt weiter.
 - Gelb bzw. der rote Rahmen bei zu hohen Punkten erscheinen, sobald du die Zelle verlässt oder

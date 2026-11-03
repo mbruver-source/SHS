@@ -142,6 +142,7 @@ classDiagram
         +editorEvent()
     }
     class _AbbruchDelegate {
+        +paint()
         +createEditor()
         +setEditorData()
         +setModelData()
@@ -443,13 +444,13 @@ sequenceDiagram
     N->>DG: Ziffern, dann Tab / Enter
     DG->>TB: setModelData
     TB->>E: itemChanged → _zelle_geaendert
-    E->>E: Zeile gelb „nicht gespeichert“,<br/>zu hoch → roter Rahmen
+    E->>E: Zeile gelb „nicht gespeichert“,<br/>zu hoch → roter Rahmen + Hinweis (zu_hoch_label)
     opt Haken DQ (Klick oder Leertaste)
         N->>TB: Haken setzen (_HakenDelegate.editorEvent)
         TB->>E: itemChanged → _zelle_geaendert → _status_umgeschaltet
         E->>E: Punktezellen leeren und sperren
     end
-    opt Abbruchgrund (Auswahlliste, Leertaste klappt auf)
+    opt Abbruchgrund (Auswahlliste, ein Klick oder Leertaste klappt auf)
         N->>TB: Grund wählen (_AbbruchDelegate.setModelData)
         TB->>E: itemChanged → _zelle_geaendert → _status_umgeschaltet
         E->>E: Punktezellen bleiben offen (Teilbewertung),<br/>nur Abbruch ohne Grund sperrt

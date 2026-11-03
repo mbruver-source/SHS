@@ -6748,10 +6748,11 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
         QLocale.setDefault(vorher)
 
     assert tab.punkte(0, "Flächensuche")[0] == "45"
-    # N6 (UX-Nachtest): bleibt hervorgehoben stehen, bis die nächste gültige Eingabe kommt.
+    # N6 (UX-Nachtest): bleibt hervorgehoben stehen - seit X8 (03.11.2026), bis die nächste
+    # Zelle bearbeitet wird; eine Eingabe von außen (punkte_eintragen) nimmt ihn ebenfalls weg.
     # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 2: als Klartext in einem eigenen Label, die
     # Hervorhebung kommt aus dessen Stylesheet (vorher stand rohes HTML in der Statuszeile).
-    assert tab.hinweis_label.text() == "Nur ganze Punkte von 0 bis 60 eingeben (keine Kommazahlen)."
+    assert tab.hinweis_label.text().startswith("Nur ganze Punkte von 0 bis 60 eingeben (keine Kommazahlen)")
     assert tab.hinweis_label.textFormat() == Qt.PlainText
     assert "<" not in tab.hinweis_label.text()
     assert "font-weight: bold" in tab.hinweis_label.styleSheet()
@@ -7092,6 +7093,78 @@ def test_ergebnis_abbruchliste_enter_uebernimmt_grund(qtbot, conn):
     qtbot.wait(50)
     assert tab.abbruch_grund(0) == "verletzung_hund"
     assert tab.tabelle.state() != tab.tabelle.State.EditingState
+
+
+def test_ergebnis_abbruch_oeffnet_mit_einem_klick(qtbot, conn):
+    """UX-Test 03.11.2026, X5: Der ERSTE Klick in die Abbruch-Zelle öffnet die Auswahl (vorher
+    markierte er nur); die leere Zelle erklärt sich per Tooltip, ein Grund steht voll darin."""
+    from PySide6.QtWidgets import QComboBox
+
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.tabelle.setCurrentCell(0, 0)  # eine andere Zelle ist markiert
+    item = tab.tabelle.item(0, _ABBRUCH_SPALTE)
+    assert "auswählen" in item.toolTip()
+    qtbot.mouseClick(tab.tabelle.viewport(), Qt.LeftButton, pos=tab.zellrechteck(0, _ABBRUCH_SPALTE).center())
+    qtbot.wait(50)
+    combos = [c for c in tab.tabelle.viewport().findChildren(QComboBox) if c.isVisible()]
+    assert len(combos) == 1
+    combos[0].hidePopup()
+    tab.status_setzen(0, abbruch="verletzung_hund")
+    assert tab.tabelle.item(0, _ABBRUCH_SPALTE).toolTip() == "Abbruch wegen Verletzung des Hundes"
+
+
+def test_ergebnis_wert_ueber_maximum_zeigt_klartext(qtbot, conn):
+    """UX-Test 03.11.2026, X7: zum roten Rahmen ein sichtbarer Text, der nach der Korrektur
+    wieder verschwindet."""
+    _teilnehmer_anlegen(conn, nachname="Erster", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.punkte_eintragen(0, "Flächensuche", suche="65", anzeige="30")
+    assert not tab.zu_hoch_label.isHidden()
+    assert "Nr. 1 Erster: Flächensuche Suche höchstens 60 Punkte (eingegeben: 65)" in tab.zu_hoch_label.text()
+    # Zweite Zeile zu hoch, erste korrigiert: der Hinweis bleibt für die zweite (Verifikation A2, 1).
+    tab.punkte_eintragen(1, "Flächensuche", anzeige="45", suche="30")
+    tab.punkte_eintragen(0, "Flächensuche", suche="50")
+    assert "Erster" not in tab.zu_hoch_label.text()
+    assert "Nr. 2 Zweiter: Flächensuche Anzeige höchstens 40 Punkte (eingegeben: 45)" in tab.zu_hoch_label.text()
+    # Ein Komma in einer anderen Zelle verdrängt ihn nicht (Befund 4), Bearbeiten einer anderen
+    # Zelle auch nicht.
+    qtbot.keyClicks(tab.zelle_bearbeiten(0, "Flächensuche", "anzeige"), "3,")
+    assert not tab.hinweis_label.isHidden()
+    assert not tab.zu_hoch_label.isHidden()
+    tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    assert tab.hinweis_label.isHidden()
+    assert not tab.zu_hoch_label.isHidden()
+    tab.punkte_eintragen(1, "Flächensuche", anzeige="35")
+    assert tab.zu_hoch_label.isHidden()
+
+
+def test_ergebnis_zu_hoch_hinweis_nach_neuaufbau(qtbot, conn):
+    """Verifikation A2, Befund 3: Nach einem Neuaufbau ohne die betroffene Zeile darf kein
+    alter X7-Hinweis stehen bleiben."""
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.punkte_eintragen(0, "Flächensuche", suche="65", anzeige="30")
+    assert not tab.zu_hoch_label.isHidden()
+    tab.aktualisieren()  # verwirft die ungespeicherte Eingabe
+    assert tab.zu_hoch_label.isHidden()
+
+
+def test_komma_hinweis_bleibt_nach_der_naechsten_ziffer(qtbot, conn):
+    """UX-Test 03.11.2026, X8: Bei "4,5" nahm die "5" den Hinweis sofort wieder weg - aus 4,5
+    wurde unbemerkt 45. Jetzt bleibt er bis zur nächsten bearbeiteten Zelle."""
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "4,5")
+    assert editor.text() == "45"
+    assert not tab.hinweis_label.isHidden()
+    assert "bitte den Wert in der Zelle prüfen" in tab.hinweis_label.text()
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert not tab.hinweis_label.isHidden()  # Übernehmen lässt ihn stehen
+    tab.zelle_bearbeiten(0, "Flächensuche", "anzeige")
+    assert tab.hinweis_label.isHidden()
 
 
 def test_ergebnis_klick_in_die_haekchenzelle_schaltet(qtbot, conn):
