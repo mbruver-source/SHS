@@ -776,10 +776,17 @@ class StartnummerTauschenDialog(QDialog):
             self.partner_combo.addItem(
                 f"{t['nachname']}, {t['vorname']} (Start-Nr. {nummer_anzeige})", t["id"]
             )
+        # UX-Test 03.11.2026, X9: kein Partner vorausgewählt - Enter tauschte sonst mit dem
+        # erstbesten Teilnehmer der Liste. „OK“ erst nach einer Wahl.
+        self.partner_combo.setPlaceholderText("– bitte Partner wählen –")
+        self.partner_combo.setCurrentIndex(-1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setEnabled(False)
+        self.partner_combo.currentIndexChanged.connect(lambda i: ok_btn.setEnabled(i >= 0))
 
         layout = QVBoxLayout(self)
         layout.addWidget(hinweis)
@@ -825,7 +832,9 @@ class TerminImportDialog(QDialog):
         self.termin_combo = QComboBox()
         for t in self._termine:
             self.termin_combo.addItem(
-                f"{t.verein or '(ohne Verein)'} – {datum_anzeige(t.datum)} ({t.anzahl_teilnehmer} Teilnehmer)"
+                f"{t.verein or '(ohne Verein)'} – {datum_anzeige(t.datum)} – "
+                + (f"{t.anzahl_teilnehmer - t.anzahl_abgemeldet} Teilnehmer, +{t.anzahl_abgemeldet} abgemeldet"
+                   if t.anzahl_abgemeldet else f"{t.anzahl_teilnehmer} Teilnehmer")
             )
         self.termin_combo.currentIndexChanged.connect(self._termin_gewaehlt)
 

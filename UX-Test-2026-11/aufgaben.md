@@ -19,7 +19,7 @@ A2 M ≈ 19 %).
 | A4 | X1 Mittagspause | S | 2 | erledigt | 2700fb6 | 16 → 26 % | R3 |
 | A5 | X2 Schriftgröße | L | 2 | erledigt | 151e766 | 26 → 39 % | Rückfrage R6 |
 | A6 | X6 Demo-Tempo | S | 2 | erledigt | 0ea6129 | 39 → 54 % | R4; Screenshot handbuch_demo vor Build |
-| A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | offen | | | |
+| A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | erledigt | (A7-Commit) | 54 → ?? % | Screenshot handbuch_start vor Build |
 | A8 | X10 Import-Meldungen | S | 3 | offen | | | |
 | A9 | X14, X15 Hilfe und Kleinigkeiten | M | 3 | offen | | | |
 | A10 | X16 Installationstexte (ohne Signatur) | S | 3 | offen | | | Website erst mit dem Release online |

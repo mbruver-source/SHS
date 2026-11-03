@@ -8694,11 +8694,11 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | umgesetzt (A6, Arbeitsstand) |
 | X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | umgesetzt (A2, Arbeitsstand) |
 | X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | umgesetzt (A2, Arbeitsstand) |
-| X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | geplant (aufgaben.md) |
+| X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | umgesetzt (A7, Arbeitsstand) |
 | X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | geplant (aufgaben.md) |
 | X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | umgesetzt (A3, Arbeitsstand) |
 | X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | umgesetzt (A3, Arbeitsstand) |
-| X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | geplant (aufgaben.md) |
+| X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | umgesetzt (A7, Arbeitsstand) |
 | X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | geplant (aufgaben.md) |
 | X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | geplant (aufgaben.md) |
 | X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | geplant (aufgaben.md) |
@@ -8881,4 +8881,32 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   Bewusst gelassen: Der Knopf „Aktueller Schritt“ behält den Vorwärtspfeil.
 - Vor dem nächsten Build ist der Screenshot `handbuch_demo` neu nötig (neuer Knopf, echte
   Wartezeit).
+
+### ux_test_2026_11 A7 (X9, X13) – umgesetzt (03.11.2026)
+
+- **X9:** Im Dialog „Startnummer tauschen“ (ein Teilnehmer markiert) ist kein Partner mehr
+  vorausgewählt. Die Liste zeigt „– bitte Partner wählen –“, „OK“ ist erst nach einer Wahl
+  aktiv, Enter schließt bei gesperrtem OK nichts. Vorher tauschte Enter mit dem ersten Eintrag
+  der Liste.
+- **X13:**
+  - Der Startbildschirm zählt wie der Kopfbalken nur Teilnehmende und zeigt Abgemeldete als
+    Zusatz („16 (+1 abgemeldet)“).
+  - `TerminInfo` hat dazu `anzahl_abgemeldet` und `teilnehmer_anzeige`. `_termin_info_lesen`
+    zählt `COALESCE(keine_teilnahme,0) <> 0`, wie `list_teilnehmer(nur_teilnehmende=True)`.
+    Alte Dateien ohne die Spalte ergeben 0.
+  - Die Terminauswahl beim Import zeigt „16 Teilnehmer, +1 abgemeldet“.
+  - Die Terminliste zählte bisher alle Gemeldeten (Fortschritt ~Z. 2975). Das ist hiermit
+    geändert, wie im Plan vom 03.11. vorgeschlagen.
+- **Handbuch:** Startbildschirm (Zählweise) und Tauschen („OK“ erst nach der Wahl).
+- **Tests:**
+  - Daten: Zählung mit Abgemeldeten, Anzeige, alte Datei;
+  - GUI: keine Vorauswahl, OK gesperrt, Enter wirkungslos.
+  Die Gegenprobe scheitert wie erwartet. Lokal laufen 500 GUI- und 721 Unittests grün.
+- **Verifikation** (Agent `verifikation`): in Ordnung. Die Kleinpunkte sind eingearbeitet:
+  Zählung wie im Kopfbalken, Property ans Klassenende, Importtext ohne doppelte Klammern,
+  Testzusätze.
+- **Nicht geändert:** Die Web-Admin- und Terminauswahl-Seiten sowie `sync_termin.py` zeigen
+  weiter die Gesamtzahl (Postgres-Variante, nicht Teil des UX-Tests).
+- Vor dem nächsten Build ist der Screenshot `handbuch_start` neu nötig (zeigt jetzt
+  „(+1 abgemeldet)“).
 

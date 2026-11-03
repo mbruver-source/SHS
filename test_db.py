@@ -2929,6 +2929,22 @@ class TestTerminuebersicht(unittest.TestCase):
         self.assertEqual(termine[0].datum, "2026-09-19")
         self.assertEqual(termine[0].anzahl_teilnehmer, 1)
         self.assertTrue(termine[0].lesbar)
+        self.assertEqual(termine[0].teilnehmer_anzeige, "1")
+
+    def test_liste_termine_zaehlt_abgemeldete_getrennt(self):
+        """UX-Test 03.11.2026, X13: Startbildschirm zeigt dieselbe Zahl wie der Kopfbalken
+        (nur Teilnehmende), Abgemeldete als Zusatz."""
+        pfad = self.ordner / "2026-11-14_test.sqlite"
+        conn = init_db(str(pfad))
+        set_veranstaltung(conn, verein="V", datum="2026-11-14")
+        ids = [add_teilnehmer(conn, NeuerTeilnehmer(
+            nachname=n, vorname="A", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld"))
+            for n in ("A", "B", "C")]
+        setze_keine_teilnahme(conn, ids[0], True)
+        conn.close()
+        (termin,) = liste_termine(self.ordner)
+        self.assertEqual((termin.anzahl_teilnehmer, termin.anzahl_abgemeldet), (3, 1))
+        self.assertEqual(termin.teilnehmer_anzeige, "2 (+1 abgemeldet)")
 
     def test_liste_termine_alte_datei_ohne_verband_spalte(self):
         # liste_termine öffnet nur lesend, ohne Migration - eine Termin-Datei von vor dem
@@ -2942,6 +2958,7 @@ class TestTerminuebersicht(unittest.TestCase):
             )
         termine = liste_termine(self.ordner)
         self.assertEqual((termine[0].verein, termine[0].verband, termine[0].lesbar), ("Alt-Verein", None, True))
+        self.assertEqual(termine[0].anzahl_abgemeldet, 0)  # X13: Datei ohne Spalte keine_teilnahme
 
     def test_liste_termine_neueste_zuerst(self):
         for datum in ("2026-01-01", "2026-12-31", "2026-06-15"):

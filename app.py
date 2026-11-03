@@ -3702,7 +3702,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 else f"{t.dateiname} (ungewöhnlich groß)" if t.grund == GRUND_ZU_GROSS
                 else f"{t.dateiname} (nicht lesbar{': ' + t.grund if t.grund else ''})",
                 t.ort or "",
-                str(t.anzahl_teilnehmer) if t.lesbar else "",
+                t.teilnehmer_anzeige if t.lesbar else "",
             ]
             for col, wert in enumerate(werte):
                 self.tabelle.setItem(row, col, QTableWidgetItem(wert))

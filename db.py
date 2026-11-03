@@ -2483,9 +2483,17 @@ class TerminInfo:
     startnummer_bereiche: str | None = None
     # Marco 09.10.2026: die Standardgröße der Bereiche ebenfalls übernehmen.
     startnummer_bereichsgroesse: str | None = None
+    # UX-Test 03.11.2026, X13: davon mit „Keine Teilnahme“ (in anzahl_teilnehmer enthalten).
+    anzahl_abgemeldet: int = 0
     # Offene Punkte O2 (Marco 18.10.2026): kurzer Grund bei lesbar=False, wenn er nicht
     # „beschädigt“ ist - GRUND_ZU_GROSS oder GRUND_ZU_AUFWENDIG.
     grund: str | None = None
+
+    @property
+    def teilnehmer_anzeige(self) -> str:
+        """„16“ bzw. „16 (+1 abgemeldet)“ - dieselbe Zahl wie im Kopfbalken des Termins."""
+        teilnehmend = self.anzahl_teilnehmer - self.anzahl_abgemeldet
+        return f"{teilnehmend} (+{self.anzahl_abgemeldet} abgemeldet)" if self.anzahl_abgemeldet else str(teilnehmend)
 
 
 # Schrittgrenze (in Einheiten von _LESE_SCHRITTWEITE SQLite-Arbeitsschritten) für das
@@ -2636,6 +2644,12 @@ def _termin_info_lesen(pfad: Path) -> TerminInfo:
     with closing(termin_lesend_pruefen(pfad)) as conn:
         v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
         anzahl = int(conn.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0])
+        # UX-Test 03.11.2026, X13: Abgemeldete getrennt zählen (der Kopfbalken zählt nur die
+        # Teilnehmenden). Alte Dateien ohne die Spalte werden hier nur lesend geöffnet.
+        spalten = {zeile[1] for zeile in conn.execute("PRAGMA table_info(teilnehmer)").fetchall()}
+        abgemeldet = int(conn.execute(
+            "SELECT COUNT(*) FROM teilnehmer WHERE COALESCE(keine_teilnahme, 0) <> 0").fetchone()[0]
+        ) if "keine_teilnahme" in spalten else 0
 
     def feld(name: str) -> str | None:
         return _text_oder_none(v[name]) if v is not None and name in v.keys() else None
@@ -2648,6 +2662,7 @@ def _termin_info_lesen(pfad: Path) -> TerminInfo:
         ort=feld("ort"),
         datum=feld("datum"),
         anzahl_teilnehmer=anzahl,
+        anzahl_abgemeldet=abgemeldet,
         lesbar=True,
         verband=feld("verband"),
         startnummer_bereiche=feld("startnummer_bereiche"),

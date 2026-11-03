@@ -166,7 +166,8 @@ Jeder Prüfungstermin ist eine eigene Datei. Standardmäßig liegen alle Termine
 ![Startbildschirm mit Terminübersicht](bilder/handbuch_start.png)
 
 Beim Programmstart siehst du alle Termine mit Datum, Verein, Ort und Teilnehmerzahl, der neueste
-steht oben.
+steht oben. Die Teilnehmerzahl zählt wie im Kopfbalken nur, wer teilnimmt; Abgemeldete („Keine
+Teilnahme“) stehen dahinter, z. B. „16 (+1 abgemeldet)“.
 
 | Button | Wirkung |
 |---|---|
@@ -279,7 +280,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. |
 | **„Bezahlt umschalten“** | Setzt oder entfernt „bezahlt“ (mit Haken) sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
 | **„Keine Teilnahme“** | Markiert nicht erschienene Teilnehmer (siehe unten), auch mehrere auf einmal. Sind alle markierten bereits so vermerkt, heißt der Button **„Teilnahme wiederherstellen“**. |
-| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen. |
+| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen („OK“ geht erst nach der Wahl). |
 | **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung, bei gesetztem „Filter Art/LK“ nur in dieser Prüfung (siehe unten). |
 | **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |

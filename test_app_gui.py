@@ -5887,7 +5887,8 @@ def _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch):
     for name, verein in (("a.sqlite", "Verein A"), ("b.sqlite", "")):
         (tmp_path / name).write_bytes(b"")
         termine.append(SimpleNamespace(pfad=str(tmp_path / name), dateiname=name, datum="2026-11-14",
-                                       verein=verein, ort="", anzahl_teilnehmer=0, lesbar=True))
+                                       verein=verein, ort="", anzahl_teilnehmer=0, lesbar=True,
+                                       teilnehmer_anzeige="0"))
     monkeypatch.setattr("app.liste_termine", lambda: [t for t in termine if os.path.exists(t.pfad)])
     ueberall_ersetzen(monkeypatch, "termine_ordner", lambda: tmp_path)
     start = StartDialog()
@@ -9706,8 +9707,13 @@ def test_startnummer_tauschen_dialog_listet_partner_und_liefert_auswahl(qtbot):
     hinweis = next(lbl for lbl in dialog.findChildren(QLabel) if "tauschen mit" in lbl.text())
     assert hinweis.textFormat() == Qt.PlainText
     assert hinweis.text() == "Startnummer von <b>Fett</b>, Fritz (aktuell: keine) tauschen mit:"
-    assert dialog.ausgewaehlte_partner_id() == 2
+    # UX-Test 03.11.2026, X9: kein Partner vorausgewählt, „OK“ erst nach einer Wahl.
+    assert dialog.ausgewaehlte_partner_id() is None
+    assert not _dialog_knopf(dialog, QDialogButtonBox.Ok).isEnabled()
+    qtbot.keyClick(dialog, Qt.Key_Return)  # Enter bei gesperrtem OK schließt nichts
+    assert dialog.result() == 0
     dialog.partner_combo.setCurrentIndex(2)
+    assert _dialog_knopf(dialog, QDialogButtonBox.Ok).isEnabled()
     _dialog_knopf(dialog, QDialogButtonBox.Ok).click()
     assert dialog.result() == QDialog.Accepted and dialog.ausgewaehlte_partner_id() == 4
 
