@@ -658,7 +658,7 @@ class ZeitplanTab(QWidget):
                     # Verifikation A4, Befund 4: der häufigste Fall bei kleinen Prüfungen.
                     QMessageBox.information(
                         self, "Keine Pause eingefügt",
-                        f"Keine Pause eingefügt – bei allen Richtern endet der Plan schon vor {wunsch} Uhr.",
+                        f"Keine Pause eingefügt – bei keinem Richter steht ab {wunsch} Uhr noch eine Prüfung im Plan.",
                     )
                 elif abweichend:
                     # UX-Nachtest 03.10.2026, N3: "um 12:00 eingefügt" stimmte nicht, wenn ein
@@ -666,7 +666,7 @@ class ZeitplanTab(QWidget):
                     # Wer vorher fertig ist, bekommt keine Pause - das steht ebenfalls da.
                     zeilen = [
                         f"{name or 'Richter'}: {zeit} Uhr" if zeit else
-                        f"{name or 'Richter'}: keine Pause – der Plan endet schon vor {wunsch} Uhr"
+                        f"{name or 'Richter'}: keine Pause – keine Prüfung mehr ab {wunsch} Uhr"
                         for name, zeit in eingefuegt
                     ]
                     QMessageBox.information(

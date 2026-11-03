@@ -280,9 +280,9 @@ class VersionDialog(QDialog):
         # UX-Test 03.11.2026, X15: Enter schließt das Fenster - vorher war „Lizenzen anzeigen“
         # als erster Knopf (AutoDefault) die Vorgabe.
         schliessen_btn.setDefault(True)
-        for knopf in (lizenz_btn, self._updates_btn, self._download_btn, seite_link_btn,
-                      diagnose_btn, protokoll_btn):
-            knopf.setAutoDefault(False)
+        # Abschluss-QS A11: Anfangsfokus statt abgeschaltetem AutoDefault - so löst Enter auf
+        # einem anderen Knopf (z. B. „Nach Updates suchen“) weiter diesen Knopf aus.
+        schliessen_btn.setFocus()
         schliessen_zeile = QHBoxLayout()
         schliessen_zeile.addWidget(seite_link_btn)
         schliessen_zeile.addStretch()

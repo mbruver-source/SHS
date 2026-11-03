@@ -9022,3 +9022,21 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   Wunsch nach einem eigenen Knopf „Nach Updates suchen“ kommt in die Note-1-Liste (A13).
   Tests: 721 Unittests, gefilterte GUI-Tests grün.
 
+### ux_test_2026_11 A11 – Abschluss-QS, Rolle Korrektheit (04.11.2026)
+
+- **Prüfung:** Agent `qs-korrektheit` über `git diff 37bb744..HEAD -- '*.py'` (A1–A10), mit dem
+  Schwerpunkt auf dem Zusammenspiel der Änderungen. Lokal 721 Unittests und 506 GUI-Tests grün.
+- **Behoben:**
+  - Versionsfenster (Regression aus A9): Enter auf einem fokussierten Knopf („Nach Updates
+    suchen“) schloss das Fenster. Jetzt ist der Anfangsfokus auf „Schließen“, AutoDefault der
+    übrigen Knöpfe bleibt. Der Test prüft Enter auf „Nach Updates suchen“.
+  - Demo: Der Tooltip und das Handbuch zu „Vorheriger Text“ sagen jetzt „das automatische
+    Weiter wartet“. Ein laufender Schritt läuft weiter, wie umgesetzt.
+  - Pause „bei allen Richtern“: neutraler Text „keine Prüfung mehr ab … Uhr“ bzw. „bei keinem
+    Richter steht ab … Uhr noch eine Prüfung im Plan“. Er stimmt auch für Richter ohne Plan.
+- **Zur Kenntnis, nicht geändert:**
+  - Die Demo übergibt dem Teilnehmer-Dialog kein Angebot (zeigt nur den grauen
+    Prüfungsnamen).
+  - Ein Schriftwechsel rechnet die Ergebnistabelle eines zweiten Demo-Hauptfensters erst bei
+    der nächsten Größenänderung neu.
+

@@ -704,7 +704,7 @@ def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
     monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog_attrappe(30, "Mittag", uhrzeit="12:00"))
     meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._pause_hinzufuegen(richter)
-    assert meldungen and "bei allen Richtern endet der Plan schon vor 12:00 Uhr" in meldungen[0]
+    assert meldungen and "bei keinem Richter steht ab 12:00 Uhr noch eine Prüfung" in meldungen[0]
     assert tab.status_label.text() == "Pause bei 0 Richter(n) eingefügt."
 
     # Ein zweiter Richter, dessen Plan um 12:00 noch läuft: gemischte Meldung.
@@ -712,7 +712,7 @@ def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
     add_zeitplan_pruefungsblock(conn, zweiter, "ED", 1, "Trümmerfeld", 200)  # 09:00-12:20
     meldungen.clear()
     tab._pause_hinzufuegen(zweiter)
-    assert "Anna: keine Pause – der Plan endet schon vor 12:00 Uhr" in meldungen[0]
+    assert "Anna: keine Pause – keine Prüfung mehr ab 12:00 Uhr" in meldungen[0]
     assert "Bernd: 12:20 Uhr" in meldungen[0]
 
 
@@ -3373,7 +3373,15 @@ def test_a9_kleinigkeiten(qtbot, monkeypatch):
     qtbot.addWidget(version)
     schliessen = next(b for b in version.findChildren(QPushButton) if b.text() == "Schließen")
     assert schliessen.isDefault()
-    assert all(not b.autoDefault() for b in version.findChildren(QPushButton) if b is not schliessen)
+    # Abschluss-QS A11: Enter auf einem anderen fokussierten Knopf löst diesen aus, nicht „Schließen“.
+    geklickt = []
+    updates = next(b for b in version.findChildren(QPushButton) if b.text() == "Nach Updates suchen")
+    updates.clicked.disconnect()
+    updates.clicked.connect(lambda: geklickt.append(True))
+    version.show()
+    updates.setFocus()
+    qtbot.keyClick(updates, Qt.Key_Return)
+    assert geklickt and version.result() == 0
 
 
 def test_teilnehmer_hinweis_ohne_angebot_nur_name(qtbot):

@@ -239,7 +239,8 @@ class DemoPanel(QWidget):
         # UX-Test 03.11.2026, X6 (Marco: „nur Text zurück“): die Erklärung eines früheren
         # Schritts noch einmal lesen - die Demo selbst läuft nur vorwärts und wartet solange.
         self.zurueck_btn = QPushButton("Vorheriger Text")
-        self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – die Demo wartet solange.")
+        self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – das automatische Weiter "
+                                    "wartet solange.")
         self.zurueck_btn.setVisible(False)
         self.zurueck_btn.clicked.connect(self._rueckblick_zeigen)
         self._verlauf: list[tuple[str, str, str]] = []
