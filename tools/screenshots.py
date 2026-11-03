@@ -310,6 +310,8 @@ def _bild_teilnehmer_dialoge(termine: _Termine, ziel: Path) -> list[Path]:
             vorhandener=db.get_teilnehmer(conn, ids[name]),
             vergebene_nummern=db.vergebene_startnummern(conn, ausser_teilnehmer_id=ids[name]),
             bereiche=db.startnummer_bereiche(db.get_veranstaltung(conn)),
+            # UX-Test 03.11.2026, X12: mit Angebot, damit das Bild „wird angeboten“ zeigt.
+            angebotene={p.kuerzel for p in db.angebotene_pruefungen(db.get_veranstaltung(conn))},
         )
         dialog.resize(1000, 760)
         dialog.show()

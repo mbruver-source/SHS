@@ -8689,15 +8689,15 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | geplant (aufgaben.md) |
 | X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
 | X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
-| X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | geplant (aufgaben.md) |
+| X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | umgesetzt (A3, Arbeitsstand) |
 | X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | umgesetzt (A2, Arbeitsstand) |
 | X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | geplant (aufgaben.md) |
 | X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | umgesetzt (A2, Arbeitsstand) |
 | X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | umgesetzt (A2, Arbeitsstand) |
 | X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | geplant (aufgaben.md) |
 | X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | geplant (aufgaben.md) |
-| X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | geplant (aufgaben.md) |
-| X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | geplant (aufgaben.md) |
+| X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | umgesetzt (A3, Arbeitsstand) |
+| X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | umgesetzt (A3, Arbeitsstand) |
 | X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | geplant (aufgaben.md) |
 | X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | geplant (aufgaben.md) |
 | X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | geplant (aufgaben.md) |
@@ -8755,4 +8755,41 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   - Nicht eigens getestet: ein Doppelklick auf die Abbruch-Zelle (der erste Klick öffnet schon) –
     beim nächsten Gerätetest ansehen.
 - Vor dem nächsten Build ist der Screenshot `handbuch_ergebniserfassung` neu nötig.
+
+### ux_test_2026_11 A3 (X4, X11, X12) – umgesetzt (03.11.2026)
+
+- **X12** (Marcos Entscheidung R2, „vorbelegen + markieren“):
+  - Ein neuer Teilnehmer beginnt mit der ersten im Termin angebotenen Prüfung statt mit
+    ED/1/Trümmerfeld.
+  - Unter „Disziplin“ steht im Klartext „Prüfung: Trümmer LK 2 – wird angeboten“ (grün) bzw.
+    „– in diesem Termin NICHT angeboten“ (rot). Ohne hinterlegtes Angebot steht nur der Name.
+  - Die drei Felder bleiben.
+- **X4:** Bei ED erklären ein Hinweis unter Gegenstand 1 und ein Tooltip an Gegenstand 2/3, warum
+  diese gesperrt sind.
+- **X11:**
+  - Eine Startnummer außerhalb des Bereichs der gewählten Prüfung wird nur nach Rückfrage
+    gespeichert (Vorgabe Nein).
+  - Die Rückfrage kommt nach „Prüfung nicht angeboten“ und beim Bearbeiten nur, wenn sich
+    Nummer oder Prüfung geändert haben.
+  - Ist der Bereich voll, schlägt das Programm weiterhin die kleinste freie Nummer insgesamt vor
+    und fragt dann beim Speichern nach. Das ist bewusst so gelassen.
+- **Weitere Stellen:**
+  - `tools/screenshots.py` übergibt das Angebot, damit das Handbuchbild „wird angeboten“ zeigt.
+  - Das Handbuch (Erfassungsmaske, Suchgegenstände) ist angepasst.
+- **Tests:** 6 neue GUI-Tests:
+  - Vorbelegung und Hinweis;
+  - ED-Hinweis und Tooltip;
+  - Bereich ja/nein;
+  - Bearbeiten behält die Prüfung und fragt nur nach einer Änderung;
+  - ohne Bereich keine Rückfrage, „Ja“ speichert;
+  - Hinweis ohne Angebot.
+  Die Gegenprobe scheitert dreifach. Lokal 495 GUI- und 718 Unittests grün.
+- **Verifikation** (Agent `verifikation`): Die Befunde sind eingearbeitet (Reihenfolge der
+  Rückfragen, Rückfrage nur nach einer Änderung, Kürzel einheitlich, Screenshot-Werkzeug,
+  Handbuch, Tests). Ein Handbuchsatz ohne Entscheidung („trägst du den ersten ein“) ist wieder
+  gestrichen.
+- **Offen als Rückfrage:** Reichen Hinweis und Tooltip für X4, oder sollen die gesperrten Felder
+  zusätzlich deutlicher aussehen oder bei ED ganz ausgeblendet werden?
+- Vor dem nächsten Build neu nötig: `handbuch_teilnehmer_dialog_ed` und
+  `handbuch_teilnehmer_dialog_dk`.
 

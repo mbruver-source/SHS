@@ -67,6 +67,7 @@ from db import (
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
 )
+from desktop_darstellung import _farbe
 from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _fehler_anzeigen,
@@ -178,7 +179,22 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # Nummern werden gesammelt ("Fehlende Startnummern vergeben…") oder bewusst
             # einzeln vergeben.
             self.startnummer_unbekannt.setChecked(True)
+            # UX-Test 03.11.2026, X12 (Marco: vorbelegen + markieren): mit der ersten im
+            # Termin angebotenen Prüfung beginnen statt immer mit ED/1/Trümmerfeld.
+            erste = next((p for p in ALLE_PRUEFUNGEN if p.kuerzel in self._angebotene), None)
+            if erste is not None:
+                self.art.setCurrentText(erste.art)
+                self.stufe.setCurrentText(str(erste.stufe))
+                if erste.disziplin:
+                    self.disziplin.setCurrentText(erste.disziplin)
 
+        # Stand beim Öffnen (X11: Bereichs-Rückfrage nur nach einer Änderung).
+        self._gespeicherte_nummer_und_pruefung = (
+            (vorhandener.get("startnummer"), self._gewaehlte_pruefung()) if vorhandener else None
+        )
+        for auswahl in (self.art, self.stufe, self.disziplin):
+            auswahl.currentTextChanged.connect(self._pruefung_hinweis_aktualisieren)
+        self._pruefung_hinweis_aktualisieren()
         self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
         self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
         self._vorschlag_aktiv = True
@@ -258,6 +274,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             zuordnung.addItem(_GEGENSTAND_ZUORDNUNG_FREI)
             zuordnung.addItems(ALLE_DISZIPLINEN)
 
+        # UX-Test 03.11.2026, X12: Klartext, welche Prüfung Art/LK/Disziplin ergeben und ob der
+        # Termin sie anbietet; X4: warum Gegenstand 2/3 bei ED gesperrt sind.
+        self.pruefung_hinweis = QLabel("")
+        self.pruefung_hinweis.setTextFormat(Qt.PlainText)
+        self.pruefung_hinweis.setWordWrap(True)
+        self.gegenstand_hinweis = QLabel("Bei einer Einzeldisziplin gibt es nur einen Gegenstand (Feld 1).")
+        self.gegenstand_hinweis.setTextFormat(Qt.PlainText)
+        self.gegenstand_hinweis.setWordWrap(True)
+
         self.bezahlt = QCheckBox("Prüfungsgebühr bezahlt")
 
         # Nutzerwunsch (20.09., Anmerkung zum Programm): Halter (Hundeeigentümer) und
@@ -321,7 +346,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_rechts.addRow("Art*", self.art)
         form_rechts.addRow("Leistungsklasse*", self.stufe)
         form_rechts.addRow("Disziplin (nur bei ED)", self.disziplin)
+        form_rechts.addRow("", self.pruefung_hinweis)
         form_rechts.addRow("Gegenstand 1", _gegenstand_zeile(self.gegenstand_1, self.gegenstand_1_disziplin))
+        form_rechts.addRow("", self.gegenstand_hinweis)
         form_rechts.addRow("Gegenstand 2", _gegenstand_zeile(self.gegenstand_2, self.gegenstand_2_disziplin))
         form_rechts.addRow("Gegenstand 3", _gegenstand_zeile(self.gegenstand_3, self.gegenstand_3_disziplin))
         form_rechts.addRow("", self.bezahlt)
@@ -482,9 +509,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     def _startnummer_vorschlag(self) -> int:
         """Kleinste freie Nummer im Bereich der gewählten Prüfung (UX-Test U1, statt
         immer "1"); ohne Bereich bzw. bei vollem Bereich die kleinste freie insgesamt."""
-        art = self.art.currentText()
-        kuerzel = pruefungs_kuerzel(art, int(self.stufe.currentText()), self.disziplin.currentText() if art == "ED" else None)
-        bereich = self._bereiche.get(kuerzel)
+        bereich = self._bereiche.get(self._gewaehlte_pruefung())
         if bereich is not None:
             frei = next((n for n in range(bereich[0], bereich[1] + 1) if n not in self._vergebene_nummern), None)
             if frei is not None:
@@ -511,6 +536,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             self.gegenstand_3, self.gegenstand_3_disziplin,
         ):
             widget.setEnabled(not ist_ed)
+            # UX-Test 03.11.2026, X4: gesperrt ohne Erklärung - jetzt mit Grund.
+            widget.setToolTip("Bei einer Einzeldisziplin gibt es nur einen Gegenstand." if ist_ed else "")
+        self.gegenstand_hinweis.setVisible(ist_ed)
         self.gegenstand_1_disziplin.setEnabled(not ist_ed)
         if ist_ed:
             self.gegenstand_1_disziplin.setCurrentText(self.disziplin.currentText())
@@ -519,6 +547,25 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # scheinbar bewusste DK-Zuordnung stehen lassen, sondern wieder auf "frei".
             self.gegenstand_1_disziplin.setCurrentText(_GEGENSTAND_ZUORDNUNG_FREI)
         self._gegenstand_1_fest_zugeordnet = ist_ed
+
+    def _gewaehlte_pruefung(self) -> str:
+        art = self.art.currentText()
+        return pruefungs_kuerzel(art, int(self.stufe.currentText()), self.disziplin.currentText() if art == "ED" else None)
+
+    def _pruefung_hinweis_aktualisieren(self, *_args) -> None:
+        """UX-Test 03.11.2026, X12: zeigt die gewählte Prüfung im Klartext und ob der Termin
+        sie anbietet (ohne hinterlegtes Angebot nur den Namen)."""
+        kuerzel = self._gewaehlte_pruefung()
+        pruefung = pruefung_nach_kuerzel(kuerzel)
+        name = pruefung.bezeichnung if pruefung else kuerzel
+        if not self._angebotene:
+            text, farbe = f"Prüfung: {name}", "gedaempft"
+        elif kuerzel in self._angebotene:
+            text, farbe = f"Prüfung: {name} – wird angeboten", "ok"
+        else:
+            text, farbe = f"Prüfung: {name} – in diesem Termin NICHT angeboten", "fehler"
+        self.pruefung_hinweis.setText(text)
+        self.pruefung_hinweis.setStyleSheet(f"color: {_farbe(farbe).name()};")
 
     def _pruefen_und_akzeptieren(self) -> None:
         leer = [feld for feld in (self.nachname, self.vorname, self.rufname_hund) if not feld.text().strip()]
@@ -578,16 +625,30 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Zuordnung, Gegenstand 2/3 werden gar nicht gespeichert (Abstimmung 23.09.).
         ist_ed = self.art.currentText() == "ED"
         # Teil 2 Nr. 13 (Marcos Entscheidung): nicht angebotene Prüfung nur nach Rückfrage.
-        kuerzel = pruefungs_kuerzel(self.art.currentText(), int(self.stufe.currentText()),
-                                    self.disziplin.currentText() if ist_ed else None)
+        kuerzel = self._gewaehlte_pruefung()
+        pruefung = pruefung_nach_kuerzel(kuerzel)
+        name = pruefung.bezeichnung if pruefung else kuerzel
         if self._angebotene and kuerzel not in self._angebotene:
-            pruefung = pruefung_nach_kuerzel(kuerzel)
             if not _ja_nein(
                 self, "Prüfung nicht angeboten",
-                f"„{pruefung.bezeichnung if pruefung else kuerzel}“ wird in diesem Termin nicht "
-                "angeboten (Veranstaltungsdaten). Trotzdem speichern?",
+                f"„{name}“ wird in diesem Termin nicht angeboten (Veranstaltungsdaten). Trotzdem speichern?",
             ):
                 self.stufe.setFocus()
+                return
+        # UX-Test 03.11.2026, X11: Nummer außerhalb des Bereichs der gewählten Prüfung nur nach
+        # Rückfrage (Hinweis, keine Sperre - Bereiche sind eine Ordnungshilfe). Beim Bearbeiten
+        # nur, wenn sich Nummer oder Prüfung geändert haben - sonst käme sie bei jeder
+        # Adressänderung wieder (Verifikation A3, Befund 5).
+        bereich = self._bereiche.get(kuerzel)
+        nummer = None if self.startnummer_unbekannt.isChecked() else self.startnummer.value()
+        geaendert = (nummer, kuerzel) != self._gespeicherte_nummer_und_pruefung
+        if nummer is not None and bereich is not None and geaendert and not bereich[0] <= nummer <= bereich[1]:
+            if not _ja_nein(
+                self, "Startnummer außerhalb des Bereichs",
+                f"Die Startnummer {nummer} liegt außerhalb des Bereichs {bereich[0]}–{bereich[1]} "
+                f"für „{name}“. Trotzdem speichern?",
+            ):
+                self.startnummer.setFocus()
                 return
         if ist_ed and (self.gegenstand_2.text().strip() or self.gegenstand_3.text().strip()):
             if not _ja_nein(

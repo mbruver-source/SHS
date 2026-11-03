@@ -50,6 +50,7 @@ from db import (
     NeuerTeilnehmer,
     TerminInfo,
     add_teilnehmer,
+    get_teilnehmer,
     add_zeitplan_pruefungsblock,
     add_zeitplan_richter,
     eintragen_ergebnis,
@@ -3230,6 +3231,93 @@ def test_teilnehmer_nicht_angebotene_pruefung_fragt(qtbot, monkeypatch, angebote
         assert "wird in diesem Termin nicht angeboten" in fragen[0] and dialog.result() == 0
     else:
         assert fragen == [] and dialog.result() == QDialog.Accepted
+
+
+def test_teilnehmer_neu_mit_erster_angebotener_pruefung_und_hinweis(qtbot):
+    """UX-Test 03.11.2026, X12: Neuanlage beginnt mit der ersten angebotenen Prüfung statt
+    ED/1/Trümmerfeld; der Klartext sagt, ob die Kombination angeboten wird."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, angebotene={"DK2", "ED2-Flächensuche"})
+    assert (dialog.art.currentText(), dialog.stufe.currentText()) == ("DK", "2")
+    assert dialog.pruefung_hinweis.text().endswith("wird angeboten")
+    dialog.art.setCurrentText("ED")
+    dialog.stufe.setCurrentText("1")
+    assert "NICHT angeboten" in dialog.pruefung_hinweis.text()
+    dialog.stufe.setCurrentText("2")
+    dialog.disziplin.setCurrentText("Flächensuche")
+    assert dialog.pruefung_hinweis.text().endswith("wird angeboten")
+
+
+def test_teilnehmer_ed_erklaert_gesperrte_gegenstaende(qtbot):
+    """UX-Test 03.11.2026, X4: bei ED Hinweis und Tooltip, warum Gegenstand 2/3 gesperrt sind."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    dialog.art.setCurrentText("ED")
+    assert not dialog.gegenstand_hinweis.isHidden()
+    assert "nur einen Gegenstand" in dialog.gegenstand_2.toolTip()
+    dialog.art.setCurrentText("DK")
+    assert dialog.gegenstand_hinweis.isHidden()
+    assert dialog.gegenstand_2.toolTip() == ""
+
+
+@pytest.mark.parametrize("nummer, gefragt", [(150, True), (45, False)])
+def test_teilnehmer_startnummer_ausserhalb_des_bereichs_fragt(qtbot, monkeypatch, nummer, gefragt):
+    """UX-Test 03.11.2026, X11: Nummer außerhalb des Bereichs der Prüfung nur nach Rückfrage."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, bereiche={"ED1-Trümmerfeld": (41, 60)})
+    dialog.art.setCurrentText("ED")
+    dialog.stufe.setCurrentText("1")
+    dialog.disziplin.setCurrentText("Trümmerfeld")
+    dialog.gegenstand_1.setText("Socke")
+    dialog.startnummer_unbekannt.setChecked(False)
+    dialog.startnummer.setValue(nummer)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    if gefragt:
+        assert "außerhalb des Bereichs 41–60" in fragen[0] and dialog.result() == 0
+    else:
+        assert fragen == [] and dialog.result() == QDialog.Accepted
+
+
+def _vorhandener_ed_teilnehmer(conn, startnummer):
+    tid = add_teilnehmer(conn, NeuerTeilnehmer(
+        nachname="Alt", vorname="A", rufname_hund="Rex", art="ED", stufe=1, disziplin="Trümmerfeld",
+        startnummer=startnummer, gegenstand_1="Socke", gegenstand_1_disziplin="Trümmerfeld"))
+    return get_teilnehmer(conn, tid)
+
+
+def test_teilnehmer_bearbeiten_behaelt_pruefung_und_fragt_nur_nach_aenderung(qtbot, monkeypatch, conn):
+    """Verifikation A3, Befunde 5 und 8: Beim Bearbeiten bleibt die gespeicherte Prüfung
+    (auch wenn sie nicht die erste angebotene ist); eine schon vorhandene Nummer außerhalb des
+    Bereichs löst nur nach einer Änderung der Nummer eine Rückfrage aus."""
+    dialog = TeilnehmerDialog(vorhandener=_vorhandener_ed_teilnehmer(conn, 150), vergebene_nummern=set(),
+                              angebotene={"DK1", "ED1-Trümmerfeld"}, bereiche={"ED1-Trümmerfeld": (41, 60)})
+    qtbot.addWidget(dialog)
+    assert (dialog.art.currentText(), dialog.disziplin.currentText()) == ("ED", "Trümmerfeld")
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
+    dialog._pruefen_und_akzeptieren()
+    assert fragen == [] and dialog.result() == QDialog.Accepted
+
+
+def test_teilnehmer_bereichsfrage_ja_speichert_und_ohne_bereich_keine_frage(qtbot, monkeypatch):
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, bereiche={"DK1": (1, 20)})
+    dialog.art.setCurrentText("ED")
+    dialog.gegenstand_1.setText("Socke")
+    dialog.startnummer_unbekannt.setChecked(False)
+    dialog.startnummer.setValue(150)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
+    dialog._pruefen_und_akzeptieren()  # ED1 hat keinen Bereich
+    assert fragen == [] and dialog.result() == QDialog.Accepted
+
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, bereiche={"DK1": (1, 20)})
+    dialog.art.setCurrentText("DK")
+    dialog.startnummer_unbekannt.setChecked(False)
+    dialog.startnummer.setValue(150)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
+    dialog._pruefen_und_akzeptieren()
+    assert len(fragen) == 1 and dialog.result() == QDialog.Accepted
+
+
+def test_teilnehmer_hinweis_ohne_angebot_nur_name(qtbot):
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    assert dialog.pruefung_hinweis.text() == "Prüfung: Trümmer LK 1"
 
 
 def test_aktualisiere_veranstaltung_feld_behaelt_alle_felder(conn):

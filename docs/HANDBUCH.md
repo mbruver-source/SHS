@@ -336,10 +336,14 @@ Pflichtfelder sind mit \* markiert: **Nachname\***, **Vorname\***, **Rufname Hun
 du zusätzlich die **Disziplin** (Trümmerfeld, Flächensuche oder Behältnisstrecke). Alle anderen
 Felder sind optional. Datumsfelder nehmen TT.MM.JJJJ an.
 
+- **Prüfung:** Ein neuer Teilnehmer beginnt mit der ersten im Termin angebotenen Prüfung. Unter
+  „Disziplin“ steht im Klartext, welche Prüfung Art, Leistungsklasse und Disziplin ergeben, und
+  ob der Termin sie anbietet (grün) oder nicht (rot). Sind im Termin noch keine Prüfungen
+  hinterlegt, steht dort nur der Name.
 - **Startnummer:** Neue Teilnehmer starten mit dem Häkchen **„Startnummer steht noch nicht
   fest“**. Entfernst du es, schlägt das Programm die kleinste freie Nummer im Bereich der
   gewählten Prüfung vor. Eine bereits vergebene Nummer lehnt das Programm ab und nennt, wer sie
-  hat.
+  hat. Liegt die Nummer außerhalb des Bereichs der Prüfung, fragt das Programm nach.
 - **Halter:** Weicht der Hundeeigentümer vom Hundeführer ab, das Häkchen
   **„Halter weicht vom Hundeführer ab“** setzen – dann erscheinen die Halter-Felder.
 - **Prüfungsgebühr bezahlt:** Häkchen in der Maske oder später „Bezahlt umschalten“.
@@ -351,7 +355,8 @@ Das bestimmt, auf welchem Bewertungsbogen er erscheint.
 
 **Einzeldisziplin (ED):** Es gibt nur eine Suchdisziplin und deshalb – in jeder Leistungsklasse –
 genau **einen** Gegenstand. Nur **Gegenstand 1** ist eingabebereit, „gesucht in“ folgt
-automatisch der gewählten Disziplin. Gegenstand 2 und 3 sind ausgegraut.
+automatisch der gewählten Disziplin. Gegenstand 2 und 3 sind ausgegraut; ein Hinweis unter
+Gegenstand 1 sagt das.
 
 ![Erfassungsmaske bei ED: nur Gegenstand 1 aktiv](bilder/handbuch_teilnehmer_dialog_ed.png)
 
