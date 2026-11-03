@@ -8699,8 +8699,8 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | umgesetzt (A3, Arbeitsstand) |
 | X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | umgesetzt (A3, Arbeitsstand) |
 | X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | umgesetzt (A7, Arbeitsstand) |
-| X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | geplant (aufgaben.md) |
-| X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | geplant (aufgaben.md) |
+| X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | umgesetzt (A9, Arbeitsstand) |
+| X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | umgesetzt (A9, Arbeitsstand) |
 | X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | geplant (aufgaben.md) |
 
 ### ux_test_2026_11 A1 (X3) – umgesetzt (03.11.2026)
@@ -8968,4 +8968,36 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   unsichtbaren Texte (Rückfrage nennt sie), veraltete Kommentare, die Bildunterschrift und
   try/finally im Test.
 - Vor dem nächsten Build ist der Screenshot `handbuch_teilnehmer_dialog_ed` neu nötig.
+
+### ux_test_2026_11 A9 (X14, X15) – umgesetzt (03.11.2026)
+
+- **Hilfe (X14):**
+  - Vor dem ersten Abschnitt steht ein Inhaltsverzeichnis mit Sprungmarken auf alle 14
+    Zwischenüberschriften (`_hilfe_mit_inhaltsverzeichnis`).
+  - „Löschen…“ verschiebt in den Papierkorb (statt „unwiderruflich“).
+  - „Automatisch verteilen“ ersetzt den Plan aller Richter.
+  - „Bezahlt umschalten“ wirkt auf alle markierten Teilnehmer.
+  - Doppelte Abschnitte gab es nicht (Werkzeugeffekt im Test).
+- **Kleinigkeiten (X15):**
+  - Die Pflichtfeld-Meldung nennt nur die fehlenden Felder, mit den sichtbaren Feldnamen.
+  - Termin-Datum: „14.11.26“ wird beim Verlassen des Felds bzw. beim OK zu 14.11.2026 ergänzt.
+  - Versionsfenster: „Schließen“ ist Vorgabe, Enter schließt (vorher öffnete Enter
+    „Lizenzen“).
+  - „Offene Starts“ im Zeitplan ist 280–360 px breit (vorher 230–280).
+  - Tooltip am Anmeldeformular: „Im Reiter „Verwaltung“ über „Veranstaltungsdaten
+    bearbeiten…“ …“ statt „Dort“.
+  - Startbildschirm: Bei genau einem lesbaren Termin ist er gleich markiert, „Öffnen“ ist
+    aktiv.
+  - Der Dateidialog für Anmelde-PDFs sagt, dass mehrere Dateien mit Strg-Klick gehen.
+- **Bewusst unverändert** (Plan): der Name der Sicherungsdatei und die sofortige Spalte bei
+  „Richter hinzufügen“. Installationstexte und „GitHub-Releases-Seite“ kommen in A10.
+- **Handbuch:** zweistelliges Jahr beim Termin-Datum.
+- **Tests:** `test_a9_kleinigkeiten` (Pflichtfelder mit einem und zwei fehlenden Feldern, Datum,
+  Inhaltsverzeichnis, Hilfetexte, Versionsfenster) und `test_startdialog_markiert_einzigen_termin`.
+  Die Gegenprobe scheitert. Lokal laufen 505 GUI- und 721 Unittests grün (Volltest durch die
+  Verifikation).
+- **Verifikation** (Agent `verifikation`): in Ordnung. Die Kleinpunkte sind eingearbeitet
+  (Feldname „Rufname Hund“, Tooltip mit Knopfname, Hilfe zu „Bezahlt umschalten“,
+  Mehrfachauswahl-Hinweis, Handbuch, Tests). Die Breite von „Offene Starts“ prüft der Nachtest
+  bzw. der Screenshot `handbuch_zeitplan` noch einmal.
 

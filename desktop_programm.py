@@ -276,6 +276,12 @@ class VersionDialog(QDialog):
 
         schliessen_btn = QPushButton("Schließen")
         schliessen_btn.clicked.connect(self.accept)
+        # UX-Test 03.11.2026, X15: Enter schließt das Fenster - vorher war „Lizenzen anzeigen“
+        # als erster Knopf (AutoDefault) die Vorgabe.
+        schliessen_btn.setDefault(True)
+        for knopf in (lizenz_btn, self._updates_btn, self._download_btn, seite_link_btn,
+                      diagnose_btn, protokoll_btn):
+            knopf.setAutoDefault(False)
         schliessen_zeile = QHBoxLayout()
         schliessen_zeile.addWidget(seite_link_btn)
         schliessen_zeile.addStretch()

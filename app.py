@@ -1384,7 +1384,9 @@ class FormularImportTab(QWidget):
         über db_import.importiere_anmeldeformular_pdf ein - eine Datei je Meldung, mehrere
         Dateien auf einmal wählbar (Nutzerwunsch 28.09.2026)."""
         pfade, _ = QFileDialog.getOpenFileNames(
-            self, "Anmeldeformulare importieren", _import_startordner(), "Anmeldeformular (*.pdf)"
+            # UX-Test 03.11.2026, X15: dass mehrere Dateien auf einmal gehen, stand nirgends.
+            self, "Anmeldeformulare importieren (mehrere mit Strg-Klick markieren)", _import_startordner(),
+            "Anmeldeformular (*.pdf)"
         )
         if not pfade:
             return
@@ -3764,6 +3766,10 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # Vereinsnamen nicht abgeschnitten werden - danach bleiben die Spalten
         # weiterhin von Hand nachziehbar.
         self.tabelle.resizeColumnsToContents()
+        # UX-Test 03.11.2026, X15: Bei genau einem Termin diesen gleich markieren - „Öffnen“
+        # war sonst ausgegraut, obwohl es nur einen gibt.
+        if len(self._termine) == 1 and self._termine[0].lesbar:
+            self.tabelle.selectRow(0)
         self._auswahl_geaendert()
 
     def eventFilter(self, obj, event) -> bool:  # type: ignore[override]

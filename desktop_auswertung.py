@@ -559,7 +559,8 @@ class ExportTab(QWidget):
         knoepfe = [
             (anmeldeformular_btn,
              "Ausfüllbares Formular zum Verschicken; Kopf und Prüfungen aus dem Reiter „Verwaltung“",
-             "Dort zuerst die angebotenen Prüfungen anhaken. Ausgefüllt zurückgeschickte "
+             "Im Reiter „Verwaltung“ über „Veranstaltungsdaten bearbeiten…“ zuerst die "
+             "angebotenen Prüfungen anhaken. Ausgefüllt zurückgeschickte "
              "Formulare im Reiter „Formular-Import“ einlesen."),
             (ergebnisliste_btn,
              "Rangliste mit Wertnoten je Leistungsklasse",

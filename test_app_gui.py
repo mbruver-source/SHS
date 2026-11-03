@@ -3340,6 +3340,42 @@ def test_teilnehmer_bereichsfrage_ja_speichert_und_ohne_bereich_keine_frage(qtbo
     assert len(fragen) == 1 and dialog.result() == QDialog.Accepted
 
 
+def test_a9_kleinigkeiten(qtbot, monkeypatch):
+    """UX-Test 03.11.2026, X14/X15: Pflichtfeld-Meldung nennt nur die fehlenden Felder,
+    „14.11.26“ wird zu 14.11.2026, die Hilfe hat ein Inhaltsverzeichnis und nennt den
+    Papierkorb, das Versionsfenster schließt mit Enter."""
+    from desktop_dialoge import _HILFE_HTML, _hilfe_mit_inhaltsverzeichnis
+    from desktop_programm import VersionDialog as _VersionDialog
+
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.nachname.setText("Muster")
+    warnungen = meldungen_sammeln(monkeypatch, "warning")
+    dialog._pruefen_und_akzeptieren()
+    assert warnungen == ["Bitte noch ausfüllen: „Vorname“, „Rufname Hund“."]
+    dialog.vorname.setText("Max")
+    warnungen.clear()
+    dialog._pruefen_und_akzeptieren()
+    assert warnungen == ["Bitte noch „Rufname Hund“ ausfüllen."]
+
+    termin_dialog = VeranstaltungsDialog(vorbelegung={"verein": "HSV", "datum": "2026-11-14"}, bearbeiten=True)
+    qtbot.addWidget(termin_dialog)
+    termin_dialog.datum.setText("14.11.26")
+    termin_dialog._jahr_ergaenzen()
+    assert termin_dialog.datum.text() == "14.11.2026"
+
+    html = _hilfe_mit_inhaltsverzeichnis(_HILFE_HTML)
+    assert "<b>Inhalt:</b>" in html and 'href="#abschnitt0"' in html and 'name="abschnitt0"' in html
+    assert "Papierkorb" in _HILFE_HTML and "unwiderruflich" not in _HILFE_HTML
+    assert "gewählten Richter" not in _HILFE_HTML
+
+    version = _VersionDialog()
+    qtbot.addWidget(version)
+    schliessen = next(b for b in version.findChildren(QPushButton) if b.text() == "Schließen")
+    assert schliessen.isDefault()
+    assert all(not b.autoDefault() for b in version.findChildren(QPushButton) if b is not schliessen)
+
+
 def test_teilnehmer_hinweis_ohne_angebot_nur_name(qtbot):
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
     assert dialog.pruefung_hinweis.text() == "Prüfung: Trümmer LK 1"
@@ -6003,6 +6039,16 @@ def test_termin_loeschen_nein_behaelt_datei(qtbot, tmp_path, monkeypatch):
     start.tabelle.selectRow(0)
     start._termin_loeschen()
     assert (tmp_path / "a.sqlite").exists()
+
+
+def test_startdialog_markiert_einzigen_termin(qtbot, tmp_path, monkeypatch):
+    """UX-Test 03.11.2026, X15: Bei genau einem lesbaren Termin ist er gleich markiert und
+    „Öffnen“ aktiv; bei zwei Terminen bleibt die Auswahl leer."""
+    start = _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch)
+    assert not start.oeffnen_btn.isEnabled()  # zwei Termine: keine Vorauswahl
+    (tmp_path / "b.sqlite").unlink()
+    start._aktualisieren()
+    assert start.tabelle.currentRow() == 0 and start.oeffnen_btn.isEnabled()
 
 
 def test_startdialog_enter_oeffnet_markierten_termin(qtbot, tmp_path, monkeypatch):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import re
 import sqlite3
 
 from PySide6.QtCore import Qt
@@ -578,10 +579,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.pruefung_hinweis.setStyleSheet(f"color: {_farbe(farbe).name()};")
 
     def _pruefen_und_akzeptieren(self) -> None:
-        leer = [feld for feld in (self.nachname, self.vorname, self.rufname_hund) if not feld.text().strip()]
+        pflicht = ((self.nachname, "Nachname"), (self.vorname, "Vorname"), (self.rufname_hund, "Rufname Hund"))
+        leer = [(feld, name) for feld, name in pflicht if not feld.text().strip()]
         if leer:
-            QMessageBox.warning(self, "Fehlende Angaben", "Nachname, Vorname und Rufname des Hundes sind Pflichtfelder.")
-            leer[0].setFocus()
+            # UX-Test 03.11.2026, X15: nur die fehlenden Felder nennen.
+            namen = [name for _feld, name in leer]
+            text = (f"Bitte noch „{namen[0]}“ ausfüllen." if len(namen) == 1
+                    else "Bitte noch ausfüllen: " + ", ".join(f"„{n}“" for n in namen) + ".")
+            QMessageBox.warning(self, "Fehlende Angaben", text)
+            leer[0][0].setFocus()
             return
         # Codeprüfung 22.09. (M5): Datumsfelder prüfen, bevor ergebnis() sie umwandelt -
         # TT.MM.JJJJ und JJJJ-MM-TT sind erlaubt, alles andere bleibt im Dialog stehen.
@@ -1281,8 +1287,9 @@ Einstellungen → System → Anzeige → „Skalierung“, z. B. 125 % wählen.<
 <p>Beim Programmstart zeigt die Terminübersicht alle vorhandenen Termine mit Datum, Verein,
 Ort und Teilnehmerzahl. Über "Neuen Termin anlegen…" legst du Verein/Ort/Datum (und optional
 weitere Angaben) fest – der Dateiname wird automatisch vorgeschlagen. Einen vorhandenen
-Termin öffnest du per Doppelklick oder "Öffnen"; "Löschen…" entfernt eine Termin-Datei
-unwiderruflich (mit Rückfrage). Im Hauptfenster kannst du über "Anderen Termin öffnen…"
+Termin öffnest du per Doppelklick oder "Öffnen"; "Löschen…" verschiebt eine Termin-Datei
+nach einer Rückfrage in den Papierkorb (gibt es keinen, fragt das Programm vor dem endgültigen
+Löschen noch einmal). Im Hauptfenster kannst du über "Anderen Termin öffnen…"
 jederzeit wechseln.</p>
 
 <h3>Demoprüfung</h3>
@@ -1312,7 +1319,7 @@ stehen, jede Disziplin aber nur einmal vorkommen).</p>
 <p><b>Spalte "Anmerkungen":</b> Die Warnung "Chip-Nr. fehlt" (orange, mit Warndreieck) solltest du vor dem
 Prüfungstag beheben. Graue Hinweise wie "Gegenstand noch offen" sind nur Erinnerungen –
 Gegenstände können bis zum Prüfungstag nachgetragen werden.</p>
-<p>"Bezahlt umschalten" setzt den Zahlungsstatus des markierten Teilnehmers, ohne den ganzen
+<p>"Bezahlt umschalten" setzt den Zahlungsstatus aller markierten Teilnehmer, ohne den ganzen
 Dialog zu öffnen. "Keine Teilnahme" markiert einen nicht erschienenen Teilnehmer: Er bleibt
 grau in der Liste, fällt aber aus Zeitplan, Ergebniserfassung, Auswertung und allen
 Ausdrucken außer der Übersicht für die Prüfungsleitung heraus (erfasste Ergebnisse bleiben
@@ -1351,7 +1358,7 @@ Projektseite: https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (dana
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…" (nach der markierten Zeile;
 wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause). Reihenfolge mit
 "Hoch"/"Runter" anpassen – sie wirken auf den ganzen Block (fette Kopfzeile). "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
-(ersetzt den bisherigen Plan der gewählten Richter, mit Rückfrage) – danach frei von Hand
+(ersetzt den bisherigen Plan aller Richter, mit Rückfrage) – danach frei von Hand
 änderbar. Start-/Endzeiten berechnen sich automatisch. Die Seitenleiste "Offene Starts"
 zeigt je Art/Leistungsklasse/Disziplin, ob dafür schon ein Prüfungsblock angelegt wurde
 (grün) oder noch fehlt (rot, "noch offen") – bleibt auch beim seitlichen Scrollen durch
@@ -1462,6 +1469,21 @@ Diagnose aus dem Fenster "Version" (siehe oben).</p>
 """
 
 
+def _hilfe_mit_inhaltsverzeichnis(html: str) -> str:
+    """UX-Test 03.11.2026, X14: Die Hilfe war eine lange Textwand. Vor den ersten Abschnitt
+    kommt ein Inhaltsverzeichnis mit Sprungmarken auf jede Zwischenüberschrift (h3)."""
+    titel = re.findall(r"<h3>(.*?)</h3>", html)
+    if not titel:
+        return html
+    for nummer, text in enumerate(titel):
+        html = html.replace(f"<h3>{text}</h3>", f'<h3><a name="abschnitt{nummer}"></a>{text}</h3>', 1)
+    verzeichnis = "<p><b>Inhalt:</b> " + " · ".join(
+        f'<a href="#abschnitt{nummer}">{text}</a>' for nummer, text in enumerate(titel)
+    ) + "</p>"
+    erster = html.index("<h3>")
+    return html[:erster] + verzeichnis + html[erster:]
+
+
 class HilfeDialog(QDialog):
     """Allgemeine Bedienungshilfe in einem eigenen, scrollbaren Fenster - ein Abschnitt je
     Reiter (siehe _HILFE_HTML oben). Wird über den Hilfe-Button im Hauptfenster geöffnet
@@ -1473,7 +1495,7 @@ class HilfeDialog(QDialog):
         self.resize(560, 520)
 
         anzeige = QTextBrowser()
-        anzeige.setHtml(_HILFE_HTML)
+        anzeige.setHtml(_hilfe_mit_inhaltsverzeichnis(_HILFE_HTML))
         anzeige.setOpenExternalLinks(False)
 
         schliessen_btn = QPushButton("Schließen")
@@ -1533,6 +1555,9 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self.ort = feld("ort")
         self.datum = QLineEdit(datum_anzeige(vorbelegung.get("datum")))
         self.datum.setPlaceholderText("TT.MM.JJJJ")
+        # UX-Test 03.11.2026, X15: „14.11.26“ wurde abgelehnt - beim Verlassen des Felds zu
+        # 14.11.2026 ergänzen (nur hier, ein Prüfungstermin liegt nie im 20. Jahrhundert).
+        self.datum.editingFinished.connect(self._jahr_ergaenzen)
         self.vereins_nr = feld("vereins_nr")
         self.pruefungsnummer = feld("pruefungsnummer")
         self.wertungsrichter_1 = feld("wertungsrichter_1")
@@ -1816,6 +1841,12 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
     def _pfad_manuell_markieren(self, _text: str) -> None:
         self._pfad_manuell_geaendert = True
 
+    def _jahr_ergaenzen(self) -> None:
+        treffer = re.fullmatch(r"\s*(\d{1,2})\.(\d{1,2})\.(\d{2})\s*", self.datum.text())
+        if treffer:
+            tag, monat, jahr = treffer.groups()
+            self.datum.setText(f"{int(tag):02d}.{int(monat):02d}.20{jahr}")
+
     def _pfad_vorschlagen(self) -> None:
         if self._pfad_manuell_geaendert:
             return
@@ -1868,6 +1899,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         return False
 
     def _pruefen_und_akzeptieren(self) -> None:
+        self._jahr_ergaenzen()  # auch bei Enter direkt im Datumsfeld
         if not self.verein.text().strip() or not self.datum.text().strip():
             QMessageBox.warning(self, "Angaben unvollständig", "Bitte Verein und Datum angeben.")
             (self.verein if not self.verein.text().strip() else self.datum).setFocus()

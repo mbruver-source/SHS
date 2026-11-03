@@ -197,8 +197,9 @@ class ZeitplanTab(QWidget):
         # AUSSERHALB von self._scroll platziert, damit sie beim horizontalen Scrollen durch
         # viele Richter-Spalten sichtbar bleibt statt mit-zu-scrollen.
         self._offene_starts_box = QGroupBox("Offene Starts")
-        self._offene_starts_box.setMinimumWidth(230)
-        self._offene_starts_box.setMaximumWidth(280)
+        # UX-Test 03.11.2026, X15: breiter (vorher 230-280 px, lange Zeilen brachen dreifach um).
+        self._offene_starts_box.setMinimumWidth(280)
+        self._offene_starts_box.setMaximumWidth(360)
         self._offene_starts_label = QLabel("")
         self._offene_starts_label.setWordWrap(True)
         self._offene_starts_label.setTextFormat(Qt.RichText)
