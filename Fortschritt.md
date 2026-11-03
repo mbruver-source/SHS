@@ -8632,3 +8632,63 @@ nannte fünf Ursachen:
   - Der Byte-Abgleich danach ist identisch.
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
   `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
+
+
+## 03.11.2026: UX-Test 1.0.55 mit sechs Personas (nur Dokumentation, kein Code geändert)
+
+Marcos Wunsch: Seit dem UX-Test vom Oktober hat sich viel geändert, deshalb ein neuer Test.
+
+- **Rahmen (mit Marco abgestimmt):**
+  - Alle sechs Personas wie im Oktober (je Gruppe mit und ohne Handbuch), nacheinander wegen des
+    Nutzungslimits.
+  - Zusätzlich im Szenario: Demoprüfung bis zum Ende, Stechen und Abbruch mit Grund,
+    Startnummern-Bereiche und eine späte Nachmeldung.
+  - Desktop-App 1.0.55 echt bedient, unsichtbar (Qt offscreen 1920×1080) in einer Sandbox je
+    Persona. Das Steuerwerkzeug ist neu gebaut und liegt nur im Scratchpad, nicht im Repo.
+  - Installation nur gedanklich. Ergebnis: ein Bericht, keine Code-Änderungen.
+- **Ablauf:**
+  - Nach dem ersten Lauf (Heinz) wurden Fehler des Werkzeugs behoben: Umlaute (QTest-ASSERT),
+    Zeitplan-Reiter, Häkchen, Tabelleneingabe. Heinz' gemeldeter „Absturz bei Umlauten“ war ein
+    Werkzeugfehler; er hat die Zeitplan-Aufgabe danach nachgeholt.
+  - Ab Julia schrieb das Werkzeug die Demo-Texte in Echtzeit mit.
+  - Gerda wurde nach einem API-Limit fortgesetzt, nicht neu gestartet.
+  - Danach habe ich zusammengeführt und die Hauptfunde gegen Code, `OFFEN.md` und den Oktober-Test
+    abgeglichen. Der Agent `verifikation` hat den Bericht geprüft (717 Unittests grün). Seine
+    31 Korrekturen sind eingearbeitet, u. a.:
+    - X1 ist N3 aus dem Nachtest;
+    - X8 ist N6, und der Komma-Hinweis verschwindet mit der nächsten Ziffer;
+    - X3 ist ein echter Kleinfehler und ein Rest von U11;
+    - Zählungen und der Oktober-Abgleich sind berichtigt.
+- **Abschottung geprüft:** Echte Termine und die Registry-Darstellung sind unverändert; die
+  Einstellungen der Personas landeten in Sandbox-Dateien. Im Repo wurde während des Tests nichts
+  geändert.
+- **Ablage:** `UX-Test-2026-11/` mit `Bericht.md` und `personas/` (6 Einzelberichte, lokale Pfade
+  anonymisiert). Die Bildschirmfotos bleiben lokal, weil viele den Benutzerpfad zeigen.
+- **Noten gesamt:** Erfahrene 2 / 2, Normale 2 / 2, Laien 2–3 / 2– (Oktober: 3+ / 3+, 3+ / 3,
+  4 / 3–4).
+  - Alle sechs würden den Prüfungstag eher allein schaffen; kein ✗.
+  - Am häufigsten „mit Mühe“: Mittagspause (6/6) und ED-Gegenstände (5/6).
+
+## Rubrik ux_test_2026_11 – Aufgabenliste (angelegt 03.11.2026)
+
+Alle Punkte aus `UX-Test-2026-11/Bericht.md`. Wie beim Oktober-Test: erst alle Punkte einzeln mit
+Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
+
+| Nr | Punkt | Status |
+|---|---|---|
+| X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | offen |
+| X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | offen |
+| X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | offen |
+| X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | offen |
+| X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | offen |
+| X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | offen |
+| X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | offen |
+| X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | offen |
+| X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | offen |
+| X10 | Übersprungene Import-Meldungen nach „OK“ nicht mehr nachlesbar; Pfeiffer-Meldung ohne Rat | offen |
+| X11 | Startnummer außerhalb des Bereichs ohne Hinweis angenommen | offen |
+| X12 | Teilnehmerformular: Prüfung aus Art/LK/Disziplin zusammensetzen, Vorbelegung ED/1/Trümmer, auch nicht angebotene Kombinationen; uneinheitliche Prüfungsnamen | offen |
+| X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | offen |
+| X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | offen |
+| X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | offen |
+| X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | offen |
