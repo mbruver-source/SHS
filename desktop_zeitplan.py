@@ -652,17 +652,28 @@ class ZeitplanTab(QWidget):
                 wunsch = datetime.datetime.strptime(dialog.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
                 eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte())
                 abweichend = [(name, zeit) for name, zeit in eingefuegt if zeit != wunsch]
-                if abweichend:
+                anzahl = sum(1 for _name, zeit in eingefuegt if zeit)
+                if eingefuegt and anzahl == 0:
+                    # Verifikation A4, Befund 4: der häufigste Fall bei kleinen Prüfungen.
+                    QMessageBox.information(
+                        self, "Keine Pause eingefügt",
+                        f"Keine Pause eingefügt – bei allen Richtern endet der Plan schon vor {wunsch} Uhr.",
+                    )
+                elif abweichend:
                     # UX-Nachtest 03.10.2026, N3: "um 12:00 eingefügt" stimmte nicht, wenn ein
-                    # Plan vorher endet oder ein Block noch läuft - tatsächliche Zeiten nennen.
+                    # Block noch läuft - tatsächliche Zeiten nennen. UX-Test 03.11.2026, X1:
+                    # Wer vorher fertig ist, bekommt keine Pause - das steht ebenfalls da.
+                    zeilen = [
+                        f"{name or 'Richter'}: {zeit} Uhr" if zeit else
+                        f"{name or 'Richter'}: keine Pause – der Plan endet schon vor {wunsch} Uhr"
+                        for name, zeit in eingefuegt
+                    ]
                     QMessageBox.information(
                         self, "Pause eingefügt",
-                        "Die Pause beginnt nicht überall um " + wunsch + ":\n\n"
-                        + "\n".join(f"{name or 'Richter'}: {zeit} Uhr" for name, zeit in eingefuegt)
-                        + "\n\nEin laufender Prüfungsblock wird nicht geteilt; endet der Plan eines "
-                        "Richters vorher, steht die Pause an seinem Ende.",
+                        "Die Pause beginnt nicht überall um " + wunsch + ":\n\n" + "\n".join(zeilen)
+                        + "\n\nEin laufender Prüfungsblock wird nicht geteilt.",
                     )
-                self.status_label.setText(f"Pause bei {len(eingefuegt)} Richter(n) eingefügt.")
+                self.status_label.setText(f"Pause bei {anzahl} Richter(n) eingefügt.")
             else:
                 # UX-Test 02.10.2026, U9: nach der markierten Zeile statt immer am Ende.
                 nach = nach_id

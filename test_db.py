@@ -2500,11 +2500,29 @@ class TestZeitplan(unittest.TestCase):
         typen_r2 = [e["bezeichnung"] or e["disziplin"] for e in list_zeitplan_eintraege(self.conn, r2)]
         # r1: DK-Block läuft um 09:05 noch -> Mittag direkt danach (vor "Kaffee", der um 09:30 beginnt).
         self.assertEqual(typen_r1, ["Trümmerfeld", "Mittag", "Kaffee", "Trümmerfeld"])
-        # r2: einziger Block beginnt vor 09:05 -> Mittag ans Ende.
+        # r2: einziger Block läuft um 09:05 noch (bis 09:10) -> Mittag direkt danach.
         self.assertEqual(typen_r2, ["Trümmerfeld", "Mittag"])
         self.assertEqual(
             [e["reihenfolge"] for e in list_zeitplan_eintraege(self.conn, r1)], [0, 1, 2, 3]
         )
+
+    def test_pause_bei_allen_laesst_fertige_richter_aus(self):
+        """UX-Test 03.11.2026, X1 (Marcos Entscheidung, ersetzt N3): Wer vor der Wunschzeit
+        schon fertig ist oder keinen Plan hat, bekommt keine Pause (vorher am Planende)."""
+        self._dk_teams(1, 3)
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=10, nachname="E1")
+        r1, r2, r3 = (add_zeitplan_richter(self.conn) for _ in range(3))
+        add_zeitplan_pruefungsblock(self.conn, r1, "DK", 1, "Trümmerfeld", 10)    # 09:00-09:30
+        add_zeitplan_pruefungsblock(self.conn, r2, "ED", 1, "Trümmerfeld", 10)    # 09:00-09:10
+        self.assertEqual(
+            add_zeitplan_pause_bei_allen(self.conn, "09:20", 15, "Mittag"),
+            [("Richter 1", "09:30"), ("Richter 2", None), ("Richter 3", None)],
+        )
+        self.assertEqual([e["bezeichnung"] for e in list_zeitplan_eintraege(self.conn, r1)], [None, "Mittag"])
+        self.assertEqual([e["bezeichnung"] for e in list_zeitplan_eintraege(self.conn, r2)], [None])
+        self.assertEqual(list_zeitplan_eintraege(self.conn, r3), [])
+        # Genau zum Planende (09:10) ist der Richter auch schon fertig.
+        self.assertEqual(add_zeitplan_pause_bei_allen(self.conn, "09:10", 5)[1], ("Richter 2", None))
 
     def test_zeitplan_eintrag_liest_einen_eintrag(self):
         """OFFEN.md B4 (19.10.2026): Einzelabfrage statt ganzem Blockplan."""

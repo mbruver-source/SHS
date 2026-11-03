@@ -1940,33 +1940,40 @@ def _pause_an_position_einfuegen(conn, richter_id: int, position: int, dauer_min
 
 def add_zeitplan_pause_bei_allen(
     conn: sqlite3.Connection, uhrzeit: str, dauer_minuten: int, bezeichnung: str | None = None,
-) -> list[tuple[str, str]]:
+) -> list[tuple[str | None, str | None]]:
     """UX-Test 02.10.2026, U9 (Marco öffnet damit bewusst die Entscheidung vom 14.09.):
     gleiche Pause bei allen Richtern. Je Spur wird sie vor dem ersten Eintrag eingefügt,
     der um `uhrzeit` (HH:MM) oder später beginnt - ein gerade laufender Block wird also
     nicht geteilt. Alles in einer Transaktion.
 
     Liefert je Richter (Name, tatsächliche Startzeit "HH:MM") - UX-Nachtest 03.10.2026, N3:
-    endet ein Plan vor der Wunschzeit, steht die Pause am Ende und beginnt früher; das soll
-    die Meldung ehrlich sagen."""
+    beginnt die Pause später (laufender Block), soll die Meldung das ehrlich sagen.
+    UX-Test 03.11.2026, X1 (Marcos Entscheidung, ersetzt N3 „Pause ans Ende“): Ist ein Richter
+    vor der Wunschzeit schon fertig (oder hat keinen Plan), bekommt er KEINE Pause - sie stand
+    sonst als sinnlose letzte Zeile im Aushang. Für ihn steht (Name, None) in der Liste."""
     zeitpunkt = datetime.datetime.strptime(uhrzeit.strip(), "%H:%M")
     try:
-        eingefuegt = []
+        eingefuegt = []  # (Name, Eintrags-ID oder None = weggelassen)
         for spur in berechne_zeitplan_bloecke(conn):
             bloecke = spur["bloecke"]
             position = next(
                 (i for i, block in enumerate(bloecke) if block["start"].time() >= zeitpunkt.time()), len(bloecke)
             )
-            eingefuegt.append(_pause_an_position_einfuegen(conn, spur["richter_id"], position, dauer_minuten, bezeichnung))
+            if position == len(bloecke) and (not bloecke or bloecke[-1]["ende"].time() <= zeitpunkt.time()):
+                eingefuegt.append((spur["richter_name"], None))
+                continue
+            eingefuegt.append((spur["richter_name"], _pause_an_position_einfuegen(
+                conn, spur["richter_id"], position, dauer_minuten, bezeichnung)))
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     startzeiten = {
-        block["id"]: (spur["richter_name"], block["start"].strftime("%H:%M"))
+        block["id"]: block["start"].strftime("%H:%M")
         for spur in berechne_zeitplan_bloecke(conn) for block in spur["bloecke"]
     }
-    return [startzeiten[eintrag_id] for eintrag_id in eingefuegt if eintrag_id in startzeiten]
+    return [(name, startzeiten.get(eintrag_id) if eintrag_id is not None else None)
+            for name, eintrag_id in eingefuegt]
 
 
 def zeitplan_eintrag(conn: sqlite3.Connection, eintrag_id: int) -> dict | None:

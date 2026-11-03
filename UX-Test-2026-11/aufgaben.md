@@ -16,7 +16,7 @@ A2 M ≈ 19 %).
 | A1 | X3 ED-Gegenstand nach PDF-Import | S | 1 | erledigt | 9afdaa6 | 64 → 70 % | R1; real ≈ 6 % |
 | A2 | X5, X7, X8 Ergebniserfassung | M | 1 | erledigt | fa073a0 | 70 → 89 % | real ≈ 19 %; Screenshot Ergebniserfassung vor Build |
 | A3 | X4, X11, X12 Teilnehmer-Dialog | M | 2 | erledigt | e19c363 | 0 → 16 % | R2; Screenshots Teilnehmer-Dialog vor Build; Rückfrage R5 |
-| A4 | X1 Mittagspause | S | 2 | offen | | | R3: weglassen |
+| A4 | X1 Mittagspause | S | 2 | erledigt | (A4-Commit) | 16 → ?? % | R3 |
 | A5 | X2 Schriftgröße | L | 2 | offen | | | |
 | A6 | X6 Demo-Tempo | S | 2 | offen | | | R4: nur Text zurück |
 | A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | offen | | | |

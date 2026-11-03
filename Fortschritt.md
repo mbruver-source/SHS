@@ -8686,7 +8686,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 
 | Nr | Punkt | Status |
 |---|---|---|
-| X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | geplant (aufgaben.md) |
+| X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | umgesetzt (A4, Arbeitsstand) |
 | X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
 | X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
 | X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | umgesetzt (A3, Arbeitsstand) |
@@ -8792,4 +8792,29 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   zusätzlich deutlicher aussehen oder bei ED ganz ausgeblendet werden?
 - Vor dem nächsten Build neu nötig: `handbuch_teilnehmer_dialog_ed` und
   `handbuch_teilnehmer_dialog_dk`.
+
+### ux_test_2026_11 A4 (X1) – umgesetzt (03.11.2026)
+
+- **Marcos Entscheidung R3** („Dann weglassen“, ersetzt die Nachtest-Entscheidung N3 „Pause am
+  Planende + Meldung“): Ist ein Richter vor der gewünschten Pausenzeit schon fertig (letzter
+  Eintrag endet ≤ Uhrzeit) oder hat er keinen Plan, bekommt er bei „Bei allen Richtern einfügen“
+  keine Pause mehr. Ein laufender Block bekommt sie weiter direkt danach.
+- **Code:** `db.add_zeitplan_pause_bei_allen` liefert je Richter (Name, Startzeit oder None).
+  `desktop_zeitplan._pause_hinzufuegen` meldet:
+  - wenn niemand eine Pause bekommt: „Keine Pause eingefügt – bei allen Richtern endet der Plan
+    schon vor 12:00 Uhr“;
+  - sonst je Richter die Zeit bzw. „keine Pause – der Plan endet schon vor … Uhr“.
+  Der Hinweis im Pausen-Dialog ist ergänzt.
+- **Handbuch:** Kap. Zeitplan und Kap. 14 (Schritt Mittagspause) angepasst. Der Screenshot
+  bleibt (im Bild bekommen beide Richter weiter eine Pause).
+- **Tests:**
+  - `test_pause_bei_allen_laesst_fertige_richter_aus` (Daten, auch Postgres-Klasse):
+    fertig/ohne Plan/genau zum Planende;
+  - der GUI-Test deckt die Meldung „keine Pause“ und den gemischten Fall ab.
+  Die Gegenprobe scheitert wie erwartet. Lokal 495 GUI- und 720 Unittests grün.
+- **Verifikation** (Agent `verifikation`): in Ordnung; Hinweistext, Meldung für „niemand“,
+  Testkommentar und Typangabe eingearbeitet. Bewusst nicht geändert (selten):
+  - Ein leerer Block genau zur Uhrzeit am Planende zählt noch als „nicht fertig“.
+  - Der Uhrzeitvergleich über `.time()` würde bei einem Plan über Mitternacht falsch werten
+    (schon vorher so).
 

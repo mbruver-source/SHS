@@ -1041,7 +1041,8 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
             form.addRow(alle_zeile)
             hinweis = QLabel(
                 "Ohne Haken wird die Pause nach der in der Liste markierten Zeile eingefügt "
-                "(sonst am Ende). Mit Haken je Richter vor dem ersten Block ab dieser Uhrzeit."
+                "(sonst am Ende). Mit Haken je Richter vor dem ersten Block ab dieser Uhrzeit; "
+                "wer vorher schon fertig ist, bekommt keine Pause."
             )
             hinweis.setWordWrap(True)
             form.addRow(hinweis)

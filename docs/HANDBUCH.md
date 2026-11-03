@@ -581,9 +581,9 @@ Der Zeitplan hat eine Spalte je Richter.
    **„Pause hinzufügen…“** fügt die Pause nach der markierten Zeile ein (ohne Markierung am
    Ende). Mit **„Bei allen Richtern einfügen, um …“** entsteht dieselbe Pause, z. B. die
    Mittagspause, bei allen Richtern auf einmal – je Richter vor dem ersten Block ab dieser
-   Uhrzeit, ein gerade laufender Block wird nicht geteilt. Endet der Plan eines Richters vor
-   dieser Uhrzeit, steht die Pause an seinem Ende; das Programm nennt dann die tatsächlichen
-   Zeiten.
+   Uhrzeit, ein gerade laufender Block wird nicht geteilt. Ist ein Richter vor dieser Uhrzeit
+   schon fertig, bekommt er keine Pause; das Programm nennt dann für jeden Richter die
+   tatsächliche Zeit bzw. „keine Pause“.
 5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block
@@ -1046,8 +1046,8 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
    Blöcke mit **„Hoch“** / **„Runter“** verschieben.
 5. Mittagspause: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den Haken bei
    **„Bei allen Richtern einfügen, um“** setzen, die Uhrzeit (z. B. 12:00) eintragen und
-   **„OK“** klicken. Endet der Plan eines Richters schon vorher, steht die Pause an seinem
-   Ende – das Programm sagt dir dann die tatsächliche Uhrzeit. Achtung: Ein erneutes
+   **„OK“** klicken. Ist ein Richter schon vorher fertig, bekommt er keine Pause – das Programm
+   sagt dir, bei wem. Achtung: Ein erneutes
    „Automatisch verteilen…“ ersetzt den ganzen Plan – die Pause musst du danach wieder
    einfügen.
 6. Mit **„Zeitplan (PDF)…“** speichern und den Richtern schicken.

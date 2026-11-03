@@ -682,8 +682,9 @@ def test_mehrere_markierte_loeschen_und_zwei_markierte_tauschen(qtbot, conn, mon
 
 
 def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
-    """UX-Nachtest 03.10.2026, N3: endet der Plan vor der Wunschzeit, nennt eine Meldung die
-    tatsächliche Uhrzeit."""
+    """UX-Nachtest 03.10.2026, N3: weicht die Uhrzeit ab, sagt es eine Meldung. Seit dem
+    UX-Test 03.11.2026 (X1) bekommt ein Richter, der vorher fertig ist, keine Pause - die
+    Meldung nennt das."""
     conn, _pfad = termin
     _teilnehmer_anlegen(conn, art="ED", stufe=1, disziplin="Trümmerfeld")
     set_veranstaltung(conn, verein="V", datum="2026-11-14", zeitplan_start="09:00")
@@ -695,7 +696,16 @@ def test_pause_bei_allen_meldet_abweichende_uhrzeit(qtbot, termin, monkeypatch):
     monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog_attrappe(30, "Mittag", uhrzeit="12:00"))
     meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._pause_hinzufuegen(richter)
-    assert meldungen and "Anna: 09:10 Uhr" in meldungen[0]
+    assert meldungen and "bei allen Richtern endet der Plan schon vor 12:00 Uhr" in meldungen[0]
+    assert tab.status_label.text() == "Pause bei 0 Richter(n) eingefügt."
+
+    # Ein zweiter Richter, dessen Plan um 12:00 noch läuft: gemischte Meldung.
+    zweiter = add_zeitplan_richter(conn, "Bernd")
+    add_zeitplan_pruefungsblock(conn, zweiter, "ED", 1, "Trümmerfeld", 200)  # 09:00-12:20
+    meldungen.clear()
+    tab._pause_hinzufuegen(zweiter)
+    assert "Anna: keine Pause – der Plan endet schon vor 12:00 Uhr" in meldungen[0]
+    assert "Bernd: 12:20 Uhr" in meldungen[0]
 
 
 def test_markierung_bleibt_nach_aenderung_beim_selben_teilnehmer(qtbot, conn):
