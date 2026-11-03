@@ -166,6 +166,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self._vorschlag_aktiv = False  # erst nach dem Aufbau, siehe Ende von __init__
         self._letzter_vorschlag: int | None = None
 
+        # Zeilen „Gegenstand 2/3“ (R5) - vor dem Layout-Aufbau noch leer; die Auswahllisten
+        # rufen _gegenstand_felder_aktualisieren schon in _felder_erstellen auf.
+        self._gegenstand_zeilen: list[QWidget] = []
         self._felder_erstellen()
         self._layout_aufbauen()
 
@@ -548,7 +551,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.gegenstand_hinweis.setVisible(ist_ed)
         # R5: Zeilen „Gegenstand 2/3“ samt Beschriftung bei ED ausblenden (vor dem Layout-Aufbau
         # gibt es sie noch nicht).
-        for zeile in getattr(self, "_gegenstand_zeilen", []):
+        for zeile in self._gegenstand_zeilen:
             self._form_rechts.setRowVisible(zeile, not ist_ed)
         self.gegenstand_1_disziplin.setEnabled(not ist_ed)
         if ist_ed:
@@ -855,7 +858,7 @@ class TerminImportDialog(QDialog):
         for t in self._termine:
             self.termin_combo.addItem(
                 f"{t.verein or '(ohne Verein)'} – {datum_anzeige(t.datum)} – "
-                + (f"{t.anzahl_teilnehmer - t.anzahl_abgemeldet} Teilnehmer, +{t.anzahl_abgemeldet} abgemeldet"
+                + (f"{t.teilnehmend} Teilnehmer, +{t.anzahl_abgemeldet} abgemeldet"
                    if t.anzahl_abgemeldet else f"{t.anzahl_teilnehmer} Teilnehmer")
             )
         self.termin_combo.currentIndexChanged.connect(self._termin_gewaehlt)

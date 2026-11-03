@@ -1824,7 +1824,8 @@ _SAMMELSPEICHERN_UEBER_TEILNEHMER = 200
 
 
 #: R6: höchster Schriftfaktor der Ergebnistabelle bei nicht maximiertem Fenster.
-_ERGEBNIS_FAKTOR_NICHT_MAXIMIERT = 1.15
+#: Gekoppelt an die Stufe „Groß“, damit eine Änderung dort hier mitwirkt.
+_ERGEBNIS_FAKTOR_NICHT_MAXIMIERT = _SCHRIFTSTUFEN["gross"]["faktor"]
 
 
 class ErgebnisTab(QWidget):

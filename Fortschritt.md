@@ -9040,3 +9040,34 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   - Ein Schriftwechsel rechnet die Ergebnistabelle eines zweiten Demo-Hauptfensters erst bei
     der nächsten Größenänderung neu.
 
+### ux_test_2026_11 A11 – Abschluss-QS abgeschlossen (04.11.2026)
+
+- **Sicherheit** (Agent `qs-sicherheit`): keine Befunde. Neue Labels und Meldungen sind
+  Klartext (S-1), der Registry-Wert `darstellung/schrift` wird geprüft, die Zählung in
+  `_termin_info_lesen` bleibt in der Lesegrenze.
+- **Wartbarkeit** (Agent `qs-wartbarkeit`), umgesetzt:
+  - `TerminInfo.teilnehmend` als gemeinsame Zahl für Startbildschirm und Termin-Import;
+  - `_gegenstand_zeilen` wird früh gesetzt statt per `getattr`;
+  - der Faktor der Ergebnistabelle ist an die Stufe „Groß“ gekoppelt.
+- **Optional, zur Entscheidung durch Marco (Rückfrage R7):**
+  - eine Hilfsfunktion „alle Schriften neu anwenden“ in `ResponsiveSchriftMixin` statt der
+    Schleife in `app.py`;
+  - Konstanten für die Pfeil- und Feldmaße in `_AbbruchDelegate.paint`;
+  - `t["…"]` statt `t.get` in `_zu_hoch_merken`;
+  - eine gemeinsame Abfrage „ohne Startnummer“;
+  - `re.sub` im Hilfe-Inhaltsverzeichnis;
+  - feste Sollwerte im Lesezeit-Test;
+  - Befundnummern in Code-Kommentaren (Projektstil bisher so);
+  - Web- und Postgres-Terminübersicht zählen weiter alle Gemeldeten;
+  - die Demo übergibt dem Teilnehmer-Dialog kein Angebot.
+- **Vor dem nächsten Build neu aufzunehmen** (`tools/screenshots.py`):
+  - `handbuch_ergebniserfassung` (Abbruch-Feld mit Pfeil);
+  - `handbuch_teilnehmer_dialog_ed` (Hinweis, Gegenstand 2/3 ausgeblendet);
+  - `handbuch_teilnehmer_dialog_dk` (Zeile „Prüfung: … – wird angeboten“);
+  - `handbuch_demo` („Vorheriger Text“, echte Wartezeit);
+  - `handbuch_start` („(+1 abgemeldet)“);
+  - `handbuch_zeitplan` (Breite „Offene Starts“ prüfen).
+  Danach `docs/HANDBUCH.pdf`. Die Website-Änderungen (A10) gehen erst mit dem Release online.
+- **Tests nach den Nacharbeiten:** gefilterte GUI-Tests und `test_db` grün. Der volle Lauf kommt
+  vor dem Build.
+

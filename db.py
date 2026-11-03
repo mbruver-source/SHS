@@ -2490,10 +2490,15 @@ class TerminInfo:
     grund: str | None = None
 
     @property
+    def teilnehmend(self) -> int:
+        """Teilnehmende ohne Abgemeldete - dieselbe Zahl wie im Kopfbalken des Termins."""
+        return self.anzahl_teilnehmer - self.anzahl_abgemeldet
+
+    @property
     def teilnehmer_anzeige(self) -> str:
-        """„16“ bzw. „16 (+1 abgemeldet)“ - dieselbe Zahl wie im Kopfbalken des Termins."""
-        teilnehmend = self.anzahl_teilnehmer - self.anzahl_abgemeldet
-        return f"{teilnehmend} (+{self.anzahl_abgemeldet} abgemeldet)" if self.anzahl_abgemeldet else str(teilnehmend)
+        """„16“ bzw. „16 (+1 abgemeldet)“."""
+        return (f"{self.teilnehmend} (+{self.anzahl_abgemeldet} abgemeldet)" if self.anzahl_abgemeldet
+                else str(self.teilnehmend))
 
 
 # Schrittgrenze (in Einheiten von _LESE_SCHRITTWEITE SQLite-Arbeitsschritten) für das
