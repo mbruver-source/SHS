@@ -24,7 +24,7 @@ A2 M ≈ 19 %).
 | A3b | X4 nach R5: gesperrte Gegenstand-Felder 2/3 bei ED ausblenden | S | 3 | erledigt | 1387abb | 0 → 17 % | R5, zusammen mit A5b |
 | A5b | X2 nach R6: Ergebnistabelle bei „Sehr groß“ und nicht maximiertem Fenster auf Faktor 1,15 begrenzen | S | 3 | erledigt | 1387abb | gemeinsam | R6 |
 | A9 | X14, X15 Hilfe und Kleinigkeiten | M | 3 | erledigt | ba8fc46 | 17 → 36 % | Screenshot handbuch_zeitplan prüfen |
-| A10 | X16 Installationstexte (ohne Signatur) | S | 3 | offen | | | Website erst mit dem Release online |
+| A10 | X16 Installationstexte (ohne Signatur) | S | 3 | erledigt | (A10-Commit) | 36 → ?? % | Website erst mit dem Release online |
 | A11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, Bericht | L | 4 | offen | | | |
 | A12 | UX-Nachtest mit 2 Personas (Laie ohne, Normal ohne Handbuch) | L | 4 | offen | | | |
 | A13 | ToDo-Liste „Note 1 bei allen Personas“ (Marco 03.11.) | M | 4 | offen | | | nach A12 |

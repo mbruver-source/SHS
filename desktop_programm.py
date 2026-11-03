@@ -225,8 +225,9 @@ class VersionDialog(QDialog):
         lizenz_layout.addStretch()
 
         hinweis = QLabel(
-            "Der Button unten fragt beim Klick die GitHub-Releases-Seite dieses "
-            "Programms ab und zeigt an, ob eine neuere Version verfügbar ist. Dafür "
+            # UX-Test 03.11.2026, X16: „GitHub-Releases-Seite“ war für Laien ein Fachwort.
+            "Der Knopf unten fragt beim Klick die Download-Seite dieses Programms "
+            "(bei GitHub) ab und zeigt an, ob eine neuere Version verfügbar ist. Dafür "
             "wird kurz eine Internetverbindung gebraucht - ohne Internet (z. B. am "
             "Prüfungstag im Vereinsnetz) erscheint stattdessen ein entsprechender "
             "Hinweis."
@@ -251,7 +252,7 @@ class VersionDialog(QDialog):
         self._download_btn.clicked.connect(self._releases_seite_oeffnen)
         self._download_btn.hide()
 
-        seite_link_btn = QPushButton("Releases-Seite im Browser öffnen")
+        seite_link_btn = QPushButton("Download-Seite im Browser öffnen")
         seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
 
         # Rückmeldung Marco 13.10.2026: Diagnose für Fehlermeldungen zum Kopieren statt eines

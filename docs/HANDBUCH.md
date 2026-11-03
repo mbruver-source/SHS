@@ -57,8 +57,18 @@ für den optionalen Formular-Import per KI und für die optionale Web-Version.
 
 ## 2. Installation und Updates
 
+**Kurz für Einsteiger (Windows):**
+
+1. Die [Download-Seite](https://github.com/mbruver-source/SHS/releases/latest) öffnen und nach
+   unten bis zum Kasten **„Assets“** (= Dateien zum Herunterladen) scrollen.
+2. Dort `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` anklicken. Die anderen Dateien (Mac, Linux,
+   „Source code“) brauchst du nicht.
+3. Warnt der Browser oder Windows, ist das bei diesem Programm normal und kommt nur beim ersten
+   Mal (Einzelheiten unten). Kaputt machen kannst du dabei nichts.
+4. Die geladene Datei starten und den Schritten folgen. Danach steht das Programm im Startmenü.
+
 Alle Dateien gibt es auf der
-[Release-Seite](https://github.com/mbruver-source/SHS/releases/latest). Das Programm läuft unter
+[Download-Seite](https://github.com/mbruver-source/SHS/releases/latest). Das Programm läuft unter
 **Windows**, als **Vorschau** auch unter **macOS** und **Linux**. Die Vorschau-Versionen werden
 bei jedem Build automatisch geprüft, sind aber noch nicht auf echten Mac- und Linux-Rechnern
 erprobt. Rückmeldungen dazu sind willkommen (siehe

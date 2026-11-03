@@ -3120,6 +3120,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         hilfe_btn.clicked.connect(self._hilfe_anzeigen)
 
         version_btn = QPushButton(f"Version {VERSION}")
+        # UX-Test 03.11.2026, X16: Werner fand den Update-Weg nicht.
+        version_btn.setToolTip("Version anzeigen und nach Updates suchen")
         version_btn.clicked.connect(self._version_anzeigen)
 
         self._tabs = QTabWidget()

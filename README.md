@@ -19,7 +19,7 @@ Wertnoten und Rangliste werden nach denselben Regeln berechnet wie dort.
 
 ➡️ **[Aktuelle Version herunterladen](https://github.com/mbruver-source/SHS/releases/latest)**
 
-**Windows:** Dort unter „Assets“ die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten.
+**Windows:** Dort nach unten bis zum Kasten „Assets“ (= Dateien zum Herunterladen) scrollen, die Datei `SHS-Pruefungsprogramm-Setup-X.Y.Z.exe` laden und starten. Die übrigen Dateien (Mac, Linux, „Source code“) werden unter Windows nicht gebraucht.
 Der Installer bringt alles mit, was das Programm braucht – Python oder andere Software
 musst du nicht installieren. Administratorrechte sind nicht nötig.
 

@@ -8701,7 +8701,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X13 | Teilnehmerzahl Startbildschirm 17 ≠ Kopfbalken 16 (6/6) | umgesetzt (A7, Arbeitsstand) |
 | X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | umgesetzt (A9, Arbeitsstand) |
 | X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | umgesetzt (A9, Arbeitsstand) |
-| X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | geplant (aufgaben.md) |
+| X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | umgesetzt ohne Signatur (A10, Arbeitsstand) |
 
 ### ux_test_2026_11 A1 (X3) – umgesetzt (03.11.2026)
 
@@ -9000,4 +9000,25 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   (Feldname „Rufname Hund“, Tooltip mit Knopfname, Hilfe zu „Bezahlt umschalten“,
   Mehrfachauswahl-Hinweis, Handbuch, Tests). Die Breite von „Offene Starts“ prüft der Nachtest
   bzw. der Screenshot `handbuch_zeitplan` noch einmal.
+
+### ux_test_2026_11 A10 (X16) – umgesetzt (03.11.2026, ohne Code-Signatur)
+
+- **Website (`docs/index.html`):**
+  - Erklärt, wo „Assets“ steht und welche Datei man unter Windows nimmt.
+  - Zeigt das Edge-Bild zur Browserwarnung.
+  - Ein Absatz beruhigt: Die Warnungen sind normal und kommen nur einmal.
+  - Der Update-Weg nennt den Knopf „Version …“ (mit i-Symbol) und den vollen Knopftext.
+  - **Geht erst mit dem nächsten Release online** (Regel 07.10.).
+- **Handbuch Kap. 2:** beginnt mit „Kurz für Einsteiger (Windows)“ in vier Schritten und sagt
+  „Download-Seite“ statt „Release-Seite“. Die README ist angeglichen.
+- **Programm:**
+  - Im Versionsfenster heißt es „Download-Seite dieses Programms (bei GitHub)“ statt
+    „GitHub-Releases-Seite“, der Knopf heißt „Download-Seite im Browser öffnen“.
+  - Der Knopf „Version …“ hat den Tooltip „Version anzeigen und nach Updates suchen“.
+- **Nicht lösbar ohne Signatur:** Die Warnungen selbst bleiben (B8, Marco 03.11.: mit dem
+  Installer derzeit nicht lösbar).
+- **Verifikation** (Agent `verifikation`): Im Kern in Ordnung. Eingearbeitet sind der
+  Knopfname, das Bild auf der Website, der volle Knopftext und der gekürzte Link. Werners
+  Wunsch nach einem eigenen Knopf „Nach Updates suchen“ kommt in die Note-1-Liste (A13).
+  Tests: 721 Unittests, gefilterte GUI-Tests grün.
 

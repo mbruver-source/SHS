@@ -2610,7 +2610,7 @@ def test_versiondialog_update_button_zeigt_fehler_ohne_internet(qtbot, monkeypat
 
 
 def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugriff(qtbot, monkeypatch):
-    """Der separate Link "Releases-Seite im Browser öffnen" bleibt als manueller
+    """Der separate Link "Download-Seite im Browser öffnen" bleibt als manueller
     Rückfallweg bestehen (z. B. falls die automatische Prüfung fehlschlägt) und ruft
     dabei NIE die GitHub-API auf, sondern öffnet direkt den Browser."""
     import app
@@ -2624,7 +2624,7 @@ def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugrif
     geoeffnete_urls = []
     monkeypatch.setattr(app.QDesktopServices, "openUrl", lambda url: geoeffnete_urls.append(url.toString()) or True)
 
-    seite_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Releases-Seite im Browser öffnen")
+    seite_btn = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Download-Seite im Browser öffnen")
     qtbot.mouseClick(seite_btn, Qt.MouseButton.LeftButton)
 
     assert geoeffnete_urls == [desktop_programm.GITHUB_RELEASES_URL]
