@@ -27,6 +27,7 @@ A2 M ≈ 19 %).
 | A10 | X16 Installationstexte (ohne Signatur) | S | 3 | offen | | | Website erst mit dem Release online |
 | A11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, Bericht | L | 4 | offen | | | |
 | A12 | UX-Nachtest mit 2 Personas (Laie ohne, Normal ohne Handbuch) | L | 4 | offen | | | |
+| A13 | ToDo-Liste „Note 1 bei allen Personas“ (Marco 03.11.) | M | 4 | offen | | | nach A12 |
 
 ## Je Aufgabe
 
@@ -107,6 +108,16 @@ Prüfen, warum Enter bei N-B nichts bewirkte (`weiter_btn` ist Default). „Zur�
 
 **A12 – Nachtest (L):** Harness aus dem Scratchpad neu aufsetzen, Laie ohne Handbuch (Werner) und
 Normal ohne Handbuch (Tobias), Szenario wie 03.11., Bericht `Nachtest.md`.
+
+**A13 – ToDo-Liste für die Note 1 (M, Marcos Auftrag 03.11.2026):** Nach dem Nachtest (A12)
+aus allen Einzelberichten (`personas/`, Nachtest) und den Abschlussnotizen eine priorisierte
+ToDo-Liste erstellen: Was fehlt je Persona noch zur Note 1 (Installation, Erststart,
+Termin-Ablauf, gesamt)?
+- Je Punkt: betroffene Personas, Begründung aus den Berichten, Vorschlag, Größe (S/M/L) und ob
+  eine Entscheidung von Marco nötig ist.
+- Nicht lösbares getrennt aufführen (z. B. Code-Signatur, B8).
+- Ablage als `UX-Test-2026-11/note1-todos.md`, Verweis in `Fortschritt.md`.
+- Nichts davon umsetzen – nur die Liste, zur Besprechung mit Marco.
 
 ## Entscheidungen
 
