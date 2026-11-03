@@ -17,7 +17,7 @@ A2 M ≈ 19 %).
 | A2 | X5, X7, X8 Ergebniserfassung | M | 1 | erledigt | fa073a0 | 70 → 89 % | real ≈ 19 %; Screenshot Ergebniserfassung vor Build |
 | A3 | X4, X11, X12 Teilnehmer-Dialog | M | 2 | erledigt | e19c363 | 0 → 16 % | R2; Screenshots Teilnehmer-Dialog vor Build; Rückfrage R5 |
 | A4 | X1 Mittagspause | S | 2 | erledigt | 2700fb6 | 16 → 26 % | R3 |
-| A5 | X2 Schriftgröße | L | 2 | erledigt | (A5-Commit) | 26 → ?? % | Rückfrage R6 |
+| A5 | X2 Schriftgröße | L | 2 | erledigt | 151e766 | 26 → 39 % | Rückfrage R6 |
 | A6 | X6 Demo-Tempo | S | 2 | offen | | | R4: nur Text zurück |
 | A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | offen | | | |
 | A8 | X10 Import-Meldungen | S | 3 | offen | | | |
