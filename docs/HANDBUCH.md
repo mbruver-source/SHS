@@ -202,9 +202,12 @@ gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du kli
 Das Programm tippt in normalem Tempo, wie von Hand. Wer es eilig hat, drückt einfach
 **„Weiter“**: Dann wird der laufende Schritt sofort fertig ausgefüllt.
 
-Ist ein Schritt fertig, zählt der Knopf zehn Sekunden herunter („Weiter (10)“) und
-schaltet dann von allein weiter. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst
-klickt, nimmt den Haken bei **„Automatisch weiter“** heraus. „Weiter“ bleibt dabei an
+Ist ein Schritt fertig, zählt der Knopf herunter („Weiter (20)“) und schaltet dann von allein
+weiter. Die Zeit richtet sich nach der Länge des Erklärtexts: mindestens zehn Sekunden, bei
+langen Texten bis zu 40. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst klickt,
+nimmt den Haken bei **„Automatisch weiter“** heraus. **Enter** wirkt wie „Weiter“.
+**„Vorheriger Text“** zeigt die Erklärung des Schritts davor noch einmal; die Demo wartet
+solange, und **„Aktueller Schritt“** führt zurück. „Weiter“ bleibt dabei an
 derselben Stelle: Das Erklärfenster wächst mit längeren Texten nach oben. Wo du es
 hinschiebst, bleibt es.
 

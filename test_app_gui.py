@@ -8843,12 +8843,96 @@ def _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3):
     import desktop_demo
 
     monkeypatch.setattr(desktop_demo.DemoTour, "AUTO_WEITER_S", sekunden)
+    # Feste Zeit statt Lesezeit nach Textlänge (X6), damit die Zählerstände vorhersagbar sind.
+    monkeypatch.setattr(desktop_demo.DemoTour, "LESEZEIT_JE_WORT_S", 0)
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     fenster.show()
     fenster._demo_starten()
     return fenster._demo_tour
+
+
+def test_demo_wartezeit_waechst_mit_der_textlaenge(qtbot, termin, demo_umgebung, monkeypatch):
+    """UX-Test 03.11.2026, X6: bei langen Erklärtexten mehr als die 10 s, höchstens 40 s."""
+    import desktop_demo
+
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=10)
+    monkeypatch.setattr(desktop_demo.DemoTour, "LESEZEIT_JE_WORT_S", 0.35)
+    schritt = tour._schritte[tour._index]
+    woerter = len(f"{schritt.titel} {schritt.text}".split())
+    assert woerter > 40  # Begrüßung ist lang
+    assert tour._wartezeit() == min(40, -(-woerter * 35 // 100))
+    monkeypatch.setattr(schritt, "text", "kurz")
+    assert tour._wartezeit() == 10
+    tour.beenden()
+
+
+def test_demo_vorheriger_text_haelt_an_und_kehrt_zurueck(qtbot, termin, demo_umgebung, monkeypatch):
+    """UX-Test 03.11.2026, X6 (Marco: nur Text zurück): „Vorheriger Text“ zeigt die frühere
+    Erklärung und hält das automatische Weiter an; „Aktueller Schritt“ führt zurück, ohne
+    weiterzuschalten. Enter wirkt wie „Weiter“."""
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3)
+    panel = tour._panel
+    assert not panel.zurueck_btn.isVisible()
+    tour.weiter()
+    assert tour._index == 1 and panel.zurueck_btn.isVisible()
+    aktueller_titel = panel.titel_label.text()
+
+    panel.zurueck_btn.click()
+    assert panel.schritt_label.text().startswith("Rückblick")
+    assert panel.titel_label.text() == tour._schritte[0].titel
+    assert not tour._countdown.isActive()
+    assert panel.weiter_btn.text() == "Aktueller Schritt"
+
+    panel.weiter_btn.click()
+    assert tour._index == 1 and panel.titel_label.text() == aktueller_titel
+    # Verifikation A6, Befund 2: danach zählt der Countdown wieder (Schritt ist fertig).
+    assert tour._countdown.isActive() and not panel.pause_label.isVisible()
+
+    # Verdrahtung des Kürzels selbst (offscreen kommt ein simulierter Tastendruck nicht
+    # verlässlich beim Fenster-Kürzel an).
+    (enter,) = [k for k in panel.findChildren(QShortcut) if k.key() == QKeySequence(Qt.Key_Return)]
+    enter.activated.emit()
+    assert tour._index == 2
+    tour.beenden()
+
+
+def test_demo_rueckblick_randfaelle(qtbot, termin, demo_umgebung, monkeypatch):
+    """Verifikation A6, Befunde 1, 3, 4, 5: Fehler im Rückblick führt zum aktuellen Schritt
+    zurück; „Automatisch weiter“ umschalten startet keinen Countdown über altem Text; die
+    Hinweiszeile des laufenden Schritts ist im Rückblick ausgeblendet; Enter löst den
+    fokussierten Knopf aus."""
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3)
+    panel = tour._panel
+    tour.weiter()
+    tour.weiter()
+    assert tour._index == 2
+    panel.hinweis("Gespeichert unter X")
+    panel.zurueck_btn.click()
+    assert not panel.hinweis_label.isVisible()
+    panel.zurueck_btn.click()  # zwei Schritte zurück, dann gesperrt
+    assert panel.titel_label.text() == tour._schritte[0].titel and not panel.zurueck_btn.isEnabled()
+
+    panel.auto_box.setChecked(False)
+    panel.auto_box.setChecked(True)
+    assert not tour._countdown.isActive()
+
+    panel.fehler("Kaputt")
+    assert panel.titel_label.text() == tour._schritte[2].titel
+    assert "Kaputt" in panel.hinweis_label.text() and not panel.zurueck_btn.isVisible()
+    tour.beenden()
+
+
+def test_demo_enter_loest_fokussierten_knopf_aus(qtbot, termin, demo_umgebung, monkeypatch):
+    tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=3)
+    panel = tour._panel
+    tour.weiter()
+    panel.zurueck_btn.setFocus()
+    monkeypatch.setattr(panel, "focusWidget", lambda: panel.zurueck_btn)
+    panel._enter_gedrueckt()
+    assert tour._index == 1 and panel.im_rueckblick()
+    tour.beenden()
 
 
 def test_demo_zaehlt_nach_fertigem_schritt_herunter_und_schaltet_weiter(qtbot, termin, demo_umgebung, monkeypatch):

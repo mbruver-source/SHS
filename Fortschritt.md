@@ -8691,7 +8691,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
 | X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | umgesetzt (A3, Arbeitsstand) |
 | X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | umgesetzt (A2, Arbeitsstand) |
-| X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | geplant (aufgaben.md) |
+| X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | umgesetzt (A6, Arbeitsstand) |
 | X7 | Punktwert > 60 beim Tippen nur roter Rahmen ohne sichtbaren Text (3/6, teils Testumgebung) | umgesetzt (A2, Arbeitsstand) |
 | X8 | „4,5“ wird zu 45; der Komma-Hinweis verschwindet mit der nächsten Ziffer (Wiederholung N6, Gegenprobe am Gerät) | umgesetzt (A2, Arbeitsstand) |
 | X9 | „Startnummer tauschen“ (ein Teilnehmer markiert): Partner vorausgewählt, Enter tauscht falsch | geplant (aufgaben.md) |
@@ -8849,4 +8849,36 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   vom 22.09.). Das Handbuch rät zum Maximieren. Alternative: Faktor nur für die Ergebnistabelle
   auf 1,15 begrenzen.
 - Vor dem nächsten Build prüfen, ob ein Handbuchbild das aufgeklappte Menü „Ansicht“ zeigt.
+
+### ux_test_2026_11 A6 (X6) – umgesetzt (03.11.2026)
+
+- **Problem:** Die Demo schaltete nach 10 s weiter, viele Erklärtexte haben 45–90 Wörter. Es
+  gab kein Zurück, Enter bewirkte nichts (4 von 6 Personas).
+- **Lösung** (Marcos Entscheidung R4, „nur Text zurück“):
+  - Die Wartezeit richtet sich nach der Textlänge (`DemoTour._wartezeit`: 0,35 s je Wort,
+    mindestens `AUTO_WEITER_S` = 10 s, höchstens 40 s; tatsächlich 13–31 s je Schritt).
+  - Neuer Knopf „Vorheriger Text“ im Erklärfenster: Er blättert nur die Erklärungen zurück,
+    die Demo selbst läuft nur vorwärts. Während des Rückblicks pausiert der Countdown, die
+    Hinweis- und Zusatzzeilen des laufenden Schritts sind ausgeblendet, und „Weiter“ heißt
+    „Aktueller Schritt“ und führt zurück. Danach zählt der Countdown wieder.
+  - Enter wirkt im Erklärfenster wie „Weiter“, bzw. auf den Knopf mit dem Fokus (QShortcut;
+    `setDefault` wirkt nur in QDialog).
+  - Einführungstext, Tooltip, Modul-Docstring, Handbuch (Demoprüfung) und `Architektur.md`
+    sind angepasst. `tools/screenshots.py` friert den Countdown auf die echte Wartezeit ein.
+- **Tests:** 4 neue GUI-Tests:
+  - Wartezeit nach Textlänge;
+  - Rückblick hält an, kehrt zurück, Countdown läuft wieder, Enter-Kürzel;
+  - Randfälle (Fehler im Rückblick, Häkchen umschalten, Hinweiszeile, zwei Schritte zurück);
+  - Enter auf dem fokussierten Knopf.
+  Die Gegenprobe scheitert 4-fach. Lokal laufen 500 GUI- und 720 Unittests grün.
+- **Verifikation** (Agent `verifikation`): Befunde 1–5 und 7–10 sind eingearbeitet:
+  - eigene Signale für Beginn und Ende des Rückblicks statt dauerhaftem Anhalten;
+  - ein Fehler führt zum aktuellen Schritt zurück;
+  - kein Countdown über altem Text;
+  - Zeilen im Rückblick ausgeblendet;
+  - Enter auf dem Fokus-Knopf;
+  - Tests und Doku.
+  Bewusst gelassen: Der Knopf „Aktueller Schritt“ behält den Vorwärtspfeil.
+- Vor dem nächsten Build ist der Screenshot `handbuch_demo` neu nötig (neuer Knopf, echte
+  Wartezeit).
 

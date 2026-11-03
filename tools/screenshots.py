@@ -420,9 +420,9 @@ def _bild_demo(termine: _Termine, ziel: Path) -> list[Path]:
         else:
             raise RuntimeError("Demo: Schritt „8.“ (Ergebnisse eintragen) nicht gefunden")
         _warten(800)
-        # Countdown auf "Weiter (10)" einfrieren.
+        # Countdown auf die echte Wartezeit des Schritts einfrieren (seit X6 nach Textlänge).
         tour._countdown.stop()
-        tour._panel.countdown_anzeigen(desktop_demo.DemoTour.AUTO_WEITER_S)
+        tour._panel.countdown_anzeigen(tour._wartezeit())
         _warten()
         bild = fenster.grab()
         panel = tour._panel.grab()

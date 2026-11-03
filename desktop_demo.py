@@ -2,8 +2,10 @@
 kompletten Prüfungstag mit erfundenen Daten vor - Termin anlegen, Teilnehmer, Startnummern,
 Bezahlt, Zeitplan, Ergebnisse, Auswertung, Stechen, Ergebnisliste - und erklärt in einem
 kleinen Fenster je Schritt, was gerade passiert und warum. Der Anwender klickt nur „Weiter“
-- oder lässt die Demo laufen: Ist ein Schritt fertig, geht es nach 10 Sekunden von allein
-weiter (Marcos Wunsch 05.10.2026, abschaltbar über „Automatisch weiter“).
+- oder lässt die Demo laufen: Ist ein Schritt fertig, geht es nach einer Lesezeit je nach
+Textlänge (mindestens 10 s, höchstens 40 s) von allein weiter (Marcos Wunsch 05.10.2026,
+abschaltbar über „Automatisch weiter“). „Vorheriger Text“ zeigt frühere Erklärungen noch
+einmal; die Demo selbst läuft nur vorwärts (UX-Test 03.11.2026, X6).
 
 Sicherheit der echten Daten: Die Demo arbeitet ausschließlich in einem eigenen
 Temp-Ordner (tempfile.mkdtemp, nie im Termine-Ordner) und löscht ihn am Ende wieder. Der
@@ -23,6 +25,7 @@ Ablauf blockieren) und zeigt das Ergebnis stattdessen im Erklärfenster.
 from __future__ import annotations
 
 import datetime
+import math
 import os
 import random
 import shutil
@@ -34,7 +37,7 @@ from typing import Callable
 
 import shiboken6
 from PySide6.QtCore import QEvent, QEventLoop, QObject, QPoint, QRect, QRectF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QFont, QPainter, QPalette, QPen
+from PySide6.QtGui import QFont, QKeySequence, QPainter, QPalette, QPen, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -195,6 +198,8 @@ class DemoPanel(QWidget):
     weiter_geklickt = Signal()
     beenden_geklickt = Signal()
     auto_weiter_umgeschaltet = Signal(bool)
+    rueckblick_geoeffnet = Signal()
+    rueckblick_beendet = Signal()
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.Tool)
@@ -228,8 +233,18 @@ class DemoPanel(QWidget):
         self.auto_box = QCheckBox("Automatisch weiter")
         self.auto_box.setChecked(True)
         self.auto_box.setToolTip(
-            f"Ist ein Schritt fertig, geht es nach {DemoTour.AUTO_WEITER_S} Sekunden von allein weiter."
+            "Ist ein Schritt fertig, geht es nach einer Lesezeit (mindestens "
+            f"{DemoTour.AUTO_WEITER_S} Sekunden, bei langen Texten länger) von allein weiter."
         )
+        # UX-Test 03.11.2026, X6 (Marco: „nur Text zurück“): die Erklärung eines früheren
+        # Schritts noch einmal lesen - die Demo selbst läuft nur vorwärts und wartet solange.
+        self.zurueck_btn = QPushButton("Vorheriger Text")
+        self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – die Demo wartet solange.")
+        self.zurueck_btn.setVisible(False)
+        self.zurueck_btn.clicked.connect(self._rueckblick_zeigen)
+        self._verlauf: list[tuple[str, str, str]] = []
+        self._rueckblick: int | None = None
+        self._sichtbar_vor_rueckblick: tuple[bool, bool, bool] | None = None
         self.auto_box.toggled.connect(self.auto_weiter_umgeschaltet)
         self.beenden_btn = QPushButton("Beenden")
         self.beenden_btn.setToolTip("Demo abbrechen – der Demo-Termin wird gelöscht.")
@@ -242,9 +257,14 @@ class DemoPanel(QWidget):
         self.weiter_btn.setLayoutDirection(Qt.RightToLeft)
         symbol_setzen(self.weiter_btn, "chevron-right", "#FFFFFF")
         self.weiter_btn.setDefault(True)
-        self.weiter_btn.clicked.connect(self.weiter_geklickt)
+        self.weiter_btn.clicked.connect(self._weiter_gedrueckt)
+        # setDefault wirkt nur in QDialog - das Erklärfenster ist ein QWidget (UX-Test
+        # 03.11.2026: Enter bewirkte nichts).
+        for taste in (Qt.Key_Return, Qt.Key_Enter):
+            QShortcut(QKeySequence(taste), self, activated=self._enter_gedrueckt)
 
         knopf_zeile = QHBoxLayout()
+        knopf_zeile.addWidget(self.zurueck_btn)
         knopf_zeile.addWidget(self.extra_btn)
         knopf_zeile.addWidget(self.auto_box)
         knopf_zeile.addStretch()
@@ -273,6 +293,11 @@ class DemoPanel(QWidget):
         self.schritt_label.setText(f"Schritt {nummer} von {anzahl}" if nummer else "Einführung")
         self.titel_label.setText(schritt.titel)
         self.text_label.setText(schritt.text)
+        self._verlauf.append((self.schritt_label.text(), schritt.titel, schritt.text))
+        self._rueckblick = None
+        self._sichtbar_vor_rueckblick = None  # hinweis()/extra() unten setzen die Zeilen neu
+        self.zurueck_btn.setVisible(len(self._verlauf) > 1)
+        self.zurueck_btn.setEnabled(True)
         self.hinweis(None)
         self.extra(None)
         self._letzter = letzter
@@ -300,8 +325,78 @@ class DemoPanel(QWidget):
         else:
             self.weiter_btn.setText(f"Weiter ({sekunden})")
 
+    def _texte_zeigen(self, eintrag: tuple[str, str, str], rueckblick: bool) -> None:
+        schritt, titel, text = eintrag
+        self.schritt_label.setText(f"Rückblick – {schritt}" if rueckblick else schritt)
+        self.titel_label.setText(titel)
+        self.text_label.setText(text)
+        # Hinweis- und Zusatzzeile gehören zum laufenden Schritt - im Rückblick ausblenden
+        # (Verifikation A6, Befund 4), danach wie vorher zeigen.
+        if rueckblick:
+            if self._sichtbar_vor_rueckblick is None:
+                self._sichtbar_vor_rueckblick = (self.hinweis_label.isVisible(), self.extra_btn.isVisible(),
+                                                 self.pause_label.isVisible())
+            for widget in (self.hinweis_label, self.extra_btn, self.pause_label):
+                widget.setVisible(False)
+        elif self._sichtbar_vor_rueckblick is not None:
+            for widget, sichtbar in zip((self.hinweis_label, self.extra_btn, self.pause_label),
+                                        self._sichtbar_vor_rueckblick):
+                widget.setVisible(sichtbar)
+            self._sichtbar_vor_rueckblick = None
+        self._groesse_anpassen()
+
+    def im_rueckblick(self) -> bool:
+        return self._rueckblick is not None
+
+    def _rueckblick_zeigen(self) -> None:
+        """Eine Erklärung weiter zurück; die Tour wartet solange (rueckblick_geoeffnet)."""
+        aktuell = len(self._verlauf) - 1 if self._rueckblick is None else self._rueckblick
+        if aktuell <= 0:
+            return
+        erster = self._rueckblick is None
+        self._rueckblick = aktuell - 1
+        self._texte_zeigen(self._verlauf[self._rueckblick], rueckblick=True)
+        self.zurueck_btn.setEnabled(self._rueckblick > 0)
+        if erster:
+            self.rueckblick_geoeffnet.emit()
+        self.weiter_btn.setText("Aktueller Schritt")
+
+    def _rueckblick_beenden(self) -> None:
+        if self._rueckblick is None:
+            return
+        self._rueckblick = None
+        self._texte_zeigen(self._verlauf[-1], rueckblick=False)
+        self.zurueck_btn.setEnabled(True)
+        self.countdown_anzeigen(None)
+        self.rueckblick_beendet.emit()
+
+    def _weiter_gedrueckt(self) -> None:
+        if self._rueckblick is not None:
+            # Erst zurück zum laufenden Schritt, nicht gleich weiter.
+            self._rueckblick_beenden()
+            return
+        self.weiter_geklickt.emit()
+
+    def _enter_gedrueckt(self) -> None:
+        # Enter löst wie unter Windows üblich den Knopf mit dem Fokus aus, sonst „Weiter“
+        # (Verifikation A6, Befund 5).
+        fokus = self.focusWidget()
+        knopf = fokus if isinstance(fokus, QPushButton) and fokus.isVisible() else self.weiter_btn
+        if knopf.isEnabled() and knopf.isVisible():
+            knopf.click()
+
+    def _zeile_zeigen(self, nummer: int, widget: QWidget, sichtbar: bool) -> None:
+        """Hinweis-/Zusatz-/Pausenzeile zeigen oder ausblenden - im Rückblick erst bei der
+        Rückkehr zum laufenden Schritt (Verifikation A6, Befund 4)."""
+        if self._sichtbar_vor_rueckblick is not None:
+            werte = list(self._sichtbar_vor_rueckblick)
+            werte[nummer] = sichtbar
+            self._sichtbar_vor_rueckblick = tuple(werte)
+            return
+        widget.setVisible(sichtbar)
+
     def angehalten_anzeigen(self, angehalten: bool) -> None:
-        self.pause_label.setVisible(angehalten)
+        self._zeile_zeigen(2, self.pause_label, angehalten)
         self._groesse_anpassen()
 
     def hinweis(self, text: str | None) -> None:
@@ -309,13 +404,13 @@ class DemoPanel(QWidget):
         # im Fenster um, statt rechts abgeschnitten zu werden (Marco 01.11.2026).
         anzeige = (text or "").replace("\\", "\\​").replace("/", "/​")
         self.hinweis_label.setText(anzeige)
-        self.hinweis_label.setVisible(bool(text))
+        self._zeile_zeigen(0, self.hinweis_label, bool(text))
         self._groesse_anpassen()
 
     def extra(self, beschriftung: str | None, aktion: Callable[[], None] | None = None) -> None:
         self._extra_aktion = aktion
         self.extra_btn.setText(beschriftung or "")
-        self.extra_btn.setVisible(bool(beschriftung))
+        self._zeile_zeigen(1, self.extra_btn, bool(beschriftung))
         self._groesse_anpassen()
 
     def _groesse_anpassen(self) -> None:
@@ -335,6 +430,12 @@ class DemoPanel(QWidget):
                 self._eigene_groessenaenderung = False
 
     def fehler(self, text: str) -> None:
+        # Verifikation A6, Befund 1: erst zurück zum fehlerhaften Schritt - sonst stand der
+        # Fehler unter einem alten Text und kein Knopf führte zurück.
+        if self._rueckblick is not None:
+            self._rueckblick = None
+            self._texte_zeigen(self._verlauf[-1], rueckblick=False)
+        self.zurueck_btn.setVisible(False)
         self.hinweis(text)
         self.weiter_btn.setEnabled(False)
 
@@ -438,6 +539,10 @@ class DemoTour(QObject):
     #: Automatisch weiter (Marcos Wunsch 05.10.2026): so viele Sekunden nach dem Ende eines
     #: Schritts (alle Aktionen ausgeführt) geht es von allein weiter; 0 = aus (Tests).
     AUTO_WEITER_S = 10
+    #: UX-Test 03.11.2026, X6: 10 s reichten für lange Erklärtexte (bis ~90 Wörter) nicht.
+    #: Die Wartezeit wächst mit der Textlänge (Lesezeit je Wort), höchstens LESEZEIT_MAX_S.
+    LESEZEIT_JE_WORT_S = 0.35
+    LESEZEIT_MAX_S = 40
     #: Nach einem geschlossenen sperrenden Fenster bleiben mindestens so viele Sekunden.
     AUTO_WEITER_NACH_MODAL_S = 3
     TASTE_MS = (55, 140)  # je Zeichen, leicht schwankend wie beim echten Tippen
@@ -516,6 +621,10 @@ class DemoTour(QObject):
         self._panel.weiter_geklickt.connect(self.weiter)
         self._panel.beenden_geklickt.connect(self.beenden)
         self._panel.auto_weiter_umgeschaltet.connect(self._auto_weiter_umgeschaltet)
+        # Rückblick (X6): Countdown nur pausieren, nicht dauerhaft anhalten - danach zählt er
+        # wieder, sofern der Schritt fertig ist (Verifikation A6, Befund 2).
+        self._panel.rueckblick_geoeffnet.connect(self._countdown_stoppen)
+        self._panel.rueckblick_beendet.connect(self._nach_rueckblick)
         # Eigene Eingaben im Demo-Dialog erkennen (siehe eventFilter).
         QApplication.instance().installEventFilter(self)
         self._schritte = self._schritte_aufbauen()
@@ -668,12 +777,25 @@ class DemoTour(QObject):
             or not self._panel.weiter_btn.isEnabled()
             or not self._panel.auto_box.isChecked()
             or self._angehalten
+            or self._panel.im_rueckblick()  # Verifikation A6, Befund 3
         ):
             return
-        self._rest = self.AUTO_WEITER_S
+        self._rest = self._wartezeit()
         self._modal_wartet = False
         self._panel.countdown_anzeigen(self._rest)
         self._countdown.start()
+
+    def _nach_rueckblick(self) -> None:
+        if not self._offen:
+            self._countdown_starten()
+
+    def _wartezeit(self) -> int:
+        """Sekunden bis zum automatischen Weiter: mindestens AUTO_WEITER_S, bei langen Texten
+        die Lesezeit (UX-Test 03.11.2026, X6)."""
+        schritt = self._schritte[self._index]
+        woerter = len(f"{schritt.titel} {schritt.text}".split())
+        lesezeit = min(self.LESEZEIT_MAX_S, math.ceil(woerter * self.LESEZEIT_JE_WORT_S))
+        return max(self.AUTO_WEITER_S, lesezeit)
 
     def _countdown_stoppen(self) -> None:
         self._countdown.stop()
@@ -876,9 +998,10 @@ class DemoTour(QObject):
                 "Willkommen zur Demoprüfung",
                 "Die Demo spielt einen kompletten Prüfungstag einmal vor: vom Anlegen des "
                 "Termins über Teilnehmer, Zeitplan und Ergebnisse bis zur Ergebnisliste.\n\n"
-                "Das Programm klickt und tippt selbst. Ist ein Schritt fertig, geht es nach "
-                f"{self.AUTO_WEITER_S} Sekunden von allein weiter – oder du drückst „Weiter“. Wer selbst "
-                "bestimmen will, nimmt den Haken bei „Automatisch weiter“ heraus. Ein farbiger "
+                "Das Programm klickt und tippt selbst. Ist ein Schritt fertig, geht es nach einer "
+                "Lesezeit (je nach Textlänge) von allein weiter – oder du drückst „Weiter“. Wer selbst "
+                "bestimmen will, nimmt den Haken bei „Automatisch weiter“ heraus. „Vorheriger Text“ "
+                "zeigt die Erklärung des Schritts davor noch einmal. Ein farbiger "
                 "Rahmen zeigt jeweils, wo gerade gearbeitet wird. Wer es eilig hat: „Weiter“ "
                 "füllt einen laufenden Schritt sofort fertig aus.\n\n"
                 "Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem "
