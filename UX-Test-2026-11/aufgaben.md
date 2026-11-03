@@ -12,7 +12,7 @@ Limit kommt deshalb aus `mcp__ccd_session_mgmt__get_usage` (5-h- und Wochenwert)
 
 | Aufgabe | Punkte | Größe | Fenster | Status | Commit | Limit vorher → nachher | Bemerkung |
 |---|---|---|---|---|---|---|---|
-| A1 | X3 ED-Gegenstand nach PDF-Import | S | 1 | offen | | | R1 |
+| A1 | X3 ED-Gegenstand nach PDF-Import | S | 1 | erledigt | (dieser) | 64 → 70 % | R1; real ≈ 6 % |
 | A2 | X5, X7, X8 Ergebniserfassung | M | 1 | offen | | | |
 | A3 | X4, X11, X12 Teilnehmer-Dialog | M | 1 | offen | | | R2: vorbelegen + markieren |
 | A4 | X1 Mittagspause | S | 2 | offen | | | R3: weglassen |

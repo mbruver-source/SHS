@@ -565,7 +565,8 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
 # (ANMELDEFORMULAR_*), dieselbe Quelle nutzt pdf_export.erstelle_anmeldeformular_pdf().
 # Marcos Entscheidungen: genau EINE Prüfung je Formular (keine oder mehrere angekreuzt ->
 # Datei wird mit Hinweis abgelehnt), die eingetragenen Gegenstände gelten für die
-# angekreuzte LK und werden als "frei" (gegenstand_N_disziplin = None) gespeichert,
+# angekreuzte LK und werden als "frei" (gegenstand_N_disziplin = None) gespeichert - bei
+# ED (nur eine Disziplin) seit dem UX-Test 03.11.2026 (X3) gleich dieser zugeordnet,
 # Dubletten werden wie beim OMA-Import übersprungen.
 _PDF_HAKEN_AUS = (None, "", "/Off", "Off")
 
@@ -715,7 +716,8 @@ def _anmeldeformular_zu_teilnehmer(werte: dict) -> tuple[NeuerTeilnehmer, list[s
         zeile["chip_nr"] = f"Täto {zeile['chip_nr']}"
 
     teilnehmer = _csv_zeile_zu_teilnehmer(zeile)
-    # Gegenstände nur aus dem Block der angekreuzten LK (LK n = n Gegenstände), als "frei".
+    # Gegenstände nur aus dem Block der angekreuzten LK (LK n = n Gegenstände), als "frei"
+    # (DK) bzw. der ED-Disziplin zugeordnet (siehe unten).
     gegenstaende = [
         _pdf_text(werte, anmeldeformular_gegenstand_feld(pruefung.stufe, nummer)) or None
         for nummer in range(1, pruefung.stufe + 1)
@@ -731,7 +733,11 @@ def _anmeldeformular_zu_teilnehmer(werte: dict) -> tuple[NeuerTeilnehmer, list[s
         gegenstaende = ausgefuellt[:1]
     for nummer, gegenstand in enumerate(gegenstaende, start=1):
         setattr(teilnehmer, f"gegenstand_{nummer}", gegenstand)
-        setattr(teilnehmer, f"gegenstand_{nummer}_disziplin", None)
+        # UX-Test 03.11.2026, X3: Bei ED gibt es nur die eine Disziplin - der Gegenstand gehört
+        # eindeutig zu ihr (wie im Teilnehmer-Dialog). "Frei" bleibt er nur bei DK, sonst
+        # meldet die Liste gleich nach dem Import "Gegenstand der Suchdisziplin nicht zugeordnet".
+        zuordnung = pruefung.disziplin if pruefung.art == "ED" and gegenstand else None
+        setattr(teilnehmer, f"gegenstand_{nummer}_disziplin", zuordnung)
     return teilnehmer, verworfen
 
 

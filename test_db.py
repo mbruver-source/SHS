@@ -4046,6 +4046,8 @@ class TestAnmeldeformularImport(unittest.TestCase):
         self.assertEqual((ergebnis.importiert, ergebnis.hinweise), (1, []))
         t = list_teilnehmer(self.conn)[0]
         self.assertEqual((t["gegenstand_1"], t["gegenstand_2"]), ("Leine", None))
+        # X3: zugeordnet, obwohl der Text aus Formularfeld 2 stammt.
+        self.assertEqual((t["gegenstand_1_disziplin"], t["gegenstand_2_disziplin"]), ("Trümmerfeld", None))
 
     def test_vollstaendiges_formular_wird_uebernommen(self):
         texte = dict(self.STANDARD_TEXTE, **{
@@ -4076,9 +4078,21 @@ class TestAnmeldeformularImport(unittest.TestCase):
         # UX-Test 02.10.2026, U11: bei Einzeldisziplin nur der erste Gegenstand, der zweite
         # wird im Import-Ergebnis als nicht übernommen genannt.
         self.assertEqual((t["gegenstand_1"], t["gegenstand_2"], t["gegenstand_3"]), ("Handschuh", None, None))
-        self.assertEqual((t["gegenstand_1_disziplin"], t["gegenstand_2_disziplin"]), (None, None))
+        # UX-Test 03.11.2026, X3: bei ED gleich der einzigen Disziplin zugeordnet - sonst stand
+        # direkt nach dem Import „Gegenstand der Suchdisziplin nicht zugeordnet“ in der Liste.
+        self.assertEqual((t["gegenstand_1_disziplin"], t["gegenstand_2_disziplin"]), ("Trümmerfeld", None))
+        self.assertIsNone(teilnehmer_gegenstand_hinweis(t))
         self.assertEqual(len(ergebnis.hinweise), 1)
         self.assertIn("nicht übernommen „Schlüssel“", ergebnis.hinweise[0])
+
+    def test_dk_gegenstaende_bleiben_frei(self):
+        # UX-Test 03.11.2026, X3: Die Zuordnung gilt nur für ED; bei DK bleibt Marcos
+        # Entscheidung vom 28.09.2026 („frei“, Zuordnung erst am Prüfungstag).
+        texte = dict(self.STANDARD_TEXTE, **{anmeldeformular_gegenstand_feld(1, 1): "Handschuh"})
+        pfad = self._pdf("dk.pdf", texte, haken=(ANMELDEFORMULAR_PRUEFUNG_PRAEFIX + "DK1",))
+        self.assertEqual(importiere_anmeldeformular_pdf(self.conn, [pfad]).importiert, 1)
+        t = list_teilnehmer(self.conn)[0]
+        self.assertEqual((t["gegenstand_1"], t["gegenstand_1_disziplin"]), ("Handschuh", None))
 
     def test_nicht_angebotene_pruefung_wird_abgelehnt(self):
         # Verifikation 28.09.2026, Befund 1: Formular eines anderen Termins / falscher Termin.

@@ -8688,7 +8688,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 |---|---|---|
 | X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | geplant (aufgaben.md) |
 | X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
-| X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | geplant (aufgaben.md) |
+| X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
 | X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | geplant (aufgaben.md) |
 | X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | geplant (aufgaben.md) |
 | X6 | Demo: 10-s-Countdown zu kurz für 45–90 Wörter, kein „Zurück“, Enter ohne Wirkung (4/6) | geplant (aufgaben.md) |
@@ -8702,3 +8702,22 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | X14 | Hilfe: lange Textwand ohne Suche; Hilfe und Handbuch widersprechen sich beim Termin-Löschen | geplant (aufgaben.md) |
 | X15 | Kleinigkeiten (Liste im Bericht, Abschnitt 3) | geplant (aufgaben.md) |
 | X16 | Installation für Laien (Browser-/SmartScreen-Warnung, „Assets“, Update-Weg); Code-Signatur ist zurückgestellt (B8) | geplant (aufgaben.md) |
+
+### ux_test_2026_11 A1 (X3) – umgesetzt (03.11.2026)
+
+- **Problem:** Nach dem Einlesen eines Anmelde-PDFs mit Einzeldisziplin stand sofort „Gegenstand
+  der Suchdisziplin nicht zugeordnet“ in der Teilnehmerliste (5 von 6 Personas). Der Import
+  speicherte die Gegenstände nach der Entscheidung vom 28.09. als „frei“.
+- **Lösung:** Bei ED wird der eine übernommene Gegenstand gleich der ED-Disziplin zugeordnet, wie im
+  Teilnehmer-Dialog (`db_import.py`, `_anmeldeformular_zu_teilnehmer`). Bei DK bleibt er frei.
+  Nebeneffekt: Der Bewertungsbogen zeigt bei ED nach dem PDF-Import jetzt den Gegenstand.
+- **Handbuch:** Der Hinweis gilt jetzt für ältere Daten oder PDFs, die mit einer älteren Version
+  eingelesen wurden. Bei „Übernommen“ steht die ED-Zuordnung.
+- **Tests:** `test_vollstaendiges_formular_wird_uebernommen` prüft Zuordnung und keinen Hinweis,
+  `test_ed_nur_zweites_gegenstandsfeld_ausgefuellt` die Zuordnung aus Feld 2, neu ist
+  `test_dk_gegenstaende_bleiben_frei`. Gegenprobe ohne Fix: 1 Fehlschlag wie erwartet. Lokal
+  718 Unittests grün.
+- **Verifikation** (Agent `verifikation`): Code korrekt, CSV/OMA nicht betroffen (übernehmen keine
+  Gegenstände), 38 gefilterte GUI-Tests grün. Ihre Kleinpunkte (Handbuch Z. ~454, Kommentar,
+  versionsfreie Formulierung, Test für Feld 2) sind eingearbeitet.
+

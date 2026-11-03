@@ -384,7 +384,7 @@ solltest du vor dem Prüfungstag beheben; **Hinweise** (klein) sind nur Erinneru
 | Gegenstand noch offen | Hinweis (grau) | ED ohne Gegenstand. Kann bis zum Prüfungstag nachgetragen werden. |
 | Gegenstände noch offen | Hinweis (grau) | DK mit weniger verschiedenen Gegenständen als die Mindestanzahl. Kann bis zum Prüfungstag nachgetragen werden. |
 | Gegenstände den Suchdisziplinen nicht vollständig zugeordnet | Hinweis | DK: Die Zuordnung ist begonnen, deckt aber nicht alle drei Disziplinen ab. |
-| Gegenstand der Suchdisziplin nicht zugeordnet | Hinweis | ED (ältere Daten): Gegenstand ohne Zuordnung. Einmal öffnen und speichern behebt das. |
+| Gegenstand der Suchdisziplin nicht zugeordnet | Hinweis | ED (ältere Daten oder Anmelde-PDFs, die mit einer älteren Programmversion eingelesen wurden): Gegenstand ohne Zuordnung. Einmal öffnen und speichern behebt das. |
 | Bei ED ist nur ein Gegenstand vorgesehen | Hinweis | ED mit mehreren Gegenständen, z. B. aus älteren Daten. Beim nächsten Speichern fragt das Programm nach, bevor es die überzähligen entfernt. |
 | keine Teilnahme | Vermerk | Teilnehmer ist als nicht erschienen markiert, die ganze Zeile ist grau (siehe oben). Weitere Meldungen stehen dahinter. |
 
@@ -452,7 +452,8 @@ unten.
   Ebenso abgelehnt wird ein Formular, bei dem Vorname, Name oder Rufname des Hundes fehlt oder
   Hündin und Rüde beide angekreuzt sind.
 - **Übernommen:** alle Angaben zu Teilnehmer, abweichendem Hundeeigentümer und Hund sowie die
-  Gegenstände der angekreuzten Leistungsklasse (ohne Zuordnung zu einer Disziplin). Bei einer
+  Gegenstände der angekreuzten Leistungsklasse (beim Dreikampf ohne Zuordnung zu einer Disziplin,
+  bei einer Einzeldisziplin gleich dieser zugeordnet). Bei einer
   **Einzeldisziplin** gibt es nur einen Gegenstand: Übernommen wird der erste ausgefüllte,
   weitere nennt die Übersicht nach dem Import als „nicht übernommen“. Das Formular weist
   darauf auch selbst hin. Die Nummer landet in der Chip-Nr.; ist Täto-Nr. und nicht zugleich
