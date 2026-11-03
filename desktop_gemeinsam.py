@@ -304,13 +304,15 @@ def _responsive_schriftgroesse(breite: int, schmal: int = 480, breit: int = 900,
     """Berechnet eine Schriftgröße (pt) zwischen pt_schmal und pt_breit, linear nach
     der Fensterbreite interpoliert - damit Beschriftungen (Spaltenköpfe, Filter- und
     Hinweistexte) bei kleineren Fenstern nicht abgeschnitten werden, sondern lesbar
-    kleiner dargestellt werden, statt der Anwendung eine Mindestbreite vorzuschreiben."""
+    kleiner dargestellt werden, statt der Anwendung eine Mindestbreite vorzuschreiben.
+    Mal dem Faktor der gewählten Schriftgröße (UX-Test 03.11.2026, X2)."""
+    faktor = desktop_darstellung.schrift_faktor()
     if breite <= schmal:
-        return pt_schmal
+        return pt_schmal * faktor
     if breite >= breit:
-        return pt_breit
+        return pt_breit * faktor
     anteil = (breite - schmal) / (breit - schmal)
-    return pt_schmal + anteil * (pt_breit - pt_schmal)
+    return (pt_schmal + anteil * (pt_breit - pt_schmal)) * faktor
 
 
 def _ergebnis_spaltenbreiten_verteilen(

@@ -1,6 +1,6 @@
 """Darstellung der Desktop-Oberfläche: Qt-Stylesheet, Akzentfarben (Themes),
-Hintergrund-Designs (Beagle/hell/dunkel/Kontrast), gespeicherte Auswahl (QSettings) und deren
-Anwendung.
+Hintergrund-Designs (Beagle/hell/dunkel/Kontrast), Schriftgröße in drei Stufen (seit dem
+UX-Test 03.11.2026), gespeicherte Auswahl (QSettings) und deren Anwendung.
 
 Aus app.py ausgelagert (Codex-Architekturprüfung 27.09.2026); rein interne Umstellung,
 Aussehen und Verhalten sind unverändert. Die Abhängigkeiten laufen nur in eine Richtung:
@@ -740,6 +740,34 @@ def _design_speichern(design_name: str) -> None:
     QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_KEY_DESIGN, design_name)
 
 
+# UX-Test 03.11.2026, X2: Schriftgröße in drei Stufen (Menü „Ansicht → Schriftgröße“). Der
+# Faktor wirkt auf die Anwendungsschrift und auf die an die Fensterbreite angepassten
+# Beschriftungen (desktop_gemeinsam._responsive_schriftgroesse).
+_SCHRIFTSTUFEN = {
+    "normal": {"anzeigename": "Normal", "faktor": 1.0},
+    "gross": {"anzeigename": "Groß", "faktor": 1.15},
+    "sehr_gross": {"anzeigename": "Sehr groß", "faktor": 1.3},
+}
+_SCHRIFT_DEFAULT = "normal"
+_SETTINGS_KEY_SCHRIFT = "darstellung/schrift"
+_schrift_faktor = 1.0
+_basis_schrift_pt: float | None = None  # Anwendungsschrift beim ersten Anwenden (Faktor 1)
+
+
+def schrift_faktor() -> float:
+    """Faktor der gewählten Schriftgröße (1,0 / 1,15 / 1,3), gesetzt von _darstellung_anwenden."""
+    return _schrift_faktor
+
+
+def _gespeicherte_schriftstufe_lesen() -> str:
+    wert = QSettings(_SETTINGS_ORG, _SETTINGS_APP).value(_SETTINGS_KEY_SCHRIFT, _SCHRIFT_DEFAULT)
+    return wert if isinstance(wert, str) and wert in _SCHRIFTSTUFEN else _SCHRIFT_DEFAULT
+
+
+def _schriftstufe_speichern(stufe: str) -> None:
+    QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_KEY_SCHRIFT, stufe)
+
+
 # Stil, mit dem die Anwendung gestartet ist - beim ersten _darstellung_anwenden()
 # gemerkt, damit "hell" den nativen Stil des Systems behält (nur die Palette ist fest).
 _ursprung_stil: str | None = None
@@ -784,8 +812,17 @@ def _design_palette(theme: dict, design: dict) -> QPalette:
 
 
 def _darstellung_anwenden(app: QApplication) -> None:
-    """Wendet gespeicherte Akzentfarbe + Hintergrund-Design auf die ganze Anwendung an."""
-    global _aktives_design, _ursprung_stil, _aktueller_stil
+    """Wendet gespeicherte Akzentfarbe, Hintergrund-Design und Schriftgröße auf die ganze
+    Anwendung an."""
+    global _aktives_design, _ursprung_stil, _aktueller_stil, _schrift_faktor, _basis_schrift_pt
+    if _basis_schrift_pt is None:
+        _basis_schrift_pt = app.font().pointSizeF()
+    _schrift_faktor = _SCHRIFTSTUFEN[_gespeicherte_schriftstufe_lesen()]["faktor"]
+    schrift = app.font()
+    ziel_pt = round(_basis_schrift_pt * _schrift_faktor, 1)
+    if _basis_schrift_pt > 0 and schrift.pointSizeF() != ziel_pt:
+        schrift.setPointSizeF(ziel_pt)
+        app.setFont(schrift)
     theme_name = _gespeichertes_theme_lesen()
     design_name = _gespeichertes_design_lesen()
     theme = _THEMES[theme_name]

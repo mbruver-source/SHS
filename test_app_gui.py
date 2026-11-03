@@ -28,7 +28,7 @@ import sys
 import pytest
 from contextlib import closing
 from PySide6.QtCore import QPoint, QPointF, QSize, Qt
-from PySide6.QtGui import QKeySequence, QPalette, QShortcut
+from PySide6.QtGui import QFont, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
 import db as _db_modul
@@ -70,7 +70,7 @@ from db_import import (
     CSV_IMPORT_SPALTEN,
     CsvImportErgebnis,
 )
-from desktop_darstellung import _erzeuge_qss
+from desktop_darstellung import _darstellung_anwenden, _erzeuge_qss
 from desktop_dialoge import BewertungsbogenAuswahlDialog, _wiederherstellungsziele_planen
 import desktop_auswertung
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
@@ -6028,7 +6028,7 @@ def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
 def darstellung_speicher(monkeypatch, tmp_path_factory):
     """Ersetzt die QSettings-Zugriffe durch einen Speicher im Arbeitsspeicher (keine
     Schreibzugriffe in Registry/~/.config) und stellt danach den Zustand der
-    QApplication (Stil, Palette, Stylesheet) sowie die Modul-Zustände von app.py wieder
+    QApplication (Stil, Palette, Stylesheet, Schrift) sowie die Modul-Zustände von app.py wieder
     her, damit nachfolgende Tests nicht im dunklen Design laufen. Die Einstellungs-
     Funktionen werden in BEIDEN Modulen ersetzt: HauptFenster (app.py) ruft sie direkt
     auf, _darstellung_anwenden() in desktop_darstellung.py ebenfalls."""
@@ -6042,25 +6042,57 @@ def darstellung_speicher(monkeypatch, tmp_path_factory):
     qapp.setStyleSheet(vorher_stylesheet)
     vorher_palette = QPalette(qapp.palette())
     hinweise = qapp.styleHints()
-    for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil", "_haken_geschrieben"):
+    for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil", "_haken_geschrieben",
+                 "_schrift_faktor", "_basis_schrift_pt"):
         monkeypatch.setattr(darstellung, name, getattr(darstellung, name))
+    vorher_schrift = QFont(qapp.font())
     monkeypatch.setattr(darstellung, "_pfeile_geschrieben", set())
     # Häkchen-Bild nicht ins echte Benutzerprofil schreiben.
     haken = tmp_path_factory.mktemp("haken") / "haken.png"
     monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(haken).replace("\\", "/"))
 
-    speicher = {"theme": "blau", "design": "hell"}
+    speicher = {"theme": "blau", "design": "hell", "schrift": "normal"}
     for modul in (app_modul, darstellung):
         monkeypatch.setattr(modul, "_gespeichertes_theme_lesen", lambda: speicher["theme"])
         monkeypatch.setattr(modul, "_gespeichertes_design_lesen", lambda: speicher["design"])
+        monkeypatch.setattr(modul, "_gespeicherte_schriftstufe_lesen", lambda: speicher["schrift"])
         monkeypatch.setattr(modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
         monkeypatch.setattr(modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
+        monkeypatch.setattr(modul, "_schriftstufe_speichern", lambda name: speicher.__setitem__("schrift", name))
     yield speicher
     if hasattr(Qt, "ColorScheme") and hasattr(hinweise, "setColorScheme"):
         hinweise.setColorScheme(Qt.ColorScheme.Unknown)  # wieder dem System folgen
+    qapp.setFont(vorher_schrift)
     qapp.setStyle(vorher_stil)
     qapp.setPalette(vorher_palette)
     qapp.setStyleSheet(vorher_stylesheet)
+
+
+def test_ansicht_menue_schriftgroesse_vergroessert_und_bleibt_gespeichert(qtbot, termin, darstellung_speicher):
+    """UX-Test 03.11.2026, X2: „Ansicht → Schriftgröße“ vergrößert die Anwendungsschrift und
+    die an die Breite angepassten Beschriftungen; „Normal“ stellt den Ausgangswert wieder her."""
+    import desktop_darstellung as darstellung
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.resize(1400, 820)
+    fenster.show()
+    assert set(fenster._schrift_actions) == {"normal", "gross", "sehr_gross"}
+    assert fenster._schrift_actions["normal"].isChecked()
+    _darstellung_anwenden(QApplication.instance())
+    basis = QApplication.instance().font().pointSizeF()
+    label_pt = fenster._schrift_pt
+
+    fenster._schrift_actions["sehr_gross"].trigger()
+    assert darstellung_speicher["schrift"] == "sehr_gross"
+    assert darstellung.schrift_faktor() == 1.3
+    assert QApplication.instance().font().pointSizeF() == pytest.approx(basis * 1.3, abs=0.1)
+    assert fenster._schrift_pt == pytest.approx(label_pt * 1.3, abs=0.1)
+
+    fenster._schrift_actions["normal"].trigger()
+    assert QApplication.instance().font().pointSizeF() == pytest.approx(basis, abs=0.1)
+    assert fenster._schrift_pt == pytest.approx(label_pt, abs=0.1)
 
 
 def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellung_speicher):

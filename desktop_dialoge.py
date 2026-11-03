@@ -1247,8 +1247,10 @@ def _wiederherstellungsziele_planen(namen, vorhandene, ordner, aktion_fuer) -> t
 # Fließtext abheben.
 _HILFE_HTML = """
 <h2>Hilfe – SHS Prüfungsprogramm</h2>
-<p><b>Schrift zu blass oder zu klein?</b> Menü „Ansicht“ → „Hintergrund“ → „Hoher Kontrast“
-(schwarz auf weiß, größere Kontraste). Die Wahl bleibt gespeichert.</p>
+<p><b>Schrift zu klein?</b> Menü „Ansicht“ → „Schriftgröße“ → „Groß“ oder „Sehr groß“.
+<b>Schrift zu blass?</b> Menü „Ansicht“ → „Hintergrund“ → „Hoher Kontrast“ (schwarz auf weiß,
+größere Kontraste). Die Wahl bleibt gespeichert. Alles noch größer (unter Windows):
+Einstellungen → System → Anzeige → „Skalierung“, z. B. 125 % wählen.</p>
 
 <h3>Erste Schritte</h3>
 <p>Beim Programmstart zeigt die Terminübersicht alle vorhandenen Termine mit Datum, Verein,

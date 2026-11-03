@@ -8687,7 +8687,7 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 | Nr | Punkt | Status |
 |---|---|---|
 | X1 | Mittagspause „um 12:00 bei allen Richtern“ landet am Planende, wenn der Plan früher endet (6/6); öffnet die Nachtest-Entscheidung N3 neu | umgesetzt (A4, Arbeitsstand) |
-| X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | geplant (aufgaben.md) |
+| X2 | Schrift nicht vergrößerbar; Hilfe „Schrift zu blass oder zu klein? → Hoher Kontrast“ verspricht es; Starttipp verweist auf Menü „Ansicht“, das im Startfenster fehlt (Laien, erheblich) | umgesetzt (A5, Arbeitsstand) |
 | X3 | Hinweis „Gegenstand der Suchdisziplin nicht zugeordnet“ direkt nach PDF-Import einer ED-Meldung – echter Kleinfehler (Disziplin bleibt leer), berührt Entscheidung 28.09.; Handbuch „ältere Daten“ (5/6) | umgesetzt (A1, Arbeitsstand) |
 | X4 | ED: Gegenstand 2/3 gesperrt ohne Erklärung; zwei Gegenstände landen in Feld 1 (6/6) | umgesetzt (A3, Arbeitsstand) |
 | X5 | Spalte „Abbruch“: keine erkennbare Auswahlliste, öffnet erst beim zweiten Klick (Handbuch sagt ein Klick); Spalte zu schmal („Verletzun…“) | umgesetzt (A2, Arbeitsstand) |
@@ -8817,4 +8817,36 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   - Ein leerer Block genau zur Uhrzeit am Planende zählt noch als „nicht fertig“.
   - Der Uhrzeitvergleich über `.time()` würde bei einem Plan über Mitternacht falsch werten
     (schon vorher so).
+
+### ux_test_2026_11 A5 (X2) – umgesetzt (03.11.2026)
+
+- **Problem:** Die Schrift ließ sich nicht vergrößern. Die Hilfe versprach „Schrift zu blass
+  oder zu klein? → Hoher Kontrast“, das ändert aber nur die Farben. Der Starttipp verwies auf
+  das Menü „Ansicht“, das es im Startfenster nicht gibt (beide Laien-Personas, erheblich).
+- **Lösung:**
+  - Neues Untermenü „Ansicht → Schriftgröße“ mit Normal / Groß / Sehr groß (Faktor
+    1,0 / 1,15 / 1,3), gespeichert in QSettings unter `darstellung/schrift`.
+  - `desktop_darstellung._darstellung_anwenden` merkt beim ersten Aufruf die Systemschrift
+    (Windows Segoe UI 9) und setzt die Anwendungsschrift auf Basis × Faktor. Das schaukelt
+    nicht auf, „Normal“ stellt den Ausgangswert exakt wieder her.
+  - `desktop_gemeinsam._responsive_schriftgroesse` (Beschriftungen, Kopfbalken,
+    Ergebnistabelle) rechnet mit dem Faktor.
+  - `HauptFenster._schrift_wechseln` stößt Beschriftungen und Ergebnistabelle sofort neu an.
+  - Hilfe und Starttipp sind berichtigt. Die Hilfe nennt zusätzlich die Windows-Skalierung,
+    das Handbuch (Aussehen) beschreibt die dritte Einstellung.
+  - `tools/screenshots.py` erzwingt „Normal“, die Test-Fixture `darstellung_speicher` stellt
+    die Schrift wieder her.
+- **Tests:** neuer GUI-Test (Menü, Speichern, Faktor, Anwendungsschrift und Beschriftungen
+  wachsen und gehen zurück). Lokal 496 GUI- und 720 Unittests grün. Sichtprüfung „Sehr groß“
+  (Teilnehmer, Ergebniserfassung) in Ordnung.
+- **Verifikation** (Agent `verifikation`): Code in Ordnung, Randfälle geprüft (Basis-Schrift,
+  kein Aufschaukeln, Dialoge, StartDialog, Testisolation, ungültige Registry-Werte).
+  Kleinpunkte (Windows-Hinweis nur „unter Windows“, Docstrings) eingearbeitet. Bewusst gelassen:
+  - Der Titel eines gerade laufenden Demo-Fensters wächst erst bei der nächsten Demo mit.
+  - Ändert Windows die Systemschrift zur Laufzeit, gilt der neue Wert erst nach einem Neustart.
+- **Offen als Rückfrage R6:** Bei „Sehr groß“ und einem nicht maximierten Fenster (1400 px)
+  werden die Kopfzeilen der Ergebniserfassung abgeschnitten (bestehende Regel `harte_minima`
+  vom 22.09.). Das Handbuch rät zum Maximieren. Alternative: Faktor nur für die Ergebnistabelle
+  auf 1,15 begrenzen.
+- Vor dem nächsten Build prüfen, ob ein Handbuchbild das aufgeklappte Menü „Ansicht“ zeigt.
 

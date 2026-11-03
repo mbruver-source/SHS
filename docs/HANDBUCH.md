@@ -139,13 +139,16 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 - **Aussehen:** Oben im Fenster zeigt der dunkle Kopfbalken den Beagle, den Verein und
   darunter Datum, Ort und die Zahl der Teilnehmer des geöffneten Termins. Kurze Hinweise in den
   Reitern haben ein kleines **„?“**; bleibt die Maus darauf, erscheint die ausführliche
-  Erklärung. Im Menü **„Ansicht“** gibt es zwei Einstellungen, die sich frei kombinieren lassen
+  Erklärung. Im Menü **„Ansicht“** gibt es drei Einstellungen, die sich frei kombinieren lassen
   und gespeichert werden:
   - **„Hintergrund“:** Beagle (Standard, warmes Creme), Hell (Weiß), Dunkel oder Hoher
     Kontrast. Hoher Kontrast eignet sich z. B. für einen Laptop draußen am Prüfungstag. Wer
     früher „Warm / Sand“ gewählt hatte, bekommt automatisch „Beagle“.
   - **„Akzentfarbe“:** Lohbraun (Standard), Blau, Grün oder Violett, die Farbe der
     Haupt-Schaltflächen und der Markierungen.
+  - **„Schriftgröße“:** Normal (Standard), Groß oder Sehr groß. Bei „Sehr groß“ das Fenster
+    am besten maximieren, damit die Spalten Platz haben. Noch größer wird alles über Windows:
+    Einstellungen → System → Anzeige → „Skalierung“, z. B. 125 %.
 
   Unter Windows bleibt beim Design Dunkel das Fenster zum Öffnen und Speichern von Dateien
   hell. Dieses Fenster stammt von Windows selbst.

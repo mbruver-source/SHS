@@ -148,6 +148,8 @@ def _umgebung_einrichten() -> QApplication:
             modul._gespeichertes_theme_lesen = lambda: desktop_darstellung._THEME_DEFAULT
         if hasattr(modul, "_gespeichertes_design_lesen"):
             modul._gespeichertes_design_lesen = lambda: desktop_darstellung._DESIGN_DEFAULT
+        if hasattr(modul, "_gespeicherte_schriftstufe_lesen"):  # X2: Bilder immer in „Normal“
+            modul._gespeicherte_schriftstufe_lesen = lambda: desktop_darstellung._SCHRIFT_DEFAULT
     # Jedes Desktop-Modul, das termine_ordner selbst importiert (seit der Aufteilung von app.py).
     desktop_module = (app_modul, desktop_auswertung, desktop_dialoge, desktop_demo, desktop_gemeinsam,
                       desktop_programm, desktop_verwaltung, desktop_zeitplan)

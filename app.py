@@ -152,7 +152,10 @@ from desktop_darstellung import (
     _DESIGNS,
     _farbe,
     _gespeichertes_design_lesen,
+    _gespeicherte_schriftstufe_lesen,
     _gespeichertes_theme_lesen,
+    _schriftstufe_speichern,
+    _SCHRIFTSTUFEN,
     _theme_speichern,
     _THEMES,
 )
@@ -3130,6 +3133,12 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             ansicht_menue.addMenu("Akzentfarbe"), _THEMES, _gespeichertes_theme_lesen(),
             self._theme_aktion_ausgeloest,
         )
+        # UX-Test 03.11.2026, X2: Schrift vergrößern (vorher nur „Hoher Kontrast“, der die
+        # Größe nicht ändert - die Hilfe versprach es trotzdem).
+        self._schrift_actions = self._auswahl_menue_aufbauen(
+            ansicht_menue.addMenu("Schriftgröße"), _SCHRIFTSTUFEN, _gespeicherte_schriftstufe_lesen(),
+            self._schrift_aktion_ausgeloest,
+        )
 
     def _auswahl_menue_aufbauen(self, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
         actions: dict[str, QAction] = {}
@@ -3151,6 +3160,19 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _design_aktion_ausgeloest(self, action: QAction) -> None:
         self._design_wechseln(action.data())
+
+    def _schrift_aktion_ausgeloest(self, action: QAction) -> None:
+        self._schrift_wechseln(action.data())
+
+    def _schrift_wechseln(self, stufe: str) -> None:
+        _schriftstufe_speichern(stufe)
+        self._darstellung_neu_anwenden()
+        # Die an die Fensterbreite angepassten Beschriftungen und die Ergebnistabelle
+        # rechnen ihre Größe nur bei Größenänderungen neu - hier einmal anstoßen.
+        for fenster in QApplication.topLevelWidgets():
+            if hasattr(fenster, "_schriftgroesse_anwenden"):
+                fenster._schriftgroesse_anwenden()
+        self.ergebnis_tab._spaltenbreiten_anpassen()
 
     def _theme_wechseln(self, theme_name: str) -> None:
         _theme_speichern(theme_name)
@@ -3631,8 +3653,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # UX-Test 02.10.2026, U14: Laien fanden das Design "Hoher Kontrast" nicht.
         hinweis = QLabel(
             f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.\n"
-            "Tipp: Schrift zu blass? Im Programm oben im Menü „Ansicht“ → „Hintergrund“ → "
-            "„Hoher Kontrast“ wählen."
+            "Tipp: Schrift zu klein oder zu blass? Nach dem Öffnen eines Termins oben im Menü "
+            "„Ansicht“ → „Schriftgröße“ bzw. „Hintergrund“ → „Hoher Kontrast“ wählen."
         )
         hinweis.setWordWrap(True)
 
