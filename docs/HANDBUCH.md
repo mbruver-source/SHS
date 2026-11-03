@@ -362,10 +362,10 @@ Das bestimmt, auf welchem Bewertungsbogen er erscheint.
 
 **Einzeldisziplin (ED):** Es gibt nur eine Suchdisziplin und deshalb – in jeder Leistungsklasse –
 genau **einen** Gegenstand. Nur **Gegenstand 1** ist eingabebereit, „gesucht in“ folgt
-automatisch der gewählten Disziplin. Gegenstand 2 und 3 sind ausgegraut; ein Hinweis unter
+automatisch der gewählten Disziplin. Gegenstand 2 und 3 sind ausgeblendet; ein Hinweis unter
 Gegenstand 1 sagt das.
 
-![Erfassungsmaske bei ED: nur Gegenstand 1 aktiv](bilder/handbuch_teilnehmer_dialog_ed.png)
+![Erfassungsmaske bei ED: nur Gegenstand 1 sichtbar](bilder/handbuch_teilnehmer_dialog_ed.png)
 
 **Dreikampf (DK):** Alle drei Felder sind frei wählbar. Mindestens nötig sind unterschiedliche
 Gegenstände je Leistungsklasse:

@@ -21,8 +21,8 @@ A2 M ≈ 19 %).
 | A6 | X6 Demo-Tempo | S | 2 | erledigt | 0ea6129 | 39 → 54 % | R4; Screenshot handbuch_demo vor Build |
 | A7 | X9, X13 Tauschen, Teilnehmerzahl | S | 3 | erledigt | f75356a | 54 → 66 % | Screenshot handbuch_start vor Build |
 | A8 | X10 Import-Meldungen | S | 3 | erledigt | cba451d | 66 → 87 % | |
-| A3b | X4 nach R5: gesperrte Gegenstand-Felder 2/3 bei ED ausblenden | S | 3 | offen | | | R5 |
-| A5b | X2 nach R6: Ergebnistabelle bei „Sehr groß“ und nicht maximiertem Fenster auf Faktor 1,15 begrenzen | S | 3 | offen | | | R6 |
+| A3b | X4 nach R5: gesperrte Gegenstand-Felder 2/3 bei ED ausblenden | S | 3 | erledigt | (A3b-Commit) | 0 → ?? % | R5, zusammen mit A5b |
+| A5b | X2 nach R6: Ergebnistabelle bei „Sehr groß“ und nicht maximiertem Fenster auf Faktor 1,15 begrenzen | S | 3 | erledigt | (A3b-Commit) | gemeinsam | R6 |
 | A9 | X14, X15 Hilfe und Kleinigkeiten | M | 3 | offen | | | |
 | A10 | X16 Installationstexte (ohne Signatur) | S | 3 | offen | | | Website erst mit dem Release online |
 | A11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, Bericht | L | 4 | offen | | | |

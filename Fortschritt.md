@@ -8945,3 +8945,27 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 - **R6 (X2):** Bei „Sehr groß“ nutzt die Ergebnistabelle nur Faktor 1,15, **solange das
   Hauptfenster nicht maximiert ist**; maximiert gilt der volle Faktor (Aufgabe A5b).
 
+### ux_test_2026_11 A3b (R5) und A5b (R6) – umgesetzt (03.11.2026)
+
+- **A3b (X4, Marcos Entscheidung R5):**
+  - Im Teilnehmer-Dialog werden Gegenstand 2 und 3 bei ED samt Beschriftung ausgeblendet
+    (`QFormLayout.setRowVisible`) statt nur gesperrt. Der Hinweis unter Gegenstand 1 bleibt.
+  - Stehen bei ED noch Texte in den unsichtbaren Feldern (Altdaten, Wechsel DK → ED), nennt die
+    Rückfrage beim Speichern sie jetzt („Gegenstand 2: Korken“).
+- **A5b (X2, Marcos Entscheidung R6):**
+  - Bei „Sehr groß“ nutzt die Ergebnistabelle nur Faktor 1,15, solange das Hauptfenster nicht
+    maximiert ist (`_ERGEBNIS_FAKTOR_NICHT_MAXIMIERT`).
+  - Unter Windows kommt beim Maximieren das resizeEvent vor dem Zustandswechsel.
+    `HauptFenster.changeEvent` rechnet bei `WindowStateChange` deshalb noch einmal nach.
+- **Handbuch:** ED-Gegenstände „ausgeblendet“, Bildunterschrift „nur Gegenstand 1 sichtbar“.
+- **Tests:**
+  - Ausblenden bei ED/DK;
+  - Rückfrage nennt die ausgeblendeten Texte;
+  - Faktor 1,15 bzw. 1,3, Neuberechnung bei WindowStateChange.
+  Die Gegenprobe scheitert. Lokal laufen alle GUI- und Unittests grün.
+- **Verifikation** (Agent `verifikation`): Ein echter Fehler (falscher Fensterzustand beim
+  Maximieren unter Windows) ist behoben. Außerdem eingearbeitet: der UX-Randfall der
+  unsichtbaren Texte (Rückfrage nennt sie), veraltete Kommentare, die Bildunterschrift und
+  try/finally im Test.
+- Vor dem nächsten Build ist der Screenshot `handbuch_teilnehmer_dialog_ed` neu nötig.
+

@@ -27,7 +27,7 @@ import sys
 
 import pytest
 from contextlib import closing
-from PySide6.QtCore import QPoint, QPointF, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QSize, Qt
 from PySide6.QtGui import QFont, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
 
@@ -3256,14 +3256,30 @@ def test_teilnehmer_neu_mit_erster_angebotener_pruefung_und_hinweis(qtbot):
     assert dialog.pruefung_hinweis.text().endswith("wird angeboten")
 
 
+def test_teilnehmer_ed_rueckfrage_nennt_ausgeblendete_gegenstaende(qtbot, monkeypatch):
+    """Verifikation A3b/A5b, Befund 3: Seit R5 sind Gegenstand 2/3 bei ED unsichtbar - die
+    Rückfrage nennt deshalb, was verworfen wird."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1.setText("Socke")
+    dialog.gegenstand_2.setText("Korken")
+    dialog.art.setCurrentText("ED")
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    assert any("Gegenstand 2: Korken" in f for f in fragen) and dialog.result() == 0
+
+
 def test_teilnehmer_ed_erklaert_gesperrte_gegenstaende(qtbot):
     """UX-Test 03.11.2026, X4: bei ED Hinweis und Tooltip, warum Gegenstand 2/3 gesperrt sind."""
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
     dialog.art.setCurrentText("ED")
     assert not dialog.gegenstand_hinweis.isHidden()
     assert "nur einen Gegenstand" in dialog.gegenstand_2.toolTip()
+    # R5 (Marco 03.11.2026): bei ED ausgeblendet
+    assert not dialog.gegenstand_2.isVisible() and not dialog.gegenstand_3_disziplin.isVisible()
     dialog.art.setCurrentText("DK")
     assert dialog.gegenstand_hinweis.isHidden()
+    assert dialog.gegenstand_2.isVisible() and dialog.gegenstand_3.isVisible()
     assert dialog.gegenstand_2.toolTip() == ""
 
 
@@ -6140,6 +6156,36 @@ def test_ansicht_menue_schriftgroesse_vergroessert_und_bleibt_gespeichert(qtbot,
     fenster._schrift_actions["normal"].trigger()
     assert QApplication.instance().font().pointSizeF() == pytest.approx(basis, abs=0.1)
     assert fenster._schrift_pt == pytest.approx(label_pt, abs=0.1)
+
+
+def test_ergebnistabelle_sehr_gross_nur_maximiert_voll(qtbot, termin, darstellung_speicher):
+    """Marcos Entscheidung R6 (UX-Test 03.11.2026): bei „Sehr groß“ nutzt die Ergebnistabelle
+    nicht maximiert nur Faktor 1,15, maximiert den vollen Faktor 1,3."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.resize(1400, 820)
+    fenster.show()
+    fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
+    fenster._schrift_actions["normal"].trigger()
+    tab = fenster.ergebnis_tab
+    tab._spaltenbreiten_anpassen()
+    normal_pt = tab._tabelle_pt
+
+    fenster._schrift_actions["sehr_gross"].trigger()
+    tab._spaltenbreiten_anpassen()
+    assert tab._tabelle_pt == pytest.approx(normal_pt * 1.15, abs=0.15)
+
+    echtes_is_maximized = fenster.isMaximized
+    fenster.isMaximized = lambda: True  # offscreen-Maximieren ändert die Breite nicht verlässlich
+    try:
+        # Verifikation A3b/A5b, Befund 1: unter Windows kommt das resizeEvent vor dem
+        # Zustandswechsel - erst der WindowStateChange darf neu rechnen.
+        fenster.changeEvent(QEvent(QEvent.WindowStateChange))
+        qtbot.waitUntil(lambda: tab._tabelle_pt == pytest.approx(normal_pt * 1.3, abs=0.15), timeout=2000)
+    finally:
+        fenster.isMaximized = echtes_is_maximized
+        fenster._schrift_actions["normal"].trigger()
 
 
 def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellung_speicher):

@@ -156,6 +156,7 @@ from desktop_darstellung import (
     _gespeichertes_theme_lesen,
     _schriftstufe_speichern,
     _SCHRIFTSTUFEN,
+    schrift_faktor,
     _theme_speichern,
     _THEMES,
 )
@@ -1820,6 +1821,10 @@ class _ErgebnisTabelle(QTableWidget):
 _SAMMELSPEICHERN_UEBER_TEILNEHMER = 200
 
 
+#: R6: höchster Schriftfaktor der Ergebnistabelle bei nicht maximiertem Fenster.
+_ERGEBNIS_FAKTOR_NICHT_MAXIMIERT = 1.15
+
+
 class ErgebnisTab(QWidget):
     """Eine Zeile je Teilnehmer. Bei DK werden alle drei Disziplinen nebeneinander in
     derselben Zeile erfasst statt in drei getrennten Zeilen. Änderungen werden nicht
@@ -2388,6 +2393,11 @@ class ErgebnisTab(QWidget):
         HauptFenster geerbte Regel nur für diese Tabelle, andere Tabs bleiben unberührt)."""
         breite = self.tabelle.viewport().width()
         pt = _responsive_schriftgroesse(breite, schmal=1000, breit=1600, pt_schmal=7.5, pt_breit=9.5)
+        # Marcos Entscheidung R6 (UX-Test 03.11.2026, X2): bei „Sehr groß“ nur Faktor 1,15,
+        # solange das Fenster nicht maximiert ist - sonst schnitten die Kopfzeilen ab.
+        faktor = schrift_faktor()
+        if faktor > _ERGEBNIS_FAKTOR_NICHT_MAXIMIERT and not self.window().isMaximized():
+            pt = pt / faktor * _ERGEBNIS_FAKTOR_NICHT_MAXIMIERT
 
         # Stylesheet nur bei geänderter Schriftgröße neu setzen (Teil 3 Nr. 6).
         if self._tabelle_pt != round(pt, 1):
@@ -3271,6 +3281,14 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.demo_btn.setToolTip(
             "Holt das Erklärfenster der laufenden Demoprüfung wieder nach vorn." if aktiv else self._demo_tooltip
         )
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        # R6 (Verifikation A3b/A5b, Befund 1): Unter Windows kommt beim Maximieren das
+        # resizeEvent, bevor isMaximized() umspringt - die Ergebnistabelle rechnete dann mit
+        # dem alten Zustand. Nach dem Zustandswechsel deshalb noch einmal anpassen.
+        if event.type() == QEvent.WindowStateChange and hasattr(self, "ergebnis_tab"):
+            QTimer.singleShot(0, self, self.ergebnis_tab._spaltenbreiten_anpassen)
+        super().changeEvent(event)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Speichert automatisch noch nicht gespeicherte Ergebnisse, bevor das Programm

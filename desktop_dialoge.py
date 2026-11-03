@@ -275,11 +275,11 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             zuordnung.addItems(ALLE_DISZIPLINEN)
 
         # UX-Test 03.11.2026, X12: Klartext, welche Prüfung Art/LK/Disziplin ergeben und ob der
-        # Termin sie anbietet; X4: warum Gegenstand 2/3 bei ED gesperrt sind.
+        # Termin sie anbietet; X4: warum Gegenstand 2/3 bei ED fehlen (seit R5 ausgeblendet).
         self.pruefung_hinweis = QLabel("")
         self.pruefung_hinweis.setTextFormat(Qt.PlainText)
         self.pruefung_hinweis.setWordWrap(True)
-        self.gegenstand_hinweis = QLabel("Bei einer Einzeldisziplin gibt es nur einen Gegenstand (Feld 1).")
+        self.gegenstand_hinweis = QLabel("Bei einer Einzeldisziplin gibt es nur einen Gegenstand.")
         self.gegenstand_hinweis.setTextFormat(Qt.PlainText)
         self.gegenstand_hinweis.setWordWrap(True)
 
@@ -349,8 +349,14 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_rechts.addRow("", self.pruefung_hinweis)
         form_rechts.addRow("Gegenstand 1", _gegenstand_zeile(self.gegenstand_1, self.gegenstand_1_disziplin))
         form_rechts.addRow("", self.gegenstand_hinweis)
-        form_rechts.addRow("Gegenstand 2", _gegenstand_zeile(self.gegenstand_2, self.gegenstand_2_disziplin))
-        form_rechts.addRow("Gegenstand 3", _gegenstand_zeile(self.gegenstand_3, self.gegenstand_3_disziplin))
+        # Marcos Entscheidung R5 (UX-Test 03.11.2026, X4): bei ED ausgeblendet statt nur gesperrt.
+        self._gegenstand_zeilen = [
+            _gegenstand_zeile(self.gegenstand_2, self.gegenstand_2_disziplin),
+            _gegenstand_zeile(self.gegenstand_3, self.gegenstand_3_disziplin),
+        ]
+        form_rechts.addRow("Gegenstand 2", self._gegenstand_zeilen[0])
+        form_rechts.addRow("Gegenstand 3", self._gegenstand_zeilen[1])
+        self._form_rechts = form_rechts
         form_rechts.addRow("", self.bezahlt)
 
         gruppe_rechts = QGroupBox("Hund && Prüfung")
@@ -462,7 +468,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.gegenstand_3.setText(vorhandener["gegenstand_3"] or "")
         # Altdaten bei ED (Abstimmung 23.09.: ED hat nur Gegenstand 1): Steht der einzige
         # Gegenstand in Feld 2 oder 3, ihn nach Feld 1 holen, statt ihn in einem
-        # ausgegrauten Feld zu verstecken.
+        # (seit R5 ausgeblendeten) Feld zu verstecken.
         if vorhandener["art"] == "ED" and not self.gegenstand_1.text():
             for feld in (self.gegenstand_2, self.gegenstand_3):
                 if feld.text():
@@ -528,7 +534,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         """Abstimmung mit Marco (23.09.): ED hat nur eine Suchdisziplin und damit
         unabhängig von der Leistungsklasse genau einen Gegenstand. Bei ED ist daher nur
         Gegenstand 1 eingabebereit, sein "gesucht in" folgt fest der gewählten
-        ED-Disziplin (automatische Zuordnung); Gegenstand 2/3 sind ausgegraut. Bei DK
+        ED-Disziplin (automatische Zuordnung); Gegenstand 2/3 sind ausgeblendet (R5). Bei DK
         sind alle drei Felder samt Zuordnung frei wählbar."""
         ist_ed = self.art.currentText() == "ED"
         for widget in (
@@ -539,6 +545,10 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # UX-Test 03.11.2026, X4: gesperrt ohne Erklärung - jetzt mit Grund.
             widget.setToolTip("Bei einer Einzeldisziplin gibt es nur einen Gegenstand." if ist_ed else "")
         self.gegenstand_hinweis.setVisible(ist_ed)
+        # R5: Zeilen „Gegenstand 2/3“ samt Beschriftung bei ED ausblenden (vor dem Layout-Aufbau
+        # gibt es sie noch nicht).
+        for zeile in getattr(self, "_gegenstand_zeilen", []):
+            self._form_rechts.setRowVisible(zeile, not ist_ed)
         self.gegenstand_1_disziplin.setEnabled(not ist_ed)
         if ist_ed:
             self.gegenstand_1_disziplin.setCurrentText(self.disziplin.currentText())
@@ -651,10 +661,16 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 self.startnummer.setFocus()
                 return
         if ist_ed and (self.gegenstand_2.text().strip() or self.gegenstand_3.text().strip()):
+            # Seit R5 sind die Felder bei ED ausgeblendet - die verworfenen Texte deshalb
+            # nennen (Verifikation A3b/A5b, Befund 3).
+            verworfen = "\n".join(
+                f"Gegenstand {nummer}: {feld.text().strip()}"
+                for nummer, feld in ((2, self.gegenstand_2), (3, self.gegenstand_3)) if feld.text().strip()
+            )
             if not _ja_nein(
                 self, "Nur ein Gegenstand bei ED",
-                "Bei einer Einzeldisziplin (ED) gibt es nur einen Gegenstand. Die Einträge "
-                "in Gegenstand 2 und 3 werden nicht gespeichert.\n\nTrotzdem speichern?",
+                "Bei einer Einzeldisziplin (ED) gibt es nur einen Gegenstand. Diese Einträge "
+                f"werden nicht gespeichert:\n\n{verworfen}\n\nTrotzdem speichern?",
             ):
                 return
         # Teil 2 Nr. 4: nur Gegenstände mit Text zählen - wie in db.gegenstand_fuer_disziplin.
