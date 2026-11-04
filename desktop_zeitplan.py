@@ -14,7 +14,7 @@ import datetime
 import html
 import sqlite3
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -234,8 +234,8 @@ class ZeitplanTab(QWidget):
         # viele Richter-Spalten sichtbar bleibt statt mit-zu-scrollen.
         self._offene_starts_box = QGroupBox("Offene Starts")
         # UX-Test 03.11.2026, X15: breiter (vorher 230-280 px, lange Zeilen brachen dreifach um).
-        self._offene_starts_box.setMinimumWidth(280)
-        self._offene_starts_box.setMaximumWidth(360)
+        # Nachtest 2 (N14): Breite nach der längsten möglichen Zeile, siehe
+        # _seitenleiste_breite_anpassen - rechts neben den Richtern ist meist Platz frei.
         self._offene_starts_label = QLabel("")
         self._offene_starts_label.setWordWrap(True)
         self._offene_starts_label.setTextFormat(Qt.RichText)
@@ -265,6 +265,33 @@ class ZeitplanTab(QWidget):
 
     # --- Aufbau --------------------------------------------------------------
 
+    #: Längste eingeplante Zeile der Seitenleiste „Offene Starts“ (Nachtest 2, N14); offene
+    #: Zeilen (fett, „– noch offen“) dürfen umbrechen.
+    _LAENGSTE_OFFENE_ZEILE = "DK LK 3 – Behältnisstrecke (99 Teilnehmer)"
+
+    def _seitenleiste_breite_anpassen(self) -> None:
+        """Seitenleiste so breit, dass eingeplante Zeilen wie „DK LK 3 – Behältnisstrecke
+        (99 Teilnehmer)“ in eine Zeile passen - in der aktuellen Schrift (aufgerufen von
+        aktualisieren() und nach einem Wechsel von Schrift oder Stylesheet, siehe changeEvent).
+        Häkchen-Symbol, Ränder der Gruppe und Bildlaufleiste kommen dazu. Auf kleinen
+        Bildschirmen bleibt sie bei höchstens einem Fünftel (Minimum) bzw. einem Viertel (Maximum)
+        der Breite, mindestens aber bei den bisherigen 280-360 px - sonst bräuchten drei
+        Richter-Spalten bei Schrift „Sehr groß“ auf 1366 px einen Bildlauf (Verifikation B19)."""
+        self._offene_starts_label.ensurePolished()
+        text = self._offene_starts_label.fontMetrics().horizontalAdvance(self._LAENGSTE_OFFENE_ZEILE)
+        breite = text + 90
+        bildschirm = self.screen() or QApplication.primaryScreen()
+        frei = bildschirm.availableGeometry().width() if bildschirm is not None else 10 * breite
+        self._offene_starts_box.setMinimumWidth(max(280, min(breite, int(frei * 0.2))))
+        self._offene_starts_box.setMaximumWidth(max(360, min(breite + 60, int(frei * 0.25))))
+
+    def changeEvent(self, event) -> None:  # type: ignore[override]
+        # Nach dem Wechsel der Schriftgröße (neues Stylesheet) erst messen, wenn die Schrift
+        # angekommen ist - aktualisieren() lief da noch mit der alten (Verifikation B19).
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange):
+            QTimer.singleShot(0, self, self._seitenleiste_breite_anpassen)
+        super().changeEvent(event)
+
     def showEvent(self, event) -> None:  # type: ignore[override]
         """UX-Test 02.10.2026, U8: beim ERSTEN Anzeigen des Reiters (nicht schon beim
         Öffnen des Termins - das soll die Datei nicht verändern) die Richter aus den
@@ -288,6 +315,7 @@ class ZeitplanTab(QWidget):
         """Baut die Richter-Spalten komplett neu aus dem aktuellen Datenbankstand auf -
         kein Zwischenspeicher, damit z.B. ein nachträglich geänderter Teilnehmerstand
         sofort in den neu berechneten Start-/Endzeiten sichtbar wird."""
+        self._seitenleiste_breite_anpassen()
         veranstaltung = get_veranstaltung(self.conn) or {}
         if not self.zeitplan_start.hasFocus():
             self.zeitplan_start.setText(veranstaltung.get("zeitplan_start") or "09:00")

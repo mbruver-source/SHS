@@ -9560,3 +9560,31 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   und `stechen_gruppen` mit optionalem `sortierschluessel`) und beim Spaltenklick in der
   Teilnehmerliste (`desktop_gemeinsam._PruefungSortierbaresItem`); Rückfallname im Import über
   `pruefung_bezeichnung`; veraltete Beispiele in Kommentaren angepasst. R-B8 als erledigt vermerkt.
+
+### ux_test_2026_11 B19 – Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ (Nachtest 2 N14; 04./05.11.2026)
+
+- **Termin-Dialog:** zweispaltig – links die Eckdaten (Verein bis Meldestelle, Speicherort),
+  rechts „Angebotene Prüfungen“ und „Startnummern-Bereiche“. Die Höhe richtet sich nach dem
+  Inhalt (`_groesse_auf_bildschirm_begrenzen(…, hoehe_nach_inhalt=True)`, höchstens 90 % des
+  Bildschirms), die Breite wie seit B14 nach dem Formular. Gemessen mit Windows-Schriften auf
+  1920×1080: Schrift „Normal“ 1009×951 ohne Bildlauf; „Groß“ 1191×972 mit 10 px Bildlauf nur,
+  solange keine Prüfung angehakt ist (dann stehen alle 12 Bereichszeilen da), „Sehr groß“ 64 px.
+  Mit angehakten Prüfungen (z. B. 3) überall 0. Auf 1366×768 greift die Kappung (Bildlauf 233 px
+  bei „Normal“ ohne Haken, mit 3 Haken 0). Der Teilnehmer-Dialog behält seine feste Höhe.
+- **Seitenleiste „Offene Starts“:** Breite nach der längsten eingeplanten Zeile („DK LK 3 –
+  Behältnisstrecke (99 Teilnehmer)“) in der aktuellen Schrift (`ZeitplanTab._seitenleiste_breite_anpassen`,
+  bei jedem `aktualisieren()` und nach einem Schrift-/Stylesheet-Wechsel über `changeEvent`), statt
+  fest 280–360 px. Offene Zeilen (fett, „– noch offen“) dürfen umbrechen. Auf kleinen Bildschirmen
+  höchstens ein Fünftel (Minimum) bzw. ein Viertel (Maximum) der Breite, mindestens die bisherigen
+  280–360 px: gemessen auf 1366 bei „Sehr groß“ mit drei Richtern kein waagerechter Bildlauf, auf
+  1920 die volle Breite.
+- Handbuch (Termin anlegen) und `tools/screenshots.py` (Bild `handbuch_termin_anlegen` jetzt
+  1080×900, ganzes Fenster) nachgezogen; das Bild selbst wird vor dem nächsten Build neu
+  aufgenommen.
+- **Tests:** neu `test_termin_dialog_zweispaltig_und_so_hoch_wie_sein_inhalt`,
+  `test_offene_starts_seitenleiste_passt_fuer_lange_zeilen` (auch Neumessung nach Schriftwechsel).
+  Gegenprobe: ohne die Änderung scheitern beide. Alle GUI-Tests grün (558).
+- **Verifikation:** Neumessung nach Schriftwechsel, Obergrenze für kleine Bildschirme, Docstring
+  und Screenshot-Werkzeug bereinigt. Zur Kenntnis: In der Demo verdeckt das Erklärfenster auf
+  1366 px unten rechts einen Teil des breiteren Termin-Dialogs (auf 1920 nicht) – bei der
+  Sichtprüfung vor dem Build ansehen.

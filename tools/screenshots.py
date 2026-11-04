@@ -39,7 +39,7 @@ if _FONTS.is_dir():
 from PySide6.QtCore import QPoint  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QScrollArea, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 import db  # noqa: E402
 
@@ -281,14 +281,12 @@ def _bild_termin_anlegen(_termine: _Termine, ziel: Path) -> list[Path]:
     })
     dialog.datum.setText("14.11.2026")
     dialog.pfad_feld.setCursorPosition(0)
-    dialog.resize(640, 900)
+    # Seit Nachtest 2 (N14) zweispaltig - mit den drei vorbelegten Prüfungen passt das ganze
+    # Fenster ohne Bildlauf.
+    dialog.resize(1080, 900)
     dialog.show()
     _warten()
-    scroll = dialog.findChild(QScrollArea)
-    if scroll is None:
-        raise RuntimeError("Veranstaltungsdialog: Scrollbereich nicht gefunden")
-    scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
-    pfad = _speichern(dialog, ziel, "handbuch_termin_anlegen", (640, 900))
+    pfad = _speichern(dialog, ziel, "handbuch_termin_anlegen", (1080, 900))
     dialog.close()
     return [pfad]
 
@@ -468,7 +466,7 @@ BILDER = {
 #: Erwartete Dateien und Größen (auch für den Test).
 BILD_DATEIEN = {
     "handbuch_start": (900, 520),
-    "handbuch_termin_anlegen": (640, 900),
+    "handbuch_termin_anlegen": (1080, 900),
     "handbuch_teilnehmer": HAUPTFENSTER,
     "handbuch_teilnehmer_dialog_ed": (1000, 760),
     "handbuch_teilnehmer_dialog_dk": (1000, 760),

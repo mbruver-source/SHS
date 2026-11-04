@@ -8221,6 +8221,58 @@ def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
     assert gemessen == [teilnehmer_dialog.findChild(QScrollArea).widget()]
 
 
+def test_termin_dialog_zweispaltig_und_so_hoch_wie_sein_inhalt(qtbot):
+    """Nachtest 2, N14: Prüfungen und Startnummern-Bereiche stehen rechts neben den Eckdaten,
+    und der Dialog ist so hoch wie sein Inhalt (höchstens 90 % des Bildschirms) - vorher lagen
+    „Behältnisse“, „Fläche“ und die Bereiche unter dem Bildlauf."""
+    from PySide6.QtCore import QPoint, QSize
+    from PySide6.QtWidgets import QScrollArea
+    from desktop_dialoge import VeranstaltungsDialog, _groesse_auf_bildschirm_begrenzen
+
+    class _Inhalt:
+        def ensurePolished(self):
+            pass
+
+        def sizeHint(self):
+            return QSize(500, 600)
+
+    probe = QDialog()
+    qtbot.addWidget(probe)
+    frei = probe.screen().availableGeometry()
+    _groesse_auf_bildschirm_begrenzen(probe, 300, 200, inhalt=_Inhalt(), hoehe_nach_inhalt=True)
+    assert probe.height() == min(710, int(frei.height() * 0.9))
+    _groesse_auf_bildschirm_begrenzen(probe, 300, 200, inhalt=_Inhalt())
+    assert probe.height() == min(200, int(frei.height() * 0.9))  # Teilnehmer-Dialog: wie bisher
+
+    dialog = VeranstaltungsDialog(None)
+    qtbot.addWidget(dialog)
+    inhalt = dialog.findChild(QScrollArea).widget()
+    verein_rechts = dialog.verein.mapTo(inhalt, QPoint(dialog.verein.width(), 0)).x()
+    assert dialog.gruppe_pruefungen.mapTo(inhalt, QPoint(0, 0)).x() > verein_rechts
+    assert dialog.gruppe_bereiche.mapTo(inhalt, QPoint(0, 0)).x() > verein_rechts
+
+
+def test_offene_starts_seitenleiste_passt_fuer_lange_zeilen(qtbot, conn):
+    """Nachtest 2, N14: Die Seitenleiste ist so breit wie die längste mögliche Zeile
+    („DK LK 3 – Behältnisstrecke (99 Teilnehmer)“), vorher brach sie um."""
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    noetig = tab._offene_starts_label.fontMetrics().horizontalAdvance(tab._LAENGSTE_OFFENE_ZEILE)
+    frei = tab.screen().availableGeometry().width()
+    assert tab._offene_starts_box.minimumWidth() >= min(noetig + 40, max(280, int(frei * 0.2)))
+    assert tab._offene_starts_box.maximumWidth() >= min(noetig + 40, max(360, int(frei * 0.25)))
+
+    # Verifikation B19: nach einem Wechsel der Schrift (Stylesheet) neu gemessen - mit der
+    # neuen Schrift (gemessen wird erst, wenn sie angekommen ist).
+    gemessen = []
+    echt = tab._seitenleiste_breite_anpassen
+    tab._seitenleiste_breite_anpassen = lambda: gemessen.append(
+        tab._offene_starts_label.fontMetrics().horizontalAdvance(tab._LAENGSTE_OFFENE_ZEILE)) or echt()
+    tab.setStyleSheet("QLabel { font-size: 20pt; }")
+    qtbot.waitUntil(lambda: bool(gemessen), timeout=2000)
+    assert max(gemessen) > noetig
+
+
 def test_ergebnis_abbruch_spalte_zeigt_den_ganzen_grund(qtbot, termin):
     """Nachtest 2, N1/N2: Die Abbruch-Spalte ist auch bei leeren Zellen so breit wie der
     längste Grund, und die Status-Spalte ragt bei großer Schrift nicht über den Rand."""

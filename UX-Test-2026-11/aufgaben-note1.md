@@ -28,8 +28,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | 8273862 | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
 | B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | f5fae0d | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
 | B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | erledigt | 506c064 | 30 → 43 %, real ≈ 13 % | |
-| B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
-| B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | offen | | | |
+| B18 | N5 Prüfungsnamen überall einheitlich | L | erledigt | 19c410f | 43 → 62 %, real ≈ 19 % | ersetzt R-B8 |
+| B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | (dieser) | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | offen | | | |
 | B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | offen | | | Setup-/Edge-Bild von Marco |
 | B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | offen | | | |

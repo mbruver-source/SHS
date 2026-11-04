@@ -97,17 +97,23 @@ _MEHRERE_GEGENSTAENDE = re.compile(r"[,;/+&]|\s(und|oder|sowie|u\.)\s", re.IGNOR
 _KLAMMERZUSATZ = re.compile(r"\([^)]*\)")
 
 
-def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int, inhalt: QWidget | None = None) -> None:
+def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int, inhalt: QWidget | None = None,
+                                      hoehe_nach_inhalt: bool = False) -> None:
     """Startgröße, begrenzt auf den verfügbaren Bildschirm (UX-Test 02.10.2026, U3), damit
     OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben - gemeinsam für Teilnehmer- und
     Veranstaltungsdialog (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 7). Mit `inhalt` (dem
     Formular in der Scrollfläche) mindestens so breit wie dessen Bedarf - bei Schrift „Groß“
-    reichte die feste Breite nicht, und es gab einen waagerechten Bildlauf (Nachtest 2, N2)."""
+    reichte die feste Breite nicht, und es gab einen waagerechten Bildlauf (Nachtest 2, N2).
+    Mit `hoehe_nach_inhalt` auch mindestens so hoch (Termin-Dialog, Nachtest 2, N14) - der
+    Bildlauf bleibt dann nur, wo der Bildschirm nicht reicht."""
     if inhalt is not None:
         # Erst polieren (Stylesheet-Ränder der Felder), dann messen; + Rand der Scrollfläche,
         # senkrechte Bildlaufleiste und Ränder des Dialogs.
         inhalt.ensurePolished()
         breite = max(breite, inhalt.sizeHint().width() + 100)
+        if hoehe_nach_inhalt:
+            # + Rand der Scrollfläche, OK/Abbrechen und Ränder des Dialogs
+            hoehe = max(hoehe, inhalt.sizeHint().height() + 110)
     bildschirm = dialog.screen() or QApplication.primaryScreen()
     if bildschirm is not None:
         frei = bildschirm.availableGeometry()
@@ -1962,8 +1968,6 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         form.addRow("Prüfungsgebühr DK (€)", self.pruefungsgebuehr_dk)
         form.addRow("Verband", self.verband)
         form.addRow("Meldestelle", self.meldestelle)
-        form.addRow(self.gruppe_pruefungen)
-        form.addRow(self.gruppe_bereiche)
 
         # Teil 2 Nr. 2: Speicherort vor dem Anlegen prüfen; die Demo schaltet das ab (ihr
         # Termin liegt fest im Demo-Ordner und existiert schon).
@@ -1991,9 +1995,20 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         # Mit Meldestelle und Prüfungsauswahl (28.09.2026) wurde der Dialog für kleinere
         # Bildschirme zu hoch - Inhalt deshalb wie im TeilnehmerDialog in einem
         # QScrollArea, OK/Abbrechen bleiben fest am unteren Rand erreichbar.
-        inhalt_layout = QVBoxLayout()
-        inhalt_layout.addLayout(form)
-        inhalt_layout.addStretch()  # überschüssige Höhe nicht auf die Prüfungsauswahl verteilen
+        # Nachtest 2 (N14): zweispaltig - links die Eckdaten, rechts Prüfungen und
+        # Startnummern-Bereiche; „Behältnisse“, „Fläche“ und die Bereiche lagen sonst unter dem
+        # Bildlauf. Die Höhe richtet sich nach dem Inhalt (höchstens 90 % des Bildschirms).
+        links = QVBoxLayout()
+        links.addLayout(form)
+        links.addStretch()
+        rechts = QVBoxLayout()
+        rechts.addWidget(self.gruppe_pruefungen)
+        rechts.addWidget(self.gruppe_bereiche)
+        rechts.addStretch()  # überschüssige Höhe nicht auf die Prüfungsauswahl verteilen
+        inhalt_layout = QHBoxLayout()
+        inhalt_layout.addLayout(links, 1)
+        inhalt_layout.addSpacing(12)
+        inhalt_layout.addLayout(rechts, 1)
         inhalt_container = QWidget()
         inhalt_container.setLayout(inhalt_layout)
         inhalt_scroll = _scrollflaeche(inhalt_container)
@@ -2002,7 +2017,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         layout.addWidget(inhalt_scroll, 1)
         layout.addWidget(buttons)
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint)
-        _groesse_auf_bildschirm_begrenzen(self, 620, 700)
+        _groesse_auf_bildschirm_begrenzen(self, 1000, 700, inhalt=inhalt_container, hoehe_nach_inhalt=True)
         self.verein.setFocus()
         self._schriftgroesse_anwenden()
 

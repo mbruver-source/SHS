@@ -257,8 +257,10 @@ Demo in Schritt 2 vor dem Umschalten auf den Demo-Termin wie beim Terminwechsel 
 
 ### Neuen Termin anlegen
 
-![Dialog „Neuen Termin anlegen“, Ausschnitt Startnummern-Bereiche](bilder/handbuch_termin_anlegen.png)
+![Dialog „Neuen Termin anlegen“: links die Eckdaten, rechts Prüfungen und Startnummern-Bereiche](bilder/handbuch_termin_anlegen.png)
 
+Links stehen die Eckdaten, rechts die angebotenen Prüfungen und die Startnummern-Bereiche – so
+ist alles ohne Bildlauf zu sehen (auf kleinen Bildschirmen bleibt ein Bildlauf).
 Pflicht sind **Austragender Verein\*** und **Datum\*** (TT.MM.JJJJ; „14.11.26“ wird zu 14.11.2026
 ergänzt). Alle weiteren Angaben –
 Vereins-Nr., Ort, Prüfungsnummer, Prüfungsleiter, Richter 1–5, Prüfungsgebühr ED/DK – kannst
