@@ -462,7 +462,7 @@ sequenceDiagram
         E->>D: eintragen_ergebnis / setze_ergebnis_status
     end
     Note over E,D: ab vielen Teilnehmern eine Transaktion,<br/>bei Fehler Rollback und alles bleibt gelb
-    E-->>N: „n Ergebnis(se) gespeichert“ oder Liste der Fehler
+    E-->>N: „n Teilnehmer gespeichert“ oder Liste der Fehler
 
     alt Reiterwechsel mit ungespeicherten Ergebnissen
         H->>N: Speichern / Nicht speichern / Abbrechen

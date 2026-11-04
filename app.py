@@ -1431,6 +1431,9 @@ _PUNKTESPALTEN = frozenset(c for paar in _ERGEBNIS_SPALTEN_JE_DISZIPLIN.values()
 # Rollen der Punktezellen, gesetzt von ErgebnisTab._aktualisiere_zeilenstatus.
 _ZU_HOCH_ROLLE = Qt.UserRole + 1
 _UNGESPEICHERT_ROLLE = Qt.UserRole + 2
+# Das allgemeine Feld-Stylesheet (desktop_darstellung, padding 4px 8px) ist für eine
+# Tabellenzelle zu groß - die Ziffern würden abgeschnitten.
+_PUNKTE_EDITOR_STIL = "padding: 0px 2px;"
 
 
 def _info_item(text: str) -> QTableWidgetItem:
@@ -1585,7 +1588,11 @@ class _AbbruchDelegate(QStyledItemDelegate):
         if text:
             painter.setFont(opt.font)
             painter.setPen(textfarbe)
-            painter.drawText(feld.adjusted(4, 0, -18, 0), int(Qt.AlignCenter), text)
+            textfeld = feld.adjusted(4, 0, -18, 0)
+            # UX-Test 2026-11, T3: reicht der Platz nicht, endet der Grund mit „…“ statt
+            # beidseitig abgeschnitten („letzung H“); der Tooltip nennt ihn vollständig.
+            text = painter.fontMetrics().elidedText(text, Qt.ElideRight, int(textfeld.width()))
+            painter.drawText(textfeld, int(Qt.AlignCenter), text)
         painter.restore()
 
     def createEditor(self, parent, option, index):  # noqa: N802
@@ -1621,14 +1628,14 @@ class _PunkteDelegate(QStyledItemDelegate):
     def __init__(self, tab: "ErgebnisTab"):
         super().__init__(tab.tabelle)
         self._tab = tab
+        # T4: auch Escape (ohne Übernehmen) nimmt den Hinweis vom Tippen weg.
+        self.closeEditor.connect(lambda *_: tab._zu_hoch_beim_tippen_ausblenden())
 
     def createEditor(self, parent, option, index):  # noqa: N802
         editor = QLineEdit(parent)
         editor.setValidator(_punkte_validator(editor))
         editor.setAlignment(Qt.AlignCenter)
-        # Das allgemeine Feld-Stylesheet (desktop_darstellung, padding 4px 8px) ist für eine
-        # Tabellenzelle zu groß - die Ziffern würden abgeschnitten.
-        editor.setStyleSheet("padding: 0px 2px;")
+        editor.setStyleSheet(_PUNKTE_EDITOR_STIL)
         maximum = self._tab._maximum_der_spalte(index.column())
         # Abgelehnte Zeichen (z. B. das Komma in "45,5") nicht stillschweigend schlucken,
         # sondern einen Hinweis zeigen (UX-Test 02.10.2026, U5). UX-Test 03.11.2026, X8: Er
@@ -1636,6 +1643,9 @@ class _PunkteDelegate(QStyledItemDelegate):
         # Ziffer gleich wieder weg, bei "4,5" also die "5", und aus 4,5 wurde unbemerkt 45.
         self._tab._eingabe_hinweis_ausblenden()
         editor.inputRejected.connect(lambda: self._tab._eingabe_abgelehnt(editor, maximum))
+        # UX-Test 2026-11, T4 (Marco 04.11.2026, C24 teilweise erledigt): ein zu hoher Wert wird
+        # schon beim Tippen rot umrandet und erklärt, nicht erst nach dem Übernehmen.
+        editor.textChanged.connect(lambda text: self._tab._wert_beim_tippen_pruefen(editor, maximum, text))
         return editor
 
     def setEditorData(self, editor, index):  # noqa: N802
@@ -1648,6 +1658,8 @@ class _PunkteDelegate(QStyledItemDelegate):
         editor.selectAll()  # Lostippen ersetzt den Wert (Marco 18.10.2026)
 
     def setModelData(self, editor, model, index):  # noqa: N802
+        # Nach dem Übernehmen übernimmt das zu_hoch_label (X7) den Hinweis vom Tippen (T4).
+        self._tab._zu_hoch_beim_tippen_ausblenden()
         text = editor.text()
         if (index.data(Qt.EditRole) or "") == text:
             return
@@ -1957,6 +1969,7 @@ class ErgebnisTab(QWidget):
         self.hinweis_label.setWordWrap(True)
         self.hinweis_label.hide()
         self._eingabe_hinweis: str | None = None
+        self._zu_hoch_hinweis: str | None = None  # Hinweis vom Tippen (T4), siehe _hinweise_zeigen
         # UX-Test 03.11.2026, X7: eigenes Label für Werte über dem Maximum (je Teilnehmer-ID).
         self.zu_hoch_label = QLabel("")
         self.zu_hoch_label.setTextFormat(Qt.PlainText)
@@ -2467,7 +2480,10 @@ class ErgebnisTab(QWidget):
                 # R7: Platz für den Grund ("Verletzung Hund").
                 # + Pfeil der offenen Auswahlliste (Verifikation R7, Befund 8).
                 # UX-Test 03.11.2026, X5: + Platz für den Pfeil der zugeklappten Zelle.
-                abbruch_breite = self.tabelle.fontMetrics().horizontalAdvance("Verletzung Hund") + 48
+                # UX-Test 2026-11, T3: längster Grund aus der Liste statt eines festen Textes.
+                abbruch_breite = max(
+                    self.tabelle.fontMetrics().horizontalAdvance(text) for text, _ in ABBRUCH_GRUENDE.values()
+                ) + 48
                 minima.append(max(abbruch_breite, header_zeilen_breite(c)))
                 harte_minima.append(abbruch_breite)
             else:
@@ -2718,16 +2734,47 @@ class ErgebnisTab(QWidget):
         # (14.10.2026, Teil 3 Nr. 2) in einem eigenen Label als Klartext mit Stylesheet, damit
         # Statusmeldungen davon unberührt bleiben und kein Rich Text nötig ist.
         self._eingabe_hinweis = hinweis
-        self.hinweis_label.setStyleSheet(f"color: {_farbe('warnung').name()}; font-weight: bold;")
-        self.hinweis_label.setText(hinweis)
+        self._hinweise_zeigen()
+
+    def _wert_beim_tippen_pruefen(self, feld: QLineEdit, maximum: int, text: str) -> None:
+        """T4: roter Rahmen am offenen Eingabefeld und Klartext, solange der getippte Wert über
+        dem Maximum liegt. Die Eingabe bleibt möglich (beim Speichern wird sie abgelehnt)."""
+        if text.isdigit() and int(text) > maximum:
+            feld.setStyleSheet(f"{_PUNKTE_EDITOR_STIL} border: 2px solid {_farbe('fehler').name()};")
+            hinweis = f"Höchstens {maximum} Punkte - {text} ist zu hoch und lässt sich so nicht speichern."
+            QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
+            self._zu_hoch_hinweis = hinweis
+            self._hinweise_zeigen()
+        else:
+            feld.setStyleSheet(_PUNKTE_EDITOR_STIL)
+            self._zu_hoch_beim_tippen_ausblenden()
+
+    def _zu_hoch_beim_tippen_ausblenden(self) -> None:
+        """Nimmt nur den Hinweis aus _wert_beim_tippen_pruefen weg; ein Komma-Hinweis (X8) bleibt
+        stehen - bei „6,5“ wird aus der 5 erst 65, danach muss der Komma-Hinweis noch da sein."""
+        if self._zu_hoch_hinweis is not None:
+            self._zu_hoch_hinweis = None
+            self._hinweise_zeigen()
+
+    def _hinweise_zeigen(self) -> None:
+        """Zeigt den Hinweis vom Tippen (rot) und den Komma-Hinweis (orange) im hinweis_label,
+        beide untereinander, wenn beides zutrifft."""
+        texte = [t for t in (self._zu_hoch_hinweis, self._eingabe_hinweis) if t is not None]
+        if not texte:
+            self.hinweis_label.clear()
+            self.hinweis_label.hide()
+            return
+        farbe = _farbe("fehler" if self._zu_hoch_hinweis is not None else "warnung")
+        self.hinweis_label.setStyleSheet(f"color: {farbe.name()}; font-weight: bold;")
+        self.hinweis_label.setText("\n".join(texte))
         self.hinweis_label.show()
 
     def _eingabe_hinweis_ausblenden(self) -> None:
-        """Nimmt den Komma-Hinweis wieder weg - nur, wenn dort noch der Hinweis steht."""
-        if self._eingabe_hinweis is not None:
-            self.hinweis_label.clear()
-            self.hinweis_label.hide()
-        self._eingabe_hinweis = None
+        """Nimmt den Komma-Hinweis und den Hinweis vom Tippen wieder weg."""
+        if self._eingabe_hinweis is not None or self._zu_hoch_hinweis is not None:
+            self._eingabe_hinweis = None
+            self._zu_hoch_hinweis = None
+            self._hinweise_zeigen()
 
     def _aktualisiere_zeilenstatus(self, row: int, hinweis_ausblenden: bool = True) -> None:
         """Färbt die Zeile gelb und setzt den Status-Text, solange sich mindestens ein
@@ -2816,6 +2863,7 @@ class ErgebnisTab(QWidget):
         status_item = self.tabelle.item(row, _STATUS_SPALTE)
         if status_item is not None:
             # Symbol statt „●“/„✓“ vor dem Text (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+            tooltip = ""
             if ungespeichert:
                 status_item.setText("nicht gespeichert")
                 status_item.setIcon(symbol("device-floppy", "warnung"))
@@ -2827,9 +2875,26 @@ class ErgebnisTab(QWidget):
                 status_item.setIcon(QIcon())
                 status_item.setForeground(_farbe("gedaempft"))
             else:
-                status_item.setText("gespeichert")
+                text = self._gespeicherter_status_text(row)
+                status_item.setText(text)
                 status_item.setIcon(symbol("check", "ok"))
                 status_item.setForeground(_farbe("ok"))
+                if text != "gespeichert":
+                    tooltip = f"gespeichert: {text}"  # die Spalte kann schmal sein
+            if status_item.toolTip() != tooltip:
+                status_item.setToolTip(tooltip)
+
+    def _gespeicherter_status_text(self, row: int) -> str:
+        """UX-Test 2026-11, T3: Disqualifiziert und Abbruch stehen ausdrücklich im Status -
+        vorher stand dort nur „gespeichert“, und die Zeile wirkte wie ein normales Ergebnis."""
+        disqualifiziert, grund = self._status_geladen_je_zeile[row]
+        if disqualifiziert:
+            return "disqualifiziert"
+        if grund == _ABBRUCH_OHNE_GRUND:
+            return "Abbruch"
+        if grund:
+            return f"Abbruch: {_abbruch_bezeichnung(grund)}"
+        return "gespeichert"
 
     def _zeile_ist_leer(self, row: int) -> bool:
         """Weder Punkte noch Disqualifiziert/Abbruch - gespeichert oder eingegeben."""
@@ -2875,7 +2940,9 @@ class ErgebnisTab(QWidget):
         gehen nur Anzahl und Art der Fehler, keine Teilnehmernamen (es landet in der kopierbaren
         Diagnose)."""
         self.tabelle.offenen_editor_beenden()
-        gespeichert = 0
+        # UX-Test 2026-11, T3: gezählt werden Teilnehmer, nicht Disziplinen - „29 Ergebnis(se)“
+        # bei 16 Teilnehmern wirkte wie doppelt gespeichert.
+        gespeicherte_zeilen: set[int] = set()
         fehler: list[str] = []
         # Stand die Tabelle vor dem Speichern auf dem aktuellen Datenstand, entspricht sie
         # danach wieder der Datenbank - der nächste Tabwechsel muss dann nicht neu aufbauen.
@@ -2921,7 +2988,7 @@ class ErgebnisTab(QWidget):
                             # bleiben.
                             eintragen_ergebnis(self.conn, t["id"], disziplin, None, None, commit=not gesammelt)
                             geladen[disziplin] = (None, None)
-                            gespeichert += 1
+                            gespeicherte_zeilen.add(row)
                             continue
 
                         # Codeprüfung 22.09., G6: gemeinsame Eingaberegel mit dem Web-Frontend
@@ -2955,7 +3022,7 @@ class ErgebnisTab(QWidget):
                             continue
 
                         geladen[disziplin] = (suche_wert, anzeige_wert)
-                        gespeichert += 1
+                        gespeicherte_zeilen.add(row)
                 # Ist die Zeile gesperrt (Disqualifiziert/Abbruch), werden die (geleerten)
                 # Punkte-Felder beim Speichern bewusst NICHT ausgewertet: eine ggf. weiterhin
                 # in der DB stehende Punktzahl bleibt unangetastet (siehe
@@ -2969,7 +3036,7 @@ class ErgebnisTab(QWidget):
                         commit=not gesammelt,
                     )
                     self._status_geladen_je_zeile[row] = status_wert
-                    gespeichert += 1
+                    gespeicherte_zeilen.add(row)
 
                 self._aktualisiere_zeilenstatus(row)
             if gesammelt:
@@ -2978,7 +3045,7 @@ class ErgebnisTab(QWidget):
             db_fehler = exc
             if gesammelt:
                 self._sammelspeichern_zuruecknehmen(geladen_vorher, status_geladen_vorher)
-                gespeichert = 0
+                gespeicherte_zeilen.clear()
             else:
                 self._aktualisiere_zeilenstatus(row)
         except BaseException:
@@ -2989,6 +3056,7 @@ class ErgebnisTab(QWidget):
                 self._sammelspeichern_zuruecknehmen(geladen_vorher, status_geladen_vorher)
             raise
 
+        gespeichert = len(gespeicherte_zeilen)
         if tabelle_war_aktuell and db_fehler is None:
             stand_nachher = self._datenstand()
             # Eigene Commits ändern nur total_changes. Hat eine andere Verbindung während
@@ -3006,7 +3074,7 @@ class ErgebnisTab(QWidget):
                 )
             else:
                 self.status_label.setText(
-                    f"Speichern abgebrochen – {gespeichert} Ergebnis(se) gespeichert, die übrigen nicht."
+                    f"Speichern abgebrochen – {gespeichert} Teilnehmer gespeichert, die übrigen nicht."
                 )
                 einleitung = (
                     "Die Ergebnisse konnten nicht (vollständig) gespeichert werden. Bereits gespeicherte "
@@ -3022,11 +3090,11 @@ class ErgebnisTab(QWidget):
                 fehler_protokollieren(db_fehler)
                 meldung_protokollieren(
                     "Speichern beim Sitzungsende",
-                    f"Speichern abgebrochen ({gespeichert} gespeichert, {len(fehler)} fehlerhafte "
+                    f"Speichern abgebrochen ({gespeichert} Teilnehmer gespeichert, {len(fehler)} fehlerhafte "
                     "Eingabe(n)); die übrigen Eingaben stehen weiter in der Tabelle.",
                 )
         elif gespeichert:
-            self.status_label.setText(f"{gespeichert} Ergebnis(se) gespeichert.")
+            self.status_label.setText(f"{gespeichert} Teilnehmer gespeichert.")
         elif not fehler:
             self.status_label.setText("Keine Änderungen zu speichern.")
 

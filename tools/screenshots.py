@@ -104,9 +104,9 @@ OHNE_STARTNUMMER = [
 ]
 
 #: Ergebnisse (Suche, Anzeige) je Disziplin. EINGETIPPT werden sie in der
-#: Ergebniserfassung sichtbar eingegeben und gespeichert ("4 Ergebnis(se) gespeichert."),
+#: Ergebniserfassung sichtbar eingegeben und gespeichert ("2 Teilnehmer gespeichert."),
 #: die übrigen stehen schon vorher in der Datenbank.
-#: Der Zähler zählt Disziplinen: 3 + 1 = 4.
+#: Der Zähler zählt Teilnehmer (UX-Test 2026-11, T3): 2.
 ERGEBNISSE_EINGETIPPT = {
     "Testuser2": {"Trümmerfeld": (50, 30), "Flächensuche": (45, 35), "Behältnisstrecke": (48, 30)},
     "Testuser5": {"Trümmerfeld": (58, 39)},
@@ -366,7 +366,7 @@ def _bild_ergebniserfassung(termine: _Termine, ziel: Path) -> list[Path]:
     _reiter(fenster, "ergebnis_tab")
     tab = fenster.ergebnis_tab
     _ergebnisse_eintippen(fenster, ids, ERGEBNISSE_EINGETIPPT)
-    tab.alle_speichern()  # Statuszeile "4 Ergebnis(se) gespeichert."
+    tab.alle_speichern()  # Statuszeile "2 Teilnehmer gespeichert."
     _ergebnisse_eintippen(fenster, ids, ERGEBNISSE_UNGESPEICHERT)
     tab._spaltenbreiten_anpassen()  # wie nach einer Größenänderung
     pfade = [_speichern(fenster, ziel, "handbuch_ergebniserfassung", HAUPTFENSTER)]

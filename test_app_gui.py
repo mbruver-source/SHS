@@ -7391,6 +7391,108 @@ def test_ergebnis_abbruch_oeffnet_mit_einem_klick(qtbot, conn):
     assert tab.tabelle.item(0, _ABBRUCH_SPALTE).toolTip() == "Abbruch wegen Verletzung des Hundes"
 
 
+def test_ergebnis_status_nennt_dq_und_abbruch(qtbot, conn):
+    """UX-Test 2026-11, T3: Der Status zeigt nach dem Speichern „disqualifiziert“ bzw. den
+    Abbruch mit Grund statt nur „gespeichert“."""
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="C", startnummer=3, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    tab.status_setzen(0, dq=True)
+    tab.status_setzen(1, abbruch="verletzung_hund")
+    tab.punkte_eintragen(2, "Flächensuche", suche=50, anzeige=30)
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "nicht gespeichert"
+    tab.alle_speichern(meldungen=False)
+
+    texte = [tab.tabelle.item(z, _STATUS_SPALTE).text() for z in range(3)]
+    assert texte == ["disqualifiziert", "Abbruch: Verletzung Hund", "gespeichert"]
+    assert tab.tabelle.item(1, _STATUS_SPALTE).toolTip() == "gespeichert: Abbruch: Verletzung Hund"
+    assert tab.tabelle.item(2, _STATUS_SPALTE).toolTip() == ""
+    tab.aktualisieren()  # neu geladen
+    assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "disqualifiziert"
+
+
+def test_ergebnis_speichermeldung_zaehlt_teilnehmer(qtbot, conn):
+    """UX-Test 2026-11, T3: „29 Ergebnis(se) gespeichert“ bei 16 Teilnehmern wirkte doppelt -
+    gezählt werden jetzt Teilnehmer, auch wenn je Teilnehmer mehrere Disziplinen und ein
+    Abbruch gespeichert werden."""
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1, art="DK", disziplin=None)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+        tab.punkte_eintragen(0, disziplin, suche=50, anzeige=30)
+    tab.status_setzen(0, abbruch="krankheit")
+    tab.punkte_eintragen(1, "Flächensuche", suche=50, anzeige=30)
+    tab.alle_speichern(meldungen=False)
+    assert tab.status_label.text() == "2 Teilnehmer gespeichert."
+
+
+def test_ergebnis_abbruch_spalte_fasst_jeden_grund(qtbot, conn):
+    """UX-Test 2026-11, T3: Im Nachtest stand „letzung H“ - die Spalte fasst den längsten
+    Grund samt Rand und Pfeil, schmal wie breit."""
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    for breite in (900, 1600):
+        tab.resize(breite, 600)
+        tab._spaltenbreiten_anpassen()
+        metrik = tab.tabelle.fontMetrics()
+        from shs_core import ABBRUCH_GRUENDE
+
+        laengster = max(metrik.horizontalAdvance(text) for text, _ in ABBRUCH_GRUENDE.values())
+        # Zelle: 2,5 Rand je Seite, Text 4 links und 18 rechts (Pfeil) eingerückt.
+        assert tab.tabelle.columnWidth(_ABBRUCH_SPALTE) >= laengster + 27
+
+
+def test_ergebnis_zu_hoch_schon_beim_tippen(qtbot, conn):
+    """UX-Test 2026-11, T4 (C24 teilweise erledigt): Ein Wert über dem Maximum wird schon im offenen
+    Eingabefeld rot umrandet und erklärt; ein gültiger Wert nimmt beides wieder weg. Den
+    Komma-Hinweis (X8) lässt das Weitertippen stehen."""
+    _teilnehmer_anlegen(conn, disziplin="Flächensuche")
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "65")
+    assert editor.isVisible()  # noch nicht übernommen
+    assert "border: 2px solid" in editor.styleSheet()
+    assert tab.hinweis_label.isVisible()
+    assert tab.hinweis_label.text().startswith("Höchstens 60 Punkte - 65 ist zu hoch")
+    qtbot.keyClick(editor, Qt.Key_Backspace)
+    assert "border" not in editor.styleSheet()
+    assert not tab.hinweis_label.isVisible()
+
+    # Übernehmen: der Hinweis vom Tippen weicht dem roten Klartext unter der Tabelle (X7).
+    qtbot.keyClicks(editor, "9")  # "69"
+    assert tab.hinweis_label.isVisible()
+    qtbot.keyClick(editor, Qt.Key_Return)
+    qtbot.waitUntil(lambda: tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is None, timeout=WARTEZEIT_MS)
+    assert not tab.hinweis_label.isVisible()
+    assert tab.zellzustand(0, "Flächensuche", "suche")["zu_hoch"]
+    assert tab.zu_hoch_label.isVisible()
+
+    # Komma-Hinweis bleibt beim Weitertippen stehen.
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "anzeige")
+    qtbot.keyClicks(editor, "3,0")
+    assert tab.hinweis_label.text().startswith("Nur ganze Punkte")
+
+    # Verifikation B1: „6,5“ - aus der 5 wird 65. Beide Hinweise stehen da, und nach der
+    # Rücktaste bleibt der Komma-Hinweis (X8) stehen.
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    editor.clear()
+    qtbot.keyClicks(editor, "6,5")
+    assert editor.text() == "65"
+    zeilen = tab.hinweis_label.text().split("\n")
+    assert zeilen[0].startswith("Höchstens 60 Punkte") and zeilen[1].startswith("Nur ganze Punkte")
+    qtbot.keyClick(editor, Qt.Key_Backspace)
+    assert tab.hinweis_label.isVisible()
+    assert tab.hinweis_label.text().startswith("Nur ganze Punkte")
+
+    # Escape verwirft die Eingabe - der Hinweis vom Tippen geht mit.
+    qtbot.keyClicks(editor, "5")
+    assert tab.hinweis_label.text().startswith("Höchstens")
+    qtbot.keyClick(editor, Qt.Key_Escape)
+    qtbot.waitUntil(lambda: tab.tabelle.indexWidget(tab.tabelle.currentIndex()) is None, timeout=WARTEZEIT_MS)
+    assert "Höchstens" not in tab.hinweis_label.text()
+
+
 def test_ergebnis_wert_ueber_maximum_zeigt_klartext(qtbot, conn):
     """UX-Test 03.11.2026, X7: zum roten Rahmen ein sichtbarer Text, der nach der Korrektur
     wieder verschwindet."""

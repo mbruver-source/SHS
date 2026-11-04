@@ -9096,4 +9096,38 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   Vorgabe „Nein“ + zweite Warnung; T11 sprechender Dateiname; T12 echtes Zurück in der Demo
   (ersetzt R4); T13 bebilderte Kurzanleitung als PDF; T14 alles umsetzen (R7 erledigt). Details in
   `note1-todos.md`, Abschnitt „Entscheidungen“. Noch nichts umgesetzt.
+- Abarbeitung als B1–B12 in `UX-Test-2026-11/aufgaben-note1.md` (Skill `aufgaben-abarbeitung`).
+
+### ux_test_2026_11 B1 – Ergebniserfassung, T3 und T4 (04.11.2026)
+
+- **Status (T3):** Nach dem Speichern steht „disqualifiziert“ bzw. „Abbruch: <Grund>“ (ohne Grund
+  „Abbruch“) statt nur „gespeichert“, mit Tooltip für schmale Spalten
+  (`ErgebnisTab._gespeicherter_status_text`).
+- **Speichermeldung (T3):** zählt Teilnehmer („2 Teilnehmer gespeichert.“), nicht mehr
+  Disziplinen und Statusänderungen; ebenso die Abbruch-Meldung und das Protokoll.
+  `tools/screenshots.py` angepasst.
+- **Abbruch-Spalte (T3):** Mindestbreite aus dem längsten Grund der Liste; reicht der Platz nicht,
+  endet der Text mit „…“ statt beidseitig abgeschnitten. Die Gegenprobe zeigt: die Breite reichte
+  schon vorher – das „letzung H“ im Nachtest lag vermutlich an der Testumgebung. Der Test sichert
+  die Breite bei schmalem und breitem Fenster ab.
+- **Zu hoch beim Tippen (T4, C24 teilweise erledigt):** Das offene Eingabefeld bekommt bei einem
+  Wert über dem Maximum sofort einen roten Rahmen, dazu Tooltip und roter Hinweis
+  „Höchstens 60 Punkte - 65 ist zu hoch …“. Ein gültiger Wert nimmt beides weg; nach dem
+  Übernehmen übernimmt der bisherige rote Klartext (X7). Der Komma-Hinweis (X8) bleibt davon
+  unberührt. Gelb erscheint weiterhin erst nach dem Übernehmen (C24 in `OFFEN.md` angepasst).
+- Handbuch („Ergebniserfassung“) nachgezogen; Screenshot `handbuch_ergebniserfassung` vor dem
+  Build ohnehin auf der Liste.
+- Tests: 4 neue GUI-Tests; Gegenprobe: 3 scheitern ohne die Änderung (die Breiten-Prüfung ist
+  reine Absicherung).
+- **Verifikation (Agent `verifikation`), behoben:** Bei „6,5“ überschrieb der Hinweis vom Tippen
+  den Komma-Hinweis, nach Rücktaste oder Enter war keiner mehr da – jetzt stehen beide
+  untereinander (`_hinweise_zeigen`), der Komma-Hinweis bleibt. Escape nimmt den Hinweis vom
+  Tippen mit weg (`closeEditor`). `UML.md` („n Teilnehmer gespeichert“) und die Angabe „C24
+  teilweise erledigt“ in Kommentar und Test angeglichen.
+- **Nicht geändert (Rückfrage R-B1 in `aufgaben-note1.md`):** Ein Designwechsel bei offenem
+  Eingabefeld lässt dessen roten Rahmen bis zum nächsten Tastendruck in der alten Farbe. Sortieren
+  nach „Status“ gruppiert jetzt „Abbruch: …“ und „disqualifiziert“ eigens. Ein Test für die
+  Zählung nach einem Datenbankfehler mitten im Speichern fehlt (die Logik ist geprüft).
+- Tests: 721 Unittests, 510 GUI-Tests grün (vor der Nacharbeit), danach die betroffenen 119
+  GUI-Tests grün.
 

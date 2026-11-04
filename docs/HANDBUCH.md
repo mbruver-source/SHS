@@ -632,10 +632,13 @@ Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Je Diszipl
 gesperrt.
 
 - **Gelbe Zeilen** mit „● nicht gespeichert“ enthalten Änderungen, die noch nicht gesichert sind.
-- **„Alle Ergebnisse speichern“** sichert alle Änderungen auf einmal. Speichere am Prüfungstag
-  regelmäßig.
-- Ein Wert über dem Höchstwert (z. B. 65 bei der Suche) bekommt einen **roten Rahmen**; unter den
-  Knöpfen steht in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert. Ein **Komma** nimmt das
+- **„Alle Ergebnisse speichern“** sichert alle Änderungen auf einmal und meldet, wie viele
+  Teilnehmer gespeichert wurden. Speichere am Prüfungstag regelmäßig.
+- Nach dem Speichern zeigt die Spalte **Status** „gespeichert“, bei Disqualifikation
+  „disqualifiziert“ und bei einem Abbruch den Grund, z. B. „Abbruch: Verletzung Hund“.
+- Ein Wert über dem Höchstwert (z. B. 65 bei der Suche) bekommt schon beim Tippen einen **roten
+  Rahmen** mit dem Hinweis „Höchstens 60 Punkte“; nach dem Übernehmen steht unter den
+  Knöpfen in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert. Ein **Komma** nimmt das
   Programm nicht an (nur ganze Punkte) – der orange Hinweis bleibt stehen, bis du die nächste
   Zelle bearbeitest. Prüfe dann den Wert in der Zelle.
 - Suche **und** Anzeige gehören zusammen. Ist nur eine der beiden Zellen ausgefüllt, wird die

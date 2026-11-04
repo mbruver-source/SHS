@@ -11,7 +11,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 
 | Aufgabe | Inhalt | Größe | Status | Commit | Limit vorher → nachher | Bemerkung |
 |---|---|---|---|---|---|---|
-| B1 | T3 + T4 Ergebniserfassung | M | offen | | | C24 erledigen |
+| B1 | T3 + T4 Ergebniserfassung | M | erledigt | (B1-Commit) | 38 → 55 % | C24 teilweise; R-B1; real ≈ 17 % |
 | B2 | T6 + T7 Teilnehmer-ED und Meldestelle | S | offen | | | |
 | B3 | T9 + T10 + T11 Version, Sicherungstext, Dateiname | M | offen | | | |
 | B4 | T2 Import-Ablehnungen nachlesbar | M | offen | | | |
@@ -90,4 +90,8 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
 
 ## Rückfragen an Marco
 
-(keine)
+- **R-B1 (optional, aus der Verifikation B1):** (a) Designwechsel bei offenem Eingabefeld: der rote
+  Rahmen behält bis zum nächsten Tastendruck die alte Farbe (Kosmetik). (b) Sortieren nach
+  „Status“ gruppiert jetzt „Abbruch: …“ und „disqualifiziert“ eigens – so lassen? (c) Test für die
+  Zählung „N Teilnehmer gespeichert“ nach einem Datenbankfehler mitten im Speichern ergänzen?
+  Vorschlag: (a) lassen, (b) lassen, (c) in B11 ergänzen.

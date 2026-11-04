@@ -79,7 +79,7 @@ abgebildete“ Regeln (R10 Mindestalter, R14, R16, R18) einen Hinweis bekommen.
 | C21 | Qt-Sprachdatei: eingebauter Ersatz übersetzt die Standardknöpfe | 03.10.2026 | F:4163 |
 | C22 | Handbuch Kap. 13 nennt den Abmelden-Knopf „Link oben rechts“ | 03.10.2026 | F:4561 |
 | C23 | „Alle speichern“ ab 201 Teilnehmern ganz oder gar nicht, ohne eigenen Handbuchsatz | 16.10.2026 | F:6780 |
-| C24 | Ergebniserfassung: Gelb/roter Rahmen erst nach dem Übernehmen; Demo markiert das Zellenrechteck | 18.10.2026 | F:7347 |
+| C24 | Ergebniserfassung: Gelb erst nach dem Übernehmen (der rote Rahmen kommt seit UX-Test 2026-11 T4, 04.11.2026, schon beim Tippen); Demo markiert das Zellenrechteck | 18.10.2026 | F:7347 |
 | C25 | Ansichtswechsel bei 1000 Teilnehmern 0,42 s (Ziel war < 0,3 s) | 19.10.2026 | F:7517 |
 | C35 | `closeEvent` nach abgebrochenem Abmelden ohne Interaktion (X11) speichert neue Eingaben weiter mit Meldungen | 19.10.2026 | F:7834 (V8), Verbesserungen-2026-10/aufgaben.md |
 
