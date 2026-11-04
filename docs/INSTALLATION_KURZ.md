@@ -34,10 +34,16 @@ verdächtig.
 ## Schritt 4: Windows warnt – trotzdem ausführen
 
 Die heruntergeladene Datei öffnen (im Download-Fenster des Browsers anklicken). Erscheint ein
-blaues Fenster **„Windows hat den Start dieser App verhindert“**:
+blaues Fenster **„Der Computer wurde durch Windows geschützt“** (bei älteren Windows-Versionen
+„Windows hat den Start dieser App verhindert“):
 
-1. auf den Text **„Weitere Informationen“** klicken,
-2. dann auf den Knopf **„Trotzdem ausführen“**.
+1. auf den unterstrichenen Text **„Weitere Informationen“** klicken,
+
+   ![Windows-Warnung: zuerst auf „Weitere Informationen“ klicken](bilder/handbuch_smartscreen_1.png)
+
+2. dann auf den Knopf **„Trotzdem ausführen“** (nicht „Nicht ausführen“).
+
+   ![Danach erscheint „Trotzdem ausführen“](bilder/handbuch_smartscreen_2.png)
 
 ## Schritt 5: Installieren und starten
 

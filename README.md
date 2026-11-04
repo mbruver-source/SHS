@@ -28,7 +28,7 @@ musst du nicht installieren. Administratorrechte sind nicht nötig.
 > bei der Datei **„Behalten“** bzw. **„Trotzdem behalten“** wählen. Genaue Schritte je
 > Browser: [Handbuch, Kapitel 2](docs/HANDBUCH.md#2-installation-und-updates).
 >
-> **Hinweis „Windows hat den Start dieser App verhindert“:** Der Installer ist noch nicht
+> **Hinweis „Der Computer wurde durch Windows geschützt“:** Der Installer ist noch nicht
 > digital signiert, deshalb warnt Windows beim ersten Start. Auf **„Weitere Informationen“**
 > und dann **„Trotzdem ausführen“** klicken. Das ist nur einmal nötig.
 

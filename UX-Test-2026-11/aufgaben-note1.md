@@ -20,7 +20,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B7 | T14 Kleinigkeiten (R7) | S | erledigt | 5b8823c | 80 → 85 %, 0 → 9 % | vor B4 gezogen; R-B7 (Befundnummern) |
 | B8 | T5 Auswahl „Prüfung“ | L | erledigt | 1077eb9 | 40 → 52 % | ersetzt R2; R-B8 |
 | B9 | T12 Demo mit echtem Zurück | L | erledigt | 1a7675f | 52 → 67 % | ersetzt R4 |
-| B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | (B10-Commit) | 67 → 72 % | Website erst mit dem Release; R-B10 |
+| B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | 48fa7a5 | 67 → 76 % | Website erst mit dem Release; R-B10 |
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | offen | | | |
 | B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda | L | offen | | | Harness aus dem Scratchpad |
 
@@ -106,3 +106,5 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
 - **R-B10 (aus B10):** Für die Kurzanleitung fehlen echte Bilder der Chrome-Download-Warnung und
   der SmartScreen-Meldung (die Sitzung kann sie nicht aufnehmen). Nimmst du sie beim nächsten
   Download auf (`docs/bilder/handbuch_chrome_download.png`, `handbuch_smartscreen.png`)?
+  → Marco 04.11.: SmartScreen-Bilder geliefert und eingebunden; Chrome warnt derzeit nicht
+  mehr – Chrome-Bild bei einem neuen Release, falls die Warnung dann kommt.

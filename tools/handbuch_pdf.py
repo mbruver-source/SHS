@@ -66,7 +66,7 @@ body { font-size: 13pt; line-height: 1.5; }
 h1 { font-size: 20pt; }
 h2 { font-size: 15pt; margin-top: 14pt; }
 h2:not(:first-of-type) { break-before: auto; }
-img { max-width: 80%; }
+img { max-width: 55%; }
 """
 
 

@@ -152,8 +152,8 @@ Signierung (siehe unten) dürfte die Sperre seltener werden, ganz verschwinden m
 
 Da die Setup-Datei nicht signiert ist (siehe unten, warum das hier bewusst so
 bleibt), zeigt Windows beim allerersten Start auf einem Rechner die
-SmartScreen-Meldung "Windows hat den Start dieser App verhindert" bzw.
-"Unbekannter Herausgeber". Das ist normal für neu gebaute, unsignierte
+SmartScreen-Meldung "Der Computer wurde durch Windows geschützt" (ältere Windows-Versionen:
+"Windows hat den Start dieser App verhindert") mit "Herausgeber: Unbekannter Herausgeber". Das ist normal für neu gebaute, unsignierte
 .exe-Dateien und kein Hinweis auf ein Problem mit dem Programm.
 
 **So geht es weiter:** Auf der Warnmeldung auf "Weitere Informationen"

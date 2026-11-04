@@ -9300,7 +9300,7 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
 
 ### ux_test_2026_11 B10 – Kurzanleitung Installation als PDF, T13 (04.11.2026)
 
-- Neue Kurzanleitung `docs/INSTALLATION_KURZ.md` → `docs/INSTALLATION_KURZ.pdf` (2 Seiten, große
+- Neue Kurzanleitung `docs/INSTALLATION_KURZ.md` → `docs/INSTALLATION_KURZ.pdf` (mit Bildern 3 Seiten, große
   Schrift): Download-Seite, richtige Datei, Browser-Warnung (Edge mit dem vorhandenen Bild,
   Chrome, Firefox), Windows-Warnung („Weitere Informationen“ → „Trotzdem ausführen“),
   Installationsprogramm („Nur für mich“, Lizenz, Weiter, Fertigstellen; Angaben aus
@@ -9317,3 +9317,9 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   eingebunden. Signatur/Store bleibt B8 (OFFEN).
 - **Verifikation:** ohne Fehler; nachgezogen: Knopf „Installieren“ vor „Fertigstellen“, Ausweg bei
   Firefox, klare Meldung bei unbekannten Angaben in `tools/handbuch_pdf.py`.
+- **Nachtrag (Marco 04.11.2026, R-B10 teilweise):** Marco hat die SmartScreen-Meldung aufgenommen
+  (`docs/bilder/handbuch_smartscreen_1.png` vor, `_2.png` nach „Weitere Informationen“). Beide in
+  die Kurzanleitung, das zweite ins Handbuch (Kapitel 2) eingebunden. Der Titel der Meldung heißt
+  heute „Der Computer wurde durch Windows geschützt“ – Handbuch, Kurzanleitung, Website,
+  `README.md` und `README_INSTALLER.md` nennen ihn jetzt (alter Titel als Hinweis). Chrome warnte
+  beim Download nicht mehr (die Datei hat inzwischen genug Ruf); ein Chrome-Bild fehlt weiter.

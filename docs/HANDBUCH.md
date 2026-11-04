@@ -99,10 +99,13 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 
        Den Schutz des Browsers („Sicheres Browsen“) dafür bitte **nicht** ausschalten.
 
-    2. **Windows warnt beim Start.** Erscheint „Windows hat den Start dieser App verhindert“,
-       auf **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
+    2. **Windows warnt beim Start.** Erscheint „Der Computer wurde durch Windows geschützt“
+       (ältere Windows-Versionen: „Windows hat den Start dieser App verhindert“), auf
+       **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
 
-    Alle Schritte auf zwei Seiten zum Ausdrucken:
+        ![Windows-Warnung: „Weitere Informationen“ zeigt „Trotzdem ausführen“](bilder/handbuch_smartscreen_2.png)
+
+    Alle Schritte mit Bildern zum Ausdrucken:
     [Kurzanleitung Installation (PDF)](INSTALLATION_KURZ.pdf).
 
 - **macOS (Vorschau, ab macOS 13):** Es gibt zwei Dateien. Welche passt, steht im Apple-Menü
