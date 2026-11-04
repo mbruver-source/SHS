@@ -9085,3 +9085,10 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   seit der Abschluss-QS den Anfangsfokus auf „Schließen“; möglicherweise ein Effekt der
   Testumgebung.
 
+### ux_test_2026_11 A13 – ToDo-Liste „Note 1“ (04.11.2026)
+
+- Marcos Auftrag vom 03.11.: `UX-Test-2026-11/note1-todos.md` mit T1–T15. Für jeden Punkt stehen
+  dort die Personas, die Größe und ob eine Entscheidung nötig ist. Nichts davon ist umgesetzt.
+- **Kern:** Erfahrene und Normale erreichen mit T1–T4, T6 und T8 voraussichtlich eine 1. Für
+  Laien bleibt die Installation ohne Code-Signatur bzw. Store-Verteilung (T13) bei 3.
+

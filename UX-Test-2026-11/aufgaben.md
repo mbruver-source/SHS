@@ -27,7 +27,7 @@ A2 M ≈ 19 %).
 | A10 | X16 Installationstexte (ohne Signatur) | S | 3 | erledigt | ea12f64 | 36 → 45 % | Website erst mit dem Release online |
 | A11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, Bericht | L | 4 | erledigt | 148461d, 56c14c0 | 45 → 77 % | Rückfrage R7 (optionale Stilpunkte) |
 | A12 | UX-Nachtest mit 2 Personas (Laie ohne, Normal ohne Handbuch) | L | 4 | erledigt | (A12-Commit) | 0 → ?? % | Nachtest.md |
-| A13 | ToDo-Liste „Note 1 bei allen Personas“ (Marco 03.11.) | M | 4 | offen | | | nach A12 |
+| A13 | ToDo-Liste „Note 1 bei allen Personas“ (Marco 03.11.) | M | 4 | erledigt | (A13-Commit) | | note1-todos.md |
 
 ## Je Aufgabe
 
