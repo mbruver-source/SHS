@@ -107,6 +107,12 @@ def _klartext_tooltip(text: str) -> str:
     return "<qt>" + html.escape(text).replace("\n", "<br>") + "</qt>"
 
 
+def _anzahl_pruefungen(gruppen: list[dict]) -> int:
+    """Zahl der Prüfungen in Zeitplan-Gruppen - der Dreikampf zählt als eine, obwohl er je
+    Disziplin eine Gruppe hat (Nachtest 2, N10)."""
+    return len({(g["art"], g["stufe"], g["disziplin"] if g["art"] == "ED" else None) for g in gruppen})
+
+
 class ZeitplanTab(QWidget):
     """Zeitplan-Planung: beliebig viele Richter-Spuren, jede mit einer frei
     sortierbaren Abfolge aus Prüfungsblöcken und Pausen (siehe db.py, Abschnitt
@@ -706,17 +712,25 @@ class ZeitplanTab(QWidget):
         konflikte = zeitplan_ueberschneidungen(self.conn)
         teams = len({k["teilnehmer"]["id"] for k in konflikte})
         if not offen and not konflikte:
-            starts = sum(g["anzahl"] for g in status)
+            # Nachtest 2 (N10): gezählt wie im Termin - der Dreikampf ist eine Prüfung (nicht drei
+            # Disziplinen), jeder Teilnehmer zählt einmal („10 Prüfung(en) mit 28 Start(s)“ bei
+            # 6 Prüfungen und 16 Teilnehmern).
+            pruefungen = _anzahl_pruefungen(status)
+            teilnehmer = len({t["id"] for g in status for t in g["teilnehmer"]})
+            mit = f"mit {teilnehmer} {'Teilnehmer' if teilnehmer == 1 else 'Teilnehmern'}"
+            wer = (f"Die Prüfung {mit} ist" if pruefungen == 1
+                   else f"Alle {pruefungen} Prüfungen {mit} sind")
             QMessageBox.information(
                 self, "Zeitplan erstellt",
-                f"Alle {len(status)} Prüfung(en) mit {starts} Start(s) sind eingeplant, und es gibt "
-                "keine Überschneidungen." + pause_text,
+                f"{wer} eingeplant, und es gibt keine Überschneidungen." + pause_text,
             )
             self.status_label.setText("Zeitplan erstellt: alles eingeplant, keine Überschneidungen.")
             return
         zeilen = []
         if offen:
-            zeilen.append(f"{len(offen)} Prüfung(en) noch nicht eingeplant (siehe „Offene Starts“).")
+            anzahl = _anzahl_pruefungen(offen)
+            zeilen.append(f"{anzahl} {'Prüfung' if anzahl == 1 else 'Prüfungen'} noch nicht (ganz) "
+                          "eingeplant (siehe „Offene Starts“).")
         if konflikte:
             zeilen.append(f"Überschneidungen bei {teams} Team(s) – rot markiert, bitte von Hand verschieben.")
         QMessageBox.warning(self, "Zeitplan erstellt – bitte prüfen", "\n".join(zeilen) + pause_text)

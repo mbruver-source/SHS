@@ -673,7 +673,7 @@ stateDiagram-v2
     end note
     Schritt --> Fehler : DemoFehler
     Fehler --> Aufraeumen
-    Schritt --> Aufraeumen : „Beenden“ / „Fertig“
+    Schritt --> Aufraeumen : „Beenden“ (nach Rückfrage „Ja“) / „Fertig“ / Erklärfenster schließen
     Aufraeumen : vorherigen Termin wiederherstellen,<br/>Temp-Ordner löschen
     Aufraeumen --> [*]
 ```

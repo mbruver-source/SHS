@@ -26,8 +26,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
 | B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | erledigt | (dieser Commit) | 50 → 76 % | real ≈ 26 % (zwei Messfehler-Suchen) |
 | B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | 8273862 | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
-| B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | (dieser) | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
-| B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | offen | | | |
+| B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | f5fae0d | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
+| B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | erledigt | (dieser) | 30 → 43 %, real ≈ 13 % | |
 | B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | offen | | | |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | offen | | | |

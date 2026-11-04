@@ -27,12 +27,14 @@ VERANSTALTUNG: dict = {
     "meldestelle": "Paula Muster\nMusterweg 1\n12345 Musterstadt\nmeldestelle@example.org",
 }
 
-#: Angebotene Prüfungen (Kürzel wie db.ALLE_PRUEFUNGEN) mit Startnummern-Bereich.
+#: Angebotene Prüfungen (Kürzel wie db.ALLE_PRUEFUNGEN) mit Startnummern-Bereich - je 20
+#: Nummern wie „Bereiche automatisch festlegen“ bei der Vorgabe „Anzahl 20“ (Nachtest 2, N9:
+#: „Zwanzig Stück, aber eins bis neunzehn?“).
 PRUEFUNGEN: dict[str, tuple[int, int]] = {
-    "DK1": (61, 79),
-    "ED1-Trümmerfeld": (1, 19),
-    "ED2-Behältnisstrecke": (41, 59),
-    "ED1-Flächensuche": (21, 39),
+    "DK1": (61, 80),
+    "ED1-Trümmerfeld": (1, 20),
+    "ED2-Behältnisstrecke": (41, 60),
+    "ED1-Flächensuche": (21, 40),
 }
 
 #: Teilnehmer in Meldereihenfolge. "daten" sind die Felder von db.NeuerTeilnehmer,

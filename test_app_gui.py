@@ -8989,6 +8989,23 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
 
 
 
+def test_verteilen_bestaetigung_zaehlt_pruefungen_und_teilnehmer(qtbot, termin, monkeypatch):
+    """Nachtest 2, N10: Der Dreikampf zählt als eine Prüfung, jeder Teilnehmer einmal - vorher
+    „4 Prüfung(en) mit 7 Start(s)“ bei 2 Prüfungen und 3 Teilnehmern."""
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Ed", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Dk1", startnummer=2, art="DK", disziplin=None)
+    _teilnehmer_anlegen(conn, nachname="Dk2", startnummer=3, art="DK", disziplin=None)
+    add_zeitplan_richter(conn)
+    add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    verteilen_dialog_bestaetigen(monkeypatch)
+    meldungen = meldungen_sammeln(monkeypatch, "information")
+    fenster.zeitplan_tab._automatisch_verteilen()
+    assert meldungen[-1].startswith("Alle 2 Prüfungen mit 3 Teilnehmern sind eingeplant"), meldungen
+
+
 def test_verteilen_bestaetigt_und_plant_mittagspause_ein(qtbot, termin, monkeypatch):
     """UX-Test 2026-11, T1: Nach dem Verteilen steht ausdrücklich „keine Überschneidungen“;
     die Mittagspause aus dem Dialog landet bei allen Richtern und ist beim Neu-Verteilen
@@ -9007,7 +9024,7 @@ def test_verteilen_bestaetigt_und_plant_mittagspause_ein(qtbot, termin, monkeypa
     dialoge = verteilen_dialog_bestaetigen(monkeypatch, pause=("10:00", 30))
     meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._automatisch_verteilen()
-    assert meldungen[-1].startswith("Alle 1 Prüfung(en) mit 12 Start(s) sind eingeplant, und es gibt keine Überschneidungen.")
+    assert meldungen[-1].startswith("Die Prüfung mit 12 Teilnehmern ist eingeplant, und es gibt keine Überschneidungen.")
     # Um 10:00 läuft noch der Block - die Meldung nennt die tatsächliche Zeit (Abschluss-QS B11, K2).
     assert "Die Pause beginnt nicht überall um 10:00:\n\nRichter 1: 11:00 Uhr" in meldungen[-1]
     assert len(dialoge) == 1
@@ -9054,7 +9071,7 @@ def test_verteilen_meldet_offene_starts(qtbot, termin, monkeypatch):
                         lambda c: [{"eingeplant": False, "art": "ED", "stufe": 1, "disziplin": "Flächensuche", "anzahl": 1}])
     warnungen = meldungen_sammeln(monkeypatch, "warning")
     tab._automatisch_verteilen()
-    assert warnungen == ["1 Prüfung(en) noch nicht eingeplant (siehe „Offene Starts“)."]
+    assert warnungen == ["1 Prüfung noch nicht (ganz) eingeplant (siehe „Offene Starts“)."]
 
     # Überschneidungen werden genannt; eine Mittagspause nach Planende wird nicht eingefügt.
     monkeypatch.setattr(desktop_zeitplan, "zeitplan_gruppen_status",
@@ -9272,7 +9289,8 @@ def test_auswertung_erklaert_von_x_bei_offenen(qtbot, conn):
 def demo_umgebung(tmp_path, monkeypatch):
     """Temp- und Termine-Ordner der Demo ins tmp_path umleiten, ohne Pausen ablaufen
     lassen und jede modale Rückfrage/Meldung zum Testfehler machen - die Demo darf den
-    Anwender nie mit einem Meldungsfenster blockieren."""
+    Anwender nie mit einem Meldungsfenster blockieren. Einzige Ausnahme ist die Rückfrage, wenn
+    er selbst „Beenden“ klickt (Nachtest 2, N9); Tests dafür ersetzen question eigens."""
     import tempfile
 
     import desktop_demo
@@ -9468,7 +9486,51 @@ def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_
     conn.execute("SELECT 1")  # echter Termin weiterhin offen
 
 
-def test_demopruefung_beenden_mitten_in_der_ergebniserfassung(qtbot, termin, demo_umgebung):
+def test_demo_bereiche_passen_zur_anzahl_und_schritt_3_nennt_pruefung():
+    """Nachtest 2, N9: je 20 Nummern wie bei „Anzahl 20“; Schritt 3 spricht vom Feld
+    „Prüfung“ statt von „Art und Leistungsklasse“, die die Maske nicht mehr zeigt."""
+    import inspect
+
+    import demo_daten
+    import desktop_demo
+
+    assert all(bis - von + 1 == 20 for von, bis in demo_daten.PRUEFUNGEN.values())
+    quelle = inspect.getsource(desktop_demo)
+    assert "Art und Leistungsklasse" not in quelle and "Wichtig ist das Feld „Prüfung“" in quelle
+
+
+def test_demo_ruht_waehrend_der_beenden_rueckfrage(qtbot, termin, demo_umgebung, monkeypatch):
+    """Verifikation B17: Während der Rückfrage zu „Beenden“ tippt die Demo nicht weiter; nach
+    „Nein“ läuft der Schritt zu Ende und die Demo bis zum Schluss."""
+    import desktop_demo
+
+    monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 1)  # Pausen zwischen den Aktionen
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    tour.weiter()  # Schritt 1: der Termin-Dialog wird ausgefüllt
+    qtbot.waitUntil(lambda: tour._timer.isActive(), timeout=WARTEZEIT_MS)
+    waehrend = []
+
+    def _frage(*_a, **_k):
+        offen = len(tour._offen)
+        qtbot.wait(1500)  # länger als jede Pause zwischen zwei Aktionen
+        waehrend.append((offen, len(tour._offen), tour._timer.isActive()))
+        return QMessageBox.No
+
+    monkeypatch.setattr(QMessageBox, "question", _frage)
+    tour._panel.beenden_btn.click()
+    assert waehrend and waehrend[0][0] == waehrend[0][1] and not waehrend[0][2]
+    assert not tour.ist_beendet and tour._timer.isActive()
+    monkeypatch.setattr(desktop_demo.DemoTour, "TEMPO", 0)
+    qtbot.waitUntil(lambda: not tour._offen, timeout=WARTEZEIT_MS)
+    tour.beenden()
+
+
+def test_demopruefung_beenden_mitten_in_der_ergebniserfassung(qtbot, termin, demo_umgebung, monkeypatch):
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
@@ -9479,6 +9541,13 @@ def test_demopruefung_beenden_mitten_in_der_ergebniserfassung(qtbot, termin, dem
     assert fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
     demo_ordner = os.path.dirname(tour.pfad)
 
+    # Nachtest 2 (N9): „Beenden“ fragt nach (Vorgabe „Nein“); „Nein“ lässt die Demo weiterlaufen.
+    antworten, vorgaben = [QMessageBox.No, QMessageBox.Yes], []
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: vorgaben.append(a[4]) or antworten.pop(0))
+    qtbot.mouseClick(tour._panel.beenden_btn, Qt.MouseButton.LeftButton)
+    assert not tour.ist_beendet and fenster._demo_tour is tour
+    assert vorgaben == [QMessageBox.No]
     qtbot.mouseClick(tour._panel.beenden_btn, Qt.MouseButton.LeftButton)
 
     assert tour.ist_beendet and fenster._demo_tour is None

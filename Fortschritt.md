@@ -9507,3 +9507,25 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   ungültige Daten, Rat bei „nicht angeboten“ nennt auch das Freischalten. Suchtexte, die mit einem
   Sonderzeichen beginnen, suchen gleich überall. Handbuch-Tabelle um Doppelklick ergänzt; Tests für
   Weitersuchen, Umlaut, Sonderzeichen und die übrigen Räte.
+
+### ux_test_2026_11 B17 – Demo-Texte und Beenden, Zählung nach dem Verteilen (Nachtest 2 N9, N10; 04.11.2026)
+
+- **N9:** Demo-Schritt 3 spricht vom Feld „Prüfung“ („Trümmer LK 1“ = ED, „DK-LK 1“ = Dreikampf)
+  statt von „Art und Leistungsklasse“, die die Maske seit B8 nur bei „andere Prüfung …“ zeigt. Die
+  Demo-Bereiche sind je 20 Nummern (1–20, 21–40, 41–60, 61–80) wie bei „Anzahl 20“. Der Knopf
+  „Beenden“ fragt nach (Vorgabe „Nein“, neues Signal `DemoPanel.beenden_angefragt`). Solange die
+  Rückfrage offen ist, ruht die Demo (kein Tippen, kein Countdown); nach „Nein“ geht der Schritt
+  weiter, ein laufender Countdown beginnt neu. Das Schließen des Erklärfensters beendet weiterhin
+  ohne Rückfrage. Die Prüfungsnamen in Schritt 3 kommen aus `ALLE_PRUEFUNGEN` (passt nach B18).
+- **N10:** Die Bestätigung nach „Automatisch verteilen“ zählt Prüfungen (der Dreikampf als eine)
+  und Teilnehmer statt Disziplin-Gruppen und Starts: „Alle 6 Prüfungen mit 16 Teilnehmern sind
+  eingeplant …“, bei einer Prüfung „Die Prüfung mit … ist eingeplant …“. Die Warnung „noch nicht
+  (ganz) eingeplant“ zählt ebenso (`desktop_zeitplan._anzahl_pruefungen`); UML (Demo-Zustände)
+  nennt die Rückfrage. Handbuch (Demoprüfung, Zeitplan, Kap. 14)
+  nachgezogen.
+- **Tests:** neu `test_verteilen_bestaetigung_zaehlt_pruefungen_und_teilnehmer`,
+  `test_demo_bereiche_passen_zur_anzahl_und_schritt_3_nennt_pruefung`; erweitert:
+  `test_demopruefung_beenden_mitten_in_der_ergebniserfassung` (Rückfrage, „Nein“ läuft weiter);
+  angepasst: Mittagspausen-Test (neuer Wortlaut). Nach der Verifikation dazu
+  `test_demo_ruht_waehrend_der_beenden_rueckfrage`. Gegenprobe: ohne die Änderung scheitern die
+  neuen und angepassten Tests. 723 Unittests, alle GUI-Tests grün.

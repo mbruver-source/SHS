@@ -85,6 +85,7 @@ from desktop_gemeinsam import (
     _ausdrucke_ordner,
     _export_dateiname,
     _fehlertext,
+    _ja_nein,
     _pfad_anzeige,
     _url_oeffnen,
     symbol_setzen,
@@ -201,7 +202,8 @@ class DemoPanel(QWidget):
     Texte als reiner Text (S-1: nie als HTML deuten)."""
 
     weiter_geklickt = Signal()
-    beenden_geklickt = Signal()
+    beenden_geklickt = Signal()  # Fenster geschlossen: ohne Rückfrage beenden
+    beenden_angefragt = Signal()  # Knopf „Beenden“: erst nachfragen (Nachtest 2, N9)
     auto_weiter_umgeschaltet = Signal(bool)
     rueckblick_geoeffnet = Signal()
     rueckblick_beendet = Signal()
@@ -256,7 +258,7 @@ class DemoPanel(QWidget):
         self.auto_box.toggled.connect(self.auto_weiter_umgeschaltet)
         self.beenden_btn = QPushButton("Beenden")
         self.beenden_btn.setToolTip("Demo abbrechen – der Demo-Termin wird gelöscht.")
-        self.beenden_btn.clicked.connect(self.beenden_geklickt)
+        self.beenden_btn.clicked.connect(self.beenden_angefragt)
         self.weiter_btn = QPushButton("Weiter")
         self.weiter_btn.setObjectName("primaerButton")  # siehe _QSS_TEMPLATE
         # Symbol rechts vom Text (Pfeil nach vorn): Qt setzt das Icon bei umgekehrter
@@ -661,6 +663,7 @@ class DemoTour(QObject):
         self._panel = DemoPanel(self._fenster)
         self._panel.weiter_geklickt.connect(self.weiter)
         self._panel.beenden_geklickt.connect(self.beenden)
+        self._panel.beenden_angefragt.connect(self._beenden_nach_rueckfrage)
         self._panel.auto_weiter_umgeschaltet.connect(self._auto_weiter_umgeschaltet)
         # Rückblick (X6): Countdown nur pausieren, nicht dauerhaft anhalten - danach zählt er
         # wieder, sofern der Schritt fertig ist (Verifikation A6, Befund 2).
@@ -694,6 +697,30 @@ class DemoTour(QObject):
             self.beenden()
             return
         self._schritt_zeigen(self._index + 1)
+
+    def _beenden_nach_rueckfrage(self) -> None:
+        """Nachtest 2 (N9, Marco 04.11.2026): Der Knopf „Beenden“ liegt neben „Weiter“ - ein
+        Fehlklick beendete die Demo sofort, und sie begann danach von vorn. Jetzt mit Rückfrage
+        (Vorgabe „Nein“). Solange sie offen ist, ruht die Demo: kein Tippen, kein Countdown
+        (Verifikation B17). Nach „Nein“ geht der Schritt weiter, ein laufender Countdown beginnt
+        neu."""
+        if self.ist_beendet:
+            return
+        lief = self._countdown.isActive()
+        tippte = self._timer.isActive()
+        self._timer.stop()
+        self._countdown_stoppen()
+        if _ja_nein(
+            self._panel, "Demoprüfung beenden",
+            "Die Demoprüfung wirklich beenden? Der Demo-Termin wird gelöscht, beim nächsten "
+            "Start beginnt die Demo wieder bei Schritt 1.",
+        ):
+            self.beenden()
+        elif not self.ist_beendet:
+            if tippte and self._offen:
+                self._timer.start(0)
+            elif lief:
+                self._nach_rueckblick()  # Countdown wie nach dem Rückblick neu starten
 
     def beenden(self) -> None:
         """Bricht ab bzw. schließt die Demo ab: stellt den vorherigen Termin wieder her
@@ -1137,9 +1164,10 @@ class DemoTour(QObject):
             DemoSchritt(
                 "3. Einen Teilnehmer erfassen",
                 "Im Reiter „Teilnehmer“ öffnet „Teilnehmer hinzufügen…“ die Erfassungsmaske.\n\n"
-                "Wichtig sind Art und Leistungsklasse: ED ist eine Einzeldisziplin "
-                "(Trümmerfeld, Flächensuche oder Behältnisstrecke), DK der Dreikampf aus allen "
-                "drei. Bei ED gibt es genau einen Suchgegenstand.\n\n"
+                f"Wichtig ist das Feld „Prüfung“: „{pruefung_nach_kuerzel('ED1-Trümmerfeld').bezeichnung}“ "
+                "ist eine Einzeldisziplin (ED: Trümmerfeld, Flächensuche oder Behältnisstrecke), "
+                f"„{pruefung_nach_kuerzel('DK1').bezeichnung}“ der Dreikampf aus allen drei. Bei ED "
+                "gibt es genau einen Suchgegenstand.\n\n"
                 "Die Startnummer bleibt hier bewusst offen – sie wird gleich für alle "
                 "gemeinsam vergeben.",
                 self._aktionen_teilnehmer_dialog,
