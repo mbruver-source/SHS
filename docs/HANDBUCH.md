@@ -127,8 +127,8 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
       `sudo apt install ./shs-pruefungsprogramm_X.Y.Z_amd64.deb`. Entfernen mit
       `sudo apt remove shs-pruefungsprogramm`, die Termine bleiben dabei erhalten.
 
-- **Version prüfen und aktualisieren:** Oben rechts auf **„Version …“** klicken, dann
-  **„Nach Updates suchen“**. Gibt es eine neuere Version, erscheint
+- **Version prüfen und aktualisieren:** Im Menü **„Hilfe → Nach Updates suchen…“** – oder
+  oben rechts auf **„Version …“** klicken, dann **„Nach Updates suchen“**. Gibt es eine neuere Version, erscheint
   **„Neue Version herunterladen (GitHub öffnen)“**. Die neue Version einfach über die alte
   installieren – deine Termine bleiben erhalten. Unter macOS die App im Ordner „Programme“
   ersetzen, beim AppImage die alte Datei durch die neue. Eine automatische Suche im
@@ -806,11 +806,11 @@ Sicherungsdatei (Endung `.zip`). Liegt der geöffnete Termin woanders (z. B. auf
 USB-Stick), fragt das Programm, ob er mitgesichert werden soll. Die PDFs im
 Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erzeugen.
 
-- **„Sicherung erstellen…“:** Auf Wunsch **„Mit Passwort schützen“** (die Sicherungsdatei wird dann verschlüsselt), danach
-  den Speicherort wählen, z. B. einen USB-Stick. Der vorgeschlagene Dateiname enthält Datum
-  und Verein des geöffneten Termins sowie den Tag der Sicherung, z. B.
-  `SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-2026-10-03.zip`. **Ein vergessenes Passwort lässt sich nicht
-  wiederherstellen.** Bewahre es getrennt von der Sicherung auf.
+- **„Sicherung erstellen…“:** Ein Passwort ist freiwillig. Auf Wunsch **„Mit Passwort schützen“**
+  (die Sicherungsdatei wird dann verschlüsselt), danach den Speicherort wählen, z. B. einen
+  USB-Stick. Der vorgeschlagene Dateiname nennt den Umfang und den Tag der Sicherung, z. B.
+  `SHS-Sicherung_2026-11-04_alle-Termine.zip`. Wer ein Passwort vergibt: **Ein vergessenes
+  Passwort lässt sich nicht wiederherstellen.** Bewahre es getrennt von der Sicherung auf.
   Jeder Termin kommt mit seinem zuletzt gespeicherten Stand in die Sicherung, auch der gerade
   geöffnete. Lässt sich eine Datei nicht als Termin lesen (z. B. beschädigt), wird sie
   unverändert mitgesichert, und die Meldung nennt sie.
@@ -959,7 +959,7 @@ Bereits gespeicherte Daten bleiben erhalten. Das Programm schreibt solche Fehler
 `absturzprotokoll.txt` im Ordner `SHS-Pruefungsprogramm` in deinem Benutzerprofil (neben dem
 Ordner `Termine`); wird sie zu groß, heißt die ältere Fassung `absturzprotokoll.alt.txt`. Für eine Fehlermeldung (siehe unten) musst du die Datei nicht suchen:
 **„Fehlerbericht kopieren“** im Fehlerfenster bzw. **„Diagnose kopieren“** im Fenster
-**„Version“** legt Version, System und das Ende des Protokolls in die Zwischenablage – zum
+**„Version“** (Bereich „Für Fehlermeldungen“) legt Version, System und das Ende des Protokolls in die Zwischenablage – zum
 Einfügen in die Meldung. Dein Benutzerordner wird dabei durch `~` ersetzt, dein Benutzername
 durch `<Benutzer>` (ein sehr kurzer Name wie „max“ nur in Pfadangaben, damit Text wie `max(`
 lesbar bleibt); kurz durchsehen, ob trotzdem echte Teilnehmerdaten darin stehen. **„Protokoll-Ordner öffnen“** zeigt die Datei.

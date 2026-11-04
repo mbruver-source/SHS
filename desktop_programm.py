@@ -20,6 +20,7 @@ from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -198,10 +199,11 @@ class VersionDialog(QDialog):
     per GitHub-API prüft, ob eine neuere Version veröffentlicht wurde (siehe
     _neueste_version_pruefen oben; im Hintergrund-Thread mit Gesamtzeitgrenze). Wird über
     den Version-Button im Hauptfenster geöffnet, in der Kopfzeile oben rechts (siehe
-    HauptFenster._version_anzeigen). Unter der Versionszeile stehen die Lizenz des Programms
+    HauptFenster._version_anzeigen), oder über „Hilfe → Nach Updates suchen…“, das die Suche
+    gleich startet (updates_sofort_suchen, UX-Test 2026-11 T9). Unter der Versionszeile stehen die Lizenz des Programms
     und ein Button, der alle Lizenztexte zeigt (LizenzDialog, Marco 01.11.2026, OFFEN B14)."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, updates_sofort_suchen: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Version")
 
@@ -235,6 +237,7 @@ class VersionDialog(QDialog):
         hinweis.setWordWrap(True)
 
         self._update_lauf = 0
+        self._fokus_zurueck = False
         self._update_bote = _UpdateBote(self)
         self._update_bote.ergebnis.connect(self._update_ergebnis)
         self._updates_btn = QPushButton("Nach Updates suchen")
@@ -256,11 +259,14 @@ class VersionDialog(QDialog):
         seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
 
         # Rückmeldung Marco 13.10.2026: Diagnose für Fehlermeldungen zum Kopieren statt eines
-        # Dumps mit Termindaten (siehe desktop_gemeinsam.diagnose_text).
+        # Dumps mit Termindaten (siehe desktop_gemeinsam.diagnose_text). UX-Test 2026-11, T9:
+        # in einem eigenen Bereich „Für Fehlermeldungen“ - Werner hielt „Diagnose“ und
+        # „Absturzprotokoll“ für etwas, das er bedienen müsse.
         fehler_hinweis = QLabel(
-            "Für eine Fehlermeldung die Diagnose kopieren und einfügen – sie enthält Version, "
-            "System und das Ende des Absturzprotokolls, aber keine Termin-Datei. Vor dem "
-            "Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen (z. B. in Fehlertexten)."
+            "Nur nötig, wenn du einen Fehler melden möchtest: „Diagnose kopieren“ und in die "
+            "Nachricht einfügen. Sie enthält Version, System und die letzten Fehlermeldungen des "
+            "Programms, aber keine Termin-Datei. Vor dem Einfügen kurz prüfen, ob Teilnehmerdaten "
+            "darin stehen (z. B. in Fehlertexten)."
         )
         fehler_hinweis.setWordWrap(True)
         diagnose_btn = QPushButton("Diagnose kopieren")
@@ -281,8 +287,10 @@ class VersionDialog(QDialog):
         # als erster Knopf (AutoDefault) die Vorgabe.
         schliessen_btn.setDefault(True)
         # Abschluss-QS A11: Anfangsfokus statt abgeschaltetem AutoDefault - so löst Enter auf
-        # einem anderen Knopf (z. B. „Nach Updates suchen“) weiter diesen Knopf aus.
-        schliessen_btn.setFocus()
+        # einem anderen Knopf (z. B. „Nach Updates suchen“) weiter diesen Knopf aus. Gesetzt in
+        # showEvent: vor dem Zeigen griff setFocus() nicht, der Fokus landete auf dem ersten
+        # Knopf (UX-Test 2026-11, T9 - im Nachtest öffnete Enter deshalb „Lizenzen anzeigen“).
+        self._schliessen_btn = schliessen_btn
         schliessen_zeile = QHBoxLayout()
         schliessen_zeile.addWidget(seite_link_btn)
         schliessen_zeile.addStretch()
@@ -297,11 +305,23 @@ class VersionDialog(QDialog):
         layout.addWidget(self._updates_btn)
         layout.addWidget(self._ergebnis_zeile)
         layout.addWidget(self._download_btn)
+        fehler_bereich = QGroupBox("Für Fehlermeldungen")
+        fehler_layout = QVBoxLayout(fehler_bereich)
+        fehler_layout.addWidget(fehler_hinweis)
+        fehler_layout.addLayout(diagnose_zeile)
         layout.addSpacing(8)
-        layout.addWidget(fehler_hinweis)
-        layout.addLayout(diagnose_zeile)
+        layout.addWidget(fehler_bereich)
         layout.addSpacing(8)
         layout.addLayout(schliessen_zeile)
+
+        # UX-Test 2026-11, T9: „Hilfe → Nach Updates suchen…“ öffnet das Fenster und sucht gleich.
+        if updates_sofort_suchen:
+            QTimer.singleShot(0, self, self._updates_pruefen)
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if not event.spontaneous():  # nicht beim Wiederherstellen aus der Taskleiste
+            self._schliessen_btn.setFocus()
 
     def _diagnose_kopieren(self) -> None:
         QApplication.clipboard().setText(diagnose_text(VERSION))
@@ -316,6 +336,12 @@ class VersionDialog(QDialog):
     def _updates_pruefen(self) -> None:
         import threading
 
+        # Verifikation B3: Beim Sperren schöbe Qt den Fokus auf den nächsten Knopf („Diagnose
+        # kopieren“), ein Enter löste dann diesen aus. Solange gesucht wird, liegt der Fokus auf
+        # „Schließen“, danach wieder auf dem Suchknopf.
+        self._fokus_zurueck = self.focusWidget() is self._updates_btn
+        if self._fokus_zurueck:
+            self._schliessen_btn.setFocus()
         self._updates_btn.setEnabled(False)
         self._updates_btn.setText("Wird geprüft…")
         self._download_btn.hide()
@@ -351,6 +377,8 @@ class VersionDialog(QDialog):
             self._updates_btn.setEnabled(True)
             self._updates_btn.setText("Nach Updates suchen")
             self._ergebnis_zeile.show()
+            if self._fokus_zurueck and self.focusWidget() is self._schliessen_btn:
+                self._updates_btn.setFocus()
 
     def _ergebnis_anzeigen(self, neueste_version: str | None, fehler: str | None) -> None:
         if fehler is not None:

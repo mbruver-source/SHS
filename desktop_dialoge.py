@@ -1454,21 +1454,22 @@ sich denselben Speicherort.</p>
 <h3>Reiter "Datensicherung"</h3>
 <p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine Sicherungsdatei
 – nicht nur den gerade geöffneten Termin. "Sicherung erstellen…" fragt zunächst,
-ob die Datei mit einem Passwort geschützt werden soll (dann wird sie verschlüsselt),
-danach den Speicherort. "Sicherung wiederherstellen…" fragt bei Bedarf nach dem
+ob die Datei mit einem Passwort geschützt werden soll (freiwillig; dann wird sie
+verschlüsselt), danach den Speicherort. "Sicherung wiederherstellen…" fragt bei Bedarf nach dem
 Passwort und bei jedem bereits vorhandenen Termin, ob überschrieben, als Kopie
-importiert oder übersprungen werden soll. Ein vergessenes Passwort lässt sich nicht
-wiederherstellen – gut aufbewahren.</p>
+importiert oder übersprungen werden soll. Wer ein Passwort vergibt: Ein vergessenes Passwort
+lässt sich nicht wiederherstellen – gut aufbewahren.</p>
 
 <h3>Versionsanzeige</h3>
 <p>Der Button "Version" oben rechts (zwischen "Anderen Termin öffnen…" und
-"Demoprüfung") zeigt die aktuell installierte Version. "Nach
+"Demoprüfung") bzw. das Menü "Hilfe → Version und Lizenzen" zeigt die aktuell installierte
+Version. "Hilfe → Nach Updates suchen…" öffnet das Fenster und sucht gleich. "Nach
 Updates suchen" prüft dort per Klick automatisch (über GitHub), ob eine neuere Version
 veröffentlicht wurde, und zeigt bei Bedarf einen Download-Button an – dafür wird kurz
 eine Internetverbindung gebraucht, ohne Internet erscheint stattdessen ein entsprechender
 Hinweis. Eine automatische Prüfung im Hintergrund beim Programmstart ist bewusst nicht
 eingebaut.</p>
-<p>Für eine Fehlermeldung legt "Diagnose kopieren" Version, System und das Ende des
+<p>Nur für eine Fehlermeldung (Bereich "Für Fehlermeldungen"): "Diagnose kopieren" legt Version, System und das Ende des
 Absturzprotokolls in die Zwischenablage (dein Benutzername wird dabei ersetzt; vor dem
 Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen). "Protokoll-Ordner öffnen" zeigt die
 Datei. Bei einem unerwarteten Fehler erscheint ein Fenster mit denselben Möglichkeiten.</p>

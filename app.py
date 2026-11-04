@@ -3258,6 +3258,12 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             ansicht_menue.addMenu("Schriftgröße"), _SCHRIFTSTUFEN, _gespeicherte_schriftstufe_lesen(),
             self._schrift_aktion_ausgeloest,
         )
+        # UX-Test 2026-11, T9: Die Update-Suche stand nur hinter dem Knopf „Version …“ - Werner
+        # suchte sie in einem Menü.
+        hilfe_menue = self.menuBar().addMenu("&Hilfe")
+        hilfe_menue.addAction("Hilfe anzeigen", self._hilfe_anzeigen)
+        hilfe_menue.addAction("Nach Updates suchen…", self._updates_suchen)
+        hilfe_menue.addAction("Version und Lizenzen", self._version_anzeigen)
 
     def _auswahl_menue_aufbauen(self, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
         actions: dict[str, QAction] = {}
@@ -3324,6 +3330,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _version_anzeigen(self) -> None:
         _ausfuehren(VersionDialog(self))
+
+    def _updates_suchen(self) -> None:
+        _ausfuehren(VersionDialog(self, updates_sofort_suchen=True))
 
     def _demo_starten(self) -> None:
         """Startet die Demoprüfung (desktop_demo.DemoTour) im Temp-Ordner; der geöffnete

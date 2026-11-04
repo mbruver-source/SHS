@@ -612,7 +612,7 @@ sequenceDiagram
     participant H as HauptFenster
     participant OS as Windows / Setup
 
-    N->>V: „Version …“
+    N->>V: „Version …“ bzw. Hilfe → „Nach Updates suchen…“
     V->>T: _neueste_version_pruefen (Zeitgrenze)
     T->>GH: releases/latest
     GH-->>T: Version

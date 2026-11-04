@@ -40,7 +40,7 @@ ersten Test haben sie erst nach dem Test als Abgleich bewertet.
 | N2 | Import-Meldung: Enter drückt „OK“, danach ist die Ablehnungsliste nicht mehr nachzulesen (der Kopierknopf ist nicht Vorgabe) | Tobias | mittel |
 | N3 | „29 Ergebnis(se) gespeichert“ bei 16 Teilnehmern – zählt Disziplinen, wirkt wie doppelt | Werner | gering |
 | N4 | Abbruch-Spalte zeigte den Grund abgeschnitten („letzung H“); Status zeigt bei DQ/Abbruch nur „gespeichert“ | Werner | gering (evtl. Testumgebung) |
-| N5 | Versionsfenster: Fachwörter (Absturzprotokoll, Diagnose); Update-Suche nur hinter „Version …“; bei Tobias öffnete Enter „Lizenzen“ | beide | gering, Enter-Verhalten **am Gerät prüfen** (Code setzt den Anfangsfokus auf „Schließen“) |
+| N5 | Versionsfenster: Fachwörter (Absturzprotokoll, Diagnose); Update-Suche nur hinter „Version …“; bei Tobias öffnete Enter „Lizenzen“ | beide | gering, Enter-Verhalten **echter Fehler**, in B3 behoben (Fokus griff vor dem Zeigen nicht) |
 | N6 | Datensicherung wirkt, als sei ein Passwort Pflicht | Werner | gering |
 | N7 | Bei leerem Verband/Meldestelle steht die Rückfrage auf „Ja“, beim Formular keine zweite Warnung | Tobias | gering |
 | N8 | ED: „Schlüsselbund, Socke“ in einem Feld wird ohne Nachfrage angenommen | Tobias | gering |

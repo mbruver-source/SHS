@@ -9150,3 +9150,29 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 - Tests: 5 neue bzw. erweiterte GUI-Tests, ein bestehender auf Vorgabe „Nein“ umgestellt;
   Gegenprobe scheitert ohne die Änderung. 721 Unittests, 517 GUI-Tests grün; nach der Nacharbeit
   die betroffenen 89 GUI-Tests grün.
+
+### ux_test_2026_11 B3 – Version, Datensicherung, T9 bis T11 (04.11.2026)
+
+- **T9:** Neues Menü **„Hilfe“** mit „Hilfe anzeigen“, „Nach Updates suchen…“ (öffnet das
+  Versionsfenster und startet die Suche sofort) und „Version und Lizenzen“. Im Versionsfenster
+  stehen „Diagnose kopieren“ und „Protokoll-Ordner öffnen“ im Bereich „Für Fehlermeldungen“ mit
+  einem Satz, dass das nur zum Melden eines Fehlers nötig ist.
+- **Enter im Versionsfenster (Nachtest N5):** echter Fehler, nicht die Testumgebung. Der
+  Anfangsfokus auf „Schließen“ (A11) wurde vor dem Zeigen gesetzt und griff nicht, der Fokus lag
+  auf „Lizenzen anzeigen“. Jetzt in `showEvent`; der Test prüft Fokus und Enter am gezeigten
+  Fenster. Die Prüfung am Gerät ist damit erledigt.
+- **T10:** Hinweis im Reiter „Datensicherung“: „… – auf Wunsch mit Passwort.“ statt „Passwort
+  getrennt von der Sicherung aufbewahren“; der Tooltip nennt das Passwort freiwillig.
+- **T11:** Dateiname `SHS-Sicherung_<Tag der Sicherung>_alle-Termine.zip` (ersetzt K10 mit Datum
+  und Verein des geöffneten Termins, der nur einen Termin vermuten ließ). Eine Variante mit
+  Terminnamen gibt es nicht, weil immer alle Termine gesichert werden.
+- Handbuch (Installation/Update, Datensicherung, Fehlermeldung) nachgezogen. Screenshots vor dem
+  Build: `handbuch_datensicherung` (Hinweistext) und alle Bilder des Hauptfensters, weil die
+  Menüleiste jetzt „Hilfe“ zeigt; vom Versionsfenster gibt es kein Bild.
+- **Verifikation, behoben:** Ein Klick auf „Nach Updates suchen“ und danach Enter kopierte die
+  Diagnose (Qt schob den Fokus beim Sperren weiter) – jetzt liegt er während der Suche auf
+  „Schließen“, danach wieder auf dem Suchknopf. Hilfe im Programm (Datensicherung, Version),
+  Docstring, Kommentar und `UML.md` nachgezogen; Dateiname in der Reihenfolge des Auftrags
+  (Datum vor Umfang).
+- Tests: 3 neue GUI-Tests, 2 angepasst; Gegenprobe: alle 4 neuen bzw. geänderten scheitern ohne
+  die Änderung.

@@ -29,7 +29,7 @@ import pytest
 from contextlib import closing
 from PySide6.QtCore import QEvent, QPoint, QPointF, QSize, Qt
 from PySide6.QtGui import QFont, QKeySequence, QPalette, QShortcut
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton
 
 import db as _db_modul
 from app import (
@@ -739,19 +739,20 @@ def test_markierung_bleibt_nach_aenderung_beim_selben_teilnehmer(qtbot, conn):
     assert tab._ausgewaehlte_id() == b
 
 
-def test_sicherung_dateiname_mit_pruefungsdatum_und_verein(qtbot, conn):
-    """UX-Test 02.10.2026, K10."""
+def test_sicherung_dateiname_nennt_umfang_und_tag(qtbot, conn):
+    """UX-Test 2026-11, T11 (ersetzt K10): Der Name nennt „alle Termine“ statt Datum und
+    Verein des geöffneten Termins - gesichert werden immer alle. T10: Der Hinweis im Reiter
+    nennt das Passwort als freiwillig."""
     import datetime
 
     heute = datetime.date.today().isoformat()
-    ohne = DatensicherungTab()
-    qtbot.addWidget(ohne)
-    assert ohne._dateiname_vorschlag() == f"SHS-Sicherung_{heute}.zip"
-
     set_veranstaltung(conn, verein="SGV Köppern e.V.", datum="2026-11-14")
     tab = DatensicherungTab(conn=conn)
     qtbot.addWidget(tab)
-    assert tab._dateiname_vorschlag() == f"SHS-Sicherung_2026-11-14_SGV-Koeppern-e-V_erstellt-{heute}.zip"
+    assert tab._dateiname_vorschlag() == f"SHS-Sicherung_{heute}_alle-Termine.zip"
+    texte = " ".join(label.text() for label in tab.findChildren(QLabel))
+    assert "auf Wunsch mit Passwort" in texte
+    assert "Passwort getrennt von der Sicherung aufbewahren" not in texte
 
 
 def test_teilnehmer_knopfleiste_zweizeilig(qtbot, conn):
@@ -2630,6 +2631,83 @@ def test_versiondialog_releases_seite_button_oeffnet_browser_ohne_netzwerkzugrif
 
     assert geoeffnete_urls == [desktop_programm.GITHUB_RELEASES_URL]
     assert "ja" not in aufgerufen
+
+
+def test_versiondialog_enter_schliesst_nach_dem_zeigen(qtbot):
+    """UX-Test 2026-11, T9: Im Nachtest öffnete Enter „Lizenzen“ - nach dem Zeigen liegt der
+    Fokus auf „Schließen“, Enter schließt das Fenster."""
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    schliessen = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Schließen")
+    assert dialog.focusWidget() is schliessen
+    qtbot.keyClick(dialog.focusWidget(), Qt.Key_Return)
+    assert dialog.result() == QDialog.Accepted
+
+
+def test_versiondialog_enter_nach_updatesuche_kopiert_keine_diagnose(qtbot, monkeypatch):
+    """Verifikation B3: Nach einem Klick auf „Nach Updates suchen“ lag der Fokus beim Sperren auf
+    „Diagnose kopieren“ - Enter kopierte dann die Diagnose. Jetzt während der Suche auf
+    „Schließen“, danach wieder auf dem Suchknopf."""
+    import threading
+
+    freigabe = threading.Event()
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen",
+                        lambda: (freigabe.wait(5), (VERSION, None))[1])
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    dialog._updates_btn.setFocus()
+    qtbot.mouseClick(dialog._updates_btn, Qt.MouseButton.LeftButton)
+    assert dialog.focusWidget() is dialog._schliessen_btn
+    freigabe.set()
+    qtbot.waitUntil(lambda: dialog._updates_btn.isEnabled(), timeout=WARTEZEIT_MS)
+    assert dialog.focusWidget() is dialog._updates_btn
+    assert dialog._diagnose_status.text() == ""
+
+
+def test_versiondialog_fehlerknoepfe_in_eigenem_bereich(qtbot):
+    """UX-Test 2026-11, T9: Diagnose und Protokoll-Ordner stehen im Bereich „Für Fehlermeldungen“."""
+    from PySide6.QtWidgets import QGroupBox
+
+    dialog = VersionDialog()
+    qtbot.addWidget(dialog)
+    bereich = next(g for g in dialog.findChildren(QGroupBox) if g.title() == "Für Fehlermeldungen")
+    knoepfe = {b.text() for b in bereich.findChildren(QPushButton)}
+    assert knoepfe == {"Diagnose kopieren", "Protokoll-Ordner öffnen"}
+
+
+def test_hilfe_menue_nach_updates_suchen_prueft_sofort(qtbot, termin, monkeypatch):
+    """UX-Test 2026-11, T9: „Hilfe → Nach Updates suchen…“ öffnet das Versionsfenster und
+    startet die Suche gleich."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    monkeypatch.setattr(desktop_programm, "_neueste_version_pruefen", lambda: (VERSION, None))
+    geoeffnet = []
+
+    def _exec(dialog):
+        geoeffnet.append(dialog)
+        qtbot.waitUntil(lambda: "neueste Version" in dialog._ergebnis_zeile.text(), timeout=WARTEZEIT_MS)
+        return 0
+
+    monkeypatch.setattr(VersionDialog, "exec", _exec)
+    hilfe = next(m for m in fenster.menuBar().findChildren(QMenu) if m.title() == "&Hilfe")
+    aktionen = {a.text(): a for a in hilfe.actions()}
+    assert set(aktionen) == {"Hilfe anzeigen", "Nach Updates suchen…", "Version und Lizenzen"}
+    aktionen["Nach Updates suchen…"].trigger()
+    assert len(geoeffnet) == 1
+
+    # Die beiden anderen Einträge öffnen Hilfe bzw. Versionsfenster (ohne Suche).
+    monkeypatch.setattr(VersionDialog, "exec", lambda dialog: geoeffnet.append(dialog) or 0)
+    aktionen["Version und Lizenzen"].trigger()
+    assert len(geoeffnet) == 2 and geoeffnet[-1]._updates_btn.isEnabled()
+    hilfe_geoeffnet = []
+    monkeypatch.setattr(HilfeDialog, "exec", lambda dialog: hilfe_geoeffnet.append(dialog) or 0)
+    aktionen["Hilfe anzeigen"].trigger()
+    assert len(hilfe_geoeffnet) == 1
 
 
 def test_versiondialog_lizenz_zeile_und_button_oeffnet_lizenzdialog(qtbot, monkeypatch):
@@ -6016,7 +6094,8 @@ def test_sicherung_fragt_bei_termin_ausserhalb_des_ordners(qtbot, conn, tmp_path
         assert aufrufe == []
         return
     assert aufrufe[0]["zusaetzliche"] == ([str(termin_pfad)] if erwartet == "mit" else [])
-    assert ("HSV" in os.path.basename(vorschlaege[0])) == (erwartet == "mit")
+    # Seit UX-Test 2026-11 (T11) nennt der Name „alle-Termine“ statt des geöffneten Termins.
+    assert os.path.basename(vorschlaege[0]).endswith("_alle-Termine.zip")
 
 
 @pytest.mark.parametrize("roh", [[], ["kaputt.sqlite"]])

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import datetime
 import os
-import re
 import sqlite3
 
 from PySide6.QtCore import Qt, Signal
@@ -27,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from db import dateiname_slug, get_veranstaltung, termine_ordner
+from db import get_veranstaltung, termine_ordner
 from db_sicherung import (
     PasswortFalschError,
     sicherung_erstellen,
@@ -134,12 +133,14 @@ class DatensicherungTab(QWidget):
         # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026). Das Wichtigste
         # - es sind ALLE Termine - steht in der kurzen Zeile.
         hinweis = kurzer_hinweis(
-            "Sichert ALLE Termine in eine .zip-Datei bzw. stellt sie daraus wieder her. "
-            "Passwort getrennt von der Sicherung aufbewahren.",
+            # UX-Test 2026-11, T10: „Passwort getrennt aufbewahren“ klang, als sei ein Passwort
+            # Pflicht (Werner erschrak) - es ist freiwillig.
+            "Sichert ALLE Termine in eine Sicherungsdatei bzw. stellt sie daraus wieder her – "
+            "auf Wunsch mit Passwort.",
             "Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner "
             f"(„{termine_ordner()}“) als eine einzige Sicherungsdatei (Endung .zip) - nicht "
-            "nur den gerade geöffneten Termin. Das Passwort einer geschützten Sicherung "
-            "am besten getrennt von der Sicherungsdatei aufbewahren (z. B. nicht auf "
+            "nur den gerade geöffneten Termin. Ein Passwort ist freiwillig. Wer eines vergibt, "
+            "bewahrt es am besten getrennt von der Sicherungsdatei auf (z. B. nicht auf "
             "demselben USB-Stick).",
         )
 
@@ -164,21 +165,12 @@ class DatensicherungTab(QWidget):
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner
 
-    def _dateiname_vorschlag(self, mit_termin: bool = True) -> str:
-        """UX-Test 02.10.2026, K10: Name mit Prüfungsdatum und Verein des geöffneten Termins,
-        damit man die Sicherung später einer Prüfung zuordnen kann, z. B.
-        "SHS-Sicherung_2026-11-14_Hundefreunde-Testhausen_erstellt-2026-10-03.zip".
-        `mit_termin=False`: der geöffnete Termin ist nicht in der Sicherung (Teil 7 Nr. 1)."""
-        heute = datetime.date.today().isoformat()
-        veranstaltung = get_veranstaltung(self.conn) if self.conn is not None and mit_termin else None
-        if not veranstaltung:
-            return f"SHS-Sicherung_{heute}.zip"
-        teile = [
-            re.sub(r"[^0-9-]", "", veranstaltung["datum"] or ""),
-            dateiname_slug(veranstaltung["verein"] or ""),
-        ]
-        mitte = "_".join(t for t in teile if t)
-        return f"SHS-Sicherung_{mitte + '_' if mitte else ''}erstellt-{heute}.zip"
+    @staticmethod
+    def _dateiname_vorschlag() -> str:
+        """UX-Test 2026-11, T11 (Marco 04.11.2026): Tag und Umfang der Sicherung, z. B.
+        "SHS-Sicherung_2026-11-04_alle-Termine.zip" (nach Datum sortierbar). Vorher (K10, 02.10.2026) standen Datum und
+        Verein des geöffneten Termins im Namen - das wirkte, als sei nur dieser gesichert."""
+        return f"SHS-Sicherung_{datetime.date.today().isoformat()}_alle-Termine.zip"
 
     def _offener_termin_im_ordner(self) -> bool:
         """Liegt der geöffnete Termin im Termine-Ordner (bzw. ist keiner geöffnet)?"""
@@ -226,8 +218,7 @@ class DatensicherungTab(QWidget):
             return
         passwort = dialog.passwort()
 
-        mit_termin = self._offener_termin_im_ordner() or bool(zusaetzliche)
-        vorschlag = os.path.join(os.path.expanduser("~"), self._dateiname_vorschlag(mit_termin))
+        vorschlag = os.path.join(os.path.expanduser("~"), self._dateiname_vorschlag())
         pfad, _ = QFileDialog.getSaveFileName(self, "Sicherung speichern", vorschlag, "ZIP-Datei (*.zip)")
         if not pfad:
             return
