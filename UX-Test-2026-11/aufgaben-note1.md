@@ -107,4 +107,5 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   der SmartScreen-Meldung (die Sitzung kann sie nicht aufnehmen). Nimmst du sie beim nächsten
   Download auf (`docs/bilder/handbuch_chrome_download.png`, `handbuch_smartscreen.png`)?
   → Marco 04.11.: SmartScreen-Bilder geliefert und eingebunden; Chrome warnt derzeit nicht
-  mehr – Chrome-Bild bei einem neuen Release, falls die Warnung dann kommt.
+  mehr (auch bei den letzten Versionen nicht, Erweiterter Schutz an) – kein Chrome-Bild nötig;
+  R-B10 erledigt.

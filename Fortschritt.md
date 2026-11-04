@@ -9323,3 +9323,6 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   heute „Der Computer wurde durch Windows geschützt“ – Handbuch, Kurzanleitung, Website,
   `README.md` und `README_INSTALLER.md` nennen ihn jetzt (alter Titel als Hinweis). Chrome warnte
   beim Download nicht mehr (die Datei hat inzwischen genug Ruf); ein Chrome-Bild fehlt weiter.
+- **Marco 04.11.2026:** Chrome (Erweiterter Schutz) warnt seit dem öffentlichen Repo auch bei neuen
+  Versionen nicht mehr. Ein Chrome-Bild entfällt; der Chrome-Hinweis bleibt für den Fall der
+  Fälle in Kurzanleitung und Handbuch. R-B10 damit erledigt.
