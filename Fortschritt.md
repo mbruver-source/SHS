@@ -9390,3 +9390,19 @@ QS mit drei Rollen über `git diff aa84240..HEAD` (nacheinander, je ein Subagent
   Titel) eingearbeitet.
 - **Nachtest (B12):** Heinz (E-A2) vor dieser Änderung fertig, Bericht
   `UX-Test-2026-11/personas/E-A2.md` (gesamt 1– statt 2); die übrigen Personas testen den Stand mit B13.
+
+### ux_test_2026_11 B12 – Nachtest 2 mit fünf Personas (04.11.2026)
+
+Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, `N-A2`, `L-A2`, `L-B3`.
+
+- **Gesamtnoten (vorher):** Heinz 1– (2), Sabine 1–2 (2), Julia 1 (2), Gerda 2+ (2–3), Werner 2+ (2).
+  Termin-Ablauf bei allen 1 bis 1–2; alle fünf kommen am Prüfungstag allein klar. Die Laien
+  bremst nur noch die Installation (3 bzw. 3+, ohne Code-Signatur nicht lösbar, B8).
+- **Abgleich früherer Funde:** 45 behoben, 7 weitgehend, 4 teilweise, 2 nicht behoben (Prüfungsnamen
+  R-B8, „Richter hinzufügen“ ohne Namen), 1 nicht erlebt.
+- **Neue/verbliebene Funde N1–N16** (Liste in `Nachtest2.md`), nichts umgesetzt – zur Entscheidung
+  an Marco. Wichtigste: abgeschnittener Abbruchgrund (alle 5), Schrift „Groß“ schneidet die
+  Erfassung ab, Kurzanleitung ohne GitHub- und Setup-Bild, Startnummer-Tausch zwischen Prüfungen
+  ohne Warnung, Demo-Schritt 3 erwähnt noch „Art und Leistungsklasse“ (seit B8 veraltet).
+- **Harness:** frische Sandboxen brauchen `home\Downloads` mit den Testdaten (vorher anlegen);
+  vereinzelt `PermissionError` auf Antwortdateien.

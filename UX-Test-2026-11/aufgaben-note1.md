@@ -22,8 +22,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B9 | T12 Demo mit echtem Zurück | L | erledigt | 1a7675f | 52 → 67 % | ersetzt R4 |
 | B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | 48fa7a5 | 67 → 76 % | Website erst mit dem Release; R-B10 |
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | erledigt | b2fe6f3 | 0 → 16 % | QS-Befunde K1–K3 und Wartbarkeit als Q1–Q4 an Marco |
-| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | läuft | | 16 → | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
-| B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | (dieser Commit) | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
+| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | (dieser Commit) | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
+| B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
 
 ## Kalibrierung
 
@@ -126,3 +126,4 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   Vorschlag: alles umsetzen (klein). Nicht vorgeschlagen: „Letzter Import“ aus `app.py`
   auslagern (eigene Aufräumaufgabe) und Mittagspause am Namen erkennen (so lassen, Kommentar ergänzen).
   → **Marco 04.11.2026: Q1–Q4 wie vorgeschlagen umsetzen** (als B13, zwischen den Nachtest-Läufen, damit kein Lauf halb geänderten Code lädt).
+- **Nachtest 2 (B12):** neue bzw. verbliebene Funde N1–N16 in `Nachtest2.md` – je Fund umsetzen, zurückstellen oder verwerfen? N5 betrifft erneut R-B8 (Prüfungsnamen, von 4 Personas gemeldet).
