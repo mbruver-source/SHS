@@ -24,6 +24,15 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | erledigt | b2fe6f3 | 0 → 16 % | QS-Befunde K1–K3 und Wartbarkeit als Q1–Q4 an Marco |
 | B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | (dieser Commit) | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 | B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
+| B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | offen | | | |
+| B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | offen | | | |
+| B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | offen | | | |
+| B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | offen | | | |
+| B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
+| B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | offen | | | |
+| B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | offen | | | |
+| B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | offen | | | Setup-/Edge-Bild von Marco |
+| B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | offen | | | |
 
 ## Kalibrierung
 
@@ -127,3 +136,24 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   auslagern (eigene Aufräumaufgabe) und Mittagspause am Namen erkennen (so lassen, Kommentar ergänzen).
   → **Marco 04.11.2026: Q1–Q4 wie vorgeschlagen umsetzen** (als B13, zwischen den Nachtest-Läufen, damit kein Lauf halb geänderten Code lädt).
 - **Nachtest 2 (B12):** neue bzw. verbliebene Funde N1–N16 in `Nachtest2.md` – je Fund umsetzen, zurückstellen oder verwerfen? N5 betrifft erneut R-B8 (Prüfungsnamen, von 4 Personas gemeldet).
+
+## Entscheidungen zum Nachtest 2 (Marco 04.11.2026)
+
+Alle Funde N1–N16 aus `Nachtest2.md` werden umgesetzt:
+
+- **N1:** Abbruch-Spalte so breit wie der längste Grund (auch bei Schrift „Groß“), die Spalte „Status“ gibt Platz ab.
+- **N2:** Spaltenbreiten der Ergebniserfassung bei „Groß“/„Sehr groß“ nach Inhalt, Bildlauf nur, wenn es nicht passt.
+- **N3:** Kurzanleitung nennt den Download-Knopf der Website; GitHub-Bild mit „Assets“ nimmt die Sitzung selbst auf; Setup- und neues Edge-Bild nimmt Marco beim nächsten Release auf.
+- **N4:** „Startnummer tauschen…“ fragt bei verschiedenen Prüfungen nach (Vorgabe Nein, Bereiche genannt, Hinweis auf gespeicherte Ergebnisse); danach Statuszeile „Nr. X und Y getauscht“.
+- **N5:** Prüfungsnamen überall einheitlich wie im Anmeldeformular („Trümmer LK 2“, „DK LK 1“) – Listen, Filter, Zeitplan, Auswertung, PDFs. Ersetzt R-B8.
+- **N6:** Knopf „Hilfe“ öffnet wie F1 beim aktuellen Reiter; Suche zuerst ganze Wörter bzw. Wortanfänge; Abschnitt „Tastenkürzel“ und USB-Stick bei der Sicherung ergänzen; Treffer kräftiger markieren.
+- **N7:** „Richter hinzufügen“ fragt den Namen ab (leer erlaubt); Richter ohne Einträge stehen nicht im Zeitplan-PDF.
+- **N8:** Punkteingaben mit Komma oder Buchstaben werden nicht übernommen, der alte Wert bleibt; Hinweis „nur ganze Zahlen“ passend zum Grund.
+- **N9:** Demo-Text Schritt 3 an die Auswahl „Prüfung“ anpassen, Anzahl und Bereiche stimmig, „Beenden“ mit Rückfrage (Vorgabe Nein).
+- **N10:** Bestätigung zählt Prüfungen (Dreikampf als eine) und Teilnehmer: „Alle 6 Prüfungen mit 16 Teilnehmern …“.
+- **N11:** Nur Texte: ED-Rückfrage nennt „weiteren Gegenstand ggf. unter Anmerkungen notieren“, Erklärung zu „Gegenstand noch offen“, CSV-Meldung nennt das Nachtragen. Kein neues Feld.
+- **N12:** Bei abgelehntem PDF ein konkreter Rat je Grund in der eigenen Zeile.
+- **N13:** „Alle Startnummern zurücksetzen…“: Web-Hinweis nur, wenn veröffentlicht; vorhandene Ergebnisse nennen; Vorgabe Nein.
+- **N14:** Termin-Dialog so, dass Prüfungen und Startnummern-Bereiche ohne Bildlauf sichtbar sind (z. B. zweispaltig/höher); Seitenleiste „Offene Starts“ breiter.
+- **N15:** Entf in der Teilnehmerliste wirkt wie „Löschen“ (mit der bestehenden Rückfrage, Vorgabe Nein).
+- **N16:** Pause zu fester Uhrzeit (im Pause- und im Verteilen-Dialog wählbar): Die Pause beginnt genau zur Uhrzeit; ein laufender Prüfungsblock wird dort geteilt, die übrigen Teilnehmer folgen nach der Pause. Ist ein Richter vor der Uhrzeit fertig, bekommt er keine Pause (wie bisher). Auslegung der Sitzung – bei Unklarheit zurückstellen und fragen.
