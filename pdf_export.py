@@ -1618,10 +1618,12 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
     berechneten Abfolge (siehe db.berechne_zeitplan) aus Prüfungsblöcken (eine Zeile je
     Teilnehmer, mit Start-/Endzeit) und Pausen - farblich nach Art/Leistungsklasse
     unterschieden (jede der sechs möglichen Kombinationen ED/DK × LK 1-3 hat eine feste,
-    eigene Farbe, siehe _ZEITPLAN_FARBE_JE_LK). Ist noch kein Richter angelegt,
+    eigene Farbe, siehe _ZEITPLAN_FARBE_JE_LK). Richter ohne Einträge fehlen (Nachtest 2,
+    N7: ein leerer „Richter 4“ stand sonst als eigene Seite darin); hat keiner Einträge,
     enthält die PDF nur einen entsprechenden Hinweis statt einer leeren Seite."""
     veranstaltung = get_veranstaltung(conn)
-    plaene = berechne_zeitplan(conn)
+    alle_plaene = berechne_zeitplan(conn)
+    plaene = [plan for plan in alle_plaene if plan["zeilen"]]
 
     story: list = []
     if not plaene:
@@ -1629,7 +1631,9 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
         if veranstaltung:
             titel += f" – {_p_wert(veranstaltung['verein'])} ({_datum_kurz(veranstaltung['datum'])})"
         story.append(Paragraph(titel, _TITEL))
-        story.append(Paragraph("Es sind noch keine Richter/Zeitplan-Einträge angelegt.", _TEXT))
+        hinweis = ("Noch keine Prüfungsblöcke/Pausen eingeplant." if alle_plaene
+                   else "Es sind noch keine Richter/Zeitplan-Einträge angelegt.")
+        story.append(Paragraph(hinweis, _TEXT))
     else:
         for i, plan in enumerate(plaene):
             if i > 0:
@@ -1639,10 +1643,7 @@ def erstelle_zeitplan_pdf(conn: sqlite3.Connection, pfad: str) -> None:
                 titel += f" ({_p_wert(veranstaltung['verein'])}, {_datum_kurz(veranstaltung['datum'])})"
             story.append(Paragraph(titel, _TITEL))
             story.append(Spacer(1, 2 * mm))
-            if not plan["zeilen"]:
-                story.append(Paragraph("Noch keine Prüfungsblöcke/Pausen für diesen Richter eingeplant.", _TEXT))
-            else:
-                story.append(_zeitplan_richter_tabelle(plan))
+            story.append(_zeitplan_richter_tabelle(plan))
 
     SimpleDocTemplate(
         pfad, pagesize=A4,

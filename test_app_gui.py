@@ -4710,6 +4710,151 @@ def test_startnummer_tauschen_vertauscht_nummern_ueber_dialog(qtbot, conn, monke
     namen_zu_nummer = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
     assert namen_zu_nummer["Erste"] == 2
     assert namen_zu_nummer["Zweite"] == 1
+    # Nachtest 2 (N4): Bestätigung in der Statuszeile
+    assert tab.status_label.text() == "Nr. 1 und 2 getauscht."
+
+
+def test_tausch_zwischen_pruefungen_fragt_mit_bereichen_nach(qtbot, conn, monkeypatch):
+    """Nachtest 2, N4 (Marco 04.11.2026): Tauschen zwischen verschiedenen Prüfungen fragt
+    nach (Vorgabe „Nein“), nennt die Bereiche und gespeicherte Ergebnisse. Gleiche Prüfung
+    über den Dialog tauscht ohne Rückfrage wie bisher."""
+    set_veranstaltung(conn, verein="HSV", datum="2026-11-14",
+                      startnummer_bereiche="ED1-Trümmerfeld=1-10,ED1-Flächensuche=11-20")
+    a = _teilnehmer_anlegen(conn, nachname="Alt", disziplin="Trümmerfeld", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="Berg", disziplin="Flächensuche", startnummer=11)
+    c = _teilnehmer_anlegen(conn, nachname="Cruz", disziplin="Trümmerfeld", startnummer=2)
+    eintragen_ergebnis(conn, b, "Flächensuche", 47, 20)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    fragen, vorgaben = [], []
+    antwort = [QMessageBox.No]
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a_, **k: fragen.append(a_[2]) or vorgaben.append(a_[4]) or antwort[0])
+    partner = {}
+
+    class _Dialog:
+        def __init__(self, parent, teilnehmer, andere):
+            pass
+
+        def exec(self):
+            return QDialog.Accepted
+
+        def ausgewaehlte_partner_id(self):
+            return partner["id"]
+
+    monkeypatch.setattr("app.StartnummerTauschenDialog", _Dialog)
+
+    def zeile(tid):
+        return next(r for r in range(tab.tabelle.rowCount()) if tab.tabelle.item(r, 0).data(Qt.UserRole) == tid)
+
+    def nummern():
+        return {t["id"]: t["startnummer"] for t in list_teilnehmer(conn)}
+
+    tab.tabelle.selectRow(zeile(a))
+    partner["id"] = b
+    tab._startnummer_tauschen()
+    assert vorgaben == [QMessageBox.No]
+    assert "liegen beide Nummern außerhalb" in fragen[-1]
+    assert "Alt, Max: ED LK 1 Trümmerfeld, Bereich 1–10" in fragen[-1]
+    assert "Berg, Max: ED LK 1 Flächensuche, Bereich 11–20" in fragen[-1]
+    assert "Für „Berg, Max“ sind schon Ergebnisse gespeichert" in fragen[-1]
+    assert nummern()[a] == 1 and nummern()[b] == 11  # „Nein“ ändert nichts
+
+    antwort[0] = QMessageBox.Yes
+    tab._startnummer_tauschen()
+    assert nummern()[a] == 11 and nummern()[b] == 1
+    assert tab.status_label.text() == "Nr. 1 und 11 getauscht."
+
+    fragen.clear()
+    tab.tabelle.selectRow(zeile(c))
+    partner["id"] = a
+    tab._startnummer_tauschen()  # gleiche Prüfung: keine Rückfrage
+    assert fragen == []
+    assert nummern()[a] == 2 and nummern()[c] == 11
+
+    # Zwei markierte: die Warnung steht in der ohnehin gestellten Frage.
+    _zeilen_markieren(tab, zeile(b), zeile(c))
+    tab._startnummer_tauschen()
+    assert len(fragen) == 1 and "Trotzdem tauschen?" in fragen[-1]
+    # Lagen die Nummern über Kreuz (Berg hat 1, Cruz 11), bringt der Tausch sie zurück.
+    assert "verschiedenen Prüfungen:" in fragen[-1] and "außerhalb" not in fragen[-1]
+    assert nummern()[b] == 11 and nummern()[c] == 1
+
+
+def test_tausch_warnung_ohne_bereich_und_mit_zwei_ergebnissen(qtbot, conn):
+    """N4 (Verifikation B15): ohne Bereich keine „außerhalb“-Behauptung; haben beide
+    Ergebnisse, nennt die Warnung beide."""
+    a = _teilnehmer_anlegen(conn, nachname="Alt", disziplin="Trümmerfeld", startnummer=1)
+    b = _teilnehmer_anlegen(conn, nachname="Berg", disziplin="Flächensuche", startnummer=2)
+    eintragen_ergebnis(conn, a, "Trümmerfeld", 40, 20)
+    eintragen_ergebnis(conn, b, "Flächensuche", 47, 20)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    warnung = tab._tausch_warnung(get_teilnehmer(conn, a), get_teilnehmer(conn, b))
+    assert warnung.startswith("Achtung: Die beiden starten in verschiedenen Prüfungen:")
+    assert "kein Bereich festgelegt" in warnung and "außerhalb" not in warnung
+    assert "Für „Alt, Max“ und „Berg, Max“ sind jeweils schon Ergebnisse gespeichert" in warnung
+
+
+def test_tausch_an_teilnehmer_ohne_nummer_meldet_uebertragung(qtbot, conn, monkeypatch):
+    """N4: Hat einer noch keine Nummer, sagt die Statuszeile, wohin die Nummer ging."""
+    _teilnehmer_anlegen(conn, nachname="Alt", startnummer=5)
+    _teilnehmer_anlegen(conn, nachname="Neu", startnummer=None)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    rueckfragen_beantworten(monkeypatch, QMessageBox.Yes)
+    _zeilen_markieren(tab, 0, 1)
+    tab._startnummer_tauschen()
+    assert tab.status_label.text() == "Nr. 5 von Alt, Max an Neu, Max übertragen."
+
+
+def test_entf_in_teilnehmerliste_loescht_nach_rueckfrage(qtbot, conn, monkeypatch):
+    """Nachtest 2, N15: Entf wirkt wie „Löschen“ - dieselbe Rückfrage, Vorgabe „Nein“."""
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    qtbot.waitExposed(tab)
+    fragen, vorgaben = [], []
+    antwort = [QMessageBox.No]
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a_, **k: fragen.append(a_[2]) or vorgaben.append(a_[4]) or antwort[0])
+    kuerzel = [k for k in tab.findChildren(QShortcut) if k.key() == QKeySequence(QKeySequence.Delete)]
+    assert len(kuerzel) == 1 and kuerzel[0].context() == Qt.WidgetShortcut
+    tab.tabelle.selectRow(0)
+    tab.activateWindow()
+    tab.tabelle.setFocus()
+    qtbot.waitUntil(lambda: tab.isActiveWindow() and tab.tabelle.hasFocus(), timeout=2000)
+    qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
+    assert "„A, Max“" in fragen[-1] and vorgaben[-1] == QMessageBox.No
+    assert len(list_teilnehmer(conn)) == 2
+    antwort[0] = QMessageBox.Yes
+    qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
+    assert [t["nachname"] for t in list_teilnehmer(conn)] == ["B"]
+
+
+def test_startnummern_zuruecksetzen_nennt_ergebnisse(qtbot, conn, monkeypatch):
+    """Nachtest 2, N13: Die Rückfrage nennt vorhandene Ergebnisse, spricht vom Web nur
+    „falls veröffentlicht“ und hat die Vorgabe „Nein“."""
+    a = _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    fragen, vorgaben = [], []
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a_, **k: fragen.append(a_[2]) or vorgaben.append(a_[4]) or QMessageBox.No)
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert "gespeicherte Ergebnisse" not in fragen[-1]
+    assert "Nur falls der Termin schon im Web veröffentlicht ist" in fragen[-1]
+    eintragen_ergebnis(conn, a, "Flächensuche", 47, 20)
+    qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
+    assert "1 von ihnen hat schon gespeicherte Ergebnisse" in fragen[-1]
+    assert vorgaben == [QMessageBox.No, QMessageBox.No]
+    assert [t["startnummer"] for t in list_teilnehmer(conn)] == [1, 2]
 
 
 # --- Bewertungsbogen-Direkt-Export aus der Teilnehmerliste (21.09.) ----------------
@@ -10186,6 +10331,11 @@ def test_zeitplan_richter_anlegen_umbenennen_verschieben_ueber_knoepfe(qtbot, co
     tab = _zeitplan_tab(qtbot, conn)
     assert _zeitplan_titel(tab) == []
 
+    # Nachtest 2 (N7): „Richter hinzufügen“ fragt den Namen ab - leer ergibt „Richter N“,
+    # Abbrechen legt keinen an.
+    namen = [("", True), ("  ", True), ("Herr Braun", False)]
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getText", lambda *a, **k: namen.pop(0))
+    _knopf(tab, "Richter hinzufügen").click()
     _knopf(tab, "Richter hinzufügen").click()
     _knopf(tab, "Richter hinzufügen").click()
     assert _richter_namen(conn) == ["Richter 1", "Richter 2"]
@@ -10215,6 +10365,16 @@ def test_zeitplan_richter_anlegen_umbenennen_verschieben_ueber_knoepfe(qtbot, co
     _symbolknopf(_zeitplan_spalte(tab, "Frau Weber"), "Spalte nach links verschieben").click()
     assert _richter_namen(conn) == ["Frau Weber", "Richter 2"]
     assert _zeitplan_titel(tab) == ["Frau Weber", "Richter 2"]
+
+
+def test_richter_hinzufuegen_uebernimmt_den_eingegebenen_namen(qtbot, conn, monkeypatch):
+    """Nachtest 2, N7 (Verifikation B15): ein eingegebener Name landet ohne Leerzeichen am
+    Rand in der Datenbank und als Spaltentitel."""
+    tab = _zeitplan_tab(qtbot, conn)
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getText", lambda *a, **k: (" Frau Lang ", True))
+    _knopf(tab, "Richter hinzufügen").click()
+    assert _richter_namen(conn) == ["Frau Lang"]
+    assert _zeitplan_titel(tab) == ["Frau Lang"]
 
 
 def test_zeitplan_richter_loeschen_nur_nach_rueckfrage(qtbot, conn, monkeypatch):

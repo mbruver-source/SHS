@@ -9443,3 +9443,35 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
 - **Verifikation:** Befund „Meldung geht beim Speichern unter“ und „abgelehntes erstes Zeichen
   blockiert die nachgetippte Zahl“ behoben; Tests für Status-Spalte mit Abbruch, Verdrahtung des
   Dialogs und ersten Grund ergänzt; Kommentar und UML nachgezogen.
+
+### ux_test_2026_11 B15 – Tausch-Warnung, Richtername, Zurücksetzen, Entf (Nachtest 2 N4, N7, N13, N15; 04.11.2026)
+
+- **N4:** „Startnummer tauschen…“ fragt bei verschiedenen Prüfungen nach (Vorgabe „Nein“): Die
+  Nummern liegen danach außerhalb ihrer Bereiche; die Rückfrage nennt Prüfung und Bereich beider
+  Teilnehmer und gespeicherte Ergebnisse. Bei gleicher Prüfung tauscht der Dialog wie bisher ohne
+  weitere Frage, bei zwei markierten bleibt es bei der einen Rückfrage (mit Warnung). Danach meldet
+  die Statuszeile „Nr. X und Y getauscht.“ bzw. „Nr. X von A an B übertragen.“ Beide Wege laufen
+  über `TeilnehmerTab._tauschen_nach_rueckfrage`.
+- **N7:** „Richter hinzufügen“ fragt gleich den Namen ab (leer = „Richter N“, Abbrechen legt
+  keinen an). Das Zeitplan-PDF lässt Richter ohne Einträge weg; hat keiner Einträge, steht nur ein
+  Hinweis darin.
+- **N13:** Die Rückfrage bei „Alle Startnummern zurücksetzen…“ nennt, wie viele der Betroffenen
+  schon Ergebnisse haben; Vorgabe bleibt „Nein“. Abweichung von der Entscheidung: Ob ein Termin im
+  Web veröffentlicht ist, steht nicht in der Termin-Datei (die Veröffentlichung lädt eine Kopie
+  hoch). Der Web-Satz steht deshalb weiter da, aber nur noch als „Nur falls der Termin schon im
+  Web veröffentlicht ist: …“ – Rückfrage an Marco in der Aufgabenliste.
+- **N15:** Entf in der Teilnehmerliste wirkt wie „Löschen“ (`QShortcut`, nur bei Fokus in der
+  Liste), mit der bestehenden Rückfrage (Vorgabe „Nein“); Tooltip am Knopf.
+- Handbuch (Teilnehmer-Knöpfe, Zeitplan) nachgezogen.
+- **Tests:** neu `test_tausch_zwischen_pruefungen_fragt_mit_bereichen_nach`,
+  `test_tausch_an_teilnehmer_ohne_nummer_meldet_uebertragung`,
+  `test_entf_in_teilnehmerliste_loescht_nach_rueckfrage`,
+  `test_startnummern_zuruecksetzen_nennt_ergebnisse`, `test_zeitplan_pdf_laesst_richter_ohne_eintraege_weg`;
+  angepasst: Richter-Knöpfe (Namensabfrage), Zeitplan-PDF mit leerem Richter, Tausch über den
+  Dialog (Statuszeile). Gegenprobe: ohne die Änderung scheitern alle neuen und angepassten
+  Tests. 722 Unittests, alle GUI-Tests grün (547).
+- **Verifikation:** „außerhalb der Bereiche“ steht nur noch, wo es stimmt (nicht ohne Nummer oder
+  Bereich, und nicht, wenn der Tausch über Kreuz liegende Nummern zurückbringt); Statuszeile mit
+  „Nachname, Vorname“; Handbuch-Absatz zum Zurücksetzen angeglichen; Tests für Name mit OK,
+  fehlenden Bereich und zwei Ergebnisse ergänzt. Rückfragen R-B15 (Web-Status, Entf am Mac) in
+  der Aufgabenliste.

@@ -515,6 +515,12 @@ class TeilnehmerTab(QWidget):
         self.loeschen_btn = QPushButton("Löschen")
         self.loeschen_btn.clicked.connect(self._teilnehmer_loeschen)
         self.loeschen_btn.setEnabled(False)
+        # Nachtest 2 (N15, Marco 04.11.2026): Entf in der Liste wirkt wie „Löschen“ (aus Excel
+        # gewohnt) - mit derselben Rückfrage, Vorgabe „Nein“.
+        self.loeschen_btn.setToolTip("Tastenkürzel: Entf")
+        entf_kuerzel = QShortcut(QKeySequence.Delete, self.tabelle)
+        entf_kuerzel.setContext(Qt.WidgetShortcut)
+        entf_kuerzel.activated.connect(self._teilnehmer_loeschen)
 
         # Schnelles Umschalten der Bezahlt-Markierung (z.B. am Anmeldetisch), ohne dafür
         # jedes Mal den kompletten Bearbeiten-Dialog öffnen zu müssen.
@@ -782,16 +788,10 @@ class TeilnehmerTab(QWidget):
                 # UX-Test 02.10.2026, U1: vorher schloss der Dialog ohne Wirkung und Hinweis.
                 QMessageBox.information(self, "Nichts zu tauschen", _NICHTS_ZU_TAUSCHEN)
                 return
-            if partner_id is not None:
-                try:
-                    tausche_startnummern(self.conn, teilnehmer_id, partner_id)
-                except sqlite3.IntegrityError as exc:
-                    _fehler_anzeigen(self, exc)
-                    return
-                except sqlite3.Error as exc:
-                    _db_fehler_anzeigen(self, exc)
-                    return
-                self.aktualisieren()
+            if partner is not None:
+                # Der Dialog ist schon die Bestätigung - gefragt wird nur bei verschiedenen
+                # Prüfungen (Nachtest 2, N4).
+                self._tauschen_nach_rueckfrage(aktuell, partner, immer_fragen=False)
 
     def _zwei_markierte_tauschen(self, id_a: int, id_b: int) -> None:
         """UX-Nachtest 03.10.2026, N2: beide Personas markierten zum Tauschen zuerst beide
@@ -803,18 +803,64 @@ class TeilnehmerTab(QWidget):
         if a["startnummer"] is None and b["startnummer"] is None:
             QMessageBox.information(self, "Nichts zu tauschen", _NICHTS_ZU_TAUSCHEN)
             return
+        self._tauschen_nach_rueckfrage(a, b, immer_fragen=True)
 
+    def _tausch_warnung(self, a: dict, b: dict) -> str | None:
+        """Nachtest 2 (N4, Marco 04.11.2026): Warnung, wenn die beiden in verschiedenen
+        Prüfungen starten. Nennt die Bereiche, ob eine Nummer danach außerhalb ihres Bereichs
+        liegt, und gespeicherte Ergebnisse; None bei gleicher Prüfung."""
+        kuerzel = [pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]) for t in (a, b)]
+        if kuerzel[0] == kuerzel[1]:
+            return None
+        bereiche = startnummer_bereiche(get_veranstaltung(self.conn))
+
+        def pruefung(k):
+            bereich = bereiche.get(k)
+            spanne = f"Bereich {bereich[0]}–{bereich[1]}" if bereich else "kein Bereich festgelegt"
+            return f"{_pruefung_bezeichnung(k)}, {spanne}"
+
+        # Außerhalb nur, wo es stimmt (Verifikation B15): ohne Nummer oder ohne Bereich nicht,
+        # und lagen die Nummern schon über Kreuz, bringt der Tausch sie gerade zurück.
+        ausserhalb = 0
+        for neue_nummer, k in ((b["startnummer"], kuerzel[0]), (a["startnummer"], kuerzel[1])):
+            bereich = bereiche.get(k)
+            if neue_nummer is not None and bereich and not bereich[0] <= neue_nummer <= bereich[1]:
+                ausserhalb += 1
+        einleitung = "Achtung: Die beiden starten in verschiedenen Prüfungen"
+        if ausserhalb == 2:
+            einleitung += " – nach dem Tausch liegen beide Nummern außerhalb ihrer Startnummern-Bereiche"
+        elif ausserhalb == 1:
+            einleitung += " – nach dem Tausch liegt eine Nummer außerhalb ihres Startnummern-Bereichs"
+        zeilen = [
+            f"{einleitung}:",
+            *(f"• {t['nachname']}, {t['vorname']}: {pruefung(k)}" for t, k in zip((a, b), kuerzel)),
+        ]
+        mit_ergebnis = [f"„{t['nachname']}, {t['vorname']}“" for t in (a, b)
+                        if hat_erfasste_ergebnisse(self.conn, t["id"])]
+        if mit_ergebnis:
+            zeilen.append(
+                f"Für {' und '.join(mit_ergebnis)} {'sind' if len(mit_ergebnis) == 1 else 'sind jeweils'} "
+                "schon Ergebnisse gespeichert. Sie bleiben beim Teilnehmer, stehen danach aber "
+                "unter der neuen Startnummer."
+            )
+        return "\n".join(zeilen)
+
+    def _tauschen_nach_rueckfrage(self, a: dict, b: dict, *, immer_fragen: bool) -> None:
+        """Tauscht nach Rückfrage (Vorgabe „Nein“) und meldet das Ergebnis in der Statuszeile
+        (N4). Ohne immer_fragen wird nur bei verschiedenen Prüfungen gefragt."""
         def beschreibung(t):
             nummer = f"Nr. {t['startnummer']}" if t["startnummer"] is not None else "ohne Nummer"
             return f"„{t['nachname']}, {t['vorname']}“ ({nummer})"
 
-        if not _ja_nein(
-            self, "Startnummern tauschen",
-            f"Startnummern von {beschreibung(a)} und {beschreibung(b)} tauschen?",
-        ):
-            return
+        warnung = self._tausch_warnung(a, b)
+        if immer_fragen or warnung:
+            frage = f"Startnummern von {beschreibung(a)} und {beschreibung(b)} tauschen?"
+            if warnung:
+                frage += f"\n\n{warnung}\n\nTrotzdem tauschen?"
+            if not _ja_nein(self, "Startnummern tauschen", frage):
+                return
         try:
-            tausche_startnummern(self.conn, id_a, id_b)
+            tausche_startnummern(self.conn, a["id"], b["id"])
         except sqlite3.IntegrityError as exc:
             _fehler_anzeigen(self, exc)
             return
@@ -822,6 +868,14 @@ class TeilnehmerTab(QWidget):
             _db_fehler_anzeigen(self, exc)
             return
         self.aktualisieren()
+        nr_a, nr_b = a["startnummer"], b["startnummer"]
+        if nr_a is not None and nr_b is not None:
+            meldung = f"Nr. {nr_a} und {nr_b} getauscht."
+        else:
+            alt, neu = (a, b) if nr_a is not None else (b, a)
+            meldung = (f"Nr. {alt['startnummer']} von {alt['nachname']}, {alt['vorname']} an "
+                       f"{neu['nachname']}, {neu['vorname']} übertragen.")
+        self.status_label.setText(meldung)
 
     def _gefilterte_pruefung(self) -> tuple[str | None, str | None]:
         """(Kürzel, Bezeichnung) der im Filter Art/LK gewählten Prüfung oder (None, None)
@@ -870,11 +924,12 @@ class TeilnehmerTab(QWidget):
         if filter_pruefung is None:
             return
         pruefung, bezeichnung = filter_pruefung
-        anzahl = sum(
-            1 for t in self._teilnehmer_je_id.values()
+        betroffen = [
+            t for t in self._teilnehmer_je_id.values()
             if t["startnummer"] is not None
             and (pruefung is None or pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]) == pruefung)
-        )
+        ]
+        anzahl = len(betroffen)
         wo = f" in „{bezeichnung}“" if bezeichnung else ""
         if not anzahl:
             QMessageBox.information(
@@ -882,13 +937,24 @@ class TeilnehmerTab(QWidget):
             )
             return
         wer = f"der Teilnehmer in „{bezeichnung}“" if bezeichnung else "ALLER Teilnehmer"
+        # Nachtest 2 (N13, Marco 04.11.2026): vorhandene Ergebnisse ausdrücklich nennen. Ob der
+        # Termin im Web veröffentlicht ist, weiß die Termin-Datei nicht (die Veröffentlichung
+        # lädt eine Kopie hoch) - der Web-Satz gilt deshalb nur „falls“.
+        mit_ergebnis = sum(1 for t in betroffen if hat_erfasste_ergebnisse(self.conn, t["id"]))
+        ergebnis_satz = (
+            f"{mit_ergebnis} von ihnen {'hat' if mit_ergebnis == 1 else 'haben'} schon "
+            "gespeicherte Ergebnisse. Die Ergebnisse bleiben beim Teilnehmer, stehen danach "
+            "aber ohne Startnummer da.\n\n"
+            if mit_ergebnis else ""
+        )
         if not _ja_nein(
             self, "Startnummern zurücksetzen",
             f"Die Startnummern {wer} ({anzahl}) werden entfernt. Neu vergeben "
             "kannst du sie danach mit „Fehlende Startnummern vergeben…“.\n\n"
-            "Achtung: Die Reihenfolge im Zeitplan richtet sich nach den Startnummern, und "
-            "im Web erfasste Ergebnisse werden beim Zurückholen über die Startnummer "
-            "zugeordnet. Nach einer Veröffentlichung im Web daher nicht mehr umnummerieren.\n\n"
+            f"{ergebnis_satz}"
+            "Die Reihenfolge im Zeitplan richtet sich nach den Startnummern. Nur falls der "
+            "Termin schon im Web veröffentlicht ist: Dort erfasste Ergebnisse werden beim "
+            "Zurückholen über die Startnummer zugeordnet - dann nicht mehr umnummerieren.\n\n"
             "Fortfahren?",
         ):
             return

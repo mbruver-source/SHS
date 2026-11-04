@@ -305,12 +305,12 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 |---|---|
 | **„Teilnehmer hinzufügen…“** | Öffnet die Erfassungsmaske. Die Startnummer bleibt zunächst offen (siehe unten). Beim Speichern fragt das Programm nach, wenn die Prüfung im Termin nicht angeboten wird oder Geburtsdatum bzw. Wurftag in der Zukunft liegen. |
 | **„Bearbeiten…“** | Öffnet die Maske für den markierten Teilnehmer – ebenso ein Doppelklick auf die Zeile. |
-| **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. |
+| **„Löschen“** | Löscht die markierten Teilnehmer nach einer Rückfrage, inklusive Ergebnis – auch mehrere auf einmal. Die Taste **Entf** in der Liste wirkt genauso. |
 | **„Bezahlt umschalten“** | Setzt oder entfernt „bezahlt“ (mit Haken) sofort, ohne die Maske zu öffnen. Wirkt auf alle markierten Teilnehmer (mehrere mit Strg- oder Umschalt-Klick markieren): Sind schon alle bezahlt, wird „bezahlt“ bei allen entfernt, sonst bei allen gesetzt. |
 | **„Keine Teilnahme“** | Markiert nicht erschienene Teilnehmer (siehe unten), auch mehrere auf einmal. Sind alle markierten bereits so vermerkt, heißt der Button **„Teilnahme wiederherstellen“**. |
-| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen („OK“ geht erst nach der Wahl). |
+| **„Startnummer tauschen…“** | Tauscht die Startnummern zweier Teilnehmer in einem Schritt: entweder beide Teilnehmer markieren (Strg-Klick) oder einen markieren und den Partner im Fenster wählen („OK“ geht erst nach der Wahl). Starten die beiden in verschiedenen Prüfungen, fragt das Programm vorher nach: Die Nummern liegen danach außerhalb ihrer Bereiche. Die Statuszeile bestätigt den Tausch („Nr. 1 und 21 getauscht.“). |
 | **„Fehlende Startnummern vergeben…“** | Vergibt allen Teilnehmern **ohne** Startnummer die nächste freie Nummer im Bereich ihrer Prüfung, bei gesetztem „Filter Art/LK“ nur in dieser Prüfung (siehe unten). |
-| **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). |
+| **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). Die Rückfrage nennt, wie viele davon schon Ergebnisse haben; die Ergebnisse bleiben erhalten. |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
 | **„Teilnehmerliste einlesen (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
 | **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
@@ -333,8 +333,9 @@ tauschen…“.
 
 Willst du **alle** Nummern neu vergeben, etwa nach geänderten Bereichen, klickst du zuerst
 auf **„Alle Startnummern zurücksetzen…“** und dann auf „Fehlende Startnummern vergeben…“.
-Das solltest du nur vor der Prüfung tun: Der Zeitplan richtet sich nach den Startnummern,
-und im Web erfasste Ergebnisse werden beim Zurückholen über die Startnummer zugeordnet.
+Das solltest du nur vor der Prüfung tun: Der Zeitplan richtet sich nach den Startnummern.
+Ist der Termin schon im Web veröffentlicht, werden die dort erfassten Ergebnisse beim
+Zurückholen über die Startnummer zugeordnet – dann nicht mehr umnummerieren.
 
 Ist im **„Filter Art/LK“** eine Prüfung gewählt, wirken beide Knöpfe nur auf diese Prüfung,
 z. B. nur auf „ED LK 1 Trümmerfeld“. Rückfrage und Meldung nennen die Prüfung dann
@@ -609,7 +610,8 @@ Der Zeitplan hat eine Spalte je Richter.
 
 1. **„Zeitplan-Start (HH:MM)“** eintragen und **„Startzeit speichern“**.
 2. Die beim Termin eingetragenen Richter 1–5 erscheinen beim ersten Öffnen automatisch als
-   Spalten. Weitere Spalten mit **„Richter hinzufügen“** anlegen, mit **„Umbenennen…“** benennen,
+   Spalten. Weitere Spalten mit **„Richter hinzufügen“** anlegen (das Programm fragt gleich nach
+   dem Namen; leer gelassen heißt die Spalte „Richter N“), mit **„Umbenennen…“** umbenennen,
    mit ◀ ▶ verschieben.
 3. Entweder **„Automatisch verteilen…“** für einen ausgewogenen Vorschlag – das **ersetzt** einen
    bereits vorhandenen Plan aller Richter (der Dialog sagt es dann). Im selben Dialog lässt sich
@@ -632,7 +634,7 @@ Der Zeitplan hat eine Spalte je Richter.
    Uhrzeit, ein gerade laufender Block wird nicht geteilt. Ist ein Richter vor dieser Uhrzeit
    schon fertig, bekommt er keine Pause; das Programm nennt dann für jeden Richter die
    tatsächliche Zeit bzw. „keine Pause“.
-5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter.
+5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter; Richter ohne Einträge fehlen darin.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block
 existiert (grün mit Haken) oder noch fehlt (rot mit Kreuz, „noch offen“).

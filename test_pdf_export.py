@@ -1494,8 +1494,20 @@ class TestPdfExport(unittest.TestCase):
         pfad = self._pfad("zeitplan_richter_leer.pdf")
         pdf_export.erstelle_zeitplan_pdf(self.conn, pfad)
         text = _text(pfad)
-        self.assertIn("Herr Ohne Plan", text)
-        self.assertIn("Noch keine Prüfungsblöcke/Pausen", text)
+        self.assertNotIn("Herr Ohne Plan", text)
+        self.assertIn("Noch keine Prüfungsblöcke/Pausen eingeplant", text)
+
+    def test_zeitplan_pdf_laesst_richter_ohne_eintraege_weg(self):
+        # Nachtest 2 (N7): ein leerer „Richter 4“ stand sonst als eigene Seite darin.
+        rid = add_zeitplan_richter(self.conn, name="Herr Meier")
+        add_zeitplan_richter(self.conn, name="Richter 4")
+        add_zeitplan_pause(self.conn, rid, dauer_minuten=15, bezeichnung="Kaffeepause")
+        pfad = self._pfad("zeitplan_ohne_leere.pdf")
+        pdf_export.erstelle_zeitplan_pdf(self.conn, pfad)
+        self.assertEqual(len(PdfReader(pfad).pages), 1)
+        text = _text(pfad)
+        self.assertIn("Herr Meier", text)
+        self.assertNotIn("Richter 4", text)
 
     def test_zeitplan_pdf_block_ohne_teilnehmer_zeigt_hinweiszeile(self):
         # Ein angelegter, aber noch leerer Prüfungsblock darf nicht spurlos aus der PDF

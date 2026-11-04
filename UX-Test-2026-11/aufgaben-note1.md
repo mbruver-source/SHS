@@ -25,7 +25,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | c472344 | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 | B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
 | B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | erledigt | (dieser Commit) | 50 → 76 % | real ≈ 26 % (zwei Messfehler-Suchen) |
-| B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | offen | | | |
+| B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | (dieser) | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
 | B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | offen | | | |
 | B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | offen | | | |
 | B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
@@ -136,6 +136,14 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   auslagern (eigene Aufräumaufgabe) und Mittagspause am Namen erkennen (so lassen, Kommentar ergänzen).
   → **Marco 04.11.2026: Q1–Q4 wie vorgeschlagen umsetzen** (als B13, zwischen den Nachtest-Läufen, damit kein Lauf halb geänderten Code lädt).
 - **Nachtest 2 (B12):** neue bzw. verbliebene Funde N1–N16 in `Nachtest2.md` – je Fund umsetzen, zurückstellen oder verwerfen? N5 betrifft erneut R-B8 (Prüfungsnamen, von 4 Personas gemeldet).
+- **R-B15 (aus B15):** (a) N13 „Web-Hinweis nur, wenn veröffentlicht“: Die Termin-Datei weiß nicht,
+  ob sie im Web veröffentlicht wurde (die Veröffentlichung lädt eine Kopie hoch; von der
+  Verifikation bestätigt). Umgesetzt ist deshalb „Nur falls der Termin schon im Web veröffentlicht
+  ist: …“. Reicht das, oder soll die Desktop-Version beim Veröffentlichen etwas vermerken (ginge
+  nur von Hand, z. B. ein Häkchen „im Web veröffentlicht“)? Vorschlag: so lassen.
+  (b) Entf löscht in der Teilnehmerliste; auf dem Mac ist die „delete“-Taste aber die Rücktaste,
+  die das Kürzel nicht auslöst. Für die Mac-Vorschau zusätzlich Rücktaste? Vorschlag: so lassen,
+  bis jemand am Mac danach fragt.
 
 ## Entscheidungen zum Nachtest 2 (Marco 04.11.2026)
 

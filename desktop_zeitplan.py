@@ -577,8 +577,15 @@ class ZeitplanTab(QWidget):
             pass  # Verbindung schon geschlossen (Terminwechsel) - der neue Reiter baut selbst auf
 
     def _richter_hinzufuegen(self) -> None:
+        # Nachtest 2 (N7, Marco 04.11.2026): gleich nach dem Namen fragen - leer bleibt es
+        # „Richter N“, umbenennen geht weiterhin.
+        name, ok = QInputDialog.getText(
+            self, "Richter hinzufügen", "Name des Richters (leer lassen für „Richter N“):",
+        )
+        if not ok:
+            return
         try:
-            add_zeitplan_richter(self.conn)
+            add_zeitplan_richter(self.conn, name.strip() or None)
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
             return
