@@ -9236,3 +9236,19 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   Nachgezogen: Meldung nennt Zahl der Prüfungen und Starts; Vorbelegung nimmt die Dauer aus
   dem Plan und die Uhrzeit aus dem letzten Wunsch; `UML.md` (Abschnitt Zeitplan), Kommentar in
   der Demo, Tests für Vorbelegung nach Neustart, Überschneidungs-Warnung und „keine Pause“.
+
+### ux_test_2026_11 B6 – Hilfe mit Suche und F1, T8 (04.11.2026)
+
+- **Suchfeld** oben im Hilfefenster (`HilfeDialog`): markiert alle Treffer gelb (ExtraSelections),
+  zeigt die Trefferzahl bzw. „nichts gefunden“, Enter oder „Weiter“ springt zum nächsten, am Ende
+  wieder von vorn; Strg+F setzt den Fokus ins Feld. Enter schließt das Fenster nicht mehr.
+- **F1** („Hilfe → Hilfe anzeigen“) öffnet die Hilfe beim Abschnitt des aktuellen Reiters
+  (`HauptFenster._hilfe_zum_reiter`, `_hilfe_anker`); der Knopf „Hilfe“ öffnet sie wie bisher oben.
+  Neuer Hilfe-Abschnitt „Diese Hilfe“.
+- Handbuch (Einleitung, Schluss der Schritt-für-Schritt-Anleitung) nachgezogen.
+- Tests: 2 neue GUI-Tests (Suche, F1 je Reiter); Gegenprobe scheitert ohne die Änderung.
+  721 Unittests, 534 GUI-Tests grün.
+- **Verifikation:** ohne Fehler. Nachgezogen: Enter ohne Treffer springt nicht mehr an den
+  Anfang; der F1-Test prüft den sichtbaren Abschnitt; Hinweis auf Cmd+? am Mac. Zur Kenntnis:
+  „Weiter“ sucht ab dem letzten Treffer (Qt-Verhalten), die Inhaltszeile zählt als Treffer
+  mit; die Demo läuft hinter der Hilfe weiter (wie bisher, OFFEN C14). Kein Hilfe-Screenshot.

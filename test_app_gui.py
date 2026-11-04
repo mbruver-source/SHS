@@ -2422,6 +2422,63 @@ def test_letzter_import_auch_aus_dem_reiter_teilnehmer(qtbot, termin, tmp_path, 
 # --- Hilfe-Button ---------------------------------------------------------------
 
 
+def test_hilfe_suche_markiert_und_springt_weiter(qtbot):
+    """UX-Test 2026-11, T8: Das Suchfeld markiert alle Treffer, Enter springt zum nächsten
+    und am Ende wieder an den Anfang; ohne Treffer steht „nichts gefunden“."""
+    dialog = HilfeDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.suchfeld.setText("Startnummer")
+    treffer = len(dialog.anzeige.extraSelections())
+    assert treffer > 2 and dialog.treffer_label.text() == f"{treffer} Treffer"
+    erste = dialog.anzeige.textCursor().selectionStart()
+    qtbot.keyClick(dialog.suchfeld, Qt.Key_Return)
+    zweite = dialog.anzeige.textCursor().selectionStart()
+    assert zweite > erste and dialog.isVisible()  # Enter schließt das Fenster nicht
+    for _ in range(treffer - 1):
+        dialog.weitersuchen()
+    assert dialog.anzeige.textCursor().selectionStart() == erste  # wieder von vorn
+    dialog.suchfeld.setText("xyzgibtsnicht")
+    assert dialog.anzeige.extraSelections() == [] and dialog.treffer_label.text() == "nichts gefunden"
+    vorher = dialog.anzeige.textCursor().position()
+    dialog.weitersuchen()  # ohne Treffer kein Sprung an den Anfang
+    assert dialog.anzeige.textCursor().position() == vorher
+    dialog.suchfeld.clear()
+    assert dialog.treffer_label.text() == ""
+
+
+def test_f1_oeffnet_hilfe_beim_aktuellen_reiter(qtbot, termin, monkeypatch):
+    """UX-Test 2026-11, T8: F1 („Hilfe → Hilfe anzeigen“) öffnet die Hilfe beim Abschnitt des
+    aktuellen Reiters; jeder Reiter hat einen Abschnitt."""
+    from desktop_dialoge import _hilfe_anker
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    for i in range(fenster._tabs.count()):
+        assert _hilfe_anker(f'Reiter "{fenster._tabs.tabText(i)}"') is not None, fenster._tabs.tabText(i)
+
+    gezeigt = []
+
+    def _exec(dialog):
+        from PySide6.QtCore import QPoint
+
+        dialog.show()
+        qtbot.waitUntil(lambda: dialog.anzeige.verticalScrollBar().value() > 0, timeout=WARTEZEIT_MS)
+        # Oben im sichtbaren Bereich steht der Abschnitt des Reiters (nicht ein Nachbar).
+        oben = dialog.anzeige.cursorForPosition(QPoint(10, 10)).block().text()
+        gezeigt.append(oben)
+        return 0
+
+    monkeypatch.setattr(HilfeDialog, "exec", _exec)
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    aktion = next(a for m in fenster.menuBar().findChildren(QMenu) if m.title() == "&Hilfe"
+                  for a in m.actions() if a.text() == "Hilfe anzeigen")
+    assert aktion.shortcut() == QKeySequence(QKeySequence.HelpContents)
+    aktion.trigger()
+    assert gezeigt == ['Reiter "Zeitplan"']
+
+
 def test_hilfe_button_ist_sichtbar_und_oeffnet_hilfedialog(qtbot, termin, monkeypatch):
     """Funktionaler Test für den Hilfe-Button: existiert im Fenster, ist sichtbar und
     öffnet beim Klick den HilfeDialog. Ergänzt (ersetzt aber nicht vollständig) den

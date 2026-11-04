@@ -14,8 +14,8 @@ import os
 import re
 import sqlite3
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIntValidator
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1546,6 +1546,11 @@ Absturzprotokolls in die Zwischenablage (dein Benutzername wird dabei ersetzt; v
 Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen). "Protokoll-Ordner öffnen" zeigt die
 Datei. Bei einem unerwarteten Fehler erscheint ein Fenster mit denselben Möglichkeiten.</p>
 
+<h3>Diese Hilfe</h3>
+<p>F1 (am Mac Cmd+?) öffnet die Hilfe beim Abschnitt des Reiters, in dem du gerade bist. Oben im Suchfeld
+ein Wort eingeben: alle Treffer werden gelb markiert, Enter oder "Weiter" springt zum
+nächsten.</p>
+
 <h3>Aussehen (Menü "Ansicht")</h3>
 <p>Unter "Hintergrund" wählst du das Design: Beagle (Standard, warme Creme-Töne), Hell,
 Dunkel oder Hoher Kontrast. Unter "Akzentfarbe" legst du die Farbe der Haupt-Schaltflächen und
@@ -1581,29 +1586,96 @@ def _hilfe_mit_inhaltsverzeichnis(html: str) -> str:
     return html[:erster] + verzeichnis + html[erster:]
 
 
+def _hilfe_anker(abschnitt: str) -> str | None:
+    """Sprungmarke („abschnittN“, siehe _hilfe_mit_inhaltsverzeichnis) der ersten
+    Zwischenüberschrift, die `abschnitt` enthält - oder None."""
+    for nummer, titel in enumerate(re.findall(r"<h3>(.*?)</h3>", _HILFE_HTML)):
+        if abschnitt in titel:
+            return f"abschnitt{nummer}"
+    return None
+
+
 class HilfeDialog(QDialog):
     """Allgemeine Bedienungshilfe in einem eigenen, scrollbaren Fenster - ein Abschnitt je
     Reiter (siehe _HILFE_HTML oben). Wird über den Hilfe-Button im Hauptfenster geöffnet
-    (siehe HauptFenster._hilfe_anzeigen)."""
+    (siehe HauptFenster._hilfe_anzeigen), mit F1 bzw. „Hilfe → Hilfe anzeigen“ gleich beim
+    Abschnitt des aktuellen Reiters (`abschnitt`, UX-Test 2026-11, T8). Das Suchfeld oben
+    markiert alle Treffer gelb und springt mit Enter bzw. „Weiter“ zum nächsten (T8: die
+    Hilfe war trotz Inhaltszeile noch lang)."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, abschnitt: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Hilfe")
         self.resize(560, 520)
 
-        anzeige = QTextBrowser()
+        self.anzeige = anzeige = QTextBrowser()
         anzeige.setHtml(_hilfe_mit_inhaltsverzeichnis(_HILFE_HTML))
         anzeige.setOpenExternalLinks(False)
 
+        self.suchfeld = QLineEdit()
+        self.suchfeld.setPlaceholderText("In der Hilfe suchen, z. B. „Startnummer“ oder „Pause“")
+        self.suchfeld.setClearButtonEnabled(True)
+        self.suchfeld.textChanged.connect(self._treffer_markieren)
+        self.suchfeld.returnPressed.connect(self.weitersuchen)
+        weiter_btn = QPushButton("Weiter")
+        weiter_btn.setAutoDefault(False)
+        weiter_btn.clicked.connect(self.weitersuchen)
+        self.treffer_label = QLabel("")
+        such_zeile = QHBoxLayout()
+        such_zeile.addWidget(self.suchfeld, 1)
+        such_zeile.addWidget(weiter_btn)
+        such_zeile.addWidget(self.treffer_label)
+        QShortcut(QKeySequence.Find, self, activated=self.suchfeld.setFocus)
+
         schliessen_btn = QPushButton("Schließen")
+        schliessen_btn.setAutoDefault(False)  # Enter im Suchfeld sucht weiter
         schliessen_btn.clicked.connect(self.accept)
         schliessen_zeile = QHBoxLayout()
         schliessen_zeile.addStretch()
         schliessen_zeile.addWidget(schliessen_btn)
 
         layout = QVBoxLayout(self)
+        layout.addLayout(such_zeile)
         layout.addWidget(anzeige)
         layout.addLayout(schliessen_zeile)
+
+        anker = _hilfe_anker(abschnitt) if abschnitt else None
+        if anker is not None:
+            # Erst nach dem Layout springen - vorher kennt der Browser seine Höhe nicht.
+            QTimer.singleShot(0, self, lambda: anzeige.scrollToAnchor(anker))
+
+    def _treffer_markieren(self, text: str) -> None:
+        markierungen = []
+        if text.strip():
+            format_ = QTextCharFormat()
+            format_.setBackground(QColor("#ffe066"))
+            format_.setForeground(QColor("#000000"))
+            cursor = self.anzeige.document().find(text)
+            while not cursor.isNull():
+                auswahl = QTextBrowser.ExtraSelection()
+                auswahl.cursor = cursor
+                auswahl.format = format_
+                markierungen.append(auswahl)
+                cursor = self.anzeige.document().find(text, cursor)
+        self.anzeige.setExtraSelections(markierungen)
+        if not text.strip():
+            self.treffer_label.setText("")
+        elif markierungen:
+            self.treffer_label.setText(f"{len(markierungen)} Treffer")
+            # Beim Tippen ab Anfang den ersten Treffer zeigen.
+            self.anzeige.moveCursor(QTextCursor.Start)
+            self.anzeige.find(text)
+        else:
+            self.treffer_label.setText("nichts gefunden")
+
+    def weitersuchen(self) -> None:
+        text = self.suchfeld.text()
+        if not text.strip() or not self.anzeige.extraSelections():
+            return  # ohne Treffer nicht an den Anfang springen (Verifikation B6)
+        if not self.anzeige.find(text):
+            # Am Ende von vorn weitersuchen.
+            self.anzeige.moveCursor(QTextCursor.Start)
+            self.anzeige.find(text)
 
 
 #: Vorschlag für die Prüfungsgebühr, solange noch keine eigene hinterlegt wurde (siehe

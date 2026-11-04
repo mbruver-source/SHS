@@ -12,7 +12,9 @@ Stand: Version 1.0.55. Alle Screenshots zeigen erfundene Testdaten.
   an. Unbekannte Wörter erklärt das [Glossar in Kapitel 15](#15-glossar-wörter-kurz-erklärt).
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
-- Kurzhilfe im Programm: Button **„Hilfe“** oben rechts
+- Kurzhilfe im Programm: Button **„Hilfe“** oben rechts; **F1** (am Mac Cmd+?) öffnet sie gleich beim Abschnitt
+  des aktuellen Reiters. Oben im Hilfefenster lässt sich suchen (Treffer gelb, Enter springt
+  zum nächsten).
 - Programm vorher ausprobieren: Button **„Demoprüfung“** spielt einen kompletten
   Prüfungstag vor, siehe [Demoprüfung](#demoprüfung); dazu eine Beispiel-CSV mit 20
   erfundenen Teilnehmern, siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
@@ -1121,7 +1123,7 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
 3. Als Speicherort z. B. den USB-Stick wählen und **„Speichern“** klicken.
 
 Geschafft! Wenn unterwegs etwas nicht klappt, hilft [Kapitel 13](#13-häufige-fragen-und-probleme)
-oder der Button **„Hilfe“** oben rechts im Programm.
+oder der Button **„Hilfe“** oben rechts im Programm (bzw. **F1**).
 
 ## 15. Glossar: Wörter kurz erklärt
 

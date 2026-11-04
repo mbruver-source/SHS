@@ -3333,7 +3333,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # UX-Test 2026-11, T9: Die Update-Suche stand nur hinter dem Knopf „Version …“ - Werner
         # suchte sie in einem Menü.
         hilfe_menue = self.menuBar().addMenu("&Hilfe")
-        hilfe_menue.addAction("Hilfe anzeigen", self._hilfe_anzeigen)
+        # T8: F1 öffnet die Hilfe beim Abschnitt des aktuellen Reiters.
+        hilfe_menue.addAction("Hilfe anzeigen", QKeySequence.HelpContents, self._hilfe_zum_reiter)
         hilfe_menue.addAction("Nach Updates suchen…", self._updates_suchen)
         hilfe_menue.addAction("Version und Lizenzen", self._version_anzeigen)
 
@@ -3397,6 +3398,10 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
 
     def _hilfe_anzeigen(self) -> None:
         _ausfuehren(HilfeDialog(self))
+
+    def _hilfe_zum_reiter(self) -> None:
+        reiter = self._tabs.tabText(self._tabs.currentIndex()).replace("&", "")
+        _ausfuehren(HilfeDialog(self, abschnitt=f'Reiter "{reiter}"'))
 
     def _version_anzeigen(self) -> None:
         _ausfuehren(VersionDialog(self))
