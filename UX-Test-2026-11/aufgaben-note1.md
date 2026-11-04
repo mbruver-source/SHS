@@ -21,7 +21,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B8 | T5 Auswahl „Prüfung“ | L | erledigt | 1077eb9 | 40 → 52 % | ersetzt R2; R-B8 |
 | B9 | T12 Demo mit echtem Zurück | L | erledigt | 1a7675f | 52 → 67 % | ersetzt R4 |
 | B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | 48fa7a5 | 67 → 76 % | Website erst mit dem Release; R-B10 |
-| B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | offen | | | |
+| B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | erledigt | (siehe Log) | 0 → 16 % | QS-Befunde K1–K3 und Wartbarkeit als Q1–Q4 an Marco |
 | B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | offen | | | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 
 ## Kalibrierung
@@ -110,3 +110,17 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   → Marco 04.11.: SmartScreen-Bilder geliefert und eingebunden; Chrome warnt derzeit nicht
   mehr (auch bei den letzten Versionen nicht, Erweiterter Schutz an) – kein Chrome-Bild nötig;
   R-B10 erledigt.
+- **Q1 (K1, mittel, aus B11):** Demo: „Schritt zurück“ aus Schritt 10/11 verliert die in Schritt 8
+  nur getippten Punkte, die Demo endet dann ohne Stechen. Vorschlag: Liegt das Ziel nach Schritt 8,
+  auf den Beginn von Schritt 8 zurückgehen (einfach, robust); dazu ein Test 10→ und 11→ bis zum Ende.
+- **Q2 (K2, niedrig–mittel):** Mittagspause beim Verteilen: Meldung nennt immer die Wunschzeit.
+  Vorschlag: abweichende tatsächliche Zeiten je Richter nennen wie bei „Pause bei allen Richtern“,
+  über einen gemeinsamen Helfer (erledigt zugleich den Wartbarkeitspunkt „doppelte Pausen-Logik“).
+- **Q3 (K3, niedrig):** Verteilen ohne Teilnehmer meldet „Alle 0 Prüfung(en) … eingeplant“.
+  Vorschlag: Hinweis „Noch keine Teilnehmer – nichts zu verteilen.“
+- **Q4 (Wartbarkeit, niedrig):** veralteter Modul-Docstring in `desktop_demo.py` („läuft nur
+  vorwärts“), doppelte Verband/Meldestelle-Prüfung (gemeinsame Funktion), Kommentar mitten im
+  `_ja_nein`-Aufruf, `ERSTER_SCHRITT_IM_TERMIN` zu den Klassenkonstanten, Sicherungsname-Test
+  prüft „Verein nicht im Namen“, doppeltes `aktualisieren()`/Statustext nach dem Verteilen.
+  Vorschlag: alles umsetzen (klein). Nicht vorgeschlagen: „Letzter Import“ aus `app.py`
+  auslagern (eigene Aufräumaufgabe) und Mittagspause am Namen erkennen (so lassen, Kommentar ergänzen).

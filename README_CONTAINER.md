@@ -258,7 +258,8 @@ README_INSTALLER.md):
 ```
 python bump_version.py                 # Versionsnummer erhöhen
 python tools/handbuch_pdf.py           # PDF-Handbuch mit neuer Nummer
-git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf
+python tools/handbuch_pdf.py --kurzanleitung   # Kurzanleitung Installation (PDF)
+git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf docs/INSTALLATION_KURZ.pdf
 git commit -m "Version X.Y.Z"
 git push
 git tag vX.Y.Z && git push origin vX.Y.Z

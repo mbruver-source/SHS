@@ -52,10 +52,12 @@ python bump_version.py
 
 Zusätzlich zieht `bump_version.py` die Zeile „Stand: Version X.Y.Z.“ in
 `docs/HANDBUCH.md` nach. Das PDF-Handbuch erzeugt es nicht selbst (dafür wird
-Edge oder Chrome gebraucht) – danach deshalb einmal ausführen:
+Edge oder Chrome gebraucht) – danach deshalb einmal ausführen (der zweite Aufruf erzeugt
+die Kurzanleitung `docs/INSTALLATION_KURZ.pdf`):
 
 ```
 python tools/handbuch_pdf.py
+python tools/handbuch_pdf.py --kurzanleitung
 ```
 
 1. **Versionsnummer erhöhen** (siehe oben – bei `build_installer.bat`
@@ -64,6 +66,7 @@ python tools/handbuch_pdf.py
    ```
    python bump_version.py
    python tools/handbuch_pdf.py
+   python tools/handbuch_pdf.py --kurzanleitung
    ```
 
 2. **Die .exe bauen** (PyInstaller, `--onefile`, siehe `build.spec`):
@@ -241,7 +244,8 @@ Abbruch gar nicht erst zu provozieren:
 ```
 python bump_version.py
 python tools/handbuch_pdf.py
-git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf
+python tools/handbuch_pdf.py --kurzanleitung
+git add version.txt version_info.txt version.py compose.yaml docs/HANDBUCH.md docs/HANDBUCH.pdf docs/INSTALLATION_KURZ.pdf
 git commit -m "Version X.Y.Z"
 git push
 git tag vX.Y.Z && git push origin vX.Y.Z
@@ -288,7 +292,8 @@ zusätzlich zur Windows-Version (alle nicht signiert, als „Vorschau“ gekennz
 - [ ] `bump_version.py` gelaufen (automatisch über `build_installer.bat`,
       oder von Hand) – neue Nummer steht in `version.txt`/`version_info.txt`
 - [ ] `tools/handbuch_pdf.py` gelaufen – `docs/HANDBUCH.md` und
-      `docs/HANDBUCH.pdf` zeigen die neue Nummer
+      `docs/HANDBUCH.pdf` zeigen die neue Nummer; mit `--kurzanleitung` auch
+      `docs/INSTALLATION_KURZ.pdf` neu erzeugt
 - [ ] Bei einem Release über GitHub Actions: die geänderte `version.txt`
       (und `version_info.txt`/`version.py`/`docs/HANDBUCH.md`/`.pdf`) **committet UND gepusht**, bevor
       der Tag gesetzt wird – siehe Warnkasten oben

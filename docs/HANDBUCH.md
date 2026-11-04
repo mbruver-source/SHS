@@ -171,6 +171,10 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
   Unter Windows bleibt beim Design Dunkel das Fenster zum Öffnen und Speichern von Dateien
   hell. Dieses Fenster stammt von Windows selbst.
 
+  Im Menü **„Hilfe“** stehen **„Hilfe anzeigen“** (auch mit der Taste **F1**; die Hilfe öffnet
+  beim gerade offenen Reiter und hat ein Suchfeld), **„Nach Updates suchen…“** und **„Version und
+  Lizenzen“**.
+
 ## 3. Termine
 
 Jeder Prüfungstermin ist eine eigene Datei. Standardmäßig liegen alle Termine im Ordner
@@ -609,8 +613,9 @@ Der Zeitplan hat eine Spalte je Richter.
 3. Entweder **„Automatisch verteilen…“** für einen ausgewogenen Vorschlag – das **ersetzt** einen
    bereits vorhandenen Plan aller Richter (der Dialog sagt es dann). Im selben Dialog lässt sich
    eine **Mittagspause** (Uhrzeit, Dauer) gleich mit einplanen; beim erneuten Verteilen ist sie
-   vorbelegt. Danach bestätigt das Programm ausdrücklich „Alle Prüfungen sind eingeplant, und es
-   gibt keine Überschneidungen“ oder nennt, was noch zu prüfen ist – oder von Hand je Richter
+   vorbelegt. Danach bestätigt das Programm ausdrücklich, dass alle Prüfungen eingeplant sind
+   und es keine Überschneidungen gibt („Alle 5 Prüfung(en) mit 7 Start(s) sind eingeplant, und es
+   gibt keine Überschneidungen.“), oder nennt, was noch zu prüfen ist – oder von Hand je Richter
    **„Prüfungsblock hinzufügen…“** (Art, Leistungsklasse, Disziplin, Dauer je Teilnehmer) und
    **„Pause hinzufügen…“**. Der Vorschlag setzt Dreikampf-Teams nie gleichzeitig bei zwei
    Richtern an und hält zwischen ihren Disziplinen den **„Mindestabstand Team“** ein (Feld oben,
@@ -1088,8 +1093,8 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
    **„Startzeit speichern“** klicken.
 3. Auf **„Automatisch verteilen…“** klicken. Für die Mittagspause den Haken bei
    **„Mittagspause einplanen um“** setzen, Uhrzeit (z. B. 12:00) und Dauer eintragen, dann
-   **„Verteilen“**. Das Programm verteilt alle Teilnehmer auf die Richter und meldet „Alle
-   Prüfungen sind eingeplant, und es gibt keine Überschneidungen“.
+   **„Verteilen“**. Das Programm verteilt alle Teilnehmer auf die Richter und meldet z. B. „Alle
+   5 Prüfung(en) mit 7 Start(s) sind eingeplant, und es gibt keine Überschneidungen.“
 4. Ist eine Zeile **rot mit Warndreieck**, steht ein Team zur selben Zeit an zwei Stellen. Dann die
    Blöcke mit **„Hoch“** / **„Runter“** verschieben.
 5. Eine weitere Pause später: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den

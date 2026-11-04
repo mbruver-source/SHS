@@ -1542,6 +1542,10 @@ def test_alle_speichern_bis_200_teilnehmer_behaelt_gespeicherte_zeilen(qtbot, te
     assert not ergebnis_tab.zeile_ungespeichert(0)
     assert ergebnis_tab.zeile_ungespeichert(1)
     assert "Bereits gespeicherte Zeilen bleiben erhalten" in meldungen[0]
+    # UX-Test 2026-11, R-B1 (c): gezählt wird nur der Teilnehmer vor dem Fehler.
+    assert ergebnis_tab.status_label.text() == (
+        "Speichern abgebrochen – 1 Teilnehmer gespeichert, die übrigen nicht."
+    )
 
 
 def test_alle_speichern_ueber_schwelle_speichert_bei_fehler_nichts(qtbot, termin, monkeypatch):

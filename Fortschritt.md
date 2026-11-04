@@ -9326,3 +9326,41 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
 - **Marco 04.11.2026:** Chrome (Erweiterter Schutz) warnt seit dem öffentlichen Repo auch bei neuen
   Versionen nicht mehr. Ein Chrome-Bild entfällt; der Chrome-Hinweis bleibt für den Fall der
   Fälle in Kurzanleitung und Handbuch. R-B10 damit erledigt.
+
+### ux_test_2026_11 B11 – Abschluss-QS über B1–B10 (04.11.2026)
+
+QS mit drei Rollen über `git diff aa84240..HEAD` (nacheinander, je ein Subagent):
+
+- **Sicherheit:** kein Befund (SQL nur mit festen Texten, Meldungen und Import-Texte als Klartext,
+  Sicherungsname ohne Nutzerdaten, Regex linear, „Schritt zurück“ nur auf der Demo-Datenbank,
+  PDF-Werkzeug ohne Shell).
+- **Korrektheit:** drei Befunde, **nicht umgesetzt** – nach `CLAUDE.md` erst nach Marcos Go
+  (Rückfragen Q1–Q3 in `UX-Test-2026-11/aufgaben-note1.md`):
+  - K1 (mittel): Demo – „Schritt zurück“ aus Schritt 10 oder 11 stellt einen Stand ohne die in
+    Schritt 8 nur getippten (noch ungespeicherten) Punkte wieder her; Schritt 12 findet dann
+    kein Stechen, die Demo kommt nicht ans Ende.
+  - K2 (niedrig–mittel): „Automatisch verteilen“ mit Mittagspause meldet immer die Wunschzeit,
+    auch wenn die Pause bei einem Richter erst nach einem laufenden Block liegt.
+  - K3 (niedrig): „Automatisch verteilen“ ohne Teilnehmer meldet „Alle 0 Prüfung(en) … eingeplant“.
+- **Wartbarkeit:** Programmcode-Punkte als Rückfrage Q4 (doppelte Pausen-Meldelogik im Zeitplan,
+  veralteter Modul-Docstring in `desktop_demo.py`, doppelte Verband/Meldestelle-Prüfung,
+  Kommentar mitten im `_ja_nein`-Aufruf, Konstantenplatz, Testschärfe beim Sicherungsnamen,
+  „Letzter Import“ aus `app.py` auslagern, Mittagspause am Namen erkannt). Doku-Punkte gleich
+  erledigt:
+  - `docs/HANDBUCH.md`: Zitat der Verteil-Bestätigung an den echten Text angeglichen; Menü „Hilfe“
+    (Hilfe anzeigen/F1, Nach Updates suchen…, Version und Lizenzen) beschrieben.
+  - `README_INSTALLER.md`, `README_CONTAINER.md`: `tools/handbuch_pdf.py --kurzanleitung` und
+    `docs/INSTALLATION_KURZ.pdf` in Build-Schritten und Checkliste.
+  - `Architektur.md`: `VerteilenDialog`, Hilfe mit Suche/F1, Auswahl „Prüfung“, „Letzter Import“,
+    Punkte-Prüfung beim Tippen, Menü „Hilfe“, Zeile für `tools/handbuch_pdf.py`.
+  - `CLAUDE.md`/`AGENTS.md`: Zeilenzahlen (app.py ≈ 4100, db.py ≈ 3700, desktop_dialoge.py ≈ 2200).
+- **R-B1 (c):** Test `test_alle_speichern_bis_200_teilnehmer_behaelt_gespeicherte_zeilen` prüft jetzt
+  auch die Meldung „Speichern abgebrochen – 1 Teilnehmer gespeichert, die übrigen nicht.“
+  (sichert vorhandenes Verhalten, keine Gegenprobe).
+- **Testlauf:** 721 Unittests OK (178 übersprungen), 537 GUI-Tests grün (1 übersprungen, 1 xfail).
+- **Screenshots vor dem nächsten Build:** alle 15 Bilder neu (`tools/screenshots.py`), weil das
+  neue Menü „Hilfe“ in jedem Hauptfenster-Bild steht; inhaltlich geändert besonders
+  `handbuch_ergebniserfassung`/`ergebniserfassung` (Status, Zählung), `handbuch_teilnehmer_dialog_ed`/
+  `_dk` (Auswahl „Prüfung“), `handbuch_zeitplan`/`zeitplan`, `handbuch_datensicherung` (Text),
+  `handbuch_formular_import` („Letzter Import“), `handbuch_demo`, `handbuch_start`. Danach
+  `docs/HANDBUCH.pdf` und `docs/INSTALLATION_KURZ.pdf` neu erzeugen.
