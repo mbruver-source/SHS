@@ -27,7 +27,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | erledigt | (dieser Commit) | 50 → 76 % | real ≈ 26 % (zwei Messfehler-Suchen) |
 | B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | 8273862 | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
 | B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | f5fae0d | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
-| B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | erledigt | (dieser) | 30 → 43 %, real ≈ 13 % | |
+| B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | erledigt | 506c064 | 30 → 43 %, real ≈ 13 % | |
 | B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | offen | | | |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | offen | | | |
@@ -114,6 +114,7 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
 - **R-B8 (aus B8):** Prüfungsnamen sind im Teilnehmer-Dialog jetzt wie im Anmeldeformular
   („Trümmer LK 1“); Teilnehmerliste, Zeitplan und Auswertung schreiben weiter „ED LK 1 –
   Trümmerfeld“. Vereinheitlichen (betrifft auch PDFs) oder so lassen? Vorschlag: so lassen.
+  → Marco 04.11.: vereinheitlichen (N5), umgesetzt in B18.
 - **R-B10 (aus B10):** Für die Kurzanleitung fehlen echte Bilder der Chrome-Download-Warnung und
   der SmartScreen-Meldung (die Sitzung kann sie nicht aufnehmen). Nimmst du sie beim nächsten
   Download auf (`docs/bilder/handbuch_chrome_download.png`, `handbuch_smartscreen.png`)?

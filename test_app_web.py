@@ -1117,7 +1117,7 @@ class TestAppWeb(_AppWebTestBasis):
         # Teilnehmer müssen für den Admin sichtbar sein.
         self.import_bericht = db.ImportBericht(
             aktualisiert=0, ohne_startnummer_uebersprungen=[], nicht_gefunden=[],
-            abweichungen=["Nr. 1: Web Muster, A (Rex, ED LK 1 Trümmerfeld) ≠ Termin-Datei Beispiel, B (Bello, ED LK 1 Trümmerfeld)"],
+            abweichungen=["Nr. 1: Web Muster, A (Rex, Trümmer LK 1) ≠ Termin-Datei Beispiel, B (Bello, Trümmer LK 1)"],
         )
         self._anmelden()
         antwort = self.client.post(
@@ -1129,7 +1129,7 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertEqual(antwort.status_code, 200)
         text = antwort.data.decode()
         self.assertIn("NICHT übernommen", text)
-        self.assertIn("Beispiel, B (Bello, ED LK 1 Trümmerfeld)", text)
+        self.assertIn("Beispiel, B (Bello, Trümmer LK 1)", text)
 
     def test_termin_zurueckholen_zeigt_bericht_und_download_funktioniert(self):
         self.import_bericht = db.ImportBericht(

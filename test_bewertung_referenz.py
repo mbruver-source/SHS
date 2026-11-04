@@ -109,7 +109,7 @@ class TestReferenzWertnoten(unittest.TestCase):
             vorher = note
 
 
-# --- Teil C: Rangliste über die Datenschicht (ED LK 1 Trümmerfeld) -----------------------
+# --- Teil C: Rangliste über die Datenschicht (Trümmer LK 1) -----------------------
 class TestReferenzRangliste(unittest.TestCase):
     def setUp(self):
         fd, self.pfad = tempfile.mkstemp(suffix=".sqlite")
@@ -163,7 +163,7 @@ class TestReferenzRangliste(unittest.TestCase):
         self.assertEqual([(fertig[n].platzierung, fertig[n].stechen) for n in ("Anna", "Ben")],
                          [(1, "offen"), (1, "offen")])
         self.assertEqual(platz_text(fertig["Anna"]), "1. von 3 (Stechen offen)")
-        self.assertEqual(list(stechen_gruppen(list(fertig.values()))), ["ED LK 1 Trümmerfeld"])
+        self.assertEqual(list(stechen_gruppen(list(fertig.values()))), ["Trümmer LK 1"])
 
         setze_stechen_sieger(self.conn, ben, [anna, ben])
         fertig, _ = self._auswertung()

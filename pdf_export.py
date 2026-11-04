@@ -53,6 +53,7 @@ from reportlab.platypus import (
 )
 
 from db import (
+    ALLE_PRUEFUNGEN,
     _GEGENSTAND_FELDER,
     ALLE_DISZIPLINEN,
     ANMELDEFORMULAR_HUENDIN,
@@ -82,6 +83,9 @@ from db import (
     get_veranstaltung,
     ist_jugendlicher,
     leistungsklasse_label,
+    pruefung_bezeichnung,
+    pruefung_sortierschluessel,
+    zeitplan_bezeichnung,
     lies_datum,
     list_teilnehmer,
     sortierschluessel_text,
@@ -688,8 +692,8 @@ def erstelle_alle_bewertungsboegen_pdf(
     Auf einmal ein Doppelseitiger Druck führt dann dazu, dass ich bei den ED auf der
     Rückseite ein anderes Team habe. [...] ggf. auch nur Auswählbar, welche LK/Disziplin
     ich gedruckt haben will?") schränkt die Sammel-PDF optional auf die genannten Art/LK-
-    Labels ein (wie leistungsklasse_label() sie liefert, z. B. "DK LK 1", "ED LK 2
-    Trümmerfeld" - siehe BewertungsbogenAuswahlDialog in desktop_dialoge.py). None
+    Labels ein (wie leistungsklasse_label() sie liefert, z. B. "DK LK 1", "Trümmer LK 2"
+    - siehe BewertungsbogenAuswahlDialog in desktop_dialoge.py). None
     (Standard) bedeutet ALLE Teilnehmer; ein leeres Set bedeutet keine (der Dialog lässt OK
     dann gar nicht zu, Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6)."""
     teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
@@ -717,7 +721,7 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
     Gesamtpunkte, Wertnote) - "nicht Bestanden"-Teilnehmer erscheinen ohne Platzzahl,
     zählen aber weiterhin bei "von X Startern" mit (siehe shs_core.berechne_rangliste).
 
-    `leistungsklasse` (Label wie "ED LK 1 Flächensuche", siehe leistungsklasse_label)
+    `leistungsklasse` (Label wie "Fläche LK 1", siehe leistungsklasse_label)
     beschränkt die Liste auf diese eine Leistungsklasse - genutzt vom Druck-Button im
     Auswertungs-Tab, der den dort gesetzten Art/LK-Filter übernimmt (Nutzerwunsch 23.09.).
     Die Platzierungen ändern sich dadurch nicht, sie gelten ohnehin je Leistungsklasse."""
@@ -732,7 +736,8 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
-    leistungsklassen = sorted({t.leistungsklasse for t in fertig} | {leistungsklasse_label(t) for t in ausstehend})
+    leistungsklassen = sorted({t.leistungsklasse for t in fertig} | {leistungsklasse_label(t) for t in ausstehend},
+                              key=pruefung_sortierschluessel)
     if leistungsklasse is not None:
         leistungsklassen = [lk for lk in leistungsklassen if lk == leistungsklasse]
     if not leistungsklassen:
@@ -803,8 +808,8 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
 # anzupassen), müssen die Felder mit bekanntem Wertebereich auf einer Zeile bleiben, sonst
 # würde umgebrochener Text optisch mit der Zeile darunter überlappen: die Spaltenbreiten
 # unten sind bewusst so gewählt, dass die Punktzahl-Felder (max. "Trümmer: 100" bzw.
-# "Behältnis: 100"/"Gesamt: 300") UND das Art/LK-Feld (max. "ED LK 3 Behältnis" - siehe
-# _ETIKETT_DISZIPLIN_KURZ) garantiert einzeilig bleiben (mit echten Etiketten/Testdaten
+# "Behältnis: 100"/"Gesamt: 300") UND das Art/LK-Feld (max. "Behältnisse LK 3" - siehe
+# db.pruefung_bezeichnung) garantiert einzeilig bleiben (mit echten Etiketten/Testdaten
 # geprüft). Frei eingegebener Vereinsname/Teilnehmername kann bei ungewöhnlich langen
 # Werten weiterhin umbrechen - das war schon vorher so und lässt sich bei Freitext nicht
 # generell ausschließen.
@@ -824,16 +829,6 @@ _ETIKETT_FELD = ParagraphStyle("SHSEtikettFeld", parent=_STYLES["Normal"], fontS
 _ETIKETT_FELD_STATUS = ParagraphStyle("SHSEtikettFeldStatus", parent=_ETIKETT_FELD, fontSize=7)
 _ETIKETT_SHR = ParagraphStyle("SHSEtikettSHR", parent=_STYLES["Normal"], fontSize=7.5, alignment=1)
 
-# Kurzform der Disziplin nur für das Art/LK-Feld des Etiketts (z.B. "ED LK 3 Behältnis"
-# statt "ED LK 3 Behältnisstrecke") - passend zu den ohnehin schon abgekürzten
-# Punktzahl-Feldern ("Behältnis: 100" statt "Behältnisstrecke: 100") auf demselben
-# Etikett und nötig, damit das Feld bei der festen Zeilenhöhe nicht umbricht. Die
-# GUI/der Filter nutzen weiterhin die ungekürzte leistungsklasse_label() aus db.py.
-_ETIKETT_DISZIPLIN_KURZ = {
-    "Trümmerfeld": "Trümmer",
-    "Flächensuche": "Fläche",
-    "Behältnisstrecke": "Behältnis",
-}
 
 
 def _etikett_verein_stil(verein: str) -> ParagraphStyle:
@@ -856,10 +851,9 @@ def _etikett_verein_stil(verein: str) -> ParagraphStyle:
 
 
 def _etikett_art_lk_text(t: dict) -> str:
-    if t["art"] == "DK":
-        return f"DK LK {_p_wert(t['stufe'])}"
-    kurz = _ETIKETT_DISZIPLIN_KURZ.get(t["disziplin"], t["disziplin"])
-    return f"ED LK {_p_wert(t['stufe'])} {_p_wert(kurz)}"
+    # Seit N5 dieselbe kurze Bezeichnung wie überall („Behältnisse LK 3“) - sie passt auch in
+    # die feste Zeilenhöhe des Etiketts (vorher eigene Kurzform „ED LK 3 Behältnis“).
+    return _p_wert(leistungsklasse_label(t))
 
 
 def _disziplin_gesamt_text(ergebnis: dict, disziplin: str) -> str:
@@ -906,7 +900,8 @@ def erstelle_ergebnisliste_etiketten_pdf(conn: sqlite3.Connection, pfad: str) ->
     def sortier_schluessel(t):
         erg = fertig_je_id.get(str(t["id"]))
         platzierung = erg.platzierung if erg is not None else None
-        return (leistungsklasse_label(t), erg is None, platzierung is None, platzierung or 0, t["startnummer"] or 0)
+        return (pruefung_sortierschluessel(leistungsklasse_label(t)), erg is None, platzierung is None,
+                platzierung or 0, t["startnummer"] or 0)
 
     gruppe = sorted(alle_teilnehmer, key=sortier_schluessel)
 
@@ -1015,7 +1010,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
     if not teilnehmer:
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
 
-    labels = sorted({leistungsklasse_label(t) for t in teilnehmer})
+    labels = sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel)
     for label in labels:
         gruppe = sorted(
             (t for t in teilnehmer if leistungsklasse_label(t) == label),
@@ -1071,10 +1066,12 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
 # das Vereinslogo der Vorlage (oben links) - das ist vereinsspezifisch und nicht Teil
 # der eigentlichen Auswertung.
 
+# Schlüssel ist die Prüfungsbezeichnung (leistungsklasse_label, N5), die Überschrift folgt
+# weiter der Vorlage des Verbands.
 _STAT_SPALTEN: list[tuple[str, str]] = (
-    [(f"DK LK {stufe}", f"LK {stufe}") for stufe in (1, 2, 3)]
+    [(pruefung_bezeichnung("DK", stufe, None), f"LK {stufe}") for stufe in (1, 2, 3)]
     + [
-        (f"ED LK {stufe} {disziplin}", f"{disziplin}<br/>LK {stufe}")
+        (pruefung_bezeichnung("ED", stufe, disziplin), f"{disziplin}<br/>LK {stufe}")
         for disziplin in ("Trümmerfeld", "Behältnisstrecke", "Flächensuche")
         for stufe in (1, 2, 3)
     ]
@@ -1108,13 +1105,13 @@ _STAT_SPALTE_BREITEN_ED = {
 
 
 def _stat_spalte_breite(spalte_key: str) -> float:
-    """Liefert die passende Spaltenbreite zu einem _STAT_SPALTEN-Schlüssel ("DK LK 1"
-    bzw. "ED LK <n> <Disziplin>", siehe leistungsklasse_label() in db.py)."""
-    if spalte_key.startswith("DK "):
+    """Liefert die passende Spaltenbreite zu einem _STAT_SPALTEN-Schlüssel (Prüfungs-
+    bezeichnung wie „DK LK 1“ oder „Trümmer LK 2“, siehe db.pruefung_bezeichnung)."""
+    pruefung = next((p for p in ALLE_PRUEFUNGEN if p.bezeichnung == spalte_key), None)
+    if pruefung is None or pruefung.art == "DK":
         return _STAT_SPALTE_BREITE_DK
-    for disziplin, breite in _STAT_SPALTE_BREITEN_ED.items():
-        if disziplin in spalte_key:
-            return breite
+    if pruefung.disziplin in _STAT_SPALTE_BREITEN_ED:
+        return _STAT_SPALTE_BREITEN_ED[pruefung.disziplin]
     return _STAT_SPALTE_BREITE_DK  # Fallback, sollte bei den heutigen 6 Kombinationen nie eintreten
 
 
@@ -1466,7 +1463,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     if not teilnehmer:
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
     else:
-        labels = sorted({leistungsklasse_label(t) for t in teilnehmer})
+        labels = sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel)
         daten = [["Art / Leistungsklasse", "Teilnehmer", "Einheiten je Teilnehmer", "Einheiten gesamt"]]
         for label in labels:
             gruppe = [t for t in teilnehmer if leistungsklasse_label(t) == label]
@@ -1578,7 +1575,7 @@ def _zeitplan_richter_tabelle(plan: dict) -> Table:
     ]
     for i, zeile in enumerate(plan["zeilen"], start=1):
         zeit_text = f"{zeile['start'].strftime('%H:%M')} – {zeile['ende'].strftime('%H:%M')}"
-        art_text = (f"{_p_wert(zeile.get('art'))} LK {_p_wert(zeile.get('stufe'))} – {_p_wert(zeile.get('disziplin'))}"
+        art_text = (_p_wert(zeitplan_bezeichnung(zeile.get("art"), zeile.get("stufe"), zeile.get("disziplin")))
                     if zeile["typ"] != "pause" else "")
         if zeile["typ"] == "pause":
             daten.append([

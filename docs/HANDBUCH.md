@@ -273,7 +273,7 @@ Meldestelle beim Anlegen leer, weist das Programm darauf hin. Die Rückfrage ste
 später nach. Beim Erzeugen des Anmeldeformulars warnt das Programm noch einmal, solange sie fehlen. Der Dialog lässt sich scrollen und vergrößern.
 
 Unter **Startnummern-Bereiche** trägst du je angebotener Prüfung einen Nummernbereich ein,
-z. B. DK-LK 1: 1 bis 20, Trümmer LK 1: 21 bis 40. Daraus vergibt „Fehlende Startnummern
+z. B. DK LK 1: 1 bis 20, Trümmer LK 1: 21 bis 40. Daraus vergibt „Fehlende Startnummern
 vergeben…“ (siehe [Kapitel 4](#4-teilnehmer)) die Nummern. Bereiche dürfen sich nicht
 überschneiden; eine Prüfung ohne Bereich bekommt keine automatische Nummer. Bei einem neuen
 Termin werden die Bereiche des letzten Termins vorgeschlagen.
@@ -339,11 +339,11 @@ Ist der Termin schon im Web veröffentlicht, werden die dort erfassten Ergebniss
 Zurückholen über die Startnummer zugeordnet – dann nicht mehr umnummerieren.
 
 Ist im **„Filter Art/LK“** eine Prüfung gewählt, wirken beide Knöpfe nur auf diese Prüfung,
-z. B. nur auf „ED LK 1 Trümmerfeld“. Rückfrage und Meldung nennen die Prüfung dann
+z. B. nur auf „Trümmer LK 1“. Rückfrage und Meldung nennen die Prüfung dann
 ausdrücklich. Die Filter „Start-Nr.“ und „Bezahlt“ haben darauf keinen Einfluss.
 
 Unter den Knöpfen steht, in welchen Prüfungen noch Teilnehmer **ohne Startnummer** sind,
-z. B. „Ohne Startnummer: DK LK 2 (1), ED LK 1 Trümmerfeld (2)“. Der Hinweis zeigt immer alle
+z. B. „Ohne Startnummer: DK LK 2 (1), Trümmer LK 1 (2)“. Der Hinweis zeigt immer alle
 Prüfungen, auch bei gesetztem Filter, und verschwindet, sobald alle eine Nummer haben.
 Teilnehmer mit „Keine Teilnahme“ zählen nicht mit.
 
@@ -372,7 +372,8 @@ Pflichtfelder sind mit \* markiert: **Nachname\***, **Vorname\***, **Rufname Hun
 und die **Prüfung\***. Alle anderen Felder sind optional. Datumsfelder nehmen TT.MM.JJJJ an.
 
 - **Prüfung:** Die Auswahl **„Prüfung\*“** enthält die im Termin angebotenen Prüfungen in der
-  Schreibweise des Anmeldeformulars (z. B. „DK-LK 1“, „Trümmer LK 1“); ein neuer Teilnehmer
+  Schreibweise des Anmeldeformulars (z. B. „DK LK 1“, „Trümmer LK 1“) – dieselbe Schreibweise
+  steht überall im Programm, in Listen, Filtern, Zeitplan, Auswertung und PDFs; ein neuer Teilnehmer
   beginnt mit der ersten. Für eine nicht angebotene Prüfung **„andere Prüfung …“** wählen: dann
   erscheinen **Art** (ED = Einzeldisziplin, DK = Dreikampf), **Leistungsklasse** (1–3) und bei ED
   die **Disziplin**. Darunter steht dann im Klartext, welche Prüfung gewählt ist und ob der Termin
@@ -1062,7 +1063,7 @@ anklickst. Ein **„Reiter“** ist eine der Registerkarten oben im Programmfens
      Spalten im Zeitplan.
    - **Verband** und **Meldestelle** (an wen die Anmeldungen gehen, z. B. Name und E-Mail).
    - Bei **Angebotene Prüfungen** einen Haken bei jeder Prüfung setzen, die ihr anbietet.
-   - Bei **Startnummern-Bereiche** je Prüfung einen Nummernbereich, z. B. DK-LK 1:
+   - Bei **Startnummern-Bereiche** je Prüfung einen Nummernbereich, z. B. DK LK 1:
      1 bis 20. Damit verteilt das Programm später die Startnummern von selbst.
 4. Den vorgeschlagenen **Speicherort** nicht ändern und auf **„OK“** klicken. Der Termin
    öffnet sich.
@@ -1186,7 +1187,7 @@ oder der Button **„Hilfe“** oben rechts im Programm (bzw. **F1**).
 | **nB (nicht bestanden)** | Mindestens eine Disziplin hat weniger als 70 Punkte. |
 | **OMA** | Online-Meldeannahme – die Internetseite, über die Teilnehmer sich auch melden können. Ihre Meldungsliste kann das Programm einlesen. |
 | **PDF** | Eine Datei zum Ansehen und Drucken, die überall gleich aussieht. |
-| **Prüfungsblock** | Im Zeitplan alle Teams einer Prüfung (z. B. „ED LK 1 Trümmerfeld“) bei einem Richter. |
+| **Prüfungsblock** | Im Zeitplan alle Teams einer Prüfung (z. B. „Trümmer LK 1“, beim Dreikampf je Disziplin wie „DK LK 1 – Flächensuche“) bei einem Richter. |
 | **Reiter** | Die Registerkarten oben im Programmfenster („Teilnehmer“, „Zeitplan“ …). |
 | **SH-R** | Spürhundesport-Richter. Das Feld „SH-R“ auf den Etiketten ist für seinen Stempel. |
 | **Sicherungsdatei** | Eine Datei (Endung `.zip`), in der alle Termine stecken – zum Aufbewahren, z. B. auf einem USB-Stick. |

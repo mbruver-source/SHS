@@ -32,6 +32,7 @@ from db import (
     get_veranstaltung,
     list_teilnehmer,
     normalisiere_datum,
+    pruefung_bezeichnung,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
     datum_anzeige,
@@ -202,7 +203,8 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
     kuerzel = pruefungs_kuerzel(teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
     if kuerzel not in angebotene:
         pruefung = pruefung_nach_kuerzel(kuerzel)
-        bezeichnung = pruefung.bezeichnung if pruefung else f"{teilnehmer.art} LK {teilnehmer.stufe}"
+        bezeichnung = pruefung.bezeichnung if pruefung else pruefung_bezeichnung(
+            teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
         raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung))
 
 

@@ -43,6 +43,7 @@ from db import (
     berechne_teilnehmer_lk_uebersicht,
     get_veranstaltung,
     leistungsklasse_label,
+    pruefung_sortierschluessel,
     list_teilnehmer,
     setze_stechen_sieger,
     stechen_gilt_fuer_veranstaltung,
@@ -86,7 +87,7 @@ def _stechen_offen_bestaetigen(parent, conn, leistungsklasse: str | None = None)
     noch offen ist (wie beim Zeitplan mit Überschneidungen). True = trotzdem erzeugen."""
     fertig, _ = berechne_auswertung(conn)
     offen = [
-        lk for lk, g in stechen_gruppen(fertig).items()
+        lk for lk, g in stechen_gruppen(fertig, pruefung_sortierschluessel).items()
         if all(t.stechen == "offen" for t in g) and (leistungsklasse is None or lk == leistungsklasse)
     ]
     if not offen:
@@ -137,7 +138,7 @@ class AuswertungTab(QWidget):
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
-        # Art/LK-Bezeichnungen wie "ED LK 3 Behältnisstrecke"), statt Text abzuschneiden.
+        # Art/LK-Bezeichnungen wie "Behältnisse LK 3"), statt Text abzuschneiden.
         self.filter_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.filter_combo.currentTextChanged.connect(self._rendern)
 
@@ -204,7 +205,7 @@ class AuswertungTab(QWidget):
 
     def _stechen_sieger_festlegen(self) -> None:
         """S1: je Gleichstand um Platz 1 den Stechen-Sieger wählen (oder offen lassen)."""
-        gruppen = stechen_gruppen(self._fertig)
+        gruppen = stechen_gruppen(self._fertig, pruefung_sortierschluessel)
         if not gruppen:
             QMessageBox.information(self, "Kein Stechen", "Es gibt keinen Gleichstand um Platz 1.")
             return
@@ -266,7 +267,8 @@ class AuswertungTab(QWidget):
         self._startnummer_je_id = {str(t["id"]): t["startnummer"] for t in stammdaten}
         self._rufname_hund_je_id = {str(t["id"]): t["rufname_hund"] for t in stammdaten}
 
-        alle_labels = sorted({t.leistungsklasse for t in self._fertig} | {leistungsklasse_label(t) for t in self._ausstehend})
+        alle_labels = sorted({t.leistungsklasse for t in self._fertig} | {leistungsklasse_label(t) for t in self._ausstehend},
+                             key=pruefung_sortierschluessel)
         bisherige_auswahl = self.filter_combo.currentText()
         self.filter_combo.blockSignals(True)
         self.filter_combo.clear()
@@ -294,7 +296,7 @@ class AuswertungTab(QWidget):
             (t for t in self._fertig if passt(t.leistungsklasse, self._startnummer_je_id.get(t.id))),
             # nicht bestandene Teilnehmer (platzierung=None) einsortieren wir ans Ende
             # ihrer Leistungsklasse, statt sie mit Platz 1 zu verwechseln.
-            key=lambda t: (t.leistungsklasse, t.platzierung is None, t.platzierung or 0),
+            key=lambda t: (pruefung_sortierschluessel(t.leistungsklasse), t.platzierung is None, t.platzierung or 0),
         )
         ausstehend_gefiltert = [
             t for t in self._ausstehend if passt(leistungsklasse_label(t), t["startnummer"])
@@ -359,11 +361,12 @@ class AuswertungTab(QWidget):
         von_hinweise = [
             f"Hinweis {lk}: „von {von}“ zählt nur Starter mit vollständigem Ergebnis – "
             f"{offen_je_lk[lk]} noch offen."
-            for lk, von in sorted(von_je_lk.items()) if offen_je_lk.get(lk)
+            for lk, von in sorted(von_je_lk.items(), key=lambda paar: pruefung_sortierschluessel(paar[0]))
+            if offen_je_lk.get(lk)
         ]
         # S1 (Marco 03.10.2026): Gleichstand um Platz 1 -> Stechen.
         sichtbare_lk = set(von_je_lk)
-        alle_gruppen = stechen_gruppen(self._fertig)
+        alle_gruppen = stechen_gruppen(self._fertig, pruefung_sortierschluessel)
         gruppen = {lk: g for lk, g in alle_gruppen.items() if lk in sichtbare_lk}
         self.stechen_btn.setEnabled(bool(alle_gruppen))
         # PO1 (PO_01012027.md): ab der neuen PO (Veranstaltung ab 01.01.2027) gibt es kein

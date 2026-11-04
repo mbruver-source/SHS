@@ -582,7 +582,7 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(by_id[str(a)].platzierung, 1)
         self.assertEqual(by_id[str(a)].von_startern, 2)
         self.assertEqual(by_id[str(b)].platzierung, 2)
-        # C ist alleine in ED LK 2 Flächensuche -> eigener Platz 1, unabhängig von DK-Gruppe
+        # C ist alleine in Fläche LK 2 -> eigener Platz 1, unabhängig von DK-Gruppe
         self.assertEqual(by_id[str(c)].platzierung, 1)
         self.assertEqual(by_id[str(c)].von_startern, 1)
 
@@ -1589,7 +1589,7 @@ class TestDatenbank(unittest.TestCase):
         ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         self.assertEqual(ergebnis.importiert, 1)
         self.assertEqual(len(ergebnis.fehler), 1)
-        self.assertIn("DK-LK 3 wird in diesem Termin nicht angeboten. Bitte mit dem Teilnehmer klären",
+        self.assertIn("DK LK 3 wird in diesem Termin nicht angeboten. Bitte mit dem Teilnehmer klären",
                       ergebnis.fehler[0])
         # UX-Nachtest N5: der Freischalt-Hinweis steht nur noch einmal in den Hinweisen.
         self.assertNotIn("Veranstaltungsdaten", ergebnis.fehler[0])
@@ -2099,7 +2099,34 @@ class TestDatenbank(unittest.TestCase):
             disziplin="Flächensuche", startnummer=3))
         self.assertEqual(
             alle_leistungsklassen(self.conn),
-            ["DK LK 2", "ED LK 1 Flächensuche"],
+            ["DK LK 2", "Fläche LK 1"],
+        )
+        # Nachtest 2 (N5): Reihenfolge des Anmeldeformulars, nicht alphabetisch
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="D", vorname="D", rufname_hund="H", art="ED", stufe=3,
+            disziplin="Behältnisstrecke", startnummer=4))
+        self.assertEqual(alle_leistungsklassen(self.conn), ["DK LK 2", "Behältnisse LK 3", "Fläche LK 1"])
+
+    def test_pruefungsbezeichnung_wie_im_anmeldeformular(self):
+        # Nachtest 2 (N5, Marco 04.11.2026): eine Schreibweise überall.
+        from db import (
+            ALLE_PRUEFUNGEN, leistungsklasse_label, pruefung_bezeichnung, pruefung_sortierschluessel,
+            zeitplan_bezeichnung,
+        )
+
+        self.assertEqual(pruefung_bezeichnung("DK", 1, None), "DK LK 1")
+        self.assertEqual(pruefung_bezeichnung("ED", 2, "Trümmerfeld"), "Trümmer LK 2")
+        self.assertEqual(pruefung_bezeichnung("ED", "3", "Behältnisstrecke"), "Behältnisse LK 3")
+        self.assertEqual(leistungsklasse_label({"art": "ED", "stufe": 1, "disziplin": "Flächensuche"}), "Fläche LK 1")
+        self.assertEqual(leistungsklasse_label({"art": "DK", "stufe": 2, "disziplin": None}), "DK LK 2")
+        self.assertEqual(pruefung_bezeichnung("ED", 4, "Trümmerfeld"), "ED LK 4 Trümmerfeld")  # unbekannt
+        self.assertEqual([p.bezeichnung for p in ALLE_PRUEFUNGEN][:4], ["DK LK 1", "DK LK 2", "DK LK 3", "Trümmer LK 1"])
+        self.assertEqual(zeitplan_bezeichnung("ED", 1, "Flächensuche"), "Fläche LK 1")
+        self.assertEqual(zeitplan_bezeichnung("DK", 1, "Trümmerfeld"), "DK LK 1 – Trümmerfeld")
+        self.assertEqual(
+            sorted(["Fläche LK 1", "Unbekannt", "Trümmer LK 2", "DK LK 3", "Behältnisse LK 1"],
+                   key=pruefung_sortierschluessel),
+            ["DK LK 3", "Trümmer LK 2", "Behältnisse LK 1", "Fläche LK 1", "Unbekannt"],
         )
 
     def test_teilnehmer_liste_sortiert_nach_startnummer(self):
@@ -2295,7 +2322,7 @@ class TestZeitplan(unittest.TestCase):
         self.assertIsNone(startnummer_bereiche_als_text({}))
         self.assertIsNone(pruefe_startnummer_bereiche(bereiche))
         fehler = pruefe_startnummer_bereiche({"DK1": (1, 20), "ED1-Trümmerfeld": (15, 30)})
-        self.assertIn("DK-LK 1", fehler)
+        self.assertIn("DK LK 1", fehler)
         self.assertIn("Trümmer LK 1", fehler)
         self.assertIn("ungültig", pruefe_startnummer_bereiche({"DK1": (10, 5)}))
         self.assertIn("ungültig", pruefe_startnummer_bereiche({"DK1": (0, 5)}))
@@ -2403,7 +2430,7 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual(bereiche_automatisch_berechnen({"DK1": 999}), {"DK1": (1, 999)})
         with self.assertRaises(ValueError) as kontext:
             bereiche_automatisch_berechnen({"DK1": 500, "DK2": 500})
-        self.assertIn("DK-LK 2", str(kontext.exception))
+        self.assertIn("DK LK 2", str(kontext.exception))
 
     def test_startnummer_bereichsgroesse_standard_und_gespeichert(self):
         self.assertEqual(startnummer_bereichsgroesse(None), 20)
@@ -3659,8 +3686,8 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(bericht.aktualisiert, 0)
         self.assertEqual(len(bericht.abweichungen), 2)
         self.assertIn("Nr. 1", bericht.abweichungen[0])
-        self.assertIn("Muster, A (Rex, ED LK 1 Trümmerfeld)", bericht.abweichungen[0])
-        self.assertIn("Beispiel, A (Bello, ED LK 1 Trümmerfeld)", bericht.abweichungen[0])
+        self.assertIn("Muster, A (Rex, Trümmer LK 1)", bericht.abweichungen[0])
+        self.assertIn("Beispiel, A (Bello, Trümmer LK 1)", bericht.abweichungen[0])
         for ziel_id in ziel_ids:
             ergebnis = get_ergebnis(self.ziel, ziel_id)
             self.assertIsNone(ergebnis["suche_truemmerfeld"])
@@ -4267,7 +4294,7 @@ class TestAnmeldeformularImport(unittest.TestCase):
         self.assertEqual(ergebnis.importiert, 0)
         self.assertEqual(len(ergebnis.fehler), 1)
         self.assertTrue(ergebnis.fehler[0].startswith("zwei.pdf: mehrere Prüfungen angekreuzt"), ergebnis.fehler)
-        self.assertIn("DK-LK 1", ergebnis.fehler[0])
+        self.assertIn("DK LK 1", ergebnis.fehler[0])
         self.assertIn("Fläche LK 3", ergebnis.fehler[0])
 
     def test_rat_bei_ablehnung_je_grund(self):
@@ -4275,7 +4302,7 @@ class TestAnmeldeformularImport(unittest.TestCase):
         from db_import import rat_bei_ablehnung
 
         faelle = {
-            "a.pdf: mehrere Prüfungen angekreuzt (DK-LK 1, Fläche LK 3) - je Formular": "eigenes Formular",
+            "a.pdf: mehrere Prüfungen angekreuzt (DK LK 1, Fläche LK 3) - je Formular": "eigenes Formular",
             "a.pdf: keine Prüfung angekreuzt": "gewünschte Prüfung erfragen",
             "a.pdf: Fläche LK 3 wird in diesem Termin nicht angeboten - Formular eines anderen "
             "Termins? Bitte mit dem Teilnehmer klären.": "angebotene Prüfung vereinbaren",

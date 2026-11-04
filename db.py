@@ -367,9 +367,11 @@ class Pruefungsangebot:
 
 
 # Reihenfolge wie im bisherigen Word-Anmeldeformular: DK, Trümmer, Behältnisse, Fläche,
-# jeweils LK 1-3.
+# jeweils LK 1-3. Die Bezeichnung gilt seit dem Nachtest 2 (N5, Marco 04.11.2026) überall im
+# Programm (siehe leistungsklasse_label) - vorher stand „DK-LK 1“ / „Trümmer LK 1“ nur hier und
+# sonst „DK LK 1“ / „ED LK 1 Trümmerfeld“.
 ALLE_PRUEFUNGEN: list[Pruefungsangebot] = [
-    Pruefungsangebot(f"DK{stufe}", "DK", stufe, None, f"DK-LK {stufe}") for stufe in (1, 2, 3)
+    Pruefungsangebot(f"DK{stufe}", "DK", stufe, None, f"DK LK {stufe}") for stufe in (1, 2, 3)
 ] + [
     Pruefungsangebot(f"ED{stufe}-{disziplin}", "ED", stufe, disziplin, f"{kurz} LK {stufe}")
     for disziplin, kurz in (("Trümmerfeld", "Trümmer"), ("Behältnisstrecke", "Behältnisse"), ("Flächensuche", "Fläche"))
@@ -1389,12 +1391,41 @@ def _wertnote(teilnehmer: dict, ergebnis: dict):
     return berechne_wertnote_dk(truemmerfeld, flaechensuche, behaeltnisstrecke)
 
 
+def pruefung_bezeichnung(art: str, stufe, disziplin: str | None) -> str:
+    """Bezeichnung einer Prüfung wie auf dem Anmeldeformular („DK LK 1“, „Trümmer LK 2“,
+    „Behältnisse LK 3“, „Fläche LK 1“) - eine Schreibweise für Listen, Filter, Zeitplan,
+    Auswertung und PDFs (Nachtest 2, N5). Unbekannte Kombinationen (z. B. beschädigte Daten)
+    ergeben „<Art> LK <Stufe> <Disziplin>“."""
+    try:
+        pruefung = pruefung_nach_kuerzel(pruefungs_kuerzel(art, int(stufe), disziplin))
+    except (TypeError, ValueError):
+        pruefung = None
+    if pruefung is not None:
+        return pruefung.bezeichnung
+    return " ".join(str(teil) for teil in (art, "LK", stufe, disziplin if art != "DK" else None) if teil)
+
+
 def leistungsklasse_label(teilnehmer: dict) -> str:
-    """Menschenlesbares Label für Art+Leistungsklasse(+Disziplin bei ED) - dient auch
-    als Filterkriterium in der GUI (Ergebniserfassung/Auswertung)."""
-    if teilnehmer["art"] == "DK":
-        return f"DK LK {teilnehmer['stufe']}"
-    return f"ED LK {teilnehmer['stufe']} {teilnehmer['disziplin']}"
+    """Menschenlesbares Label der Prüfung eines Teilnehmers (pruefung_bezeichnung) - dient
+    auch als Filterkriterium in der GUI (Ergebniserfassung/Auswertung)."""
+    return pruefung_bezeichnung(teilnehmer["art"], teilnehmer["stufe"], teilnehmer["disziplin"])
+
+
+def zeitplan_bezeichnung(art: str, stufe, disziplin: str | None) -> str:
+    """Bezeichnung eines Prüfungsblocks im Zeitplan: wie pruefung_bezeichnung, beim Dreikampf
+    mit der Disziplin des Blocks („DK LK 1 – Trümmerfeld“), da er je Disziplin geplant wird."""
+    if art == "DK":
+        return f"{pruefung_bezeichnung(art, stufe, None)} – {disziplin}" if disziplin else pruefung_bezeichnung(art, stufe, None)
+    return pruefung_bezeichnung(art, stufe, disziplin)
+
+
+def pruefung_sortierschluessel(bezeichnung: str) -> tuple:
+    """Sortierung von Prüfungsbezeichnungen in der Reihenfolge des Anmeldeformulars (DK,
+    Trümmer, Behältnisse, Fläche, je LK 1-3) statt alphabetisch; Unbekanntes ans Ende."""
+    for nummer, pruefung in enumerate(ALLE_PRUEFUNGEN):
+        if pruefung.bezeichnung == bezeichnung:
+            return (nummer, "")
+    return (len(ALLE_PRUEFUNGEN), sortierschluessel_text(bezeichnung))
 
 
 # Konstanten für die Richter-Bedarfsberechnung nach Vorgabe des Vereins: 1
@@ -1701,7 +1732,7 @@ def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
     """Sortierte Liste aller in diesem Termin tatsächlich vorkommenden Art/LK-Label -
     zum Befüllen eines Filters in der Oberfläche."""
     labels = {leistungsklasse_label(t) for t in list_teilnehmer(conn, nur_teilnehmende=True)}
-    return sorted(labels)
+    return sorted(labels, key=pruefung_sortierschluessel)
 
 
 # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): "bei uns im Verband müssen
@@ -1800,7 +1831,8 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
 
     # PO1: ab der neuen PO (Veranstaltungsdatum ab 01.01.2027) kein Stechen mehr; ein früher
     # gespeicherter stechen_sieger bleibt in der Datenbank, wird dann aber nicht ausgewertet.
-    return berechne_rangliste(fertig, stechen_sieger, stechen_gilt_fuer_veranstaltung(conn)), ausstehend
+    return berechne_rangliste(fertig, stechen_sieger, stechen_gilt_fuer_veranstaltung(conn),
+                              sortierschluessel=pruefung_sortierschluessel), ausstehend
 
 
 # --- Zeitplan --------------------------------------------------------------

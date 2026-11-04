@@ -349,6 +349,20 @@ class TestPdfExport(unittest.TestCase):
         for teil in ("Müller-", "Lüdenscheidt-", "Großkopf"):
             self.assertIn(teil, text)
 
+    def test_etikett_pruefungsfeld_bleibt_einzeilig(self):
+        """Nachtest 2 (N5): Das Etikett zeigt die Prüfung wie überall („Behältnisse LK 3“) -
+        jede Bezeichnung muss bei fester Zeilenhöhe in eine Zeile passen."""
+        from reportlab.platypus import Paragraph
+
+        from db import ALLE_PRUEFUNGEN
+
+        breite = pdf_export._ETIKETT_SPALTEN[1] - 12
+        for p in ALLE_PRUEFUNGEN:
+            text = pdf_export._etikett_art_lk_text({"art": p.art, "stufe": p.stufe, "disziplin": p.disziplin})
+            self.assertEqual(text, p.bezeichnung)
+            _b, hoehe = Paragraph(text, pdf_export._ETIKETT_TEXT).wrap(breite, 1000)
+            self.assertLessEqual(hoehe, pdf_export._ETIKETT_TEXT.leading + 0.01, text)
+
     def test_etikett_vereinsname_wird_hoechstens_zweizeilig(self):
         """A6-Prüfung (Marco 01.11.2026): der austragende Verein links oben im Etikett wird
         verkleinert, bis er in zwei Zeilen passt (Mindestgröße 6,5 pt); kurze Namen bleiben
@@ -826,7 +840,7 @@ class TestPdfExport(unittest.TestCase):
         eintragen_ergebnis(self.conn, b, "Trümmerfeld", suche=55, anzeige=35)
 
         pfad = self._pfad("ergebnisliste_lk.pdf")
-        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, "ED LK 1 Flächensuche")
+        pdf_export.erstelle_ergebnisliste_pdf(self.conn, pfad, "Fläche LK 1")
         text = _text(pfad)
         self.assertIn("Flaeche, A", text)
         self.assertNotIn("Truemmer, B", text)
@@ -1517,7 +1531,7 @@ class TestPdfExport(unittest.TestCase):
         pfad = self._pfad("zeitplan_block_leer.pdf")
         pdf_export.erstelle_zeitplan_pdf(self.conn, pfad)
         text = _text(pfad)
-        self.assertIn("ED LK 1", text)
+        self.assertIn("Trümmer LK 1", text)  # Nachtest 2 (N5): Bezeichnung wie im Anmeldeformular
         self.assertIn("noch keine Teilnehmer gemeldet", text)
 
 

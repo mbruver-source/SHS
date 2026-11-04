@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 )
 
 from db import (
+    pruefung_sortierschluessel,
     ALLE_DISZIPLINEN,
     SCHRITTGRENZE_TEXT,
     get_veranstaltung,
@@ -622,6 +623,17 @@ class _NumerischSortierbaresItem(QTableWidgetItem):
     def __lt__(self, other) -> bool:  # noqa: D105 - siehe Klassen-Docstring
         if isinstance(other, _NumerischSortierbaresItem):
             return self._sortierwert < other._sortierwert
+        return super().__lt__(other)
+
+
+class _PruefungSortierbaresItem(QTableWidgetItem):
+    """Zelle mit einer Prüfungsbezeichnung, die beim Spaltenklick in der Reihenfolge des
+    Anmeldeformulars sortiert statt alphabetisch (Nachtest 2, N5) - wie
+    _NumerischSortierbaresItem über `__lt__`."""
+
+    def __lt__(self, other) -> bool:  # noqa: D105
+        if isinstance(other, _PruefungSortierbaresItem):
+            return pruefung_sortierschluessel(self.text()) < pruefung_sortierschluessel(other.text())
         return super().__lt__(other)
 
 

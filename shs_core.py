@@ -204,6 +204,7 @@ def berechne_rangliste(
     teilnehmer: list[Teilnehmerergebnis],
     stechen_sieger: set[str] | frozenset[str] = frozenset(),
     mit_stechen: bool = True,
+    sortierschluessel=None,
 ) -> list[Teilnehmerergebnis]:
     """Berechnet die Platzierung je Leistungsklasse (höhere Punktzahl = besserer Rang).
 
@@ -232,7 +233,7 @@ def berechne_rangliste(
     (PO_01012027.md, PO1) und käme an dieser Stelle hinzu.
     """
     ergebnis: list[Teilnehmerergebnis] = []
-    leistungsklassen = sorted({t.leistungsklasse for t in teilnehmer})
+    leistungsklassen = sorted({t.leistungsklasse for t in teilnehmer}, key=sortierschluessel)
 
     for lk in leistungsklassen:
         gruppe = [t for t in teilnehmer if t.leistungsklasse == lk]
@@ -282,14 +283,16 @@ def platz_text(t: Teilnehmerergebnis) -> str | None:
     return text
 
 
-def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis]) -> dict[str, list[Teilnehmerergebnis]]:
+def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis],
+                    sortierschluessel=None) -> dict[str, list[Teilnehmerergebnis]]:
     """Leistungsklassen mit Gleichstand um Platz 1 (Stechen offen ODER schon entschieden) -
     für Hinweis, Auswahl des Siegers und die Rückfrage vor dem Druck.
 
     Erwartet das Ergebnis von berechne_rangliste(). Wurde dort ohne Stechen gerechnet (PO1,
-    neue PO), hat niemand einen Stechen-Vermerk und das Ergebnis ist leer."""
+    neue PO), hat niemand einen Stechen-Vermerk und das Ergebnis ist leer. `sortierschluessel`
+    legt die Reihenfolge der Leistungsklassen fest (db.pruefung_sortierschluessel, N5)."""
     gruppen: dict[str, list[Teilnehmerergebnis]] = {}
-    for lk in sorted({t.leistungsklasse for t in ergebnisse}):
+    for lk in sorted({t.leistungsklasse for t in ergebnisse}, key=sortierschluessel):
         gruppe = [t for t in ergebnisse if t.leistungsklasse == lk and t.bestanden]
         if not gruppe:
             continue

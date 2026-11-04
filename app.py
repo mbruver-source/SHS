@@ -95,6 +95,7 @@ from db import (
     DISZIPLIN_SPALTEN,
     add_teilnehmer,
     alle_leistungsklassen,
+    pruefung_sortierschluessel,
     angebotene_pruefungen,
     datum_anzeige,
     delete_teilnehmer,
@@ -189,6 +190,7 @@ from desktop_gemeinsam import (
     _import_ordner_merken,
     _import_startordner,
     _NumerischSortierbaresItem,
+    _PruefungSortierbaresItem,
     _pdf_exportieren,
     _ausfuehren,
     _wartecursor,
@@ -217,11 +219,9 @@ from desktop_programm import VERSION, VersionDialog, laufkennung_setzen, sitzung
 
 
 def _pruefung_bezeichnung(kuerzel: str) -> str:
-    """Bezeichnung einer Prüfung wie im Filter Art/LK (db.leistungsklasse_label)."""
+    """Bezeichnung einer Prüfung wie im Filter Art/LK (seit N5 überall dieselbe)."""
     pruefung = pruefung_nach_kuerzel(kuerzel)
-    if pruefung is None:
-        return kuerzel
-    return leistungsklasse_label({"art": pruefung.art, "stufe": pruefung.stufe, "disziplin": pruefung.disziplin})
+    return pruefung.bezeichnung if pruefung is not None else kuerzel
 
 
 def _fehlende_startnummern_vergeben_mit_meldung(
@@ -235,7 +235,7 @@ def _fehlende_startnummern_vergeben_mit_meldung(
             parent, "Keine Startnummern-Bereiche",
             "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“ → "
             "„Veranstaltungsdaten bearbeiten…“) je Prüfung einen Startnummern-Bereich "
-            "eintragen, z. B. DK-LK 1: 1 bis 20.",
+            "eintragen, z. B. DK LK 1: 1 bis 20.",
         )
         return
     try:
@@ -498,7 +498,7 @@ class TeilnehmerTab(QWidget):
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
-        # Art/LK-Bezeichnungen wie "ED LK 3 Behältnisstrecke"), statt Text abzuschneiden.
+        # Art/LK-Bezeichnungen wie "Behältnisse LK 3"), statt Text abzuschneiden.
         self.filter_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.filter_combo.currentTextChanged.connect(self._filter_anwenden)
 
@@ -1173,6 +1173,8 @@ class TeilnehmerTab(QWidget):
                     # _filter_anwenden) - unverzichtbar, sobald per Spaltenklick sortiert wird
                     # und die Zeilenreihenfolge nicht mehr der Listenreihenfolge entspricht.
                     item.setData(Qt.UserRole, t["id"])
+                elif col == 4:
+                    item = _PruefungSortierbaresItem(wert)  # N5: Reihenfolge des Formulars
                 else:
                     item = QTableWidgetItem(wert)
                 self.tabelle.setItem(row, col, item)
@@ -1269,7 +1271,7 @@ class TeilnehmerTab(QWidget):
         # Bewusst aus der eigenen (ungefilterten) Liste statt alle_leistungsklassen(), das
         # nur teilnehmende Teilnehmer berücksichtigt - hier sollen auch Leistungsklassen
         # filterbar bleiben, in denen nur noch "keine Teilnahme"-Teilnehmer stehen.
-        self.filter_combo.addItems(sorted({leistungsklasse_label(t) for t in teilnehmer}))
+        self.filter_combo.addItems(sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel))
         index = self.filter_combo.findText(bisherige_auswahl)
         self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
         self.filter_combo.blockSignals(False)
@@ -1298,7 +1300,7 @@ def _formular_import_prompt() -> str:
         "Hundes' auf dem Formular). Fehlt eine davon, das Formular trotzdem als Zeile "
         "ausgeben (das Feld leer) - der Import meldet dann, was fehlt.\n"
         "- art/stufe/disziplin ergeben sich aus dem angekreuzten Kästchen oben auf dem "
-        "Formular: 'DK-LK 1/2/3' -> art=DK, stufe=1/2/3, disziplin LEER lassen. "
+        "Formular: 'DK LK 1/2/3' -> art=DK, stufe=1/2/3, disziplin LEER lassen. "
         "'Trümmer LK n' -> art=ED, stufe=n, disziplin=Trümmerfeld. "
         "'Fläche LK n' -> art=ED, stufe=n, disziplin=Flächensuche. "
         "'Behältnisse LK n' -> art=ED, stufe=n, disziplin=Behältnisstrecke.\n"
@@ -2098,7 +2100,7 @@ class ErgebnisTab(QWidget):
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
-        # Art/LK-Bezeichnungen wie "ED LK 3 Behältnisstrecke"), statt Text abzuschneiden.
+        # Art/LK-Bezeichnungen wie "Behältnisse LK 3"), statt Text abzuschneiden.
         self.filter_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.filter_combo.currentTextChanged.connect(self._filter_anwenden)
 
@@ -2708,7 +2710,7 @@ class ErgebnisTab(QWidget):
             return sortierschluessel_text(f"{t['nachname']}, {t['vorname']}")
         if spalte == 2:
             return sortierschluessel_text(t["rufname_hund"])
-        return sortierschluessel_text(leistungsklasse_label(t))
+        return pruefung_sortierschluessel(leistungsklasse_label(t))
 
     def _sortierschluessel_fuer_zeile(self, row: int, spalte: int):
         """Sortierschlüssel für Zeile `row` bezogen auf die VOR dem Sortieren gültige

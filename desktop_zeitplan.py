@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from db import (
+    zeitplan_bezeichnung,
     add_zeitplan_pause,
     add_zeitplan_pause_bei_allen,
     add_zeitplan_pruefungsblock,
@@ -375,7 +376,7 @@ class ZeitplanTab(QWidget):
                 )
             zeilen.append("")
         for eintrag in status_liste:
-            bezeichnung = f"{eintrag['art']} LK {eintrag['stufe']} – {eintrag['disziplin']}"
+            bezeichnung = zeitplan_bezeichnung(eintrag["art"], eintrag["stufe"], eintrag["disziplin"])
             if eintrag["eingeplant"]:
                 zeilen.append(
                     f'<span style="color:{ok};">{haken}{html.escape(bezeichnung)} ({eintrag["anzahl"]} Teilnehmer)</span>'
@@ -440,7 +441,7 @@ class ZeitplanTab(QWidget):
                 ]
                 hinweise = [h for h in hinweise if h]
                 # Symbol statt „▸ “/„⚠ “ vor dem Text (Marco 01.11.2026).
-                kopf = QListWidgetItem(f"{zeile['art']} LK {zeile['stufe']} – {zeile['disziplin']}  ({umfang})")
+                kopf = QListWidgetItem(f"{zeitplan_bezeichnung(zeile['art'], zeile['stufe'], zeile['disziplin'])}  ({umfang})")
                 kopf.setIcon(symbol("alert-triangle", "fehler") if hinweise else symbol("chevron-right", "TEXT_GEDAEMPFT"))
                 kopf.setData(Qt.UserRole, zeile["eintrag_id"])
                 schrift = kopf.font()

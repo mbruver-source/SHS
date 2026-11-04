@@ -398,7 +398,7 @@ def test_auswertung_zeigt_hund_zwischen_name_und_gesamtpunkte(qtbot, conn):
 
 @pytest.mark.parametrize("filter_wert, erwartete_lk, erwarteter_name", [
     ("Alle", None, "Ergebnisliste.pdf"),
-    ("ED LK 1 Flächensuche", "ED LK 1 Flächensuche", "Ergebnisliste_ED_LK_1_Flächensuche.pdf"),
+    ("Fläche LK 1", "Fläche LK 1", "Ergebnisliste_Fläche_LK_1.pdf"),
 ])
 def test_auswertung_druck_button_uebernimmt_lk_filter(
     qtbot, conn, monkeypatch, tmp_path, filter_wert, erwartete_lk, erwarteter_name
@@ -503,11 +503,11 @@ def test_offene_starts_markiert_eingeplante_und_fehlende_gruppen(qtbot, conn):
     qtbot.addWidget(tab)
 
     text = tab._offene_starts_label.text()
-    assert "ED LK 1 – Trümmerfeld" in text
-    assert "ED LK 2 – Flächensuche" in text
+    assert "Trümmer LK 1" in text
+    assert "Fläche LK 2" in text
     assert "noch offen" in text
     # Die bereits eingeplante Gruppe ist NICHT als "noch offen" markiert.
-    eingeplante_zeile = next(z for z in text.split("<br>") if "Trümmerfeld" in z)
+    eingeplante_zeile = next(z for z in text.split("<br>") if "Trümmer LK 1" in z)
     assert "noch offen" not in eingeplante_zeile
 
 
@@ -518,6 +518,21 @@ def test_offene_starts_ohne_teilnehmer_zeigt_hinweis(qtbot, conn):
 
 
 # --- Bezahlt-Markierung -------------------------------------------------------------
+
+
+def test_teilnehmerliste_ordnet_pruefungen_wie_das_formular(qtbot, conn):
+    """Nachtest 2 (N5): Filter und Spaltensortierung der Teilnehmerliste folgen der Reihenfolge
+    des Anmeldeformulars (DK, Trümmer, Behältnisse, Fläche) statt dem Alphabet."""
+    _teilnehmer_anlegen(conn, nachname="F", startnummer=1, disziplin="Flächensuche")
+    _teilnehmer_anlegen(conn, nachname="B", startnummer=2, disziplin="Behältnisstrecke", stufe=2)
+    _teilnehmer_anlegen(conn, nachname="D", startnummer=3, art="DK", disziplin=None)
+    _teilnehmer_anlegen(conn, nachname="T", startnummer=4, disziplin="Trümmerfeld")
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    eintraege = [tab.filter_combo.itemText(i) for i in range(tab.filter_combo.count())]
+    assert eintraege == ["Alle", "DK LK 1", "Trümmer LK 1", "Behältnisse LK 2", "Fläche LK 1"]
+    tab.tabelle.sortByColumn(4, Qt.AscendingOrder)
+    assert [tab.tabelle.item(r, 1).text() for r in range(4)] == ["D", "T", "B", "F"]
 
 
 def test_bezahlt_button_ist_erst_nach_auswahl_einer_zeile_aktiv(qtbot, conn):
@@ -994,7 +1009,7 @@ def test_auswertung_stechen_hinweis_sieger_und_rueckfrage(qtbot, conn, monkeypat
     platz_spalte = tab.tabelle.columnCount() - 1
     plaetze = {tab.tabelle.item(r, 2).text(): tab.tabelle.item(r, platz_spalte).text() for r in range(tab.tabelle.rowCount())}
     assert set(plaetze.values()) == {"1. von 2 (Stechen offen)"}
-    assert ("Stechen nötig in ED LK 1 Trümmerfeld: A Anna mit Bello (Nr. 1), B Ben mit Bello (Nr. 2) (95 Punkte)"
+    assert ("Stechen nötig in Trümmer LK 1: A Anna mit Bello (Nr. 1), B Ben mit Bello (Nr. 2) (95 Punkte)"
             in tab.ausstehend_label.text())
     assert tab.stechen_btn.isEnabled()
 
@@ -3738,10 +3753,10 @@ def test_teilnehmer_auswahl_pruefung_mit_angebot(qtbot):
     Prüfung …“."""
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot, angebotene={"DK1", "ED1-Trümmerfeld"})
     auswahl = dialog.pruefung_auswahl
-    assert [auswahl.itemText(i) for i in range(auswahl.count())] == ["DK-LK 1", "Trümmer LK 1", "andere Prüfung …"]
+    assert [auswahl.itemText(i) for i in range(auswahl.count())] == ["DK LK 1", "Trümmer LK 1", "andere Prüfung …"]
     form = dialog._form_rechts
     assert form.isRowVisible(auswahl) and not form.isRowVisible(dialog.art)
-    assert auswahl.currentText() == "DK-LK 1" and dialog._gewaehlte_pruefung() == "DK1"
+    assert auswahl.currentText() == "DK LK 1" and dialog._gewaehlte_pruefung() == "DK1"
 
     auswahl.setCurrentText("Trümmer LK 1")
     assert (dialog.art.currentText(), dialog.stufe.currentText(), dialog.disziplin.currentText()) == (
@@ -3758,7 +3773,7 @@ def test_teilnehmer_auswahl_pruefung_mit_angebot(qtbot):
     assert auswahl.currentText() == "andere Prüfung …" and dialog._gewaehlte_pruefung() == "DK2"
     assert "NICHT angeboten" in dialog.pruefung_hinweis.text()
     dialog.stufe.setCurrentText("1")  # wieder eine angebotene Prüfung
-    assert auswahl.currentText() == "DK-LK 1"
+    assert auswahl.currentText() == "DK LK 1"
 
 
 def test_teilnehmer_auswahl_pruefung_ohne_angebot_und_beim_bearbeiten(qtbot, conn):
@@ -4393,8 +4408,8 @@ def test_ergebnis_zeigt_hund_und_sortiert_danach(qtbot, conn):
     # Vor jeder Sortierung: Spalte 2 zeigt den jeweiligen Hundenamen, Spalte 3 die Art/LK.
     assert tab.tabelle.item(0, 2).text() == "Zeus"
     assert tab.tabelle.item(1, 2).text() == "Bello"
-    assert tab.tabelle.item(0, 3).text() == "ED LK 1 Flächensuche"
-    assert tab.tabelle.item(1, 3).text() == "ED LK 1 Flächensuche"
+    assert tab.tabelle.item(0, 3).text() == "Fläche LK 1"
+    assert tab.tabelle.item(1, 3).text() == "Fläche LK 1"
 
     tab.tabelle.horizontalHeader().sectionClicked.emit(2)  # Spalte 2 = Hund
 
@@ -4825,8 +4840,8 @@ def test_tausch_zwischen_pruefungen_fragt_mit_bereichen_nach(qtbot, conn, monkey
     tab._startnummer_tauschen()
     assert vorgaben == [QMessageBox.No]
     assert "liegen beide Nummern außerhalb" in fragen[-1]
-    assert "Alt, Max: ED LK 1 Trümmerfeld, Bereich 1–10" in fragen[-1]
-    assert "Berg, Max: ED LK 1 Flächensuche, Bereich 11–20" in fragen[-1]
+    assert "Alt, Max: Trümmer LK 1, Bereich 1–10" in fragen[-1]
+    assert "Berg, Max: Fläche LK 1, Bereich 11–20" in fragen[-1]
     assert "Für „Berg, Max“ sind schon Ergebnisse gespeichert" in fragen[-1]
     assert nummern()[a] == 1 and nummern()[b] == 11  # „Nein“ ändert nichts
 
@@ -5071,14 +5086,14 @@ def test_veranstaltungsdialog_datum_deutsch_anzeigen_und_iso_liefern(qtbot, monk
 
 
 def test_bewertungsbogen_auswahl_dialog_standardmaessig_alle_angehakt(qtbot):
-    dialog = BewertungsbogenAuswahlDialog(None, ["DK LK 1", "ED LK 2 Trümmerfeld"])
+    dialog = BewertungsbogenAuswahlDialog(None, ["DK LK 1", "Trümmer LK 2"])
     qtbot.addWidget(dialog)
     dialog.show()
 
-    assert dialog.ausgewaehlte_labels() == {"DK LK 1", "ED LK 2 Trümmerfeld"}
+    assert dialog.ausgewaehlte_labels() == {"DK LK 1", "Trümmer LK 2"}
 
     dialog.liste.item(0).setCheckState(Qt.Unchecked)
-    assert dialog.ausgewaehlte_labels() == {"ED LK 2 Trümmerfeld"}
+    assert dialog.ausgewaehlte_labels() == {"Trümmer LK 2"}
 
     # Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6: OK nur mit mindestens einem Haken.
     ok = dialog.buttons.button(QDialogButtonBox.Ok)
@@ -5685,7 +5700,7 @@ def test_aus_anderem_termin_importieren_weist_auf_nicht_angebotene_pruefung_hin(
     assert {t["nachname"] for t in list_teilnehmer(conn)} == {"Angeboten", "Fremd"}
     assert meldungen[0].startswith("2 Teilnehmer importiert.")
     assert "1 Teilnehmer in hier nicht angebotenen Prüfungen" in meldungen[0]
-    assert "Fremd, F – ED LK 1 Trümmerfeld" in meldungen[0] and "Angeboten" not in meldungen[0]
+    assert "Fremd, F – Trümmer LK 1" in meldungen[0] and "Angeboten" not in meldungen[0]
 
 
 def test_importmeldung_mit_ablehnungen_warnt_rat_und_liste_kopieren(qtbot, monkeypatch):
@@ -8737,28 +8752,28 @@ def test_startnummern_filter_art_lk_und_hinweis(qtbot, termin, monkeypatch):
     tab = TeilnehmerTab(conn, pfad=pfad)
     qtbot.addWidget(tab)
     tab.show()
-    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: ED LK 1 Flächensuche (1)"
+    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: Fläche LK 1 (1)"
 
     infos = []
     monkeypatch.setattr("app.QMessageBox.information", lambda parent, titel, text: infos.append(text))
     fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
 
-    tab.filter_combo.setCurrentText("ED LK 1 Trümmerfeld")
+    tab.filter_combo.setCurrentText("Trümmer LK 1")
     qtbot.mouseClick(tab.zuruecksetzen_btn, Qt.MouseButton.LeftButton)
-    assert "„ED LK 1 Trümmerfeld“ (1)" in fragen[-1]
+    assert "„Trümmer LK 1“ (1)" in fragen[-1]
     nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
     assert nummern == {"Trümmer": None, "Fläche": 11, "Neu": None}
-    assert tab.status_label.text() == "1 Startnummer(n) in „ED LK 1 Trümmerfeld“ zurückgesetzt."
+    assert tab.status_label.text() == "1 Startnummer(n) in „Trümmer LK 1“ zurückgesetzt."
     # Hinweis unabhängig vom Filter, Reihenfolge wie die Prüfungsliste
     assert tab.startnummern_hinweis.text() == (
-        "Ohne Startnummer: ED LK 1 Trümmerfeld (1), ED LK 1 Flächensuche (1)"
+        "Ohne Startnummer: Trümmer LK 1 (1), Fläche LK 1 (1)"
     )
 
     qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
-    assert infos[-1] == "1 Startnummer(n) in „ED LK 1 Trümmerfeld“ vergeben."
+    assert infos[-1] == "1 Startnummer(n) in „Trümmer LK 1“ vergeben."
     nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(conn)}
     assert nummern == {"Trümmer": 1, "Fläche": 11, "Neu": None}
-    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: ED LK 1 Flächensuche (1)"
+    assert tab.startnummern_hinweis.text() == "Ohne Startnummer: Fläche LK 1 (1)"
 
     tab.filter_combo.setCurrentText("Alle")
     qtbot.mouseClick(tab.vergeben_btn, Qt.MouseButton.LeftButton)
@@ -8780,7 +8795,7 @@ def test_vergabe_nach_import_ignoriert_filter(qtbot, termin, monkeypatch):
     _teilnehmer_anlegen(conn, nachname="Trümmer", disziplin="Trümmerfeld", startnummer=1)
     tab = TeilnehmerTab(conn, pfad=pfad)
     qtbot.addWidget(tab)
-    tab.filter_combo.setCurrentText("ED LK 1 Trümmerfeld")
+    tab.filter_combo.setCurrentText("Trümmer LK 1")
     assert tab._gefilterte_pruefung()[0] == "ED1-Trümmerfeld"  # Filter wirklich gesetzt
     _teilnehmer_anlegen(conn, nachname="Neu-T", disziplin="Trümmerfeld", startnummer=None)
     _teilnehmer_anlegen(conn, nachname="Neu-F", disziplin="Flächensuche", startnummer=None)
@@ -8803,8 +8818,8 @@ def test_gefilterte_pruefung_ohne_passende_pruefung_bricht_ab(qtbot, termin, mon
     tab = TeilnehmerTab(conn, pfad=pfad)
     qtbot.addWidget(tab)
     assert tab._gefilterte_pruefung() == (None, None)
-    tab.filter_combo.setCurrentText("ED LK 1 Flächensuche")
-    assert tab._gefilterte_pruefung() == ("ED1-Flächensuche", "ED LK 1 Flächensuche")
+    tab.filter_combo.setCurrentText("Fläche LK 1")
+    assert tab._gefilterte_pruefung() == ("ED1-Flächensuche", "Fläche LK 1")
 
     tab.filter_combo.addItem("Gibt es nicht")
     tab.filter_combo.setCurrentText("Gibt es nicht")
@@ -8982,7 +8997,7 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
     spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
     liste = next(lw for sp in spalten if sp is not None for lw in sp.findChildren(QListWidget))
     texte = [liste.item(i).text() for i in range(liste.count())]
-    assert texte[0].startswith("ED LK 1 – Flächensuche  (2 Teilnehmer")
+    assert texte[0].startswith("Fläche LK 1  (2 Teilnehmer")
     assert liste.item(0).icon().cacheKey() == symbol("chevron-right", "TEXT_GEDAEMPFT").cacheKey()
     assert liste.item(0).font().bold()
     assert texte[1].lstrip().startswith("09:00") and "Nr. 1" in texte[1]
@@ -10574,7 +10589,7 @@ def test_zeitplan_pruefungsblock_hinzufuegen_mit_echtem_dialog(qtbot, conn, monk
     liste = _zeitplan_liste(_zeitplan_spalte(tab, "R1"))
     texte = [liste.item(i).text() for i in range(liste.count())]
     assert len(texte) == 2
-    assert texte[0].startswith("ED LK 2 – Flächensuche  (1 Teilnehmer")
+    assert texte[0].startswith("Fläche LK 2  (1 Teilnehmer")
     assert "Blockmann" in texte[1]
 
     monkeypatch.setattr(PruefungsblockDialog, "exec", lambda _dialog: QDialog.Rejected)

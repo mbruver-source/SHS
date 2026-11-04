@@ -9529,3 +9529,34 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   angepasst: Mittagspausen-Test (neuer Wortlaut). Nach der Verifikation dazu
   `test_demo_ruht_waehrend_der_beenden_rueckfrage`. Gegenprobe: ohne die Änderung scheitern die
   neuen und angepassten Tests. 723 Unittests, alle GUI-Tests grün.
+
+### ux_test_2026_11 B18 – Prüfungsnamen überall einheitlich (Nachtest 2 N5; 04.11.2026)
+
+- **N5 (ersetzt R-B8):** Eine Schreibweise für jede Prüfung, wie auf dem Anmeldeformular: „DK LK 1“,
+  „Trümmer LK 2“, „Behältnisse LK 3“, „Fläche LK 1“ – in Teilnehmerliste, Filtern,
+  Ergebniserfassung, Auswertung, Übersicht, Zeitplan, Meldungen, Web-Erfassung und allen PDFs
+  (Ergebnislisten, Etiketten, Statistik-Schlüssel, Zeitplan). Vorher „ED LK 2 Trümmerfeld“ bzw.
+  „DK-LK 1“ auf dem Formular.
+  - Zentral: `db.pruefung_bezeichnung` (aus `ALLE_PRUEFUNGEN.bezeichnung`, dort jetzt „DK LK n“
+    statt „DK-LK n“), `leistungsklasse_label` ruft sie auf. Zeitplan-Blöcke über
+    `db.zeitplan_bezeichnung` („Fläche LK 1“, beim Dreikampf „DK LK 1 – Trümmerfeld“).
+  - Sortiert wird in der Reihenfolge des Formulars (DK, Trümmer, Behältnisse, Fläche, je LK 1–3,
+    `db.pruefung_sortierschluessel`) statt alphabetisch – sonst stünde „Behältnisse“ vor „DK“.
+  - Etiketten nutzen dieselbe Bezeichnung (die eigene Kurzform „ED LK 3 Behältnis“ entfällt).
+  - Bewusst unverändert: der Bewertungsbogen (Vorlage des Verbands, „LK 1“ / „ED - LK 1“), die
+    Spaltenköpfe der Statistik-PDF (Vorlage) und die Übersicht je Leistungsklasse („ED LK 1“ fasst
+    alle Einzeldisziplinen einer LK zusammen, keine einzelne Prüfung). Gespeichert wird keine
+    Bezeichnung (Stechen, Angebote und Bereiche laufen über Kürzel bzw. IDs), alte Termine
+    brauchen deshalb keine Umstellung.
+  - Handbuch nachgezogen; die Bildschirmfotos zeigen noch die alten Namen und werden vor dem
+    nächsten Build ohnehin neu aufgenommen.
+- **Tests:** rund 45 erwartete Texte in den Tests auf die neuen Namen umgestellt; neu
+  `test_pruefungsbezeichnung_wie_im_anmeldeformular`, `test_etikett_pruefungsfeld_bleibt_einzeilig`,
+  `test_teilnehmerliste_ordnet_pruefungen_wie_das_formular`, Formular-Reihenfolge in
+  `test_alle_leistungsklassen_sortiert_und_ohne_duplikate`. Gegenprobe: ohne die Änderung in
+  `db.py` scheitern die neuen und umgestellten Tests. 725 Unittests, alle GUI-Tests grün.
+- **Verifikation:** Die Formular-Reihenfolge gilt jetzt auch in der Ergebnistabelle der
+  Auswertung, den Etiketten, den „von x“-Hinweisen, beim Stechen (`shs_core.berechne_rangliste`
+  und `stechen_gruppen` mit optionalem `sortierschluessel`) und beim Spaltenklick in der
+  Teilnehmerliste (`desktop_gemeinsam._PruefungSortierbaresItem`); Rückfallname im Import über
+  `pruefung_bezeichnung`; veraltete Beispiele in Kommentaren angepasst. R-B8 als erledigt vermerkt.
