@@ -141,6 +141,21 @@ def _ja_nein(parent, titel: str, text: str, *, vorgabe_ja: bool = False) -> bool
     return QMessageBox.question(parent, titel, text, QMessageBox.Yes | QMessageBox.No, vorgabe) == QMessageBox.Yes
 
 
+def fehlende_formularangaben(verband: str | None, meldestelle: str | None) -> list[str]:
+    """Leere Angaben, die auf dem Anmeldeformular fehlen würden („Verband“, „Meldestelle“) -
+    eine Regel für die Rückfrage beim Termin-Anlegen und die Warnung beim Erzeugen des
+    Formulars (UX-Test 2026-11, T7; Abschluss-QS B11)."""
+    return [name for name, wert in (("Verband", verband), ("Meldestelle", meldestelle))
+            if not (wert or "").strip()]
+
+
+def fehlende_formularangaben_satz(fehlend: list[str]) -> str:
+    """„Verband ist leer und fehlt dann auf dem Anmeldeformular“ (ohne Satzende)."""
+    eins = len(fehlend) == 1
+    return (f"{' und '.join(fehlend)} {'ist' if eins else 'sind'} leer und "
+            f"{'fehlt' if eins else 'fehlen'} dann auf dem Anmeldeformular")
+
+
 @contextlib.contextmanager
 def _wartecursor():
     """Wartecursor für längere Arbeiten (z. B. Exporte, Sicherung und Wiederherstellen,

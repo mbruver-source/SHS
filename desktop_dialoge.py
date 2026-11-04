@@ -73,6 +73,8 @@ from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _fehler_anzeigen,
     _ja_nein,
+    fehlende_formularangaben,
+    fehlende_formularangaben_satz,
     _klartext_fehler,
     _gegenstand_zeile,
     _GEGENSTAND_ZUORDNUNG_FREI,
@@ -2149,19 +2151,17 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
                 self._bereich_fehler_feld.setFocus()
             return
         # UX-Test 02.10.2026, K6: Beim Anlegen darauf hinweisen, dass leere Angaben auf dem
-        # Anmeldeformular fehlen - Speichern bleibt trotzdem möglich.
-        fehlend = [name for name, leer in (("Verband", not self.verband.text().strip()),
-                                           ("Meldestelle", self.meldestelle_text() is None)) if leer]
+        # Anmeldeformular fehlen - Speichern bleibt trotzdem möglich. UX-Test 2026-11, T7 (Marco
+        # 04.11.2026): Vorgabe „Nein“ - wer Enter drückt, trägt die Angaben nach, statt ein
+        # Formular ohne Meldestelle zu bekommen.
+        fehlend = fehlende_formularangaben(self.verband.text(), self.meldestelle_text())
         if not self._bearbeiten and fehlend:
             if not _ja_nein(
                 self, "Angaben für das Anmeldeformular",
-                f"{' und '.join(fehlend)} {'ist' if len(fehlend) == 1 else 'sind'} leer und "
-                f"{'fehlt' if len(fehlend) == 1 else 'fehlen'} dann auf dem Anmeldeformular für die Teilnehmer.\n\n"
+                fehlende_formularangaben_satz(fehlend) + " für die Teilnehmer.\n\n"
                 "Du kannst das auch später im Reiter „Verwaltung“ über „Veranstaltungsdaten "
                 "bearbeiten…“ nachtragen.\n\n"
                 "Trotzdem jetzt speichern?",
-                # UX-Test 2026-11, T7 (Marco 04.11.2026): Vorgabe „Nein“ - wer Enter drückt,
-                # trägt die Angaben nach, statt ein Formular ohne Meldestelle zu bekommen.
             ):
                 (self.verband if "Verband" in fehlend else self.meldestelle).setFocus()
                 return

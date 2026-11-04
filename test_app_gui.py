@@ -771,6 +771,7 @@ def test_sicherung_dateiname_nennt_umfang_und_tag(qtbot, conn):
     tab = DatensicherungTab(conn=conn)
     qtbot.addWidget(tab)
     assert tab._dateiname_vorschlag() == f"SHS-Sicherung_{heute}_alle-Termine.zip"
+    assert "Köppern" not in tab._dateiname_vorschlag()  # Verein des Termins nicht mehr im Namen
     texte = " ".join(label.text() for label in tab.findChildren(QLabel))
     assert "auf Wunsch mit Passwort" in texte
     assert "Passwort getrennt von der Sicherung aufbewahren" not in texte
@@ -8670,7 +8671,8 @@ def test_verteilen_bestaetigt_und_plant_mittagspause_ein(qtbot, termin, monkeypa
     meldungen = meldungen_sammeln(monkeypatch, "information")
     tab._automatisch_verteilen()
     assert meldungen[-1].startswith("Alle 1 Prüfung(en) mit 12 Start(s) sind eingeplant, und es gibt keine Überschneidungen.")
-    assert "Mittagspause (30 Min.) ab 10:00 Uhr bei 1 von 1 Richter(n)" in meldungen[-1]
+    # Um 10:00 läuft noch der Block - die Meldung nennt die tatsächliche Zeit (Abschluss-QS B11, K2).
+    assert "Die Pause beginnt nicht überall um 10:00:\n\nRichter 1: 11:00 Uhr" in meldungen[-1]
     assert len(dialoge) == 1
     pausen = [b for spur in berechne_zeitplan_bloecke(conn) for b in spur["bloecke"] if b["typ"] == "pause"]
     assert [(p["bezeichnung"], p["dauer_minuten"]) for p in pausen] == [(MITTAGSPAUSE, 30)]
@@ -8718,14 +8720,81 @@ def test_verteilen_meldet_offene_starts(qtbot, termin, monkeypatch):
     assert warnungen == ["1 Prüfung(en) noch nicht eingeplant (siehe „Offene Starts“)."]
 
     # Überschneidungen werden genannt; eine Mittagspause nach Planende wird nicht eingefügt.
-    monkeypatch.setattr(desktop_zeitplan, "zeitplan_gruppen_status", lambda c: [])
+    monkeypatch.setattr(desktop_zeitplan, "zeitplan_gruppen_status",
+                        lambda c: [{"eingeplant": True, "art": "ED", "stufe": 1, "disziplin": "Flächensuche", "anzahl": 1}])
     monkeypatch.setattr(tab, "aktualisieren", lambda: None)  # Seitenleiste braucht volle Konflikt-Daten
     monkeypatch.setattr(desktop_zeitplan, "zeitplan_ueberschneidungen",
                         lambda c: [{"teilnehmer": {"id": 1}}, {"teilnehmer": {"id": 1}}])
     verteilen_dialog_bestaetigen(monkeypatch, pause=("18:00", 30))
     tab._automatisch_verteilen()
     assert warnungen[-1].startswith("Überschneidungen bei 1 Team(s)")
-    assert warnungen[-1].endswith("Keine Mittagspause eingeplant – ab 18:00 Uhr steht keine Prüfung mehr im Plan.")
+    assert warnungen[-1].endswith("Keine Pause eingefügt – bei keinem Richter steht ab 18:00 Uhr noch eine Prüfung im Plan.")
+
+
+def test_verteilen_nennt_tatsaechliche_pausenzeit_und_braucht_teilnehmer(qtbot, termin, monkeypatch):
+    """Abschluss-QS B11, K2: Läuft um die Wunschzeit noch ein Block, nennt die Bestätigung die
+    tatsächliche Startzeit der Mittagspause. K3: Ohne Teilnehmer gibt es nichts zu verteilen."""
+    from db import berechne_zeitplan_bloecke
+
+    conn, pfad = termin
+    add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    dialoge = verteilen_dialog_bestaetigen(monkeypatch, pause=("09:10", 30))
+    meldungen = meldungen_sammeln(monkeypatch, "information")
+    tab._automatisch_verteilen()
+    assert meldungen == ["Noch keine Teilnehmer – nichts zu verteilen."] and dialoge == []
+
+    for nr in range(1, 7):
+        _teilnehmer_anlegen(conn, nachname=f"T{nr}", startnummer=nr)
+    tab._automatisch_verteilen()
+    beginn = next(b["start"].strftime("%H:%M") for spur in berechne_zeitplan_bloecke(conn)
+                  for b in spur["bloecke"] if b["typ"] == "pause")
+    assert beginn > "09:10"
+    assert "Die Pause beginnt nicht überall um 09:10" in meldungen[-1]
+    assert f"{beginn} Uhr" in meldungen[-1]
+
+    # Beginnt die Pause überall zur Wunschzeit, steht die kurze Erfolgsmeldung da.
+    monkeypatch.setattr("desktop_zeitplan.add_zeitplan_pause_bei_allen",
+                        lambda *a, **k: [("Richter 1", "09:10")])
+    tab._automatisch_verteilen()
+    assert meldungen[-1].endswith("\n\nMittagspause (30 Min.) um 09:10 Uhr bei 1 Richter(n) eingeplant.")
+
+
+def test_pause_bei_allen_hinweis_und_titel(qtbot, termin, monkeypatch):
+    """Abschluss-QS B11: der gemeinsame Hinweis für beide Pausen-Wege; der Titel der Meldung
+    bei „Pause bei allen Richtern“ bleibt „Pause eingefügt“ bzw. „Keine Pause eingefügt“."""
+    import desktop_zeitplan
+    from desktop_zeitplan import _pause_bei_allen_hinweis
+
+    assert _pause_bei_allen_hinweis([], "12:00") == (0, "")
+    assert _pause_bei_allen_hinweis([("A", "12:00"), ("B", "12:00")], "12:00") == (2, "")
+    anzahl, text = _pause_bei_allen_hinweis([("A", "12:30"), ("", None)], "12:00")
+    assert anzahl == 1 and "A: 12:30 Uhr" in text and "Richter: keine Pause – keine Prüfung mehr ab 12:00 Uhr" in text
+    assert _pause_bei_allen_hinweis([("A", None)], "12:00")[1].startswith("Keine Pause eingefügt")
+
+    conn, pfad = termin
+    richter_id = add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    titel = meldungen_sammeln(monkeypatch, "information", merke="titel")
+
+    class _Dialog:
+        def __init__(self, *a, **k):
+            self.fuer_alle = type("C", (), {"isChecked": lambda s: True})()
+            self.uhrzeit = type("T", (), {"text": lambda s: "12:00"})()
+
+        def werte(self):
+            return {"dauer_minuten": 30}
+
+    monkeypatch.setattr(desktop_zeitplan, "PauseDialog", _Dialog)
+    monkeypatch.setattr(desktop_zeitplan, "_ausfuehren", lambda d: QDialog.Accepted)
+    for antwort, erwartet in (([("A", None)], "Keine Pause eingefügt"), ([("A", "12:30")], "Pause eingefügt")):
+        monkeypatch.setattr(desktop_zeitplan, "add_zeitplan_pause_bei_allen", lambda *a, _r=antwort, **k: _r)
+        tab._pause_hinzufuegen(richter_id)
+        assert titel[-1] == erwartet
 
 
 def test_formular_import_ki_weg_eingeklappt_und_vorlage(qtbot, conn, monkeypatch, tmp_path, gespeichert_meldungen):
@@ -9125,6 +9194,29 @@ def test_demo_schritt_zurueck_spielt_den_vorigen_schritt_neu_ab(qtbot, termin, d
     # Danach läuft die Demo normal bis zum Ende (inkl. Speichern und PDF).
     _demo_bis(tour, None)
     assert tour.ist_beendet and fenster.conn is conn and tour._stand == {}
+
+
+def test_demo_schritt_zurueck_nach_ungespeicherten_ergebnissen(qtbot, termin, demo_umgebung):
+    """Abschluss-QS B11, K1: Zwischen „Ergebnisse eintragen“ und „Speichern“ stehen die Punkte
+    nur in der Tabelle - „Schritt zurück“ aus Schritt 10 und 11 geht deshalb zu Schritt 8, und
+    die Demo findet danach wie gewohnt das Stechen und läuft bis zum Ende."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    panel = tour._panel
+
+    for von in ("10.", "11."):
+        _demo_bis(tour, von)
+        panel.zurueck_btn.click()
+        assert tour._schritte[tour._index].titel.startswith("8.")
+    _demo_bis(tour, "12.")
+    panel.zurueck_btn.click()  # Ziel nach dem Speichern: der vorige Schritt
+    assert tour._schritte[tour._index].titel.startswith("11.")
+    _demo_bis(tour, None)
+    assert tour.ist_beendet
 
 
 def test_demopruefung_endet_beim_schliessen_des_fensters(qtbot, termin, demo_umgebung):

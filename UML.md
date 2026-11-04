@@ -656,7 +656,7 @@ stateDiagram-v2
     }
     Schritt --> Schritt : nächster Schritt
     Schritt --> Zurueck : „Schritt zurück“ (ab Schritt 4)
-    Zurueck : Stand vor dem vorigen Schritt<br/>wiederherstellen, Reiter neu aufbauen
+    Zurueck : Stand vor dem vorigen Schritt<br/>wiederherstellen, Reiter neu aufbauen<br/>(aus 10/11: zurück bis Schritt 8)
     Zurueck --> Schritt : vorigen Schritt neu abspielen
     note right of Schritt
         Willkommen, dann 15 Schritte:

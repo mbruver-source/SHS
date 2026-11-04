@@ -4,8 +4,9 @@ Bezahlt, Zeitplan, Ergebnisse, Auswertung, Stechen, Ergebnisliste - und erklärt
 kleinen Fenster je Schritt, was gerade passiert und warum. Der Anwender klickt nur „Weiter“
 - oder lässt die Demo laufen: Ist ein Schritt fertig, geht es nach einer Lesezeit je nach
 Textlänge (mindestens 10 s, höchstens 40 s) von allein weiter (Marcos Wunsch 05.10.2026,
-abschaltbar über „Automatisch weiter“). „Vorheriger Text“ zeigt frühere Erklärungen noch
-einmal; die Demo selbst läuft nur vorwärts (UX-Test 03.11.2026, X6).
+abschaltbar über „Automatisch weiter“). In den Schritten 1 bis 3 zeigt „Vorheriger Text“
+frühere Erklärungen noch einmal (UX-Test 03.11.2026, X6); ab Schritt 4 nimmt „Schritt zurück“
+den vorigen Schritt zurück und spielt ihn neu ab (UX-Test 2026-11, T12).
 
 Sicherheit der echten Daten: Die Demo arbeitet ausschließlich in einem eigenen
 Temp-Ordner (tempfile.mkdtemp, nie im Termine-Ordner) und löscht ihn am Ende wieder. Der
@@ -363,7 +364,10 @@ class DemoPanel(QWidget):
         self._echtes_zurueck = echt
         if echt:
             self.zurueck_btn.setText("Schritt zurück")
-            self.zurueck_btn.setToolTip("Nimmt den vorigen Schritt zurück und spielt ihn noch einmal ab.")
+            self.zurueck_btn.setToolTip(
+                "Nimmt den vorigen Schritt zurück und spielt ihn noch einmal ab (aus Schritt 10 "
+                "und 11 zurück bis „Ergebnisse eintragen“)."
+            )
         else:
             self.zurueck_btn.setText("Vorheriger Text")
             self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – das automatische "
@@ -576,6 +580,9 @@ class DemoTour(QObject):
     LESEZEIT_MAX_S = 40
     #: Nach einem geschlossenen sperrenden Fenster bleiben mindestens so viele Sekunden.
     AUTO_WEITER_NACH_MODAL_S = 3
+    #: Index des ersten Schritts, der im Demo-Termin spielt (nach „Termin gespeichert“) - ab
+    #: hier gibt es einen Stand, den „Schritt zurück“ wiederherstellen kann (T12).
+    ERSTER_SCHRITT_IM_TERMIN = 3
     TASTE_MS = (55, 140)  # je Zeichen, leicht schwankend wie beim echten Tippen
 
     def __init__(self, fenster=None, fenster_fabrik=None):
@@ -766,10 +773,6 @@ class DemoTour(QObject):
                 return
         self._naechste_aktion()
 
-    #: Index des ersten Schritts, der im Demo-Termin spielt (nach „Termin gespeichert“) - ab
-    #: hier gibt es einen Stand, den „Schritt zurück“ wiederherstellen kann (T12).
-    ERSTER_SCHRITT_IM_TERMIN = 3
-
     def _stand_merken(self, index: int) -> None:
         self._staende_verwerfen(index)
         self.conn.commit()
@@ -784,7 +787,7 @@ class DemoTour(QObject):
     def schritt_zurueck(self) -> None:
         """UX-Test 2026-11, T12: den laufenden Schritt abbrechen, den Stand vor dem vorigen
         Schritt wiederherstellen und diesen noch einmal abspielen."""
-        ziel = self._index - 1
+        ziel = self._zurueck_ziel()
         if self.ist_beendet or ziel < self.ERSTER_SCHRITT_IM_TERMIN or ziel not in self._stand:
             return
         self._timer.stop()
@@ -807,6 +810,20 @@ class DemoTour(QObject):
         self._schritt_zeigen(ziel)
         # Sonst nähme Enter (Knopf mit Fokus) gleich den nächsten Schritt zurück (Verifikation B9).
         self._panel.weiter_btn.setFocus()
+
+    def _zurueck_ziel(self) -> int:
+        """Schritt, zu dem „Schritt zurück“ springt: der vorige - außer zwischen „Ergebnisse
+        eintragen“ und „Speichern“. Dort stehen die Punkte nur ungespeichert in der Tabelle, der
+        Stand vor dem vorigen Schritt enthielte sie nicht, und die Demo fände später kein
+        Stechen. Dann geht es zurück zu „Ergebnisse eintragen“ (Abschluss-QS B11, K1)."""
+        ziel = self._index - 1
+        aktionen = [schritt.aktionen for schritt in self._schritte]
+        try:
+            ergebnisse = aktionen.index(self._aktionen_ergebnisse)
+            speichern = aktionen.index(self._aktionen_speichern)
+        except ValueError:
+            return ziel
+        return ergebnisse if ergebnisse < ziel <= speichern else ziel
 
     def _naechste_aktion(self) -> None:
         while self._offen and not self.ist_beendet:

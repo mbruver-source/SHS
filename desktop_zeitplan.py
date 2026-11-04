@@ -73,8 +73,31 @@ from desktop_gemeinsam import (
 )
 
 #: Bezeichnung der Pause aus „Automatisch verteilen…“ - daran erkennt ein erneutes Verteilen
-#: die bisherige Mittagspause wieder (UX-Test 2026-11, T1).
+#: die bisherige Mittagspause wieder (UX-Test 2026-11, T1). Eine von Hand ebenso benannte
+#: Pause gilt dabei bewusst auch als Mittagspause (Abschluss-QS B11).
 MITTAGSPAUSE = "Mittagspause"
+
+
+def _pause_bei_allen_hinweis(eingefuegt: list[tuple[str, str | None]], wunsch: str) -> tuple[int, str]:
+    """Gemeinsame Meldung für „Pause bei allen Richtern“ und die Mittagspause aus
+    „Automatisch verteilen…“ (Abschluss-QS B11, K2): (Zahl der Richter mit Pause, Hinweis).
+    Der Hinweis ist leer, wenn die Pause überall zur Wunschzeit beginnt."""
+    anzahl = sum(1 for _name, zeit in eingefuegt if zeit)
+    if eingefuegt and anzahl == 0:
+        # Verifikation A4, Befund 4: der häufigste Fall bei kleinen Prüfungen.
+        return 0, f"Keine Pause eingefügt – bei keinem Richter steht ab {wunsch} Uhr noch eine Prüfung im Plan."
+    if any(zeit != wunsch for _name, zeit in eingefuegt):
+        # UX-Nachtest 03.10.2026, N3: "um 12:00 eingefügt" stimmte nicht, wenn ein Block noch
+        # läuft - tatsächliche Zeiten nennen. UX-Test 03.11.2026, X1: Wer vorher fertig ist,
+        # bekommt keine Pause - das steht ebenfalls da.
+        zeilen = [
+            f"{name or 'Richter'}: {zeit} Uhr" if zeit else
+            f"{name or 'Richter'}: keine Pause – keine Prüfung mehr ab {wunsch} Uhr"
+            for name, zeit in eingefuegt
+        ]
+        return anzahl, ("Die Pause beginnt nicht überall um " + wunsch + ":\n\n" + "\n".join(zeilen)
+                        + "\n\nEin laufender Prüfungsblock wird nicht geteilt.")
+    return anzahl, ""
 
 
 def _klartext_tooltip(text: str) -> str:
@@ -621,6 +644,10 @@ class ZeitplanTab(QWidget):
                 "Bitte zuerst mindestens einen Richter anlegen.",
             )
             return
+        if not zeitplan_gruppen_status(self.conn):
+            # Abschluss-QS B11, K3: sonst hieße es „Alle 0 Prüfung(en) … eingeplant“.
+            QMessageBox.information(self, "Keine Teilnehmer", "Noch keine Teilnehmer – nichts zu verteilen.")
+            return
         # UX-Test 02.10.2026, U9: nur warnen, wenn es schon einen Plan gibt, der verloren ginge.
         # UX-Test 2026-11, T1: im Dialog mit der optionalen Mittagspause statt einer Rückfrage.
         ersetzt_plan = any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter)
@@ -638,10 +665,11 @@ class ZeitplanTab(QWidget):
                 _db_fehler_anzeigen(self, exc)
                 self.aktualisieren()
                 return
-            anzahl = sum(1 for _name, zeit in eingefuegt if zeit)
-            pause_text = (f"\n\nMittagspause ({pause[1]} Min.) ab {pause[0]} Uhr bei {anzahl} von "
-                          f"{len(eingefuegt)} Richter(n) eingeplant." if anzahl else
-                          f"\n\nKeine Mittagspause eingeplant – ab {pause[0]} Uhr steht keine Prüfung mehr im Plan.")
+            anzahl, hinweis = _pause_bei_allen_hinweis(eingefuegt, pause[0])
+            pause_text = "\n\n" + (hinweis or f"Mittagspause ({pause[1]} Min.) um {pause[0]} Uhr bei "
+                                             f"{anzahl} Richter(n) eingeplant.")
+            # Nach dem Einfügen der Pause neu aufbauen (verteilen_ohne_rueckfrage baute den Plan
+            # ohne sie auf); den Statustext setzt danach _verteilung_bestaetigen.
             self.aktualisieren()
         self._verteilung_bestaetigen(pause_text)
 
@@ -713,27 +741,10 @@ class ZeitplanTab(QWidget):
                 # Teil 4 Nr. 6: „9:20“ wie „09:20“ (die Prüfung im Dialog lässt beides zu).
                 wunsch = datetime.datetime.strptime(dialog.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
                 eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte())
-                abweichend = [(name, zeit) for name, zeit in eingefuegt if zeit != wunsch]
-                anzahl = sum(1 for _name, zeit in eingefuegt if zeit)
-                if eingefuegt and anzahl == 0:
-                    # Verifikation A4, Befund 4: der häufigste Fall bei kleinen Prüfungen.
+                anzahl, hinweis = _pause_bei_allen_hinweis(eingefuegt, wunsch)
+                if hinweis:
                     QMessageBox.information(
-                        self, "Keine Pause eingefügt",
-                        f"Keine Pause eingefügt – bei keinem Richter steht ab {wunsch} Uhr noch eine Prüfung im Plan.",
-                    )
-                elif abweichend:
-                    # UX-Nachtest 03.10.2026, N3: "um 12:00 eingefügt" stimmte nicht, wenn ein
-                    # Block noch läuft - tatsächliche Zeiten nennen. UX-Test 03.11.2026, X1:
-                    # Wer vorher fertig ist, bekommt keine Pause - das steht ebenfalls da.
-                    zeilen = [
-                        f"{name or 'Richter'}: {zeit} Uhr" if zeit else
-                        f"{name or 'Richter'}: keine Pause – keine Prüfung mehr ab {wunsch} Uhr"
-                        for name, zeit in eingefuegt
-                    ]
-                    QMessageBox.information(
-                        self, "Pause eingefügt",
-                        "Die Pause beginnt nicht überall um " + wunsch + ":\n\n" + "\n".join(zeilen)
-                        + "\n\nEin laufender Prüfungsblock wird nicht geteilt.",
+                        self, "Pause eingefügt" if anzahl else "Keine Pause eingefügt", hinweis,
                     )
                 self.status_label.setText(f"Pause bei {anzahl} Richter(n) eingefügt.")
             else:

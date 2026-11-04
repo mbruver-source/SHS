@@ -9364,3 +9364,29 @@ QS mit drei Rollen über `git diff aa84240..HEAD` (nacheinander, je ein Subagent
   `_dk` (Auswahl „Prüfung“), `handbuch_zeitplan`/`zeitplan`, `handbuch_datensicherung` (Text),
   `handbuch_formular_import` („Letzter Import“), `handbuch_demo`, `handbuch_start`. Danach
   `docs/HANDBUCH.pdf` und `docs/INSTALLATION_KURZ.pdf` neu erzeugen.
+
+### ux_test_2026_11 B13 – Q1–Q4 aus der Abschluss-QS (04.11.2026, Marcos Go)
+
+- **Q1 (K1):** Demo – „Schritt zurück“ aus Schritt 10 und 11 geht zurück zu Schritt 8
+  („Ergebnisse eintragen“), weil die Punkte erst in Schritt 10 gespeichert werden; vorher fehlten
+  sie danach, und die Demo fand kein Stechen (`DemoTour._zurueck_ziel`). Tooltip, Handbuch,
+  `Architektur.md` und `UML.md` nachgezogen.
+- **Q2 (K2):** Mittagspause aus „Automatisch verteilen…“ nennt die tatsächlichen Zeiten je Richter,
+  wenn um die Wunschzeit noch ein Block läuft. Gemeinsamer Helfer `_pause_bei_allen_hinweis` für
+  diesen Weg und „Pause bei allen Richtern“ (Texte und Titel dort unverändert).
+- **Q3 (K3):** „Automatisch verteilen…“ ohne Teilnehmer: „Noch keine Teilnehmer – nichts zu verteilen.“
+- **Q4:** Modul-Docstring der Demo, `ERSTER_SCHRITT_IM_TERMIN` bei den Klassenkonstanten,
+  `fehlende_formularangaben`/`_satz` in `desktop_gemeinsam.py` für Termin-Dialog und
+  Formular-Export (Texte gleich), Kommentar aus dem `_ja_nein`-Aufruf gezogen, Kommentar zu
+  `MITTAGSPAUSE` (von Hand so benannte Pause gilt bewusst mit), Sicherungsname-Test prüft „Verein
+  nicht im Namen“. Das zweite `aktualisieren()` nach dem Einfügen der Mittagspause bleibt (nötig).
+- **Tests:** neu `test_demo_schritt_zurueck_nach_ungespeicherten_ergebnissen`,
+  `test_verteilen_nennt_tatsaechliche_pausenzeit_und_braucht_teilnehmer`,
+  `test_pause_bei_allen_hinweis_und_titel`; zwei bestehende Zeitplan-Tests an das richtige
+  Verhalten angepasst (einer hatte die falsche Wunschzeit-Meldung erwartet). Gegenprobe: ohne die
+  Änderung scheitern die vier betroffenen Tests. 721 Unittests, 539 GUI-Tests grün (vor den
+  Nachträgen der Verifikation; danach die betroffenen 52 gezielt grün).
+- **Verifikation:** kein Verhaltensfehler; Nachträge (Doku, Tooltip, Tests für Erfolgsmeldung und
+  Titel) eingearbeitet.
+- **Nachtest (B12):** Heinz (E-A2) vor dieser Änderung fertig, Bericht
+  `UX-Test-2026-11/personas/E-A2.md` (gesamt 1– statt 2); die übrigen Personas testen den Stand mit B13.

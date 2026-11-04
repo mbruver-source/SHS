@@ -58,6 +58,8 @@ from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _export_dateiname,
     _ja_nein,
+    fehlende_formularangaben,
+    fehlende_formularangaben_satz,
     _pdf_exportieren,
     _pfad_anzeige,
     _url_oeffnen,
@@ -685,12 +687,10 @@ class ExportTab(QWidget):
             return
         # UX-Test 2026-11, T7 (Marco 04.11.2026): Fehlen Verband oder Meldestelle, noch einmal
         # warnen - beim Anlegen des Termins wird die Rückfrage leicht weggeklickt.
-        fehlend = [name for name, schluessel in (("Verband", "verband"), ("Meldestelle", "meldestelle"))
-                   if not (veranstaltung.get(schluessel) or "").strip()]
+        fehlend = fehlende_formularangaben(veranstaltung.get("verband"), veranstaltung.get("meldestelle"))
         if fehlend and not _ja_nein(
             self, "Angaben fehlen auf dem Formular",
-            f"{' und '.join(fehlend)} {'ist' if len(fehlend) == 1 else 'sind'} leer und "
-            f"{'fehlt' if len(fehlend) == 1 else 'fehlen'} dann auf dem Anmeldeformular."
+            fehlende_formularangaben_satz(fehlend) + "."
             + (" Die Teilnehmer wissen so nicht, wohin sie die Meldung schicken sollen."
                if "Meldestelle" in fehlend else "")
             + "\n\nNachtragen kannst du das im Reiter „Verwaltung“ über „Veranstaltungsdaten "
