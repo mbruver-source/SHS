@@ -4492,6 +4492,11 @@ class TestTerminverwaltungPostgres(unittest.TestCase):
         add_teilnehmer(self.conn, NeuerTeilnehmer(
             nachname="X", vorname="Y", rufname_hund="Z", art="DK", stufe=1,
         ))
+        # UX-Test 2026-11, T14: „keine Teilnahme“ zählt nicht mit (wie am Desktop).
+        abgemeldet = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ab", vorname="Gemeldet", rufname_hund="Z", art="DK", stufe=1,
+        ))
+        setze_keine_teilnahme(self.conn, abgemeldet, True)
 
         b = erstelle_termin_postgres(self.conn)
         oeffne_termin_postgres(self.conn, b.schema_name)

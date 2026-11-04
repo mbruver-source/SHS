@@ -421,6 +421,17 @@ class ResponsiveSchriftMixin:
         super().resizeEvent(event)
         self._schriftgroesse_anwenden()
 
+    @staticmethod
+    def alle_neu_anwenden() -> None:
+        """Nach einem Wechsel der Schriftstufe: alle offenen Fenster mit angepasster Schrift
+        neu berechnen, dazu die Ergebnistabelle jedes Hauptfensters (UX-Test 2026-11, T14)."""
+        for fenster in QApplication.topLevelWidgets():
+            if isinstance(fenster, ResponsiveSchriftMixin):
+                fenster._schriftgroesse_anwenden()
+            ergebnis_tab = getattr(fenster, "ergebnis_tab", None)
+            if ergebnis_tab is not None:
+                ergebnis_tab._spaltenbreiten_anpassen()
+
     def _schriftgroesse_anwenden(self) -> None:
         pt = round(_responsive_schriftgroesse(self.width()), 1)
         # Nur bei geänderter Schriftgröße neu setzen - jedes setStyleSheet stößt ein

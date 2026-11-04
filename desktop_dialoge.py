@@ -1499,8 +1499,9 @@ def _hilfe_mit_inhaltsverzeichnis(html: str) -> str:
     titel = re.findall(r"<h3>(.*?)</h3>", html)
     if not titel:
         return html
-    for nummer, text in enumerate(titel):
-        html = html.replace(f"<h3>{text}</h3>", f'<h3><a name="abschnitt{nummer}"></a>{text}</h3>', 1)
+    nummern = iter(range(len(titel)))
+    html = re.sub(r"<h3>(.*?)</h3>",
+                  lambda m: f'<h3><a name="abschnitt{next(nummern)}"></a>{m.group(1)}</h3>', html)
     verzeichnis = "<p><b>Inhalt:</b> " + " · ".join(
         f'<a href="#abschnitt{nummer}">{text}</a>' for nummer, text in enumerate(titel)
     ) + "</p>"

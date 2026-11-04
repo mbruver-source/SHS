@@ -7596,8 +7596,44 @@ def test_ergebnis_abbruch_spalte_fasst_jeden_grund(qtbot, conn):
         from shs_core import ABBRUCH_GRUENDE
 
         laengster = max(metrik.horizontalAdvance(text) for text, _ in ABBRUCH_GRUENDE.values())
-        # Zelle: 2,5 Rand je Seite, Text 4 links und 18 rechts (Pfeil) eingerückt.
-        assert tab.tabelle.columnWidth(_ABBRUCH_SPALTE) >= laengster + 27
+        from app import _AbbruchDelegate
+
+        assert tab.tabelle.columnWidth(_ABBRUCH_SPALTE) >= laengster + _AbbruchDelegate.PLATZ_NEBEN_TEXT
+
+
+def test_teilnehmer_ohne_startnummer_gemeinsame_auswahl(conn):
+    """UX-Test 2026-11, T14: eine gemeinsame Auswahl für Vergabe, Hinweis und Import-Rückfrage;
+    abgemeldete Teilnehmer zählen nicht."""
+    from app import _ohne_startnummer_ids
+    from db import setze_keine_teilnahme, teilnehmer_ohne_startnummer
+
+    a = _teilnehmer_anlegen(conn, nachname="A", startnummer=None, disziplin="Flächensuche")
+    b = _teilnehmer_anlegen(conn, nachname="B", startnummer=None, disziplin="Trümmerfeld")
+    _teilnehmer_anlegen(conn, nachname="C", startnummer=7, disziplin="Flächensuche")
+    setze_keine_teilnahme(conn, b, True)
+    assert [t["id"] for t in teilnehmer_ohne_startnummer(conn)] == [a]
+    assert teilnehmer_ohne_startnummer(conn, "ED1-Trümmerfeld") == []
+    assert [t["id"] for t in teilnehmer_ohne_startnummer(conn, "ED1-Flächensuche")] == [a]
+    assert _ohne_startnummer_ids(conn) == {a}
+
+
+def test_schriftwechsel_rechnet_alle_ergebnistabellen_neu(qtbot, termin, monkeypatch):
+    """UX-Test 2026-11, T14 (Abschluss-QS A11): Der Schriftwechsel rechnet auch die
+    Ergebnistabelle eines zweiten Hauptfensters (Demo) neu."""
+    conn, pfad = termin
+    erstes = HauptFenster(conn, pfad)
+    zweites = HauptFenster(conn, pfad)
+    for fenster in (erstes, zweites):
+        qtbot.addWidget(fenster)
+        fenster.show()
+    aufrufe = []
+    for fenster in (erstes, zweites):
+        monkeypatch.setattr(fenster.ergebnis_tab, "_spaltenbreiten_anpassen",
+                            lambda f=fenster: aufrufe.append(f))
+    monkeypatch.setattr("app._schriftstufe_speichern", lambda stufe: None)
+    monkeypatch.setattr("app.HauptFenster._darstellung_neu_anwenden", lambda self: None)
+    erstes._schrift_wechseln("normal")
+    assert erstes in aufrufe and zweites in aufrufe
 
 
 def test_ergebnis_zu_hoch_schon_beim_tippen(qtbot, conn):
@@ -9264,12 +9300,16 @@ def test_demo_wartezeit_waechst_mit_der_textlaenge(qtbot, termin, demo_umgebung,
     """UX-Test 03.11.2026, X6: bei langen Erklärtexten mehr als die 10 s, höchstens 40 s."""
     import desktop_demo
 
+    import math
+
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch, sekunden=10)
-    monkeypatch.setattr(desktop_demo.DemoTour, "LESEZEIT_JE_WORT_S", 0.35)
+    je_wort = 0.35
+    monkeypatch.setattr(desktop_demo.DemoTour, "LESEZEIT_JE_WORT_S", je_wort)
+    hoechstens = desktop_demo.DemoTour.LESEZEIT_MAX_S
     schritt = tour._schritte[tour._index]
     woerter = len(f"{schritt.titel} {schritt.text}".split())
-    assert woerter > 40  # Begrüßung ist lang
-    assert tour._wartezeit() == min(40, -(-woerter * 35 // 100))
+    assert woerter * je_wort > 10  # Begrüßung ist lang
+    assert tour._wartezeit() == max(10, min(hoechstens, math.ceil(woerter * je_wort)))
     monkeypatch.setattr(schritt, "text", "kurz")
     assert tour._wartezeit() == 10
     tour.beenden()

@@ -125,6 +125,7 @@ from db import (
     vergebene_startnummern,
     fehlende_startnummern_vergeben,
     fehlende_startnummern_je_pruefung,
+    teilnehmer_ohne_startnummer,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
     ALLE_PRUEFUNGEN,
@@ -330,7 +331,7 @@ def _ohne_startnummer_ids(conn) -> set[int] | None:
     """IDs der Teilnehmenden ohne Startnummer - vor einem Import gemerkt, damit die Rückfrage
     danach nur kommt, wenn der Import selbst neue Teilnehmer ohne Nummer gebracht hat."""
     try:
-        return {t["id"] for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None}
+        return {t["id"] for t in teilnehmer_ohne_startnummer(conn)}
     except sqlite3.Error:
         return None
 
@@ -340,7 +341,7 @@ def _startnummern_nach_import_anbieten(parent, conn, vorher_ohne: set[int] | Non
     anbieten, sie gesammelt zu vergeben. Bewusst immer für alle Prüfungen, auch wenn im
     Reiter "Teilnehmer" ein Filter Art/LK gesetzt ist (Marco 09.10.2026). UX-Test 03.11.2026
     (X10/L-B): nur, wenn der Import neue Teilnehmer ohne Nummer gebracht hat (`vorher_ohne`)."""
-    ohne = [t for t in list_teilnehmer(conn, nur_teilnehmende=True) if t["startnummer"] is None]
+    ohne = teilnehmer_ohne_startnummer(conn)
     if not ohne:
         return
     if vorher_ohne is not None and all(t["id"] in vorher_ohne for t in ohne):
@@ -1556,6 +1557,17 @@ class _AbbruchDelegate(QStyledItemDelegate):
     """Auswahlliste für den Abbruchgrund (R7). Sie klappt beim Öffnen gleich auf; die Wahl
     in der Liste gilt sofort (wie ein Häkchen)."""
 
+    # Maße der gezeichneten Zelle in Pixeln (UX-Test 2026-11, T14). RAND wie bei den
+    # Punktezellen; TEXT_RECHTS lässt Platz für das Dreieck. _spaltenbreiten_anpassen rechnet
+    # mit PLATZ_NEBEN_TEXT.
+    RAND = 2.5
+    ECKE = 4
+    PFEIL_ABSTAND = 10  # Mitte des Dreiecks vom rechten Rand
+    PFEIL_HALBE_BREITE = 4
+    TEXT_LINKS = 4
+    TEXT_RECHTS = 18
+    PLATZ_NEBEN_TEXT = 2 * RAND + TEXT_LINKS + TEXT_RECHTS
+
     def paint(self, painter, option, index):  # noqa: N802
         # UX-Test 03.11.2026, X5: wie ein zugeklapptes Auswahlfeld zeichnen (umrandet wie die
         # Punktefelder, Dreieck rechts) - vorher sah eine leere Zelle wie ein leeres Kästchen aus.
@@ -1569,7 +1581,7 @@ class _AbbruchDelegate(QStyledItemDelegate):
         widget = opt.widget
         style = widget.style() if widget is not None else QApplication.style()
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
-        feld = QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5)
+        feld = QRectF(opt.rect).adjusted(self.RAND, self.RAND, -self.RAND, -self.RAND)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
         fokus = bool(opt.state & QStyle.State_HasFocus)
@@ -1579,16 +1591,17 @@ class _AbbruchDelegate(QStyledItemDelegate):
         hintergrund = index.data(Qt.BackgroundRole)
         ungespeichert = isinstance(hintergrund, QBrush) and hintergrund.color() == _farbe("ungespeichert_bg")
         painter.setBrush(_farbe("ungespeichert_bg") if ungespeichert else _farbe("FLAECHE"))
-        painter.drawRoundedRect(feld, 4, 4)
+        painter.drawRoundedRect(feld, self.ECKE, self.ECKE)
         textfarbe = opt.palette.color(QPalette.Text)
-        cx, cy = feld.right() - 10, feld.center().y()
+        cx, cy = feld.right() - self.PFEIL_ABSTAND, feld.center().y()
+        b = self.PFEIL_HALBE_BREITE
         painter.setPen(Qt.NoPen)
         painter.setBrush(textfarbe)
-        painter.drawPolygon(QPolygonF([QPointF(cx - 4, cy - 2), QPointF(cx + 4, cy - 2), QPointF(cx, cy + 3)]))
+        painter.drawPolygon(QPolygonF([QPointF(cx - b, cy - 2), QPointF(cx + b, cy - 2), QPointF(cx, cy + 3)]))
         if text:
             painter.setFont(opt.font)
             painter.setPen(textfarbe)
-            textfeld = feld.adjusted(4, 0, -18, 0)
+            textfeld = feld.adjusted(self.TEXT_LINKS, 0, -self.TEXT_RECHTS, 0)
             # UX-Test 2026-11, T3: reicht der Platz nicht, endet der Grund mit „…“ statt
             # beidseitig abgeschnitten („letzung H“); der Tooltip nennt ihn vollständig.
             text = painter.fontMetrics().elidedText(text, Qt.ElideRight, int(textfeld.width()))
@@ -2812,8 +2825,8 @@ class ErgebnisTab(QWidget):
                     zu_hoch.append(f"{disziplin} {teil} höchstens {maximum} Punkte "
                                    f"(eingegeben: {self._feldwert(item)})")
         if zu_hoch:
-            nummer = t.get("startnummer")
-            wer = f"Nr. {nummer} {t.get('nachname', '')}" if nummer is not None else t.get("nachname", "")
+            nummer = t["startnummer"]
+            wer = f"Nr. {nummer} {t['nachname']}" if nummer is not None else t["nachname"]
             self._zu_hoch_je_teilnehmer[t["id"]] = f"{wer}: " + ", ".join(zu_hoch)
         elif self._zu_hoch_je_teilnehmer.pop(t["id"], None) is None:
             return
@@ -3293,11 +3306,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         _schriftstufe_speichern(stufe)
         self._darstellung_neu_anwenden()
         # Die an die Fensterbreite angepassten Beschriftungen und die Ergebnistabelle
-        # rechnen ihre Größe nur bei Größenänderungen neu - hier einmal anstoßen.
-        for fenster in QApplication.topLevelWidgets():
-            if hasattr(fenster, "_schriftgroesse_anwenden"):
-                fenster._schriftgroesse_anwenden()
-        self.ergebnis_tab._spaltenbreiten_anpassen()
+        # rechnen ihre Größe nur bei Größenänderungen neu - hier einmal anstoßen, in allen
+        # Fenstern (auch einem zweiten Hauptfenster der Demo, Abschluss-QS A11).
+        ResponsiveSchriftMixin.alle_neu_anwenden()
 
     def _theme_wechseln(self, theme_name: str) -> None:
         _theme_speichern(theme_name)

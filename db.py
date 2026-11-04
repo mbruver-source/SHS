@@ -1025,10 +1025,7 @@ def fehlende_startnummern_vergeben(
     Filter Art/LK im Reiter "Teilnehmer" schränkt die Vergabe ein)."""
     bereiche = startnummer_bereiche(get_veranstaltung(conn))
     reihenfolge = {p.kuerzel: i for i, p in enumerate(ALLE_PRUEFUNGEN)}
-    offen = [
-        t for t in list_teilnehmer(conn, nur_teilnehmende=True)
-        if t["startnummer"] is None and (pruefung is None or _teilnehmer_kuerzel(t) == pruefung)
-    ]
+    offen = teilnehmer_ohne_startnummer(conn, pruefung)
     offen.sort(key=lambda t: (
         reihenfolge.get(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]), len(reihenfolge)),
         (t["nachname"] or "").casefold(), (t["vorname"] or "").casefold(), t["id"],
@@ -1112,15 +1109,24 @@ def startnummern_zuruecksetzen(conn: sqlite3.Connection, pruefung: str | None = 
     return len(ids)
 
 
+def teilnehmer_ohne_startnummer(conn: sqlite3.Connection, pruefung: str | None = None) -> list[dict]:
+    """Teilnehmende (ohne „keine Teilnahme“) ohne Startnummer, mit `pruefung` (Kürzel) nur
+    die dieser Prüfung - gemeinsame Auswahl für die Vergabe, den Hinweis im Reiter
+    „Teilnehmer“ und die Rückfrage nach einem Import (UX-Test 2026-11, T14)."""
+    return [
+        t for t in list_teilnehmer(conn, nur_teilnehmende=True)
+        if t["startnummer"] is None and (pruefung is None or _teilnehmer_kuerzel(t) == pruefung)
+    ]
+
+
 def fehlende_startnummern_je_pruefung(conn: sqlite3.Connection) -> list[tuple[str, int]]:
     """(Kürzel, Anzahl) der Prüfungen, in denen teilnehmende Teilnehmer noch keine
     Startnummer haben, in der Reihenfolge von ALLE_PRUEFUNGEN - für den Hinweis unter den
     Startnummern-Knöpfen im Reiter "Teilnehmer" (Marco 09.10.2026)."""
     anzahl: dict[str, int] = {}
-    for t in list_teilnehmer(conn, nur_teilnehmende=True):
-        if t["startnummer"] is None:
-            kuerzel = _teilnehmer_kuerzel(t)
-            anzahl[kuerzel] = anzahl.get(kuerzel, 0) + 1
+    for t in teilnehmer_ohne_startnummer(conn):
+        kuerzel = _teilnehmer_kuerzel(t)
+        anzahl[kuerzel] = anzahl.get(kuerzel, 0) + 1
     reihenfolge = {p.kuerzel: i for i, p in enumerate(ALLE_PRUEFUNGEN)}
     return sorted(anzahl.items(), key=lambda e: (reihenfolge.get(e[0], len(reihenfolge)), e[0]))
 
@@ -3373,7 +3379,13 @@ def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
         schema_name = eintrag["schema_name"]
         _setze_termin_suchpfad(conn, schema_name)
         v = conn.execute("SELECT * FROM veranstaltung WHERE id = 1").fetchone()
-        anzahl = conn.execute("SELECT COUNT(*) AS anzahl FROM teilnehmer").fetchone()["anzahl"]
+        # UX-Test 2026-11, T14: nur Teilnehmende wie am Desktop (TerminInfo.teilnehmend). Der
+        # Web-Export überträgt „keine Teilnahme“ ohnehin nicht, gezählt wird trotzdem ausdrücklich.
+        # Ein seit dem 02.10.2026 nie geöffnetes Schema hat die Spalte noch nicht (migriert wird
+        # erst in oeffne_termin_postgres) - dann wie bisher alle (Verifikation B7).
+        bedingung = (" WHERE COALESCE(keine_teilnahme, 0) = 0"
+                     if "keine_teilnahme" in _vorhandene_spalten(conn, "teilnehmer") else "")
+        anzahl = conn.execute(f"SELECT COUNT(*) AS anzahl FROM teilnehmer{bedingung}").fetchone()["anzahl"]
         ergebnisse.append(TerminInfoPostgres(
             id=eintrag["id"], schema_name=schema_name,
             verein=v["verein"] if v else None, ort=v["ort"] if v else None,

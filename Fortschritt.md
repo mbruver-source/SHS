@@ -9176,3 +9176,28 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   (Datum vor Umfang).
 - Tests: 3 neue GUI-Tests, 2 angepasst; Gegenprobe: alle 4 neuen bzw. geänderten scheitern ohne
   die Änderung.
+
+### ux_test_2026_11 B7 – Kleinigkeiten aus der Abschluss-QS, T14 / R7 (04.11.2026)
+
+Marco 04.11.2026: „alles umsetzen“. Umgesetzt:
+- `ResponsiveSchriftMixin.alle_neu_anwenden()` statt der Schleife in `_schrift_wechseln`; rechnet
+  auch die Ergebnistabelle eines zweiten Hauptfensters (Demo) neu.
+- `_AbbruchDelegate`: Konstanten für Rand, Ecke, Pfeil und Texteinzug (`PLATZ_NEBEN_TEXT`).
+- `_zu_hoch_merken`: `t["…"]` statt `t.get`.
+- Gemeinsame Abfrage `db.teilnehmer_ohne_startnummer(conn, pruefung=None)` für die Vergabe, den
+  Hinweis im Reiter „Teilnehmer“ und die Rückfrage nach einem Import.
+- Hilfe-Inhaltsverzeichnis mit `re.sub` statt Ersetzen je Titel.
+- Lesezeit-Test rechnet mit `LESEZEIT_MAX_S` und `math.ceil` statt fester Zahlen.
+- Web-/PostgreSQL-Terminübersicht (`liste_termine_postgres`) zählt nur Teilnehmende wie am
+  Desktop (`COALESCE(keine_teilnahme, 0) = 0`); der PostgreSQL-Test prüft das (nur in der CI).
+- Demo übergibt dem Teilnehmer-Dialog Angebot und Prüfungsdatum (zeigt „… – wird angeboten“).
+
+Nicht umgesetzt, Rückfrage R-B7: „Befundnummern in Code-Kommentaren“ – sie zu entfernen träfe das
+ganze Projekt und nähme die Verbindung zu `Fortschritt.md`; bisher Projektstil.
+
+Tests: 2 neue GUI-Tests, 2 angepasst, PostgreSQL-Test erweitert; Gegenprobe: die neuen scheitern
+ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
+
+- **Verifikation:** ohne Fehler. Nachgezogen: Die PostgreSQL-Übersicht prüft vorher, ob ein
+  altes, nie geöffnetes Termin-Schema die Spalte `keine_teilnahme` schon hat (sonst wie bisher
+  alle zählen); positiver Fall im Test für `teilnehmer_ohne_startnummer`.

@@ -59,6 +59,7 @@ import pdf_export
 from db import (
     NeuerTeilnehmer,
     add_teilnehmer,
+    angebotene_pruefungen,
     berechne_auswertung,
     dateiname_vorschlagen,
     fehlende_startnummern_vergeben,
@@ -1244,13 +1245,16 @@ class DemoTour(QObject):
             self._markieren(tab.hinzufuegen_btn)
 
         def dialog_zeigen() -> None:
-            # Dieselben Angaben wie TeilnehmerTab._teilnehmer_hinzufuegen, ohne `angebotene`:
-            # die Demo-Teilnehmer stehen immer in angebotenen Prüfungen.
+            # Dieselben Angaben wie TeilnehmerTab._teilnehmer_hinzufuegen. Seit UX-Test 2026-11
+            # (T14) mit `angebotene`, damit die Demo die Zeile „… – wird angeboten“ zeigt.
+            veranstaltung = get_veranstaltung(self.conn)
             dialog = TeilnehmerDialog(
                 tab,
                 vergebene_nummern=vergebene_startnummern(self.conn),
                 namen_je_startnummer={},
-                bereiche=startnummer_bereiche(get_veranstaltung(self.conn)),
+                bereiche=startnummer_bereiche(veranstaltung),
+                angebotene={p.kuerzel for p in angebotene_pruefungen(veranstaltung)},
+                stichtag=(veranstaltung or {}).get("datum"),
             )
             self._dialog_zeigen(dialog)
             daten = demo_daten.TEILNEHMER[0]["daten"]
