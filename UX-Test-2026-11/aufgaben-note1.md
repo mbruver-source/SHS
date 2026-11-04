@@ -22,7 +22,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B9 | T12 Demo mit echtem Zurück | L | erledigt | 1a7675f | 52 → 67 % | ersetzt R4 |
 | B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | 48fa7a5 | 67 → 76 % | Website erst mit dem Release; R-B10 |
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | offen | | | |
-| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda | L | offen | | | Harness aus dem Scratchpad |
+| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | offen | | | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 
 ## Kalibrierung
 
@@ -85,7 +85,8 @@ Abbildungen, gekennzeichnet; sonst Rückfrage an Marco und Teilpunkt zurückstel
 **B11 – Abschluss (L):** QS mit `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit`; Doku
 abgleichen; Screenshot-Liste für den Build; voller Unit- und GUI-Testlauf.
 
-**B12 – T15 (L):** Nachtest mit Heinz (E-A), Sabine (E-B), Julia (N-A), Gerda (L-A) über die
+**B12 – T15 (L):** Nachtest mit Heinz (E-A), Sabine (E-B), Julia (N-A), Gerda (L-A) und Werner
+(L-B3, Marco 04.11.2026; Vergleich mit L-B und L-B2) über die
 Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
 
 ## Rückfragen an Marco
