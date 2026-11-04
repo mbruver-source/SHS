@@ -2452,6 +2452,75 @@ def test_hilfe_suche_markiert_und_springt_weiter(qtbot):
     assert dialog.treffer_label.text() == ""
 
 
+def test_hilfe_suche_bevorzugt_wortanfaenge_und_kennt_tastenkuerzel(qtbot):
+    """Nachtest 2, N6: „USB“ findet „USB-Stick“, nicht „ausbalancierten“; erst ohne solche
+    Treffer zählen Wortteile. Abschnitt „Tastenkürzel“ und USB-Stick bei der Sicherung."""
+    from desktop_dialoge import _HILFE_HTML, _hilfe_anker
+
+    dialog = HilfeDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.suchfeld.setText("usb")
+    treffer = [a.cursor.selectedText() for a in dialog.anzeige.extraSelections()]
+    assert treffer and all(t == "USB" for t in treffer)
+    assert dialog.treffer_label.text() == f"{len(treffer)} Treffer"
+    text = dialog.anzeige.toPlainText()
+    for auswahl in dialog.anzeige.extraSelections():
+        davor = text[auswahl.cursor.selectionStart() - 1]
+        assert not davor.isalnum()  # Wortanfang
+    assert dialog.anzeige.extraSelections()[0].format.fontWeight() == QFont.Bold
+
+    dialog.suchfeld.setText("alancier")  # nur mitten im Wort vorhanden
+    assert dialog.anzeige.extraSelections()
+    assert dialog.treffer_label.text().endswith("(in Wörtern)")
+    stellen = [a.cursor.selectionStart() for a in dialog.anzeige.extraSelections()]
+    assert dialog.anzeige.textCursor().selectionStart() == stellen[0]
+    dialog.weitersuchen()
+    erwartet = stellen[1] if len(stellen) > 1 else stellen[0]  # sonst wieder von vorn
+    assert dialog.anzeige.textCursor().selectionStart() == erwartet
+    assert dialog.anzeige.textCursor().selectedText().lower() == "alancier"
+
+    # Umlaut am Wortanfang, Groß/Klein egal
+    dialog.suchfeld.setText("ÜBERALL")
+    assert dialog.treffer_label.text().endswith("Treffer")
+    # Sonderzeichen am Anfang: kein Wortanfang, kein Fehler, kein „(in Wörtern)“
+    dialog.suchfeld.setText("(")
+    assert dialog.anzeige.extraSelections() and dialog.treffer_label.text().endswith("Treffer")
+    dialog.suchfeld.setText("c++")
+    assert dialog.treffer_label.text() == "nichts gefunden"
+
+    assert _hilfe_anker("Tastenkürzel") is not None
+    assert "USB-Stick" in _HILFE_HTML.split('<h3>Reiter "Datensicherung"</h3>')[1].split("<h3>")[0]
+
+
+def test_spalte_anmerkungen_erklaert_gegenstand_noch_offen(qtbot, conn):
+    """Nachtest 2, N11: Der Spaltenkopf „Anmerkungen“ erklärt die grauen Hinweise."""
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    kopf = tab.tabelle.horizontalHeaderItem(7)
+    assert kopf.text() == "Anmerkungen"
+    assert "„Gegenstand noch offen“" in kopf.toolTip() and "nachgetragen" in kopf.toolTip()
+
+
+def test_hilfe_knopf_oeffnet_beim_aktuellen_reiter(qtbot, termin, monkeypatch):
+    """Nachtest 2, N6: Der Knopf „Hilfe“ öffnet wie F1 beim Abschnitt des Reiters."""
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    abschnitte = []
+    echt = HilfeDialog.__init__
+
+    def _init(self, parent=None, abschnitt=None):
+        abschnitte.append(abschnitt)
+        echt(self, parent, abschnitt)
+
+    monkeypatch.setattr(HilfeDialog, "__init__", _init)
+    monkeypatch.setattr(HilfeDialog, "exec", lambda self: 0)
+    fenster._tabs.setCurrentWidget(fenster.zeitplan_tab)
+    next(b for b in fenster.findChildren(QPushButton) if b.text() == "Hilfe").click()
+    assert abschnitte == ['Reiter "Zeitplan"']
+
+
 def test_f1_oeffnet_hilfe_beim_aktuellen_reiter(qtbot, termin, monkeypatch):
     """UX-Test 2026-11, T8: F1 („Hilfe → Hilfe anzeigen“) öffnet die Hilfe beim Abschnitt des
     aktuellen Reiters; jeder Reiter hat einen Abschnitt."""
@@ -5642,6 +5711,9 @@ def test_importmeldung_mit_ablehnungen_warnt_rat_und_liste_kopieren(qtbot, monke
     assert box.icon() == QMessageBox.Warning
     assert "Was tun?" in box.text() and "von Hand erfassen" in box.text()
     assert "Pfeiffer.pdf" in QApplication.clipboard().text()
+    # Nachtest 2 (N12): ein Rat zum Grund in eigener Zeile darunter
+    assert ("Pfeiffer.pdf: mehrere Prüfungen angekreuzt\n   → Rat: Für jede weitere Prüfung "
+            "ein eigenes Formular") in box.text()
 
     # Nur Duplikate: Knopf ja, aber Informationssymbol und kein „Was tun?“.
     boxen.clear()

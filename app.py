@@ -140,6 +140,7 @@ from db_import import (
     importiere_teilnehmer_aus_oma,
     importiere_teilnehmer_stammdaten,
     nicht_angebotene,
+    rat_bei_ablehnung,
     schreibe_csv_vorlage,
 )
 import pdf_export
@@ -332,7 +333,10 @@ def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(
         # UX-Nachtest 03.10.2026, N1: bereits vorhandene Meldungen werden nicht doppelt angelegt.
         (f"{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:",
          ergebnis.uebersprungen),
-        (f"{len(ergebnis.fehler)} {fehler_ueberschrift}", ergebnis.fehler),
+        # Nachtest 2 (N12): unter jedem abgelehnten Eintrag ein Rat passend zum Grund.
+        (f"{len(ergebnis.fehler)} {fehler_ueberschrift}",
+         [f"{fehler}\n   → {rat}" if (rat := rat_bei_ablehnung(fehler)) else fehler
+          for fehler in ergebnis.fehler]),
         ("Was tun?", [_RAT_BEI_ABLEHNUNG] if ergebnis.fehler else []),
         ("Hinweis:", ergebnis.hinweise),
     ]
@@ -456,6 +460,13 @@ class TeilnehmerTab(QWidget):
         self.tabelle = QTableWidget(0, 8)
         self.tabelle.setHorizontalHeaderLabels(
             ["Start-Nr.", "Nachname", "Vorname", "Hund", "Art/LK", "Verein", "Bezahlt", "Anmerkungen"]
+        )
+        # Nachtest 2 (N11): was „Gegenstand noch offen“ heißt, stand nur am einzelnen Eintrag.
+        self.tabelle.horizontalHeaderItem(7).setToolTip(
+            "Orange mit Warndreieck: vor dem Prüfungstag beheben (z. B. „Chip-Nr. fehlt“).\n"
+            "Grau: nur eine Erinnerung – „Gegenstand noch offen“ heißt, die zu suchenden "
+            "Gegenstände sind noch nicht eingetragen. Sie können bis zum Prüfungstag über "
+            "„Bearbeiten…“ nachgetragen werden."
         )
         self.tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabelle.setSelectionBehavior(QTableWidget.SelectRows)
@@ -3385,7 +3396,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # Seit dem Erscheinungsbild „Beagle“ (Marco 01.11.2026) ein dunkler Kopfbalken mit
         # dem Beagle, Verein und Termin-Angaben (KopfBalken); Symbole statt Emojis.
         hilfe_btn = QPushButton("Hilfe")
-        hilfe_btn.clicked.connect(self._hilfe_anzeigen)
+        # Nachtest 2 (N6): wie F1 beim Abschnitt des aktuellen Reiters, nicht ganz oben.
+        hilfe_btn.setToolTip("Hilfe zum aktuellen Reiter (F1)")
+        hilfe_btn.clicked.connect(self._hilfe_zum_reiter)
 
         version_btn = QPushButton(f"Version {VERSION}")
         # UX-Test 03.11.2026, X16: Werner fand den Update-Weg nicht.
@@ -3522,9 +3535,6 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         for tab in (self.teilnehmer_tab, self.auswertung_tab, self.zeitplan_tab):
             tab.aktualisieren()
         self.ergebnis_tab.farben_auffrischen()
-
-    def _hilfe_anzeigen(self) -> None:
-        _ausfuehren(HilfeDialog(self))
 
     def _hilfe_zum_reiter(self) -> None:
         reiter = self._tabs.tabText(self._tabs.currentIndex()).replace("&", "")

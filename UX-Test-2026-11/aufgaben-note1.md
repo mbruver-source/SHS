@@ -25,8 +25,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | c472344 | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 | B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
 | B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | erledigt | (dieser Commit) | 50 → 76 % | real ≈ 26 % (zwei Messfehler-Suchen) |
-| B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | (dieser) | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
-| B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | offen | | | |
+| B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | erledigt | 8273862 | 0 → 14 %, real ≈ 14 % | R-B15 (Web-Status, Entf am Mac) |
+| B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | (dieser) | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
 | B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | offen | | | |
 | B18 | N5 Prüfungsnamen überall einheitlich | L | offen | | | ersetzt R-B8 |
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | offen | | | |
@@ -144,6 +144,12 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   (b) Entf löscht in der Teilnehmerliste; auf dem Mac ist die „delete“-Taste aber die Rücktaste,
   die das Kürzel nicht auslöst. Für die Mac-Vorschau zusätzlich Rücktaste? Vorschlag: so lassen,
   bis jemand am Mac danach fragt.
+- **R-B16 (aus B16, N11):** „Weiteren Gegenstand ggf. unter Anmerkungen notieren“ – ein Feld
+  „Anmerkungen“ gibt es im Teilnehmer-Dialog nicht; die gleichnamige Spalte der Liste füllt das
+  Programm selbst (Chip-Nr. fehlt, Gegenstand noch offen). Die ED-Rückfrage ist deshalb
+  unverändert. Möglichkeiten: (a) so lassen, (b) Rat „mit dem Teilnehmer klären“ ohne Ort,
+  (c) doch ein freies Notizfeld „Bemerkung“ (neues Datenbankfeld, auch in Export und Web).
+  Vorschlag: (b).
 
 ## Entscheidungen zum Nachtest 2 (Marco 04.11.2026)
 

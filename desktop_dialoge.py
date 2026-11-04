@@ -14,8 +14,8 @@ import os
 import re
 import sqlite3
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
+from PySide6.QtCore import QRegularExpression, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1594,6 +1594,9 @@ verschlüsselt), danach den Speicherort. "Sicherung wiederherstellen…" fragt b
 Passwort und bei jedem bereits vorhandenen Termin, ob überschrieben, als Kopie
 importiert oder übersprungen werden soll. Wer ein Passwort vergibt: Ein vergessenes Passwort
 lässt sich nicht wiederherstellen – gut aufbewahren.</p>
+<p>Als Speicherort am besten einen USB-Stick oder ein anderes Laufwerk wählen und den Stick
+getrennt vom Rechner aufbewahren – eine Sicherung auf demselben Rechner hilft nicht, wenn
+dieser ausfällt.</p>
 
 <h3>Versionsanzeige</h3>
 <p>Der Button "Version" oben rechts (zwischen "Anderen Termin öffnen…" und
@@ -1610,9 +1613,26 @@ Einfügen kurz prüfen, ob Teilnehmerdaten darin stehen). "Protokoll-Ordner öff
 Datei. Bei einem unerwarteten Fehler erscheint ein Fenster mit denselben Möglichkeiten.</p>
 
 <h3>Diese Hilfe</h3>
-<p>F1 (am Mac Cmd+?) öffnet die Hilfe beim Abschnitt des Reiters, in dem du gerade bist. Oben im Suchfeld
-ein Wort eingeben: alle Treffer werden gelb markiert, Enter oder "Weiter" springt zum
-nächsten.</p>
+<p>Der Knopf "Hilfe" oben und F1 (am Mac Cmd+?) öffnen die Hilfe beim Abschnitt des Reiters, in
+dem du gerade bist. Oben im Suchfeld ein Wort eingeben (Strg+F springt dorthin): Gesucht wird
+nach ganzen Wörtern und Wortanfängen, "USB" findet also "USB-Stick". Erst wenn es so nichts
+gibt, zählen auch Stellen mitten im Wort. Alle Treffer werden orange markiert, Enter oder
+"Weiter" springt zum nächsten.</p>
+
+<h3>Tastenkürzel</h3>
+<p><b>Überall:</b> F1 (am Mac Cmd+?) – Hilfe zum aktuellen Reiter. In der Hilfe: Strg+F
+(am Mac Cmd+F) – ins Suchfeld.</p>
+<p><b>Reiter "Teilnehmer":</b> Strg-Klick bzw. Umschalt-Klick markiert mehrere Zeilen, Strg+A alle
+sichtbaren. Entf löscht die markierten Teilnehmer (nach Rückfrage). Doppelklick auf eine Zeile
+öffnet "Bearbeiten…".</p>
+<p><b>Reiter "Ergebniserfassung":</b> Zelle markieren und die Zahl tippen – sie ersetzt den
+Wert; F2 (am Mac Enter) oder Doppelklick ändert ihn. Enter übernimmt, Esc verwirft die Eingabe.
+Tab bzw. Umschalt+Tab springt zur nächsten bzw. vorigen Eingabe. Die Leertaste setzt das
+Häkchen bei "Disqualifiziert" und klappt bei "Abbruch" die Liste auf. Entf bzw. die Rücktaste
+leert die Zelle oder nimmt den Abbruch zurück. Strg+S (am Mac Cmd+S) speichert alle
+Ergebnisse.</p>
+<p>In Rückfragen wählt Enter die vorgegebene Antwort (bei allem, was Daten ändert, "Nein"),
+Esc bricht ab.</p>
 
 <h3>Aussehen (Menü "Ansicht")</h3>
 <p>Unter "Hintergrund" wählst du das Design: Beagle (Standard, warme Creme-Töne), Hell,
@@ -1661,10 +1681,11 @@ def _hilfe_anker(abschnitt: str) -> str | None:
 class HilfeDialog(QDialog):
     """Allgemeine Bedienungshilfe in einem eigenen, scrollbaren Fenster - ein Abschnitt je
     Reiter (siehe _HILFE_HTML oben). Wird über den Hilfe-Button im Hauptfenster geöffnet
-    (siehe HauptFenster._hilfe_anzeigen), mit F1 bzw. „Hilfe → Hilfe anzeigen“ gleich beim
+    (seit dem Nachtest 2, N6, wie F1 gleich beim Abschnitt des Reiters), mit F1 bzw. „Hilfe → Hilfe anzeigen“ gleich beim
     Abschnitt des aktuellen Reiters (`abschnitt`, UX-Test 2026-11, T8). Das Suchfeld oben
-    markiert alle Treffer gelb und springt mit Enter bzw. „Weiter“ zum nächsten (T8: die
-    Hilfe war trotz Inhaltszeile noch lang)."""
+    markiert alle Treffer und springt mit Enter bzw. „Weiter“ zum nächsten (T8: die Hilfe war
+    trotz Inhaltszeile noch lang). Seit dem Nachtest 2 (N6) zählen zuerst ganze Wörter und
+    Wortanfänge („USB“ fand sonst „ausbalancierten“), die Markierung ist kräftiger."""
 
     def __init__(self, parent=None, abschnitt: str | None = None):
         super().__init__(parent)
@@ -1675,6 +1696,7 @@ class HilfeDialog(QDialog):
         anzeige.setHtml(_hilfe_mit_inhaltsverzeichnis(_HILFE_HTML))
         anzeige.setOpenExternalLinks(False)
 
+        self._muster: QRegularExpression | None = None  # Suchmuster der aktuellen Treffer
         self.suchfeld = QLineEdit()
         self.suchfeld.setPlaceholderText("In der Hilfe suchen, z. B. „Startnummer“ oder „Pause“")
         self.suchfeld.setClearButtonEnabled(True)
@@ -1707,38 +1729,64 @@ class HilfeDialog(QDialog):
             # Erst nach dem Layout springen - vorher kennt der Browser seine Höhe nicht.
             QTimer.singleShot(0, self, lambda: anzeige.scrollToAnchor(anker))
 
+    def _fundstellen(self, muster: QRegularExpression) -> list[QTextCursor]:
+        fundstellen = []
+        cursor = self.anzeige.document().find(muster)
+        while not cursor.isNull():
+            fundstellen.append(cursor)
+            cursor = self.anzeige.document().find(muster, cursor)
+        return fundstellen
+
     def _treffer_markieren(self, text: str) -> None:
+        self._muster = None
+        fundstellen = []
+        wortteile = False
+        suchtext = text.strip()
+        if suchtext:
+            optionen = (QRegularExpression.CaseInsensitiveOption
+                        | QRegularExpression.UseUnicodePropertiesOption)
+            escaped = QRegularExpression.escape(suchtext)
+            # N6: zuerst ganze Wörter und Wortanfänge, erst ohne Treffer auch Wortteile. Beginnt
+            # der Suchtext nicht mit einem Buchstaben oder einer Ziffer (z. B. „(“), gibt es
+            # keinen Wortanfang - dann gleich überall suchen.
+            wortanfang = suchtext[0].isalnum()
+            for muster in ((QRegularExpression(rf"(?<!\w){escaped}", optionen),) if wortanfang else ()) + (
+                    QRegularExpression(escaped, optionen),):
+                fundstellen = self._fundstellen(muster)
+                if fundstellen:
+                    self._muster = muster
+                    break
+                wortteile = wortanfang
+        format_ = QTextCharFormat()
+        format_.setBackground(QColor("#ff9f1c"))  # N6: kräftiges Orange statt blassem Gelb
+        format_.setForeground(QColor("#000000"))
+        format_.setFontWeight(QFont.Bold)
         markierungen = []
-        if text.strip():
-            format_ = QTextCharFormat()
-            format_.setBackground(QColor("#ffe066"))
-            format_.setForeground(QColor("#000000"))
-            cursor = self.anzeige.document().find(text)
-            while not cursor.isNull():
-                auswahl = QTextBrowser.ExtraSelection()
-                auswahl.cursor = cursor
-                auswahl.format = format_
-                markierungen.append(auswahl)
-                cursor = self.anzeige.document().find(text, cursor)
+        for cursor in fundstellen:
+            auswahl = QTextBrowser.ExtraSelection()
+            auswahl.cursor = cursor
+            auswahl.format = format_
+            markierungen.append(auswahl)
         self.anzeige.setExtraSelections(markierungen)
-        if not text.strip():
+        if not suchtext:
             self.treffer_label.setText("")
         elif markierungen:
-            self.treffer_label.setText(f"{len(markierungen)} Treffer")
+            self.treffer_label.setText(
+                f"{len(markierungen)} Treffer" + (" (in Wörtern)" if wortteile else "")
+            )
             # Beim Tippen ab Anfang den ersten Treffer zeigen.
             self.anzeige.moveCursor(QTextCursor.Start)
-            self.anzeige.find(text)
+            self.anzeige.find(self._muster)
         else:
             self.treffer_label.setText("nichts gefunden")
 
     def weitersuchen(self) -> None:
-        text = self.suchfeld.text()
-        if not text.strip() or not self.anzeige.extraSelections():
+        if self._muster is None:
             return  # ohne Treffer nicht an den Anfang springen (Verifikation B6)
-        if not self.anzeige.find(text):
+        if not self.anzeige.find(self._muster):
             # Am Ende von vorn weitersuchen.
             self.anzeige.moveCursor(QTextCursor.Start)
-            self.anzeige.find(text)
+            self.anzeige.find(self._muster)
 
 
 #: Vorschlag für die Prüfungsgebühr, solange noch keine eigene hinterlegt wurde (siehe

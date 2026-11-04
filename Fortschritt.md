@@ -9475,3 +9475,35 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   „Nachname, Vorname“; Handbuch-Absatz zum Zurücksetzen angeglichen; Tests für Name mit OK,
   fehlenden Bereich und zwei Ergebnisse ergänzt. Rückfragen R-B15 (Web-Status, Entf am Mac) in
   der Aufgabenliste.
+
+### ux_test_2026_11 B16 – Hilfe, Gegenstand-Texte, Rat bei Ablehnung (Nachtest 2 N6, N11, N12; 04.11.2026)
+
+- **N6:** Der Knopf „Hilfe“ öffnet wie F1 beim Abschnitt des aktuellen Reiters (Tooltip „Hilfe zum
+  aktuellen Reiter (F1)“; `HauptFenster._hilfe_anzeigen` entfällt). Die Suche findet zuerst ganze
+  Wörter und Wortanfänge (`QRegularExpression` mit `(?<!\w)`, Unicode); nur ohne solche Treffer
+  zählen Wortteile, die Trefferzahl sagt dann „(in Wörtern)“. Treffer kräftig orange und fett statt
+  blassgelb. Neuer Hilfe-Abschnitt „Tastenkürzel“ (überall, Teilnehmer, Ergebniserfassung,
+  Rückfragen), im Abschnitt „Datensicherung“ der Rat zum USB-Stick; Handbuch Kap. 13 bekommt eine
+  Tabelle „Tastenkürzel“.
+- **N11:** Der Spaltenkopf „Anmerkungen“ erklärt per Tooltip orange (beheben) und grau (Erinnerung,
+  „Gegenstand noch offen“ = Gegenstände noch nicht eingetragen, bis zum Prüfungstag über
+  „Bearbeiten…“ nachtragen). CSV- und OMA-Import nennen als letzten Hinweis, dass die Gegenstände
+  nachzutragen sind. Zurückgestellt: der Satz „weiteren Gegenstand ggf. unter Anmerkungen notieren“
+  in der ED-Rückfrage – ein Feld „Anmerkungen“ gibt es im Dialog nicht (Rückfrage R-B16).
+- **N12:** `db_import.rat_bei_ablehnung` ordnet jedem Ablehnungsgrund einen konkreten Rat zu
+  (mehrere/keine Prüfung angekreuzt, nicht angeboten, keine Angebote hinterlegt, Hündin und Rüde,
+  kein Anmeldeformular, defekte oder nicht lesbare Datei, unbekannte Prüfung, fehlende oder
+  ungültige Angabe); die Importmeldung zeigt ihn als „→ Rat: …“ in eigener Zeile unter dem
+  Eintrag. Der allgemeine Abschnitt „Was tun?“ bleibt.
+- **Tests:** neu `test_hilfe_suche_bevorzugt_wortanfaenge_und_kennt_tastenkuerzel`,
+  `test_hilfe_knopf_oeffnet_beim_aktuellen_reiter`, `test_spalte_anmerkungen_erklaert_gegenstand_noch_offen`,
+  `test_rat_bei_ablehnung_je_grund`; erweitert: Importmeldung mit Rat, drei Import-Tests um den
+  Gegenstände-Hinweis.
+  Gegenprobe: ohne die Änderung scheitern alle neuen und erweiterten Tests. 723 Unittests, alle
+  GUI-Tests grün (552).
+- **Verifikation:** Strg+Tab aus den Tastenkürzel-Listen genommen – Tabellen (außer der
+  Ergebniserfassung) verbrauchen die Taste selbst, „überall“ stimmte nicht. Der Rat wird nur im Grund
+  gesucht (ohne Zeile/Datei und ohne Werte in „…“), „ist ungültig“ vor „fehlt“, neuer Rat für
+  ungültige Daten, Rat bei „nicht angeboten“ nennt auch das Freischalten. Suchtexte, die mit einem
+  Sonderzeichen beginnen, suchen gleich überall. Handbuch-Tabelle um Doppelklick ergänzt; Tests für
+  Weitersuchen, Umlaut, Sonderzeichen und die übrigen Räte.

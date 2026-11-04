@@ -12,9 +12,10 @@ Stand: Version 1.0.55. Alle Screenshots zeigen erfundene Testdaten.
   an. Unbekannte Wörter erklärt das [Glossar in Kapitel 15](#15-glossar-wörter-kurz-erklärt).
 - Umstieg von der LibreOffice-Datei: [UMSTIEG.md](UMSTIEG.md)
 - Einrichtung der Web-Version (Server/Container): [README_CONTAINER.md](../README_CONTAINER.md)
-- Kurzhilfe im Programm: Button **„Hilfe“** oben rechts; **F1** (am Mac Cmd+?) öffnet sie gleich beim Abschnitt
-  des aktuellen Reiters. Oben im Hilfefenster lässt sich suchen (Treffer gelb, Enter springt
-  zum nächsten).
+- Kurzhilfe im Programm: Button **„Hilfe“** oben rechts oder **F1** (am Mac Cmd+?) – beide öffnen sie gleich
+  beim Abschnitt des aktuellen Reiters. Oben im Hilfefenster lässt sich suchen: zuerst nach ganzen
+  Wörtern und Wortanfängen, Treffer orange, Enter springt zum nächsten. Alle Tastenkürzel stehen
+  in Kapitel 13 unter „Tastenkürzel“.
 - Programm vorher ausprobieren: Button **„Demoprüfung“** spielt einen kompletten
   Prüfungstag vor, siehe [Demoprüfung](#demoprüfung); dazu eine Beispiel-CSV mit 20
   erfundenen Teilnehmern, siehe [Ausprobieren mit Beispieldaten](#ausprobieren-mit-beispieldaten)
@@ -444,7 +445,9 @@ Leistungsklasse mit „Bearbeiten…“ anpassen kannst.
 Meldungen nach einem Import oder der Startnummernvergabe zeigen je Liste höchstens 15 Namen; die
 vollständige Liste steht unter **„Details“**. Wurden beim Import Meldungen abgelehnt oder
 übersprungen, legt **„Meldung kopieren und schließen“** die ganze Meldung samt vollständiger Listen
-in die Zwischenablage (z. B. zum Einfügen in eine E-Mail); die Meldung sagt dann auch, was zu tun ist.
+in die Zwischenablage (z. B. zum Einfügen in eine E-Mail); die Meldung sagt dann auch, was zu tun ist –
+unter jeder abgelehnten Meldung steht ein Rat passend zum Grund (z. B. bei zwei angekreuzten
+Prüfungen: je Prüfung ein eigenes Formular oder von Hand anlegen).
 Auch nach „OK“ bleibt das Ergebnis des letzten Imports im Reiter **„Formular-Import“** unter
 **„Letzter Import“** stehen (mit Uhrzeit und Knopf **„Kopieren“**), bis zum nächsten Import oder
 Terminwechsel. Nach einem Import fragt das Programm
@@ -549,7 +552,8 @@ Ausgefüllte Meldeformulare (PDF, Word oder Foto/Scan) lassen sich mit einem KI-
 
 Für beide CSV-Wege gilt: Jede Zeile wird ein neuer Teilnehmer – außer er ist schon gemeldet (gleicher Name, Hund,
 Art, Leistungsklasse und Disziplin; dann wird er übersprungen und genannt). Startnummer, Gegenstände und Bezahlt-Status
-sind nicht enthalten, diese trägst du danach im Reiter „Teilnehmer“ nach. Fehlerhafte Zeilen werden übersprungen und nach
+sind nicht enthalten, diese trägst du danach im Reiter „Teilnehmer“ nach (die Meldung nach dem Import
+erinnert an die Gegenstände; bis dahin steht in der Spalte „Anmerkungen“ grau „Gegenstand noch offen“). Fehlerhafte Zeilen werden übersprungen und nach
 dem Import mit Zeilennummer und Grund aufgelistet, z. B. fehlende Pflichtangaben, Art nicht
 ED/DK, Leistungsklasse nicht 1–3, ED ohne gültige Disziplin oder ein ungültiges Datum. Wie beim
 PDF-Import werden auch Zeilen mit einer Prüfung abgelehnt, die der Termin nicht anbietet. Sind im
@@ -1009,6 +1013,22 @@ eingeben). Unter macOS bzw. Linux im Terminal eingeben (das Ergebnis steht dann 
 „ERGEBNIS: alles OK“ heißt: Termine, Auswertung, PDFs, Formular-Import,
 Datensicherung, Oberfläche, Programmsymbol und Diagnose funktionieren. Bei einer Fehlermeldung die Datei bitte an die
 Fehlermeldung anhängen (siehe unten).
+
+### Tastenkürzel
+
+| Wo | Taste | Wirkung |
+|---|---|---|
+| überall | **F1** (am Mac Cmd+?) oder Knopf **„Hilfe“** | Hilfe zum aktuellen Reiter |
+| Hilfe | **Strg+F** (am Mac Cmd+F) | ins Suchfeld |
+| Teilnehmer | **Entf** | markierte Teilnehmer löschen (nach Rückfrage) |
+| Teilnehmer | **Strg-Klick**, **Umschalt-Klick**, **Strg+A** | mehrere bzw. alle sichtbaren Zeilen markieren |
+| Teilnehmer | **Doppelklick** auf eine Zeile | „Bearbeiten…“ öffnen |
+| Ergebniserfassung | Zahl tippen, **F2** (am Mac Enter) oder **Doppelklick**, **Enter**, **Esc** | Wert ersetzen, ändern, übernehmen, verwerfen |
+| Ergebniserfassung | **Tab** / **Umschalt+Tab** | nächste / vorige Eingabe |
+| Ergebniserfassung | **Leertaste** | Häkchen „Disqualifiziert“ setzen, Liste „Abbruch“ aufklappen |
+| Ergebniserfassung | **Entf** / **Rücktaste** | Zelle leeren bzw. Abbruch zurücknehmen |
+| Ergebniserfassung | **Strg+S** (am Mac Cmd+S) | alle Ergebnisse speichern |
+| Rückfragen | **Enter** / **Esc** | vorgegebene Antwort (bei Datenänderungen „Nein“) / abbrechen |
 
 ### Fehler melden oder Wunsch äußern
 

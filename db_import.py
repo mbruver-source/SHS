@@ -89,6 +89,59 @@ _KEINE_ANGEBOTE_HINWEIS = (
 )
 
 
+# Nachtest 2 (N12, Marco 04.11.2026): ein konkreter Rat je Ablehnungsgrund, angezeigt in einer
+# eigenen Zeile unter dem Eintrag (app._import_ergebnis_melden). Erkannt wird der Grund an
+# seinem Text - die Texte entstehen alle in diesem Modul. Der allgemeine Abschnitt „Was tun?“
+# bleibt für alles Übrige.
+_RAT_JE_GRUND = (
+    ("pypdf fehlt", None),  # Programmfehler, kein Rat an den Teilnehmer
+    ("mehrere Prüfungen angekreuzt",
+     "Rat: Für jede weitere Prüfung ein eigenes Formular schicken lassen oder den Teilnehmer je "
+     "Prüfung von Hand anlegen („Teilnehmer hinzufügen…“)."),
+    ("keine Prüfung angekreuzt",
+     "Rat: Beim Teilnehmer die gewünschte Prüfung erfragen und ihn von Hand anlegen."),
+    ("wird in diesem Termin nicht angeboten",
+     "Rat: Mit dem Teilnehmer eine angebotene Prüfung vereinbaren und ihn von Hand anlegen – oder, "
+     "falls die Prüfung doch angeboten wird, sie freischalten (siehe Hinweis) und erneut einlesen."),
+    ("noch keine angebotenen Prüfungen hinterlegt",
+     "Rat: Zuerst die angebotenen Prüfungen in den Veranstaltungsdaten ankreuzen, dann erneut einlesen."),
+    ("Hündin und Rüde sind beide angekreuzt",
+     "Rat: Das Geschlecht des Hundes erfragen und den Teilnehmer von Hand anlegen."),
+    ("kein SHS-Anmeldeformular",
+     "Rat: Das Anmeldeformular aus dem Reiter „Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
+    ("keine Formularfelder",
+     "Rat: Das Anmeldeformular aus dem Reiter „Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
+    ("keine lesbare PDF-Datei",
+     "Rat: Die Datei erneut schicken lassen; sie ist vermutlich beschädigt."),
+    ("Datei konnte nicht gelesen werden",
+     "Rat: Die Datei erst in einen eigenen Ordner speichern (z. B. aus dem E-Mail-Programm) und von dort einlesen."),
+    ("unbekannte Prüfung",
+     "Rat: Formular eines anderen Termins? Die Prüfung erfragen und den Teilnehmer von Hand anlegen."),
+    ("kein gültiges Datum",
+     "Rat: Das Datum als TT.MM.JJJJ eintragen und erneut einlesen oder den Teilnehmer von Hand anlegen."),
+    ("ist ungültig",
+     "Rat: Den richtigen Wert erfragen bzw. in der Datei korrigieren und erneut einlesen oder den "
+     "Teilnehmer von Hand anlegen."),
+    ("fehlt",
+     "Rat: Die fehlende Angabe erfragen und ergänzt erneut einlesen oder von Hand anlegen."),
+)
+
+
+def rat_bei_ablehnung(fehler: str) -> str | None:
+    """Rat zum Grund eines abgelehnten Import-Eintrags (N12) oder None, wenn keiner passt.
+    Gesucht wird nur im Grund - ohne Zeile/Datei davor und ohne eingegebene Werte in „…“,
+    sonst gäbe ein Name, Dateiname oder Wert wie „fehlt“ den falschen Rat (Verifikation B16)."""
+    grund = re.sub(r"„[^“]*“", "", fehler.split(": ", 1)[-1])
+    return next((rat for merkmal, rat in _RAT_JE_GRUND if merkmal in grund), None)
+
+
+#: Nachtest 2 (N11): Gegenstände stehen weder in der CSV-Liste noch im OMA-Export.
+_GEGENSTAENDE_NACHTRAGEN = (
+    "Die Gegenstände stehen nicht in der Liste – bis zum Prüfungstag im Reiter „Teilnehmer“ "
+    "über „Bearbeiten…“ nachtragen (bis dahin zeigt die Spalte „Anmerkungen“ „Gegenstand noch offen“)."
+)
+
+
 def _nicht_angeboten_text(bezeichnung: str, formular: bool = False) -> str:
     vermutung = " - Formular eines anderen Termins?" if formular else "."
     # UX-Nachtest 03.10.2026, N5: der Hinweis zum Freischalten steht nur noch EINMAL am Ende
@@ -391,7 +444,8 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
         hinweise.append("Die Datei enthält keine Teilnehmerzeilen - es wurde nichts importiert.")
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(hinweise, nicht_angeboten) + excel_hinweise,
+        hinweise=(_hinweise_ergaenzen(hinweise, nicht_angeboten) + excel_hinweise
+                  + ([_GEGENSTAENDE_NACHTRAGEN] if importiert else [])),
     )
 
 
@@ -555,7 +609,8 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
     hinweise = [_KEINE_ANGEBOTE_HINWEIS] if not angebotene and (importiert or fehler) else []
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
-        hinweise=_hinweise_ergaenzen(hinweise, nicht_angeboten),
+        hinweise=(_hinweise_ergaenzen(hinweise, nicht_angeboten)
+                  + ([_GEGENSTAENDE_NACHTRAGEN] if importiert else [])),
     )
 
 

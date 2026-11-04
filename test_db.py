@@ -1593,8 +1593,10 @@ class TestDatenbank(unittest.TestCase):
                       ergebnis.fehler[0])
         # UX-Nachtest N5: der Freischalt-Hinweis steht nur noch einmal in den Hinweisen.
         self.assertNotIn("Veranstaltungsdaten", ergebnis.fehler[0])
-        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertEqual(len(ergebnis.hinweise), 2)
         self.assertIn("Veranstaltungsdaten bearbeiten", ergebnis.hinweise[0])
+        # Nachtest 2 (N11): Gegenstände stehen nicht in der Liste - nachtragen.
+        self.assertIn("Gegenstände stehen nicht in der Liste", ergebnis.hinweise[1])
         self.assertEqual([t["rufname_hund"] for t in list_teilnehmer(self.conn)], ["A"])
 
     def test_importiere_teilnehmer_aus_csv_lehnt_nicht_angebotene_pruefung_ab(self):
@@ -1618,8 +1620,10 @@ class TestDatenbank(unittest.TestCase):
         # UX-Nachtest N5: Name in der Meldung, Freischalt-Hinweis nur einmal.
         self.assertIn("Zeile 3 (Jan Meier): Fläche LK 3 wird in diesem Termin nicht angeboten", ergebnis.fehler[0])
         self.assertNotIn("Formular eines anderen Termins", ergebnis.fehler[0])
-        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertEqual(len(ergebnis.hinweise), 2)
         self.assertIn("Veranstaltungsdaten bearbeiten", ergebnis.hinweise[0])
+        # Nachtest 2 (N11): Gegenstände stehen nicht in der Liste - nachtragen.
+        self.assertIn("Gegenstände stehen nicht in der Liste", ergebnis.hinweise[1])
 
     def test_csv_import_ueberspringt_bereits_gemeldete(self):
         """UX-Nachtest 03.10.2026, N1: dieselbe Datei zweimal -> keine Doppelten."""
@@ -1655,8 +1659,9 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
         self.assertEqual(ergebnis.importiert, 1)
-        self.assertEqual(len(ergebnis.hinweise), 1)
+        self.assertEqual(len(ergebnis.hinweise), 2)
         self.assertIn("keine angebotenen Prüfungen hinterlegt", ergebnis.hinweise[0])
+        self.assertIn("über „Bearbeiten…“ nachtragen", ergebnis.hinweise[1])
 
     def test_importiere_teilnehmer_aus_oma_ungueltiges_geschlecht_ueberspringt_zeile(self):
         pfad = self._oma_datei([
@@ -4264,6 +4269,36 @@ class TestAnmeldeformularImport(unittest.TestCase):
         self.assertTrue(ergebnis.fehler[0].startswith("zwei.pdf: mehrere Prüfungen angekreuzt"), ergebnis.fehler)
         self.assertIn("DK-LK 1", ergebnis.fehler[0])
         self.assertIn("Fläche LK 3", ergebnis.fehler[0])
+
+    def test_rat_bei_ablehnung_je_grund(self):
+        # Nachtest 2 (N12): jeder Ablehnungsgrund des PDF-Imports bekommt einen eigenen Rat.
+        from db_import import rat_bei_ablehnung
+
+        faelle = {
+            "a.pdf: mehrere Prüfungen angekreuzt (DK-LK 1, Fläche LK 3) - je Formular": "eigenes Formular",
+            "a.pdf: keine Prüfung angekreuzt": "gewünschte Prüfung erfragen",
+            "a.pdf: Fläche LK 3 wird in diesem Termin nicht angeboten - Formular eines anderen "
+            "Termins? Bitte mit dem Teilnehmer klären.": "angebotene Prüfung vereinbaren",
+            "a.pdf: Hündin und Rüde sind beide angekreuzt": "Geschlecht des Hundes erfragen",
+            "a.pdf: die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)": "Reiter „Export“",
+            "a.pdf: Datei ist keine lesbare PDF-Datei (x)": "erneut schicken",
+            "Zeile 4 (Max Muster): Art „EDX“ ist ungültig – bitte ED oder DK eintragen": "korrigieren",
+            "Zeile 5: Nachname/Vorname/Rufname des Hundes fehlt": "fehlende Angabe erfragen",
+            "a.pdf: unbekannte Prüfung 'XY' angekreuzt": "Formular eines anderen Termins",
+            "a.pdf: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)": "Reiter „Export“",
+            "a.pdf: Datei konnte nicht gelesen werden (gesperrt)": "eigenen Ordner speichern",
+            "a.pdf: in diesem Termin sind noch keine angebotenen Prüfungen hinterlegt": "Veranstaltungsdaten",
+            "Zeile 6 (Max Muster): Geburtsdatum: „31.02.2020“ ist kein gültiges Datum – diesen Tag "
+            "gibt es nicht": "TT.MM.JJJJ",
+            # Verifikation B16: eingegebene Werte und Namen bestimmen den Rat nicht
+            "Zeile 7 (Max Muster): Art „fehlt“ ist ungültig – bitte ED oder DK eintragen": "korrigieren",
+            "fehlt-ungültig.pdf: keine Prüfung angekreuzt": "gewünschte Prüfung erfragen",
+        }
+        for fehler, erwartet in faelle.items():
+            with self.subTest(fehler=fehler):
+                self.assertIn(erwartet, rat_bei_ablehnung(fehler) or "")
+        self.assertIsNone(rat_bei_ablehnung("a.pdf: das Einlesen ist nicht verfügbar (pypdf fehlt)"))
+        self.assertIsNone(rat_bei_ablehnung("etwas ganz anderes"))
 
     def test_huendin_und_ruede_angekreuzt(self):
         pfad = self._pdf("beide.pdf", haken=(
