@@ -1126,6 +1126,78 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
         }
 
 
+class VerteilenDialog(ResponsiveSchriftMixin, QDialog):
+    """UX-Test 2026-11, T1 (Marco 04.11.2026): „Automatisch verteilen…“ mit optionaler
+    Mittagspause. Sie wird nach dem Verteilen bei allen Richtern eingefügt (wie „Pause bei
+    allen Richtern“). Steht im bisherigen Plan schon eine Mittagspause, ist sie vorbelegt -
+    so bleibt sie beim Neu-Verteilen erhalten. `ersetzt_plan`: Warnung, dass der bisherige
+    Plan ersetzt wird (vorher eine eigene Rückfrage, UX-Test 02.10.2026, U9)."""
+
+    def __init__(self, parent=None, ersetzt_plan: bool = False, pause: tuple[str, int] | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("Automatisch verteilen")
+
+        text = QLabel(
+            "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter."
+            + (" Der bisherige Zeitplan wird dabei ERSETZT (eingefügte Pausen und von Hand "
+               "geänderte Reihenfolgen gehen verloren)." if ersetzt_plan else "")
+        )
+        text.setWordWrap(True)
+        self.warnung = text
+
+        self.mit_pause = QCheckBox("Mittagspause einplanen um")
+        self.uhrzeit = QLineEdit(pause[0] if pause else "12:00")
+        self.uhrzeit.setPlaceholderText("HH:MM")
+        self.uhrzeit.setMaximumWidth(70)
+        self.dauer_minuten = QSpinBox()
+        self.dauer_minuten.setRange(5, 240)
+        self.dauer_minuten.setValue(pause[1] if pause else 45)
+        self.dauer_minuten.setSuffix(" Min.")
+        self.mit_pause.toggled.connect(self.uhrzeit.setEnabled)
+        self.mit_pause.toggled.connect(self.dauer_minuten.setEnabled)
+        self.mit_pause.setChecked(pause is not None)
+        self.uhrzeit.setEnabled(pause is not None)
+        self.dauer_minuten.setEnabled(pause is not None)
+        pause_zeile = QHBoxLayout()
+        pause_zeile.addWidget(self.mit_pause)
+        pause_zeile.addWidget(self.uhrzeit)
+        pause_zeile.addWidget(QLabel("Uhr für"))
+        pause_zeile.addWidget(self.dauer_minuten)
+        pause_zeile.addStretch()
+        pause_hinweis = QLabel("Je Richter vor dem ersten Block ab dieser Uhrzeit; wer vorher schon "
+                               "fertig ist, bekommt keine Pause.")
+        pause_hinweis.setWordWrap(True)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Verteilen")
+        buttons.accepted.connect(self._pruefen_und_akzeptieren)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(text)
+        layout.addLayout(pause_zeile)
+        layout.addWidget(pause_hinweis)
+        layout.addWidget(buttons)
+        self._schriftgroesse_anwenden()
+
+    def _pruefen_und_akzeptieren(self) -> None:
+        if self.mit_pause.isChecked():
+            try:
+                datetime.datetime.strptime(self.uhrzeit.text().strip(), "%H:%M")
+            except ValueError:
+                QMessageBox.warning(self, "Ungültige Uhrzeit", "Bitte die Uhrzeit als HH:MM eingeben, z. B. 12:00.")
+                self.uhrzeit.setFocus()
+                return
+        self.accept()
+
+    def pause(self) -> tuple[str, int] | None:
+        """(Uhrzeit „HH:MM“, Dauer in Minuten) oder None ohne Mittagspause."""
+        if not self.mit_pause.isChecked():
+            return None
+        uhrzeit = datetime.datetime.strptime(self.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
+        return uhrzeit, self.dauer_minuten.value()
+
+
 class BewertungsbogenAuswahlDialog(QDialog):
     """Auswahl, welche Art/Leistungsklasse(n)/Disziplin(en) in die Sammel-PDF "alle
     Bewertungsbögen" aufgenommen werden (Nutzerwunsch 21.09., Marcos eigener Lösungs-

@@ -41,6 +41,7 @@ from db import (
     aktualisiere_zeitplan_eintrag,
     automatische_zeitplan_verteilung,
     berechne_zeitplan,
+    berechne_zeitplan_bloecke,
     dk_mindestabstand,
     get_veranstaltung,
     list_zeitplan_eintraege,
@@ -57,7 +58,7 @@ from db import (
     zeitplan_ueberschneidungen,
 )
 from desktop_darstellung import _farbe
-from desktop_dialoge import PauseDialog, PruefungsblockDialog
+from desktop_dialoge import PauseDialog, PruefungsblockDialog, VerteilenDialog
 from desktop_gemeinsam import (
     _Ablageort,
     _aktualisiere_veranstaltung_feld,
@@ -70,6 +71,10 @@ from desktop_gemeinsam import (
     symbol_html,
     symbol_setzen,
 )
+
+#: Bezeichnung der Pause aus „Automatisch verteilen…“ - daran erkennt ein erneutes Verteilen
+#: die bisherige Mittagspause wieder (UX-Test 2026-11, T1).
+MITTAGSPAUSE = "Mittagspause"
 
 
 def _klartext_tooltip(text: str) -> str:
@@ -99,6 +104,7 @@ class ZeitplanTab(QWidget):
     def __init__(self, conn, ablageort: _Ablageort | None = None, parent=None):
         super().__init__(parent)
         self.conn = conn
+        self._letzte_mittagspause: tuple[str, int] | None = None  # T1, siehe _mittagspause_vorschlag
         # Wird ein `ablageort` übergeben (siehe HauptFenster), ist es dasselbe Objekt wie
         # im Tab "Export" - ein dort gewählter Ordner gilt dann auch hier als Standard-
         # Speicherort für "Zeitplan (PDF)…", und umgekehrt.
@@ -616,15 +622,70 @@ class ZeitplanTab(QWidget):
             )
             return
         # UX-Test 02.10.2026, U9: nur warnen, wenn es schon einen Plan gibt, der verloren ginge.
-        if any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter):
-            if not _ja_nein(
-                self, "Automatisch verteilen",
-                "Erstellt einen ausgewogenen Vorschlag über ALLE angelegten Richter "
-                "und ERSETZT dabei deren bisherigen Zeitplan (bereits eingefügte Pausen und "
-                "von Hand geänderte Reihenfolgen gehen dabei verloren). Fortfahren?",
-            ):
+        # UX-Test 2026-11, T1: im Dialog mit der optionalen Mittagspause statt einer Rückfrage.
+        ersetzt_plan = any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter)
+        dialog = VerteilenDialog(self, ersetzt_plan=ersetzt_plan, pause=self._mittagspause_vorschlag())
+        if _ausfuehren(dialog) != QDialog.Accepted:
+            return
+        if not self.verteilen_ohne_rueckfrage():
+            return
+        pause = self._letzte_mittagspause = dialog.pause()
+        pause_text = ""
+        if pause is not None:
+            try:
+                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, pause[0], pause[1], MITTAGSPAUSE)
+            except sqlite3.Error as exc:
+                _db_fehler_anzeigen(self, exc)
+                self.aktualisieren()
                 return
-        self.verteilen_ohne_rueckfrage()
+            anzahl = sum(1 for _name, zeit in eingefuegt if zeit)
+            pause_text = (f"\n\nMittagspause ({pause[1]} Min.) ab {pause[0]} Uhr bei {anzahl} von "
+                          f"{len(eingefuegt)} Richter(n) eingeplant." if anzahl else
+                          f"\n\nKeine Mittagspause eingeplant – ab {pause[0]} Uhr steht keine Prüfung mehr im Plan.")
+            self.aktualisieren()
+        self._verteilung_bestaetigen(pause_text)
+
+    def _mittagspause_vorschlag(self) -> tuple[str, int] | None:
+        """T1: beim Neu-Verteilen die bisherige Mittagspause vorbelegen, damit sie erhalten
+        bleibt - die zuletzt hier gewählte Wunschzeit (die tatsächliche Startzeit kann nach
+        einem laufenden Block später liegen), sonst Beginn und Dauer aus dem jetzigen Plan."""
+        im_plan = self._mittagspause_im_plan()
+        if im_plan is None:
+            return None
+        # Dauer aus dem Plan (von Hand geändert?), Uhrzeit aus dem letzten Wunsch.
+        uhrzeit = self._letzte_mittagspause[0] if self._letzte_mittagspause is not None else im_plan[0]
+        return uhrzeit, im_plan[1]
+
+    def _mittagspause_im_plan(self) -> tuple[str, int] | None:
+        for spur in berechne_zeitplan_bloecke(self.conn):
+            for block in spur["bloecke"]:
+                if block["typ"] == "pause" and (block.get("bezeichnung") or "") == MITTAGSPAUSE:
+                    return block["start"].strftime("%H:%M"), block["dauer_minuten"]
+        return None
+
+    def _verteilung_bestaetigen(self, pause_text: str = "") -> None:
+        """UX-Test 2026-11, T1 (Nachtest N1): ausdrücklich bestätigen, dass alles eingeplant ist
+        und es keine Überschneidungen gibt - grüne Haken hießen nur „eingeplant“."""
+        status = zeitplan_gruppen_status(self.conn)
+        offen = [g for g in status if not g["eingeplant"]]
+        konflikte = zeitplan_ueberschneidungen(self.conn)
+        teams = len({k["teilnehmer"]["id"] for k in konflikte})
+        if not offen and not konflikte:
+            starts = sum(g["anzahl"] for g in status)
+            QMessageBox.information(
+                self, "Zeitplan erstellt",
+                f"Alle {len(status)} Prüfung(en) mit {starts} Start(s) sind eingeplant, und es gibt "
+                "keine Überschneidungen." + pause_text,
+            )
+            self.status_label.setText("Zeitplan erstellt: alles eingeplant, keine Überschneidungen.")
+            return
+        zeilen = []
+        if offen:
+            zeilen.append(f"{len(offen)} Prüfung(en) noch nicht eingeplant (siehe „Offene Starts“).")
+        if konflikte:
+            zeilen.append(f"Überschneidungen bei {teams} Team(s) – rot markiert, bitte von Hand verschieben.")
+        QMessageBox.warning(self, "Zeitplan erstellt – bitte prüfen", "\n".join(zeilen) + pause_text)
+        self.status_label.setText("Zeitplan erstellt – bitte die Hinweise rechts prüfen.")
 
     # --- Aktionen: Einträge ------------------------------------------------
 

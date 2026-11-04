@@ -14,8 +14,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B1 | T3 + T4 Ergebniserfassung | M | erledigt | 916d954 | 38 → 55 % | C24 teilweise; R-B1; real ≈ 17 % |
 | B2 | T6 + T7 Teilnehmer-ED und Meldestelle | S | erledigt | eaa2d5b | 55 → 65 % | real ≈ 10 % (inkl. CVE-Rückfrage) |
 | B3 | T9 + T10 + T11 Version, Sicherungstext, Dateiname | M | erledigt | 96db049 | 65 → 80 % | real ≈ 15 %; Enter-Fehler N5 echt, behoben |
-| B4 | T2 Import-Ablehnungen nachlesbar | M | erledigt | (B4-Commit) | 9 → 17 % | R-B4 |
-| B5 | T1 Zeitplan: Bestätigung und Pausenfeld | M | offen | | | |
+| B4 | T2 Import-Ablehnungen nachlesbar | M | erledigt | 76ae4d6 | 9 → 17 % | R-B4 |
+| B5 | T1 Zeitplan: Bestätigung und Pausenfeld | M | erledigt | (B5-Commit) | 17 → 26 % | |
 | B6 | T8 Hilfe mit Suche und F1 | M | offen | | | |
 | B7 | T14 Kleinigkeiten (R7) | S | erledigt | 5b8823c | 80 → 85 %, 0 → 9 % | vor B4 gezogen; R-B7 (Befundnummern) |
 | B8 | T5 Auswahl „Prüfung“ | L | offen | | | ersetzt R2 |

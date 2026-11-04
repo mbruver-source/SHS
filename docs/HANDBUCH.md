@@ -595,7 +595,10 @@ Der Zeitplan hat eine Spalte je Richter.
    Spalten. Weitere Spalten mit **„Richter hinzufügen“** anlegen, mit **„Umbenennen…“** benennen,
    mit ◀ ▶ verschieben.
 3. Entweder **„Automatisch verteilen…“** für einen ausgewogenen Vorschlag – das **ersetzt** einen
-   bereits vorhandenen Plan aller Richter (dann nach Rückfrage) – oder von Hand je Richter
+   bereits vorhandenen Plan aller Richter (der Dialog sagt es dann). Im selben Dialog lässt sich
+   eine **Mittagspause** (Uhrzeit, Dauer) gleich mit einplanen; beim erneuten Verteilen ist sie
+   vorbelegt. Danach bestätigt das Programm ausdrücklich „Alle Prüfungen sind eingeplant, und es
+   gibt keine Überschneidungen“ oder nennt, was noch zu prüfen ist – oder von Hand je Richter
    **„Prüfungsblock hinzufügen…“** (Art, Leistungsklasse, Disziplin, Dauer je Teilnehmer) und
    **„Pause hinzufügen…“**. Der Vorschlag setzt Dreikampf-Teams nie gleichzeitig bei zwei
    Richtern an und hält zwischen ihren Disziplinen den **„Mindestabstand Team“** ein (Feld oben,
@@ -1071,16 +1074,17 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
    (sonst mit **„Richter hinzufügen“** anlegen).
 2. Oben bei **„Zeitplan-Start (HH:MM)“** die Uhrzeit eintragen, z. B. 08:30, und
    **„Startzeit speichern“** klicken.
-3. Auf **„Automatisch verteilen…“** klicken. Das Programm verteilt alle Teilnehmer auf die
-   Richter.
+3. Auf **„Automatisch verteilen…“** klicken. Für die Mittagspause den Haken bei
+   **„Mittagspause einplanen um“** setzen, Uhrzeit (z. B. 12:00) und Dauer eintragen, dann
+   **„Verteilen“**. Das Programm verteilt alle Teilnehmer auf die Richter und meldet „Alle
+   Prüfungen sind eingeplant, und es gibt keine Überschneidungen“.
 4. Ist eine Zeile **rot mit Warndreieck**, steht ein Team zur selben Zeit an zwei Stellen. Dann die
    Blöcke mit **„Hoch“** / **„Runter“** verschieben.
-5. Mittagspause: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den Haken bei
-   **„Bei allen Richtern einfügen, um“** setzen, die Uhrzeit (z. B. 12:00) eintragen und
-   **„OK“** klicken. Ist ein Richter schon vorher fertig, bekommt er keine Pause – das Programm
-   sagt dir, bei wem. Achtung: Ein erneutes
-   „Automatisch verteilen…“ ersetzt den ganzen Plan – die Pause musst du danach wieder
-   einfügen.
+5. Eine weitere Pause später: auf **„Pause hinzufügen…“** klicken, die Dauer eintragen, den
+   Haken bei **„Bei allen Richtern einfügen, um“** setzen, die Uhrzeit eintragen und **„OK“**
+   klicken. Ist ein Richter schon vorher fertig, bekommt er keine Pause – das Programm sagt dir,
+   bei wem. Ein erneutes „Automatisch verteilen…“ ersetzt den ganzen Plan; nur die Mittagspause
+   aus dem Verteilen-Dialog ist dann wieder vorbelegt.
 6. Mit **„Zeitplan (PDF)…“** speichern und den Richtern schicken.
 
 ### Schritt 6: Kurz vor der Prüfung

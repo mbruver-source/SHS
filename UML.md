@@ -408,15 +408,16 @@ sequenceDiagram
 flowchart TD
     a[ZeitplanTab öffnen] --> b[Richter-Spuren aus den<br/>Veranstaltungsdaten]
     b --> c{Aktion}
-    c -->|„Automatisch verteilen“| d[db: Prüfungsblöcke auf Richter verteilen<br/>DK-Mindestabstand beachten]
+    c -->|„Automatisch verteilen“| v[VerteilenDialog<br/>optional Mittagspause]
+    v --> d[db: Prüfungsblöcke auf Richter verteilen<br/>DK-Mindestabstand beachten<br/>dann ggf. Pause bei allen Richtern]
     c -->|Block hinzufügen| e[PruefungsblockDialog]
     c -->|Pause einfügen| f[PauseDialog<br/>an Position oder bei allen Richtern]
     c -->|Eintrag bearbeiten| m[db.zeitplan_eintrag<br/>Block: Dauer je Teilnehmer, Pause: PauseDialog]
     d & e & f & m --> g[db.berechne_zeitplan / berechne_zeitplan_bloecke]
     g --> h[db.zeitplan_ueberschneidungen]
     h --> i{Überschneidungen<br/>oder offene Starts?}
-    i -->|ja| j[Hinweis im Reiter]
-    i -->|nein| k[Plan fertig]
+    i -->|ja| j[Hinweis im Reiter<br/>nach dem Verteilen zusätzlich eine Warnung]
+    i -->|nein| k[Plan fertig<br/>nach dem Verteilen: Bestätigung]
     j --> c
     k --> l[Zeitplan als PDF<br/>pdf_export]
 ```

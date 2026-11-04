@@ -162,6 +162,27 @@ def meldungen_sammeln(monkeypatch, art, merke="text"):
     return gesammelt
 
 
+def verteilen_dialog_bestaetigen(monkeypatch, pause: tuple[str, int] | None = None, abbrechen: bool = False):
+    """Ersetzt das Anzeigen des Dialogs „Automatisch verteilen“ (UX-Test 2026-11, T1): setzt
+    auf Wunsch die Mittagspause und bestätigt; liefert die Liste der gezeigten Dialoge."""
+    from desktop_dialoge import VerteilenDialog
+
+    gezeigt = []
+
+    def _exec(dialog):
+        gezeigt.append(dialog)
+        if abbrechen:
+            return QDialog.Rejected
+        dialog.mit_pause.setChecked(pause is not None)
+        if pause is not None:
+            dialog.uhrzeit.setText(pause[0])
+            dialog.dauer_minuten.setValue(pause[1])
+        return QDialog.Accepted
+
+    monkeypatch.setattr(VerteilenDialog, "exec", _exec)
+    return gezeigt
+
+
 def import_meldungen_sammeln(monkeypatch):
     """Wie meldungen_sammeln(..., "information"), fängt aber auch die Importmeldung mit Knopf
     „Meldung kopieren und schließen“ und Warnsymbol ab (UX-Test 03.11.2026, X10: eigenes QMessageBox-Fenster)."""
@@ -8507,11 +8528,13 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
     qtbot.addWidget(fenster)
     tab = fenster.zeitplan_tab
 
-    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes, merke="args")
+    # UX-Test 2026-11, T1: Die Warnung steht jetzt im Dialog „Automatisch verteilen“.
+    dialoge = verteilen_dialog_bestaetigen(monkeypatch)
+    meldungen_sammeln(monkeypatch, "information")
     tab._automatisch_verteilen()
-    assert fragen == []  # leerer Plan: keine Warnung
+    assert "ERSETZT" not in dialoge[-1].warnung.text()  # leerer Plan: keine Warnung
     tab._automatisch_verteilen()
-    assert len(fragen) == 1  # jetzt gibt es einen Plan, der ersetzt würde
+    assert "ERSETZT" in dialoge[-1].warnung.text()  # jetzt gibt es einen Plan, der ersetzt würde
 
     spalten = [tab._spalten_layout.itemAt(i).widget() for i in range(tab._spalten_layout.count())]
     liste = next(lw for sp in spalten if sp is not None for lw in sp.findChildren(QListWidget))
@@ -8521,6 +8544,83 @@ def test_zeitplan_blockkoepfe_und_warnung_nur_mit_plan(qtbot, termin, monkeypatc
     assert liste.item(0).font().bold()
     assert texte[1].lstrip().startswith("09:00") and "Nr. 1" in texte[1]
 
+
+
+def test_verteilen_bestaetigt_und_plant_mittagspause_ein(qtbot, termin, monkeypatch):
+    """UX-Test 2026-11, T1: Nach dem Verteilen steht ausdrücklich „keine Überschneidungen“;
+    die Mittagspause aus dem Dialog landet bei allen Richtern und ist beim Neu-Verteilen
+    vorbelegt; „Abbrechen“ ändert nichts."""
+    from db import berechne_zeitplan_bloecke, list_zeitplan_eintraege, list_zeitplan_richter
+    from desktop_zeitplan import MITTAGSPAUSE
+
+    conn, pfad = termin
+    for nr in range(1, 13):
+        _teilnehmer_anlegen(conn, nachname=f"T{nr}", startnummer=nr)
+    add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+
+    dialoge = verteilen_dialog_bestaetigen(monkeypatch, pause=("10:00", 30))
+    meldungen = meldungen_sammeln(monkeypatch, "information")
+    tab._automatisch_verteilen()
+    assert meldungen[-1].startswith("Alle 1 Prüfung(en) mit 12 Start(s) sind eingeplant, und es gibt keine Überschneidungen.")
+    assert "Mittagspause (30 Min.) ab 10:00 Uhr bei 1 von 1 Richter(n)" in meldungen[-1]
+    assert len(dialoge) == 1
+    pausen = [b for spur in berechne_zeitplan_bloecke(conn) for b in spur["bloecke"] if b["typ"] == "pause"]
+    assert [(p["bezeichnung"], p["dauer_minuten"]) for p in pausen] == [(MITTAGSPAUSE, 30)]
+
+    # Neu verteilen: die Mittagspause ist vorbelegt (bleibt erhalten).
+    vorbelegt = []
+    monkeypatch.setattr("desktop_dialoge.VerteilenDialog.exec", lambda d: vorbelegt.append(
+        (d.mit_pause.isChecked(), d.uhrzeit.text(), d.dauer_minuten.value())) or QDialog.Accepted)
+    tab._automatisch_verteilen()
+    assert vorbelegt == [(True, "10:00", 30)]  # Wunschzeit, nicht die tatsächliche Startzeit
+
+    # Nach einem Neustart (neuer Reiter): Beginn und Dauer aus dem Plan.
+    from desktop_zeitplan import ZeitplanTab
+
+    frisch = ZeitplanTab(conn)
+    qtbot.addWidget(frisch)
+    pausen_start = next(b["start"].strftime("%H:%M") for spur in berechne_zeitplan_bloecke(conn)
+                        for b in spur["bloecke"] if b["typ"] == "pause")
+    assert frisch._mittagspause_vorschlag() == (pausen_start, 30) and pausen_start >= "10:00"
+    pausen = [b for spur in berechne_zeitplan_bloecke(conn) for b in spur["bloecke"] if b["typ"] == "pause"]
+    assert len(pausen) == 1
+
+    # Abbrechen: Plan bleibt.
+    vorher = [(e["id"]) for r in list_zeitplan_richter(conn) for e in list_zeitplan_eintraege(conn, r["id"])]
+    verteilen_dialog_bestaetigen(monkeypatch, abbrechen=True)
+    tab._automatisch_verteilen()
+    assert [(e["id"]) for r in list_zeitplan_richter(conn) for e in list_zeitplan_eintraege(conn, r["id"])] == vorher
+
+
+def test_verteilen_meldet_offene_starts(qtbot, termin, monkeypatch):
+    """UX-Test 2026-11, T1: Bleibt etwas uneingeplant, sagt die Bestätigung das (Warnung)."""
+    import desktop_zeitplan
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="A", startnummer=1)
+    add_zeitplan_richter(conn)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    verteilen_dialog_bestaetigen(monkeypatch)
+    monkeypatch.setattr(desktop_zeitplan, "zeitplan_gruppen_status",
+                        lambda c: [{"eingeplant": False, "art": "ED", "stufe": 1, "disziplin": "Flächensuche", "anzahl": 1}])
+    warnungen = meldungen_sammeln(monkeypatch, "warning")
+    tab._automatisch_verteilen()
+    assert warnungen == ["1 Prüfung(en) noch nicht eingeplant (siehe „Offene Starts“)."]
+
+    # Überschneidungen werden genannt; eine Mittagspause nach Planende wird nicht eingefügt.
+    monkeypatch.setattr(desktop_zeitplan, "zeitplan_gruppen_status", lambda c: [])
+    monkeypatch.setattr(tab, "aktualisieren", lambda: None)  # Seitenleiste braucht volle Konflikt-Daten
+    monkeypatch.setattr(desktop_zeitplan, "zeitplan_ueberschneidungen",
+                        lambda c: [{"teilnehmer": {"id": 1}}, {"teilnehmer": {"id": 1}}])
+    verteilen_dialog_bestaetigen(monkeypatch, pause=("18:00", 30))
+    tab._automatisch_verteilen()
+    assert warnungen[-1].startswith("Überschneidungen bei 1 Team(s)")
+    assert warnungen[-1].endswith("Keine Mittagspause eingeplant – ab 18:00 Uhr steht keine Prüfung mehr im Plan.")
 
 
 def test_formular_import_ki_weg_eingeklappt_und_vorlage(qtbot, conn, monkeypatch, tmp_path, gespeichert_meldungen):

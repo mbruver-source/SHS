@@ -1356,7 +1356,7 @@ class DemoTour(QObject):
             self._markieren(tab.verteilen_btn)
 
         def verteilen() -> None:
-            # Direkt statt über den Knopf - bei schon vorhandenem Plan käme eine Rückfrage.
+            # Direkt statt über den Knopf - der öffnet den Dialog „Automatisch verteilen“ (T1).
             if not list_zeitplan_richter(self.conn):
                 raise DemoFehler("Im Zeitplan sind keine Richter angelegt.")
             if not tab.verteilen_ohne_rueckfrage():

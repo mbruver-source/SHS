@@ -9216,3 +9216,23 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   Ergebnis des vorigen Imports stehen (an der Uhrzeit erkennbar). Vorschlag: so lassen.
 - Tests: 1 neuer GUI-Test, 1 erweitert; Gegenprobe scheitert ohne die Änderung. 721 Unittests,
   530 GUI-Tests grün; nach der Nacharbeit die Import-Tests grün.
+
+### ux_test_2026_11 B5 – Zeitplan: Bestätigung und Mittagspause, T1 (04.11.2026)
+
+- **Dialog „Automatisch verteilen“** (`VerteilenDialog`) statt der bisherigen Rückfrage: nennt das
+  Ersetzen eines vorhandenen Plans und bietet „Mittagspause einplanen um [12:00] Uhr für [45]
+  Min.“ an. Die Pause wird nach dem Verteilen wie „Pause bei allen Richtern“ eingefügt
+  (Bezeichnung „Mittagspause“). Beim Neu-Verteilen ist sie vorbelegt: die zuletzt gewählte
+  Wunschzeit bzw. (nach einem Neustart) Beginn und Dauer der Mittagspause im Plan.
+- **Bestätigung (Nachtest N1):** „Alle Prüfungen sind eingeplant, und es gibt keine
+  Überschneidungen.“ samt Zeile zur Mittagspause; sonst eine Warnung mit der Zahl offener
+  Prüfungen bzw. betroffener Teams. Die Demo nutzt weiter `verteilen_ohne_rueckfrage` ohne
+  Fenster.
+- Handbuch (Kapitel Zeitplan und Schritt-für-Schritt) nachgezogen. Screenshot `handbuch_zeitplan`
+  steht ohnehin auf der Liste; der neue Dialog hat kein eigenes Bild.
+- Tests: 2 neue GUI-Tests, 1 angepasst (Hilfsfunktion `verteilen_dialog_bestaetigen`);
+  Gegenprobe scheitert ohne die Änderung. 721 Unittests, 532 GUI-Tests grün.
+- **Verifikation:** ohne Fehler (297 Pausen-Varianten ohne neue Überschneidung nachgestellt).
+  Nachgezogen: Meldung nennt Zahl der Prüfungen und Starts; Vorbelegung nimmt die Dauer aus
+  dem Plan und die Uhrzeit aus dem letzten Wunsch; `UML.md` (Abschnitt Zeitplan), Kommentar in
+  der Demo, Tests für Vorbelegung nach Neustart, Überschneidungs-Warnung und „keine Pause“.
