@@ -2295,7 +2295,8 @@ def test_export_tab_anmeldeformular_ohne_angebotene_pruefungen_zeigt_hinweis(qtb
 
 
 def test_export_tab_anmeldeformular_erzeugt_pdf(qtbot, conn, tmp_path, monkeypatch):
-    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1")
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1",
+                      verband="HSVRM", meldestelle="Erika Muster")
     ziel = tmp_path / "Anmeldeformular.pdf"
     monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
     tab = ExportTab(conn)
@@ -3267,6 +3268,83 @@ def test_teilnehmer_ed_rueckfrage_nennt_ausgeblendete_gegenstaende(qtbot, monkey
     fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
     dialog._pruefen_und_akzeptieren()
     assert any("Gegenstand 2: Korken" in f for f in fragen) and dialog.result() == 0
+
+
+@pytest.mark.parametrize("text, gefragt", [
+    ("Schlüsselbund, Socke", True), ("Socke und Korken", True), ("Socke/Korken", True),
+    ("Socke UND Korken", True), ("Socke & Korken", True), ("Socke sowie Korken", True),
+    ("Socke u. Korken", True),
+    ("Schlüsselbund", False), ("Undine-Spielzeug", False), ("Ball (rot, klein)", False),
+])
+def test_teilnehmer_ed_mehrere_gegenstaende_in_einem_feld_fragt(qtbot, monkeypatch, text, gefragt):
+    """UX-Test 2026-11, T6: „Schlüsselbund, Socke“ bei ED nur nach Rückfrage (Vorgabe Nein)."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
+    dialog.art.setCurrentText("ED")
+    dialog.gegenstand_1.setText(text)
+    fragen, vorgaben = [], []
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a, **k: fragen.append(a[2]) or vorgaben.append(a[4]) or QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    treffer = [f for f in fragen if "mehreren Gegenständen" in f]
+    assert bool(treffer) == gefragt
+    if gefragt:
+        assert dialog.result() == 0 and vorgaben[fragen.index(treffer[0])] == QMessageBox.No
+
+
+def test_teilnehmer_ed_mehrere_gegenstaende_nur_nach_aenderung(qtbot, conn, monkeypatch):
+    """T6: Ein schon so gespeicherter Gegenstand löst die Rückfrage beim Bearbeiten nicht erneut aus."""
+    _teilnehmer_anlegen(conn, gegenstand_1="Socke, Korken")
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0])
+    qtbot.addWidget(dialog)
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.Yes)
+    dialog._pruefen_und_akzeptieren()
+    assert not any("mehreren Gegenständen" in f for f in fragen)
+    dialog.gegenstand_1.setText("Socke, Korken, Ball")
+    dialog._pruefen_und_akzeptieren()
+    assert any("mehreren Gegenständen" in f for f in fragen)
+
+
+def test_teilnehmer_mehrere_gegenstaende_nach_wechsel_auf_ed(qtbot, conn, monkeypatch):
+    """Verifikation B2: Wechselt ein DK-Teilnehmer mit „Socke, Korken“ auf ED, kommt die
+    Rückfrage auch ohne geänderten Text; „Nein“ setzt den Fokus auf Gegenstand 1."""
+    _teilnehmer_anlegen(conn, art="DK", disziplin=None, gegenstand_1="Socke, Korken")
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("ED")
+    fragen = rueckfragen_sammeln(monkeypatch, QMessageBox.No)
+    dialog._pruefen_und_akzeptieren()
+    assert any("mehreren Gegenständen" in f for f in fragen)
+    assert dialog.focusWidget() is dialog.gegenstand_1
+
+
+def test_export_tab_anmeldeformular_warnt_ohne_meldestelle(qtbot, conn, tmp_path, monkeypatch):
+    """UX-Test 2026-11, T7: Beim Erzeugen des Formulars ohne Meldestelle noch einmal warnen
+    (Vorgabe Nein); „Nein“ erzeugt nichts."""
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1", verband="HSVRM")
+    ziel = tmp_path / "Anmeldeformular.pdf"
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), ""))
+    fragen, vorgaben = [], []
+    antwort = [QMessageBox.No]
+    monkeypatch.setattr("app.QMessageBox.question",
+                        lambda *a, **k: fragen.append(a[2]) or vorgaben.append(a[4]) or antwort[0])
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab._anmeldeformular_exportieren()
+    assert fragen and fragen[0].startswith("Meldestelle ist leer") and "wohin" in fragen[0]
+    assert vorgaben[0] == QMessageBox.No
+    assert not ziel.exists()
+    antwort[0] = QMessageBox.Yes
+    tab._anmeldeformular_exportieren()
+    assert ziel.exists()
+
+    # Verifikation B2: nur der Verband fehlt bzw. beides fehlt.
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1", meldestelle="E. Muster")
+    tab._anmeldeformular_exportieren()
+    assert fragen[-1].startswith("Verband ist leer und fehlt") and "wohin" not in fragen[-1]
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1")
+    tab._anmeldeformular_exportieren()
+    assert fragen[-1].startswith("Verband und Meldestelle sind leer und fehlen")
 
 
 def test_teilnehmer_ed_erklaert_gesperrte_gegenstaende(qtbot):
@@ -7819,7 +7897,8 @@ def test_neuer_termin_hinweis_bei_leerem_verband_und_meldestelle(qtbot, monkeypa
 
     dialog._pruefen_und_akzeptieren()
     assert "Verband und Meldestelle sind leer" in fragen[-1]
-    assert vorgaben[-1] == QMessageBox.Yes  # harmlos, später nachtragbar (Marco 15.10.2026)
+    # UX-Test 2026-11, T7 (Marco 04.11.2026): Vorgabe jetzt „Nein“ (vorher „Ja“, 15.10.2026).
+    assert vorgaben[-1] == QMessageBox.No
     assert not akzeptiert
 
     dialog.verband.setText("HSVRM")

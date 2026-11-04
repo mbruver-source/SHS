@@ -9131,3 +9131,22 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 - Tests: 721 Unittests, 510 GUI-Tests grün (vor der Nacharbeit), danach die betroffenen 119
   GUI-Tests grün.
 
+
+### ux_test_2026_11 B2 – ED-Gegenstand und Meldestelle, T6 und T7 (04.11.2026)
+
+- **T6:** Bei ED fragt der Teilnehmer-Dialog nach („… sieht nach mehreren Gegenständen aus“,
+  Vorgabe Nein, Fokus auf Gegenstand 1), wenn Gegenstand 1 Komma, Semikolon, „/“, „+“, „&“ oder
+  „und/oder/sowie/u.“ enthält. Klammerzusätze wie „Ball (rot, klein)“ zählen nicht. Beim
+  Bearbeiten nur nach einer Änderung von Text oder Prüfung (auch DK → ED).
+- **T7:** Die Rückfrage bei leerem Verband/Meldestelle beim Anlegen des Termins hat jetzt die
+  Vorgabe „Nein“ (vorher „Ja“, Marco 15.10.2026). Beim Erzeugen des Anmeldeformulars warnt das
+  Programm noch einmal, solange Verband oder Meldestelle fehlen (Vorgabe Nein; bei fehlender
+  Meldestelle mit dem Satz, dass die Teilnehmer sonst nicht wissen, wohin).
+- **Verifikation:** ohne Befund; die optionalen Punkte (Klammerzusatz, „sowie“/„u.“, eigener
+  Titel der Rückfrage, Wechsel DK → ED, Handbuch im ED-Abschnitt, weitere Testfälle) gleich mit
+  umgesetzt. Bewusst gelassen: „Tennisball 1/2“ fragt nach (mit „Ja“ erledigt).
+- Handbuch (Kapitel 3 Veranstaltungsdaten, Kapitel 4 Suchgegenstände, FAQ) nachgezogen. Web nicht
+  betroffen.
+- Tests: 5 neue bzw. erweiterte GUI-Tests, ein bestehender auf Vorgabe „Nein“ umgestellt;
+  Gegenprobe scheitert ohne die Änderung. 721 Unittests, 517 GUI-Tests grün; nach der Nacharbeit
+  die betroffenen 89 GUI-Tests grün.

@@ -675,12 +675,27 @@ class ExportTab(QWidget):
         # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf
         # wirft dann ValueError) - Hinweis deshalb schon VOR dem Speichern-Dialog statt
         # danach als irreführende "Export fehlgeschlagen (Zielpfad ...)"-Meldung.
-        if not angebotene_pruefungen(get_veranstaltung(self.conn)):
+        veranstaltung = get_veranstaltung(self.conn)
+        if not angebotene_pruefungen(veranstaltung):
             QMessageBox.information(
                 self, "Keine Prüfungen ausgewählt",
                 "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“, Button "
                 "„Veranstaltungsdaten bearbeiten…“) die angebotenen Prüfungen auswählen.",
             )
+            return
+        # UX-Test 2026-11, T7 (Marco 04.11.2026): Fehlen Verband oder Meldestelle, noch einmal
+        # warnen - beim Anlegen des Termins wird die Rückfrage leicht weggeklickt.
+        fehlend = [name for name, schluessel in (("Verband", "verband"), ("Meldestelle", "meldestelle"))
+                   if not (veranstaltung.get(schluessel) or "").strip()]
+        if fehlend and not _ja_nein(
+            self, "Angaben fehlen auf dem Formular",
+            f"{' und '.join(fehlend)} {'ist' if len(fehlend) == 1 else 'sind'} leer und "
+            f"{'fehlt' if len(fehlend) == 1 else 'fehlen'} dann auf dem Anmeldeformular."
+            + (" Die Teilnehmer wissen so nicht, wohin sie die Meldung schicken sollen."
+               if "Meldestelle" in fehlend else "")
+            + "\n\nNachtragen kannst du das im Reiter „Verwaltung“ über „Veranstaltungsdaten "
+            "bearbeiten…“.\n\nTrotzdem jetzt erstellen?",
+        ):
             return
         self._pdf_export_ausfuehren(
             "Anmeldeformular speichern", "Anmeldeformular",

@@ -251,8 +251,9 @@ der Übersicht für die Prüfungsleitung.
 **Verband**, **Meldestelle** (mehrzeilig, z. B. Name, Anschrift, E-Mail) und **Angebotene
 Prüfungen** (12 Haken: DK, Trümmer, Behältnisse und Fläche, jeweils LK 1–3) brauchst du für das
 ausfüllbare Anmeldeformular (siehe [Kapitel 5](#5-formular-import)). Bleiben Verband oder
-Meldestelle beim Anlegen leer, weist das Programm darauf hin – du kannst trotzdem speichern
-und sie später nachtragen. Der Dialog lässt sich scrollen und vergrößern.
+Meldestelle beim Anlegen leer, weist das Programm darauf hin. Die Rückfrage steht auf
+„Nein“, damit du sie gleich eintragen kannst; mit „Ja“ speicherst du trotzdem und trägst sie
+später nach. Beim Erzeugen des Anmeldeformulars warnt das Programm noch einmal, solange sie fehlen. Der Dialog lässt sich scrollen und vergrößern.
 
 Unter **Startnummern-Bereiche** trägst du je angebotener Prüfung einen Nummernbereich ein,
 z. B. DK-LK 1: 1 bis 20, Trümmer LK 1: 21 bis 40. Daraus vergibt „Fehlende Startnummern
@@ -374,7 +375,8 @@ Das bestimmt, auf welchem Bewertungsbogen er erscheint.
 **Einzeldisziplin (ED):** Es gibt nur eine Suchdisziplin und deshalb – in jeder Leistungsklasse –
 genau **einen** Gegenstand. Nur **Gegenstand 1** ist eingabebereit, „gesucht in“ folgt
 automatisch der gewählten Disziplin. Gegenstand 2 und 3 sind ausgeblendet; ein Hinweis unter
-Gegenstand 1 sagt das.
+Gegenstand 1 sagt das. Steht in Gegenstand 1 etwas wie „Schlüsselbund, Socke“, fragt das
+Programm beim Speichern nach.
 
 ![Erfassungsmaske bei ED: nur Gegenstand 1 sichtbar](bilder/handbuch_teilnehmer_dialog_ed.png)
 
@@ -934,7 +936,8 @@ sicher.
 
 **Warum ist bei ED nur ein Gegenstand eingebbar?**
 Bei einer Einzeldisziplin wird nur in einer Disziplin gesucht – daher gibt es in jeder
-Leistungsklasse genau einen Gegenstand (siehe [Kapitel 4](#suchgegenstände)).
+Leistungsklasse genau einen Gegenstand (siehe [Kapitel 4](#suchgegenstände)). Steht im Feld etwas
+wie „Schlüsselbund, Socke“ oder „Socke und Korken“, fragt das Programm beim Speichern nach.
 
 **Ich sehe den Termin nach einer Wiederherstellung nicht.**
 Wiederhergestellte Termine erscheinen erst beim nächsten „Anderen Termin öffnen…“.

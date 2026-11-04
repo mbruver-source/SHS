@@ -87,6 +87,10 @@ from desktop_gemeinsam import (
 # Mindestbreite ihrer Textfelder links.
 _TEILNEHMER_DIALOG_GROESSE = (1040, 720)
 _MINDESTBREITE_TEXTFELD = 170
+# UX-Test 2026-11, T6: Trennzeichen, die bei ED auf mehrere Gegenstände in einem Feld deuten.
+# Klammerzusätze wie „Ball (rot, klein)“ zählen nicht (_KLAMMERZUSATZ wird vorher entfernt).
+_MEHRERE_GEGENSTAENDE = re.compile(r"[,;/+&]|\s(und|oder|sowie|u\.)\s", re.IGNORECASE)
+_KLAMMERZUSATZ = re.compile(r"\([^)]*\)")
 
 
 def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int) -> None:
@@ -196,6 +200,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self._gespeicherte_nummer_und_pruefung = (
             (vorhandener.get("startnummer"), self._gewaehlte_pruefung()) if vorhandener else None
         )
+        self._gespeicherter_gegenstand_1 = self.gegenstand_1.text().strip() if vorhandener else None
         for auswahl in (self.art, self.stufe, self.disziplin):
             auswahl.currentTextChanged.connect(self._pruefung_hinweis_aktualisieren)
         self._pruefung_hinweis_aktualisieren()
@@ -681,6 +686,21 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 "Bei einer Einzeldisziplin (ED) gibt es nur einen Gegenstand. Diese Einträge "
                 f"werden nicht gespeichert:\n\n{verworfen}\n\nTrotzdem speichern?",
             ):
+                return
+        # UX-Test 2026-11, T6: „Schlüsselbund, Socke“ in Gegenstand 1 wurde bei ED ohne Nachfrage
+        # angenommen. Rückfrage nur nach einer Änderung (wie X11), Vorgabe Nein.
+        # Auch nach einem Wechsel der Prüfung (z. B. DK → ED), nicht nur nach geändertem Text.
+        gegenstand = self.gegenstand_1.text().strip()
+        gespeichert = (self._gespeicherter_gegenstand_1,
+                       self._gespeicherte_nummer_und_pruefung and self._gespeicherte_nummer_und_pruefung[1])
+        if (ist_ed and (gegenstand, kuerzel) != gespeichert
+                and _MEHRERE_GEGENSTAENDE.search(_KLAMMERZUSATZ.sub("", gegenstand))):
+            if not _ja_nein(
+                self, "Mehrere Gegenstände bei ED?",
+                f"„{gegenstand}“ sieht nach mehreren Gegenständen aus. Bei einer Einzeldisziplin "
+                "(ED) gibt es nur einen Gegenstand.\n\nTrotzdem so speichern?",
+            ):
+                self.gegenstand_1.setFocus()
                 return
         # Teil 2 Nr. 4: nur Gegenstände mit Text zählen - wie in db.gegenstand_fuer_disziplin.
         vergebene_disziplinen = [] if ist_ed else [
@@ -1941,7 +1961,8 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
                 "Du kannst das auch später im Reiter „Verwaltung“ über „Veranstaltungsdaten "
                 "bearbeiten…“ nachtragen.\n\n"
                 "Trotzdem jetzt speichern?",
-                vorgabe_ja=True,
+                # UX-Test 2026-11, T7 (Marco 04.11.2026): Vorgabe „Nein“ - wer Enter drückt,
+                # trägt die Angaben nach, statt ein Formular ohne Meldestelle zu bekommen.
             ):
                 (self.verband if "Verband" in fehlend else self.meldestelle).setFocus()
                 return
