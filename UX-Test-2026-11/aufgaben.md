@@ -142,3 +142,4 @@ Termin-Ablauf, gesamt)?
 
 - **R7 (A11, optional):** Die Stilpunkte aus der Wartbarkeits-QS (Liste in Fortschritt.md,
   „A11 – Abschluss-QS abgeschlossen“) umsetzen, zurückstellen oder verwerfen?
+  → **Marco 04.11.2026: umsetzen** (als T14 in `note1-todos.md`).

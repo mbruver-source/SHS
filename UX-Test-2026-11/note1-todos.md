@@ -40,6 +40,21 @@ zeigen, wie nah sie schon an der 1 sind (T15).
 | T14 | **Kleinigkeiten aus der QS (R7):** Stilpunkte der Wartbarkeits-QS; Web- und Postgres-Übersicht zählt noch alle Gemeldeten; die Demo zeigt die Angebotsmarkierung nicht | – | S | ja – R7 |
 | T15 | **Nachtest mit Heinz, Sabine, Julia und Gerda** nach T1–T10 | alle | L | – |
 
+## Entscheidungen (Marco 04.11.2026)
+
+| Nr | Entscheidung | Größe neu |
+|---|---|---|
+| T1 | **Bestätigung + Pause:** Meldung „keine Überschneidungen, alle Starts eingeplant“ nach dem Verteilen; im Verteilen-Dialog ein optionales Pausenfeld (Uhrzeit, Dauer), das beim Neu-Verteilen erhalten bleibt | M |
+| T4 | **Sofort markieren:** beim Tippen roter Rahmen und Text „höchstens N Punkte“; die Eingabe bleibt möglich. Damit ist das akzeptierte Restrisiko C24 erledigt | S |
+| T5 | **Eine Auswahl „Prüfung“** mit den angebotenen Prüfungen des Termins in dessen Schreibweise; „andere …“ öffnet die drei Felder Art/LK/Disziplin. Ersetzt R2 | L |
+| T7 | **Vorgabe „Nein“ + Warnung:** Rückfrage beim Termin-Anlegen mit Vorgabe „Nein“, beim Erzeugen des Anmeldeformulars noch einmal warnen | S |
+| T11 | **Sprechender Name** als Vorschlag im Speichern-Dialog (Datum und Umfang), änderbar | S |
+| T12 | **Echtes Zurück in der Demo:** Schritte werden umkehrbar. Ersetzt R4 („nur Text zurück“) | L |
+| T13 | **Bebilderte Kurzanleitung** zur Installation als PDF zum Ausdrucken, auf der Website verlinkt (Website erst mit dem Release online). Signatur/Store bleibt offen (B8) | M |
+| T14 | **Alles umsetzen** (R7 erledigt): Stilpunkte der Wartbarkeits-QS, Zählung in Web- und Postgres-Übersicht, Angebotsmarkierung in der Demo | S |
+
+Ohne Entscheidung umsetzbar bleiben T2, T3, T6, T8, T9 und T10; T15 (Nachtest) folgt zum Schluss.
+
 ## Einschätzung
 
 - **Erfahrene und Normale (Heinz, Sabine, Julia, Tobias):** Mit T1–T4, T6 und T8 ist eine 1

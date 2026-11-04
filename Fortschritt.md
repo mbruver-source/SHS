@@ -9091,4 +9091,9 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
   dort die Personas, die Größe und ob eine Entscheidung nötig ist. Nichts davon ist umgesetzt.
 - **Kern:** Erfahrene und Normale erreichen mit T1–T4, T6 und T8 voraussichtlich eine 1. Für
   Laien bleibt die Installation ohne Code-Signatur bzw. Store-Verteilung (T13) bei 3.
+- **Entscheidungen Marco (04.11.2026):** T1 Bestätigung + Pausenfeld im Verteilen-Dialog; T4
+  sofort beim Tippen markieren (C24 damit erledigt); T5 eine Auswahl „Prüfung“ (ersetzt R2); T7
+  Vorgabe „Nein“ + zweite Warnung; T11 sprechender Dateiname; T12 echtes Zurück in der Demo
+  (ersetzt R4); T13 bebilderte Kurzanleitung als PDF; T14 alles umsetzen (R7 erledigt). Details in
+  `note1-todos.md`, Abschnitt „Entscheidungen“. Noch nichts umgesetzt.
 
