@@ -9071,3 +9071,17 @@ Marco planen (umsetzen / zurückstellen / verwerfen), dann einzeln umsetzen.
 - **Tests nach den Nacharbeiten:** gefilterte GUI-Tests und `test_db` grün. Der volle Lauf kommt
   vor dem Build.
 
+### ux_test_2026_11 A12 – Nachtest mit zwei Personas (04.11.2026)
+
+- Werner (Laie, ohne Handbuch) und Tobias (normal, ohne Handbuch), gleiches Szenario, neuer
+  Arbeitsstand. Bericht `UX-Test-2026-11/Nachtest.md`, Einzelberichte `personas/L-B2.md` und
+  `N-B2.md`.
+- **Noten gesamt:** Werner 2– → 2, Tobias 2 → 2 (eher 1–2), Erststart mit Demo bei Tobias 1.
+  Tobias würde den Prüfungstag allein schaffen, Werner „eher ja, näher an Ja“. Kein ✗.
+- **Abgleich:** Die meisten alten Funde sind behoben (Werner 6 + 2 weitgehend, Tobias 5).
+  Neue bzw. verbliebene Punkte N1–N9 (u. a. fehlende Bestätigung „keine Überschneidungen“,
+  Enter in der Import-Meldung, Disziplin-Zählung beim Speichern) gehen in die Note-1-Liste.
+- **Am Gerät prüfen:** Bei Tobias öffnete Enter im Versionsfenster „Lizenzen“. Der Code setzt
+  seit der Abschluss-QS den Anfangsfokus auf „Schließen“; möglicherweise ein Effekt der
+  Testumgebung.
+
