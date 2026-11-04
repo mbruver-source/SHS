@@ -1,0 +1,93 @@
+# Aufgabenliste „Note 1“ (UX-Test 2026-11, Start 04.11.2026)
+
+Abarbeitung nach dem Skill `aufgaben-abarbeitung`. Grundlage: [note1-todos.md](note1-todos.md)
+mit Marcos Entscheidungen vom 04.11.2026. Rubrik in `Fortschritt.md`: `ux_test_2026_11 B…`.
+Kein Push, Tag, Versionsbump oder Build. Website-Änderungen unter `docs/` gehen erst mit dem
+Release online.
+
+Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgaben-note1.md nach dem Skill aufgaben-abarbeitung ab.`
+
+## Status
+
+| Aufgabe | Inhalt | Größe | Status | Commit | Limit vorher → nachher | Bemerkung |
+|---|---|---|---|---|---|---|
+| B1 | T3 + T4 Ergebniserfassung | M | offen | | | C24 erledigen |
+| B2 | T6 + T7 Teilnehmer-ED und Meldestelle | S | offen | | | |
+| B3 | T9 + T10 + T11 Version, Sicherungstext, Dateiname | M | offen | | | |
+| B4 | T2 Import-Ablehnungen nachlesbar | M | offen | | | |
+| B5 | T1 Zeitplan: Bestätigung und Pausenfeld | M | offen | | | |
+| B6 | T8 Hilfe mit Suche und F1 | M | offen | | | |
+| B7 | T14 Kleinigkeiten (R7) | S | offen | | | |
+| B8 | T5 Auswahl „Prüfung“ | L | offen | | | ersetzt R2 |
+| B9 | T12 Demo mit echtem Zurück | L | offen | | | ersetzt R4 |
+| B10 | T13 Kurzanleitung Installation (PDF) | M | offen | | | Website erst mit dem Release |
+| B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | offen | | | |
+| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda | L | offen | | | Harness aus dem Scratchpad |
+
+## Kalibrierung
+
+Startwerte S ≈ 15 %, M ≈ 20 %, L ≈ 30 % des 5-h-Fensters (Erfahrung A1–A13: oft weniger).
+Regel: Nutzung + Schätzung + 3 % ≤ 100 % (5 h und Woche), Limit über `get_usage`.
+
+## Aufgaben
+
+**B1 – T3, T4 (M):** Ergebniserfassung.
+- Spalte „Status“ zeigt bei DQ „disqualifiziert“ und bei Abbruch „Abbruch: <Grund>“ statt nur
+  „gespeichert“.
+- Die Speichermeldung zählt Teilnehmer („16 Teilnehmer gespeichert“), nicht Disziplinen.
+- Abbruch-Spalte so breit, dass der Grund nicht abgeschnitten wird (Tooltip mit vollem Text).
+- T4: Werte über dem Höchstwert schon beim Tippen markieren (roter Rahmen am Editor, Text
+  „höchstens N Punkte“); Eingabe bleibt möglich. C24 in `OFFEN.md` als erledigt austragen.
+
+**B2 – T6, T7 (S):**
+- T6: ED-Gegenstand 1 mit Komma, „und“ oder „/“ → Rückfrage „Bei ED ist nur ein Gegenstand
+  erlaubt. Trotzdem so speichern?“ (Vorgabe Nein).
+- T7: Rückfrage bei leerem Verband/Meldestelle beim Termin-Anlegen mit Vorgabe „Nein“; beim
+  Erzeugen des Anmeldeformulars ohne Meldestelle noch einmal warnen.
+
+**B3 – T9, T10, T11 (M):**
+- T9: Menüpunkt „Hilfe → Nach Updates suchen“. Im Versionsfenster Diagnose- und Protokoll-Knöpfe
+  in einen Bereich „Für Fehlermeldungen“. Enter-Verhalten im Test absichern.
+- T10: Text der Datensicherung: Passwort klar als freiwillig („auf Wunsch mit Passwort“).
+- T11: Vorschlag für den Dateinamen `SHS-Sicherung_<Datum>_<Umfang>.zip` (Umfang z. B.
+  „alle-Termine“ bzw. Terminname), änderbar.
+
+**B4 – T2 (M):** Im Reiter „Formular-Import“ ein Bereich „Letzter Import“ mit vollständiger
+Liste (abgelehnt, bereits vorhanden, Hinweise) und Knopf „Kopieren“; bleibt bis zum nächsten
+Import (nur im Speicher der Sitzung).
+
+**B5 – T1 (M):** Nach „Automatisch verteilen…“ ausdrückliche Bestätigung „Keine
+Überschneidungen, alle N Starts eingeplant“ (bzw. was fehlt). Im Verteilen-Dialog optional
+„Mittagspause um … für … Minuten“; beim Verteilen wird sie wie die Pause bei allen eingefügt
+und bleibt beim Neu-Verteilen erhalten.
+
+**B6 – T8 (M):** Hilfe mit Suchfeld (Treffer hervorheben, weiter springen). F1 öffnet die Hilfe
+beim Abschnitt des aktuellen Reiters.
+
+**B7 – T14 (S):** Stilpunkte der Wartbarkeits-QS aus `Fortschritt.md` („A11 – Abschluss-QS“);
+Web- und Postgres-Übersicht zählen Abgemeldete wie der Desktop; Demo zeigt die
+Angebotsmarkierung im Teilnehmer-Dialog.
+
+**B8 – T5 (L):** Teilnehmer-Dialog: eine Auswahl „Prüfung“ mit den angebotenen Prüfungen des
+Termins in dessen Schreibweise; Eintrag „andere …“ blendet Art/LK/Disziplin ein. Bei
+Bearbeitung einer nicht angebotenen Prüfung direkt „andere …“. Prüfungsnamen überall
+einheitlich. Ersetzt die Vorbelegung aus R2. Handbuch und Screenshots nachziehen.
+
+**B9 – T12 (L):** Demo: „Vorheriger Schritt“ spielt den letzten Schritt zurück (Zustand vor dem
+Schritt wiederherstellen, z. B. über Sicherungspunkte der Demo-Datenbank je Schritt). Ersetzt
+„nur Text zurück“ (R4).
+
+**B10 – T13 (M):** Bebilderte Kurzanleitung „Installation in 5 Schritten“ als PDF zum
+Ausdrucken (`docs/`), mit Bildern der Download-, Browser- und SmartScreen-Hinweise. Echte
+Bildschirmfotos der Windows-Warnungen kann die Sitzung nicht aufnehmen: nachgestellte
+Abbildungen, gekennzeichnet; sonst Rückfrage an Marco und Teilpunkt zurückstellen.
+
+**B11 – Abschluss (L):** QS mit `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit`; Doku
+abgleichen; Screenshot-Liste für den Build; voller Unit- und GUI-Testlauf.
+
+**B12 – T15 (L):** Nachtest mit Heinz (E-A), Sabine (E-B), Julia (N-A), Gerda (L-A) über die
+Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
+
+## Rückfragen an Marco
+
+(keine)
