@@ -29,6 +29,7 @@ import math
 import os
 import random
 import shutil
+import sqlite3
 import tempfile
 import time
 from dataclasses import dataclass
@@ -203,6 +204,7 @@ class DemoPanel(QWidget):
     auto_weiter_umgeschaltet = Signal(bool)
     rueckblick_geoeffnet = Signal()
     rueckblick_beendet = Signal()
+    schritt_zurueck_geklickt = Signal()
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.Tool)
@@ -239,13 +241,14 @@ class DemoPanel(QWidget):
             "Ist ein Schritt fertig, geht es nach einer Lesezeit (mindestens "
             f"{DemoTour.AUTO_WEITER_S} Sekunden, bei langen Texten länger) von allein weiter."
         )
-        # UX-Test 03.11.2026, X6 (Marco: „nur Text zurück“): die Erklärung eines früheren
-        # Schritts noch einmal lesen - die Demo selbst läuft nur vorwärts und wartet solange.
+        # UX-Test 03.11.2026, X6: die Erklärung eines früheren Schritts noch einmal lesen; seit
+        # UX-Test 2026-11 (T12) ab Schritt 4 „Schritt zurück“ (siehe zurueck_modus).
         self.zurueck_btn = QPushButton("Vorheriger Text")
         self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – das automatische Weiter "
                                     "wartet solange.")
         self.zurueck_btn.setVisible(False)
-        self.zurueck_btn.clicked.connect(self._rueckblick_zeigen)
+        self.zurueck_btn.clicked.connect(self._zurueck_gedrueckt)
+        self._echtes_zurueck = False  # siehe zurueck_modus
         self._verlauf: list[tuple[str, str, str]] = []
         self._rueckblick: int | None = None
         self._sichtbar_vor_rueckblick: tuple[bool, bool, bool] | None = None
@@ -351,6 +354,30 @@ class DemoPanel(QWidget):
 
     def im_rueckblick(self) -> bool:
         return self._rueckblick is not None
+
+    def zurueck_modus(self, echt: bool) -> None:
+        """UX-Test 2026-11, T12 (Marco 04.11.2026, ersetzt R4): ab Schritt 4 spielt „Schritt
+        zurück“ den vorigen Schritt wirklich noch einmal ab (der Stand davor wird
+        wiederhergestellt). Bis Schritt 3 gibt es keinen früheren Schritt im Demo-Termin, dort
+        bleibt „Vorheriger Text“."""
+        self._echtes_zurueck = echt
+        if echt:
+            self.zurueck_btn.setText("Schritt zurück")
+            self.zurueck_btn.setToolTip("Nimmt den vorigen Schritt zurück und spielt ihn noch einmal ab.")
+        else:
+            self.zurueck_btn.setText("Vorheriger Text")
+            self.zurueck_btn.setToolTip("Zeigt die Erklärung des vorigen Schritts noch einmal – das automatische "
+                                        "Weiter wartet solange.")
+
+    def verlauf_kuerzen(self, anzahl: int) -> None:
+        """Nach „Schritt zurück“: nur die Erklärungen der Schritte vor dem Ziel behalten."""
+        del self._verlauf[anzahl:]
+
+    def _zurueck_gedrueckt(self) -> None:
+        if self._echtes_zurueck and self._rueckblick is None:
+            self.schritt_zurueck_geklickt.emit()
+        else:
+            self._rueckblick_zeigen()
 
     def _rueckblick_zeigen(self) -> None:
         """Eine Erklärung weiter zurück; die Tour wartet solange (rueckblick_geoeffnet)."""
@@ -586,6 +613,9 @@ class DemoTour(QObject):
         self._modal_wartet = False  # siehe _countdown_tick
         # Für den laufenden Schritt angehalten („PDF öffnen“, eigene Eingabe im Demo-Dialog).
         self._angehalten = False
+        # T12: Stand des Demo-Termins zu Beginn jedes Schritts (Kopie im Speicher), damit
+        # „Schritt zurück“ ihn wiederherstellen kann.
+        self._stand: dict[int, sqlite3.Connection] = {}
 
     # --- Start / Ende ---------------------------------------------------------
 
@@ -629,6 +659,7 @@ class DemoTour(QObject):
         # wieder, sofern der Schritt fertig ist (Verifikation A6, Befund 2).
         self._panel.rueckblick_geoeffnet.connect(self._countdown_stoppen)
         self._panel.rueckblick_beendet.connect(self._nach_rueckblick)
+        self._panel.schritt_zurueck_geklickt.connect(self.schritt_zurueck)
         # Eigene Eingaben im Demo-Dialog erkennen (siehe eventFilter).
         QApplication.instance().installEventFilter(self)
         self._schritte = self._schritte_aufbauen()
@@ -689,6 +720,7 @@ class DemoTour(QObject):
                 fenster._demo_sperren(False)
             # Verifikation 04.10.2026, Befund 2: Aufräumen auch dann, wenn oben etwas
             # schiefgeht - sonst blieben Verbindung, Temp-Ordner und Erklärfenster zurück.
+            self._staende_verwerfen(0)
             if self.conn is not None:
                 try:
                     self.conn.close()  # unter Windows Voraussetzung für das Löschen
@@ -717,7 +749,14 @@ class DemoTour(QObject):
         self._angehalten = False
         self._index = index
         schritt = self._schritte[index]
+        if index >= self.ERSTER_SCHRITT_IM_TERMIN:
+            try:
+                self._stand_merken(index)
+            except sqlite3.Error:
+                # Ohne Kopie gibt es nur für diesen Schritt kein „Schritt zurück“ (Verifikation B9).
+                self._staende_verwerfen(index)
         self._panel.anzeigen(index, len(self._schritte) - 1, schritt, index == len(self._schritte) - 1)
+        self._panel.zurueck_modus(index > self.ERSTER_SCHRITT_IM_TERMIN)
         self._offen = []
         if schritt.aktionen is not None:
             try:
@@ -726,6 +765,48 @@ class DemoTour(QObject):
                 self._fehler_zeigen(exc)
                 return
         self._naechste_aktion()
+
+    #: Index des ersten Schritts, der im Demo-Termin spielt (nach „Termin gespeichert“) - ab
+    #: hier gibt es einen Stand, den „Schritt zurück“ wiederherstellen kann (T12).
+    ERSTER_SCHRITT_IM_TERMIN = 3
+
+    def _stand_merken(self, index: int) -> None:
+        self._staende_verwerfen(index)
+        self.conn.commit()
+        kopie = sqlite3.connect(":memory:")
+        self.conn.backup(kopie)
+        self._stand[index] = kopie
+
+    def _staende_verwerfen(self, ab_index: int) -> None:
+        for index in [i for i in self._stand if i >= ab_index]:
+            self._stand.pop(index).close()
+
+    def schritt_zurueck(self) -> None:
+        """UX-Test 2026-11, T12: den laufenden Schritt abbrechen, den Stand vor dem vorigen
+        Schritt wiederherstellen und diesen noch einmal abspielen."""
+        ziel = self._index - 1
+        if self.ist_beendet or ziel < self.ERSTER_SCHRITT_IM_TERMIN or ziel not in self._stand:
+            return
+        self._timer.stop()
+        self._countdown_stoppen()
+        self._offen.clear()
+        try:
+            self._markieren(None)
+            self._dialog_schliessen()
+            # Offene Änderungen gehören zum zurückgenommenen Schritt - und eine offene
+            # Schreib-Transaktion ließe das Zurückschreiben scheitern (Verifikation B9).
+            self.conn.rollback()
+            self._stand[ziel].backup(self.conn)
+            # Alle Reiter neu aus der Datei aufbauen - auch ungespeicherte Ergebnisse gehören zum
+            # zurückgenommenen Schritt.
+            self._fenster._termin_setzen(self.conn, self.pfad, demo=True)
+        except Exception as exc:  # noqa: BLE001 - jeder Fehler erscheint im Erklärfenster
+            self._fehler_zeigen(exc)
+            return
+        self._panel.verlauf_kuerzen(ziel)
+        self._schritt_zeigen(ziel)
+        # Sonst nähme Enter (Knopf mit Fokus) gleich den nächsten Schritt zurück (Verifikation B9).
+        self._panel.weiter_btn.setFocus()
 
     def _naechste_aktion(self) -> None:
         while self._offen and not self.ist_beendet:
@@ -1004,8 +1085,9 @@ class DemoTour(QObject):
                 "Termins über Teilnehmer, Zeitplan und Ergebnisse bis zur Ergebnisliste.\n\n"
                 "Das Programm klickt und tippt selbst. Ist ein Schritt fertig, geht es nach einer "
                 "Lesezeit (je nach Textlänge) von allein weiter – oder du drückst „Weiter“. Wer selbst "
-                "bestimmen will, nimmt den Haken bei „Automatisch weiter“ heraus. „Vorheriger Text“ "
-                "zeigt die Erklärung des Schritts davor noch einmal. Ein farbiger "
+                "bestimmen will, nimmt den Haken bei „Automatisch weiter“ heraus. „Schritt zurück“ "
+                "nimmt ab Schritt 4 den letzten Schritt zurück und spielt ihn noch einmal ab (bis "
+                "dahin zeigt „Vorheriger Text“ die Erklärung davor). Ein farbiger "
                 "Rahmen zeigt jeweils, wo gerade gearbeitet wird. Wer es eilig hat: „Weiter“ "
                 "füllt einen laufenden Schritt sofort fertig aus.\n\n"
                 "Alle Namen und Daten sind erfunden. Der Demo-Termin liegt in einem "
@@ -1308,7 +1390,7 @@ class DemoTour(QObject):
                         "Die Prüfung im Fenster „Teilnehmer erfassen“ wurde geändert – für die "
                         "weiteren Schritte muss sie bleiben, wie die Demo sie eingetragen hat."
                     )
-            else:  # Dialog ist nicht mehr da (praktisch nicht erreichbar) - mit den Demodaten weiter
+            else:  # Dialog ist nicht mehr da (z. B. nach „Schritt zurück“ aus Schritt 5) - mit den Demodaten weiter
                 neu = NeuerTeilnehmer(**demo)
             self._dialog_schliessen()
             # Immer unter dem Demonamen merken - spätere Schritte suchen ihn darunter.

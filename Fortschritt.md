@@ -9274,3 +9274,26 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   steht nur noch zusammen mit Art/LK/Disziplin (sonst doppelt); der Demo-Rückfall wählt zuerst
   „andere Prüfung …“; Test prüft die ED-Zuordnung von Gegenstand 1. Zur Kenntnis: Altdaten ED
   ohne Disziplin zeigen die erste Disziplin (wie bisher, nur weniger sichtbar).
+
+### ux_test_2026_11 B9 – Demo mit echtem Zurück, T12 (04.11.2026)
+
+- Marcos Entscheidung (ersetzt R4 „nur Text zurück“): **„Schritt zurück“** im Erklärfenster
+  nimmt ab Schritt 4 den letzten Schritt zurück und spielt ihn neu ab. Dazu merkt sich die Demo
+  zu Beginn jedes Schritts im Demo-Termin dessen Stand als SQLite-Kopie im Speicher
+  (`DemoTour._stand_merken`, `sqlite3.Connection.backup`). Zurück: laufenden Schritt abbrechen,
+  Demo-Dialog schließen, Stand wiederherstellen, alle Reiter neu aufbauen
+  (`_termin_setzen` - auch ungespeicherte Ergebnisse gehören zum zurückgenommenen Schritt),
+  Erklärungsverlauf kürzen, Schritt neu abspielen. Beim Beenden werden die Kopien geschlossen.
+- Bis Schritt 3 (Begrüßung, Termin anlegen, Termin gespeichert, erster Teilnehmer) gibt es
+  keinen früheren Schritt im Demo-Termin; dort bleibt **„Vorheriger Text“** (Rückblick wie
+  bisher). Der Knopf heißt je nach Schritt passend.
+- Begrüßungstext und Handbuch (Demoprüfung) nachgezogen.
+- Tests: 1 neuer GUI-Test (zurück aus Schritt 5 und 9, danach bis zum Ende); Gegenprobe scheitert
+  ohne die Änderung; die bisherigen Rückblick-Tests laufen unverändert. 721 Unittests,
+  537 GUI-Tests grün.
+- **Verifikation, behoben:** Enter nach „Schritt zurück“ nahm gleich den nächsten Schritt zurück
+  (Fokus blieb auf dem Knopf) – jetzt Fokus auf „Weiter“. Eine offene Schreib-Transaktion ließ
+  das Zurückschreiben scheitern – jetzt vorher `rollback`. Scheitert die Kopie zu Beginn eines
+  Schritts, fehlt nur für ihn „Schritt zurück“. Zurück aus Schritt 5 nimmt für Schritt 4 die
+  Demodaten statt eigener Eingaben aus Schritt 3 (vertretbar). `Architektur.md`, `UML.md`
+  (Zustandsdiagramm Demo), Kommentare und Texte nachgezogen.

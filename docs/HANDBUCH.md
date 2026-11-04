@@ -219,8 +219,11 @@ Ist ein Schritt fertig, zählt der Knopf herunter („Weiter (20)“) und schalt
 weiter. Die Zeit richtet sich nach der Länge des Erklärtexts: mindestens zehn Sekunden, bei
 langen Texten bis zu 40. So läuft die Demo auch ohne Zutun durch. Wer lieber selbst klickt,
 nimmt den Haken bei **„Automatisch weiter“** heraus. **Enter** wirkt wie „Weiter“.
-**„Vorheriger Text“** zeigt die Erklärung des Schritts davor noch einmal; das automatische Weiter
-wartet solange, und **„Aktueller Schritt“** führt zurück. „Weiter“ bleibt dabei an
+Ab Schritt 4 nimmt **„Schritt zurück“** den letzten Schritt zurück und spielt ihn noch einmal
+ab – alles, was er im Demo-Termin geändert hat (auch noch nicht gespeicherte Punkte), wird dabei
+zurückgesetzt. In den Schritten 1 bis 3 gibt es noch keinen früheren Schritt im Demo-Termin;
+dort zeigt **„Vorheriger Text“** die Erklärung des Schritts davor noch einmal, das automatische
+Weiter wartet solange, und **„Aktueller Schritt“** führt zurück. „Weiter“ bleibt dabei an
 derselben Stelle: Das Erklärfenster wächst mit längeren Texten nach oben. Wo du es
 hinschiebst, bleibt es.
 

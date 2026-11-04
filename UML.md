@@ -655,6 +655,9 @@ stateDiagram-v2
         Warten --> [*] : „Weiter“ oder automatisch nach Countdown
     }
     Schritt --> Schritt : nächster Schritt
+    Schritt --> Zurueck : „Schritt zurück“ (ab Schritt 4)
+    Zurueck : Stand vor dem vorigen Schritt<br/>wiederherstellen, Reiter neu aufbauen
+    Zurueck --> Schritt : vorigen Schritt neu abspielen
     note right of Schritt
         Willkommen, dann 15 Schritte:
         1 Termin anlegen, 2 gespeichert, 3–4 Teilnehmer,

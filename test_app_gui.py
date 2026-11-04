@@ -9077,6 +9077,52 @@ def test_demopruefung_beenden_mitten_in_der_ergebniserfassung(qtbot, termin, dem
     assert not os.path.exists(demo_ordner)
 
 
+def test_demo_schritt_zurueck_spielt_den_vorigen_schritt_neu_ab(qtbot, termin, demo_umgebung):
+    """UX-Test 2026-11, T12 (Marco 04.11.2026, ersetzt R4): „Schritt zurück“ stellt den Stand vor
+    dem vorigen Schritt wieder her und spielt ihn noch einmal ab - auch ungespeicherte
+    Ergebnisse werden zurückgenommen. Vor dem Demo-Termin bleibt es bei „Vorheriger Text“; die
+    Demo läuft danach bis zum Ende."""
+    from db import list_teilnehmer
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._demo_starten()
+    tour = fenster._demo_tour
+    panel = tour._panel
+
+    _demo_bis(tour, "3.")
+    assert panel.zurueck_btn.text() == "Vorheriger Text"  # beim Anlegen des Termins nur Text
+    _demo_bis(tour, "5.")
+    assert panel.zurueck_btn.text() == "Schritt zurück"
+    assert all(t["startnummer"] is not None for t in list_teilnehmer(tour.conn))
+
+    # Zurück aus Schritt 5: Schritt 4 läuft neu, die Startnummern sind wieder weg. Enter danach
+    # nimmt nicht noch einen Schritt zurück (Fokus auf „Weiter“, Verifikation B9).
+    panel.zurueck_btn.setFocus()
+    panel.zurueck_btn.click()
+    assert tour._schritte[tour._index].titel.startswith("4.")
+    assert panel.focusWidget() is panel.weiter_btn
+    anzahl = len(list_teilnehmer(tour.conn))
+    assert anzahl and all(t["startnummer"] is None for t in list_teilnehmer(tour.conn))
+    assert len(panel._verlauf) == tour._index + 1
+
+    # Ungespeicherte Ergebnisse (Schritt 8/9) werden mit zurückgenommen, auch bei einer offenen
+    # Schreib-Transaktion.
+    _demo_bis(tour, "9.")
+    assert fenster.ergebnis_tab.hat_ungespeicherte_aenderungen()
+    tour.conn.execute("UPDATE veranstaltung SET ort = 'offen'")
+    panel.zurueck_btn.click()
+    assert panel.weiter_btn.isEnabled()
+    assert tour._schritte[tour._index].titel.startswith("8.")
+    assert len(list_teilnehmer(tour.conn)) == anzahl
+
+    # Danach läuft die Demo normal bis zum Ende (inkl. Speichern und PDF).
+    _demo_bis(tour, None)
+    assert tour.ist_beendet and fenster.conn is conn and tour._stand == {}
+
+
 def test_demopruefung_endet_beim_schliessen_des_fensters(qtbot, termin, demo_umgebung):
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
