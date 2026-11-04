@@ -49,7 +49,8 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 1. `PY bump_version.py` (zieht `version.txt`, `version_info.txt`, `version.py`,
    „Stand: Version …“ im Handbuch und den Image-Tag in `compose.yaml` nach).
 2. `PY tools/screenshots.py` noch einmal, damit die Bilder die neue Versionsnummer zeigen.
-3. `PY tools/handbuch_pdf.py` erzeugt `docs/HANDBUCH.pdf` neu.
+3. `PY tools/handbuch_pdf.py` erzeugt `docs/HANDBUCH.pdf` neu. `PY tools/handbuch_pdf.py --kurzanleitung` erzeugt
+   `docs/INSTALLATION_KURZ.pdf` (Kurzanleitung Installation, seit UX-Test 2026-11 T13) neu.
 
 ## 4. Tests
 

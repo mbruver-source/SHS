@@ -102,6 +102,9 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
     2. **Windows warnt beim Start.** Erscheint „Windows hat den Start dieser App verhindert“,
        auf **„Weitere Informationen“** → **„Trotzdem ausführen“** klicken.
 
+    Alle Schritte auf zwei Seiten zum Ausdrucken:
+    [Kurzanleitung Installation (PDF)](INSTALLATION_KURZ.pdf).
+
 - **macOS (Vorschau, ab macOS 13):** Es gibt zwei Dateien. Welche passt, steht im Apple-Menü
   unter **„Über diesen Mac“**: Bei „Chip Apple M…“ die Datei
   `SHS-Pruefungsprogramm-X.Y.Z-macOS-AppleSilicon.dmg`, bei „Prozessor Intel …“ die Datei

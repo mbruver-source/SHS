@@ -9297,3 +9297,23 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   Schritts, fehlt nur für ihn „Schritt zurück“. Zurück aus Schritt 5 nimmt für Schritt 4 die
   Demodaten statt eigener Eingaben aus Schritt 3 (vertretbar). `Architektur.md`, `UML.md`
   (Zustandsdiagramm Demo), Kommentare und Texte nachgezogen.
+
+### ux_test_2026_11 B10 – Kurzanleitung Installation als PDF, T13 (04.11.2026)
+
+- Neue Kurzanleitung `docs/INSTALLATION_KURZ.md` → `docs/INSTALLATION_KURZ.pdf` (2 Seiten, große
+  Schrift): Download-Seite, richtige Datei, Browser-Warnung (Edge mit dem vorhandenen Bild,
+  Chrome, Firefox), Windows-Warnung („Weitere Informationen“ → „Trotzdem ausführen“),
+  Installationsprogramm („Nur für mich“, Lizenz, Weiter, Fertigstellen; Angaben aus
+  `installer.iss` geprüft), Demoprüfung und Updates.
+- `tools/handbuch_pdf.py --kurzanleitung` erzeugt das PDF (eigenes Druck-CSS ohne Seitenumbruch
+  je Kapitel); in der Build-Checkliste (`shs-build`) ergänzt. Erzeugen über PowerShell (siehe
+  Memory).
+- Verlinkt im Handbuch (Kapitel 2) und auf der Website (Abschnitt Installation). Die Website geht
+  erst mit dem Release online (Regel 07.10.2026).
+- **Nicht umgesetzt, Rückfrage R-B10:** Bilder der Chrome-Download-Warnung und der
+  SmartScreen-Meldung. Echte Bildschirmfotos kann die Sitzung nicht aufnehmen, nachgestellte
+  Windows-Fenster wären irreführend. Vorschlag: Marco nimmt beide beim nächsten Download auf
+  (`docs/bilder/handbuch_chrome_download.png`, `handbuch_smartscreen.png`), dann werden sie
+  eingebunden. Signatur/Store bleibt B8 (OFFEN).
+- **Verifikation:** ohne Fehler; nachgezogen: Knopf „Installieren“ vor „Fertigstellen“, Ausweg bei
+  Firefox, klare Meldung bei unbekannten Angaben in `tools/handbuch_pdf.py`.

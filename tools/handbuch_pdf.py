@@ -1,10 +1,13 @@
-"""Erzeugt docs/HANDBUCH.pdf aus docs/HANDBUCH.md.
+"""Erzeugt docs/HANDBUCH.pdf aus docs/HANDBUCH.md, mit ``--kurzanleitung`` zusätzlich
+docs/INSTALLATION_KURZ.pdf aus docs/INSTALLATION_KURZ.md (UX-Test 2026-11, T13: bebilderte
+Installationsanleitung zum Ausdrucken, größere Schrift, ohne Seitenumbruch je Kapitel).
 
 Ablauf: Markdown -> HTML (Python-Paket ``markdown``) mit Druck-CSS -> PDF über den
 Headless-Modus von Microsoft Edge bzw. Google Chrome (``--print-to-pdf``). Nach jeder
 Änderung an HANDBUCH.md oder den Bildern in docs/bilder erneut ausführen:
 
     python tools/handbuch_pdf.py
+    python tools/handbuch_pdf.py --kurzanleitung
 
 Voraussetzungen: ``pip install markdown`` (in Anaconda bereits enthalten) und Edge oder
 Chrome. Abweichender Browser-Pfad über die Umgebungsvariable SHS_PDF_BROWSER.
@@ -57,6 +60,15 @@ a { color: #1f4fa3; text-decoration: none; }
 hr { display: none; }
 """
 
+# Kurzanleitung: für Laien zum Ausdrucken - größere Schrift, Kapitel ohne Seitenumbruch.
+CSS_KURZ = CSS + """
+body { font-size: 13pt; line-height: 1.5; }
+h1 { font-size: 20pt; }
+h2 { font-size: 15pt; margin-top: 14pt; }
+h2:not(:first-of-type) { break-before: auto; }
+img { max-width: 80%; }
+"""
+
 
 def browser_finden() -> str:
     eigener = os.environ.get("SHS_PDF_BROWSER")
@@ -70,9 +82,10 @@ def browser_finden() -> str:
     )
 
 
-def html_erzeugen() -> str:
+def html_erzeugen(quelle: Path = QUELLE, css: str = CSS,
+                  titel: str = "Benutzerhandbuch SHS-Prüfungsprogramm") -> str:
     inhalt = markdown.markdown(
-        QUELLE.read_text(encoding="utf-8"),
+        quelle.read_text(encoding="utf-8"),
         extensions=["tables", "toc", "sane_lists"],
         # Gleiche Anker wie auf GitHub (Umlaute bleiben erhalten), damit die
         # Inhaltsverzeichnis-Links auch im PDF funktionieren.
@@ -81,22 +94,34 @@ def html_erzeugen() -> str:
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
 <base href="{DOCS.as_uri()}/">
-<title>Benutzerhandbuch SHS-Prüfungsprogramm</title>
-<style>{CSS}</style></head>
+<title>{titel}</title>
+<style>{css}</style></head>
 <body>{inhalt}</body></html>"""
 
 
-def main() -> int:
+def pdf_erzeugen(html_text: str, ziel: Path) -> None:
     browser = browser_finden()
     with tempfile.TemporaryDirectory() as tmp:
-        html = Path(tmp) / "HANDBUCH_druck.html"
-        html.write_text(html_erzeugen(), encoding="utf-8")
+        html = Path(tmp) / "druck.html"
+        html.write_text(html_text, encoding="utf-8")
         subprocess.run(
             [browser, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
-             f"--print-to-pdf={ZIEL}", html.as_uri()],
+             f"--print-to-pdf={ziel}", html.as_uri()],
             check=True, capture_output=True, timeout=120,
         )
-    print(f"PDF erzeugt: {ZIEL} ({ZIEL.stat().st_size} Bytes)")
+    print(f"PDF erzeugt: {ziel} ({ziel.stat().st_size} Bytes)")
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    unbekannt = [a for a in argv if a != "--kurzanleitung"]
+    if unbekannt:
+        raise SystemExit(f"Unbekannte Angabe(n): {' '.join(unbekannt)} - erlaubt ist nur --kurzanleitung.")
+    if "--kurzanleitung" in argv:
+        pdf_erzeugen(html_erzeugen(DOCS / "INSTALLATION_KURZ.md", CSS_KURZ,
+                                   "SHS-Prüfungsprogramm installieren"), DOCS / "INSTALLATION_KURZ.pdf")
+    else:
+        pdf_erzeugen(html_erzeugen(), ZIEL)
     return 0
 
 
