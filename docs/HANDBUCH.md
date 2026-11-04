@@ -352,15 +352,16 @@ Ergebnisse bleiben gespeichert und zählen wieder, sobald du
 
 ### Die Erfassungsmaske
 
-Pflichtfelder sind mit \* markiert: **Nachname\***, **Vorname\***, **Rufname Hund\***,
-**Art\*** (ED = Einzeldisziplin, DK = Dreikampf) und **Leistungsklasse\*** (1–3). Bei ED wählst
-du zusätzlich die **Disziplin** (Trümmerfeld, Flächensuche oder Behältnisstrecke). Alle anderen
-Felder sind optional. Datumsfelder nehmen TT.MM.JJJJ an.
+Pflichtfelder sind mit \* markiert: **Nachname\***, **Vorname\***, **Rufname Hund\***
+und die **Prüfung\***. Alle anderen Felder sind optional. Datumsfelder nehmen TT.MM.JJJJ an.
 
-- **Prüfung:** Ein neuer Teilnehmer beginnt mit der ersten im Termin angebotenen Prüfung. Unter
-  „Disziplin“ steht im Klartext, welche Prüfung Art, Leistungsklasse und Disziplin ergeben, und
-  ob der Termin sie anbietet (grün) oder nicht (rot). Sind im Termin noch keine Prüfungen
-  hinterlegt, steht dort nur der Name.
+- **Prüfung:** Die Auswahl **„Prüfung\*“** enthält die im Termin angebotenen Prüfungen in der
+  Schreibweise des Anmeldeformulars (z. B. „DK-LK 1“, „Trümmer LK 1“); ein neuer Teilnehmer
+  beginnt mit der ersten. Für eine nicht angebotene Prüfung **„andere Prüfung …“** wählen: dann
+  erscheinen **Art** (ED = Einzeldisziplin, DK = Dreikampf), **Leistungsklasse** (1–3) und bei ED
+  die **Disziplin**. Darunter steht dann im Klartext, welche Prüfung gewählt ist und ob der Termin
+  sie anbietet (grün) oder nicht (rot). Sind im Termin noch keine Prüfungen hinterlegt, gibt es
+  die Auswahl nicht, und Art, Leistungsklasse und Disziplin stehen direkt da.
 - **Startnummer:** Neue Teilnehmer starten mit dem Häkchen **„Startnummer steht noch nicht
   fest“**. Entfernst du es, schlägt das Programm die kleinste freie Nummer im Bereich der
   gewählten Prüfung vor. Eine bereits vergebene Nummer lehnt das Programm ab und nennt, wer sie

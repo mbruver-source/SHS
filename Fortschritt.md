@@ -9252,3 +9252,25 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
   Anfang; der F1-Test prüft den sichtbaren Abschnitt; Hinweis auf Cmd+? am Mac. Zur Kenntnis:
   „Weiter“ sucht ab dem letzten Treffer (Qt-Verhalten), die Inhaltszeile zählt als Treffer
   mit; die Demo läuft hinter der Hilfe weiter (wie bisher, OFFEN C14). Kein Hilfe-Screenshot.
+
+### ux_test_2026_11 B8 – Auswahl „Prüfung“ im Teilnehmer-Dialog, T5 (04.11.2026)
+
+- Marcos Entscheidung (ersetzt R2): eine Auswahl **„Prüfung*“** mit den angebotenen Prüfungen in
+  der Schreibweise des Anmeldeformulars (`Pruefungsangebot.bezeichnung`, z. B. „Trümmer LK 1“)
+  und dem Eintrag **„andere Prüfung …“**, der Art/LK/Disziplin einblendet. Art/LK/Disziplin
+  bleiben die gespeicherte Grundlage; die Auswahl folgt ihnen (auch beim Bearbeiten: nicht
+  angebotene Prüfung → „andere Prüfung …“ mit sichtbaren Feldern). Ohne Angebot im Termin
+  entfällt die Auswahl. Vorbelegung mit der ersten angebotenen Prüfung (R2) bleibt.
+- Die Demo wählt die Prüfung über die Auswahl (Rückfall auf Art/LK/Disziplin, wenn sie nicht
+  angeboten ist).
+- „Prüfungsnamen überall einheitlich“: im Dialog umgesetzt (gleiche Bezeichnung wie Anmeldeformular
+  und Hinweiszeile). Teilnehmerliste und Auswertung zeigen weiter „ED LK 1 – …“ – siehe
+  Rückfrage R-B8.
+- Handbuch („Die Erfassungsmaske“) nachgezogen. Screenshots `handbuch_teilnehmer_dialog_ed` und
+  `_dk` stehen ohnehin auf der Liste (zeigen jetzt die Auswahl).
+- Tests: 2 neue GUI-Tests; Gegenprobe scheitert ohne die Änderung. 721 Unittests, 536 GUI-Tests
+  grün.
+- **Verifikation:** ohne Fehler. Nachgezogen: Die Hinweiszeile „Prüfung: … – wird angeboten“
+  steht nur noch zusammen mit Art/LK/Disziplin (sonst doppelt); der Demo-Rückfall wählt zuerst
+  „andere Prüfung …“; Test prüft die ED-Zuordnung von Gegenstand 1. Zur Kenntnis: Altdaten ED
+  ohne Disziplin zeigen die erste Disziplin (wie bisher, nur weniger sichtbar).

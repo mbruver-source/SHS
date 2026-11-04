@@ -66,6 +66,8 @@ from db import (
     get_veranstaltung,
     init_db,
     list_zeitplan_richter,
+    pruefung_nach_kuerzel,
+    pruefungs_kuerzel,
     set_veranstaltung,
     setze_stechen_sieger,
     startnummer_bereiche,
@@ -1258,15 +1260,26 @@ class DemoTour(QObject):
             )
             self._dialog_zeigen(dialog)
             daten = demo_daten.TEILNEHMER[0]["daten"]
+            # UX-Test 2026-11, T5: die Prüfung über die Auswahl „Prüfung“ wählen; ist sie (nach
+            # eigener Änderung der Veranstaltungsdaten) nicht angeboten, wie bisher Art/LK/Disziplin.
+            kuerzel = pruefungs_kuerzel(daten["art"], daten["stufe"], daten["disziplin"])
+            if dialog.pruefung_auswahl.findData(kuerzel) >= 0:
+                pruefung = self._eintragen(dialog.pruefung_auswahl, pruefung_nach_kuerzel(kuerzel).bezeichnung)
+            else:
+                pruefung = [
+                    *self._eintragen(dialog.pruefung_auswahl, dialog.pruefung_auswahl.itemText(
+                        dialog.pruefung_auswahl.count() - 1)),  # „andere Prüfung …“ blendet die Felder ein
+                    *self._eintragen(dialog.art, daten["art"]),
+                    *self._eintragen(dialog.stufe, str(daten["stufe"])),
+                    *self._eintragen(dialog.disziplin, daten["disziplin"]),
+                ]
             self._offen[:0] = [
                 *self._eintragen(dialog.nachname, daten["nachname"]),
                 *self._eintragen(dialog.vorname, daten["vorname"]),
                 *self._eintragen(dialog.verein, daten["verein"]),
                 *self._eintragen(dialog.rufname_hund, daten["rufname_hund"]),
                 *self._eintragen(dialog.chip_nr, daten["chip_nr"]),
-                *self._eintragen(dialog.art, daten["art"]),
-                *self._eintragen(dialog.stufe, str(daten["stufe"])),
-                *self._eintragen(dialog.disziplin, daten["disziplin"]),
+                *pruefung,
                 *self._eintragen(dialog.gegenstand_1, daten["gegenstand_1"]),
                 self._markieren_aktion(self._dialog_ok_knopf),
             ]

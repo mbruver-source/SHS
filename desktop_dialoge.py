@@ -87,6 +87,8 @@ from desktop_gemeinsam import (
 # Mindestbreite ihrer Textfelder links.
 _TEILNEHMER_DIALOG_GROESSE = (1040, 720)
 _MINDESTBREITE_TEXTFELD = 170
+#: UX-Test 2026-11, T5: letzter Eintrag der Auswahl „Prüfung“ - blendet Art/LK/Disziplin ein.
+_ANDERE_PRUEFUNG = "andere Prüfung …"
 # UX-Test 2026-11, T6: Trennzeichen, die bei ED auf mehrere Gegenstände in einem Feld deuten.
 # Klammerzusätze wie „Ball (rot, klein)“ zählen nicht (_KLAMMERZUSATZ wird vorher entfernt).
 _MEHRERE_GEGENSTAENDE = re.compile(r"[,;/+&]|\s(und|oder|sowie|u\.)\s", re.IGNORECASE)
@@ -201,8 +203,10 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             (vorhandener.get("startnummer"), self._gewaehlte_pruefung()) if vorhandener else None
         )
         self._gespeicherter_gegenstand_1 = self.gegenstand_1.text().strip() if vorhandener else None
+        self._pruefung_auswahl_fuellen()
         for auswahl in (self.art, self.stufe, self.disziplin):
             auswahl.currentTextChanged.connect(self._pruefung_hinweis_aktualisieren)
+            auswahl.currentTextChanged.connect(self._pruefung_auswahl_nachfuehren)
         self._pruefung_hinweis_aktualisieren()
         self._halter_sichtbarkeit_aktualisieren(self.halter_weicht_ab.isChecked())
         self._startnummer_verfuegbarkeit_aktualisieren(self.startnummer_unbekannt.isChecked())
@@ -258,6 +262,11 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # werden.
         self.startnummer_unbekannt = QCheckBox("Startnummer steht noch nicht fest")
         self.startnummer_unbekannt.toggled.connect(self._startnummer_verfuegbarkeit_aktualisieren)
+
+        # UX-Test 2026-11, T5 (Marco 04.11.2026, ersetzt R2): eine Auswahl „Prüfung“ mit den im
+        # Termin angebotenen Prüfungen in der Schreibweise des Anmeldeformulars. Art/LK/Disziplin
+        # bleiben die Grundlage; sichtbar nur über „andere Prüfung …“ bzw. ohne Angebot.
+        self.pruefung_auswahl = QComboBox()
 
         self.art = QComboBox()
         self.art.addItems(["ED", "DK"])
@@ -352,6 +361,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         form_rechts.addRow("Wurftag (TT.MM.JJJJ)", self.wurftag)
         form_rechts.addRow("Tollwutimpfung gültig bis (TT.MM.JJJJ)", self.tollwutimpfung_bis)
         form_rechts.addRow("Startnummer", _startnummer_zeile(self.startnummer, self.startnummer_unbekannt))
+        form_rechts.addRow("Prüfung*", self.pruefung_auswahl)
         form_rechts.addRow("Art*", self.art)
         form_rechts.addRow("Leistungsklasse*", self.stufe)
         form_rechts.addRow("Disziplin (nur bei ED)", self.disziplin)
@@ -566,6 +576,49 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # scheinbar bewusste DK-Zuordnung stehen lassen, sondern wieder auf "frei".
             self.gegenstand_1_disziplin.setCurrentText(_GEGENSTAND_ZUORDNUNG_FREI)
         self._gegenstand_1_fest_zugeordnet = ist_ed
+
+    def _pruefung_auswahl_fuellen(self) -> None:
+        """T5: angebotene Prüfungen plus „andere Prüfung …“; ohne Angebot im Termin entfällt die
+        Auswahl, und Art/LK/Disziplin stehen wie bisher da."""
+        for p in ALLE_PRUEFUNGEN:
+            if p.kuerzel in self._angebotene:
+                self.pruefung_auswahl.addItem(p.bezeichnung, p.kuerzel)
+        self.pruefung_auswahl.addItem(_ANDERE_PRUEFUNG, None)
+        self._form_rechts.setRowVisible(self.pruefung_auswahl, bool(self._angebotene))
+        self._pruefung_auswahl_nachfuehren()
+        # Beim Bearbeiten einer nicht angebotenen Prüfung steht gleich „andere Prüfung …“ da.
+        self._pruefung_details_zeigen(not self._angebotene or self.pruefung_auswahl.currentData() is None)
+        self.pruefung_auswahl.currentIndexChanged.connect(self._pruefung_auswahl_geaendert)
+
+    def _pruefung_details_zeigen(self, sichtbar: bool) -> None:
+        # Die Hinweiszeile nur zusammen mit Art/LK/Disziplin - sonst wiederholte sie die
+        # Auswahl darüber (Verifikation B8).
+        for feld in (self.art, self.stufe, self.disziplin, self.pruefung_hinweis):
+            self._form_rechts.setRowVisible(feld, sichtbar)
+
+    def _pruefung_auswahl_geaendert(self, _index: int) -> None:
+        kuerzel = self.pruefung_auswahl.currentData()
+        pruefung = pruefung_nach_kuerzel(kuerzel) if kuerzel else None
+        if pruefung is None:  # „andere Prüfung …“
+            self._pruefung_details_zeigen(True)
+            return
+        self.art.setCurrentText(pruefung.art)
+        self.stufe.setCurrentText(str(pruefung.stufe))
+        if pruefung.disziplin:
+            self.disziplin.setCurrentText(pruefung.disziplin)
+        self._pruefung_details_zeigen(False)
+
+    def _pruefung_auswahl_nachfuehren(self, *_args) -> None:
+        """Art/LK/Disziplin geändert (auch von außen, z. B. Vorbelegung): die passende
+        angebotene Prüfung bzw. „andere Prüfung …“ zeigen, ohne die Felder umzuschalten."""
+        index = self.pruefung_auswahl.findData(self._gewaehlte_pruefung())
+        if index < 0:
+            index = self.pruefung_auswahl.count() - 1
+            self._pruefung_details_zeigen(True)  # nicht angeboten: Felder sichtbar lassen
+        if index != self.pruefung_auswahl.currentIndex():
+            self.pruefung_auswahl.blockSignals(True)
+            self.pruefung_auswahl.setCurrentIndex(index)
+            self.pruefung_auswahl.blockSignals(False)
 
     def _gewaehlte_pruefung(self) -> str:
         art = self.art.currentText()

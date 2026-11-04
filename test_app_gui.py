@@ -3658,6 +3658,50 @@ def test_a9_kleinigkeiten(qtbot, monkeypatch):
     assert geklickt and version.result() == 0
 
 
+def test_teilnehmer_auswahl_pruefung_mit_angebot(qtbot):
+    """UX-Test 2026-11, T5 (Marco 04.11.2026): eine Auswahl „Prüfung“ mit den angebotenen
+    Prüfungen in der Schreibweise des Anmeldeformulars; Art/LK/Disziplin nur über „andere
+    Prüfung …“."""
+    dialog = _teilnehmer_dialog_ausgefuellt(qtbot, angebotene={"DK1", "ED1-Trümmerfeld"})
+    auswahl = dialog.pruefung_auswahl
+    assert [auswahl.itemText(i) for i in range(auswahl.count())] == ["DK-LK 1", "Trümmer LK 1", "andere Prüfung …"]
+    form = dialog._form_rechts
+    assert form.isRowVisible(auswahl) and not form.isRowVisible(dialog.art)
+    assert auswahl.currentText() == "DK-LK 1" and dialog._gewaehlte_pruefung() == "DK1"
+
+    auswahl.setCurrentText("Trümmer LK 1")
+    assert (dialog.art.currentText(), dialog.stufe.currentText(), dialog.disziplin.currentText()) == (
+        "ED", "1", "Trümmerfeld")
+    assert dialog.pruefung_hinweis.text().endswith("wird angeboten")
+    assert not form.isRowVisible(dialog.art) and not form.isRowVisible(dialog.pruefung_hinweis)
+    assert dialog.gegenstand_1_disziplin.currentText() == "Trümmerfeld"  # ED-Zuordnung folgt
+
+    auswahl.setCurrentText("andere Prüfung …")
+    assert form.isRowVisible(dialog.art) and form.isRowVisible(dialog.stufe)
+    assert form.isRowVisible(dialog.pruefung_hinweis)
+    dialog.art.setCurrentText("DK")
+    dialog.stufe.setCurrentText("2")
+    assert auswahl.currentText() == "andere Prüfung …" and dialog._gewaehlte_pruefung() == "DK2"
+    assert "NICHT angeboten" in dialog.pruefung_hinweis.text()
+    dialog.stufe.setCurrentText("1")  # wieder eine angebotene Prüfung
+    assert auswahl.currentText() == "DK-LK 1"
+
+
+def test_teilnehmer_auswahl_pruefung_ohne_angebot_und_beim_bearbeiten(qtbot, conn):
+    """T5: Ohne Angebot im Termin bleibt es bei Art/LK/Disziplin; ein Teilnehmer in einer nicht
+    angebotenen Prüfung öffnet mit „andere Prüfung …“ und sichtbaren Feldern."""
+    ohne = _teilnehmer_dialog_ausgefuellt(qtbot)
+    assert not ohne._form_rechts.isRowVisible(ohne.pruefung_auswahl)
+    assert ohne._form_rechts.isRowVisible(ohne.art)
+
+    _teilnehmer_anlegen(conn, art="DK", stufe=3, disziplin=None)
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0], angebotene={"DK1"})
+    qtbot.addWidget(dialog)
+    assert dialog.pruefung_auswahl.currentText() == "andere Prüfung …"
+    assert dialog._form_rechts.isRowVisible(dialog.art)
+    assert dialog._gewaehlte_pruefung() == "DK3"
+
+
 def test_teilnehmer_hinweis_ohne_angebot_nur_name(qtbot):
     dialog = _teilnehmer_dialog_ausgefuellt(qtbot)
     assert dialog.pruefung_hinweis.text() == "Prüfung: Trümmer LK 1"

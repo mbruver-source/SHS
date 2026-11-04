@@ -16,9 +16,9 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B3 | T9 + T10 + T11 Version, Sicherungstext, Dateiname | M | erledigt | 96db049 | 65 → 80 % | real ≈ 15 %; Enter-Fehler N5 echt, behoben |
 | B4 | T2 Import-Ablehnungen nachlesbar | M | erledigt | 76ae4d6 | 9 → 17 % | R-B4 |
 | B5 | T1 Zeitplan: Bestätigung und Pausenfeld | M | erledigt | 170f9bc | 17 → 26 % | |
-| B6 | T8 Hilfe mit Suche und F1 | M | erledigt | (B6-Commit) | 31 → 40 % | |
+| B6 | T8 Hilfe mit Suche und F1 | M | erledigt | 082fed2 | 31 → 40 % | |
 | B7 | T14 Kleinigkeiten (R7) | S | erledigt | 5b8823c | 80 → 85 %, 0 → 9 % | vor B4 gezogen; R-B7 (Befundnummern) |
-| B8 | T5 Auswahl „Prüfung“ | L | offen | | | ersetzt R2 |
+| B8 | T5 Auswahl „Prüfung“ | L | erledigt | (B8-Commit) | 40 → 52 % | ersetzt R2; R-B8 |
 | B9 | T12 Demo mit echtem Zurück | L | offen | | | ersetzt R4 |
 | B10 | T13 Kurzanleitung Installation (PDF) | M | offen | | | Website erst mit dem Release |
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | offen | | | |
@@ -71,7 +71,7 @@ Angebotsmarkierung im Teilnehmer-Dialog.
 **B8 – T5 (L):** Teilnehmer-Dialog: eine Auswahl „Prüfung“ mit den angebotenen Prüfungen des
 Termins in dessen Schreibweise; Eintrag „andere …“ blendet Art/LK/Disziplin ein. Bei
 Bearbeitung einer nicht angebotenen Prüfung direkt „andere …“. Prüfungsnamen überall
-einheitlich. Ersetzt die Vorbelegung aus R2. Handbuch und Screenshots nachziehen.
+einheitlich. Ersetzt R2 (die Auswahl beginnt weiter mit der ersten angebotenen Prüfung). Handbuch und Screenshots nachziehen.
 
 **B9 – T12 (L):** Demo: „Vorheriger Schritt“ spielt den letzten Schritt zurück (Zustand vor dem
 Schritt wiederherstellen, z. B. über Sicherungspunkte der Demo-Datenbank je Schritt). Ersetzt
@@ -100,3 +100,6 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   `Fortschritt.md`. Vorschlag: so lassen (Projektstil).
 - **R-B4 (aus B4):** Bei Abbruch oder Datenbankfehler mitten im Import bleibt unter „Letzter
   Import“ das vorige Ergebnis stehen (Uhrzeit zeigt es). Vorschlag: so lassen.
+- **R-B8 (aus B8):** Prüfungsnamen sind im Teilnehmer-Dialog jetzt wie im Anmeldeformular
+  („Trümmer LK 1“); Teilnehmerliste, Zeitplan und Auswertung schreiben weiter „ED LK 1 –
+  Trümmerfeld“. Vereinheitlichen (betrifft auch PDFs) oder so lassen? Vorschlag: so lassen.
