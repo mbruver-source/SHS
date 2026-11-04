@@ -426,14 +426,18 @@ Leistungsklasse mit „Bearbeiten…“ anpassen kannst.
 Meldungen nach einem Import oder der Startnummernvergabe zeigen je Liste höchstens 15 Namen; die
 vollständige Liste steht unter **„Details“**. Wurden beim Import Meldungen abgelehnt oder
 übersprungen, legt **„Meldung kopieren und schließen“** die ganze Meldung samt vollständiger Listen
-in die Zwischenablage (z. B. zum Einfügen in eine E-Mail); die Meldung sagt dann auch, was zu tun ist. Nach einem Import fragt das Programm
+in die Zwischenablage (z. B. zum Einfügen in eine E-Mail); die Meldung sagt dann auch, was zu tun ist.
+Auch nach „OK“ bleibt das Ergebnis des letzten Imports im Reiter **„Formular-Import“** unter
+**„Letzter Import“** stehen (mit Uhrzeit und Knopf **„Kopieren“**), bis zum nächsten Import oder
+Terminwechsel. Nach einem Import fragt das Programm
 nur dann nach der Startnummernvergabe, wenn neue Teilnehmer ohne Nummer dazugekommen sind.
 
 ## 5. Formular-Import
 
 ![Reiter „Formular-Import“](bilder/handbuch_formular_import.png)
 
-Der Reiter zeigt drei Wege, Teilnehmer einzulesen – jeweils mit kurzer Erklärung:
+Der Reiter zeigt drei Wege, Teilnehmer einzulesen – jeweils mit kurzer Erklärung (nach einem
+Import steht dazu das Ergebnis unter **„Letzter Import“**, siehe oben):
 **1. Ausgefüllte Anmeldeformulare (PDF)**, **2. Teilnehmerliste aus Excel (CSV-Datei)** und
 **3. Meldungen aus der OMA**. Darunter lässt sich der Weg **über ein KI-System** (Foto, Scan,
 Word) aufklappen. Nach jedem Import fragt das Programm, ob es fehlende Startnummern gleich

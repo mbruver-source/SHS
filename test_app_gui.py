@@ -2357,6 +2357,46 @@ def test_formular_import_tab_anmeldeformulare_importieren_zeigt_zusammenfassung(
     assert "1 Datei(en) nicht importiert" in _gesammelt[0]
     assert "c.pdf: kein Anmeldeformular" in _gesammelt[0]
 
+    # UX-Test 2026-11, T2: nach „OK“ weiter nachlesbar und kopierbar.
+    assert tab.letzter_import.isVisible()
+    assert tab.letzter_import.title().startswith("Letzter Import (")
+    text = tab.letzter_import_text.toPlainText()
+    assert "c.pdf: kein Anmeldeformular" in text and "b.pdf: Muster" in text and "Was tun?" in text
+    qtbot.mouseClick(next(b for b in tab.findChildren(QPushButton) if b.text() == "Kopieren"),
+                     Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == text
+
+
+def test_letzter_import_auch_aus_dem_reiter_teilnehmer(qtbot, termin, tmp_path, monkeypatch):
+    """UX-Test 2026-11, T2: Ein Import aus dem Reiter „Teilnehmer“ landet ebenfalls unter
+    „Letzter Import“ im Reiter „Formular-Import“; ein zweiter Import ersetzt den Text, ohne
+    Elternfenster passiert nichts."""
+    import app as app_modul
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    assert not fenster.formular_import_tab.letzter_import.isVisible()
+    monkeypatch.setattr("app.QFileDialog.getOpenFileName", lambda *a, **k: (str(tmp_path / "liste.csv"), ""))
+    monkeypatch.setattr("app.importiere_teilnehmer_aus_csv",
+                        lambda c, p: CsvImportErgebnis(importiert=0, fehler=["Zeile 3: Name fehlt"]))
+    import_meldungen_sammeln(monkeypatch)
+    app_modul._teilnehmerliste_importieren(fenster.teilnehmer_tab, conn)
+    tab = fenster.formular_import_tab
+    assert "Zeile 3: Name fehlt" in tab.letzter_import_text.toPlainText()
+    assert not tab.letzter_import.isHidden()
+
+    tab._letzten_import_kopieren()
+    assert tab.letzter_import_status.text() == "Kopiert."
+    monkeypatch.setattr("app.importiere_teilnehmer_aus_csv",
+                        lambda c, p: CsvImportErgebnis(importiert=0, fehler=["Zeile 9: Hund fehlt"]))
+    app_modul._teilnehmerliste_importieren(fenster.teilnehmer_tab, conn)
+    assert "Zeile 9: Hund fehlt" in tab.letzter_import_text.toPlainText()
+    assert "Zeile 3" not in tab.letzter_import_text.toPlainText()
+    assert tab.letzter_import_status.text() == ""
+
+    app_modul._letzten_import_zeigen(None, "x")  # ohne Fenster: keine Ausnahme
+
 
 # --- Hilfe-Button ---------------------------------------------------------------
 

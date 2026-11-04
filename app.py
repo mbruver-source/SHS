@@ -29,6 +29,7 @@ dort unabhängig von der Oberfläche getestet - dieses Fenster ruft sie nur auf.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import os
 import sqlite3
 import sys
@@ -258,6 +259,13 @@ def _fehlende_startnummern_vergeben_mit_meldung(
 _MELDUNG_LISTE_MAX = 15
 
 
+def _meldungstext_voll(einleitung: str, abschnitte: list[tuple[str, list[str]]]) -> str:
+    """Der ungekürzte Text einer _meldung_mit_listen-Meldung (leere Abschnitte entfallen)."""
+    return einleitung + "".join(
+        f"\n\n{ueberschrift}\n" + "\n".join(eintraege) for ueberschrift, eintraege in abschnitte if eintraege
+    )
+
+
 def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tuple[str, list[str]]],
                         warnung: bool = False, kopieren: bool = False) -> None:
     """Informationsmeldung aus `einleitung` und Abschnitten (Überschrift, Einträge); leere
@@ -265,7 +273,8 @@ def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tu
     und die vollständige Fassung über „Details“ angeboten. UX-Test 03.11.2026, X10:
     `warnung` zeigt das Warnsymbol statt „i“, `kopieren` einen Knopf „Meldung kopieren und schließen“ - die
     Liste war nach „OK“ sonst nirgends mehr nachzulesen."""
-    kurz = voll = einleitung
+    kurz = einleitung
+    voll = _meldungstext_voll(einleitung, abschnitte)
     gekuerzt = False
     for ueberschrift, eintraege in abschnitte:
         if not eintraege:
@@ -275,7 +284,6 @@ def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tu
             zeilen.append(f"… und {len(eintraege) - _MELDUNG_LISTE_MAX} weitere (siehe „Details“)")
             gekuerzt = True
         kurz += f"\n\n{ueberschrift}\n" + "\n".join(zeilen)
-        voll += f"\n\n{ueberschrift}\n" + "\n".join(eintraege)
     if not (gekuerzt or warnung or kopieren):
         QMessageBox.information(parent, titel, kurz)
         return
@@ -300,20 +308,37 @@ def _meldung_mit_listen(parent, titel: str, einleitung: str, abschnitte: list[tu
 _RAT_BEI_ABLEHNUNG = ("Abgelehnte Meldungen: beim Teilnehmer nachfragen und von Hand erfassen "
                       "(„Teilnehmer hinzufügen…“) oder korrigiert erneut einlesen – bereits "
                       "übernommene Meldungen werden dabei nicht doppelt angelegt. Ist die ganze "
-                      "Datei betroffen, die Datei prüfen und erneut einlesen. Mit „Meldung "
-                      "kopieren und schließen“ lässt sich alles z. B. in eine E-Mail einfügen.")
+                      "Datei betroffen, die Datei prüfen und erneut einlesen. Mit dem Kopier-Knopf "
+                      "lässt sich alles z. B. in eine E-Mail einfügen; nachlesbar bleibt es im "
+                      "Reiter „Formular-Import“ unter „Letzter Import“.")
+
+
+def _letzten_import_zeigen(parent, text: str) -> None:
+    """UX-Test 2026-11, T2: Die Abschlussmeldung eines Imports bleibt im Reiter
+    „Formular-Import“ unter „Letzter Import“ nachlesbar - nach „OK“ (oder Enter) war die
+    Ablehnungsliste sonst weg. Gilt auch für Importe aus dem Reiter „Teilnehmer“."""
+    if isinstance(parent, FormularImportTab):
+        tab = parent
+    else:
+        tab = getattr(parent.window(), "formular_import_tab", None) if parent is not None else None
+    if tab is not None:
+        tab.letzten_import_zeigen(text)
 
 
 def _import_ergebnis_melden(parent, ergebnis, fehler_ueberschrift: str = "Zeile(n) übersprungen:") -> None:
     """Gemeinsame Abschlussmeldung für CSV-, OMA- und Anmeldeformular-Import (Teil 5 Nr. 5)."""
-    _meldung_mit_listen(parent, "Import abgeschlossen", f"{ergebnis.importiert} Teilnehmer importiert.", [
+    einleitung = f"{ergebnis.importiert} Teilnehmer importiert."
+    abschnitte = [
         # UX-Nachtest 03.10.2026, N1: bereits vorhandene Meldungen werden nicht doppelt angelegt.
         (f"{len(ergebnis.uebersprungen)} Meldung(en) bereits vorhanden, nicht erneut angelegt:",
          ergebnis.uebersprungen),
         (f"{len(ergebnis.fehler)} {fehler_ueberschrift}", ergebnis.fehler),
         ("Was tun?", [_RAT_BEI_ABLEHNUNG] if ergebnis.fehler else []),
         ("Hinweis:", ergebnis.hinweise),
-    ], warnung=bool(ergebnis.fehler), kopieren=bool(ergebnis.fehler or ergebnis.uebersprungen))
+    ]
+    _letzten_import_zeigen(parent, _meldungstext_voll(einleitung, abschnitte))
+    _meldung_mit_listen(parent, "Import abgeschlossen", einleitung, abschnitte,
+                        warnung=bool(ergebnis.fehler), kopieren=bool(ergebnis.fehler or ergebnis.uebersprungen))
 
 
 _NICHTS_ZU_TAUSCHEN = ("Beide Teilnehmer haben noch keine Startnummer. Startnummern vergibst du "
@@ -917,12 +942,15 @@ class TeilnehmerTab(QWidget):
                         fremde = nicht_angebotene(self.conn, uebernommen)
                     except sqlite3.Error:
                         fremde = []  # nur der Hinweis entfällt, der Import ist gespeichert
-                    _meldung_mit_listen(self, "Import abgeschlossen", f"{anzahl} Teilnehmer importiert.", [
+                    einleitung = f"{anzahl} Teilnehmer importiert."
+                    abschnitte = [
                         (f"{len(fremde)} Teilnehmer in hier nicht angebotenen Prüfungen – bitte die "
                          "Leistungsklasse anpassen („Bearbeiten…“) oder die Prüfung in den "
                          "Veranstaltungsdaten anbieten:",
                          [f"{t['nachname']}, {t['vorname']} – {leistungsklasse_label(t)}" for t in fremde]),
-                    ])
+                    ]
+                    _letzten_import_zeigen(self, _meldungstext_voll(einleitung, abschnitte))
+                    _meldung_mit_listen(self, "Import abgeschlossen", einleitung, abschnitte)
                     if anzahl:
                         _startnummern_nach_import_anbieten(self, self.conn, vorher_ohne)
                         self.aktualisieren()
@@ -1305,6 +1333,25 @@ class FormularImportTab(QWidget):
         )
         self._ki_umschalter.toggled.connect(self._ki_bereich_umschalten)
 
+        # UX-Test 2026-11, T2: Ergebnis des letzten Imports (bis zum nächsten bzw. bis zum
+        # Terminwechsel, nur im Speicher), siehe _letzten_import_zeigen.
+        self.letzter_import = QGroupBox("Letzter Import")
+        self.letzter_import_text = QPlainTextEdit()
+        self.letzter_import_text.setReadOnly(True)
+        self.letzter_import_text.setMaximumHeight(160)
+        letzter_kopieren_btn = QPushButton("Kopieren")
+        letzter_kopieren_btn.setToolTip("Den ganzen Text z. B. in eine E-Mail an die Teilnehmer einfügen.")
+        letzter_kopieren_btn.clicked.connect(self._letzten_import_kopieren)
+        self.letzter_import_status = QLabel("")
+        letzter_zeile = QHBoxLayout()
+        letzter_zeile.addWidget(letzter_kopieren_btn)
+        letzter_zeile.addWidget(self.letzter_import_status)
+        letzter_zeile.addStretch()
+        letzter_layout = QVBoxLayout(self.letzter_import)
+        letzter_layout.addWidget(self.letzter_import_text)
+        letzter_layout.addLayout(letzter_zeile)
+        self.letzter_import.setVisible(False)
+
         layout = QVBoxLayout(self)
         layout.addWidget(abschnitt(
             "1. Ausgefüllte Anmeldeformulare (PDF) – empfohlen",
@@ -1326,6 +1373,7 @@ class FormularImportTab(QWidget):
             "übersprungen.",
             oma_btn,
         ))
+        layout.addWidget(self.letzter_import)
         layout.addWidget(self._ki_umschalter)
         layout.addWidget(self._ki_bereich, 1)
         layout.addStretch()
@@ -1333,6 +1381,17 @@ class FormularImportTab(QWidget):
     def _prompt_kopieren(self) -> None:
         QApplication.clipboard().setText(self.prompt_feld.toPlainText())
         self.status_label.setText("Prompt kopiert.")
+
+    def letzten_import_zeigen(self, text: str) -> None:
+        uhrzeit = datetime.datetime.now().strftime("%H:%M")
+        self.letzter_import.setTitle(f"Letzter Import ({uhrzeit} Uhr)")
+        self.letzter_import_text.setPlainText(text)
+        self.letzter_import_status.setText("")
+        self.letzter_import.setVisible(True)
+
+    def _letzten_import_kopieren(self) -> None:
+        QApplication.clipboard().setText(self.letzter_import_text.toPlainText())
+        self.letzter_import_status.setText("Kopiert.")
 
     def _csv_importieren(self) -> None:
         _teilnehmerliste_importieren(self, self.conn)

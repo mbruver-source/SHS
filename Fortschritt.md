@@ -9201,3 +9201,18 @@ ohne die Änderung. 721 Unittests, 529 GUI-Tests grün.
 - **Verifikation:** ohne Fehler. Nachgezogen: Die PostgreSQL-Übersicht prüft vorher, ob ein
   altes, nie geöffnetes Termin-Schema die Spalte `keine_teilnahme` schon hat (sonst wie bisher
   alle zählen); positiver Fall im Test für `teilnehmer_ohne_startnummer`.
+
+### ux_test_2026_11 B4 – Import-Ablehnungen nachlesbar, T2 (04.11.2026)
+
+- Im Reiter „Formular-Import“ steht nach einem Import der Bereich **„Letzter Import (HH:MM Uhr)“**
+  mit der vollständigen Abschlussmeldung (importiert, bereits vorhanden, abgelehnt, Rat,
+  Hinweise) und dem Knopf „Kopieren“. Er bleibt bis zum nächsten Import bzw. Terminwechsel, nur
+  im Speicher. Gilt auch für CSV- und Termin-Import aus dem Reiter „Teilnehmer“
+  (`_letzten_import_zeigen`, gemeinsamer Text über `_meldungstext_voll`). Der Rat bei Ablehnung
+  nennt den Bereich.
+- Verifikation: ohne Fehler; Test-Docstring, zweiter Import und Text des Rats nachgezogen,
+  Querverweis im Handbuch Kapitel 5.
+- **Rückfrage R-B4:** Bei Abbruch oder Datenbankfehler mitten im Import bleibt im Bereich das
+  Ergebnis des vorigen Imports stehen (an der Uhrzeit erkennbar). Vorschlag: so lassen.
+- Tests: 1 neuer GUI-Test, 1 erweitert; Gegenprobe scheitert ohne die Änderung. 721 Unittests,
+  530 GUI-Tests grün; nach der Nacharbeit die Import-Tests grün.
