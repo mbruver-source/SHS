@@ -87,12 +87,12 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
         - **Chrome:** Mit **Strg + J** die Download-Liste öffnen. Bei der Datei auf
           **„Gefährliche Datei behalten“** bzw. **„Trotzdem behalten“** klicken und die
           Rückfrage bestätigen.
-        - **Edge:** meldet „… wird häufig nicht heruntergeladen“. Im Download-Fenster oben
-          rechts mit der Maus auf die Datei zeigen, auf **„…“** klicken → **„Beibehalten“**.
-          Fragt Edge danach noch einmal nach: **„Mehr anzeigen“** →
-          **„Trotzdem beibehalten“**.
+        - **Edge:** meldet im Download-Fenster „… wird häufig nicht heruntergeladen“. Auf
+          **„Mehr anzeigen“** klicken, dann auf den **Pfeil neben „Löschen“** →
+          **„Trotzdem beibehalten“**. (Ältere Edge-Versionen: mit der Maus auf die Datei
+          zeigen, **„…“** → **„Beibehalten“**.)
 
-            ![Edge: Datei über „…“ → „Beibehalten“ freigeben](bilder/handbuch_edge_download.png)
+            ![Edge: „Mehr anzeigen“, dann Pfeil neben „Löschen“ → „Trotzdem beibehalten“](bilder/handbuch_edge_download_2.png)
 
         - **Firefox:** blockiert die Datei normalerweise nicht. Falls doch: in der
           Download-Liste (Pfeil oben rechts) auf die Datei klicken → **„Download erlauben“**.

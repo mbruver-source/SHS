@@ -20,11 +20,15 @@ Versionsnummer). Alle anderen Dateien (für Mac, Linux, „Source code“) brauc
 Weil das Programm neu ist und selten heruntergeladen wird, hält der Browser es vorsorglich für
 verdächtig.
 
-- **Edge:** Oben rechts im Download-Fenster mit der Maus auf die Datei zeigen, auf **„…“**
-  klicken und **„Beibehalten“** wählen. Fragt Edge noch einmal: **„Mehr anzeigen“** →
-  **„Trotzdem beibehalten“**.
+- **Edge:** Oben rechts im Download-Fenster steht „… wird häufig nicht heruntergeladen“. Auf
+  **„Mehr anzeigen“** klicken,
 
-  ![Edge: Datei über „…“ → „Beibehalten“ freigeben](bilder/handbuch_edge_download.png)
+  ![Edge: Warnung im Download-Fenster, darunter „Mehr anzeigen“](bilder/handbuch_edge_download_1.png)
+
+  dann im nächsten Fenster auf den **Pfeil neben „Löschen“** und **„Trotzdem beibehalten“**
+  wählen (nicht auf „Löschen“ selbst).
+
+  ![Edge: Pfeil neben „Löschen“ → „Trotzdem beibehalten“](bilder/handbuch_edge_download_2.png)
 
 - **Chrome:** Die Tasten **Strg** und **J** gleichzeitig drücken. Bei der Datei auf
   **„Trotzdem behalten“** bzw. **„Gefährliche Datei behalten“** klicken und bestätigen.

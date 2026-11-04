@@ -29,7 +29,8 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
   Bilder, feste Testdaten; einzelne mit `--nur name1,name2`, Namen siehe `BILDER` im Skript).
   Danach jedes geänderte Bild ansehen (`git status docs/bilder`). Neue Oberflächen im Skript
   ergänzen statt Ad-hoc-Code zu schreiben. Von Hand bleiben: Web-Bilder,
-  `handbuch_anmeldeformular`, `bewertungsbogen`, `handbuch_edge_download`. Geht ein Bild
+  `handbuch_anmeldeformular`, `bewertungsbogen`, `handbuch_edge_download_1`/`_2`,
+  `handbuch_smartscreen_1`/`_2`. Geht ein Bild
   nicht, Marco fragen, statt ohne zu bauen. Bei Änderungen an `handbuch_zeitplan.png` die
   `og:image`-Angaben der Website prüfen.
 - `Architektur.md`, `README*.md`.

@@ -9406,3 +9406,9 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   ohne Warnung, Demo-Schritt 3 erwähnt noch „Art und Leistungsklasse“ (seit B8 veraltet).
 - **Harness:** frische Sandboxen brauchen `home\Downloads` mit den Testdaten (vorher anlegen);
   vereinzelt `PermissionError` auf Antwortdateien.
+- **Nachtrag (Marco 04.11.2026, N3 teilweise):** Marco hat die Edge-Download-Warnung von 1.0.55
+  aufgenommen (`docs/bilder/handbuch_edge_download_1.png` Warnung mit „Mehr anzeigen“, `_2.png`
+  Fenster mit Pfeil neben „Löschen“ → „Trotzdem beibehalten“). Ersetzt das alte Bild (1.0.45, Weg
+  über „…“ → „Beibehalten“). Kurzanleitung, Handbuch, Website und `README_INSTALLER.md` beschreiben
+  den neuen Weg (alter Weg als Hinweis für ältere Edge-Versionen). Offen bei N3: Setup-Bild
+  („Nur für mich“) von Marco, GitHub-Bild und Website-Knopf in B21.
