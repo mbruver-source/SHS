@@ -22,9 +22,9 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B9 | T12 Demo mit echtem Zurück | L | erledigt | 1a7675f | 52 → 67 % | ersetzt R4 |
 | B10 | T13 Kurzanleitung Installation (PDF) | M | erledigt | 48fa7a5 | 67 → 76 % | Website erst mit dem Release; R-B10 |
 | B11 | Abschluss: QS 3 Rollen, Doku, Screenshot-Liste, voller Testlauf | L | erledigt | b2fe6f3 | 0 → 16 % | QS-Befunde K1–K3 und Wartbarkeit als Q1–Q4 an Marco |
-| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | (dieser Commit) | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
+| B12 | T15 Nachtest mit Heinz, Sabine, Julia, Gerda, Werner | L | erledigt | c472344 | 16 → 76 %, 0 → 41 % | Bericht Nachtest2.md; je Persona ≈ 17–22 % | Harness aus dem Scratchpad; Werner auf Marcos Wunsch 04.11. dazu, ggf. über zwei Limit-Fenster |
 | B13 | Q1–Q4 aus der Abschluss-QS (Demo-Zurück, Pausenmeldung, Verteilen ohne Teilnehmer, Aufräumen) | M | erledigt | 7a2d700 | 35 → 45 % | Marco 04.11.; nach dem Lauf Heinz, vor Sabine |
-| B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | offen | | | |
+| B14 | N1 + N2 + N8 Ergebniserfassung: Abbruch-Spalte breit, kompakt bei großer Schrift, Komma ablehnen | M | erledigt | (dieser Commit) | 50 → 76 % | real ≈ 26 % (zwei Messfehler-Suchen) |
 | B15 | N4 + N7 + N13 + N15 Tausch-Warnung, Richtername, Reset-Text, Entf löscht | M | offen | | | |
 | B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | offen | | | |
 | B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | offen | | | |

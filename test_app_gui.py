@@ -7348,7 +7348,8 @@ def test_komma_in_punktefeld_gibt_hinweis(qtbot, termin):
     finally:
         QLocale.setDefault(vorher)
 
-    assert tab.punkte(0, "Flächensuche")[0] == "45"
+    # Nachtest 2 (N8): eine Eingabe mit abgelehntem Zeichen wird nicht übernommen.
+    assert tab.punkte(0, "Flächensuche")[0] == ""
     # N6 (UX-Nachtest): bleibt hervorgehoben stehen - seit X8 (03.11.2026), bis die nächste
     # Zelle bearbeitet wird; eine Eingabe von außen (punkte_eintragen) nimmt ihn ebenfalls weg.
     # Desktop-Prüfung 14.10.2026, Teil 3 Nr. 2: als Klartext in einem eigenen Label, die
@@ -7899,11 +7900,130 @@ def test_komma_hinweis_bleibt_nach_der_naechsten_ziffer(qtbot, conn):
     qtbot.keyClicks(editor, "4,5")
     assert editor.text() == "45"
     assert not tab.hinweis_label.isHidden()
-    assert "bitte den Wert in der Zelle prüfen" in tab.hinweis_label.text()
+    assert "der bisherige Wert bleibt" in tab.hinweis_label.text()
     qtbot.keyClick(editor, Qt.Key_Return)
     assert not tab.hinweis_label.isHidden()  # Übernehmen lässt ihn stehen
     tab.zelle_bearbeiten(0, "Flächensuche", "anzeige")
     assert tab.hinweis_label.isHidden()
+
+
+def test_punkte_mit_abgelehntem_zeichen_werden_nicht_uebernommen(qtbot, conn):
+    """Nachtest 2, N8 (Marco 04.11.2026): Aus „4,5“ wurde 45 und überschrieb den alten Wert.
+    Jetzt bleibt der alte Wert, die Statuszeile sagt es, und der Hinweis nennt den Grund.
+    Wer das Feld leert und neu tippt, dessen Eingabe gilt wieder."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche", startnummer=7)
+    eintragen_ergebnis(conn, tid, "Flächensuche", 47, 20)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "4,5")
+    assert "(keine Kommazahlen)" in tab.hinweis_label.text()
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert tab.punkte(0, "Flächensuche")[0] == "47"
+    assert tab.status_label.text().startswith("Nr. 7 Muster: Eingabe nicht übernommen")
+    assert "„47“" in tab.status_label.text()
+
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "4x")
+    assert "(keine Buchstaben)" in tab.hinweis_label.text()
+    editor.clear()  # Feld geleert: die neue Eingabe gilt
+    qtbot.keyClicks(editor, "48")
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert tab.punkte(0, "Flächensuche")[0] == "48"
+
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "anzeige")
+    qtbot.keyClicks(editor, "123")
+    assert "(höchstens zwei Ziffern)" in tab.hinweis_label.text()
+
+    # Der erste Grund bleibt („4,55“ ist ein Komma-Fehler, kein Ziffern-Fehler).
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, "4,55")
+    assert "(keine Kommazahlen)" in tab.hinweis_label.text()
+    # Speichern mit offenem Feld: die Meldung geht nicht unter (Verifikation B14).
+    tab.alle_speichern()
+    assert tab.punkte(0, "Flächensuche")[0] == "48"
+    assert tab.status_label.text().startswith("Nr. 7 Muster: Eingabe nicht übernommen")
+
+    # Ein abgelehntes erstes Zeichen bei markiertem Wert fällt nur weg - die Zahl danach gilt.
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, ",44")
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert tab.punkte(0, "Flächensuche")[0] == "44"
+
+
+def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
+    """Nachtest 2, N2: Bei Schrift „Groß“ war das Formular breiter als die feste Startgröße
+    des Teilnehmer-Dialogs - die Breite richtet sich jetzt nach dem Inhalt (höchstens 95 %
+    des Bildschirms)."""
+    from PySide6.QtCore import QSize
+    from desktop_dialoge import _groesse_auf_bildschirm_begrenzen
+
+    class _Inhalt:
+        def ensurePolished(self):
+            pass
+
+        def sizeHint(self):
+            return QSize(500, 100)
+
+    dialog = QDialog()
+    qtbot.addWidget(dialog)
+    _groesse_auf_bildschirm_begrenzen(dialog, 300, 200, inhalt=_Inhalt())
+    frei = dialog.screen().availableGeometry().width()
+    assert dialog.width() == min(600, int(frei * 0.95))
+    _groesse_auf_bildschirm_begrenzen(dialog, 300, 200)
+    assert dialog.width() == min(300, int(frei * 0.95))
+
+    # Der Teilnehmer-Dialog misst sein Formular (Verdrahtung).
+    from PySide6.QtWidgets import QScrollArea
+    import desktop_dialoge
+
+    gemessen = []
+    echt = desktop_dialoge._groesse_auf_bildschirm_begrenzen
+    desktop_dialoge._groesse_auf_bildschirm_begrenzen = (
+        lambda d, b, h, inhalt=None: gemessen.append(inhalt) or echt(d, b, h, inhalt=inhalt))
+    try:
+        teilnehmer_dialog = desktop_dialoge.TeilnehmerDialog(None)
+        qtbot.addWidget(teilnehmer_dialog)
+    finally:
+        desktop_dialoge._groesse_auf_bildschirm_begrenzen = echt
+    assert gemessen == [teilnehmer_dialog.findChild(QScrollArea).widget()]
+
+
+def test_ergebnis_abbruch_spalte_zeigt_den_ganzen_grund(qtbot, termin):
+    """Nachtest 2, N1/N2: Die Abbruch-Spalte ist auch bei leeren Zellen so breit wie der
+    längste Grund, und die Status-Spalte ragt bei großer Schrift nicht über den Rand."""
+    from PySide6.QtGui import QFontMetrics
+    from PySide6.QtWidgets import QStyleOptionViewItem
+
+    import app
+    import desktop_darstellung
+    from shs_core import ABBRUCH_GRUENDE
+
+    conn, pfad = termin
+    for nr in range(1, 5):
+        _teilnehmer_anlegen(conn, nachname=f"T{nr}", startnummer=nr, art="DK", disziplin=None)
+    laengster_code = max(ABBRUCH_GRUENDE, key=lambda k: len(ABBRUCH_GRUENDE[k][0]))
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.status_setzen(0, abbruch=laengster_code)
+    tab.alle_speichern()  # Status „Abbruch: <längster Grund>“
+    laengster = ABBRUCH_GRUENDE[laengster_code][0]
+    for faktor in (1.0, 1.15):  # Normal, Groß
+        desktop_darstellung._schrift_faktor = faktor
+        try:
+            tab.resize(1900, 700)
+            tab.show()
+            qtbot.waitExposed(tab)
+            tab._tabelle_pt = None
+            tab._spaltenbreiten_anpassen()
+            t = tab.tabelle
+            opt = QStyleOptionViewItem()
+            t.initViewItemOption(opt)
+            noetig = QFontMetrics(opt.font).horizontalAdvance(laengster) + app._AbbruchDelegate.PLATZ_NEBEN_TEXT
+            assert t.columnWidth(app._ABBRUCH_SPALTE) >= noetig
+            assert sum(t.columnWidth(c) for c in range(t.columnCount())) <= t.viewport().width()
+        finally:
+            desktop_darstellung._schrift_faktor = 1.0
 
 
 def test_ergebnis_klick_in_die_haekchenzelle_schaltet(qtbot, conn):

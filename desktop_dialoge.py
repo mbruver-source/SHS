@@ -97,10 +97,17 @@ _MEHRERE_GEGENSTAENDE = re.compile(r"[,;/+&]|\s(und|oder|sowie|u\.)\s", re.IGNOR
 _KLAMMERZUSATZ = re.compile(r"\([^)]*\)")
 
 
-def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int) -> None:
+def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int, inhalt: QWidget | None = None) -> None:
     """Startgröße, begrenzt auf den verfügbaren Bildschirm (UX-Test 02.10.2026, U3), damit
     OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben - gemeinsam für Teilnehmer- und
-    Veranstaltungsdialog (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 7)."""
+    Veranstaltungsdialog (Desktop-Prüfung 14.10.2026, Teil 2 Nr. 7). Mit `inhalt` (dem
+    Formular in der Scrollfläche) mindestens so breit wie dessen Bedarf - bei Schrift „Groß“
+    reichte die feste Breite nicht, und es gab einen waagerechten Bildlauf (Nachtest 2, N2)."""
+    if inhalt is not None:
+        # Erst polieren (Stylesheet-Ränder der Felder), dann messen; + Rand der Scrollfläche,
+        # senkrechte Bildlaufleiste und Ränder des Dialogs.
+        inhalt.ensurePolished()
+        breite = max(breite, inhalt.sizeHint().width() + 100)
     bildschirm = dialog.screen() or QApplication.primaryScreen()
     if bildschirm is not None:
         frei = bildschirm.availableGeometry()
@@ -440,8 +447,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         layout.addWidget(inhalt_scroll, 1)
         layout.addWidget(buttons)
 
-        # Feste, bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch
-        # die vielen Felder - passt dadurch auch auf kleinere Bildschirme (der Inhalt
+        # Bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch die vielen
+        # Felder, bei großer Schrift mindestens so breit wie das Formular (Nachtest 2, N2) -
+        # passt dadurch auch auf kleinere Bildschirme (der Inhalt
         # scrollt jetzt bei Bedarf, siehe oben, statt abgeschnitten zu werden). Der Dialog
         # bleibt frei in der Größe änderbar UND jetzt auch maximierbar (CI-Fund 21.09.:
         # QDialog zeigt standardmäßig keinen Maximieren-Button, obwohl der Nutzer bei
@@ -450,7 +458,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         # UX-Test 02.10.2026, U3: größere Startgröße (vorher 780x640), begrenzt auf den
         # verfügbaren Bildschirm, damit OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben.
-        _groesse_auf_bildschirm_begrenzen(self, *_TEILNEHMER_DIALOG_GROESSE)
+        _groesse_auf_bildschirm_begrenzen(self, *_TEILNEHMER_DIALOG_GROESSE, inhalt=inhalt_container)
 
     def _vorbelegung_uebernehmen(self, vorhandener: dict) -> None:
         """Übernimmt beim Bearbeiten eines vorhandenen Teilnehmers dessen Werte in die

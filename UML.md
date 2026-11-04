@@ -443,8 +443,13 @@ sequenceDiagram
     TB->>DG: createEditor (Validator 0–60 / 0–40)
     DG->>DG: setEditorData (nur solange nicht getippt)
     N->>DG: Ziffern, dann Tab / Enter
-    DG->>TB: setModelData
-    TB->>E: itemChanged → _zelle_geaendert
+    alt Zeichen abgelehnt (Komma, Buchstabe, dritte Ziffer)
+        DG->>E: _eingabe_abgelehnt → Hinweis mit Grund
+        DG->>E: setModelData → _eingabe_verworfen<br/>(alter Wert bleibt, Statuszeile)
+    else gültige Zahl
+        DG->>TB: setModelData
+        TB->>E: itemChanged → _zelle_geaendert
+    end
     E->>E: Zeile gelb „nicht gespeichert“,<br/>zu hoch → roter Rahmen + Hinweis (zu_hoch_label)
     opt Haken DQ (Klick oder Leertaste)
         N->>TB: Haken setzen (_HakenDelegate.editorEvent)

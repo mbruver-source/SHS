@@ -9417,3 +9417,29 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   nummerierte Liste. Die Frage „Nur für mich“ kam bei Marcos Update nicht (Inno Setup merkt sich den
   Modus); die Kurzanleitung sagt jetzt „beim ersten Mal“. Kein Bild davon – bei einer
   Neuinstallation nachholen, falls gewünscht. Offen bei N3 nur noch GitHub-Bild und Website-Knopf (B21).
+
+### ux_test_2026_11 B14 – Ergebniserfassung: Abbruch-Spalte, große Schrift, Komma (Nachtest 2 N1, N2, N8; 04.11.2026)
+
+- **N1:** Die Abbruch-Spalte ist so breit wie der längste Grund. Ursache: Reichte der Platz,
+  gab `_ergebnis_spaltenbreiten_verteilen` die natürlichen Breiten zurück; bei leeren Zellen
+  misst `resizeColumnsToContents` aber nur die Kopfzeile („Verletzu…“). Die natürlichen Breiten
+  werden jetzt auf die Minima angehoben.
+- **N2:** Bei Schrift „Groß“ kein waagerechter Bildlauf mehr: Die Status-Spalte behielt die
+  Inhaltsbreite für „Abbruch: <Grund>“ (seit T3) und ragte über den Rand; jetzt bekommt sie
+  immer den Rest (mindestens 40 px, Text endet mit „…“, Tooltip und Abbruch-Spalte zeigen den
+  Grund ganz). Der Teilnehmer-Dialog wird mindestens so breit wie sein Formular
+  (`_groesse_auf_bildschirm_begrenzen(…, inhalt=)`, höchstens 95 % des Bildschirms); gemessen mit
+  Windows-Schriften bei „Groß“ 1114 statt 1040 px, ohne Bildlauf.
+- **N8:** Eine Punkteingabe mit abgelehntem Zeichen (Komma, Buchstabe, dritte Ziffer) wird nicht
+  übernommen, der bisherige Wert bleibt; der Hinweis nennt den (ersten) Grund, die Statuszeile
+  meldet „Nr. X Name: Eingabe nicht übernommen …“, auch beim Speichern mit offenem Feld.
+  Feld leeren macht die Eingabe wieder gültig. Ein abgelehntes erstes Zeichen bei noch
+  markiertem Wert fällt nur weg (die Zahl danach ersetzt den Wert wie gewohnt). Handbuch Kap. 7
+  und `UML.md` (Sequenz „Ergebnisse erfassen“) nachgezogen.
+- **Tests:** neu `test_punkte_mit_abgelehntem_zeichen_werden_nicht_uebernommen`,
+  `test_dialoggroesse_richtet_sich_nach_dem_inhalt`, `test_ergebnis_abbruch_spalte_zeigt_den_ganzen_grund`;
+  zwei Komma-Tests an das neue Verhalten angepasst. Gegenprobe: ohne die Änderung scheitern bzw.
+  hängen die neuen Tests. 721 Unittests, alle GUI-Tests grün.
+- **Verifikation:** Befund „Meldung geht beim Speichern unter“ und „abgelehntes erstes Zeichen
+  blockiert die nachgetippte Zahl“ behoben; Tests für Status-Spalte mit Abbruch, Verdrahtung des
+  Dialogs und ersten Grund ergänzt; Kommentar und UML nachgezogen.

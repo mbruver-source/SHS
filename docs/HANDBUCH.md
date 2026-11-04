@@ -665,9 +665,11 @@ gesperrt.
   „disqualifiziert“ und bei einem Abbruch den Grund, z. B. „Abbruch: Verletzung Hund“.
 - Ein Wert über dem Höchstwert (z. B. 65 bei der Suche) bekommt schon beim Tippen einen **roten
   Rahmen** mit dem Hinweis „Höchstens 60 Punkte“; nach dem Übernehmen steht unter den
-  Knöpfen in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert. Ein **Komma** nimmt das
-  Programm nicht an (nur ganze Punkte) – der orange Hinweis bleibt stehen, bis du die nächste
-  Zelle bearbeitest. Prüfe dann den Wert in der Zelle.
+  Knöpfen in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert.
+- Ein **Komma**, ein Buchstabe oder eine dritte Ziffer wird nicht angenommen (nur ganze Punkte).
+  Die Eingabe in dieser Zelle wird dann **nicht übernommen**, der bisherige Wert bleibt, und
+  der orange Hinweis nennt den Grund. Zum Korrigieren die Zelle leeren oder **Esc** drücken und
+  die Zahl neu eingeben.
 - Suche **und** Anzeige gehören zusammen. Ist nur eine der beiden Zellen ausgefüllt, wird die
   Zeile nicht gespeichert: „Bitte Suche UND Anzeige eintragen oder beide Felder leer lassen.“
 - **Ergebnis entfernen:** beide Zellen leeren und speichern.

@@ -1714,7 +1714,15 @@ class _PunkteDelegate(QStyledItemDelegate):
         # bleibt stehen, bis die nächste Zelle bearbeitet wird - vorher nahm ihn die nächste
         # Ziffer gleich wieder weg, bei "4,5" also die "5", und aus 4,5 wurde unbemerkt 45.
         self._tab._eingabe_hinweis_ausblenden()
+        # Nachtest 2 (N8, Marco 04.11.2026): nach einem abgelehnten Zeichen wird die Zelle nicht
+        # übernommen - aus „4,5“ wurde sonst 45 und überschrieb den alten Wert. Leert man das
+        # Feld, gilt die neue Eingabe wieder.
+        editor.setProperty("abgelehnt", False)
+        # isModified gilt während der Ablehnung schon als True - deshalb ein eigener Merker.
+        editor.setProperty("getippt", False)
+        editor.textEdited.connect(lambda _text: editor.setProperty("getippt", True))
         editor.inputRejected.connect(lambda: self._tab._eingabe_abgelehnt(editor, maximum))
+        editor.textChanged.connect(lambda text: text or editor.setProperty("abgelehnt", False))
         # UX-Test 2026-11, T4 (Marco 04.11.2026, C24 teilweise erledigt): ein zu hoher Wert wird
         # schon beim Tippen rot umrandet und erklärt, nicht erst nach dem Übernehmen.
         editor.textChanged.connect(lambda text: self._tab._wert_beim_tippen_pruefen(editor, maximum, text))
@@ -1735,6 +1743,9 @@ class _PunkteDelegate(QStyledItemDelegate):
         text = editor.text()
         if (index.data(Qt.EditRole) or "") == text:
             return
+        if editor.property("abgelehnt"):
+            self._tab._eingabe_verworfen(index.row(), index.data(Qt.EditRole) or "")
+            return
         self._tab._aus_editor = True
         try:
             model.setData(index, text, Qt.EditRole)
@@ -1745,6 +1756,9 @@ class _PunkteDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
     def eventFilter(self, editor, event):  # noqa: N802
+        if event.type() == QEvent.KeyPress and isinstance(editor, QLineEdit):
+            # N8: das zuletzt getippte Zeichen - für einen Hinweis passend zum Grund.
+            editor.setProperty("letzte_taste", event.text())
         # Strg+Tab gehört dem Reiterwechsel (QTabWidget), nicht der Zellnavigation; die
         # Übernahme des Feldes erledigt dann hat_ungespeicherte_aenderungen.
         if (event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Tab, Qt.Key_Backtab)
@@ -2042,6 +2056,8 @@ class ErgebnisTab(QWidget):
         self.hinweis_label.hide()
         self._eingabe_hinweis: str | None = None
         self._zu_hoch_hinweis: str | None = None  # Hinweis vom Tippen (T4), siehe _hinweise_zeigen
+        # N8: Meldung einer verworfenen Eingabe - alle_speichern stellt sie seiner eigenen voran.
+        self._verworfen_meldung: str | None = None
         # UX-Test 03.11.2026, X7: eigenes Label für Werte über dem Maximum (je Teilnehmer-ID).
         self.zu_hoch_label = QLabel("")
         self.zu_hoch_label.setTextFormat(Qt.PlainText)
@@ -2509,7 +2525,9 @@ class ErgebnisTab(QWidget):
         # längster möglicher Inhalt ("nicht gespeichert" mit Symbol, siehe _aktualisiere_zeilenstatus)
         # vorab von der verfügbaren Breite abgezogen, damit sie nicht auf (fast) 0
         # zusammengedrückt wird.
-        # + Symbol (16) mit Abstand und Zellenrand.
+        # + Symbol (16) mit Abstand und Zellenrand. Ein längerer Status („Abbruch: <Grund>“, T3)
+        # endet bei wenig Platz mit „…“; der Grund steht ganz in der Spalte „Abbruch“ und im
+        # Tooltip (Nachtest 2, N2).
         status_minimum = self.tabelle.fontMetrics().horizontalAdvance("nicht gespeichert") + 16 + 44
         breite_fuer_fixspalten = max(breite - status_minimum, 0)
 
@@ -2564,6 +2582,9 @@ class ErgebnisTab(QWidget):
                 minima.append(natuerlich[c])
                 harte_minima.append(natuerlich[c])
 
+        # Nachtest 2 (N1): Ist die Zelle leer, misst resizeColumnsToContents nur die Kopfzeile -
+        # die Abbruch-Spalte blieb dann so schmal („Verletzu…“), solange der Platz ohnehin reichte.
+        natuerlich = [max(n, m) for n, m in zip(natuerlich, minima)]
         ziel = _ergebnis_spaltenbreiten_verteilen(
             natuerlich, minima, breite_fuer_fixspalten, harte_minima
         )
@@ -2573,9 +2594,10 @@ class ErgebnisTab(QWidget):
         # streckt nur bei einer Größenänderung neu. Nach einem Neuaufbau ohne Größenänderung
         # (Speichern, "Liste aktualisieren") blieb sie sonst bei ihrer Inhaltsbreite stehen,
         # und bei breiten Fenstern stand rechts eine graue Lücke.
+        # Nachtest 2 (N2): auch schmaler als ihr Inhalt (Text endet dann mit „…“) - sonst behielt
+        # sie die Breite von resizeColumnsToContents und ragte über den Rand.
         rest = breite - sum(ziel)
-        if rest > self.tabelle.columnWidth(_STATUS_SPALTE):
-            self.tabelle.setColumnWidth(_STATUS_SPALTE, rest)
+        self.tabelle.setColumnWidth(_STATUS_SPALTE, max(rest, 40))
         # UX-Test 02.10.2026, K1: Zeilen mindestens so hoch wie ein Eingabefeld - sonst
         # wurden eingetippte Punkte unten abgeschnitten.
         if self._feldhoehe is None:
@@ -2796,9 +2818,32 @@ class ErgebnisTab(QWidget):
 
     def _eingabe_abgelehnt(self, feld: QLineEdit, maximum: int) -> None:
         """Hinweis, wenn der Validator ein Zeichen ablehnt (Komma, Buchstabe, dritte
-        Ziffer) - sonst wirkt es, als würde die Eingabe einfach verschluckt."""
-        hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben (keine Kommazahlen) - "
-                   "das Zeichen wurde nicht übernommen, bitte den Wert in der Zelle prüfen.")
+        Ziffer) - sonst wirkt es, als würde die Eingabe einfach verschluckt. Seit dem Nachtest 2
+        (N8) wird die Zelle dann nicht übernommen; der Hinweis nennt den Grund."""
+        zeichen = feld.property("letzte_taste") or ""
+        if not feld.property("getippt"):
+            # Noch nichts getippt (Wert markiert): das Zeichen fällt einfach weg, die Zahl danach
+            # ersetzt den Wert wie gewohnt - nur der Hinweis erscheint (Verifikation B14).
+            grund = None
+            feld.selectAll()
+        elif feld.property("abgelehnt"):
+            grund = feld.property("abgelehnt_grund")  # der erste Grund ist der aussagekräftige („4,55“)
+        elif zeichen.isdigit():
+            grund = "höchstens zwei Ziffern"
+        elif zeichen in (",", "."):
+            grund = "keine Kommazahlen"
+        elif zeichen.isalpha():
+            grund = "keine Buchstaben"
+        else:
+            grund = "nur Ziffern"
+        if grund is None:
+            hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben - das Zeichen wurde nicht "
+                       "übernommen.")
+        else:
+            feld.setProperty("abgelehnt", True)
+            feld.setProperty("abgelehnt_grund", grund)
+            hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben ({grund}) - diese Eingabe wird "
+                       "nicht übernommen, der bisherige Wert bleibt. Feld leeren oder Esc und neu eingeben.")
         QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
         # UX-Nachtest 03.10.2026, N6 (ersetzt den 8-Sekunden-Timer aus U5b): der Hinweis wurde
         # leicht übersehen - er steht orange und fett über der Statuszeile, seit dem UX-Test
@@ -2807,6 +2852,18 @@ class ErgebnisTab(QWidget):
         # Statusmeldungen davon unberührt bleiben und kein Rich Text nötig ist.
         self._eingabe_hinweis = hinweis
         self._hinweise_zeigen()
+
+    def _eingabe_verworfen(self, zeile: int, bisher: str) -> None:
+        """N8: Meldung in der Statuszeile, wenn eine Zelle mit abgelehntem Zeichen nicht
+        übernommen wurde - der Hinweis darüber verschwindet mit der nächsten Zelle."""
+        t = self._teilnehmer_je_zeile[zeile]
+        nr = t.get("startnummer")
+        wer = f"Nr. {nr} {t['nachname']}" if nr is not None else t["nachname"]
+        self._verworfen_meldung = (
+            f"{wer}: Eingabe nicht übernommen (unzulässiges Zeichen) - es bleibt "
+            + (f"„{bisher}“." if bisher else "das leere Feld.")
+        )
+        self.status_label.setText(self._verworfen_meldung)
 
     def _wert_beim_tippen_pruefen(self, feld: QLineEdit, maximum: int, text: str) -> None:
         """T4: roter Rahmen am offenen Eingabefeld und Klartext, solange der getippte Wert über
@@ -3011,6 +3068,7 @@ class ErgebnisTab(QWidget):
         ohne erlaubte Interaktion, OFFEN.md B5) erscheint kein Fenster; ins Absturzprotokoll
         gehen nur Anzahl und Art der Fehler, keine Teilnehmernamen (es landet in der kopierbaren
         Diagnose)."""
+        self._verworfen_meldung = None
         self.tabelle.offenen_editor_beenden()
         # UX-Test 2026-11, T3: gezählt werden Teilnehmer, nicht Disziplinen - „29 Ergebnis(se)“
         # bei 16 Teilnehmern wirkte wie doppelt gespeichert.
@@ -3169,6 +3227,9 @@ class ErgebnisTab(QWidget):
             self.status_label.setText(f"{gespeichert} Teilnehmer gespeichert.")
         elif not fehler:
             self.status_label.setText("Keine Änderungen zu speichern.")
+        if self._verworfen_meldung is not None:
+            # N8 (Verifikation B14): beim Speichern mit offenem Feld ging die Meldung sonst unter.
+            self.status_label.setText(f"{self._verworfen_meldung} {self.status_label.text()}")
 
         if fehler and db_fehler is None:
             text = ("Folgende Zeilen konnten nicht gespeichert werden (übrige wurden gespeichert):\n\n"
