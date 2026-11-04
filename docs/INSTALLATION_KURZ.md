@@ -51,12 +51,24 @@ blaues Fenster **„Der Computer wurde durch Windows geschützt“** (bei älter
 
 ## Schritt 5: Installieren und starten
 
-Das Installationsprogramm fragt zuerst, für wen installiert werden soll: **„Nur für mich“**
-wählen – dann braucht es kein Administrator-Passwort. Danach die Lizenz mit **„Ich akzeptiere
-die Vereinbarung“** bestätigen, immer **„Weiter“** klicken, dann **„Installieren“** und am Ende
-**„Fertigstellen“**. Mit
-dem Haken bei „jetzt starten“ öffnet sich das Programm gleich; später findest du es im
-Startmenü unter **„SHS-Pruefungsprogramm“**.
+Beim ersten Mal fragt das Installationsprogramm zuerst, für wen installiert werden soll:
+**„Nur für mich“** wählen – dann braucht es kein Administrator-Passwort (bei einem Update
+kommt die Frage nicht).
+
+1. Die Lizenz mit **„Ich akzeptiere die Vereinbarung“** bestätigen und **„Weiter“** klicken.
+
+   ![Setup: „Ich akzeptiere die Vereinbarung“, dann „Weiter“](bilder/handbuch_setup_1.png)
+
+2. Den Haken bei **„Desktop-Verknüpfung anlegen“** lassen und **„Weiter“** klicken, dann
+   **„Installieren“**.
+
+   ![Setup: „Installieren“](bilder/handbuch_setup_2.png)
+
+3. Am Ende **„Fertigstellen“** klicken. Mit dem Haken bei „jetzt starten“ öffnet sich das
+   Programm gleich; später findest du es auf dem Desktop und im Startmenü unter
+   **„SHS-Pruefungsprogramm“**.
+
+   ![Setup: „Fertigstellen“, Haken bei „jetzt starten“](bilder/handbuch_setup_3.png)
 
 **Tipp zum Kennenlernen:** Oben rechts auf **„Demoprüfung“** klicken – das Programm spielt einen
 ganzen Prüfungstag mit erfundenen Daten vor.

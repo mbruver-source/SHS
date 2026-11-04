@@ -15,7 +15,7 @@ fest:
 
 Nicht enthalten (Handarbeit, selten geändert): Web-Bilder, handbuch_anmeldeformular
 (per LibreOffice aus dem PDF), bewertungsbogen, handbuch_edge_download_1/_2,
-handbuch_smartscreen_1/_2 (echte Aufnahmen von Marco).
+handbuch_smartscreen_1/_2, handbuch_setup_1 bis _3 (echte Aufnahmen von Marco).
 Nach dem Lauf jedes geänderte Bild ansehen. Nur ein Entwickler-Werkzeug - gehört nicht zum
 Programm und wird nicht mit ausgeliefert.
 """

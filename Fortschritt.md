@@ -9412,3 +9412,8 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   über „…“ → „Beibehalten“). Kurzanleitung, Handbuch, Website und `README_INSTALLER.md` beschreiben
   den neuen Weg (alter Weg als Hinweis für ältere Edge-Versionen). Offen bei N3: Setup-Bild
   („Nur für mich“) von Marco, GitHub-Bild und Website-Knopf in B21.
+- **Nachtrag (Marco 04.11.2026, N3):** Setup-Bilder von 1.0.55 (Lizenz, Bereit zur Installation,
+  Fertigstellen) als `docs/bilder/handbuch_setup_1` bis `_3.png` in der Kurzanleitung, Schritt 5 als
+  nummerierte Liste. Die Frage „Nur für mich“ kam bei Marcos Update nicht (Inno Setup merkt sich den
+  Modus); die Kurzanleitung sagt jetzt „beim ersten Mal“. Kein Bild davon – bei einer
+  Neuinstallation nachholen, falls gewünscht. Offen bei N3 nur noch GitHub-Bild und Website-Knopf (B21).
