@@ -807,7 +807,9 @@ def test_teilnehmer_knopfleiste_zweizeilig(qtbot, conn):
     tab.show()
     oben = tab.bearbeiten_btn.geometry().y()
     assert tab.bewertungsbogen_btn.geometry().y() == oben
-    assert tab.tauschen_btn.geometry().y() > oben
+    # Nach 1.0.56: „Startnummer tauschen…“ oben, damit die untere Zeile auf 1366 px passt.
+    assert tab.tauschen_btn.geometry().y() == oben
+    assert tab.vergeben_btn.geometry().y() > oben
 
 
 _ALTDATEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "testdaten", "altversionen")

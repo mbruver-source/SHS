@@ -595,14 +595,16 @@ class TeilnehmerTab(QWidget):
 
         # Vor-Build-Klärung 03.10.2026 (U12): zehn Knöpfe in einer Zeile waren auf kleinen
         # Laptops breiter als der Bildschirm - zweizeilig: oben die Arbeit am markierten
-        # Teilnehmer, unten Startnummern und Importe.
+        # Teilnehmer, unten Startnummern und Importe. Nach 1.0.56 (Marco 05.11.2026): „Startnummer
+        # tauschen…“ oben - die untere Zeile war bei Schrift „Sehr groß“ mit 1331 px zu breit für
+        # einen 1366-px-Bildschirm; der Tausch wirkt ohnehin auf die markierten Teilnehmer.
         button_zeile = QHBoxLayout()
         for knopf in (hinzufuegen_btn, self.bearbeiten_btn, self.loeschen_btn, self.bezahlt_btn,
-                      self.teilnahme_btn, self.bewertungsbogen_btn):
+                      self.teilnahme_btn, self.tauschen_btn, self.bewertungsbogen_btn):
             button_zeile.addWidget(knopf)
         button_zeile.addStretch()
         button_zeile_2 = QHBoxLayout()
-        for knopf in (self.tauschen_btn, vergeben_btn, self.zuruecksetzen_btn, import_btn, liste_btn):
+        for knopf in (vergeben_btn, self.zuruecksetzen_btn, import_btn, liste_btn):
             button_zeile_2.addWidget(knopf)
         button_zeile_2.addStretch()
 

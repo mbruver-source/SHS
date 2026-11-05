@@ -9772,5 +9772,9 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   kleiner als das Testfenster). Gegenprobe: ohne die Änderung scheitern die neuen Tests. Alle
   GUI-Tests grün (564). Verifikation eingearbeitet (alle Fenster, Rahmen und Position, alle
   Darstellungswechsel, kein Sprung ohne Wirkung).
-- **Rest (Rückfrage an Marco):** Auf 1366 px bei „Sehr groß“ ist der Reiter „Teilnehmer“ (zwei
-  Knopfzeilen) mit 1349 px noch etwa 11 px zu breit.
+- **Reiter „Teilnehmer“ (Marco: anpassen):** Auf 1366 px bei „Sehr groß“ war die untere Knopfzeile
+  mit 1331 px zu breit (Reiter 1349 px, Fenster 1373 > 1362 px). „Startnummer tauschen…“ steht jetzt
+  oben bei den Knöpfen für die markierten Teilnehmer; Reiter 1181 px, Fenster 1205 px – passt.
+  `test_teilnehmer_knopfleiste_zweizeilig` angepasst (Gegenprobe: scheitert mit der alten
+  Anordnung), Screenshot `handbuch_teilnehmer` neu. Alle GUI-Tests grün (564). Gemessen sind damit
+  alle Reiter bei „Sehr groß“ auf 1366 px höchstens 1181 px breit.
