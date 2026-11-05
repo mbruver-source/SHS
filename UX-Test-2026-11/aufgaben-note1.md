@@ -36,7 +36,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B23 | K1 + W4 Punkteingabe: Komma hinter einstelligem Wert, `_PunkteFeld` | M | erledigt | 9126bbf | 49 → 59 %, real ≈ 10 % | |
 | B24 | W1–W3 + W8 Prüfungsbezeichnung/Sortierung zentral, Imports | S | erledigt | 443b1c1 | 59 → 66 %, real ≈ 7 % | |
 | B25 | W5–W7 Tausch-Bereichsprüfung auslagern, Docstrings, Tests | S | erledigt | 1cd8597 | 66 → 73 %, real ≈ 7 % | |
-| B26 | R-B20: feste Pause mit Lücke (Option „genau“, Schwelle 15 Min.) | M | erledigt | (dieser) | 73 → ~90 %, real ≈ 17 % | R-B26 optional |
+| B26 | R-B20: feste Pause mit Lücke (Option „genau“, Schwelle 15 Min.) | M | erledigt | 75ff0e9 | 73 → ~90 %, real ≈ 17 % | R-B26 optional |
 
 ## Kalibrierung
 
