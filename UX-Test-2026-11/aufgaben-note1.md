@@ -35,7 +35,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | erledigt | b3fcd1f | 13 → 27 %, real ≈ 14 % | QS-Befunde K1, W1–W10 zur Entscheidung |
 | B23 | K1 + W4 Punkteingabe: Komma hinter einstelligem Wert, `_PunkteFeld` | M | erledigt | 9126bbf | 49 → 59 %, real ≈ 10 % | |
 | B24 | W1–W3 + W8 Prüfungsbezeichnung/Sortierung zentral, Imports | S | erledigt | 443b1c1 | 59 → 66 %, real ≈ 7 % | |
-| B25 | W5–W7 Tausch-Bereichsprüfung auslagern, Docstrings, Tests | S | erledigt | (dieser) | 66 → 73 %, real ≈ 7 % | |
+| B25 | W5–W7 Tausch-Bereichsprüfung auslagern, Docstrings, Tests | S | erledigt | 1cd8597 | 66 → 73 %, real ≈ 7 % | |
 
 ## Kalibrierung
 
