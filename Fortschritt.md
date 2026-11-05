@@ -9737,3 +9737,17 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   `RELEASE_NOTES.md` neu geschrieben, `OFFEN.md` nachgezogen.
 - **Tests lokal:** 734 Unittests (183 übersprungen) und 561 GUI-Tests grün, UML mit mmdc geprüft.
 - Website-Änderungen (Kurzanleitung, GitHub-Bild) gehen mit diesem Release online.
+
+
+## 05.11.2026: 1.0.56 ausgeliefert, Quellcode-Spiegel auf 1.0.56
+
+- Marco hat `main` gepusht und `v1.0.56` getaggt (Tag auf 6b5a004); alle Workflows grün.
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen: alle Dateien aus
+  Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner, im Spiegel nichts gelöscht.
+  - 33 Dateien sind neu: die UX-Test-Berichte unter `UX-Test-2026-11/`, die Kurzanleitung
+    (`docs/INSTALLATION_KURZ.md`/`.pdf`), neun Handbuch-Bilder (Edge, Setup, SmartScreen,
+    GitHub-Assets) und `testdaten/altversionen/v1.0.56/` mit 4 Dateien.
+  - 53 Dateien sind geändert.
+  - Der Byte-Abgleich danach ist identisch (330 Dateien).
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
+  `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
