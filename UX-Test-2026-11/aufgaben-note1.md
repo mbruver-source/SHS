@@ -32,7 +32,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | 03e6400 | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | zurückgestellt | | 0 → 3 % | R-B20: braucht Datenmodell-Entscheidung |
 | B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | erledigt | 0ed334c | 3 → 13 %, real ≈ 10 % | R-B21 (Bild auch auf der Website?) |
-| B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | erledigt | (dieser) | 13 → 27 %, real ≈ 14 % | QS-Befunde K1, W1–W10 zur Entscheidung |
+| B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | erledigt | b3fcd1f | 13 → 27 %, real ≈ 14 % | QS-Befunde K1, W1–W10 zur Entscheidung |
 
 ## Kalibrierung
 
