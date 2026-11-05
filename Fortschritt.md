@@ -9612,3 +9612,17 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   Versionsnummer“. Neu aufgenommen wird es nur bei sichtbaren Änderungen an GitHub; der Ablauf
   steht in der Build-Checkliste (`.claude/skills/shs-build/SKILL.md`) und im Kopf von
   `tools/screenshots.py`. Offen als R-B21: das Bild auch auf der Website (`index.html`) zeigen? Setup- und Edge-Bilder hat Marco am 04.11. geliefert (siehe B12/N3).
+
+### ux_test_2026_11 B22 – Abschluss 2: QS über B14–B21 (05.11.2026)
+
+- QS mit `qs-korrektheit`, `qs-sicherheit`, `qs-wartbarkeit` nacheinander über
+  `git diff 2fa38a3..HEAD`. Sicherheit: keine Befunde. Korrektheit: K1 (mittel, Kommazahl hinter
+  einem einstelligen Wert wird als Zehnfaches übernommen). Wartbarkeit: W1–W10 (zwei mittel:
+  Sortierschlüssel an vielen Stellen, eine vergessen; Punkteingabe als Property-Zustandsautomat).
+  Alle Befunde mit Vorschlag in `UX-Test-2026-11/aufgaben-note1.md` („Abschluss 2“) – umgesetzt
+  wird erst nach Marcos Entscheidung je Befund.
+- Doku abgeglichen: Zeilenzahlen in `CLAUDE.md`/`AGENTS.md` (app.py rund 4300), `Architektur.md`
+  (Prüfungsbezeichnungen und Sortierung in `db.py`, Rat je Ablehnungsgrund in `db_import.py`).
+- Offene Rückfragen aus B15–B21: R-B15 (Web-Status, Entf am Mac), R-B16 (ED-Satz „Anmerkungen“),
+  R-B20 (Pause zu fester Uhrzeit, Datenmodell), R-B21 (GitHub-Bild auf der Website).
+- Vor dem nächsten Build: Screenshots neu (W10), `HANDBUCH.pdf`, Sichtprüfung Demo auf 1366 px.

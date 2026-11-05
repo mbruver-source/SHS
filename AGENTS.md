@@ -6,8 +6,8 @@ Diese Datei ist der Spiegel von `CLAUDE.md` für Codex (Stand 05.10.2026). Maßg
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: rund 4100 Zeilen, `db.py`: rund 3700 Zeilen,
-  `desktop_dialoge.py`: rund 2200 Zeilen, Stand 04.11.2026; ausgelagert sind `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
+  selbst durch die großen Module (`app.py`: rund 4300 Zeilen, `db.py`: rund 3700 Zeilen,
+  `desktop_dialoge.py`: rund 2200 Zeilen, Stand 05.11.2026; ausgelagert sind `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
   durcharbeitest. Die Abläufe und Klassen als UML (Mermaid) stehen in `UML.md`.
 - **Offene, zurückgestellte und akzeptierte Punkte auf einen Blick:** `OFFEN.md` - vor jeder
   Planung und bevor du einen Befund meldest dort nachsehen; Fundstellen verweisen in

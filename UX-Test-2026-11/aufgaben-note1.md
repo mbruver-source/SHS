@@ -31,8 +31,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B18 | N5 Prüfungsnamen überall einheitlich | L | erledigt | 19c410f | 43 → 62 %, real ≈ 19 % | ersetzt R-B8 |
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | 03e6400 | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | zurückgestellt | | 0 → 3 % | R-B20: braucht Datenmodell-Entscheidung |
-| B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | erledigt | (dieser) | 3 → 8 %, real ≈ 5 % | R-B21 (Bild auch auf der Website?) |
-| B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | offen | | | |
+| B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | erledigt | 0ed334c | 3 → 13 %, real ≈ 10 % | R-B21 (Bild auch auf der Website?) |
+| B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | erledigt | (dieser) | 13 → 27 %, real ≈ 14 % | QS-Befunde K1, W1–W10 zur Entscheidung |
 
 ## Kalibrierung
 
@@ -190,3 +190,42 @@ Alle Funde N1–N16 aus `Nachtest2.md` werden umgesetzt:
 - **N14:** Termin-Dialog so, dass Prüfungen und Startnummern-Bereiche ohne Bildlauf sichtbar sind (z. B. zweispaltig/höher); Seitenleiste „Offene Starts“ breiter.
 - **N15:** Entf in der Teilnehmerliste wirkt wie „Löschen“ (mit der bestehenden Rückfrage, Vorgabe Nein).
 - **N16:** Pause zu fester Uhrzeit (im Pause- und im Verteilen-Dialog wählbar): Die Pause beginnt genau zur Uhrzeit; ein laufender Prüfungsblock wird dort geteilt, die übrigen Teilnehmer folgen nach der Pause. Ist ein Richter vor der Uhrzeit fertig, bekommt er keine Pause (wie bisher). Auslegung der Sitzung – bei Unklarheit zurückstellen und fragen.
+
+## Abschluss 2 (B22): QS-Befunde zur Entscheidung (05.11.2026)
+
+QS mit drei Rollen über `git diff 2fa38a3..HEAD` (B14–B21). **Sicherheit: keine Befunde.**
+Nach Projektregel wird jeder Befund erst nach Marcos Go umgesetzt.
+
+- **K1 (mittel, Korrektheit, N8):** Steht in einer Punktezelle schon „4“ und man tippt nach
+  F2/Doppelklick hinter der 4 „,5“, wird 45 gespeichert – ohne Meldung (der Sonderfall „noch
+  nichts getippt, Wert markiert“ greift, obwohl nicht mehr markiert ist). Bei zweistelligen Werten
+  passiert es nicht. Vorschlag: Sonderfall nur bei leerem Feld oder ganz markiertem Wert;
+  Test „4, Ende, ‚,5‘, Enter → 4 bleibt, Statuszeile meldet die Verwerfung“.
+- **W1 (mittel):** Formular-Reihenfolge an ~13 Stellen von Hand übergeben; die Demo
+  (`desktop_demo.py`, `stechen_gruppen(fertig)`) sortiert noch alphabetisch. Vorschlag:
+  `db.sortiere_pruefungen(labels)` und überall nutzen, Demo angleichen.
+- **W2 (gering):** „Bezeichnung → Prüfung“ dreimal einzeln gesucht. Vorschlag:
+  `db.pruefung_nach_bezeichnung` und ein Index-Dict für den Sortierschlüssel.
+- **W3 (gering):** Doppelter Rückfall in `db_import._angebot_pruefen` (und Hülle
+  `app._pruefung_bezeichnung`). Vorschlag: nur `pruefung_bezeichnung(...)`.
+- **W4 (mittel):** Punkteingabe N8 als Zustandsautomat aus vier Qt-Properties am `QLineEdit`.
+  Vorschlag: kleine Unterklasse `_PunkteFeld` mit Attributen, Grund-Ermittlung als reine Funktion
+  (ohne GUI testbar) – passt gut mit K1 zusammen.
+- **W5 (gering):** Bereichsprüfung der Tausch-Warnung (N4) ist Qt-freie Logik in `app.py`.
+  Vorschlag: `tausch_ausserhalb_bereich(...)` auslagern und einzeln testen.
+- **W6 (gering):** Docstring `HilfeDialog` umständlich (Knopf und F1 tun dasselbe), Kommentar im
+  `TeilnehmerDialog` unsauber umbrochen, `_fundstellen` ohne Docstring, Musterliste schwer lesbar.
+- **W7 (gering):** Tests: Quelltext-Inspektion im Demo-Test, Hand-Monkeypatch im Dialoggrößen-Test,
+  Tests rechnen Bildschirm-Faktoren (0,95/0,9/0,2/0,25) und Breiten-Zuschläge nach. Vorschlag:
+  Faktoren als Modulkonstanten, echten Schritt-Text prüfen, `monkeypatch`.
+- **W8 (Kleinigkeit):** Neue Imports nicht alphabetisch einsortiert; drei Leerzeilen in
+  `pdf_export.py` nach dem Entfernen von `_ETIKETT_DISZIPLIN_KURZ`.
+- **W9 (Kleinigkeit, optional):** Übersicht je LK nennt weiter „ED LK n“ (Sammelzeile, richtig) –
+  ggf. im Handbuch erklären.
+- **W10 (gering):** Vor dem Build Screenshots neu (`handbuch_termin_anlegen` jetzt 1080×900,
+  alle Bilder mit Prüfungsnamen: Teilnehmer, Zeitplan, Auswertung, Ergebniserfassung, Demo,
+  Export), dann `HANDBUCH.pdf`; `Architektur.md` könnte Seitenleistenbreite, Hilfe-Suche und
+  Demo-Rückfrage nennen.
+
+Vorschlag gesamt: K1 + W4 zusammen (eine Aufgabe M), W1–W3 + W8 zusammen (S), W5–W7 (S), W10 beim
+Build; W9 so lassen.
