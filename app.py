@@ -1770,10 +1770,76 @@ class _AbbruchDelegate(QStyledItemDelegate):
         model.setData(index, _abbruch_bezeichnung(grund), Qt.DisplayRole)
 
 
+#: Merker in _PunkteFeld.letzte_taste für Einfügen per Tastenkürzel (Verifikation B23).
+_EINGEFUEGT = "<einfügen>"
+
+
+def _ablehnungsgrund(zeichen: str) -> str:
+    """Grund für ein vom Validator abgelehntes Zeichen einer Punktezelle (Nachtest 2, N8) -
+    ohne Qt, damit einzeln testbar (QS B22, W4)."""
+    if zeichen == _EINGEFUEGT:
+        return "nur ganze Zahlen einfügen"
+    if zeichen.isdigit():
+        return "höchstens zwei Ziffern"
+    if zeichen in (",", "."):
+        return "keine Kommazahlen"
+    if zeichen.isalpha():
+        return "keine Buchstaben"
+    return "nur Ziffern"
+
+
+class _PunkteFeld(QLineEdit):
+    """Eingabefeld einer Punktezelle mit dem Zustand der Ablehnung (Nachtest 2, N8) als
+    Attribute statt als Qt-Properties (QS B22, W4):
+
+    - `getippt`: der Anwender hat schon etwas eingegeben (isModified gilt während der
+      Ablehnung bereits als True, deshalb ein eigener Merker);
+    - `abgelehnt`/`abgelehnt_grund`: ein Zeichen wurde abgelehnt - die Zelle wird dann nicht
+      übernommen; wer das Feld leert, dessen neue Eingabe gilt wieder;
+    - `letzte_taste`: das zuletzt getippte Zeichen, für den Grund im Hinweis."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.getippt = False
+        self.abgelehnt = False
+        self.abgelehnt_grund: str | None = None
+        self.letzte_taste = ""
+        self._vorher_ganz_markiert = True
+        self.textEdited.connect(self._getippt_merken)
+        self.textChanged.connect(self._leeren_hebt_ablehnung_auf)
+
+    def _getippt_merken(self, _text: str) -> None:
+        self.getippt = True
+
+    def _leeren_hebt_ablehnung_auf(self, text: str) -> None:
+        if not text:
+            self.abgelehnt = False
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        # Vor der Verarbeitung merken: inputRejected kommt aus der Basisklasse, und dann ist die
+        # Markierung schon aufgehoben.
+        # Beim Einfügen (Strg+V/Cmd+V) zählt nicht die Taste, sondern der eingefügte Text.
+        self.letzte_taste = _EINGEFUEGT if event.matches(QKeySequence.Paste) else event.text()
+        self._vorher_ganz_markiert = not self.text() or self.selectedText() == self.text()
+        super().keyPressEvent(event)
+
+    def ersetzt_noch_den_wert(self) -> bool:
+        """True, solange ein Zeichen den bisherigen Wert noch ganz ersetzen würde: noch nichts
+        getippt UND das Feld leer oder ganz markiert. QS B22, K1: Mit dem Cursor hinter einer
+        vorhandenen „4“ war „,5“ sonst ein harmloses erstes Zeichen, und es wurde 45 gespeichert."""
+        return not self.getippt and self._vorher_ganz_markiert
+
+    def ablehnen(self, grund: str) -> None:
+        """Merkt die Ablehnung; der erste Grund bleibt (bei „4,55“ ist das Komma aussagekräftig)."""
+        if not self.abgelehnt:
+            self.abgelehnt_grund = grund
+        self.abgelehnt = True
+
+
 class _PunkteDelegate(QStyledItemDelegate):
     """Zeichnet eine Punktezelle wie ein umrandetes Eingabefeld (roter Rahmen über dem
     Maximum, gelb solange ungespeichert, leer und ohne Rahmen auf abgesetzter Fläche wenn
-    gesperrt) und öffnet zum Bearbeiten ein QLineEdit mit _punkte_validator. Lostippen
+    gesperrt) und öffnet zum Bearbeiten ein _PunkteFeld (QLineEdit) mit _punkte_validator. Lostippen
     ersetzt den Wert."""
 
     def __init__(self, tab: "ErgebnisTab"):
@@ -1783,7 +1849,7 @@ class _PunkteDelegate(QStyledItemDelegate):
         self.closeEditor.connect(lambda *_: tab._zu_hoch_beim_tippen_ausblenden())
 
     def createEditor(self, parent, option, index):  # noqa: N802
-        editor = QLineEdit(parent)
+        editor = _PunkteFeld(parent)
         editor.setValidator(_punkte_validator(editor))
         editor.setAlignment(Qt.AlignCenter)
         editor.setStyleSheet(_PUNKTE_EDITOR_STIL)
@@ -1794,14 +1860,9 @@ class _PunkteDelegate(QStyledItemDelegate):
         # Ziffer gleich wieder weg, bei "4,5" also die "5", und aus 4,5 wurde unbemerkt 45.
         self._tab._eingabe_hinweis_ausblenden()
         # Nachtest 2 (N8, Marco 04.11.2026): nach einem abgelehnten Zeichen wird die Zelle nicht
-        # übernommen - aus „4,5“ wurde sonst 45 und überschrieb den alten Wert. Leert man das
-        # Feld, gilt die neue Eingabe wieder.
-        editor.setProperty("abgelehnt", False)
-        # isModified gilt während der Ablehnung schon als True - deshalb ein eigener Merker.
-        editor.setProperty("getippt", False)
-        editor.textEdited.connect(lambda _text: editor.setProperty("getippt", True))
+        # übernommen - aus „4,5“ wurde sonst 45 und überschrieb den alten Wert (Zustand in
+        # _PunkteFeld).
         editor.inputRejected.connect(lambda: self._tab._eingabe_abgelehnt(editor, maximum))
-        editor.textChanged.connect(lambda text: text or editor.setProperty("abgelehnt", False))
         # UX-Test 2026-11, T4 (Marco 04.11.2026, C24 teilweise erledigt): ein zu hoher Wert wird
         # schon beim Tippen rot umrandet und erklärt, nicht erst nach dem Übernehmen.
         editor.textChanged.connect(lambda text: self._tab._wert_beim_tippen_pruefen(editor, maximum, text))
@@ -1822,7 +1883,7 @@ class _PunkteDelegate(QStyledItemDelegate):
         text = editor.text()
         if (index.data(Qt.EditRole) or "") == text:
             return
-        if editor.property("abgelehnt"):
+        if editor.abgelehnt:
             self._tab._eingabe_verworfen(index.row(), index.data(Qt.EditRole) or "")
             return
         self._tab._aus_editor = True
@@ -1835,9 +1896,6 @@ class _PunkteDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
     def eventFilter(self, editor, event):  # noqa: N802
-        if event.type() == QEvent.KeyPress and isinstance(editor, QLineEdit):
-            # N8: das zuletzt getippte Zeichen - für einen Hinweis passend zum Grund.
-            editor.setProperty("letzte_taste", event.text())
         # Strg+Tab gehört dem Reiterwechsel (QTabWidget), nicht der Zellnavigation; die
         # Übernahme des Feldes erledigt dann hat_ungespeicherte_aenderungen.
         if (event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Tab, Qt.Key_Backtab)
@@ -2895,34 +2953,22 @@ class ErgebnisTab(QWidget):
                 suche_feld.setEnabled(not sperren)
                 anzeige_feld.setEnabled(not sperren)
 
-    def _eingabe_abgelehnt(self, feld: QLineEdit, maximum: int) -> None:
+    def _eingabe_abgelehnt(self, feld: "_PunkteFeld", maximum: int) -> None:
         """Hinweis, wenn der Validator ein Zeichen ablehnt (Komma, Buchstabe, dritte
         Ziffer) - sonst wirkt es, als würde die Eingabe einfach verschluckt. Seit dem Nachtest 2
         (N8) wird die Zelle dann nicht übernommen; der Hinweis nennt den Grund."""
-        zeichen = feld.property("letzte_taste") or ""
-        if not feld.property("getippt"):
-            # Noch nichts getippt (Wert markiert): das Zeichen fällt einfach weg, die Zahl danach
-            # ersetzt den Wert wie gewohnt - nur der Hinweis erscheint (Verifikation B14).
-            grund = None
+        if feld.ersetzt_noch_den_wert():
+            # Noch nichts getippt und der Wert ganz markiert: das Zeichen fällt einfach weg, die
+            # Zahl danach ersetzt den Wert wie gewohnt - nur der Hinweis erscheint (Verifikation
+            # B14). Steht der Cursor hinter dem Wert, gilt das nicht (QS B22, K1).
             feld.selectAll()
-        elif feld.property("abgelehnt"):
-            grund = feld.property("abgelehnt_grund")  # der erste Grund ist der aussagekräftige („4,55“)
-        elif zeichen.isdigit():
-            grund = "höchstens zwei Ziffern"
-        elif zeichen in (",", "."):
-            grund = "keine Kommazahlen"
-        elif zeichen.isalpha():
-            grund = "keine Buchstaben"
-        else:
-            grund = "nur Ziffern"
-        if grund is None:
             hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben - das Zeichen wurde nicht "
                        "übernommen.")
         else:
-            feld.setProperty("abgelehnt", True)
-            feld.setProperty("abgelehnt_grund", grund)
-            hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben ({grund}) - diese Eingabe wird "
-                       "nicht übernommen, der bisherige Wert bleibt. Feld leeren oder Esc und neu eingeben.")
+            feld.ablehnen(_ablehnungsgrund(feld.letzte_taste))
+            hinweis = (f"Nur ganze Punkte von 0 bis {maximum} eingeben ({feld.abgelehnt_grund}) - diese "
+                       "Eingabe wird nicht übernommen, der bisherige Wert bleibt. Feld leeren oder Esc "
+                       "und neu eingeben.")
         QToolTip.showText(feld.mapToGlobal(feld.rect().bottomLeft()), hinweis, feld)
         # UX-Nachtest 03.10.2026, N6 (ersetzt den 8-Sekunden-Timer aus U5b): der Hinweis wurde
         # leicht übersehen - er steht orange und fett über der Statuszeile, seit dem UX-Test

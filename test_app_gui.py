@@ -8183,6 +8183,42 @@ def test_punkte_mit_abgelehntem_zeichen_werden_nicht_uebernommen(qtbot, conn):
     assert tab.punkte(0, "Flächensuche")[0] == "44"
 
 
+def test_komma_hinter_einstelligem_wert_wird_nicht_uebernommen(qtbot, conn):
+    """QS B22, K1: Steht schon „4“ in der Zelle und wird hinter der 4 „,5“ getippt, darf nicht
+    45 gespeichert werden - die 4 bleibt, die Statuszeile meldet die Verwerfung. Ist der Wert
+    dagegen noch ganz markiert, ersetzt die Zahl nach dem Komma ihn wie gewohnt."""
+    tid = _teilnehmer_anlegen(conn, disziplin="Flächensuche", startnummer=7)
+    eintragen_ergebnis(conn, tid, "Flächensuche", 4, 20)
+    tab = _ergebnis_tab_gezeigt(qtbot, conn)
+
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    assert editor.selectedText() == "4"
+    qtbot.keyClick(editor, Qt.Key_End)
+    qtbot.keyClicks(editor, ",5")
+    assert "(keine Kommazahlen)" in tab.hinweis_label.text()
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert tab.punkte(0, "Flächensuche")[0] == "4"
+    assert tab.status_label.text().startswith("Nr. 7 Muster: Eingabe nicht übernommen")
+    qtbot.keyClick(editor, Qt.Key_Escape)  # Enter lässt das Feld offen
+
+    editor = tab.zelle_bearbeiten(0, "Flächensuche", "suche")
+    qtbot.keyClicks(editor, ",5")  # Wert noch markiert: das Komma fällt weg, die 5 ersetzt
+    qtbot.keyClick(editor, Qt.Key_Return)
+    assert tab.punkte(0, "Flächensuche")[0] == "5"
+
+
+def test_ablehnungsgrund_je_zeichen():
+    """QS B22, W4: der Grund im Hinweis, ohne Oberfläche geprüft."""
+    from app import _ablehnungsgrund
+
+    assert _ablehnungsgrund("7") == "höchstens zwei Ziffern"
+    assert _ablehnungsgrund(",") == _ablehnungsgrund(".") == "keine Kommazahlen"
+    assert _ablehnungsgrund("x") == _ablehnungsgrund("Ä") == "keine Buchstaben"
+    assert _ablehnungsgrund("-") == _ablehnungsgrund("") == "nur Ziffern"
+    from app import _EINGEFUEGT
+    assert _ablehnungsgrund(_EINGEFUEGT) == "nur ganze Zahlen einfügen"
+
+
 def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
     """Nachtest 2, N2: Bei Schrift „Groß“ war das Formular breiter als die feste Startgröße
     des Teilnehmer-Dialogs - die Breite richtet sich jetzt nach dem Inhalt (höchstens 95 %

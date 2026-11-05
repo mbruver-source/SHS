@@ -33,6 +33,9 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | zurückgestellt | | 0 → 3 % | R-B20: braucht Datenmodell-Entscheidung |
 | B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | erledigt | 0ed334c | 3 → 13 %, real ≈ 10 % | R-B21 (Bild auch auf der Website?) |
 | B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | erledigt | b3fcd1f | 13 → 27 %, real ≈ 14 % | QS-Befunde K1, W1–W10 zur Entscheidung |
+| B23 | K1 + W4 Punkteingabe: Komma hinter einstelligem Wert, `_PunkteFeld` | M | erledigt | (dieser) | 49 → 59 %, real ≈ 10 % | |
+| B24 | W1–W3 + W8 Prüfungsbezeichnung/Sortierung zentral, Imports | S | offen | | | |
+| B25 | W5–W7 Tausch-Bereichsprüfung auslagern, Docstrings, Tests | S | offen | | | |
 
 ## Kalibrierung
 
@@ -229,3 +232,4 @@ Nach Projektregel wird jeder Befund erst nach Marcos Go umgesetzt.
 
 Vorschlag gesamt: K1 + W4 zusammen (eine Aufgabe M), W1–W3 + W8 zusammen (S), W5–W7 (S), W10 beim
 Build; W9 so lassen.
+→ **Marco 05.11.2026: wie vorgeschlagen** (B23 = K1 + W4, B24 = W1–W3 + W8, B25 = W5–W7; W10 beim Build, W9 bleibt).

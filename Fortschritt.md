@@ -9626,3 +9626,24 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
 - Offene Rückfragen aus B15–B21: R-B15 (Web-Status, Entf am Mac), R-B16 (ED-Satz „Anmerkungen“),
   R-B20 (Pause zu fester Uhrzeit, Datenmodell), R-B21 (GitHub-Bild auf der Website).
 - Vor dem nächsten Build: Screenshots neu (W10), `HANDBUCH.pdf`, Sichtprüfung Demo auf 1366 px.
+
+### ux_test_2026_11 B23 – Punkteingabe: Komma hinter einem Wert, eigenes Eingabefeld (QS B22 K1, W4; 05.11.2026)
+
+- **K1:** Stand „4“ in der Zelle und wurde mit dem Cursor hinter der 4 „,5“ getippt, galt das
+  Komma als harmloses erstes Zeichen „bei markiertem Wert“, und 45 wurde gespeichert. Jetzt gilt
+  die Ausnahme nur, wenn vor dem Tastendruck noch nichts getippt UND der Wert ganz markiert (oder
+  das Feld leer) war – gemerkt vor der Verarbeitung, denn beim Ablehnen ist die Markierung schon
+  weg. Sonst wird die Zelle verworfen, die 4 bleibt, die Statuszeile meldet es.
+- **W4:** Der Zustand der Ablehnung liegt in `app._PunkteFeld(QLineEdit)` als Attribute
+  (`getippt`, `abgelehnt`, `abgelehnt_grund`, `letzte_taste`, `ersetzt_noch_den_wert()`,
+  `ablehnen()`) statt in vier Qt-Properties; der Grund kommt aus der reinen Funktion
+  `app._ablehnungsgrund(zeichen)`. Das letzte Zeichen merkt sich das Feld selbst
+  (`keyPressEvent`), der Delegate-Eventfilter nicht mehr.
+- **Tests:** neu `test_komma_hinter_einstelligem_wert_wird_nicht_uebernommen`,
+  `test_ablehnungsgrund_je_zeichen`. Gegenprobe: ohne die Änderung scheitern beide. Alle GUI-Tests
+  grün (560).
+- **Verifikation:** Randfälle (Klick mitten in den Wert, Teilmarkierung, Strg+V, mehrere abgelehnte
+  Zeichen, Tab, Leeren) geprüft, alle sicher. Nachgezogen: Einfügen per Tastenkürzel nennt den Grund
+  „nur ganze Zahlen einfügen“ statt eines Grunds nach der Taste; Docstring, direkter Attributzugriff.
+  Bewusst so gelassen: Nach Entf/Rücktaste auf dem markierten Wert gilt „,5“ als Ablehnung (Feld
+  ist dann schon „getippt“), direkt auf dem markierten Wert ersetzt die 5 – beides sicher.
