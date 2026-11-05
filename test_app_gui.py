@@ -6834,6 +6834,9 @@ def test_ergebnistabelle_sehr_gross_nur_maximiert_voll(qtbot, termin, darstellun
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
+    # Der Offscreen-Bildschirm ist kleiner als das Testfenster - das Einpassen nach dem
+    # Schriftwechsel (05.11.2026) würde es sonst verkleinern.
+    fenster._an_bildschirm_anpassen = lambda: None
     fenster.resize(1400, 820)
     fenster.show()
     fenster._tabs.setCurrentWidget(fenster.ergebnis_tab)
@@ -8343,6 +8346,76 @@ def test_termin_dialog_zweispaltig_und_so_hoch_wie_sein_inhalt(qtbot):
     verein_rechts = dialog.verein.mapTo(inhalt, QPoint(dialog.verein.width(), 0)).x()
     assert dialog.gruppe_pruefungen.mapTo(inhalt, QPoint(0, 0)).x() > verein_rechts
     assert dialog.gruppe_bereiche.mapTo(inhalt, QPoint(0, 0)).x() > verein_rechts
+
+
+def test_zeitplan_kopf_in_zwei_zeilen(qtbot, conn):
+    """Marco 05.11.2026 (nach 1.0.56): Die Kopfzeile des Zeitplans war bei Schrift „Sehr groß“
+    breiter als ein 1536-px-Bildschirm. Die Knöpfe stehen jetzt in einer eigenen Zeile unter den
+    Einstellungen."""
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    qtbot.waitExposed(tab)
+    assert tab.verteilen_btn.y() > tab.zeitplan_start.y() + tab.zeitplan_start.height() // 2
+    # Einstellungen in einer Zeile (die Felder sind unterschiedlich hoch, daher die Mitte)
+    assert abs(tab.zeitplan_start.geometry().center().y() - tab.mindestabstand.geometry().center().y()) <= 3
+
+
+def test_fenster_passt_sich_nach_schriftwechsel_dem_bildschirm_an(qtbot, termin, monkeypatch):
+    """Marco 05.11.2026 (nach 1.0.56): War das Fenster breiter als der Bildschirm, blieb es das
+    nach dem Wechsel zurück auf „Normal“ - erst Minimieren/Maximieren half. Jetzt passt es sich
+    an: maximiert über erneutes Maximieren, sonst durch Verkleinern und Verschieben; passt die
+    Mindestgröße gar nicht, geschieht nichts."""
+    from PySide6.QtCore import QRect, QSize
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    frei = fenster.screen().availableGeometry()
+    monkeypatch.setattr(fenster, "minimumSizeHint", lambda: QSize(100, 100))
+    zu_gross = QRect(frei.x(), frei.y(), frei.width() + 200, frei.height())
+    monkeypatch.setattr(fenster, "frameGeometry", lambda: zu_gross)
+    aufrufe = []
+    monkeypatch.setattr(fenster, "isMaximized", lambda: True)
+    monkeypatch.setattr(fenster, "showNormal", lambda: aufrufe.append("normal"))
+    monkeypatch.setattr(fenster, "showMaximized", lambda: aufrufe.append("maximiert"))
+    fenster._an_bildschirm_anpassen()
+    assert aufrufe == ["normal", "maximiert"]
+
+    # Mindestgröße passt nicht in den Bildschirm: kein Sprung ohne Wirkung.
+    aufrufe.clear()
+    monkeypatch.setattr(fenster, "minimumSizeHint", lambda: QSize(frei.width() + 50, 100))
+    fenster._an_bildschirm_anpassen()
+    assert aufrufe == []
+
+    # Nicht maximiert: verkleinern und in den freien Bereich schieben.
+    monkeypatch.setattr(fenster, "minimumSizeHint", lambda: QSize(100, 100))
+    monkeypatch.setattr(fenster, "isMaximized", lambda: False)
+    gesetzt = {}
+    monkeypatch.setattr(fenster, "resize", lambda b, h: gesetzt.update(groesse=(b, h)))
+    monkeypatch.setattr(fenster, "move", lambda x, y: gesetzt.update(ort=(x, y)))
+    # Der Rahmen folgt dem Verkleinern (wie beim echten Fenster); Rand wie gemessen.
+    rand = (zu_gross.width() - fenster.width(), zu_gross.height() - fenster.height())
+    monkeypatch.setattr(fenster, "frameGeometry", lambda: QRect(
+        frei.x() + 300, frei.y(),
+        gesetzt["groesse"][0] + rand[0] if "groesse" in gesetzt else zu_gross.width(),
+        gesetzt["groesse"][1] + rand[1] if "groesse" in gesetzt else zu_gross.height()))
+    fenster._an_bildschirm_anpassen()
+    assert gesetzt["groesse"][0] <= frei.width()
+    assert gesetzt["ort"][0] >= frei.x()
+
+    # Passt schon: nichts tun.
+    gesetzt.clear()
+    monkeypatch.setattr(fenster, "frameGeometry", lambda: QRect(frei.x(), frei.y(), 200, 200))
+    fenster._an_bildschirm_anpassen()
+    assert gesetzt == {} and aufrufe == []
+
+    # Jeder Darstellungswechsel stößt die Anpassung an.
+    angestossen = []
+    monkeypatch.setattr(fenster, "_an_bildschirm_anpassen", lambda: angestossen.append(True))
+    monkeypatch.setattr("app._schriftstufe_speichern", lambda stufe: None)
+    fenster._schrift_wechseln("normal")
+    qtbot.waitUntil(lambda: bool(angestossen), timeout=2000)
 
 
 def test_offene_starts_seitenleiste_passt_fuer_lange_zeilen(qtbot, conn):

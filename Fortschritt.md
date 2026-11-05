@@ -9751,3 +9751,26 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   - Der Byte-Abgleich danach ist identisch (330 Dateien).
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort
   `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
+
+
+## 05.11.2026: Zeitplan bei großer Schrift rechts abgeschnitten (Meldung nach 1.0.56)
+
+- **Meldung Marco:** Bei „Groß“ und „Sehr groß“ ist der Zeitplan rechts teilweise abgeschnitten; nach
+  dem Wechsel zurück auf „Normal“ braucht es Minimieren/Maximieren für die richtige Ansicht.
+- **Ursache (gemessen mit Windows-Schriften, 1536 px wie Full HD bei 125 %):** Die Kopfzeile des
+  Zeitplans war eine Zeile mit 1338/1482/1636 px Mindestbreite (Normal/Groß/Sehr groß). Bei „Sehr
+  groß“ wurde das Fenster breiter als der Bildschirm, bei „Groß“ war es sehr knapp; das maximierte
+  Fenster schrumpfte nach dem Zurückschalten nicht von selbst.
+- **Behebung:** Einstellungen (Start, Dauer, Mindestabstand) und Knöpfe (Richter hinzufügen,
+  Automatisch verteilen, Zeitplan-PDF) in zwei Zeilen – Zeitplan-Reiter jetzt 1023/1126 px bei
+  Groß/Sehr groß. Nach jedem Darstellungswechsel (Schrift, Design, Akzent) passen sich alle
+  Hauptfenster (auch das der Demo) wieder an den Bildschirm an (`HauptFenster._an_bildschirm_anpassen`:
+  maximiert neu maximieren, sonst verkleinern und verschieben; nichts tun, wenn die Mindestgröße
+  ohnehin nicht passt). Screenshot `handbuch_zeitplan`/`zeitplan` neu.
+- **Tests:** neu `test_zeitplan_kopf_in_zwei_zeilen`, `test_fenster_passt_sich_nach_schriftwechsel_dem_bildschirm_an`;
+  `test_ergebnistabelle_sehr_gross_nur_maximiert_voll` schaltet das Einpassen ab (Offscreen-Bildschirm
+  kleiner als das Testfenster). Gegenprobe: ohne die Änderung scheitern die neuen Tests. Alle
+  GUI-Tests grün (564). Verifikation eingearbeitet (alle Fenster, Rahmen und Position, alle
+  Darstellungswechsel, kein Sprung ohne Wirkung).
+- **Rest (Rückfrage an Marco):** Auf 1366 px bei „Sehr groß“ ist der Reiter „Teilnehmer“ (zwei
+  Knopfzeilen) mit 1349 px noch etwa 11 px zu breit.

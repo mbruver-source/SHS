@@ -3553,6 +3553,32 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # Fenstern (auch einem zweiten Hauptfenster der Demo, Abschluss-QS A11).
         ResponsiveSchriftMixin.alle_neu_anwenden()
 
+    def _an_bildschirm_anpassen(self) -> None:
+        """Marco 05.11.2026 (nach 1.0.56): War das Fenster bei großer Schrift breiter als der
+        Bildschirm geworden, blieb es das nach dem Zurückschalten - erst Minimieren/Maximieren
+        half. Passt das Fenster wieder in den freien Bereich, falls es größer ist (mit Rahmen) -
+        sofern seine Mindestgröße überhaupt hineinpasst, sonst wäre es ein Sprung ohne Wirkung."""
+        bildschirm = self.screen() or QApplication.primaryScreen()
+        if bildschirm is None:
+            return
+        frei = bildschirm.availableGeometry()
+        rahmen = self.frameGeometry()
+        if frei.contains(rahmen):
+            return
+        rand_breite, rand_hoehe = rahmen.width() - self.width(), rahmen.height() - self.height()
+        mindest = self.minimumSizeHint()
+        if mindest.width() + rand_breite > frei.width() or mindest.height() + rand_hoehe > frei.height():
+            return
+        if self.isMaximized():
+            # Ein maximiertes Fenster übernimmt die Bildschirmgröße erst nach erneutem Maximieren.
+            self.showNormal()
+            self.showMaximized()
+            return
+        self.resize(min(self.width(), frei.width() - rand_breite), min(self.height(), frei.height() - rand_hoehe))
+        rahmen = self.frameGeometry()
+        self.move(min(max(rahmen.x(), frei.x()), frei.right() - rahmen.width() + 1),
+                  min(max(rahmen.y(), frei.y()), frei.bottom() - rahmen.height() + 1))
+
     def _theme_wechseln(self, theme_name: str) -> None:
         _theme_speichern(theme_name)
         self._darstellung_neu_anwenden()
@@ -3570,6 +3596,11 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             self.kopf.farben_aktualisieren()
             # Übrige Knöpfe mit Symbol (Zeitplan-Pfeile, Formular-Import, Demo-Fenster).
             symbole_auffrischen(self)
+        # Nach dem Neu-Layout alle Hauptfenster (auch das der Demo) wieder auf den Bildschirm
+        # einpassen - Schrift, Design und Akzent ändern Mindestbreiten (nach 1.0.56).
+        for fenster in QApplication.topLevelWidgets():
+            if isinstance(fenster, HauptFenster):
+                QTimer.singleShot(0, fenster, fenster._an_bildschirm_anpassen)
 
     def _farben_auffrischen(self) -> None:
         """Färbt Tabelleninhalte nach einem Darstellungswechsel neu. Teilnehmer,

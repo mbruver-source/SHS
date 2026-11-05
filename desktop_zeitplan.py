@@ -191,6 +191,9 @@ class ZeitplanTab(QWidget):
         export_btn = QPushButton("Zeitplan (PDF)…")
         export_btn.clicked.connect(self._pdf_exportieren)
 
+        # Marco 05.11.2026 (nach 1.0.56): Einstellungen und Knöpfe in zwei Zeilen - in einer Zeile
+        # war die Kopfzeile bei Schrift „Sehr groß“ breiter als ein 1536-px-Bildschirm (1636 px),
+        # das Fenster wurde breiter als der Bildschirm und rechts abgeschnitten.
         kopf_zeile = QHBoxLayout()
         kopf_zeile.addWidget(QLabel("Zeitplan-Start (HH:MM):"))
         kopf_zeile.addWidget(self.zeitplan_start)
@@ -201,11 +204,12 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addSpacing(16)
         kopf_zeile.addWidget(QLabel("Mindestabstand Team:"))
         kopf_zeile.addWidget(self.mindestabstand)
-        kopf_zeile.addSpacing(16)
-        kopf_zeile.addWidget(richter_hinzufuegen_btn)
-        kopf_zeile.addWidget(verteilen_btn)
         kopf_zeile.addStretch()
-        kopf_zeile.addWidget(export_btn)
+        knopf_zeile = QHBoxLayout()
+        knopf_zeile.addWidget(richter_hinzufuegen_btn)
+        knopf_zeile.addWidget(verteilen_btn)
+        knopf_zeile.addStretch()
+        knopf_zeile.addWidget(export_btn)
 
         # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026).
         hinweis = kurzer_hinweis(
@@ -258,6 +262,7 @@ class ZeitplanTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Zeitplan"))
         layout.addLayout(kopf_zeile)
+        layout.addLayout(knopf_zeile)
         layout.addWidget(hinweis)
         layout.addLayout(inhalt_zeile, stretch=1)
         layout.addWidget(self.status_label)
