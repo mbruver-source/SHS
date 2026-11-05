@@ -97,6 +97,11 @@ _MEHRERE_GEGENSTAENDE = re.compile(r"[,;/+&]|\s(und|oder|sowie|u\.)\s", re.IGNOR
 _KLAMMERZUSATZ = re.compile(r"\([^)]*\)")
 
 
+#: Höchstens so viel des freien Bildschirms nimmt ein Dialog beim Öffnen ein (U3, N2, N14).
+DIALOG_MAX_BREITE_ANTEIL = 0.95
+DIALOG_MAX_HOEHE_ANTEIL = 0.9
+
+
 def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int, inhalt: QWidget | None = None,
                                       hoehe_nach_inhalt: bool = False) -> None:
     """Startgröße, begrenzt auf den verfügbaren Bildschirm (UX-Test 02.10.2026, U3), damit
@@ -117,8 +122,8 @@ def _groesse_auf_bildschirm_begrenzen(dialog, breite: int, hoehe: int, inhalt: Q
     bildschirm = dialog.screen() or QApplication.primaryScreen()
     if bildschirm is not None:
         frei = bildschirm.availableGeometry()
-        breite = min(breite, int(frei.width() * 0.95))
-        hoehe = min(hoehe, int(frei.height() * 0.9))
+        breite = min(breite, int(frei.width() * DIALOG_MAX_BREITE_ANTEIL))
+        hoehe = min(hoehe, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))
     dialog.resize(breite, hoehe)
 
 
@@ -455,12 +460,11 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
 
         # Bewusst gewählte Startgröße statt automatischer (zu hoher) Größe durch die vielen
         # Felder, bei großer Schrift mindestens so breit wie das Formular (Nachtest 2, N2) -
-        # passt dadurch auch auf kleinere Bildschirme (der Inhalt
-        # scrollt jetzt bei Bedarf, siehe oben, statt abgeschnitten zu werden). Der Dialog
-        # bleibt frei in der Größe änderbar UND jetzt auch maximierbar (CI-Fund 21.09.:
-        # QDialog zeigt standardmäßig keinen Maximieren-Button, obwohl der Nutzer bei
-        # einer Menge Felder/aufgeklapptem Halter-Block mehr Platz braucht als die
-        # Startgröße bietet).
+        # passt dadurch auch auf kleinere Bildschirme (der Inhalt scrollt bei Bedarf, siehe
+        # oben, statt abgeschnitten zu werden). Der Dialog bleibt frei in der Größe änderbar
+        # UND auch maximierbar (CI-Fund 21.09.: QDialog zeigt standardmäßig keinen
+        # Maximieren-Button, obwohl der Nutzer bei vielen Feldern/aufgeklapptem Halter-Block
+        # mehr Platz braucht als die Startgröße bietet).
         self.setWindowFlags(self.windowFlags() | Qt.WindowMaximizeButtonHint | Qt.WindowMinimizeButtonHint)
         # UX-Test 02.10.2026, U3: größere Startgröße (vorher 780x640), begrenzt auf den
         # verfügbaren Bildschirm, damit OK/Abbrechen auch auf kleinen Laptops sichtbar bleiben.
@@ -1686,12 +1690,11 @@ def _hilfe_anker(abschnitt: str) -> str | None:
 
 class HilfeDialog(QDialog):
     """Allgemeine Bedienungshilfe in einem eigenen, scrollbaren Fenster - ein Abschnitt je
-    Reiter (siehe _HILFE_HTML oben). Wird über den Hilfe-Button im Hauptfenster geöffnet
-    (seit dem Nachtest 2, N6, wie F1 gleich beim Abschnitt des Reiters), mit F1 bzw. „Hilfe → Hilfe anzeigen“ gleich beim
-    Abschnitt des aktuellen Reiters (`abschnitt`, UX-Test 2026-11, T8). Das Suchfeld oben
-    markiert alle Treffer und springt mit Enter bzw. „Weiter“ zum nächsten (T8: die Hilfe war
-    trotz Inhaltszeile noch lang). Seit dem Nachtest 2 (N6) zählen zuerst ganze Wörter und
-    Wortanfänge („USB“ fand sonst „ausbalancierten“), die Markierung ist kräftiger."""
+    Reiter (siehe _HILFE_HTML oben). Der Knopf „Hilfe“, F1 und „Hilfe → Hilfe anzeigen“ öffnen
+    sie gleich beim Abschnitt des aktuellen Reiters (`abschnitt`; UX-Test 2026-11, T8, für den
+    Knopf seit dem Nachtest 2, N6). Das Suchfeld oben markiert alle Treffer und springt mit
+    Enter bzw. „Weiter“ zum nächsten (T8). Gesucht wird zuerst nach ganzen Wörtern und
+    Wortanfängen („USB“ fand sonst „ausbalancierten“, N6)."""
 
     def __init__(self, parent=None, abschnitt: str | None = None):
         super().__init__(parent)
@@ -1736,6 +1739,7 @@ class HilfeDialog(QDialog):
             QTimer.singleShot(0, self, lambda: anzeige.scrollToAnchor(anker))
 
     def _fundstellen(self, muster: QRegularExpression) -> list[QTextCursor]:
+        """Alle Treffer von `muster` im Hilfetext, in Textreihenfolge."""
         fundstellen = []
         cursor = self.anzeige.document().find(muster)
         while not cursor.isNull():
@@ -1756,8 +1760,10 @@ class HilfeDialog(QDialog):
             # der Suchtext nicht mit einem Buchstaben oder einer Ziffer (z. B. „(“), gibt es
             # keinen Wortanfang - dann gleich überall suchen.
             wortanfang = suchtext[0].isalnum()
-            for muster in ((QRegularExpression(rf"(?<!\w){escaped}", optionen),) if wortanfang else ()) + (
-                    QRegularExpression(escaped, optionen),):
+            muster_liste = [QRegularExpression(escaped, optionen)]
+            if wortanfang:
+                muster_liste.insert(0, QRegularExpression(rf"(?<!\w){escaped}", optionen))
+            for muster in muster_liste:
                 fundstellen = self._fundstellen(muster)
                 if fundstellen:
                     self._muster = muster

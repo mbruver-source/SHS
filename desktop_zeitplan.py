@@ -268,6 +268,11 @@ class ZeitplanTab(QWidget):
     #: Längste eingeplante Zeile der Seitenleiste „Offene Starts“ (Nachtest 2, N14); offene
     #: Zeilen (fett, „– noch offen“) dürfen umbrechen.
     _LAENGSTE_OFFENE_ZEILE = "DK LK 3 – Behältnisstrecke (99 Teilnehmer)"
+    #: Zuschlag zur Textbreite: Häkchen-Symbol, Ränder der Gruppe, Bildlaufleiste.
+    SEITENLEISTE_ZUSCHLAG = 90
+    #: Höchstens dieser Anteil der Bildschirmbreite für Mindest- bzw. Höchstbreite.
+    SEITENLEISTE_MIN_ANTEIL = 0.2
+    SEITENLEISTE_MAX_ANTEIL = 0.25
 
     def _seitenleiste_breite_anpassen(self) -> None:
         """Seitenleiste so breit, dass eingeplante Zeilen wie „DK LK 3 – Behältnisstrecke
@@ -279,11 +284,11 @@ class ZeitplanTab(QWidget):
         Richter-Spalten bei Schrift „Sehr groß“ auf 1366 px einen Bildlauf (Verifikation B19)."""
         self._offene_starts_label.ensurePolished()
         text = self._offene_starts_label.fontMetrics().horizontalAdvance(self._LAENGSTE_OFFENE_ZEILE)
-        breite = text + 90
+        breite = text + self.SEITENLEISTE_ZUSCHLAG
         bildschirm = self.screen() or QApplication.primaryScreen()
         frei = bildschirm.availableGeometry().width() if bildschirm is not None else 10 * breite
-        self._offene_starts_box.setMinimumWidth(max(280, min(breite, int(frei * 0.2))))
-        self._offene_starts_box.setMaximumWidth(max(360, min(breite + 60, int(frei * 0.25))))
+        self._offene_starts_box.setMinimumWidth(max(280, min(breite, int(frei * self.SEITENLEISTE_MIN_ANTEIL))))
+        self._offene_starts_box.setMaximumWidth(max(360, min(breite + 60, int(frei * self.SEITENLEISTE_MAX_ANTEIL))))
 
     def changeEvent(self, event) -> None:  # type: ignore[override]
         # Nach dem Wechsel der Schriftgröße (neues Stylesheet) erst messen, wenn die Schrift

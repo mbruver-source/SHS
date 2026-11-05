@@ -2107,6 +2107,20 @@ class TestDatenbank(unittest.TestCase):
             disziplin="Behältnisstrecke", startnummer=4))
         self.assertEqual(alle_leistungsklassen(self.conn), ["DK LK 2", "Behältnisse LK 3", "Fläche LK 1"])
 
+    def test_nummern_ausserhalb_nach_tausch(self):
+        # QS B22 (W5): die Zählung der Tausch-Warnung (Nachtest 2, N4) ohne Oberfläche.
+        from db import nummern_ausserhalb_nach_tausch
+
+        bereiche = {"ED1-Trümmerfeld": (1, 10), "ED1-Flächensuche": (11, 20)}
+
+        def t(nummer, disziplin):
+            return {"art": "ED", "stufe": 1, "disziplin": disziplin, "startnummer": nummer}
+
+        self.assertEqual(nummern_ausserhalb_nach_tausch(bereiche, t(1, "Trümmerfeld"), t(11, "Flächensuche")), 2)
+        self.assertEqual(nummern_ausserhalb_nach_tausch(bereiche, t(11, "Trümmerfeld"), t(1, "Flächensuche")), 0)
+        self.assertEqual(nummern_ausserhalb_nach_tausch(bereiche, t(1, "Trümmerfeld"), t(None, "Flächensuche")), 1)
+        self.assertEqual(nummern_ausserhalb_nach_tausch({}, t(1, "Trümmerfeld"), t(11, "Flächensuche")), 0)
+
     def test_pruefungsbezeichnung_wie_im_anmeldeformular(self):
         # Nachtest 2 (N5, Marco 04.11.2026): eine Schreibweise überall.
         from db import (

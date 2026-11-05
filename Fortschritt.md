@@ -9664,3 +9664,19 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
 - **Tests:** `test_pruefungsbezeichnung_wie_im_anmeldeformular` um `sortiere_pruefungen` und
   `pruefung_nach_bezeichnung` erweitert (Gegenprobe: scheitert ohne die Änderung). 726 Unittests,
   alle GUI-Tests grün (560).
+
+### ux_test_2026_11 B25 – Tausch-Logik ausgelagert, Docstrings, Tests (QS B22 W5–W7; 05.11.2026)
+
+- **W5:** Die Zählung „wie viele Nummern lägen nach dem Tausch außerhalb ihres Bereichs“ steht als
+  `db.nummern_ausserhalb_nach_tausch(bereiche, a, b)` in der Datenschicht (ohne Qt) und hat einen
+  eigenen Test; `TeilnehmerTab._tausch_warnung` baut nur noch den Text.
+- **W6:** Docstring `HilfeDialog` neu (Knopf, F1 und Menü öffnen beim Reiter), Kommentar im
+  `TeilnehmerDialog` neu umbrochen, `_fundstellen` mit Docstring, Suchmuster als Liste statt
+  verschachteltem Tupel-Ausdruck.
+- **W7:** Faktoren benannt: `desktop_dialoge.DIALOG_MAX_BREITE_ANTEIL`/`DIALOG_MAX_HOEHE_ANTEIL`,
+  `ZeitplanTab.SEITENLEISTE_ZUSCHLAG`/`_MIN_ANTEIL`/`_MAX_ANTEIL`; die Tests nutzen die Konstanten
+  statt Zahlen. Der Demo-Test prüft den echten Text von Schritt 3 (über `_schritte_aufbauen` mit einer
+  Attrappe) statt des Quelltexts; der Dialoggrößen-Test nutzt `monkeypatch`.
+- **Tests:** neu `test_nummern_ausserhalb_nach_tausch` (Gegenprobe: scheitert ohne die Änderung).
+  728 Unittests, alle GUI-Tests grün (560); nach der Verifikation die Seitenleisten- und Demo-Tests
+  wieder um die eigentliche Anforderung ergänzt (Mindestbreite ≥ Textbreite, „Feld „Prüfung““).

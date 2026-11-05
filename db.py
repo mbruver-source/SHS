@@ -1161,6 +1161,19 @@ def tausche_startnummern(conn: sqlite3.Connection, teilnehmer_id_a: int, teilneh
     conn.commit()
 
 
+def nummern_ausserhalb_nach_tausch(bereiche: dict[str, tuple[int, int]], a: dict, b: dict) -> int:
+    """Wie viele der beiden Startnummern nach einem Tausch zwischen `a` und `b` außerhalb des
+    Bereichs der neuen Prüfung lägen (0-2) - für die Warnung vor dem Tausch (Nachtest 2, N4).
+    Ohne Nummer oder ohne Bereich zählt nichts; liegen die Nummern schon über Kreuz, bringt der
+    Tausch sie gerade zurück (0). Ohne Qt, einzeln testbar (QS B22, W5)."""
+    ausserhalb = 0
+    for neue_nummer, t in ((b["startnummer"], a), (a["startnummer"], b)):
+        bereich = bereiche.get(pruefungs_kuerzel(t["art"], t["stufe"], t["disziplin"]))
+        if neue_nummer is not None and bereich and not bereich[0] <= neue_nummer <= bereich[1]:
+            ausserhalb += 1
+    return ausserhalb
+
+
 @_mit_rollback
 def setze_bezahlt(conn: sqlite3.Connection, teilnehmer_id: int, bezahlt: bool) -> None:
     """Setzt/entfernt die Bezahlt-Markierung eines Teilnehmers, ohne die übrigen

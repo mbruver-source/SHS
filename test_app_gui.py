@@ -71,7 +71,12 @@ from db_import import (
     CsvImportErgebnis,
 )
 from desktop_darstellung import _darstellung_anwenden, _erzeuge_qss
-from desktop_dialoge import BewertungsbogenAuswahlDialog, _wiederherstellungsziele_planen
+from desktop_dialoge import (
+    DIALOG_MAX_BREITE_ANTEIL,
+    DIALOG_MAX_HOEHE_ANTEIL,
+    BewertungsbogenAuswahlDialog,
+    _wiederherstellungsziele_planen,
+)
 import desktop_auswertung
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 import desktop_programm
@@ -3399,7 +3404,7 @@ def test_dialoge_fokus_und_groesse(qtbot, tmp_path, monkeypatch):
     veranstaltung.show()
     assert veranstaltung.focusWidget() is veranstaltung.verein
     frei = veranstaltung.screen().availableGeometry()
-    assert veranstaltung.height() <= int(frei.height() * 0.9) + 1
+    assert veranstaltung.height() <= int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL) + 1
 
 
 def test_veranstaltungsdialog_gebuehr_standard_nur_beim_anlegen(qtbot, tmp_path, monkeypatch):
@@ -8219,7 +8224,7 @@ def test_ablehnungsgrund_je_zeichen():
     assert _ablehnungsgrund(_EINGEFUEGT) == "nur ganze Zahlen einfügen"
 
 
-def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
+def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot, monkeypatch):
     """Nachtest 2, N2: Bei Schrift „Groß“ war das Formular breiter als die feste Startgröße
     des Teilnehmer-Dialogs - die Breite richtet sich jetzt nach dem Inhalt (höchstens 95 %
     des Bildschirms)."""
@@ -8237,9 +8242,9 @@ def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
     qtbot.addWidget(dialog)
     _groesse_auf_bildschirm_begrenzen(dialog, 300, 200, inhalt=_Inhalt())
     frei = dialog.screen().availableGeometry().width()
-    assert dialog.width() == min(600, int(frei * 0.95))
+    assert dialog.width() == min(600, int(frei * DIALOG_MAX_BREITE_ANTEIL))
     _groesse_auf_bildschirm_begrenzen(dialog, 300, 200)
-    assert dialog.width() == min(300, int(frei * 0.95))
+    assert dialog.width() == min(300, int(frei * DIALOG_MAX_BREITE_ANTEIL))
 
     # Der Teilnehmer-Dialog misst sein Formular (Verdrahtung).
     from PySide6.QtWidgets import QScrollArea
@@ -8247,13 +8252,10 @@ def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot):
 
     gemessen = []
     echt = desktop_dialoge._groesse_auf_bildschirm_begrenzen
-    desktop_dialoge._groesse_auf_bildschirm_begrenzen = (
-        lambda d, b, h, inhalt=None: gemessen.append(inhalt) or echt(d, b, h, inhalt=inhalt))
-    try:
-        teilnehmer_dialog = desktop_dialoge.TeilnehmerDialog(None)
-        qtbot.addWidget(teilnehmer_dialog)
-    finally:
-        desktop_dialoge._groesse_auf_bildschirm_begrenzen = echt
+    monkeypatch.setattr(desktop_dialoge, "_groesse_auf_bildschirm_begrenzen",
+                        lambda d, b, h, inhalt=None, **k: gemessen.append(inhalt) or echt(d, b, h, inhalt=inhalt, **k))
+    teilnehmer_dialog = desktop_dialoge.TeilnehmerDialog(None)
+    qtbot.addWidget(teilnehmer_dialog)
     assert gemessen == [teilnehmer_dialog.findChild(QScrollArea).widget()]
 
 
@@ -8276,9 +8278,9 @@ def test_termin_dialog_zweispaltig_und_so_hoch_wie_sein_inhalt(qtbot):
     qtbot.addWidget(probe)
     frei = probe.screen().availableGeometry()
     _groesse_auf_bildschirm_begrenzen(probe, 300, 200, inhalt=_Inhalt(), hoehe_nach_inhalt=True)
-    assert probe.height() == min(710, int(frei.height() * 0.9))
+    assert probe.height() == min(710, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))
     _groesse_auf_bildschirm_begrenzen(probe, 300, 200, inhalt=_Inhalt())
-    assert probe.height() == min(200, int(frei.height() * 0.9))  # Teilnehmer-Dialog: wie bisher
+    assert probe.height() == min(200, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))  # Teilnehmer-Dialog: wie bisher
 
     dialog = VeranstaltungsDialog(None)
     qtbot.addWidget(dialog)
@@ -8295,8 +8297,12 @@ def test_offene_starts_seitenleiste_passt_fuer_lange_zeilen(qtbot, conn):
     qtbot.addWidget(tab)
     noetig = tab._offene_starts_label.fontMetrics().horizontalAdvance(tab._LAENGSTE_OFFENE_ZEILE)
     frei = tab.screen().availableGeometry().width()
-    assert tab._offene_starts_box.minimumWidth() >= min(noetig + 40, max(280, int(frei * 0.2)))
-    assert tab._offene_starts_box.maximumWidth() >= min(noetig + 40, max(360, int(frei * 0.25)))
+    # Anforderung N14 mit fester Zahl (lange Zeilen passen, soweit der Bildschirm reicht) ...
+    assert tab._offene_starts_box.minimumWidth() >= min(noetig + 40, max(280, int(frei * tab.SEITENLEISTE_MIN_ANTEIL)))
+    # ... und die genaue Formel.
+    breite = noetig + tab.SEITENLEISTE_ZUSCHLAG
+    assert tab._offene_starts_box.minimumWidth() == max(280, min(breite, int(frei * tab.SEITENLEISTE_MIN_ANTEIL)))
+    assert tab._offene_starts_box.maximumWidth() >= min(breite, max(360, int(frei * tab.SEITENLEISTE_MAX_ANTEIL)))
 
     # Verifikation B19: nach einem Wechsel der Schrift (Stylesheet) neu gemessen - mit der
     # neuen Schrift (gemessen wird erst, wenn sie angekommen ist).
@@ -8501,8 +8507,8 @@ def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
     assert dialog.nachname.width() >= desktop_dialoge._MINDESTBREITE_TEXTFELD
     frei = dialog.screen().availableGeometry()
     breite, hoehe = desktop_dialoge._TEILNEHMER_DIALOG_GROESSE
-    assert dialog.width() <= min(breite, int(frei.width() * 0.95))
-    assert dialog.height() <= min(hoehe, int(frei.height() * 0.9))
+    assert dialog.width() <= min(breite, int(frei.width() * DIALOG_MAX_BREITE_ANTEIL))
+    assert dialog.height() <= min(hoehe, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))
 
 
 def test_lange_namensliste_in_auswertung_verbreitert_fenster_nicht(qtbot, termin):
@@ -9592,14 +9598,25 @@ def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_
 def test_demo_bereiche_passen_zur_anzahl_und_schritt_3_nennt_pruefung():
     """Nachtest 2, N9: je 20 Nummern wie bei „Anzahl 20“; Schritt 3 spricht vom Feld
     „Prüfung“ statt von „Art und Leistungsklasse“, die die Maske nicht mehr zeigt."""
-    import inspect
-
     import demo_daten
     import desktop_demo
+    from db import pruefung_nach_kuerzel
 
     assert all(bis - von + 1 == 20 for von, bis in demo_daten.PRUEFUNGEN.values())
-    quelle = inspect.getsource(desktop_demo)
-    assert "Art und Leistungsklasse" not in quelle and "Wichtig ist das Feld „Prüfung“" in quelle
+
+    class _Attrappe:
+        """Statt einer laufenden DemoTour: liefert für die Aktionen nur Platzhalter."""
+        eigenes_fenster = False
+
+        def __getattr__(self, _name):
+            return lambda *a, **k: []
+
+    schritt = next(s for s in desktop_demo.DemoTour._schritte_aufbauen(_Attrappe())
+                   if s.titel.startswith("3."))
+    assert "Art und Leistungsklasse" not in schritt.text
+    assert "Feld „Prüfung“" in schritt.text
+    assert f"„{pruefung_nach_kuerzel('ED1-Trümmerfeld').bezeichnung}“" in schritt.text
+    assert f"„{pruefung_nach_kuerzel('DK1').bezeichnung}“" in schritt.text
 
 
 def test_demo_ruht_waehrend_der_beenden_rueckfrage(qtbot, termin, demo_umgebung, monkeypatch):

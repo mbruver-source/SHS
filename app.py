@@ -108,6 +108,7 @@ from db import (
     leistungsklasse_label,
     liste_termine,
     list_teilnehmer,
+    nummern_ausserhalb_nach_tausch,
     sortierschluessel_text,
     termin_oeffnen,
     TerminNichtOeffenbar,
@@ -831,13 +832,8 @@ class TeilnehmerTab(QWidget):
             spanne = f"Bereich {bereich[0]}–{bereich[1]}" if bereich else "kein Bereich festgelegt"
             return f"{_pruefung_bezeichnung(k)}, {spanne}"
 
-        # Außerhalb nur, wo es stimmt (Verifikation B15): ohne Nummer oder ohne Bereich nicht,
-        # und lagen die Nummern schon über Kreuz, bringt der Tausch sie gerade zurück.
-        ausserhalb = 0
-        for neue_nummer, k in ((b["startnummer"], kuerzel[0]), (a["startnummer"], kuerzel[1])):
-            bereich = bereiche.get(k)
-            if neue_nummer is not None and bereich and not bereich[0] <= neue_nummer <= bereich[1]:
-                ausserhalb += 1
+        # Außerhalb nur, wo es stimmt (Verifikation B15, siehe db.nummern_ausserhalb_nach_tausch).
+        ausserhalb = nummern_ausserhalb_nach_tausch(bereiche, a, b)
         einleitung = "Achtung: Die beiden starten in verschiedenen Prüfungen"
         if ausserhalb == 2:
             einleitung += " – nach dem Tausch liegen beide Nummern außerhalb ihrer Startnummern-Bereiche"
