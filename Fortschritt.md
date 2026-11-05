@@ -9778,3 +9778,16 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   `test_teilnehmer_knopfleiste_zweizeilig` angepasst (Gegenprobe: scheitert mit der alten
   Anordnung), Screenshot `handbuch_teilnehmer` neu. Alle GUI-Tests grün (564). Gemessen sind damit
   alle Reiter bei „Sehr groß“ auf 1366 px höchstens 1181 px breit.
+
+
+## Version 1.0.57
+
+- **Große Schrift (Meldung Marco nach 1.0.56):** Zeitplan-Kopf in zwei Zeilen, „Startnummer
+  tauschen…“ in die obere Knopfzeile des Teilnehmer-Reiters; alle Reiter passen bei „Sehr groß“
+  auf 1366 px. Nach jedem Darstellungswechsel passen sich alle Hauptfenster wieder an den
+  Bildschirm an (`HauptFenster._an_bildschirm_anpassen`).
+- Vor-Build-Verifikation ohne Einwände; auf Marcos Entscheidung `_an_bildschirm_anpassen` im
+  Klassendiagramm (`UML.md`) ergänzt, mit mmdc geprüft.
+- Die Version ist erhöht, alle 15 Desktop-Screenshots neu, `docs/HANDBUCH.pdf` und
+  `docs/INSTALLATION_KURZ.pdf` neu, `RELEASE_NOTES.md` neu geschrieben.
+- **Tests lokal:** 734 Unittests (183 übersprungen) und 564 GUI-Tests grün.

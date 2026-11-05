@@ -97,6 +97,7 @@ classDiagram
         -_tab_gewechselt(index)
         -_rueckfrage_ungespeichert()
         -_darstellung_neu_anwenden()
+        -_an_bildschirm_anpassen()
         +closeEvent(event)
     }
     class StartDialog {
