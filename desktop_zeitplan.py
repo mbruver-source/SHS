@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
 )
 
 from db import (
-    zeitplan_bezeichnung,
     add_zeitplan_pause,
     add_zeitplan_pause_bei_allen,
     add_zeitplan_pruefungsblock,
@@ -57,6 +56,7 @@ from db import (
     zeitplan_gruppen_status,
     zeitplan_richter_aus_veranstaltung_anlegen,
     zeitplan_ueberschneidungen,
+    zeitplan_bezeichnung,
 )
 from desktop_darstellung import _farbe
 from desktop_dialoge import PauseDialog, PruefungsblockDialog, VerteilenDialog

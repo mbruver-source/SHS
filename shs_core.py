@@ -24,6 +24,7 @@ wird für "nicht Bestanden"-Teilnehmer statt einer Platzierung ("RANK.EQ") das K
 """
 
 import datetime
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -204,7 +205,7 @@ def berechne_rangliste(
     teilnehmer: list[Teilnehmerergebnis],
     stechen_sieger: set[str] | frozenset[str] = frozenset(),
     mit_stechen: bool = True,
-    sortierschluessel=None,
+    sortierschluessel: Callable[[str], object] | None = None,
 ) -> list[Teilnehmerergebnis]:
     """Berechnet die Platzierung je Leistungsklasse (höhere Punktzahl = besserer Rang).
 
@@ -284,7 +285,8 @@ def platz_text(t: Teilnehmerergebnis) -> str | None:
 
 
 def stechen_gruppen(ergebnisse: list[Teilnehmerergebnis],
-                    sortierschluessel=None) -> dict[str, list[Teilnehmerergebnis]]:
+                    sortierschluessel: Callable[[str], object] | None = None,
+                    ) -> dict[str, list[Teilnehmerergebnis]]:
     """Leistungsklassen mit Gleichstand um Platz 1 (Stechen offen ODER schon entschieden) -
     für Hinweis, Auswahl des Siegers und die Rückfrage vor dem Druck.
 

@@ -202,9 +202,7 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
         return
     kuerzel = pruefungs_kuerzel(teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
     if kuerzel not in angebotene:
-        pruefung = pruefung_nach_kuerzel(kuerzel)
-        bezeichnung = pruefung.bezeichnung if pruefung else pruefung_bezeichnung(
-            teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
+        bezeichnung = pruefung_bezeichnung(teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin)
         raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung))
 
 

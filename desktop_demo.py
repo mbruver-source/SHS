@@ -69,6 +69,7 @@ from db import (
     init_db,
     list_zeitplan_richter,
     pruefung_nach_kuerzel,
+    pruefung_sortierschluessel,
     pruefungs_kuerzel,
     set_veranstaltung,
     setze_stechen_sieger,
@@ -1590,7 +1591,7 @@ class DemoTour(QObject):
             sieger = self._ids.get(demo_daten.STECHEN_SIEGER)
             # Wie in der Auswertung je Leistungsklasse (shs_core.stechen_gruppen), Teil 10 Nr. 10.
             gruppe = next(
-                ([int(t.id) for t in g] for g in stechen_gruppen(fertig).values()
+                ([int(t.id) for t in g] for g in stechen_gruppen(fertig, pruefung_sortierschluessel).values()
                  if any(int(t.id) == sieger and t.stechen == "offen" for t in g)),
                 [],
             )

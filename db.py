@@ -378,6 +378,8 @@ ALLE_PRUEFUNGEN: list[Pruefungsangebot] = [
     for stufe in (1, 2, 3)
 ]
 _PRUEFUNG_NACH_KUERZEL = {p.kuerzel: p for p in ALLE_PRUEFUNGEN}
+_PRUEFUNG_NACH_BEZEICHNUNG = {p.bezeichnung: p for p in ALLE_PRUEFUNGEN}
+_FORMULAR_POSITION = {p.bezeichnung: nummer for nummer, p in enumerate(ALLE_PRUEFUNGEN)}
 
 
 def pruefungen_als_text(kuerzel: list[str]) -> str | None:
@@ -400,6 +402,11 @@ def angebotene_pruefungen(veranstaltung: dict | None) -> list[Pruefungsangebot]:
 
 def pruefung_nach_kuerzel(kuerzel: str) -> Pruefungsangebot | None:
     return _PRUEFUNG_NACH_KUERZEL.get(kuerzel)
+
+
+def pruefung_nach_bezeichnung(bezeichnung: str) -> Pruefungsangebot | None:
+    """Die Prüfung zu einer Bezeichnung wie „Trümmer LK 2“ (Filter, Statistik) oder None."""
+    return _PRUEFUNG_NACH_BEZEICHNUNG.get(bezeichnung)
 
 
 # Feste Feldnamen des ausfüllbaren Anmeldeformulars (pdf_export.erstelle_anmeldeformular_pdf)
@@ -1422,10 +1429,15 @@ def zeitplan_bezeichnung(art: str, stufe, disziplin: str | None) -> str:
 def pruefung_sortierschluessel(bezeichnung: str) -> tuple:
     """Sortierung von Prüfungsbezeichnungen in der Reihenfolge des Anmeldeformulars (DK,
     Trümmer, Behältnisse, Fläche, je LK 1-3) statt alphabetisch; Unbekanntes ans Ende."""
-    for nummer, pruefung in enumerate(ALLE_PRUEFUNGEN):
-        if pruefung.bezeichnung == bezeichnung:
-            return (nummer, "")
+    if bezeichnung in _FORMULAR_POSITION:
+        return (_FORMULAR_POSITION[bezeichnung], "")
     return (len(ALLE_PRUEFUNGEN), sortierschluessel_text(bezeichnung))
+
+
+def sortiere_pruefungen(bezeichnungen) -> list[str]:
+    """Prüfungsbezeichnungen in der Reihenfolge des Anmeldeformulars (pruefung_sortierschluessel)
+    - eine Stelle für alle Listen, Filter und PDFs (QS B22, W1)."""
+    return sorted(bezeichnungen, key=pruefung_sortierschluessel)
 
 
 # Konstanten für die Richter-Bedarfsberechnung nach Vorgabe des Vereins: 1
@@ -1732,7 +1744,7 @@ def alle_leistungsklassen(conn: sqlite3.Connection) -> list[str]:
     """Sortierte Liste aller in diesem Termin tatsächlich vorkommenden Art/LK-Label -
     zum Befüllen eines Filters in der Oberfläche."""
     labels = {leistungsklasse_label(t) for t in list_teilnehmer(conn, nur_teilnehmende=True)}
-    return sorted(labels, key=pruefung_sortierschluessel)
+    return sortiere_pruefungen(labels)
 
 
 # Nutzerwunsch (21.09., Rückmeldung "Statistik/Jugendliche"): "bei uns im Verband müssen

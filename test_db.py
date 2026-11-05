@@ -2128,6 +2128,12 @@ class TestDatenbank(unittest.TestCase):
                    key=pruefung_sortierschluessel),
             ["DK LK 3", "Trümmer LK 2", "Behältnisse LK 1", "Fläche LK 1", "Unbekannt"],
         )
+        # QS B22 (W1, W2): eine Stelle zum Sortieren, Suche nach der Bezeichnung
+        from db import pruefung_nach_bezeichnung, sortiere_pruefungen
+
+        self.assertEqual(sortiere_pruefungen({"Fläche LK 1", "DK LK 2"}), ["DK LK 2", "Fläche LK 1"])
+        self.assertEqual(pruefung_nach_bezeichnung("Trümmer LK 2").kuerzel, "ED2-Trümmerfeld")
+        self.assertIsNone(pruefung_nach_bezeichnung("ED LK 2 Trümmerfeld"))
 
     def test_teilnehmer_liste_sortiert_nach_startnummer(self):
         add_teilnehmer(self.conn, NeuerTeilnehmer(

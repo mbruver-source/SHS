@@ -95,7 +95,6 @@ from db import (
     DISZIPLIN_SPALTEN,
     add_teilnehmer,
     alle_leistungsklassen,
-    pruefung_sortierschluessel,
     angebotene_pruefungen,
     datum_anzeige,
     delete_teilnehmer,
@@ -115,7 +114,10 @@ from db import (
     TerminUngewoehnlichGross,
     GRUND_ZU_GROSS,
     pruefe_ergebnis_eingabe,
+    pruefung_nach_bezeichnung,
+    pruefung_sortierschluessel,
     set_veranstaltung,
+    sortiere_pruefungen,
     setze_bezahlt,
     setze_ergebnis_status,
     setze_keine_teilnahme,
@@ -130,7 +132,6 @@ from db import (
     teilnehmer_ohne_startnummer,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
-    ALLE_PRUEFUNGEN,
     startnummer_bereiche,
     startnummern_zuruecksetzen,
 )
@@ -897,10 +898,8 @@ class TeilnehmerTab(QWidget):
         filter_wert = self.filter_combo.currentText()
         if filter_wert in ("Alle", ""):
             return None, None
-        for pruefung in ALLE_PRUEFUNGEN:
-            if _pruefung_bezeichnung(pruefung.kuerzel) == filter_wert:
-                return pruefung.kuerzel, filter_wert
-        return None, filter_wert
+        pruefung = pruefung_nach_bezeichnung(filter_wert)
+        return (pruefung.kuerzel if pruefung is not None else None), filter_wert
 
     def _gefilterte_pruefung_oder_meldung(self) -> tuple[str | None, str | None] | None:
         pruefung, bezeichnung = self._gefilterte_pruefung()
@@ -1271,7 +1270,7 @@ class TeilnehmerTab(QWidget):
         # Bewusst aus der eigenen (ungefilterten) Liste statt alle_leistungsklassen(), das
         # nur teilnehmende Teilnehmer berücksichtigt - hier sollen auch Leistungsklassen
         # filterbar bleiben, in denen nur noch "keine Teilnahme"-Teilnehmer stehen.
-        self.filter_combo.addItems(sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel))
+        self.filter_combo.addItems(sortiere_pruefungen({leistungsklasse_label(t) for t in teilnehmer}))
         index = self.filter_combo.findText(bisherige_auswahl)
         self.filter_combo.setCurrentIndex(index if index >= 0 else 0)
         self.filter_combo.blockSignals(False)

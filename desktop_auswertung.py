@@ -44,6 +44,7 @@ from db import (
     get_veranstaltung,
     leistungsklasse_label,
     pruefung_sortierschluessel,
+    sortiere_pruefungen,
     list_teilnehmer,
     setze_stechen_sieger,
     stechen_gilt_fuer_veranstaltung,
@@ -267,8 +268,8 @@ class AuswertungTab(QWidget):
         self._startnummer_je_id = {str(t["id"]): t["startnummer"] for t in stammdaten}
         self._rufname_hund_je_id = {str(t["id"]): t["rufname_hund"] for t in stammdaten}
 
-        alle_labels = sorted({t.leistungsklasse for t in self._fertig} | {leistungsklasse_label(t) for t in self._ausstehend},
-                             key=pruefung_sortierschluessel)
+        alle_labels = sortiere_pruefungen({t.leistungsklasse for t in self._fertig}
+                                          | {leistungsklasse_label(t) for t in self._ausstehend})
         bisherige_auswahl = self.filter_combo.currentText()
         self.filter_combo.blockSignals(True)
         self.filter_combo.clear()

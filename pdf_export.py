@@ -53,7 +53,6 @@ from reportlab.platypus import (
 )
 
 from db import (
-    ALLE_PRUEFUNGEN,
     _GEGENSTAND_FELDER,
     ALLE_DISZIPLINEN,
     ANMELDEFORMULAR_HUENDIN,
@@ -83,13 +82,15 @@ from db import (
     get_veranstaltung,
     ist_jugendlicher,
     leistungsklasse_label,
-    pruefung_bezeichnung,
-    pruefung_sortierschluessel,
-    zeitplan_bezeichnung,
     lies_datum,
     list_teilnehmer,
-    sortierschluessel_text,
+    pruefung_bezeichnung,
+    pruefung_nach_bezeichnung,
+    pruefung_sortierschluessel,
     pruefungsgebuehr_fuer_art,
+    sortiere_pruefungen,
+    sortierschluessel_text,
+    zeitplan_bezeichnung,
 )
 from shs_core import (
     ABBRUCH_ABK,
@@ -736,8 +737,8 @@ def erstelle_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str, leistungskla
     story.append(Paragraph(titel, _TITEL))
     story.append(Spacer(1, 2 * mm))
 
-    leistungsklassen = sorted({t.leistungsklasse for t in fertig} | {leistungsklasse_label(t) for t in ausstehend},
-                              key=pruefung_sortierschluessel)
+    leistungsklassen = sortiere_pruefungen({t.leistungsklasse for t in fertig}
+                                           | {leistungsklasse_label(t) for t in ausstehend})
     if leistungsklasse is not None:
         leistungsklassen = [lk for lk in leistungsklassen if lk == leistungsklasse]
     if not leistungsklassen:
@@ -828,7 +829,6 @@ _ETIKETT_FELD = ParagraphStyle("SHSEtikettFeld", parent=_STYLES["Normal"], fontS
 # 22.09., M3) - nur dieser Fall bekommt eine kleinere Schrift (Marcos Entscheidung).
 _ETIKETT_FELD_STATUS = ParagraphStyle("SHSEtikettFeldStatus", parent=_ETIKETT_FELD, fontSize=7)
 _ETIKETT_SHR = ParagraphStyle("SHSEtikettSHR", parent=_STYLES["Normal"], fontSize=7.5, alignment=1)
-
 
 
 def _etikett_verein_stil(verein: str) -> ParagraphStyle:
@@ -1010,7 +1010,7 @@ def erstelle_leere_ergebnisliste_pdf(conn: sqlite3.Connection, pfad: str) -> Non
     if not teilnehmer:
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
 
-    labels = sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel)
+    labels = sortiere_pruefungen({leistungsklasse_label(t) for t in teilnehmer})
     for label in labels:
         gruppe = sorted(
             (t for t in teilnehmer if leistungsklasse_label(t) == label),
@@ -1107,7 +1107,7 @@ _STAT_SPALTE_BREITEN_ED = {
 def _stat_spalte_breite(spalte_key: str) -> float:
     """Liefert die passende Spaltenbreite zu einem _STAT_SPALTEN-Schlüssel (Prüfungs-
     bezeichnung wie „DK LK 1“ oder „Trümmer LK 2“, siehe db.pruefung_bezeichnung)."""
-    pruefung = next((p for p in ALLE_PRUEFUNGEN if p.bezeichnung == spalte_key), None)
+    pruefung = pruefung_nach_bezeichnung(spalte_key)
     if pruefung is None or pruefung.art == "DK":
         return _STAT_SPALTE_BREITE_DK
     if pruefung.disziplin in _STAT_SPALTE_BREITEN_ED:
@@ -1463,7 +1463,7 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     if not teilnehmer:
         story.append(Paragraph("Keine Teilnehmer erfasst.", _TEXT))
     else:
-        labels = sorted({leistungsklasse_label(t) for t in teilnehmer}, key=pruefung_sortierschluessel)
+        labels = sortiere_pruefungen({leistungsklasse_label(t) for t in teilnehmer})
         daten = [["Art / Leistungsklasse", "Teilnehmer", "Einheiten je Teilnehmer", "Einheiten gesamt"]]
         for label in labels:
             gruppe = [t for t in teilnehmer if leistungsklasse_label(t) == label]

@@ -47,11 +47,11 @@ from PySide6.QtWidgets import (
 )
 
 from db import (
-    pruefung_sortierschluessel,
     ALLE_DISZIPLINEN,
     SCHRITTGRENZE_TEXT,
     get_veranstaltung,
     lies_datum,
+    pruefung_sortierschluessel,
     set_veranstaltung,
     zeitplan_ueberschneidungen,
 )

@@ -9647,3 +9647,20 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   „nur ganze Zahlen einfügen“ statt eines Grunds nach der Taste; Docstring, direkter Attributzugriff.
   Bewusst so gelassen: Nach Entf/Rücktaste auf dem markierten Wert gilt „,5“ als Ablehnung (Feld
   ist dann schon „getippt“), direkt auf dem markierten Wert ersetzt die 5 – beides sicher.
+
+### ux_test_2026_11 B24 – Prüfungsbezeichnung und Sortierung zentral (QS B22 W1–W3, W8; 05.11.2026)
+
+- **W1:** `db.sortiere_pruefungen(bezeichnungen)` an allen Stellen, die Prüfungsnamen sortieren
+  (Filter Teilnehmer/Auswertung, `alle_leistungsklassen`, Ergebnisliste, Bewertungsbögen,
+  Richter-Bedarf); der Schlüssel `pruefung_sortierschluessel` bleibt für zusammengesetzte
+  Sortierungen. Die Demo übergibt ihn jetzt auch an `stechen_gruppen`. In `shs_core` ist der
+  Parameter typisiert (`Callable[[str], object] | None`).
+- **W2:** `db.pruefung_nach_bezeichnung` (Dict wie `pruefung_nach_kuerzel`); genutzt vom Filter im
+  Teilnehmer-Reiter und von der Statistik-Spaltenbreite; der Sortierschlüssel nutzt ein Dict statt
+  einer Schleife.
+- **W3:** Rückfall in `db_import._angebot_pruefen` vereinfacht (nur `pruefung_bezeichnung`).
+- **W8:** neue Imports einsortiert, überzählige Leerzeile in `pdf_export.py` entfernt, nicht mehr
+  gebrauchter Import `ALLE_PRUEFUNGEN` in `app.py` und `pdf_export.py` entfernt.
+- **Tests:** `test_pruefungsbezeichnung_wie_im_anmeldeformular` um `sortiere_pruefungen` und
+  `pruefung_nach_bezeichnung` erweitert (Gegenprobe: scheitert ohne die Änderung). 726 Unittests,
+  alle GUI-Tests grün (560).
