@@ -1548,7 +1548,9 @@ Projektseite: https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (dana
 <h3>Reiter "Zeitplan"</h3>
 <p>Plant den Tagesablauf je Richter. Startzeit oben festlegen, dann je Richter eine
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…" (nach der markierten Zeile;
-wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause). Reihenfolge mit
+wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause; mit "genau um diese Uhrzeit
+beginnen" beginnt sie fest zur Uhrzeit, ein erst kurz vorher begonnener Block rückt dahinter und
+davor bleibt eine Lücke – auch bei "Automatisch verteilen…" wählbar). Reihenfolge mit
 "Hoch"/"Runter" anpassen – sie wirken auf den ganzen Block (fette Kopfzeile). "Automatisch verteilen…" erstellt einen ausbalancierten Vorschlag
 (ersetzt den bisherigen Plan aller Richter, mit Rückfrage) – danach frei von Hand
 änderbar. Start-/Endzeiten berechnen sich automatisch. Die Seitenleiste "Offene Starts"

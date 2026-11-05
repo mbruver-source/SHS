@@ -1,6 +1,6 @@
 # Offene, zurückgestellte und akzeptierte Punkte
 
-Stand: 01.11.2026, nach dem Durchgang aller offenen Punkte mit Marco. Die Datei fasst zusammen, was in `Fortschritt.md` über
+Stand: 05.11.2026 (UX-Test 2026-11 eingearbeitet), davor 01.11.2026 nach dem Durchgang aller offenen Punkte mit Marco. Die Datei fasst zusammen, was in `Fortschritt.md` über
 viele Abschnitte verteilt steht. Maßgeblich bleibt `Fortschritt.md`; die Fundstellen (F:Zeile)
 zeigen auf den entscheidenden Absatz. Bevor ein Punkt als neuer Befund gemeldet oder neu
 geplant wird, hier nachsehen.
@@ -101,3 +101,6 @@ abgebildete“ Regeln (R10 Mindestalter, R14, R16, R18) einen Hinweis bekommen.
 | C32 | Website- und Projekt-Kleinigkeiten (Website F2/F4, Review-Historie im Docstring, Chrome-Tipp, Maintainer-Adresse im .deb, Selbsttest legt evtl. leeren Termine-Ordner an) | 30.09.–08.10.2026 | F:2949, F:5172, F:5311, F:5367, F:4457 |
 | C33 | Alte `haken.png` im TEMP-Ordner wird nicht aufgeräumt | 14.10.2026 | Desktop-Pruefung-2026-10/aufgaben.md:7 |
 | C37 | dmgbuild nutzt intern das von Apple als veraltet geführte `hdiutil udifrez`; fällt es weg, schlägt der dmg-Schritt fehl und wird dann ersetzt | 01.11.2026 | F:8076, F:8128 |
+| C38 | UX-Test 2026-11, R-B15: Startnummern-Zurücksetzen nennt das Web nur „falls veröffentlicht“ (die Termin-Datei kennt den Veröffentlicht-Status nicht); Entf löscht am Mac nicht (dort ist „delete“ die Rücktaste) | 05.11.2026 | UX-Test-2026-11/aufgaben-note1.md (R-B15) |
+| C39 | UX-Test 2026-11, R-B26 (feste Pause): Pläne über Mitternacht, Mindestabstands-Wartezeit bleibt vor einer festen Pause stehen, feste Uhrzeit beim Bearbeiten nicht änderbar (entfernen und neu anlegen) | 05.11.2026 | UX-Test-2026-11/aufgaben-note1.md (R-B26) |
+| C40 | UX-Test 2026-11: Demo-Erklärfenster verdeckt auf 1366 px unten rechts einen Teil des breiteren Termin-Dialogs (auf 1920 px nicht); Termin-Dialog bei Schrift „Groß“ ohne angehakte Prüfungen 10 px Bildlauf | 05.11.2026 | Fortschritt.md (B19) |

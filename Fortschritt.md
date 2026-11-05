@@ -9716,3 +9716,24 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   Installation (`docs/index.html`) – geht nach der Website-Regel erst mit dem nächsten Release online.
 - Damit sind alle Rückfragen aus dem UX-Test 2026-11 beantwortet; offen bleibt vor dem nächsten
   Build W10 (Screenshots neu, `HANDBUCH.pdf`, Sichtprüfung Demo auf 1366 px).
+
+
+## Version 1.0.56
+
+- **UX-Test 2026-11** mit Nachtest (B1–B26, Aufgabenliste `UX-Test-2026-11/aufgaben-note1.md`):
+  einheitliche Prüfungsnamen wie im Anmeldeformular samt Formular-Reihenfolge; Auswahl „Prüfung“
+  im Teilnehmer-Dialog; Ergebniserfassung mit Markierung zu hoher Werte beim Tippen, Ablehnung von
+  Komma/Buchstaben (alter Wert bleibt), Status- und Abbruch-Spalte; Zeitplan mit Bestätigung nach
+  dem Verteilen, Mittagspause im Verteilen-Dialog, fester Pausenzeit mit Lücke davor (neue Spalte
+  `zeitplan_eintrag.fest_um`), Richtername beim Anlegen, breiterer Seitenleiste; Teilnehmer mit
+  Entf = Löschen und Tausch-Warnung; Import mit „Letzter Import“ und Rat je Ablehnungsgrund;
+  zweispaltiger Termin-Dialog; Hilfe mit Suche, F1/Knopf beim Reiter und Tastenkürzeln; Demo mit
+  echtem „Schritt zurück“ und Rückfrage bei „Beenden“; Kurzanleitung Installation als PDF.
+- Zwei Abschluss-QS (B11, B22) mit drei Rollen, alle Befunde umgesetzt bzw. von Marco entschieden;
+  Vor-Build-Verifikation ohne Einwände, ihre Kleinigkeiten nach Marcos Entscheidung umgesetzt
+  (feste Pause in Hilfe, Architektur.md, UML.md) bzw. akzeptiert (OFFEN.md C38–C40).
+- Die Version ist erhöht. Alle 15 Desktop-Screenshots sind neu (neue Prüfungsnamen, zweispaltiger
+  Termin-Dialog, jetzt 1080×680), `docs/HANDBUCH.pdf` und `docs/INSTALLATION_KURZ.pdf` neu,
+  `RELEASE_NOTES.md` neu geschrieben, `OFFEN.md` nachgezogen.
+- **Tests lokal:** 734 Unittests (183 übersprungen) und 561 GUI-Tests grün, UML mit mmdc geprüft.
+- Website-Änderungen (Kurzanleitung, GitHub-Bild) gehen mit diesem Release online.

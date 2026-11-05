@@ -284,10 +284,10 @@ def _bild_termin_anlegen(_termine: _Termine, ziel: Path) -> list[Path]:
     dialog.pfad_feld.setCursorPosition(0)
     # Seit Nachtest 2 (N14) zweispaltig - mit den drei vorbelegten Prüfungen passt das ganze
     # Fenster ohne Bildlauf.
-    dialog.resize(1080, 900)
+    dialog.resize(1080, 680)
     dialog.show()
     _warten()
-    pfad = _speichern(dialog, ziel, "handbuch_termin_anlegen", (1080, 900))
+    pfad = _speichern(dialog, ziel, "handbuch_termin_anlegen", (1080, 680))
     dialog.close()
     return [pfad]
 
@@ -467,7 +467,7 @@ BILDER = {
 #: Erwartete Dateien und Größen (auch für den Test).
 BILD_DATEIEN = {
     "handbuch_start": (900, 520),
-    "handbuch_termin_anlegen": (1080, 900),
+    "handbuch_termin_anlegen": (1080, 680),
     "handbuch_teilnehmer": HAUPTFENSTER,
     "handbuch_teilnehmer_dialog_ed": (1000, 760),
     "handbuch_teilnehmer_dialog_dk": (1000, 760),
