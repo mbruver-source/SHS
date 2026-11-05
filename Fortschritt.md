@@ -9598,3 +9598,17 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   `CLAUDE.md` (Datenmodell-Entscheidungen zuerst klären) und der Vorgabe im Auftrag („bei
   Unklarheit zurückstellen und fragen“) zurückgestellt; Rückfrage R-B20 mit drei Möglichkeiten in
   `UX-Test-2026-11/aufgaben-note1.md` (Vorschlag: feste Pause mit Lücke davor, ohne Teilen).
+
+### ux_test_2026_11 B21 – Kurzanleitung: Website-Knopf und GitHub-Bild (Nachtest 2 N3; 05.11.2026)
+
+- `docs/INSTALLATION_KURZ.md` Schritt 1 nennt zuerst die Website (mbruver-source.github.io/SHS)
+  mit dem Knopf „Aktuelle Version herunterladen“, dann die direkte Adresse; Schritt 2 zeigt das
+  neue Bild `docs/bilder/handbuch_github_assets.png` (Kasten „Assets“ der Release-Seite 1.0.55,
+  Setup-Datei rot eingerahmt). Aufgenommen mit Edge headless (`--virtual-time-budget=15000`,
+  sonst lädt die Asset-Liste nicht) und mit PIL ausgeschnitten. Handbuch Kap. 2 („Kurz für
+  Einsteiger“) ebenso. `INSTALLATION_KURZ.pdf` neu erzeugt (5 Seiten, 8 Bilder).
+- Das Bild zeigt die Versionsnummer 1.0.55. Vor einem Build zeigt die Release-Seite immer noch
+  die vorige Version (Verifikation B21) – das ist in Ordnung, der Text sagt „statt … steht dort die
+  Versionsnummer“. Neu aufgenommen wird es nur bei sichtbaren Änderungen an GitHub; der Ablauf
+  steht in der Build-Checkliste (`.claude/skills/shs-build/SKILL.md`) und im Kopf von
+  `tools/screenshots.py`. Offen als R-B21: das Bild auch auf der Website (`index.html`) zeigen? Setup- und Edge-Bilder hat Marco am 04.11. geliefert (siehe B12/N3).

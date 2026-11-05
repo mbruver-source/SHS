@@ -31,7 +31,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B18 | N5 Prüfungsnamen überall einheitlich | L | erledigt | 19c410f | 43 → 62 %, real ≈ 19 % | ersetzt R-B8 |
 | B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | 03e6400 | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
 | B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | zurückgestellt | | 0 → 3 % | R-B20: braucht Datenmodell-Entscheidung |
-| B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | offen | | | Setup-/Edge-Bild von Marco |
+| B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | erledigt | (dieser) | 3 → 8 %, real ≈ 5 % | R-B21 (Bild auch auf der Website?) |
 | B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | offen | | | |
 
 ## Kalibrierung
@@ -165,6 +165,10 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   Zeit). Braucht nur ein Feld „fest um“ für Pausen. Größe M.
   (c) So lassen (die Meldung nennt die tatsächliche Pausenzeit, seit B13).
   Vorschlag: (b) – deckt den gemeldeten Wunsch mit deutlich weniger Risiko ab.
+- **R-B21 (aus B21, optional):** Das neue Bild der Release-Seite (Kasten „Assets“) steht in
+  Kurzanleitung und Handbuch. Soll es auch auf die Website (`docs/index.html`, Abschnitt
+  Installation) und in die `README.md`? Ginge erst mit dem nächsten Release online. Vorschlag: ja,
+  in `index.html` (dort beschreibt der Text denselben Weg ohne Bild).
 
 ## Entscheidungen zum Nachtest 2 (Marco 04.11.2026)
 

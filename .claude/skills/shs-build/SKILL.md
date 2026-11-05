@@ -30,7 +30,11 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
   Danach jedes geänderte Bild ansehen (`git status docs/bilder`). Neue Oberflächen im Skript
   ergänzen statt Ad-hoc-Code zu schreiben. Von Hand bleiben: Web-Bilder,
   `handbuch_anmeldeformular`, `bewertungsbogen`, `handbuch_edge_download_1`/`_2`,
-  `handbuch_smartscreen_1`/`_2`, `handbuch_setup_1` bis `_3`. Geht ein Bild
+  `handbuch_smartscreen_1`/`_2`, `handbuch_setup_1` bis `_3`, `handbuch_github_assets`
+  (Ausschnitt „Assets“ der Release-Seite; zeigt vor dem Build zwangsläufig die vorige
+  Version - das ist in Ordnung, neu nur bei sichtbaren Änderungen an GitHub: Edge headless
+  `--virtual-time-budget=15000` auf …/releases/latest, ausschneiden, Setup-Zeile rot
+  einrahmen). Geht ein Bild
   nicht, Marco fragen, statt ohne zu bauen. Bei Änderungen an `handbuch_zeitplan.png` die
   `og:image`-Angaben der Website prüfen.
 - `Architektur.md`, `README*.md`.

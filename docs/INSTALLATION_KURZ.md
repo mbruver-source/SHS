@@ -7,13 +7,18 @@ Kaputt machen kannst du dabei nichts.
 
 ## Schritt 1: Download-Seite öffnen
 
-Im Browser die Adresse **github.com/mbruver-source/SHS/releases/latest** eingeben.
-Nach unten scrollen bis zum Kasten **„Assets“** (das heißt: Dateien zum Herunterladen).
+Am einfachsten über die Website des Programms, **mbruver-source.github.io/SHS**: Dort oben auf
+den Knopf **„Aktuelle Version herunterladen“** klicken. Oder im Browser direkt die Adresse
+**github.com/mbruver-source/SHS/releases/latest** eingeben.
+Auf der Seite nach unten scrollen bis zum Kasten **„Assets“** (das heißt: Dateien zum
+Herunterladen).
 
 ## Schritt 2: Die richtige Datei anklicken
 
 Die Datei **SHS-Pruefungsprogramm-Setup-…exe** anklicken (statt „…“ steht dort die
 Versionsnummer). Alle anderen Dateien (für Mac, Linux, „Source code“) brauchst du nicht.
+
+![GitHub: Kasten „Assets“, die Setup-Datei ist rot eingerahmt](bilder/handbuch_github_assets.png)
 
 ## Schritt 3: Der Browser warnt – Datei behalten
 
