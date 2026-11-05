@@ -9705,3 +9705,14 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   „(fest um …)“ nur bei lesbarem Wert), Vorschlag beim Neu-Verteilen nimmt die feste Uhrzeit,
   Handbuch nennt Bearbeiten/Verschieben, Test für unlesbare Werte. Zurückgestellt als R-B26:
   Mitternacht, Mindestabstands-Wartezeit vor einer festen Pause, feste Uhrzeit beim Bearbeiten.
+
+### ux_test_2026_11 – Rückfragen R-B15, R-B16, R-B21, R-B26 entschieden (05.11.2026)
+
+- Marco: wie vorgeschlagen. R-B15 (Web-Satz „nur falls veröffentlicht“, Entf am Mac) und R-B26
+  (Mitternacht, Wartezeit vor fester Pause, feste Uhrzeit beim Bearbeiten) bleiben so.
+- R-B16: Die ED-Rückfrage „Mehrere Gegenstände bei ED?“ sagt jetzt „einen weiteren bitte mit dem
+  Teilnehmer klären“ (kein neues Feld).
+- R-B21: Das GitHub-Bild (`handbuch_github_assets.png`) steht auch auf der Website im Abschnitt
+  Installation (`docs/index.html`) – geht nach der Website-Regel erst mit dem nächsten Release online.
+- Damit sind alle Rückfragen aus dem UX-Test 2026-11 beantwortet; offen bleibt vor dem nächsten
+  Build W10 (Screenshots neu, `HANDBUCH.pdf`, Sichtprüfung Demo auf 1366 px).

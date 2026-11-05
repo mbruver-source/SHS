@@ -771,7 +771,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             if not _ja_nein(
                 self, "Mehrere Gegenstände bei ED?",
                 f"„{gegenstand}“ sieht nach mehreren Gegenständen aus. Bei einer Einzeldisziplin "
-                "(ED) gibt es nur einen Gegenstand.\n\nTrotzdem so speichern?",
+                # R-B16 (Marco 05.11.2026): sagen, was mit dem zweiten Gegenstand geschieht.
+                "(ED) gibt es nur einen Gegenstand – einen weiteren bitte mit dem Teilnehmer "
+                "klären.\n\nTrotzdem so speichern?",
             ):
                 self.gegenstand_1.setFocus()
                 return

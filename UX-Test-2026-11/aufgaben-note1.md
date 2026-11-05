@@ -177,6 +177,9 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   feste Pause, bleibt eine Mindestabstands-Wartezeit davor stehen (Überschneidungsprüfung zeigt
   Probleme). (c) Feste Uhrzeit beim Bearbeiten nicht änderbar (Handbuch nennt den Weg).
   Vorschlag: alles so lassen.
+- **Marco 05.11.2026 zu R-B15, R-B16, R-B21, R-B26: wie vorgeschlagen.** R-B15 (a)+(b) und R-B26 so
+  gelassen; R-B16 (b): ED-Rückfrage sagt „einen weiteren bitte mit dem Teilnehmer klären“; R-B21:
+  GitHub-Bild auch auf der Website (`docs/index.html`, geht erst mit dem nächsten Release online).
 - **R-B21 (aus B21, optional):** Das neue Bild der Release-Seite (Kasten „Assets“) steht in
   Kurzanleitung und Handbuch. Soll es auch auf die Website (`docs/index.html`, Abschnitt
   Installation) und in die `README.md`? Ginge erst mit dem nächsten Release online. Vorschlag: ja,
