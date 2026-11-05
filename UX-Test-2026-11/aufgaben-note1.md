@@ -29,8 +29,8 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B16 | N6 + N11 + N12 Hilfe (Knopf, Suche, Texte), Gegenstand-Texte, Rat bei Ablehnung | M | erledigt | f5fae0d | 14 → 30 %, real ≈ 16 % | R-B16 (ED-Satz „Anmerkungen“) |
 | B17 | N9 + N10 Demo-Texte/Beenden, Zählung nach Prüfungen und Teilnehmern | S | erledigt | 506c064 | 30 → 43 %, real ≈ 13 % | |
 | B18 | N5 Prüfungsnamen überall einheitlich | L | erledigt | 19c410f | 43 → 62 %, real ≈ 19 % | ersetzt R-B8 |
-| B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | (dieser) | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
-| B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | offen | | | |
+| B19 | N14 Termin-Dialog ohne Bildlauf, Seitenleiste „Offene Starts“ breiter | M | erledigt | 03e6400 | 62 → 81 %, real ≈ 19 % | Demo-Erklärfenster auf 1366 ansehen |
+| B20 | N16 Pause zu fester Uhrzeit (Block wird geteilt) | L | zurückgestellt | | 0 → 3 % | R-B20: braucht Datenmodell-Entscheidung |
 | B21 | N3 Kurzanleitung: Website-Knopf, GitHub-Bild | S | offen | | | Setup-/Edge-Bild von Marco |
 | B22 | Abschluss 2: QS 3 Rollen über B14–B21, Doku, Tests | L | offen | | | |
 
@@ -151,6 +151,20 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   unverändert. Möglichkeiten: (a) so lassen, (b) Rat „mit dem Teilnehmer klären“ ohne Ort,
   (c) doch ein freies Notizfeld „Bemerkung“ (neues Datenbankfeld, auch in Export und Web).
   Vorschlag: (b).
+- **R-B20 (B20, N16 zurückgestellt):** Ein Prüfungsblock umfasst heute immer **alle** Teams einer
+  Prüfung (live nach Art/LK/Disziplin, nur mit Startversatz) – einen laufenden Block um 12:00 zu
+  teilen, geht ohne Änderung am Datenmodell nicht. Möglichkeiten:
+  (a) **Teilen wie entschieden:** neues Feld „Anzahl Teams“ je Block (Teil 1 die ersten k Teams,
+  Teil 2 der Rest; neue Teilnehmer landen im Rest). Braucht Migration (SQLite und PostgreSQL),
+  Anpassungen bei Berechnung, Anzeige, „Hoch/Runter/Entfernen“ (wirken heute auf den ganzen
+  Block), „Offene Starts“ und beim Verteilen. Größe eher L+ (≈ 40 %).
+  (b) **Feste Pause ohne Teilen** (Sabines eigentlicher Wunsch „12:00 mit Lücke davor“): Eine
+  Pause kann eine feste Uhrzeit haben; ist der Richter früher fertig, entsteht davor eine Lücke
+  („frei bis 12:00“); läuft um 12:00 noch ein Block, beginnt die Pause nach dem Team, das
+  gerade dran ist – geht nicht, ohne zu teilen, also nach dem Block (wie heute, Meldung nennt die
+  Zeit). Braucht nur ein Feld „fest um“ für Pausen. Größe M.
+  (c) So lassen (die Meldung nennt die tatsächliche Pausenzeit, seit B13).
+  Vorschlag: (b) – deckt den gemeldeten Wunsch mit deutlich weniger Risiko ab.
 
 ## Entscheidungen zum Nachtest 2 (Marco 04.11.2026)
 

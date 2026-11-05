@@ -9588,3 +9588,13 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   und Screenshot-Werkzeug bereinigt. Zur Kenntnis: In der Demo verdeckt das Erklärfenster auf
   1366 px unten rechts einen Teil des breiteren Termin-Dialogs (auf 1920 nicht) – bei der
   Sichtprüfung vor dem Build ansehen.
+
+### ux_test_2026_11 B20 – Pause zu fester Uhrzeit: zurückgestellt (Nachtest 2 N16; 05.11.2026)
+
+- Nicht umgesetzt: Ein Prüfungsblock umfasst im Datenmodell immer alle Teams einer Prüfung
+  (`_teilnehmer_fuer_pruefungseintrag` filtert live nach Art/LK/Disziplin, nur mit Startversatz).
+  Einen laufenden Block zur Pausenzeit zu teilen, braucht ein neues Feld je Block samt Migration
+  (SQLite, PostgreSQL) und neue Regeln für Verschieben/Entfernen und „Offene Starts“. Nach
+  `CLAUDE.md` (Datenmodell-Entscheidungen zuerst klären) und der Vorgabe im Auftrag („bei
+  Unklarheit zurückstellen und fragen“) zurückgestellt; Rückfrage R-B20 mit drei Möglichkeiten in
+  `UX-Test-2026-11/aufgaben-note1.md` (Vorschlag: feste Pause mit Lücke davor, ohne Teilen).
