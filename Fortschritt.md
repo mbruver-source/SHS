@@ -9791,3 +9791,14 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
 - Die Version ist erhöht, alle 15 Desktop-Screenshots neu, `docs/HANDBUCH.pdf` und
   `docs/INSTALLATION_KURZ.pdf` neu, `RELEASE_NOTES.md` neu geschrieben.
 - **Tests lokal:** 734 Unittests (183 übersprungen) und 564 GUI-Tests grün.
+
+
+## 05.11.2026: 1.0.57 ausgeliefert, Quellcode-Spiegel auf 1.0.57
+
+- Marco hat `main` gepusht und `v1.0.57` getaggt (Tag auf c5a1db9); alle Workflows grün.
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen (alle Dateien aus Git
+  außer `.claude/`, die Workflows zusätzlich im Wurzelordner, im Spiegel nichts gelöscht): 4 Dateien
+  neu (`testdaten/altversionen/v1.0.57/`), 24 geändert; der Byte-Abgleich danach ist identisch
+  (334 Dateien).
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort `Fortschritt.md`
+  neu hoch (`Architektur.md` und `Grobkonzept.md` sind seit 1.0.56 unverändert).
