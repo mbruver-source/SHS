@@ -644,6 +644,14 @@ Der Zeitplan hat eine Spalte je Richter.
    Uhrzeit, ein gerade laufender Block wird nicht geteilt. Ist ein Richter vor dieser Uhrzeit
    schon fertig, bekommt er keine Pause; das Programm nennt dann für jeden Richter die
    tatsächliche Zeit bzw. „keine Pause“.
+   **Feste Pause:** Mit dem Haken **„genau um diese Uhrzeit beginnen“** (im Pause-Dialog und bei
+   „Automatisch verteilen…“) beginnt die Pause genau zur Uhrzeit, z. B. um 12:00. Ein Block, der
+   erst kurz vorher (weniger als 15 Minuten) begonnen hätte, rückt dafür als Ganzes hinter die
+   Pause – davor bleibt eine Lücke. Ein Block, der schon länger läuft, wird nicht geteilt; die
+   Pause folgt dann direkt danach. In der Liste steht bei der Pause „(fest um 12:00 Uhr)“. Die
+   feste Uhrzeit bleibt beim Bearbeiten und Verschieben erhalten – schiebt man die Pause weiter nach
+   vorn, entsteht davor entsprechend eine größere Lücke. Soll sie wieder normal anschließen, die
+   Pause entfernen und neu anlegen.
 5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter; Richter ohne Einträge fehlen darin.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block

@@ -2576,6 +2576,58 @@ class TestZeitplan(unittest.TestCase):
         # Genau zum Planende (09:10) ist der Richter auch schon fertig.
         self.assertEqual(add_zeitplan_pause_bei_allen(self.conn, "09:10", 5)[1], ("Richter 2", None))
 
+    def test_feste_pause_ruckt_kurz_vorher_begonnenen_block_dahinter(self):
+        """R-B20 (Marco 05.11.2026): Pause „genau“ um 09:35 - der ED-Block hätte erst um 09:30
+        begonnen (weniger als 15 Minuten vorher) und rückt hinter die Pause, davor bleibt eine
+        Lücke. Wer vorher fertig ist, bekommt weiterhin keine Pause."""
+        from db import berechne_zeitplan
+
+        self._dk_teams(1, 3)
+        self._teilnehmer("ED", 1, "Trümmerfeld", startnummer=10, nachname="E1")
+        r1, r2 = add_zeitplan_richter(self.conn), add_zeitplan_richter(self.conn)
+        add_zeitplan_pruefungsblock(self.conn, r1, "DK", 1, "Trümmerfeld", 10)    # 09:00-09:30
+        add_zeitplan_pruefungsblock(self.conn, r1, "ED", 1, "Trümmerfeld", 10)    # 09:30-09:40
+        add_zeitplan_pruefungsblock(self.conn, r2, "ED", 1, "Trümmerfeld", 10)    # 09:00-09:10
+        self.assertEqual(
+            add_zeitplan_pause_bei_allen(self.conn, "09:35", 30, "Mittag", fest=True),
+            [("Richter 1", "09:35"), ("Richter 2", None)],
+        )
+        eintraege = list_zeitplan_eintraege(self.conn, r1)
+        self.assertEqual([e["bezeichnung"] or e["art"] for e in eintraege], ["DK", "Mittag", "ED"])
+        self.assertEqual(eintraege[1]["fest_um"], "09:35")
+        zeilen = next(p["zeilen"] for p in berechne_zeitplan(self.conn) if p["richter_id"] == r1)
+        zeiten = [(z["typ"], z["start"].strftime("%H:%M"), z["ende"].strftime("%H:%M")) for z in zeilen]
+        self.assertEqual(zeiten[3:], [("pause", "09:35", "10:05"), ("pruefung", "10:05", "10:15")])
+
+    def test_feste_pausenzeit_nur_wenn_lesbar(self):
+        # R-B20 (Verifikation B26): fremde Werte aus einer Datei zählen nicht.
+        import datetime
+
+        from db import _pausen_beginn, feste_pausenzeit
+
+        neun = datetime.datetime(1900, 1, 1, 9, 0)
+        for wert in ("abc", "25:00", "12:00:00", None, ""):
+            with self.subTest(wert=wert):
+                self.assertIsNone(feste_pausenzeit({"fest_um": wert}))
+                self.assertEqual(_pausen_beginn(neun, {"fest_um": wert}), neun)
+        self.assertEqual(feste_pausenzeit({"fest_um": "9:30"}), "09:30")
+        self.assertEqual(_pausen_beginn(neun, {"fest_um": "9:30"}).strftime("%H:%M"), "09:30")
+
+    def test_feste_pause_teilt_keinen_laenger_laufenden_block(self):
+        """R-B20: Läuft der Block um die Pausenzeit schon 15 Minuten oder länger, folgt die
+        Pause direkt nach ihm; ohne „genau“ bleibt alles wie bisher."""
+        self._dk_teams(1, 3)
+        r1 = add_zeitplan_richter(self.conn)
+        add_zeitplan_pruefungsblock(self.conn, r1, "DK", 1, "Trümmerfeld", 10)    # 09:00-09:30
+        add_zeitplan_pruefungsblock(self.conn, r1, "DK", 1, "Flächensuche", 10)   # 09:30-10:00
+        self.assertEqual(add_zeitplan_pause_bei_allen(self.conn, "09:20", 15, "Mittag", fest=True),
+                         [("Richter 1", "09:30")])
+        self.assertEqual([e["bezeichnung"] or e["disziplin"] for e in list_zeitplan_eintraege(self.conn, r1)],
+                         ["Trümmerfeld", "Mittag", "Flächensuche"])
+        # Ohne „genau“: auch ein kurz vorher begonnener Block läuft zu Ende (bisheriges Verhalten).
+        self.assertEqual(add_zeitplan_pause_bei_allen(self.conn, "09:50", 5, "Kaffee"), [("Richter 1", "10:15")])
+        self.assertIsNone(list_zeitplan_eintraege(self.conn, r1)[-1]["fest_um"])
+
     def test_zeitplan_eintrag_liest_einen_eintrag(self):
         """OFFEN.md B4 (19.10.2026): Einzelabfrage statt ganzem Blockplan."""
         richter_id = add_zeitplan_richter(self.conn, "R1")

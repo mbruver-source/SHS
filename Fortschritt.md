@@ -9680,3 +9680,28 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
 - **Tests:** neu `test_nummern_ausserhalb_nach_tausch` (Gegenprobe: scheitert ohne die Änderung).
   728 Unittests, alle GUI-Tests grün (560); nach der Verifikation die Seitenleisten- und Demo-Tests
   wieder um die eigentliche Anforderung ergänzt (Mindestbreite ≥ Textbreite, „Feld „Prüfung““).
+
+### ux_test_2026_11 B26 – Feste Pause mit Lücke davor (R-B20, Nachtest 2 N16; 05.11.2026)
+
+- **Entscheidung Marco 05.11.2026:** Option (b) aus R-B20 statt Teilen; auf Rückfrage zum um die
+  Pausenzeit laufenden Block „je nach Restzeit“: Hätte er weniger als 15 Minuten vorher begonnen,
+  rückt er als Ganzes hinter die Pause (Lücke davor), sonst folgt die Pause nach ihm. (Ohne diese
+  Regel hätte „genau“ nie etwas bewirkt – die Blöcke folgen lückenlos aufeinander.)
+- **Daten:** neue Spalte `zeitplan_eintrag.fest_um` („HH:MM“, nur Pausen; Migration über
+  `_ZEITPLAN_EINTRAG_NEUE_SPALTEN`, gilt für SQLite und PostgreSQL). Die Berechnung
+  (`_zeitplan_zeilen`, `berechne_zeitplan_bloecke`) lässt eine Pause mit fester Uhrzeit frühestens
+  dann beginnen (`_pausen_beginn`); eine unlesbare Angabe aus einer fremden Datei zählt nicht.
+- **Einfügen:** `add_zeitplan_pause_bei_allen(…, fest=True)` setzt `fest_um` und schiebt die Pause
+  vor einen Prüfungsblock, der zur Pausenzeit erst weniger als `FESTE_PAUSE_SCHWELLE_MINUTEN` (15)
+  laufen würde. Wer vorher fertig ist, bekommt wie bisher keine Pause.
+- **Oberfläche:** Haken „genau um diese Uhrzeit beginnen“ im Pause-Dialog (nur mit „Bei allen
+  Richtern“) und im Verteilen-Dialog (beim Neu-Verteilen vorbelegt, wenn die Mittagspause eine
+  feste Uhrzeit hat); die Liste zeigt „(fest um … Uhr)“. Handbuch Kap. 6 ergänzt.
+- **Tests:** neu `test_feste_pause_ruckt_kurz_vorher_begonnenen_block_dahinter`,
+  `test_feste_pause_teilt_keinen_laenger_laufenden_block`, `test_feste_pause_ueber_dialog_und_beim_verteilen`;
+  Pause-Dialog-Test und Attrappen um „genau“ erweitert.
+  Gegenprobe: ohne die Änderung scheitern die neuen Tests. 732 Unittests, alle GUI-Tests grün (561).
+- **Verifikation:** keine Fehler. Nachgezogen: `db.feste_pausenzeit` prüft den Wert einmal (Anzeige
+  „(fest um …)“ nur bei lesbarem Wert), Vorschlag beim Neu-Verteilen nimmt die feste Uhrzeit,
+  Handbuch nennt Bearbeiten/Verschieben, Test für unlesbare Werte. Zurückgestellt als R-B26:
+  Mitternacht, Mindestabstands-Wartezeit vor einer festen Pause, feste Uhrzeit beim Bearbeiten.

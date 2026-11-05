@@ -215,6 +215,9 @@ CREATE TABLE IF NOT EXISTS zeitplan_eintrag (
     -- Block beginnt (Rotation), damit parallele DK-Blöcke nicht dasselbe Team gleichzeitig
     -- ansetzen. 0 = Reihenfolge nach Startnummer.
     startversatz INTEGER NOT NULL DEFAULT 0,
+    -- R-B20 (Marco 05.11.2026): feste Uhrzeit einer Pause („HH:MM“) - ist der Richter vorher
+    -- fertig, beginnt sie trotzdem erst dann (Lücke davor). NULL = direkt im Anschluss.
+    fest_um TEXT,
     -- Prüfungsblöcke brauchen Art/Leistungsklasse/Disziplin, Pausen dürfen sie nicht
     -- haben (Pausen haben stattdessen optional eine freie Bezeichnung).
     CHECK (
@@ -575,6 +578,8 @@ def _migriere_ergebnisse_spalten(conn) -> None:
 _ZEITPLAN_EINTRAG_NEUE_SPALTEN = [
     # UX-Test 02.10.2026, U2: Rotation innerhalb eines Prüfungsblocks.
     ("startversatz", "INTEGER NOT NULL DEFAULT 0"),
+    # R-B20 (05.11.2026): feste Uhrzeit einer Pause.
+    "fest_um",
 ]
 
 
@@ -1984,25 +1989,32 @@ def add_zeitplan_pause(
     return pause_id
 
 
-def _pause_an_position_einfuegen(conn, richter_id: int, position: int, dauer_minuten: int, bezeichnung: str | None) -> int:
+def _pause_an_position_einfuegen(conn, richter_id: int, position: int, dauer_minuten: int, bezeichnung: str | None,
+                                 fest_um: str | None = None) -> int:
     """Schiebt die Einträge ab `position` um eins nach hinten und fügt dort eine Pause ein
-    (ohne commit - siehe Aufrufer)."""
+    (ohne commit - siehe Aufrufer). `fest_um` siehe _pausen_beginn."""
     for eintrag in list_zeitplan_eintraege(conn, richter_id)[position:][::-1]:
         conn.execute(
             "UPDATE zeitplan_eintrag SET reihenfolge = ? WHERE id = ?", (eintrag["reihenfolge"] + 1, eintrag["id"])
         )
     cur = conn.execute(
         """
-        INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, dauer_minuten, bezeichnung)
-        VALUES (?, ?, 'pause', ?, ?)
+        INSERT INTO zeitplan_eintrag (richter_id, reihenfolge, typ, dauer_minuten, bezeichnung, fest_um)
+        VALUES (?, ?, 'pause', ?, ?, ?)
         """,
-        (richter_id, position, dauer_minuten, bezeichnung),
+        (richter_id, position, dauer_minuten, bezeichnung, fest_um),
     )
     return cur.lastrowid
 
 
+#: R-B20 (Marco 05.11.2026): Ein Block, der weniger als so viele Minuten vor einer festen Pause
+#: begonnen hätte, rückt hinter die Pause (Lücke davor); ein länger laufender wird nicht geteilt.
+FESTE_PAUSE_SCHWELLE_MINUTEN = 15
+
+
 def add_zeitplan_pause_bei_allen(
     conn: sqlite3.Connection, uhrzeit: str, dauer_minuten: int, bezeichnung: str | None = None,
+    fest: bool = False,
 ) -> list[tuple[str | None, str | None]]:
     """UX-Test 02.10.2026, U9 (Marco öffnet damit bewusst die Entscheidung vom 14.09.):
     gleiche Pause bei allen Richtern. Je Spur wird sie vor dem ersten Eintrag eingefügt,
@@ -2013,7 +2025,12 @@ def add_zeitplan_pause_bei_allen(
     beginnt die Pause später (laufender Block), soll die Meldung das ehrlich sagen.
     UX-Test 03.11.2026, X1 (Marcos Entscheidung, ersetzt N3 „Pause ans Ende“): Ist ein Richter
     vor der Wunschzeit schon fertig (oder hat keinen Plan), bekommt er KEINE Pause - sie stand
-    sonst als sinnlose letzte Zeile im Aushang. Für ihn steht (Name, None) in der Liste."""
+    sonst als sinnlose letzte Zeile im Aushang. Für ihn steht (Name, None) in der Liste.
+
+    R-B20 (Marco 05.11.2026): Mit `fest` beginnt die Pause genau um `uhrzeit` (fest_um). Ein
+    Prüfungsblock, der zu dieser Zeit erst weniger als FESTE_PAUSE_SCHWELLE_MINUTEN läuft, rückt
+    als Ganzes hinter die Pause - davor bleibt eine Lücke. Ein länger laufender Block wird nicht
+    geteilt; die Pause folgt dann direkt nach ihm."""
     zeitpunkt = datetime.datetime.strptime(uhrzeit.strip(), "%H:%M")
     try:
         eingefuegt = []  # (Name, Eintrags-ID oder None = weggelassen)
@@ -2025,8 +2042,15 @@ def add_zeitplan_pause_bei_allen(
             if position == len(bloecke) and (not bloecke or bloecke[-1]["ende"].time() <= zeitpunkt.time()):
                 eingefuegt.append((spur["richter_name"], None))
                 continue
+            if fest and position > 0:
+                laufend = bloecke[position - 1]
+                begonnen = laufend["start"].replace(year=1900, month=1, day=1)
+                if (laufend["typ"] == "pruefung" and laufend["ende"].time() > zeitpunkt.time()
+                        and zeitpunkt - begonnen < datetime.timedelta(minutes=FESTE_PAUSE_SCHWELLE_MINUTEN)):
+                    position -= 1  # kurz vorher begonnen: der Block rückt hinter die Pause
             eingefuegt.append((spur["richter_name"], _pause_an_position_einfuegen(
-                conn, spur["richter_id"], position, dauer_minuten, bezeichnung)))
+                conn, spur["richter_id"], position, dauer_minuten, bezeichnung,
+                zeitpunkt.strftime("%H:%M") if fest else None)))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -2197,6 +2221,25 @@ def berechne_zeitplan(conn: sqlite3.Connection) -> list[dict]:
     ]
 
 
+def feste_pausenzeit(eintrag: dict) -> str | None:
+    """Die lesbare feste Uhrzeit einer Pause („HH:MM“, R-B20) oder None."""
+    try:
+        return datetime.datetime.strptime(str(eintrag.get("fest_um") or "").strip(), "%H:%M").strftime("%H:%M")
+    except ValueError:
+        return None
+
+
+def _pausen_beginn(aktuelle_zeit: datetime.datetime, eintrag: dict) -> datetime.datetime:
+    """Beginn einer Pause: direkt im Anschluss oder - mit fester Uhrzeit (`fest_um`, R-B20) -
+    frühestens dann; davor bleibt eine Lücke. Eine unlesbare Angabe (fremde Datei) zählt
+    nicht."""
+    fest = feste_pausenzeit(eintrag)
+    if fest is None:
+        return aktuelle_zeit
+    uhrzeit = datetime.datetime.strptime(fest, "%H:%M")
+    return max(aktuelle_zeit, aktuelle_zeit.replace(hour=uhrzeit.hour, minute=uhrzeit.minute, second=0))
+
+
 def _zeitplan_zeilen(eintraege: list[dict], alle_teilnehmer: list[dict], uhrzeit_start) -> list[dict]:
     """Zeilen (je Teilnehmer bzw. Pause) einer Richter-Spur mit Start-/Endzeit - siehe
     berechne_zeitplan. Auch für die automatische Verteilung (Plan im Speicher)."""
@@ -2204,11 +2247,12 @@ def _zeitplan_zeilen(eintraege: list[dict], alle_teilnehmer: list[dict], uhrzeit
     zeilen = []
     for eintrag in eintraege:
         if eintrag["typ"] == "pause":
-            start, ende = aktuelle_zeit, aktuelle_zeit + datetime.timedelta(minutes=eintrag["dauer_minuten"])
+            start = _pausen_beginn(aktuelle_zeit, eintrag)
+            ende = start + datetime.timedelta(minutes=eintrag["dauer_minuten"])
             zeilen.append({
                 "typ": "pause", "start": start, "ende": ende,
                 "bezeichnung": eintrag["bezeichnung"] or "Pause",
-                "eintrag_id": eintrag["id"],
+                "eintrag_id": eintrag["id"], "fest_um": eintrag.get("fest_um"),
             })
             aktuelle_zeit = ende
         else:
@@ -2298,8 +2342,8 @@ def berechne_zeitplan_bloecke(conn: sqlite3.Connection) -> list[dict]:
                 anzahl = len(_teilnehmer_fuer_pruefungseintrag(alle_teilnehmer, eintrag))
                 dauer_gesamt = eintrag["dauer_minuten"] * anzahl
                 eintrag["teilnehmer_anzahl"] = anzahl
-            eintrag["start"] = aktuelle_zeit
-            eintrag["ende"] = aktuelle_zeit + datetime.timedelta(minutes=dauer_gesamt)
+            eintrag["start"] = _pausen_beginn(aktuelle_zeit, eintrag) if eintrag["typ"] == "pause" else aktuelle_zeit
+            eintrag["ende"] = eintrag["start"] + datetime.timedelta(minutes=dauer_gesamt)
             aktuelle_zeit = eintrag["ende"]
             bloecke.append(eintrag)
         ergebnis.append({"richter_id": richter["id"], "richter_name": richter["name"], "bloecke": bloecke})

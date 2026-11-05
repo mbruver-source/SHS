@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from db import (
     add_zeitplan_pause,
+    feste_pausenzeit,
     add_zeitplan_pause_bei_allen,
     add_zeitplan_pruefungsblock,
     add_zeitplan_richter,
@@ -540,6 +541,8 @@ class ZeitplanTab(QWidget):
         zeit = f"{zeile['start'].strftime('%H:%M')}–{zeile['ende'].strftime('%H:%M')}"
         if zeile["typ"] == "pause":
             text = f"{zeit}  Pause: {zeile['bezeichnung']}"
+            if feste_pausenzeit(zeile):
+                text += f" (fest um {feste_pausenzeit(zeile)} Uhr)"  # R-B20
         else:
             # Block-Angaben stehen in der Kopfzeile darüber (siehe _richter_spalte, U9).
             t = zeile["teilnehmer"]
@@ -698,7 +701,8 @@ class ZeitplanTab(QWidget):
         # UX-Test 02.10.2026, U9: nur warnen, wenn es schon einen Plan gibt, der verloren ginge.
         # UX-Test 2026-11, T1: im Dialog mit der optionalen Mittagspause statt einer Rückfrage.
         ersetzt_plan = any(list_zeitplan_eintraege(self.conn, r["id"]) for r in richter)
-        dialog = VerteilenDialog(self, ersetzt_plan=ersetzt_plan, pause=self._mittagspause_vorschlag())
+        dialog = VerteilenDialog(self, ersetzt_plan=ersetzt_plan, pause=self._mittagspause_vorschlag(),
+                                 pause_fest=self._mittagspause_fest())
         if _ausfuehren(dialog) != QDialog.Accepted:
             return
         if not self.verteilen_ohne_rueckfrage():
@@ -707,7 +711,8 @@ class ZeitplanTab(QWidget):
         pause_text = ""
         if pause is not None:
             try:
-                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, pause[0], pause[1], MITTAGSPAUSE)
+                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, pause[0], pause[1], MITTAGSPAUSE,
+                                                          fest=dialog.pause_fest())
             except sqlite3.Error as exc:
                 _db_fehler_anzeigen(self, exc)
                 self.aktualisieren()
@@ -731,11 +736,20 @@ class ZeitplanTab(QWidget):
         uhrzeit = self._letzte_mittagspause[0] if self._letzte_mittagspause is not None else im_plan[0]
         return uhrzeit, im_plan[1]
 
+    def _mittagspause_fest(self) -> bool:
+        """R-B20: Hat die Mittagspause im jetzigen Plan eine feste Uhrzeit? Dann ist „genau“
+        beim Neu-Verteilen wieder angehakt."""
+        return any(
+            block["typ"] == "pause" and (block.get("bezeichnung") or "") == MITTAGSPAUSE and feste_pausenzeit(block)
+            for spur in berechne_zeitplan_bloecke(self.conn) for block in spur["bloecke"]
+        )
+
     def _mittagspause_im_plan(self) -> tuple[str, int] | None:
         for spur in berechne_zeitplan_bloecke(self.conn):
             for block in spur["bloecke"]:
                 if block["typ"] == "pause" and (block.get("bezeichnung") or "") == MITTAGSPAUSE:
-                    return block["start"].strftime("%H:%M"), block["dauer_minuten"]
+                    # R-B20: bei fester Uhrzeit diese, nicht die (evtl. spätere) tatsächliche.
+                    return feste_pausenzeit(block) or block["start"].strftime("%H:%M"), block["dauer_minuten"]
         return None
 
     def _verteilung_bestaetigen(self, pause_text: str = "") -> None:
@@ -795,7 +809,8 @@ class ZeitplanTab(QWidget):
             if dialog.fuer_alle.isChecked():
                 # Teil 4 Nr. 6: „9:20“ wie „09:20“ (die Prüfung im Dialog lässt beides zu).
                 wunsch = datetime.datetime.strptime(dialog.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
-                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte())
+                eingefuegt = add_zeitplan_pause_bei_allen(self.conn, wunsch, **dialog.werte(),
+                                                          fest=dialog.genau.isChecked())
                 anzahl, hinweis = _pause_bei_allen_hinweis(eingefuegt, wunsch)
                 if hinweis:
                     QMessageBox.information(

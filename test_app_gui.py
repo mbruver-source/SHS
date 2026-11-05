@@ -260,9 +260,10 @@ def meldungen_stumm(monkeypatch, *arten):
         monkeypatch.setattr(f"app.QMessageBox.{art}", lambda *_a, **_k: None)
 
 
-def _pause_dialog_attrappe(dauer_minuten, bezeichnung, uhrzeit=None):
+def _pause_dialog_attrappe(dauer_minuten, bezeichnung, uhrzeit=None, genau=False):
     """Ersetzt PauseDialog: sofort „OK“ mit den gegebenen Werten. Mit `uhrzeit` gilt die
-    Pause für alle Richter ab dieser Uhrzeit (wie das Häkchen im echten Dialog)."""
+    Pause für alle Richter ab dieser Uhrzeit (wie das Häkchen im echten Dialog), mit `genau`
+    beginnt sie genau dann (R-B20)."""
 
     class _Feld:
         def __init__(self, wert):
@@ -278,6 +279,7 @@ def _pause_dialog_attrappe(dauer_minuten, bezeichnung, uhrzeit=None):
         def __init__(self, *_a, **_k):
             self.fuer_alle = _Feld(uhrzeit)
             self.uhrzeit = _Feld(uhrzeit)
+            self.genau = _Feld(genau)
 
         def exec(self):
             return QDialog.Accepted
@@ -945,6 +947,55 @@ def test_zeitplan_eintrag_bearbeiten_ohne_blockplan(qtbot, conn, monkeypatch):
     assert zeitplan_eintrag(conn, block_id)["dauer_minuten"] == 9
 
 
+def test_feste_pause_ueber_dialog_und_beim_verteilen(qtbot, termin, monkeypatch):
+    """R-B20 (Marco 05.11.2026): „genau“ im Pause-Dialog und im Verteilen-Dialog legt die
+    Pause mit fester Uhrzeit an; die Liste nennt sie, und beim Neu-Verteilen ist „genau“
+    wieder angehakt."""
+    from db import list_zeitplan_eintraege, list_zeitplan_richter
+    from desktop_dialoge import VerteilenDialog
+
+    conn, pfad = termin
+    for nr in range(1, 4):
+        _teilnehmer_anlegen(conn, nachname=f"T{nr}", startnummer=nr)
+    richter_id = add_zeitplan_richter(conn)
+    add_zeitplan_pruefungsblock(conn, richter_id, art="ED", stufe=1, disziplin="Flächensuche", dauer_minuten=10)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.zeitplan_tab
+    meldungen_sammeln(monkeypatch, "information")
+
+    # Pause-Dialog: Block 09:00-09:30; „genau“ um 09:25 - der Block lief schon 25 Minuten,
+    # die Pause folgt danach, aber mit fester Uhrzeit gespeichert.
+    monkeypatch.setattr("desktop_zeitplan.PauseDialog", _pause_dialog_attrappe(10, "Kaffee", uhrzeit="09:25", genau=True))
+    tab._pause_hinzufuegen(richter_id)
+    pause = list_zeitplan_eintraege(conn, richter_id)[-1]
+    assert (pause["bezeichnung"], pause["fest_um"]) == ("Kaffee", "09:25")
+    from PySide6.QtWidgets import QListWidget
+
+    texte = [liste.item(i).text() for liste in tab.findChildren(QListWidget) for i in range(liste.count())]
+    assert any("(fest um 09:25 Uhr)" in t for t in texte)
+
+    # Verteilen mit „genau“: die Mittagspause bekommt die feste Uhrzeit ...
+    gezeigt = []
+
+    def _exec(dialog):
+        gezeigt.append(dialog)
+        dialog.mit_pause.setChecked(True)
+        dialog.uhrzeit.setText("09:05")
+        dialog.pause_genau.setChecked(True)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(VerteilenDialog, "exec", _exec)
+    tab._automatisch_verteilen()
+    pausen = [e for r in list_zeitplan_richter(conn) for e in list_zeitplan_eintraege(conn, r["id"])
+              if e["typ"] == "pause"]
+    assert [(p["bezeichnung"], p["fest_um"]) for p in pausen] == [("Mittagspause", "09:05")]
+    # ... und beim nächsten Verteilen ist „genau“ vorbelegt.
+    monkeypatch.setattr(VerteilenDialog, "exec", lambda dialog: gezeigt.append(dialog) or QDialog.Rejected)
+    tab._automatisch_verteilen()
+    assert gezeigt[-1].pause_genau.isChecked() and gezeigt[-1].pause_fest()
+
+
 def test_pause_dialog_beim_bearbeiten_ohne_felder_fuer_alle(qtbot):
     """OFFEN.md B4: Beim Bearbeiten legt der Dialog „Bei allen Richtern“/Uhrzeit nicht an."""
     from PySide6.QtWidgets import QCheckBox
@@ -961,7 +1012,11 @@ def test_pause_dialog_beim_bearbeiten_ohne_felder_fuer_alle(qtbot):
 
     neu = PauseDialog(None, neu=True)
     qtbot.addWidget(neu)
-    assert neu.fuer_alle is not None and len(neu.findChildren(QCheckBox)) == 1
+    assert neu.fuer_alle is not None and len(neu.findChildren(QCheckBox)) == 2
+    # R-B20: „genau“ nur zusammen mit „bei allen Richtern“
+    assert not neu.genau.isEnabled()
+    neu.fuer_alle.setChecked(True)
+    assert neu.genau.isEnabled()
 
 
 def test_zeitplan_startzeit_enter_verlassen_und_vereinheitlicht(qtbot, conn, monkeypatch):
@@ -9248,6 +9303,7 @@ def test_pause_bei_allen_hinweis_und_titel(qtbot, termin, monkeypatch):
         def __init__(self, *a, **k):
             self.fuer_alle = type("C", (), {"isChecked": lambda s: True})()
             self.uhrzeit = type("T", (), {"text": lambda s: "12:00"})()
+            self.genau = type("C", (), {"isChecked": lambda s: False})()
 
         def werte(self):
             return {"dauer_minuten": 30}

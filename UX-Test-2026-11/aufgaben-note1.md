@@ -36,6 +36,7 @@ Start per `/loop Arbeite die nächste offene Aufgabe aus UX-Test-2026-11/aufgabe
 | B23 | K1 + W4 Punkteingabe: Komma hinter einstelligem Wert, `_PunkteFeld` | M | erledigt | 9126bbf | 49 → 59 %, real ≈ 10 % | |
 | B24 | W1–W3 + W8 Prüfungsbezeichnung/Sortierung zentral, Imports | S | erledigt | 443b1c1 | 59 → 66 %, real ≈ 7 % | |
 | B25 | W5–W7 Tausch-Bereichsprüfung auslagern, Docstrings, Tests | S | erledigt | 1cd8597 | 66 → 73 %, real ≈ 7 % | |
+| B26 | R-B20: feste Pause mit Lücke (Option „genau“, Schwelle 15 Min.) | M | erledigt | (dieser) | 73 → ~90 %, real ≈ 17 % | R-B26 optional |
 
 ## Kalibrierung
 
@@ -168,6 +169,14 @@ Harness, Bericht `Nachtest2.md`, Noten mit dem ersten Test vergleichen.
   Zeit). Braucht nur ein Feld „fest um“ für Pausen. Größe M.
   (c) So lassen (die Meldung nennt die tatsächliche Pausenzeit, seit B13).
   Vorschlag: (b) – deckt den gemeldeten Wunsch mit deutlich weniger Risiko ab.
+  → **Marco 05.11.2026: (b)**, und auf Rückfrage zum um 12:00 laufenden Block: **je nach Restzeit** –
+  hat er weniger als 15 Minuten vorher begonnen, rückt er als Ganzes hinter die Pause (Lücke davor),
+  sonst folgt die Pause nach ihm. Umsetzung als B26.
+- **R-B26 (aus der Verifikation B26, optional):** (a) Pläne über Mitternacht: feste Pausenzeit
+  bezieht sich auf den Tag der laufenden Planzeit (praxisfern). (b) Rückt ein DK-Block hinter die
+  feste Pause, bleibt eine Mindestabstands-Wartezeit davor stehen (Überschneidungsprüfung zeigt
+  Probleme). (c) Feste Uhrzeit beim Bearbeiten nicht änderbar (Handbuch nennt den Weg).
+  Vorschlag: alles so lassen.
 - **R-B21 (aus B21, optional):** Das neue Bild der Release-Seite (Kasten „Assets“) steht in
   Kurzanleitung und Handbuch. Soll es auch auf die Website (`docs/index.html`, Abschnitt
   Installation) und in die `README.md`? Ginge erst mit dem nächsten Release online. Vorschlag: ja,

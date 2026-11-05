@@ -1153,6 +1153,7 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
         # Beim Bearbeiten gibt es beide Felder nicht (OFFEN.md B4, 19.10.2026).
         self.fuer_alle: QCheckBox | None = None
         self.uhrzeit: QLineEdit | None = None
+        self.genau: QCheckBox | None = None
         if neu:
             self.fuer_alle = QCheckBox("Bei allen Richtern einfügen, um")
             self.uhrzeit = QLineEdit("12:00")
@@ -1166,10 +1167,17 @@ class PauseDialog(ResponsiveSchriftMixin, QDialog):
             alle_zeile.addWidget(QLabel("Uhr"))
             alle_zeile.addStretch()
             form.addRow(alle_zeile)
+            # R-B20 (Marco 05.11.2026): Pause genau zur Uhrzeit, mit Lücke davor.
+            self.genau = QCheckBox("genau um diese Uhrzeit beginnen (sonst direkt nach dem Block davor)")
+            self.genau.setEnabled(False)
+            self.fuer_alle.toggled.connect(self.genau.setEnabled)
+            form.addRow(self.genau)
             hinweis = QLabel(
                 "Ohne Haken wird die Pause nach der in der Liste markierten Zeile eingefügt "
                 "(sonst am Ende). Mit Haken je Richter vor dem ersten Block ab dieser Uhrzeit; "
-                "wer vorher schon fertig ist, bekommt keine Pause."
+                "wer vorher schon fertig ist, bekommt keine Pause. Mit „genau“ beginnt sie genau "
+                "zur Uhrzeit: Ein Block, der erst kurz vorher (weniger als 15 Minuten) begonnen hätte, "
+                "rückt dahinter, davor bleibt eine Lücke; ein länger laufender Block wird nicht geteilt."
             )
             hinweis.setWordWrap(True)
             form.addRow(hinweis)
@@ -1206,7 +1214,8 @@ class VerteilenDialog(ResponsiveSchriftMixin, QDialog):
     so bleibt sie beim Neu-Verteilen erhalten. `ersetzt_plan`: Warnung, dass der bisherige
     Plan ersetzt wird (vorher eine eigene Rückfrage, UX-Test 02.10.2026, U9)."""
 
-    def __init__(self, parent=None, ersetzt_plan: bool = False, pause: tuple[str, int] | None = None):
+    def __init__(self, parent=None, ersetzt_plan: bool = False, pause: tuple[str, int] | None = None,
+                 pause_fest: bool = False):
         super().__init__(parent)
         self.setWindowTitle("Automatisch verteilen")
 
@@ -1237,8 +1246,16 @@ class VerteilenDialog(ResponsiveSchriftMixin, QDialog):
         pause_zeile.addWidget(QLabel("Uhr für"))
         pause_zeile.addWidget(self.dauer_minuten)
         pause_zeile.addStretch()
+        # R-B20 (Marco 05.11.2026): Mittagspause genau zur Uhrzeit, mit Lücke davor.
+        self.pause_genau = QCheckBox("genau um diese Uhrzeit beginnen (sonst direkt nach dem Block davor)")
+        self.pause_genau.setChecked(pause_fest)
+        self.pause_genau.setEnabled(pause is not None)
+        self.mit_pause.toggled.connect(self.pause_genau.setEnabled)
         pause_hinweis = QLabel("Je Richter vor dem ersten Block ab dieser Uhrzeit; wer vorher schon "
-                               "fertig ist, bekommt keine Pause.")
+                               "fertig ist, bekommt keine Pause. Mit „genau“ beginnt sie genau zur "
+                               "Uhrzeit: Ein Block, der erst kurz vorher (weniger als 15 Minuten) "
+                               "begonnen hätte, rückt dahinter, davor bleibt eine Lücke; ein länger "
+                               "laufender Block wird nicht geteilt.")
         pause_hinweis.setWordWrap(True)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -1249,6 +1266,7 @@ class VerteilenDialog(ResponsiveSchriftMixin, QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(text)
         layout.addLayout(pause_zeile)
+        layout.addWidget(self.pause_genau)
         layout.addWidget(pause_hinweis)
         layout.addWidget(buttons)
         self._schriftgroesse_anwenden()
@@ -1269,6 +1287,10 @@ class VerteilenDialog(ResponsiveSchriftMixin, QDialog):
             return None
         uhrzeit = datetime.datetime.strptime(self.uhrzeit.text().strip(), "%H:%M").strftime("%H:%M")
         return uhrzeit, self.dauer_minuten.value()
+
+    def pause_fest(self) -> bool:
+        """R-B20: Mittagspause genau zur Uhrzeit (mit Lücke davor)."""
+        return self.mit_pause.isChecked() and self.pause_genau.isChecked()
 
 
 class BewertungsbogenAuswahlDialog(QDialog):
