@@ -1,14 +1,17 @@
 # SHS-Prüfungsprogramm - Hinweise für Codex-Sitzungen
 
-Diese Datei ist der Spiegel von `CLAUDE.md` für Codex (Stand 05.10.2026). Maßgeblich ist
-`CLAUDE.md`; bei Änderungen an einer der beiden Dateien die andere nachziehen.
+Diese Datei ist der Spiegel von `CLAUDE.md` für Codex. Maßgeblich ist `CLAUDE.md`; sie wird
+daraus mit `python test_agents_spiegel.py --schreiben` erzeugt, nicht von Hand gepflegt.
 
 Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du hier arbeitest:
 
+- **Sprache und Umgebung:** Antworten, Commit-Nachrichten und Dokumentation auf Deutsch.
+  Commit-Nachrichten sind kurze Beschreibungen ohne Präfix (Beispiel: "Zeitplan bei grosser
+  Schrift nicht mehr abgeschnitten"). Hauptshell ist PowerShell unter Windows; Bash nur für
+  POSIX-Skripte.
 - **Architekturüberblick (mit Diagramm):** `Architektur.md` - lies das zuerst, bevor du dich
-  selbst durch die großen Module (`app.py`: rund 4300 Zeilen, `db.py`: rund 3700 Zeilen,
-  `desktop_dialoge.py`: rund 2200 Zeilen, Stand 05.11.2026; ausgelagert sind `desktop_*.py`, `db_import.py`, `db_sicherung.py`)
-  durcharbeitest. Die Abläufe und Klassen als UML (Mermaid) stehen in `UML.md`.
+  selbst durch die großen Module (`app.py`, `db.py`, `desktop_dialoge.py`) durcharbeitest.
+  Die Abläufe und Klassen als UML (Mermaid) stehen in `UML.md`.
 - **Offene, zurückgestellte und akzeptierte Punkte auf einen Blick:** `OFFEN.md` - vor jeder
   Planung und bevor du einen Befund meldest dort nachsehen; Fundstellen verweisen in
   `Fortschritt.md`.
@@ -31,36 +34,29 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    `test_db_postgres_wrapper.py`), parallele Subagents je Bereich statt sequenziell
    nacheinander.
 3. **QS-Prüfungen mit differenzierten Rollen statt identischer Aufträge.** Bei einer
-   Mehr-Subagent-Codeprüfung (z. B. 3 unabhängige Reviewer) jedem Subagent einen anderen
-   Schwerpunkt geben statt 3x denselben allgemeinen Auftrag: Sicherheit / Korrektheit &
-   Edge-Cases / Wartbarkeit & Stil. Dafür gibt es feste Agenten-Typen in `.claude/agents/`:
-   `qs-sicherheit`, `qs-korrektheit`, `qs-wartbarkeit` (läuft auf Sonnet).
-   Den ganzen Ablauf samt Gegenprüfung aller Befunde fasst der gespeicherte Workflow
-   `qs-pruefung` (`.claude/workflows/qs-pruefung.js`) zusammen.
-   Für eine gründliche Prüfung der ganzen Desktopversion gibt es zusätzlich den
-   Agenten-Typ `desktop-pruefer` (Opus 5.5, Effort hoch). Der Skill `desktop-pruefung`
-   startet ihn je Funktionsbereich in 10 einzeln startbaren Teilen samt Gegenprüfung
-   (13.10.2026).
-4. **Viele Aufgaben automatisch abarbeiten (Projektstandard, Marco 15.10.2026).** Gibt Marco
-   eine größere Menge Befunde "zur automatischen Abarbeitung", gilt der Skill
-   `aufgaben-abarbeitung` (`.claude/skills/aufgaben-abarbeitung/`): Rückfragen vorab, Aufgaben
-   bündeln und als S/M/L schätzen, Limit über die Statuszeile (`statusline-shs.ps1`, schreibt
-   `shs-limit.json`) prüfen mit der Regel Nutzung + Schätzung + 3 % ≤ 100 %, je Aufgabe Explore →
-   Umsetzen → Tests mit Gegenprobe → Verifikation → `Fortschritt.md` → lokaler Commit, Loop mit
-   `ScheduleWakeup` über Limit-Pausen hinweg.
+   Mehr-Subagent-Codeprüfung jedem Subagent einen anderen Schwerpunkt geben (Sicherheit /
+   Korrektheit & Edge-Cases / Wartbarkeit & Stil). Dafür gibt es die Agenten-Typen in
+   `.claude/agents/` (`qs-*`, `desktop-pruefer`), den Workflow `qs-pruefung`
+   (`.claude/workflows/qs-pruefung.js`, mit Gegenprüfung aller Befunde) und den Skill
+   `desktop-pruefung` (Desktopversion in 10 einzeln startbaren Teilen).
+4. **Viele Aufgaben automatisch abarbeiten (Projektstandard).** Gibt Marco eine größere
+   Menge Befunde "zur automatischen Abarbeitung", gilt der Skill `aufgaben-abarbeitung`
+   (Limitprüfung über die Statuszeile, je Aufgabe Explore → Umsetzen → Tests → Verifikation
+   → `Fortschritt.md` → lokaler Commit). Das ist die Ausnahme von "KEIN Commit" unten: dort
+   wird je Aufgabe lokal committet, nie gepusht.
 5. **Unabhängiger Verifikations-Subagent nach jeder Umsetzung.** Bevor eine Änderung als
    fertig gemeldet wird, prüft zusätzlich zum eigenen Testlauf ein separater Subagent Diff
    und Tests gegen - besonders bei sicherheitsrelevanten Änderungen. Dafür den
-   Agenten-Typ `verifikation` aus `.claude/agents/` nutzen.
+   Agenten-Typ `verifikation` nutzen.
 
 Kein Subagent nimmt eigenständig Code-Änderungen an bereits abgeschlossenen, vom Nutzer
 freigegebenen Ständen vor. Etablierter Prozess: jeder QS-/Sicherheits-Befund wird einzeln mit
 dem Nutzer besprochen und erst nach seinem expliziten Go umgesetzt - das gilt für jede
 Sitzung und jeden Subagent gleichermaßen, auch für automatisierte/geplante Läufe.
 
-Die fünf Agenten-Typen (07.10.2026 mit Marco abgestimmt, `desktop-pruefer` seit 13.10.2026)
-haben kein Edit- oder Write-Werkzeug und ändern deshalb keinen Code. Sie liefern Befunde nur
-als Antwort; Berichte legt die Hauptsitzung ab (Sicherheitsberichte in `_unveroeffentlicht/`).
+Die Agenten-Typen haben kein Edit- oder Write-Werkzeug und ändern deshalb keinen Code. Sie
+liefern Befunde nur als Antwort; Berichte legt die Hauptsitzung ab (Sicherheitsberichte in
+`_unveroeffentlicht/`).
 Codex kennt diese Dateien nicht; dort die Texte als Auftrag für die jeweilige Rolle
 verwenden.
 
@@ -90,24 +86,21 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ## Tests lokal ausführen (ohne PySide6/psycopg2/pytest)
 
 ```
-python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
+python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel
 ```
+
+Ist `python3` nicht im PATH, den Anaconda-Python nehmen: `C:\Users\mbruv\anaconda3\python.exe`
+(dort ist auch PySide6 installiert).
 
 Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne
 `pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
 
 GUI-Tests (`test_app_gui.py`, `test_theme.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
-PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen auch lokal, wenn PySide6
-installiert ist (Anaconda-Python, siehe Memory „Lokales Python“); die echten PostgreSQL-Tests
-laufen nur in der CI (`.github/workflows/tests.yml`, Job `test` unter Linux). Der zweite Job
-`test-windows` führt die Suite seit 19.10.2026 zusätzlich unter Windows aus (ohne PostgreSQL).
+PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen lokal mit dem Anaconda-Python;
+die echten PostgreSQL-Tests laufen nur in der CI (`.github/workflows/tests.yml`, Job `test` unter
+Linux). Der zweite Job `test-windows` führt die Suite zusätzlich unter Windows aus (ohne PostgreSQL).
 
-## Sitzungsablauf bei Rückmeldungen/Aufgaben (aus dem Cowork-Arbeitsablauf übernommen, 21.09.2026)
-
-Bis zur Migration auf Claude Code (und daneben Codex) lief die Zusammenarbeit über Cowork,
-mit einem eigenen Cowork-Skill (`shs-projekt-workflow`) für das Sitzungs-/Drumherum. Damit diese mit Marco
-abgestimmten Abläufe nicht verloren gehen, stehen sie ab jetzt hier - unabhängig vom
-jeweils genutzten Werkzeug (Cowork, Claude Code oder Codex).
+## Sitzungsablauf bei Rückmeldungen/Aufgaben
 
 ### Feedback-Aufnahme
 
@@ -125,56 +118,37 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
 
 - Code-Änderungen bleiben zunächst nur im Arbeitsstand + `Fortschritt.md`-Eintrag - KEINE
   Auslieferung, KEIN Versionsbump, KEIN Commit, bis Marco explizit einen Build anfordert
-  ("jetzt neuen Build erzeugen" o. ä.). Reine Dokumentationsänderungen (z. B. an dieser Datei,
-  `Fortschritt.md`, `Architektur.md`) sind davon ausgenommen und können direkt committet
-  werden.
-- **Dokumente und Screenshots VOR dem Build (Marcos Vorgabe, 27.09.2026):** Bevor die Version
-  erhöht und gebaut wird, müssen alle Dokumente zum Stand der gebündelten Änderungen passen.
-  Anlass: Bei 1.0.35 wurde der Handbuch-Screenshot erst nach dem Build erneuert und musste
-  deshalb auf den nächsten Build warten. Konkret vor jedem Build prüfen und nachziehen:
-  - `docs/HANDBUCH.md` inhaltlich (neue/geänderte Funktionen, Bedienung);
-  - Screenshots in `docs/bilder/` für jede sichtbar geänderte Oberfläche neu aufnehmen
-    (Desktop-Bilder mit `tools/screenshots.py`, Details im Skill `shs-build`);
-  - `Architektur.md`, `README*.md` und `Fortschritt.md`.
-  Erst danach kommen Versionsbump, `docs/HANDBUCH.pdf` und Build. Kann ein Screenshot nicht
-  erstellt werden, vor dem Build bei Marco nachfragen statt ohne ihn zu bauen.
-- **Offene Punkte VOR dem Build klären (Marcos Vorgabe, 27.09.2026):** Liefern die Verifikation
-  oder die Vorbereitung eines Builds noch Punkte, Befunde oder Auffälligkeiten, gilt das auch
-  für optionale Kleinigkeiten wie veraltete Kommentare oder Test-Robustheit. Dann wird NICHT
-  gebaut, sondern zuerst Marco gefragt und der Umgang damit geklärt: umsetzen, bewusst
-  zurückstellen oder verwerfen. Erst danach folgt der Build, mit allem, was dazugehören soll.
-  Anlass: 1.0.37 wurde gebaut, obwohl die Verifikation noch zwei kleine Punkte gemeldet hatte.
-  Die kamen danach als Nachtrag-Commit dazu, sodass zwei Build-Durchläufe entstanden, wo einer
-  gereicht hätte.
+  ("jetzt neuen Build erzeugen" o. ä.). Ausnahmen: reine Dokumentationsänderungen (z. B. an
+  dieser Datei, `Fortschritt.md`, `Architektur.md`) können direkt committet werden, und der
+  Ablauf `aufgaben-abarbeitung` committet je Aufgabe lokal (siehe Subagents, Punkt 4).
+- **Dokumente und Screenshots VOR dem Build (Marcos Vorgabe):** Bevor die Version erhöht und
+  gebaut wird, müssen `docs/HANDBUCH.md`, die Screenshots in `docs/bilder/` (für jede sichtbar
+  geänderte Oberfläche neu aufnehmen), `Architektur.md`, `README*.md` und `Fortschritt.md` zum
+  Stand der gebündelten Änderungen passen. Kann ein Screenshot nicht erstellt werden, vor dem
+  Build bei Marco nachfragen statt ohne ihn zu bauen.
+- **Offene Punkte VOR dem Build klären (Marcos Vorgabe):** Liefern die Verifikation oder die
+  Vorbereitung eines Builds noch Punkte, Befunde oder Auffälligkeiten - auch optionale
+  Kleinigkeiten wie veraltete Kommentare oder Test-Robustheit -, wird NICHT gebaut, sondern
+  zuerst Marco gefragt: umsetzen, bewusst zurückstellen oder verwerfen. Erst danach folgt der
+  Build, mit allem, was dazugehören soll.
 - Wenn Marco einen Build anfordert: die Checkliste in `.claude/skills/shs-build/SKILL.md`
-  abarbeiten (in Claude Code als Skill `shs-build`; Codex liest die Datei direkt; seit
-  07.10.2026). Sie enthält die Schritte in dieser Reihenfolge: offene Punkte klären, Dokumente und Screenshots wie oben,
-  `bump_version.py`, `tools/handbuch_pdf.py`, lokale Tests, Build-Commit, danach die
-  Altdaten der neuen Version als eigener Commit (Marcos Entscheidung T3, 03.10.2026).
-  Die Regeln in diesem Abschnitt gehen vor; ändern sie sich, die Checkliste nachziehen.
+  abarbeiten (in Claude Code als Skill `shs-build`; Codex liest die Datei direkt). Die Regeln in diesem Abschnitt gehen vor;
+  ändern sie sich, die Checkliste nachziehen.
 - `git tag` und `git push --tags` NIE selbst ausführen - das bleibt immer Marcos eigene
   Aktion. Ihm die genauen Befehle nennen, wenn nötig.
-- `git push` (Marcos Freigabe, 06.10.2026): Bei Kleinigkeiten ohne Programmcode darf die
-  Sitzung selbst pushen. Gemeint sind Dokumentation (`Fortschritt.md`, `Architektur.md`,
-  diese Datei usw.), die Website unter `docs/` sowie Agenten-Typen, Workflows und Skills in
-  `.claude/agents/`, `.claude/workflows/` und `.claude/skills/` (Ergänzung 07.10.2026). Vorher mit
-  `git diff --stat origin/main..HEAD` prüfen, dass alle ungepushten Commits nur solche
-  Dateien betreffen. Sobald Programmcode, Tests, Build-/CI-Dateien oder ein Build-Commit
-  dabei sind, pusht weiterhin nur Marco. Die Regel "Sicherheitsfunde erst nach dem Release
-  veröffentlichen" gilt auch hier.
-- Ausnahme (Marco 07.10.2026): Website-Änderungen unter `docs/`, die eine neue Funktion oder
-  neue Download-Dateien beschreiben, gehen erst zusammen mit dem Release online, das diese
-  enthält – nicht vorher separat pushen. Anlass: die Mac-/Linux-Vorschau; die Website hätte
-  sonst Downloads angekündigt, die es im aktuellen Release noch nicht gibt.
-
-### Bekannte Fallstricke bei der Auslieferung (traten bisher beim Arbeiten über die Cowork-Geräte-Brücke auf)
-
-- Stale `.git/index.lock`/`.git/HEAD.lock` blockieren gelegentlich `git commit` (kein echter
-  Git-Prozess läuft, vermutlich ein Hintergrundprozess auf dem Rechner). Workaround: Lock-Datei
-  vor dem Commit-Versuch verschieben oder löschen, dann committen.
-- Nach wichtigen Schreibvorgängen zur Sicherheit Byte-Anzahl/Inhalt gegenprüfen (z. B.
-  `wc -c`/`grep`) - insbesondere wenn der Schreibweg (z. B. eine Cowork-Geräte-Brücke) einen
-  stillen No-Op melden könnte, ohne den Inhalt tatsächlich zu aktualisieren.
+- `git push` (Marcos Freigabe): Bei Kleinigkeiten ohne Programmcode darf die Sitzung selbst
+  pushen. Gemeint sind Dokumentation (`Fortschritt.md`, `Architektur.md`, diese Datei usw.),
+  die Website unter `docs/` sowie Agenten-Typen, Workflows und Skills in `.claude/agents/`,
+  `.claude/workflows/` und `.claude/skills/`. Vorher mit `git diff --stat origin/main..HEAD`
+  prüfen, dass alle ungepushten Commits nur solche Dateien betreffen. Sobald Programmcode,
+  Tests, Build-/CI-Dateien oder ein Build-Commit dabei sind, pusht weiterhin nur Marco. Die
+  Regel "Sicherheitsfunde erst nach dem Release veröffentlichen" gilt auch hier.
+- Ausnahme (Marco): Website-Änderungen unter `docs/`, die eine neue Funktion oder neue
+  Download-Dateien beschreiben, gehen erst zusammen mit dem Release online, das diese
+  enthält - nicht vorher separat pushen (die Website würde sonst Downloads ankündigen, die es
+  im aktuellen Release noch nicht gibt).
+- Hängt `git commit` an einer verwaisten `.git/index.lock` oder `.git/HEAD.lock` (kein echter
+  Git-Prozess läuft), die Lock-Datei verschieben oder löschen und erneut committen.
 
 ### Geplante/zeitversetzte Aufgaben
 
@@ -185,13 +159,12 @@ einem späteren Zeitpunkt (z. B. als geplante/automatisierte Aufgabe) laufen sol
    Ausführung startet ohne Gedächtnis an dieses Gespräch und kann selbst nichts mehr
    nachfragen.
 2. Die vollständige, detaillierte Arbeitsanweisung NICHT in einen kurzen Trigger-/Task-Prompt
-   packen - lange Prompts haben in der Praxis (Cowork `create_trigger`) wiederholt zu Timeouts
-   beim Tool-Aufruf geführt. Stattdessen: ausführliches Briefing als neuen Abschnitt in
-   `Fortschritt.md` schreiben, den eigentlichen Trigger-/Task-Prompt kurz halten und nur auf
-   diesen Abschnitt verweisen.
+   packen - lange Prompts haben in der Praxis wiederholt zu Timeouts beim Tool-Aufruf geführt.
+   Stattdessen: ausführliches Briefing als neuen Abschnitt in `Fortschritt.md` schreiben, den
+   eigentlichen Trigger-/Task-Prompt kurz halten und nur auf diesen Abschnitt verweisen.
 3. Das Briefing in `Fortschritt.md` muss vollständig eigenständig sein: exakten lokalen
    Testbefehl nennen und den vollständigen Ablauf festhalten (Explore-Subagent → umsetzen/
-   testen → Verifikations-Subagent → `Fortschritt.md` aktualisieren → committen mit
+   testen → Verifikations-Subagent → `Fortschritt.md` aktualisieren → lokal committen mit
    Attribution-Footer → NICHT pushen/taggen/Version bumpen, außer explizit angefordert →
    ausführliche Abschlussmeldung, da Marco bei der Ausführung nicht dabei ist).
 

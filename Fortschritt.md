@@ -9802,3 +9802,22 @@ Bericht `UX-Test-2026-11/Nachtest2.md`, Einzelberichte `personas/E-A2`, `E-B2`, 
   (334 Dateien).
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort `Fortschritt.md`
   neu hoch (`Architektur.md` und `Grobkonzept.md` sind seit 1.0.56 unverändert).
+
+## CLAUDE.md überarbeitet (09.11.2026, nur Dokumentation, nichts committet)
+
+Prüfung der `CLAUDE.md` mit Marco, alle Punkte umgesetzt:
+
+- Widerspruch aufgelöst: "KEIN Commit bis Build" gilt mit zwei Ausnahmen (reine Doku-Änderungen,
+  Ablauf `aufgaben-abarbeitung` committet je Aufgabe lokal, nie gepusht).
+- Verweis auf die private Memory "Lokales Python" ersetzt durch den Pfad zum Anaconda-Python.
+- Zeilenzahlen der Module entfernt (stehen in `Architektur.md`, veralten sonst).
+- Cowork-Altlasten gestrichen (Einleitung "Sitzungsablauf", Geräte-Brücke, Byte-Abgleich);
+  der Hinweis zur verwaisten `index.lock` bleibt als eine Zeile.
+- Build-Regeln gekürzt, Datumsstempel entfernt, Agenten-Aufzählung durch Verweis ersetzt.
+- Neu: Zeile zu Sprache/Commit-Stil/Shell. `AGENTS.md` wird jetzt aus `CLAUDE.md` erzeugt
+  (`python test_agents_spiegel.py --schreiben`); `test_agents_spiegel.py` prüft den Gleichstand.
+- Hintergrund der gestrichenen "Anlass"-Sätze: Bei 1.0.35 wurde der Handbuch-Screenshot erst
+  nach dem Build erneuert und musste auf den nächsten Build warten (daher "Dokumente und
+  Screenshots vor dem Build"). 1.0.37 wurde gebaut, obwohl die Verifikation noch zwei kleine
+  Punkte gemeldet hatte; sie kamen als Nachtrag-Commit, zwei Build-Durchläufe statt einem
+  (daher "Offene Punkte vor dem Build klären").
