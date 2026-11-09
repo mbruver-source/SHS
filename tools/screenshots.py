@@ -138,6 +138,7 @@ def _umgebung_einrichten() -> QApplication:
     import desktop_darstellung
     import desktop_demo
     import desktop_dialoge
+    import desktop_abrechnung
     import desktop_auswertung
     import desktop_gemeinsam
     import desktop_programm
@@ -153,7 +154,7 @@ def _umgebung_einrichten() -> QApplication:
         if hasattr(modul, "_gespeicherte_schriftstufe_lesen"):  # X2: Bilder immer in „Normal“
             modul._gespeicherte_schriftstufe_lesen = lambda: desktop_darstellung._SCHRIFT_DEFAULT
     # Jedes Desktop-Modul, das termine_ordner selbst importiert (seit der Aufteilung von app.py).
-    desktop_module = (app_modul, desktop_auswertung, desktop_dialoge, desktop_demo, desktop_gemeinsam,
+    desktop_module = (app_modul, desktop_abrechnung, desktop_auswertung, desktop_dialoge, desktop_demo, desktop_gemeinsam,
                       desktop_programm, desktop_verwaltung, desktop_zeitplan)
     for modul in desktop_module:
         if hasattr(modul, "termine_ordner"):
@@ -334,6 +335,46 @@ def _bild_einfacher_reiter(reiter: str, name: str):
     return bild
 
 
+def _bild_abrechnung(termine: _Termine, ziel: Path) -> list[Path]:
+    """Reiter „Abrechnung Leistungsrichter“ (Marco 09.11.2026) mit zwei Richtern."""
+    import lr_abrechnung
+    from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
+
+    conn, pfad, _ids = termine.neu()
+    _aktualisiere_veranstaltung_feld(conn, lr_abrechnung=lr_abrechnung.richter_eingaben_als_text(
+        {1: {"km": "120"}, 2: {"km": "85,5", "pauschale": "25"}}))
+    fenster = _hauptfenster(conn, pfad)
+    _reiter(fenster, "abrechnung_tab")
+    ergebnis = _speichern(fenster, ziel, "handbuch_abrechnung", HAUPTFENSTER)
+    _schliessen(fenster, conn)
+    return [ergebnis]
+
+
+def _bild_verwaltung(termine: _Termine, ziel: Path) -> list[Path]:
+    """Reiter „Verwaltung“ mit der Checkliste (Marco 09.11.2026): einige Haken, zwei Kategorien
+    aufgeklappt, eine eigene Kategorie."""
+    import checkliste
+    from desktop_gemeinsam import _aktualisiere_veranstaltung_feld
+
+    conn, pfad, _ids = termine.neu()
+    eigene = checkliste.kategorie_hinzufuegen(checkliste.eigene_lesen(None), "Verein")
+    eigene = checkliste.punkt_hinzufuegen(eigene, "e1", "Pokale besorgen")
+    _aktualisiere_veranstaltung_feld(
+        conn, checkliste_eigene=checkliste.eigene_als_text(eigene),
+        checkliste=checkliste.als_text(
+            {"veranstaltung", "anmeldeformular", "teilnehmer", "zeitplan"},
+            checkliste.alle_kennungen(checkliste.struktur(db.get_veranstaltung(conn) | {
+                "checkliste_eigene": checkliste.eigene_als_text(eigene)}))))
+    fenster = _hauptfenster(conn, pfad)
+    _reiter(fenster, "verwaltung_tab")
+    for schluessel in ("vorher", "tage8"):
+        fenster.verwaltung_tab.checkliste_koepfe[schluessel].setChecked(True)
+    _warten(250)
+    ergebnis = _speichern(fenster, ziel, "handbuch_verwaltung", HAUPTFENSTER)
+    _schliessen(fenster, conn)
+    return [ergebnis]
+
+
 def _bild_zeitplan(termine: _Termine, ziel: Path) -> list[Path]:
     conn, pfad, _ids = termine.neu()
     richter = [db.add_zeitplan_richter(conn, "Richterin A"), db.add_zeitplan_richter(conn, "Richter B")]
@@ -459,6 +500,8 @@ BILDER = {
     "handbuch_ergebniserfassung": _bild_ergebniserfassung,
     "handbuch_auswertung": _bild_auswertung,
     "handbuch_uebersicht": _bild_uebersicht,
+    "handbuch_abrechnung": _bild_abrechnung,
+    "handbuch_verwaltung": _bild_verwaltung,
     "handbuch_export": _bild_einfacher_reiter("export_tab", "handbuch_export"),
     "handbuch_datensicherung": _bild_einfacher_reiter("datensicherung_tab", "handbuch_datensicherung"),
     "handbuch_demo": _bild_demo,
@@ -478,6 +521,8 @@ BILD_DATEIEN = {
     "ergebniserfassung": (1917, 651),
     "handbuch_auswertung": HAUPTFENSTER,
     "handbuch_uebersicht": HAUPTFENSTER,
+    "handbuch_abrechnung": HAUPTFENSTER,
+    "handbuch_verwaltung": HAUPTFENSTER,
     "handbuch_export": HAUPTFENSTER,
     "handbuch_datensicherung": HAUPTFENSTER,
     "handbuch_demo": HAUPTFENSTER,

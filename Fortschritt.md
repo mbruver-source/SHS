@@ -9821,3 +9821,45 @@ Prüfung der `CLAUDE.md` mit Marco, alle Punkte umgesetzt:
   Screenshots vor dem Build"). 1.0.37 wurde gebaut, obwohl die Verifikation noch zwei kleine
   Punkte gemeldet hatte; sie kamen als Nachtrag-Commit, zwei Build-Durchläufe statt einem
   (daher "Offene Punkte vor dem Build klären").
+
+## Version 1.0.58: Abrechnung Leistungsrichter, Checkliste, Reiter „Ausdrucke/Export“ (09.11.2026)
+
+Marcos Wunsch: neuer Reiter und neue Funktion „Abrechnung Leistungsrichter“ mit 0,35 € je
+Kilometer und 50 € Tagespauschale je Leistungsrichter, beide Werte Standard und änderbar.
+Befragung mit Marco, Entscheidungen:
+
+- **Nur Desktop** (Web bleibt bei der Ergebniserfassung). Neuer Reiter zwischen „Übersicht“ und
+  „Verwaltung“ (`desktop_abrechnung.py`, `AbrechnungTab`).
+- **Richter:** Wertungsrichter 1–5 der Veranstaltungsdaten, nur mit eingetragenem Namen (keine
+  leeren Zeilen), keine Prüfungsleiter oder Helfer. Die Eingaben hängen an der Position 1–5: eine
+  Umbenennung lässt die Beträge stehen.
+- **Kilometer:** von Hand je Richter, Gesamtstrecke Hin und zurück, eine Nachkommastelle. Es gibt
+  keine Entfernungsberechnung.
+- **Rechnung:** Fahrtkosten = km × Satz, kaufmännisch auf Cent gerundet; Summe = Fahrtkosten +
+  Pauschale (einmal je Richter, ein Termin = ein Prüfungstag). Satz und Pauschale gelten je Termin
+  (Standard 0,35 / 50) und sind je Richter überschreibbar (leer = Satz des Termins). Obergrenzen
+  gegen Tippfehler: 10.000 km, 10 €/km, 10.000 € Pauschale.
+- **Ausgabe:** PDF-Gesamtübersicht (`pdf_export.erstelle_abrechnung_pdf`) und eine Quittung je
+  Richter, eine Seite je Richter, in einem PDF (`erstelle_quittungen_pdf`): Betrag, Betrag in
+  Worten, von (Verein), für (Prüfung, Datum, Ort, km × Satz, Pauschale), Empfänger, Ort/Datum und
+  Unterschrift von Hand. Kein CSV, keine Anschrift/IBAN auf der Quittung (Nicht-Ziele).
+- **Daten:** drei neue Spalten in `veranstaltung` (`lr_km_satz`, `lr_tagespauschale`,
+  `lr_abrechnung` = JSON je Position), Migration über `_VERANSTALTUNG_NEUE_SPALTEN`, Sync nach
+  PostgreSQL (`kopiere_termin_daten`) nimmt sie mit. Beim Anlegen eines neuen Termins werden nur die
+  Sätze vom letzten Termin vorgeschlagen (`TerminInfo`), nicht die Eingaben je Richter.
+- Rechenlogik ohne Qt und DB in `lr_abrechnung.py` (Decimal, Betrag in Worten, tolerantes Lesen
+  beschädigter JSON-Eingaben); `dezimal_lesen` lehnt Exponenten, Vorzeichen, NaN und Infinity ab.
+- Verifikation (Agent `verifikation`): keine Codefehler. Auf Marcos Entscheidung liest der Parser bei Kilometern und Pauschale einen Punkt mit genau drei Ziffern dahinter als Tausendertrenner („1.234“ = 1234, „0.355“ bleibt dezimal); der Satz je km nie. Ein Termin-Satz mit mehr als zwei Nachkommastellen (nur durch Bearbeiten der Datei möglich) wird bewusst nicht gesondert behandelt. `UML.md` nachgezogen.
+- **Änderung nach Marcos Demo-Rückmeldung (09.11.2026):** Satz und Pauschale stehen in jeder Zeile mit den Werten des Termins vorbelegt (gespeichert wird je Richter nur eine Abweichung; die Zeile folgt sonst dem Termin-Satz). Quittungen nur je Richter über den Knopf „Quittung…“ in der Zeile (eigenes PDF, `erstelle_quittungen_pdf(…, nummer=…)`), der Sammelknopf „Quittungen als PDF…“ entfällt. Neuer Knopf „Ablageort öffnen“.
+- **CSV-Export (Marco 09.11.2026):** Knopf „Export als CSV…“ zwischen „Übersicht als PDF…“ und „Ablageort öffnen“ (`db_import.exportiere_abrechnung_csv`): UTF-8 mit BOM, Trenner `;`, eine Zeile je Richter mit Datum, Empfänger, Verwendungszweck, Kilometer, Satz je km, Fahrtkosten, Tagespauschale, Betrag (Dezimalkomma, ohne Tausenderpunkt und Währungszeichen) und Art „Ausgabe“; Namen mit Schutz vor CSV-Formeln. Das Zielformat des Vereinstools ist nicht bekannt, die Spalten sind unsere Wahl.
+- **Reiter umbenannt (Marco 09.11.2026):** „Export“ heißt jetzt „Ausdrucke/Export“ (Reiterbeschriftung, Hilfeabschnitt, Verweise in Meldungen, Demo, Handbuch und Umstiegshilfe). Der Screenshot `handbuch_export.png` zeigt noch die alte Beschriftung und entsteht beim Build neu. Die Berichte unter `UX-Test-*` bleiben als Historie unverändert.
+- **Checkliste zum Abhaken (Marco 09.11.2026):** Im Reiter „Verwaltung“ steht unter dem Knopf der Ablauf aus Handbuch Kapitel 1 als Liste mit Kästchen (`checkliste.py`, 7 Abschnitte, 18 Schritte). Die Haken werden sofort je Termin gespeichert (neue Spalte `veranstaltung.checkliste`, JSON-Liste stabiler Kennungen; Migration, PostgreSQL-Sync, wird beim neuen Termin nicht übernommen). „Alle Haken entfernen“ fragt nach (Vorgabe Nein). Die Schritte sind meine Aufteilung der sieben Zeilen aus Kapitel 1 plus „Leistungsrichter abgerechnet“; Marco hat die Texte noch nicht gesehen.
+- **Knopf „Checkliste“ im Kopfbalken (Marco 09.11.2026):** springt von jedem Reiter zum Reiter „Verwaltung“ (`HauptFenster._zur_checkliste`, `VerwaltungTab.zur_checkliste`), klappt die erste Kategorie mit offenen Punkten auf und setzt den Fokus darauf; während der Demoprüfung (Reiter gesperrt) ohne Wirkung. Ohne eigenes Symbol (nutzt „check“ aus den vorhandenen Tabler-Symbolen).
+- **Checkliste erweitert (Marco 09.11.2026):** Jede Kategorie ist auf- und zuklappbar und beim Öffnen des Reiters zugeklappt (Überschrift mit „x von y“; der Auf-/Zu-Zustand gilt nur für die Sitzung des Reiters). Eigene Kategorien („Kategorie hinzufügen…“) und eigene Punkte („Punkt hinzufügen…“ in jeder Kategorie, auch den festen) sind möglich, eigene Einträge lassen sich löschen (nach Rückfrage; Kategorie samt Punkten), feste nicht. Speicherung: neue Spalte `veranstaltung.checkliste_eigene` (JSON, eigene Kennungen `e1`, `e2` …, höchstens 20 Kategorien, 200 Punkte, 60/120 Zeichen); eigene Kategorien und Punkte (ohne Haken) werden beim neuen Termin aus dem letzten vorgeschlagen (`TerminInfo`). Eigene Kennungen werden nach dem Löschen eines Punkts mit der höchsten Nummer wiederverwendet, die Haken gelöschter Punkte entfallen dabei mit.
+- Verifikation vor dem Build (Agent `verifikation`): ein echter Fehler (Absturz beim Lesen beschädigter eigener Checkliste-Daten mit nicht hashbarem `kategorie`) behoben und mit Tests abgesichert; Handbuch (Kapitel 1 und 9, Screenshots `handbuch_abrechnung`, `handbuch_verwaltung`), `Architektur.md`, `UML.md` (Komponenten, Klassen, Gesamtablauf; mit mmdc geprüft) und README nachgezogen; Kommentare mit der alten Reiterbezeichnung angepasst. Nicht behandelt, weil nur per Dateibearbeitung möglich: ein Termin-Satz mit mehr als zwei Nachkommastellen wird gerechnet, aber auf zwei Stellen gerundet angezeigt.
+- Tests: `test_lr_abrechnung.py` (Rechnen, Worte, Speicherung, Migration, PDFs),
+  `test_app_gui.py` (sieben Tests am Ende: Reiter, Sätze, ungültige Eingabe, Export, Reihenfolge,
+  Dialog).
+- **Noch offen vor dem Build:** Handbuch (Kapitel 9 oder eigener Abschnitt), Screenshot des neuen
+  Reiters in `docs/bilder/` (`tools/screenshots.py`), `README*.md` prüfen. Die Hilfe (F1) hat den
+  Abschnitt schon.

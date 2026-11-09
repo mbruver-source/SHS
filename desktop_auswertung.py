@@ -1,7 +1,7 @@
 """
 Auswertung, Teilnehmerübersicht und Export der Desktop-Oberfläche (aus app.py ausgelagert,
 offene Punkte O4, 19.10.2026): Reiter „Auswertung“ (Rangliste, Stechen), Teilnehmer-
-übersicht je Leistungsklasse samt Behältnis-Bedarf und Reiter „Export“ (PDF-Ausdrucke,
+übersicht je Leistungsklasse samt Behältnis-Bedarf und Reiter „Ausdrucke/Export“ (PDF-Ausdrucke,
 CSV).
 
 Bewusst KEIN `import app` (siehe desktop_programm.py): gemeinsame Helfer liegen in
@@ -120,7 +120,7 @@ class AuswertungTab(QWidget):
         super().__init__(parent)
         self.conn = conn
         # Für den Druck-Button (Nutzerwunsch 23.09.) - dasselbe Objekt wie in den Tabs
-        # "Zeitplan"/"Export", wenn HauptFenster eines übergibt (siehe _Ablageort).
+        # "Zeitplan"/"Ausdrucke/Export", wenn HauptFenster eines übergibt (siehe _Ablageort).
         self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
         self._fertig: list = []
         self._ausstehend: list[dict] = []
@@ -504,7 +504,7 @@ _EXCEL_CSV_HINWEIS = (
 
 
 class ExportTab(QWidget):
-    """Reiter "Export" (Ausdrucke und Listen): PDFs wie Ergebnislisten, Statistik und
+    """Reiter "Ausdrucke/Export" (Ausdrucke und Listen): PDFs wie Ergebnislisten, Statistik und
     Bewertungsbögen (siehe pdf_export.py) sowie die Teilnehmerliste als CSV. Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
 
     def __init__(self, conn, termin_pfad: str | None = None, ablageort: _Ablageort | None = None, parent=None):
@@ -561,7 +561,7 @@ class ExportTab(QWidget):
 
         # Rückmeldung Marco 13.10.2026: statt eines langen, unübersichtlichen Erklärtextes
         # unter den Knöpfen steht neben jedem Knopf eine kurze Zeile; Einzelheiten zeigt der
-        # Tooltip an Knopf und Kurztext (ausführlich: Handbuch, Abschnitt "Export").
+        # Tooltip an Knopf und Kurztext (ausführlich: Handbuch, Abschnitt "Ausdrucke/Export").
         knoepfe = [
             (anmeldeformular_btn,
              "Ausfüllbares Formular zum Verschicken; Kopf und Prüfungen aus dem Reiter „Verwaltung“",

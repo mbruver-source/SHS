@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.57. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.58. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -44,14 +44,15 @@ Stand: Version 1.0.57. Alle Screenshots zeigen erfundene Testdaten.
 
 | Wann | Was | Wo |
 |---|---|---|
-| Wochen vorher | Termin anlegen, Veranstaltungsdaten und angebotene Prüfungen eintragen, Anmeldeformular (PDF) erzeugen und mit der Ausschreibung verschicken | Startbildschirm, Reiter „Verwaltung“, „Export“ |
+| Wochen vorher | Termin anlegen, Veranstaltungsdaten und angebotene Prüfungen eintragen, Anmeldeformular (PDF) erzeugen und mit der Ausschreibung verschicken | Startbildschirm, Reiter „Verwaltung“, „Ausdrucke/Export“ |
 | Mit den Meldungen | Teilnehmer erfassen, Zahlungen abhaken | Reiter „Teilnehmer“, „Formular-Import“ |
 | 8 Tage vorher | Zeitplan erstellen, Kontakt zu den Richtern aufnehmen und ihnen den Zeitplan übermitteln (PDF), bei späteren Änderungen erneut senden | Reiter „Zeitplan“ |
-| Kurz vorher | Startnummern und Gegenstände prüfen, Bewertungsbögen und Listen drucken | Reiter „Teilnehmer“, „Export“ |
+| Kurz vorher | Startnummern und Gegenstände prüfen, Bewertungsbögen und Listen drucken | Reiter „Teilnehmer“, „Ausdrucke/Export“ |
 | Am Prüfungstag | Ergebnisse eintragen, regelmäßig speichern | Reiter „Ergebniserfassung“ (oder Web-Version) |
-| Danach | Rangliste, Ergebnisliste, Etiketten, Statistik | Reiter „Auswertung“, „Export“ |
+| Danach | Rangliste, Ergebnisliste, Etiketten, Statistik, Leistungsrichter abrechnen | Reiter „Auswertung“, „Ausdrucke/Export“, „Abrechnung Leistungsrichter“ |
 | Zum Schluss | Datensicherung erstellen; abgeschlossene Termine später löschen | Reiter „Datensicherung“, Startbildschirm |
 
+Die Schritte stehen auch als Checkliste zum Abhaken im Reiter „Verwaltung“ (Kapitel 9).
 Eine ausführliche Anleitung mit jedem einzelnen Klick findest du in
 [Kapitel 14](#14-die-erste-prüfung-schritt-für-schritt).
 
@@ -473,7 +474,7 @@ vergeben soll (siehe [Kapitel 4](#4-teilnehmer)).
 ### Ausfüllbares Anmeldeformular (PDF) – empfohlen
 
 Importieren lässt sich **nur das Anmeldeformular, das dieses Programm selbst erzeugt** (Reiter
-„Export“ → „Anmeldeformular (PDF)…“), und zwar aus **demselben Termin**, in den du importierst.
+„Ausdrucke/Export“ → „Anmeldeformular (PDF)…“), und zwar aus **demselben Termin**, in den du importierst.
 Nur dieses PDF enthält die Formularfelder, die der Import ausliest. So sieht es aus – Kopf mit
 den Termindaten, ohne Vereins- oder Verbandslogos, ankreuzbar nur die angebotenen Prüfungen:
 
@@ -489,7 +490,7 @@ unten.
 
 1. **Termin vorbereiten:** Im Reiter „Verwaltung“ unter „Veranstaltungsdaten bearbeiten…“
    Verband, Meldestelle und die **angebotenen Prüfungen** eintragen.
-2. **Formular erzeugen:** Im Reiter „Export“ mit **„Anmeldeformular (PDF)…“** das PDF
+2. **Formular erzeugen:** Im Reiter „Ausdrucke/Export“ mit **„Anmeldeformular (PDF)…“** das PDF
    speichern und mit der Ausschreibung an die Teilnehmer verschicken. Veranstalter, Verband,
    Meldestelle, Datum und Ort sind eingedruckt.
 3. **Ausfüllen lassen:** Die Teilnehmer füllen das PDF am Rechner aus (Adobe Acrobat Reader,
@@ -543,7 +544,7 @@ beim Speichern sind die Ziffern dann verloren. Formatiere die Spalten `chip_nr`,
 rechte Maustaste → Zellen formatieren → Text). Erkennt der Import solche Werte, übernimmt er die
 Zeile trotzdem und nennt sie in der Meldung, damit du sie prüfen kannst. Fehlen in der Datei die
 nötigen Spalten (z. B. andere Überschriften), bricht der Import mit einem Hinweis ab. Eine mit
-**„Teilnehmerliste speichern (CSV, für Excel)…“** (Reiter „Export“) gespeicherte Liste lässt sich ebenso
+**„Teilnehmerliste speichern (CSV, für Excel)…“** (Reiter „Ausdrucke/Export“) gespeicherte Liste lässt sich ebenso
 wieder einlesen.
 
 ### Per KI (Foto, Scan, Word)
@@ -806,9 +807,55 @@ weil die Behältnisse je LK unterschiedlich sind.
 Prüfungsleiter, Richter 1–5, die Prüfungsgebühren sowie Verband, Meldestelle und angebotene
 Prüfungen (für das Anmeldeformular) nachträglich.
 
+![Reiter „Verwaltung“ mit der Checkliste](bilder/handbuch_verwaltung.png)
+
+Darunter steht die **Checkliste zum Prüfungstermin**: der Ablauf aus Kapitel 1 (von „Wochen vorher“
+bis „Zum Schluss“) in einzelnen Schritten zum Abhaken. Ein Haken wird sofort für den geöffneten
+Termin gespeichert, oben steht, wie viele Schritte erledigt sind. Der Knopf **„Checkliste“** oben im
+Fenster springt von jedem Reiter direkt hierher und klappt den ersten Abschnitt mit offenen Schritten
+auf. Die Abschnitte lassen sich
+auf- und zuklappen (beim Öffnen sind sie zugeklappt, hinter dem Namen steht, wie viele Schritte
+erledigt sind). „Alle Haken entfernen“ setzt die Liste nach einer Rückfrage zurück.
+
+Eigene Punkte und Abschnitte legst du mit **„Punkt hinzufügen…“** (in jedem Abschnitt) und
+**„Kategorie hinzufügen…“** an. Eigene Einträge lassen sich über das ✕ hinter dem Punkt bzw.
+über „Kategorie löschen“ wieder entfernen; die vorgegebenen Schritte bleiben immer erhalten. Beim
+Anlegen eines neuen Termins schlägt das Programm deine eigenen Abschnitte und Punkte aus dem
+letzten Termin vor, die Haken beginnen leer.
+
+### Abrechnung Leistungsrichter
+
+![Reiter „Abrechnung Leistungsrichter“](bilder/handbuch_abrechnung.png)
+
+Der Reiter rechnet die Vergütung der Leistungsrichter ab. Es erscheinen die Richter 1–5 aus den
+Veranstaltungsdaten (Reiter „Verwaltung“), und zwar nur die mit eingetragenem Namen.
+
+1. Oben stehen die Sätze des Termins: **Vergütung je km** (Standard 0,35 €) und **Tagespauschale
+   je Richter** (Standard 50 €). Beide lassen sich ändern.
+2. In der Tabelle trägst du je Richter die **Kilometer** ein, als Gesamtstrecke Hin und zurück
+   (z. B. 120 oder 85,5; „1.234“ gilt als 1234). Satz und Pauschale stehen in jeder Zeile mit
+   den Werten des Termins vorbelegt und lassen sich für einen einzelnen Richter überschreiben
+   (z. B. 0 € bei Verzicht). Leer lassen oder den Wert des Termins eintragen bedeutet: es gilt
+   wieder der Satz des Termins.
+3. **Fahrtkosten** sind Kilometer mal Satz, **Summe** ist Fahrtkosten plus Tagespauschale, auf
+   Cent gerundet. Darunter steht die Gesamtsumme.
+
+Die Eingaben werden beim Verlassen des Felds gespeichert und gehören zur Position des Richters
+(Richter 1–5): Benennst du einen Richter in den Veranstaltungsdaten um, bleiben die Beträge
+stehen. Beim Anlegen eines neuen Termins schlägt das Programm die Sätze aus dem letzten Termin
+vor, die Kilometer nicht.
+
+- **„Übersicht als PDF…“** erzeugt die Gesamtübersicht mit allen Richtern.
+- **„Quittung…“** (in der Zeile) erzeugt eine Quittung nur für diesen Richter: Betrag in Ziffern und
+  Worten, Zweck, Empfänger, dazu Linien für Ort, Datum und Unterschrift von Hand.
+- **„Export als CSV…“** speichert eine Liste (eine Zeile je Richter mit Datum, Empfänger,
+  Verwendungszweck, Kilometer, Satz, Fahrtkosten, Tagespauschale, Betrag und Art „Ausgabe“) für
+  ein Vereinstool mit Ein- und Ausgaben.
+- **„Ablageort öffnen“** zeigt den Ordner der gespeicherten Dateien.
+
 ### Export
 
-![Reiter „Export“](bilder/handbuch_export.png)
+![Reiter „Ausdrucke/Export“](bilder/handbuch_export.png)
 
 Neben jedem Button steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Tooltip,
 wenn die Maus auf dem Button bleibt.
@@ -1086,7 +1133,7 @@ Alles, was du jetzt noch nicht weißt, trägst du später im Reiter **„Verwalt
 
 ### Schritt 2: Das Anmeldeformular verschicken
 
-1. Reiter **„Export“** anklicken.
+1. Reiter **„Ausdrucke/Export“** anklicken.
 2. Auf **„Anmeldeformular (PDF)…“** klicken und **„Speichern“** wählen.
 3. Es erscheint ein Fenster, wo die Datei liegt. Mit **„Ordner zeigen“** siehst du sie im
    Dateimanager (Explorer bzw. Finder) und kannst sie z. B. an eine E-Mail anhängen.
@@ -1146,7 +1193,7 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
 ### Schritt 6: Kurz vor der Prüfung
 
 1. Im Reiter **„Teilnehmer“** prüfen, ob die Spalte „Anmerkungen“ noch Orangenes zeigt.
-2. Im Reiter **„Export“** ausdrucken:
+2. Im Reiter **„Ausdrucke/Export“** ausdrucken:
    - **„Bewertungsbögen – alle Teilnehmer (PDF)…“** für die Richter,
    - **„Übersicht für Prüfungsleitung (PDF)…“** (wer hat bezahlt, Impfungen),
    - bei Bedarf **„Chipnummernliste (PDF)…“**.
@@ -1165,7 +1212,7 @@ Im Reiter **„Teilnehmer“** siehst du alle Gemeldeten.
 ### Schritt 8: Nach der Prüfung
 
 1. Reiter **„Auswertung“**: Hier steht die Rangliste mit Punkten, Wertnote und Platz.
-2. Reiter **„Export“**: **„Ergebnisliste (PDF)…“**, **„Etiketten (PDF)…“** (zum Aufkleben in
+2. Reiter **„Ausdrucke/Export“**: **„Ergebnisliste (PDF)…“**, **„Etiketten (PDF)…“** (zum Aufkleben in
    die Leistungshefte) und **„Statistik (PDF)…“** speichern und drucken.
 
 ### Schritt 9: Sichern

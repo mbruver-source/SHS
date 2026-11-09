@@ -37,9 +37,9 @@ entstehen direkt aus dem Programm, ohne Serienbrief.
 | „Prüfungsteilnehmer“ (Punkte eintragen) | Reiter **„Ergebniserfassung“**, eine Zeile je Teilnehmer |
 | „Übersicht Teilnehmer & LK“ | Reiter **„Übersicht“**, inklusive Bedarf an Leistungsrichtern |
 | „Hilfstabelle Rankingliste“ | Reiter **„Auswertung“**, wird automatisch berechnet |
-| „Statistikblatt 1+2“ | Reiter **„Export“** → Statistik (PDF) |
-| „Druck_LU“, „Ergebnisliste für Verein“ | Reiter **„Export“** → Etiketten bzw. Ergebnisliste (PDF) |
-| „Übertrag für Serienbriefe“ → `SHS Bewertungsbögen_Serienbrief.ods` → 12 Serienbrief-Vorlagen | Reiter **„Export“** → Bewertungsbögen (PDF). **Kein Kopieren und kein Serienbrief mehr.** |
+| „Statistikblatt 1+2“ | Reiter **„Ausdrucke/Export“** → Statistik (PDF) |
+| „Druck_LU“, „Ergebnisliste für Verein“ | Reiter **„Ausdrucke/Export“** → Etiketten bzw. Ergebnisliste (PDF) |
+| „Übertrag für Serienbriefe“ → `SHS Bewertungsbögen_Serienbrief.ods` → 12 Serienbrief-Vorlagen | Reiter **„Ausdrucke/Export“** → Bewertungsbögen (PDF). **Kein Kopieren und kein Serienbrief mehr.** |
 | „Zeitplan“ (von Hand gepflegte Liste) | Reiter **„Zeitplan“**: Planung je Leistungsrichter mit automatischem Vorschlag, Zeiten werden berechnet |
 | Datei selbst kopieren/sichern | Reiter **„Datensicherung“**: alle Termine als eine ZIP-Datei, auf Wunsch mit Passwort |
 
@@ -52,14 +52,14 @@ So sieht ein Bewertungsbogen aus, den das Programm direkt erzeugt, ohne Serienbr
 - Teilnehmer aus einem früheren Termin übernehmen (Reiter „Teilnehmer“ → „Aus anderem
   Termin importieren…“). Wer regelmäßig startet, muss nicht jedes Mal neu erfasst werden.
 - Ausfüllbares Anmeldeformular (PDF) je Termin erzeugen und die zurückgeschickten Formulare
-  direkt einlesen (Reiter „Export“ und „Formular-Import“).
+  direkt einlesen (Reiter „Ausdrucke/Export“ und „Formular-Import“).
 - Andere Meldeformulare mit Hilfe einer KI einlesen (Reiter „Formular-Import“).
 - Disqualifikation und Abbruch werden in der Ergebniserfassung eigens erfasst.
 - Nicht erschienene Teilnehmer per „Keine Teilnahme“ markieren (Reiter „Teilnehmer“). Sie
   fallen dann aus Zeitplan, Wertung und Ausdrucken heraus, ohne gelöscht zu werden.
 - Startnummern-Bereiche je Prüfung; fehlende Startnummern werden auf einen Klick vergeben.
 - Teilnehmerlisten aus Excel einlesen (als CSV gespeichert) und die Teilnehmerliste als CSV für
-  Excel speichern (Reiter „Formular-Import“ bzw. „Export“).
+  Excel speichern (Reiter „Formular-Import“ bzw. „Ausdrucke/Export“).
 - Der Zeitplan warnt, wenn ein Dreikampf-Team zur selben Zeit an zwei Stellen steht.
 - Ergebniseingabe durch mehrere Richter gleichzeitig im Browser (optional, siehe
   [README_CONTAINER.md](../README_CONTAINER.md)).
@@ -97,7 +97,7 @@ sollen nicht ungeprüft mitwandern.
    Teilnehmer von Hand erfassen, Zeitplan erstellen, Bewertungsbögen drucken.
 5. **Am Prüfungstag:** Ergebnisse im Reiter „Ergebniserfassung“ eintragen und regelmäßig auf
    „Alle Ergebnisse speichern“ klicken. Danach Ergebnisliste, Etiketten und Statistik im
-   Reiter „Export“ erzeugen. Zum Schluss eine **Datensicherung** erstellen.
+   Reiter „Ausdrucke/Export“ erzeugen. Zum Schluss eine **Datensicherung** erstellen.
 
 Wenn du beim ersten echten Termin auf Nummer sicher gehen willst: Die alte Datei parallel
 bereithalten. Nötig sollte das nicht sein.

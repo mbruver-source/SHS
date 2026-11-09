@@ -25,7 +25,7 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 ## 2. Dokumente und Screenshots nachziehen (vor dem Versionsbump)
 
 - `docs/HANDBUCH.md`: neue oder geänderte Funktionen und Bedienung.
-- `docs/bilder/`: Desktop-Screenshots mit `PY tools/screenshots.py` neu erzeugen (alle 15
+- `docs/bilder/`: Desktop-Screenshots mit `PY tools/screenshots.py` neu erzeugen (alle 17
   Bilder, feste Testdaten; einzelne mit `--nur name1,name2`, Namen siehe `BILDER` im Skript).
   Danach jedes geänderte Bild ansehen (`git status docs/bilder`). Neue Oberflächen im Skript
   ergänzen statt Ad-hoc-Code zu schreiben. Von Hand bleiben: Web-Bilder,

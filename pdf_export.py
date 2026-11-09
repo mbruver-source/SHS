@@ -92,6 +92,15 @@ from db import (
     sortierschluessel_text,
     zeitplan_bezeichnung,
 )
+from lr_abrechnung import (
+    abrechnungszeilen as lr_abrechnungszeilen,
+    betrag_in_worten as lr_betrag_in_worten,
+    euro_text as lr_euro_text,
+    gesamtsumme as lr_gesamtsumme,
+    km_satz_des_termins as lr_km_satz_des_termins,
+    km_text as lr_km_text,
+    pauschale_des_termins as lr_pauschale_des_termins,
+)
 from shs_core import (
     ABBRUCH_ABK,
     ABBRUCH_GRUENDE,
@@ -1523,6 +1532,124 @@ def erstelle_leistungsrichter_bedarf_pdf(conn: sqlite3.Connection, pfad: str) ->
     SimpleDocTemplate(
         pfad, pagesize=A4,
         topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
+    ).build(story)
+
+
+# --- Abrechnung Leistungsrichter ---------------------------------------------
+#
+# Marco 09.11.2026: Übersicht über Fahrtkosten und Tagespauschale je Leistungsrichter und
+# eine Quittung je Richter (Rechnung und Betrag in Worten: lr_abrechnung.py).
+
+_QUITTUNG_TITEL = ParagraphStyle("SHSQuittungTitel", parent=_STYLES["Heading1"], fontSize=24, spaceAfter=6 * mm)
+_QUITTUNG_TEXT = ParagraphStyle("SHSQuittungText", parent=_STYLES["Normal"], fontSize=12, leading=16)
+# Bezeichnungen links: gleiche Größe und Zeilenhöhe wie der Text daneben (gleiche Grundlinie)
+_QUITTUNG_LABEL = ParagraphStyle("SHSQuittungLabel", parent=_QUITTUNG_TEXT, fontName=_SCHRIFT_FETT)
+_QUITTUNG_UNTERSCHRIFT = ParagraphStyle("SHSQuittungUnterschrift", parent=_STYLES["Normal"], fontSize=10, leading=13)
+
+
+def _abrechnung_kopf(veranstaltung: dict | None) -> str:
+    if not veranstaltung:
+        return ""
+    return f"{_p_wert(veranstaltung.get('verein'))} ({_datum_kurz(veranstaltung.get('datum'))})"
+
+
+def erstelle_abrechnung_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+    """Übersicht der Abrechnung der Leistungsrichter: je Richter Kilometer, Fahrtkosten,
+    Tagespauschale und Summe, darunter die Gesamtsumme."""
+    veranstaltung = get_veranstaltung(conn)
+    zeilen = lr_abrechnungszeilen(veranstaltung)
+    story: list = [Paragraph(f"Abrechnung Leistungsrichter – {_abrechnung_kopf(veranstaltung)}", _TITEL)]
+    story.append(Paragraph(
+        f"Vergütung {lr_euro_text(lr_km_satz_des_termins(veranstaltung))} je Kilometer, "
+        f"Tagespauschale {lr_euro_text(lr_pauschale_des_termins(veranstaltung))} je Leistungsrichter "
+        "(abweichende Sätze einzelner Richter sind in der Zeile angegeben).",
+        _HINWEIS,
+    ))
+    story.append(Spacer(1, 2 * mm))
+    if not zeilen:
+        story.append(Paragraph("Keine Leistungsrichter eingetragen.", _TEXT))
+    else:
+        daten = [["Leistungsrichter", "km", "Satz je km", "Fahrtkosten", "Tagespauschale", "Summe"]]
+        for z in zeilen:
+            daten.append([
+                Paragraph(_p_wert(z.name), _TEXT), lr_km_text(z.km), lr_euro_text(z.km_satz),
+                lr_euro_text(z.fahrtkosten), lr_euro_text(z.pauschale), lr_euro_text(z.summe),
+            ])
+        daten.append(["Gesamt", "", "", "", "", lr_euro_text(lr_gesamtsumme(zeilen))])
+        tabelle = Table(daten, colWidths=[58 * mm, 18 * mm, 22 * mm, 26 * mm, 28 * mm, 22 * mm], repeatRows=1)
+        tabelle.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+            ("FONTNAME", (0, 0), (-1, 0), _SCHRIFT_FETT),
+            ("FONTNAME", (0, -1), (-1, -1), _SCHRIFT_FETT),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+        ]))
+        story.append(tabelle)
+    SimpleDocTemplate(
+        pfad, pagesize=A4,
+        topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
+    ).build(story)
+
+
+def erstelle_quittungen_pdf(conn: sqlite3.Connection, pfad: str, nummer: int | None = None) -> None:
+    """Quittung(en) der Leistungsrichter, jede auf einer eigenen Seite (Betrag, Betrag in
+    Worten, Zahlender, Zweck, Ort/Datum, Unterschrift des Empfängers). Mit `nummer` (Position
+    1-5) nur die Quittung dieses Richters - der Desktop erzeugt sie je Richter einzeln."""
+    veranstaltung = get_veranstaltung(conn) or {}
+    zeilen = lr_abrechnungszeilen(veranstaltung)
+    if nummer is not None:
+        zeilen = [z for z in zeilen if z.nummer == nummer]
+    story: list = []
+    if not zeilen:
+        story.append(Paragraph("Keine Leistungsrichter eingetragen.", _TEXT))
+    for index, z in enumerate(zeilen):
+        if index:
+            story.append(PageBreak())
+        ort = veranstaltung.get("ort") or ""
+        zweck = (
+            f"Leistungsrichter bei der Prüfung am {_datum_kurz(veranstaltung.get('datum'))}"
+            + (f" in {_p_wert(ort)}" if ort else "")
+            + f": Fahrtkosten {lr_km_text(z.km)} km × {lr_euro_text(z.km_satz)} = {lr_euro_text(z.fahrtkosten)}, "
+            f"Tagespauschale {lr_euro_text(z.pauschale)}"
+        )
+        zeilen_tabelle = Table([
+            [Paragraph("Betrag:", _QUITTUNG_LABEL), Paragraph(f"<b>{lr_euro_text(z.summe)}</b>", _QUITTUNG_TEXT)],
+            [Paragraph("in Worten:", _QUITTUNG_LABEL), Paragraph(_p_wert(lr_betrag_in_worten(z.summe)), _QUITTUNG_TEXT)],
+            [Paragraph("von:", _QUITTUNG_LABEL), Paragraph(_p_wert(veranstaltung.get("verein")), _QUITTUNG_TEXT)],
+            [Paragraph("für:", _QUITTUNG_LABEL), Paragraph(zweck, _QUITTUNG_TEXT)],
+            [Paragraph("Empfänger:", _QUITTUNG_LABEL), Paragraph(_p_wert(z.name), _QUITTUNG_TEXT)],
+        ], colWidths=[36 * mm, 138 * mm])
+        zeilen_tabelle.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LINEBELOW", (1, 0), (1, -1), 0.5, colors.grey),
+            ("LEFTPADDING", (0, 0), (0, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3 * mm),
+        ]))
+        story.append(Paragraph("Quittung", _QUITTUNG_TITEL))
+        story.append(zeilen_tabelle)
+        story.append(Spacer(1, 6 * mm))
+        story.append(Paragraph("Den Betrag habe ich dankend erhalten.", _QUITTUNG_TEXT))
+        story.append(Spacer(1, 25 * mm))
+        unterschrift = Table([
+            ["", "", ""],  # Ort, Datum und Unterschrift trägt der Empfänger von Hand ein
+            [Paragraph("Ort, Datum", _QUITTUNG_UNTERSCHRIFT), "", Paragraph("Unterschrift des Empfängers", _QUITTUNG_UNTERSCHRIFT)],
+        ], colWidths=[70 * mm, 24 * mm, 80 * mm])
+        unterschrift.setStyle(TableStyle([
+            ("LINEBELOW", (0, 0), (0, 0), 0.5, colors.black),
+            ("LINEBELOW", (2, 0), (2, 0), 0.5, colors.black),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, 0), 8 * mm),
+            ("TOPPADDING", (0, 1), (-1, 1), 1 * mm),
+        ]))
+        story.append(unterschrift)
+    SimpleDocTemplate(
+        pfad, pagesize=A4,
+        topMargin=25 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
     ).build(story)
 
 

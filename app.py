@@ -215,6 +215,7 @@ from desktop_dialoge import (
 from desktop_beagle import BeagleKlickZaehler
 from desktop_demo import DemoTour, demo_ohne_termin_ausfuehren, demo_reste_aufraeumen
 from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
+from desktop_abrechnung import AbrechnungTab
 from desktop_zeitplan import ZeitplanTab
 from desktop_verwaltung import DatensicherungTab, VerwaltungTab
 from desktop_programm import VERSION, VersionDialog, laufkennung_setzen, sitzungsende_einrichten, zweitstart_pruefen
@@ -578,10 +579,10 @@ class TeilnehmerTab(QWidget):
         # (Laien suchten sie im Reiter "Teilnehmer" bzw. unter "Aus anderem Termin").
         liste_btn = QPushButton("Teilnehmerliste einlesen (Excel/CSV)…")
         # N8 (nach 1.0.40): eindeutig "einlesen" - der fast gleich benannte Export-Knopf im
-        # Reiter "Export" heißt "Teilnehmerliste speichern (CSV, für Excel)…".
+        # Reiter "Ausdrucke/Export" heißt "Teilnehmerliste speichern (CSV, für Excel)…".
         liste_btn.setToolTip(
             "Eine Excel-Liste (als CSV gespeichert) mit einer Zeile je Teilnehmer einlesen. "
-            "Speichern als CSV geht im Reiter „Export“."
+            "Speichern als CSV geht im Reiter „Ausdrucke/Export“."
         )
         liste_btn.clicked.connect(self._teilnehmerliste_importieren)
 
@@ -1038,7 +1039,7 @@ class TeilnehmerTab(QWidget):
         """Erzeugt den Bewertungsbogen für genau den ausgewählten Teilnehmer (Nutzerwunsch
         21.09., siehe bewertungsbogen_btn oben) - nutzt dieselbe Kernfunktion
         (pdf_export.erstelle_bewertungsbogen_pdf) wie der bisherige Weg über den Reiter
-        "Export" (dort weiterhin als Sammel-Export für alle Teilnehmer vorhanden)."""
+        "Ausdrucke/Export" (dort weiterhin als Sammel-Export für alle Teilnehmer vorhanden)."""
         teilnehmer_id = self._ausgewaehlte_id()
         if teilnehmer_id is None:
             return
@@ -1333,7 +1334,7 @@ class FormularImportTab(QWidget):
     einen Kopier-Prompt statt einer eingebauten KI-Anbindung, da die Desktop-Anwendung
     offline arbeitet und keinen eigenen KI-Zugriff hat.
     Nutzerwunsch 28.09.2026: Das vom Programm erzeugte, ausfüllbare Anmeldeformular (Reiter
-    "Export") lässt sich ausgefüllt direkt einlesen - ganz ohne KI (siehe
+    "Ausdrucke/Export") lässt sich ausgefüllt direkt einlesen - ganz ohne KI (siehe
     _anmeldeformulare_importieren)."""
 
     _KI_UMSCHALTER_TEXT = "Andere Meldeformulare (Foto, Scan, Word) über ein KI-System einlesen"
@@ -1431,7 +1432,7 @@ class FormularImportTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(abschnitt(
             "1. Ausgefüllte Anmeldeformulare (PDF) – empfohlen",
-            "Das Anmeldeformular erzeugst du im Reiter „Export“ und verschickst es an die "
+            "Das Anmeldeformular erzeugst du im Reiter „Ausdrucke/Export“ und verschickst es an die "
             "Teilnehmer. Die ausgefüllt zurückgeschickten PDF-Dateien hier einlesen – mehrere "
             "auf einmal möglich, bereits vorhandene Meldungen werden übersprungen.",
             anmeldeformular_btn,
@@ -3465,8 +3466,14 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         )
         self.demo_btn.clicked.connect(self._demo_starten)
 
+        # Marco 09.11.2026: von jedem Reiter direkt zur Checkliste im Reiter „Verwaltung“.
+        self.checkliste_btn = QPushButton("Checkliste")
+        self.checkliste_btn.setToolTip("Springt zur Checkliste zum Prüfungstermin (Reiter „Verwaltung“)")
+        self.checkliste_btn.clicked.connect(self._zur_checkliste)
+
         self.kopf = KopfBalken()
         self.kopf.knopf_hinzufuegen(self.wechseln_btn, "folder-open")
+        self.kopf.knopf_hinzufuegen(self.checkliste_btn, "check")
         self.kopf.knopf_hinzufuegen(version_btn, "info-circle")
         self.kopf.knopf_hinzufuegen(self.demo_btn, "school")
         self.kopf.knopf_hinzufuegen(hilfe_btn, "help-circle")
@@ -3615,6 +3622,15 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def _hilfe_zum_reiter(self) -> None:
         reiter = self._tabs.tabText(self._tabs.currentIndex()).replace("&", "")
         _ausfuehren(HilfeDialog(self, abschnitt=f'Reiter "{reiter}"'))
+
+    def _zur_checkliste(self) -> None:
+        """Wechselt zum Reiter „Verwaltung“ und zeigt dort die Checkliste (klappt die erste
+        Kategorie mit offenen Punkten auf)."""
+        index = self._tabs.indexOf(self.verwaltung_tab)
+        if index < 0 or not self._tabs.isTabEnabled(index):
+            return  # z. B. während der Demoprüfung gesperrt
+        self._tabs.setCurrentIndex(index)
+        self.verwaltung_tab.zur_checkliste()
 
     def _version_anzeigen(self) -> None:
         _ausfuehren(VersionDialog(self))
@@ -3777,8 +3793,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             ("ergebnis_tab", "Ergebniserfassung", lambda: ErgebnisTab(conn)),
             ("auswertung_tab", "Auswertung", lambda: AuswertungTab(conn, ablageort)),
             ("teilnehmer_uebersicht_tab", "Übersicht", lambda: TeilnehmerUebersichtTab(conn)),
+            ("abrechnung_tab", "Abrechnung Leistungsrichter", lambda: AbrechnungTab(conn, ablageort)),
             ("verwaltung_tab", "Verwaltung", lambda: VerwaltungTab(conn)),
-            ("export_tab", "Export", lambda: ExportTab(conn, pfad, ablageort)),
+            ("export_tab", "Ausdrucke/Export", lambda: ExportTab(conn, pfad, ablageort)),
             # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
             # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
             # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
@@ -4178,6 +4195,11 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
                 "startnummer_bereiche": letzter.startnummer_bereiche,
                 # Marco 09.10.2026: die Standardgröße der Bereiche ebenso.
                 "startnummer_bereichsgroesse": letzter.startnummer_bereichsgroesse,
+                # Marco 09.11.2026: die Sätze der Leistungsrichter-Abrechnung ebenso.
+                "lr_km_satz": letzter.lr_km_satz,
+                "lr_tagespauschale": letzter.lr_tagespauschale,
+                # Marco 09.11.2026: eigene Kategorien/Punkte der Checkliste (ohne Haken).
+                "checkliste_eigene": letzter.checkliste_eigene,
             }
         dialog = VeranstaltungsDialog(self, vorbelegung=vorbelegung, speichern=_termin_datei_anlegen)
         if _ausfuehren(dialog) != QDialog.Accepted:

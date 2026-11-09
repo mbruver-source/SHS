@@ -1524,7 +1524,7 @@ Zeilen nur aus.</p>
 
 <h3>Reiter "Formular-Import"</h3>
 <p><b>Ausfüllbares Anmeldeformular (empfohlen):</b> Importieren lässt sich nur das
-Anmeldeformular, das dieses Programm selbst erzeugt (Reiter "Export" → "Anmeldeformular
+Anmeldeformular, das dieses Programm selbst erzeugt (Reiter "Ausdrucke/Export" → "Anmeldeformular
 (PDF)…"), und zwar aus demselben Termin. Die Teilnehmer füllen es am Rechner aus, kreuzen
 genau eine Prüfung an und speichern es (nicht "Drucken → Als PDF", dabei gehen die Felder
 verloren). "Anmeldeformulare (PDF) importieren…" liest die zurückgeschickten Dateien ein,
@@ -1602,15 +1602,33 @@ Richter). Darunter die benötigten Behältnisse der Behältnisstrecke je LK (ED 
 separates Behältnis für die Material-Verleitung je Teilnehmer. Die gleiche Tabelle steht auch
 in der Richter-Bedarf-PDF.</p>
 
+<h3>Reiter "Abrechnung Leistungsrichter"</h3>
+<p>Rechnet die Vergütung der Leistungsrichter (Richter 1-5 aus den Veranstaltungsdaten, nur
+mit eingetragenem Namen) ab: Fahrtkosten = Kilometer (Gesamtstrecke Hin und zurück) mal Satz je
+Kilometer, dazu die Tagespauschale. Standard sind 0,35 € je km und 50 € Tagespauschale; beide
+Werte lassen sich oben für den Termin ändern. In jeder Zeile stehen sie vorbelegt und lassen sich
+dort für diesen Richter überschreiben. Kilometer dürfen mit Tausenderpunkt stehen (1.234 =
+1234). Die Eingaben werden beim Verlassen des Felds gespeichert. "Übersicht als PDF…" erzeugt die
+Gesamtübersicht, "Export als CSV…" eine Liste (eine Zeile je Richter, Art "Ausgabe") für ein
+Vereinstool mit Ein- und Ausgaben, der Knopf "Quittung…" in der Zeile eine Quittung für genau diesen Richter zum
+Unterschreiben. "Ablageort öffnen" zeigt den Ordner der PDFs.</p>
+
 <h3>Reiter "Verwaltung"</h3>
+<p>Unter dem Knopf steht die Checkliste zum Prüfungstermin: der Ablauf von "Wochen vorher" bis
+"Zum Schluss" in einzelnen Schritten zum Abhaken. Der Knopf "Checkliste" oben im Fenster springt von jedem Reiter hierher und klappt die erste Kategorie mit
+offenen Punkten auf. Die Kategorien lassen sich auf- und zuklappen (beim Öffnen sind sie zugeklappt). Die Haken werden sofort je Termin
+gespeichert, "Alle Haken entfernen" setzt sie (nach Rückfrage) zurück. Mit "Punkt hinzufügen…" (in jeder
+Kategorie) und "Kategorie hinzufügen…" legst du eigene Punkte und Kategorien an; sie lassen sich über ✕
+bzw. "Kategorie löschen" wieder entfernen. Eigene Kategorien und Punkte werden beim Anlegen eines neuen
+Termins aus dem letzten Termin vorgeschlagen, die Haken nicht.</p>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
 Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
-Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Export").
+Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "Ausdrucke/Export").
 Verband, Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des
 Anmeldeformulars.</p>
 
-<h3>Reiter "Export"</h3>
+<h3>Reiter "Ausdrucke/Export"</h3>
 <p>Neben jedem Knopf steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Hinweis,
 wenn die Maus kurz darauf bleibt. Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
@@ -1860,6 +1878,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         self._speichern = speichern
         self.setWindowTitle("Veranstaltungsdaten bearbeiten" if bearbeiten else "Neuen Termin anlegen")
         vorbelegung = vorbelegung or {}
+        self._lr_saetze = {name: vorbelegung.get(name) for name in ("lr_km_satz", "lr_tagespauschale", "checkliste_eigene")}
 
         def feld(name: str) -> QLineEdit:
             return QLineEdit(vorbelegung.get(name) or "")
@@ -2058,7 +2077,7 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         _aktualisiere_veranstaltung_feld (nach _pruefen_und_akzeptieren aufrufen) - vorher
         wortgleich in StartDialog._neuer_termin und VerwaltungTab._veranstaltung_bearbeiten,
         jetzt auch von der Demoprüfung genutzt."""
-        return dict(
+        werte = dict(
             verein=self.verein.text().strip(),
             datum=self.datum_iso(),
             ort=self.ort.text().strip() or None,
@@ -2078,6 +2097,10 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
             startnummer_bereiche=self.startnummer_bereiche_text(),
             startnummer_bereichsgroesse=str(self.standard_groesse.value()),
         )
+        # Marco 09.11.2026: Sätze der Leistungsrichter-Abrechnung stehen nicht im Dialog; sie
+        # werden nur durchgereicht (Vorschlag aus dem letzten Termin beim Anlegen).
+        werte.update({name: wert for name, wert in self._lr_saetze.items() if wert})
+        return werte
 
     def meldestelle_text(self) -> str | None:
         """Meldestelle (mehrzeilig) in Speicherform; None, wenn leer."""

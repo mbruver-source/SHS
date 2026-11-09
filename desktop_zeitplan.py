@@ -137,7 +137,7 @@ class ZeitplanTab(QWidget):
         self.conn = conn
         self._letzte_mittagspause: tuple[str, int] | None = None  # T1, siehe _mittagspause_vorschlag
         # Wird ein `ablageort` übergeben (siehe HauptFenster), ist es dasselbe Objekt wie
-        # im Tab "Export" - ein dort gewählter Ordner gilt dann auch hier als Standard-
+        # im Tab "Ausdrucke/Export" - ein dort gewählter Ordner gilt dann auch hier als Standard-
         # Speicherort für "Zeitplan (PDF)…", und umgekehrt.
         self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
         # ID des zuletzt verschobenen/bearbeiteten Eintrags - nach jedem Neuaufbau der

@@ -30,7 +30,7 @@ Zwei Oberflächen, eine gemeinsame Fach- und Datenschicht. Pfeile zeigen „benu
 flowchart LR
     subgraph Desktop["Desktop-App (PySide6)"]
         app["app.py<br/>HauptFenster, StartDialog,<br/>Teilnehmer, Formular-Import,<br/>Ergebniserfassung, main()"]
-        reiter["desktop_auswertung.py<br/>desktop_zeitplan.py<br/>desktop_verwaltung.py"]
+        reiter["desktop_auswertung.py<br/>desktop_zeitplan.py<br/>desktop_verwaltung.py<br/>desktop_abrechnung.py"]
         programm["desktop_programm.py<br/>Version/Update, Sitzungsende,<br/>Zweitstart"]
         dialoge["desktop_dialoge.py"]
         gemeinsam["desktop_gemeinsam.py"]
@@ -50,6 +50,7 @@ flowchart LR
         db["db.py<br/>Schema, Migrationen,<br/>Termine, Teilnehmer, Ergebnisse,<br/>Zeitplan, Sync"]
         core["shs_core.py<br/>Wertnoten, Rangliste"]
         pdf["pdf_export.py<br/>alle PDF-Ausdrucke"]
+        fach["lr_abrechnung.py, checkliste.py<br/>Fachlogik ohne Qt und DB"]
     end
 
     sqlite[("SQLite-Datei<br/>je Termin")]
@@ -66,6 +67,7 @@ flowchart LR
     dialoge --> db
     gemeinsam --> db
     reiter --> db
+    reiter & pdf & imp --> fach
     app --> db
     web --> db & tpl
     pdf --> db
@@ -163,7 +165,20 @@ classDiagram
     class TeilnehmerUebersichtTab
     class ExportTab
     class ZeitplanTab
-    class VerwaltungTab
+    class AbrechnungTab
+    class VerwaltungTab {
+        +zur_checkliste()
+    }
+    class lr_abrechnung {
+        <<Modul>>
+        +abrechnungszeilen()
+        +betrag_in_worten()
+    }
+    class checkliste {
+        <<Modul>>
+        +struktur()
+        +erledigte()
+    }
     class DatensicherungTab
     class VersionDialog
     class LizenzDialog
@@ -192,11 +207,13 @@ classDiagram
     HauptFenster *-- ErgebnisTab
     HauptFenster *-- AuswertungTab
     HauptFenster *-- TeilnehmerUebersichtTab
+    HauptFenster *-- AbrechnungTab
     HauptFenster *-- VerwaltungTab
     HauptFenster *-- ExportTab
     HauptFenster *-- DatensicherungTab
     HauptFenster *-- KopfBalken
     StartDialog *-- KopfBalken
+    HauptFenster ..> VerwaltungTab : Knopf „Checkliste“ → zur_checkliste
     HauptFenster ..> VersionDialog : öffnet
     VersionDialog ..> LizenzDialog : öffnet
     HauptFenster ..> DemoTour : startet
@@ -217,6 +234,8 @@ classDiagram
     ZeitplanTab ..> PruefungsblockDialog
     ZeitplanTab ..> PauseDialog
     VerwaltungTab ..> VeranstaltungsDialog
+    VerwaltungTab ..> checkliste : Haken, eigene Punkte
+    AbrechnungTab ..> lr_abrechnung : Rechnung
     StartDialog ..> VeranstaltungsDialog : neuer Termin
     DatensicherungTab ..> SicherungErstellenDialog
     HauptFenster ..> HilfeDialog
@@ -254,7 +273,8 @@ flowchart TD
     stech -->|ja| stechen[„Stechen-Sieger festlegen…“]
     stech -->|nein| druck2
     stechen --> druck2[Ergebnisliste, Statistik,<br/>Übersicht Prüfungsleitung als PDF]
-    druck2 --> sich[Datensicherung<br/>ZIP, optional verschlüsselt]
+    druck2 --> abr[Leistungsrichter abrechnen<br/>Reiter Abrechnung: Kilometer eintragen,<br/>Übersicht, Quittungen, CSV]
+    abr --> sich[Datensicherung<br/>ZIP, optional verschlüsselt]
     sich --> ende([Termin abgeschlossen])
 ```
 

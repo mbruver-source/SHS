@@ -78,7 +78,7 @@ def _aktualisiere_veranstaltung_feld(conn, **overrides) -> None:
 
 class _Ablageort:
     """Gemeinsamer, veränderlicher Ablageort für alle Export-Buttons EINES Termins
-    (Reiter "Teilnehmer", "Auswertung", "Zeitplan" und "Export")
+    (Reiter "Teilnehmer", "Auswertung", "Zeitplan" und "Ausdrucke/Export")
     - ein einzelnes, von allen diesen Tabs geteiltes Objekt statt
     je ein eigener String pro Tab. Wählt der Nutzer beim Speichern bewusst einen anderen
     Ordner, gilt dieser dadurch sofort auch als neuer Standard-Speicherort im jeweils

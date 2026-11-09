@@ -4379,12 +4379,12 @@ class TestAnmeldeformularImport(unittest.TestCase):
             "a.pdf: Fläche LK 3 wird in diesem Termin nicht angeboten - Formular eines anderen "
             "Termins? Bitte mit dem Teilnehmer klären.": "angebotene Prüfung vereinbaren",
             "a.pdf: Hündin und Rüde sind beide angekreuzt": "Geschlecht des Hundes erfragen",
-            "a.pdf: die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)": "Reiter „Export“",
+            "a.pdf: die PDF ist kein SHS-Anmeldeformular (keine passenden Formularfelder)": "Reiter „Ausdrucke/Export“",
             "a.pdf: Datei ist keine lesbare PDF-Datei (x)": "erneut schicken",
             "Zeile 4 (Max Muster): Art „EDX“ ist ungültig – bitte ED oder DK eintragen": "korrigieren",
             "Zeile 5: Nachname/Vorname/Rufname des Hundes fehlt": "fehlende Angabe erfragen",
             "a.pdf: unbekannte Prüfung 'XY' angekreuzt": "Formular eines anderen Termins",
-            "a.pdf: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)": "Reiter „Export“",
+            "a.pdf: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)": "Reiter „Ausdrucke/Export“",
             "a.pdf: Datei konnte nicht gelesen werden (gesperrt)": "eigenen Ordner speichern",
             "a.pdf: in diesem Termin sind noch keine angebotenen Prüfungen hinterlegt": "Veranstaltungsdaten",
             "Zeile 6 (Max Muster): Geburtsdatum: „31.02.2020“ ist kein gültiges Datum – diesen Tag "

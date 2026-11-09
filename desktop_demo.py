@@ -1265,7 +1265,7 @@ class DemoTour(QObject):
             ),
             DemoSchritt(
                 "13. Ergebnisliste als PDF",
-                "Im Reiter „Export“ liegen alle Ausdrucke: Ergebnisliste, Etiketten, "
+                "Im Reiter „Ausdrucke/Export“ liegen alle Ausdrucke: Ergebnisliste, Etiketten, "
                 "Statistik, Bewertungsbögen, Zeitplan und mehr. Neben jedem Knopf steht "
                 "kurz, was er erzeugt; bleibt die Maus darauf, zeigt ein Tooltip "
                 "Einzelheiten.\n\n"

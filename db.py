@@ -90,7 +90,18 @@ CREATE TABLE IF NOT EXISTS veranstaltung (
     dk_mindestabstand TEXT,
     -- Marco 09.10.2026: Standardgröße eines Startnummern-Bereichs je Prüfung für
     -- "Bereiche automatisch festlegen" im Veranstaltungsdialog; leer = 20.
-    startnummer_bereichsgroesse TEXT
+    startnummer_bereichsgroesse TEXT,
+    -- Marco 09.11.2026: Abrechnung Leistungsrichter (siehe lr_abrechnung.py): Satz je
+    -- Kilometer, Tagespauschale (je Termin, leer = Standard) und die Eingaben je Richter
+    -- (JSON, Position 1-5).
+    lr_km_satz TEXT,
+    lr_tagespauschale TEXT,
+    lr_abrechnung TEXT,
+    -- Marco 09.11.2026: Checkliste zum Abhaken im Reiter Verwaltung (checkliste.py), JSON-Liste
+    -- der erledigten Schritte.
+    checkliste TEXT,
+    -- Marco 09.11.2026: eigene Kategorien und Punkte der Checkliste (JSON, siehe checkliste.py).
+    checkliste_eigene TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teilnehmer (
@@ -354,6 +365,10 @@ _VERANSTALTUNG_NEUE_SPALTEN = [
     "dk_mindestabstand",
     # Marco 09.10.2026: Standardgröße der Startnummern-Bereiche.
     "startnummer_bereichsgroesse",
+    # Marco 09.11.2026: Abrechnung Leistungsrichter, siehe Kommentar bei SCHEMA oben.
+    "lr_km_satz", "lr_tagespauschale", "lr_abrechnung",
+    # Marco 09.11.2026: Checkliste, siehe Kommentar bei SCHEMA oben.
+    "checkliste", "checkliste_eigene",
 ]
 
 
@@ -727,6 +742,11 @@ def set_veranstaltung(
     startnummer_bereiche: str | None = None,
     dk_mindestabstand: str | None = None,
     startnummer_bereichsgroesse: str | None = None,
+    lr_km_satz: str | None = None,
+    lr_tagespauschale: str | None = None,
+    lr_abrechnung: str | None = None,
+    checkliste: str | None = None,
+    checkliste_eigene: str | None = None,
 ) -> None:
     conn.execute(
         """
@@ -735,8 +755,9 @@ def set_veranstaltung(
             wertungsrichter_1, wertungsrichter_2, wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
             verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand,
-            startnummer_bereichsgroesse
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            startnummer_bereichsgroesse, lr_km_satz, lr_tagespauschale, lr_abrechnung, checkliste,
+            checkliste_eigene
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             verein=excluded.verein, ort=excluded.ort, datum=excluded.datum,
             vereins_nr=excluded.vereins_nr, pruefungsnummer=excluded.pruefungsnummer,
@@ -750,14 +771,18 @@ def set_veranstaltung(
             angebotene_pruefungen=excluded.angebotene_pruefungen,
             startnummer_bereiche=excluded.startnummer_bereiche,
             dk_mindestabstand=excluded.dk_mindestabstand,
-            startnummer_bereichsgroesse=excluded.startnummer_bereichsgroesse
+            startnummer_bereichsgroesse=excluded.startnummer_bereichsgroesse,
+            lr_km_satz=excluded.lr_km_satz, lr_tagespauschale=excluded.lr_tagespauschale,
+            lr_abrechnung=excluded.lr_abrechnung, checkliste=excluded.checkliste,
+            checkliste_eigene=excluded.checkliste_eigene
         """,
         (
             verein, ort, datum, vereins_nr, pruefungsnummer, wertungsrichter_1, wertungsrichter_2,
             wertungsrichter_3, wertungsrichter_4, wertungsrichter_5,
             pruefungsleiter, pruefungsgebuehr_ed, pruefungsgebuehr_dk, zeitplan_start,
             verband, meldestelle, angebotene_pruefungen, startnummer_bereiche, dk_mindestabstand,
-            startnummer_bereichsgroesse,
+            startnummer_bereichsgroesse, lr_km_satz, lr_tagespauschale, lr_abrechnung,
+            checkliste, checkliste_eigene,
         ),
     )
     conn.commit()
@@ -2590,6 +2615,12 @@ class TerminInfo:
     startnummer_bereiche: str | None = None
     # Marco 09.10.2026: die Standardgröße der Bereiche ebenfalls übernehmen.
     startnummer_bereichsgroesse: str | None = None
+    # Marco 09.11.2026: die Sätze der Leistungsrichter-Abrechnung ebenfalls übernehmen
+    # (die Eingaben je Richter nicht).
+    lr_km_satz: str | None = None
+    lr_tagespauschale: str | None = None
+    # Marco 09.11.2026: eigene Kategorien und Punkte der Checkliste (ohne Haken) ebenfalls.
+    checkliste_eigene: str | None = None
     # UX-Test 03.11.2026, X13: davon mit „Keine Teilnahme“ (in anzahl_teilnehmer enthalten).
     anzahl_abgemeldet: int = 0
     # Offene Punkte O2 (Marco 18.10.2026): kurzer Grund bei lesbar=False, wenn er nicht
@@ -2779,6 +2810,9 @@ def _termin_info_lesen(pfad: Path) -> TerminInfo:
         verband=feld("verband"),
         startnummer_bereiche=feld("startnummer_bereiche"),
         startnummer_bereichsgroesse=feld("startnummer_bereichsgroesse"),
+        lr_km_satz=feld("lr_km_satz"),
+        lr_tagespauschale=feld("lr_tagespauschale"),
+        checkliste_eigene=feld("checkliste_eigene"),
     )
 
 
@@ -3567,6 +3601,11 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
             startnummer_bereiche=veranstaltung.get("startnummer_bereiche"),
             dk_mindestabstand=veranstaltung.get("dk_mindestabstand"),
             startnummer_bereichsgroesse=veranstaltung.get("startnummer_bereichsgroesse"),
+            lr_km_satz=veranstaltung.get("lr_km_satz"),
+            lr_tagespauschale=veranstaltung.get("lr_tagespauschale"),
+            lr_abrechnung=veranstaltung.get("lr_abrechnung"),
+            checkliste=veranstaltung.get("checkliste"),
+            checkliste_eigene=veranstaltung.get("checkliste_eigene"),
         )
 
     id_zuordnung: dict[int, int] = {}

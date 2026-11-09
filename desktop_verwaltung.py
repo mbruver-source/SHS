@@ -18,14 +18,20 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QInputDialog,
+    QCheckBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+import checkliste
 from db import get_veranstaltung, termine_ordner
 from db_sicherung import (
     PasswortFalschError,
@@ -43,6 +49,8 @@ from desktop_gemeinsam import (
     _aktualisiere_veranstaltung_feld,
     _ausfuehren,
     _datei_gespeichert_melden,
+    _db_fehler_anzeigen,
+    _ja_nein,
     _fehlertext,
     _klartext_fehler,
     _pfad_anzeige,
@@ -55,7 +63,7 @@ from desktop_gemeinsam import (
 class VerwaltungTab(QWidget):
     """Verwaltungsdaten der Veranstaltung: Verein/Ort/Datum und Zusatzangaben (Vereins-Nr.,
     Prüfungsnummer, Richter 1-5, Prüfungsleiter, Prüfungsgebühr ED/DK). War früher
-    Teil des Reiters "Export" (erster Button dort), steht aber inhaltlich für sich und wurde
+    Teil des Reiters "Ausdrucke/Export" (erster Button dort), steht aber inhaltlich für sich und wurde
     deshalb in einen eigenen Reiter verschoben (siehe HauptFenster._termin_setzen)."""
 
     # Nach dem Speichern der Veranstaltungsdaten - das Hauptfenster aktualisiert den Titel.
@@ -77,9 +85,9 @@ class VerwaltungTab(QWidget):
             "sowie Vereins-Nr., Prüfungsnummer, Richter 1-5, Prüfungsleiter und die "
             "Prüfungsgebühr ED/DK nachtragen bzw. ändern - sie erscheinen im Kopf der "
             "Statistik-PDF bzw. in der Übersicht für Prüfungsleitung (siehe Reiter "
-            "„Export“) und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
+            "„Ausdrucke/Export“) und stehen oft erst kurz vor dem Prüfungstag fest. Verband, "
             "Meldestelle und die angebotenen Prüfungen bestimmen Kopf und Ankreuzfelder des "
-            "Anmeldeformulars (Reiter „Export“), die Startnummern-Bereiche die Vergabe der "
+            "Anmeldeformulars (Reiter „Ausdrucke/Export“), die Startnummern-Bereiche die Vergabe der "
             "Startnummern.",
         )
 
@@ -87,15 +95,205 @@ class VerwaltungTab(QWidget):
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
+        # Checkliste zum Abhaken (Marco 09.11.2026): der Ablauf eines Termins in aufklappbaren
+        # Kategorien (Standard: alle zugeklappt), je Termin gespeichert, mit eigenen Kategorien
+        # und Punkten.
+        self._checkliste_laedt = False
+        self._checkliste_offen: set[str] = set()  # aufgeklappte Kategorien (nur für diese Sitzung)
+        self._checkliste_signatur = None
+        self._checkliste_kategorien: list[checkliste.Kategorie] = []
+        self.checkliste_felder: dict[str, QCheckBox] = {}
+        self.checkliste_koepfe: dict[str, QToolButton] = {}
+        self.checkliste_inhalte: dict[str, QWidget] = {}
+        self.checkliste_stand = QLabel("")
+        kategorie_btn = QPushButton("Kategorie hinzufügen…")
+        kategorie_btn.clicked.connect(self._checkliste_kategorie_hinzufuegen)
+        zuruecksetzen_btn = QPushButton("Alle Haken entfernen")
+        zuruecksetzen_btn.clicked.connect(self._checkliste_zuruecksetzen)
+        self._checkliste_inhalt = QWidget()
+        self._checkliste_liste = QVBoxLayout(self._checkliste_inhalt)
+        bildlauf = self._checkliste_bildlauf = QScrollArea()
+        bildlauf.setWidgetResizable(True)
+        bildlauf.setWidget(self._checkliste_inhalt)
+        kopf = QHBoxLayout()
+        kopf.addWidget(QLabel("Checkliste zum Prüfungstermin"))
+        kopf.addWidget(self.checkliste_stand)
+        kopf.addStretch()
+        kopf.addWidget(kategorie_btn)
+        kopf.addWidget(zuruecksetzen_btn)
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Verwaltung"))
         layout.addWidget(veranstaltung_btn)
         layout.addWidget(hinweis)
-        layout.addStretch()
+        layout.addLayout(kopf)
+        layout.addWidget(bildlauf, 1)
         layout.addWidget(self.status_label)
+        self.aktualisieren()
 
     def aktualisieren(self) -> None:
-        pass  # kein Zwischenspeicher - liest bei jedem Öffnen des Dialogs frisch aus der DB
+        """Liest die Checkliste frisch aus der Datenbank (die Veranstaltungsdaten selbst werden
+        bei jedem Öffnen des Dialogs frisch gelesen)."""
+        veranstaltung = get_veranstaltung(self.conn)
+        kategorien = checkliste.struktur(veranstaltung)
+        if kategorien != self._checkliste_kategorien:
+            self._checkliste_aufbauen(kategorien)
+        erledigt = checkliste.erledigte(veranstaltung)
+        self._checkliste_laedt = True
+        try:
+            for kennung, feld in self.checkliste_felder.items():
+                feld.setChecked(kennung in erledigt)
+        finally:
+            self._checkliste_laedt = False
+        self._checkliste_stand_anzeigen(erledigt)
+
+    def zur_checkliste(self) -> None:
+        """Zeigt die Checkliste: klappt die erste Kategorie mit offenen Punkten auf (sind alle
+        erledigt, bleibt der Zustand) und setzt den Fokus darauf."""
+        self.aktualisieren()
+        erledigt = checkliste.erledigte(get_veranstaltung(self.conn))
+        for kat in self._checkliste_kategorien:
+            if any(p.kennung not in erledigt for p in kat.punkte):
+                kopf = self.checkliste_koepfe[kat.schluessel]
+                if not kopf.isChecked():
+                    kopf.setChecked(True)  # klappt auf (und merkt es für diese Sitzung)
+                kopf.setFocus()
+                self._checkliste_bildlauf.ensureWidgetVisible(kopf)
+                return
+        self.checkliste_stand.setFocus()
+
+    def _checkliste_aufbauen(self, kategorien: list) -> None:
+        """Baut Kategorien und Punkte neu auf (nur wenn sich die Struktur geändert hat)."""
+        self._checkliste_kategorien = kategorien
+        liste = self._checkliste_liste
+        while liste.count():
+            eintrag = liste.takeAt(0)
+            if eintrag.widget() is not None:
+                eintrag.widget().setParent(None)
+                eintrag.widget().deleteLater()
+        self.checkliste_felder.clear()
+        self.checkliste_koepfe.clear()
+        self.checkliste_inhalte.clear()
+        for kat in kategorien:
+            kopf = QToolButton()
+            kopf.setCheckable(True)
+            kopf.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            kopf.setStyleSheet("font-weight: bold; text-align: left;")
+            kopf.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            inhalt = QWidget()
+            zeilen = QVBoxLayout(inhalt)
+            zeilen.setContentsMargins(28, 0, 0, 8)
+            for punkt in kat.punkte:
+                zeile = QHBoxLayout()
+                feld = QCheckBox(punkt.text)
+                feld.toggled.connect(lambda _an: self._checkliste_geaendert())
+                self.checkliste_felder[punkt.kennung] = feld
+                zeile.addWidget(feld, 1)
+                if punkt.eigen:
+                    loeschen = QToolButton()
+                    loeschen.setText("✕")
+                    loeschen.setToolTip("Diesen eigenen Punkt löschen")
+                    loeschen.clicked.connect(lambda _=False, k=punkt.kennung: self._checkliste_punkt_loeschen(k))
+                    zeile.addWidget(loeschen)
+                zeilen.addLayout(zeile)
+            fuss = QHBoxLayout()
+            neu_btn = QPushButton("Punkt hinzufügen…")
+            neu_btn.clicked.connect(lambda _=False, k=kat.schluessel: self._checkliste_punkt_hinzufuegen(k))
+            fuss.addWidget(neu_btn)
+            if kat.eigen:
+                weg_btn = QPushButton("Kategorie löschen")
+                weg_btn.clicked.connect(lambda _=False, k=kat.schluessel: self._checkliste_kategorie_loeschen(k))
+                fuss.addWidget(weg_btn)
+            fuss.addStretch()
+            zeilen.addLayout(fuss)
+            offen = kat.schluessel in self._checkliste_offen
+            inhalt.setVisible(offen)
+            kopf.setChecked(offen)
+            kopf.setArrowType(Qt.DownArrow if offen else Qt.RightArrow)
+            kopf.toggled.connect(lambda an, k=kat.schluessel, i=inhalt, b=kopf: self._checkliste_klappen(k, i, b, an))
+            self.checkliste_koepfe[kat.schluessel] = kopf
+            self.checkliste_inhalte[kat.schluessel] = inhalt
+            liste.addWidget(kopf)
+            liste.addWidget(inhalt)
+        liste.addStretch()
+
+    def _checkliste_klappen(self, schluessel: str, inhalt: QWidget, kopf: QToolButton, auf: bool) -> None:
+        inhalt.setVisible(auf)
+        kopf.setArrowType(Qt.DownArrow if auf else Qt.RightArrow)
+        if auf:
+            self._checkliste_offen.add(schluessel)
+        else:
+            self._checkliste_offen.discard(schluessel)
+
+    def _checkliste_stand_anzeigen(self, erledigt: set[str]) -> None:
+        alle = checkliste.alle_kennungen(self._checkliste_kategorien)
+        self.checkliste_stand.setText(f"{len(erledigt & set(alle))} von {len(alle)} erledigt")
+        for kat in self._checkliste_kategorien:
+            kennungen = {p.kennung for p in kat.punkte}
+            self.checkliste_koepfe[kat.schluessel].setText(
+                f"{kat.titel}  ({len(erledigt & kennungen)} von {len(kennungen)})")
+
+    def _checkliste_geaendert(self) -> None:
+        if self._checkliste_laedt:
+            return
+        erledigt = {k for k, feld in self.checkliste_felder.items() if feld.isChecked()}
+        reihenfolge = checkliste.alle_kennungen(self._checkliste_kategorien)
+        if self._checkliste_speichern(checkliste=checkliste.als_text(erledigt, reihenfolge)):
+            self._checkliste_stand_anzeigen(erledigt)
+
+    def _checkliste_speichern(self, **felder) -> bool:
+        try:
+            _aktualisiere_veranstaltung_feld(self.conn, **felder)
+        except Exception as exc:  # noqa: BLE001 - Datenbankfehler als Meldung statt Absturz
+            _db_fehler_anzeigen(self, exc)
+            self.aktualisieren()
+            return False
+        return True
+
+    def _checkliste_eigene_aendern(self, aenderung, **weitere) -> None:
+        """Wendet `aenderung(eigene)` auf die eigenen Kategorien/Punkte an und speichert; die
+        Haken gelöschter Punkte entfallen mit."""
+        veranstaltung = get_veranstaltung(self.conn)
+        try:
+            eigene = aenderung(checkliste.eigene_lesen(veranstaltung))
+        except ValueError as fehler:
+            self.status_label.setText(str(fehler))
+            return
+        nach = dict(veranstaltung or {}, checkliste_eigene=checkliste.eigene_als_text(eigene))
+        gueltig = checkliste.alle_kennungen(checkliste.struktur(nach))
+        felder = {"checkliste_eigene": nach["checkliste_eigene"],
+                  "checkliste": checkliste.als_text(checkliste.erledigte(veranstaltung), gueltig)}
+        felder.update(weitere)
+        if self._checkliste_speichern(**felder):
+            self.aktualisieren()
+
+    def _checkliste_kategorie_hinzufuegen(self) -> None:
+        name, ok = QInputDialog.getText(self, "Kategorie hinzufügen", "Name der neuen Kategorie:")
+        if ok and name.strip():
+            self._checkliste_eigene_aendern(lambda e: checkliste.kategorie_hinzufuegen(e, name))
+
+    def _checkliste_punkt_hinzufuegen(self, schluessel: str) -> None:
+        text, ok = QInputDialog.getText(self, "Punkt hinzufügen", "Text des neuen Punkts:")
+        if ok and text.strip():
+            self._checkliste_offen.add(schluessel)
+            self._checkliste_eigene_aendern(lambda e: checkliste.punkt_hinzufuegen(e, schluessel, text))
+
+    def _checkliste_punkt_loeschen(self, kennung: str) -> None:
+        if _ja_nein(self, "Punkt löschen", "Diesen eigenen Punkt der Checkliste löschen?"):
+            self._checkliste_eigene_aendern(lambda e: checkliste.punkt_loeschen(e, kennung))
+
+    def _checkliste_kategorie_loeschen(self, schluessel: str) -> None:
+        if _ja_nein(self, "Kategorie löschen", "Diese eigene Kategorie mit allen ihren Punkten löschen?"):
+            self._checkliste_offen.discard(schluessel)
+            self._checkliste_eigene_aendern(lambda e: checkliste.kategorie_loeschen(e, schluessel))
+
+    def _checkliste_zuruecksetzen(self) -> None:
+        if not any(feld.isChecked() for feld in self.checkliste_felder.values()):
+            return
+        if not _ja_nein(self, "Haken entfernen", "Alle Haken der Checkliste dieses Termins entfernen?"):
+            return
+        for feld in self.checkliste_felder.values():
+            feld.setChecked(False)  # speichert über _checkliste_geaendert
 
     def _veranstaltung_bearbeiten(self) -> None:
         aktuell = get_veranstaltung(self.conn) or {}

@@ -37,6 +37,7 @@ from db import (
     pruefungs_kuerzel,
     datum_anzeige,
 )
+from lr_abrechnung import abrechnungszeilen, zahl_text
 
 # Nutzerwunsch (20.09., Anmerkung zum Programm, Abschnitt "Teilnehmer"): Meldeformulare
 # nicht mehr von Hand abtippen müssen. Die Desktop-Anwendung selbst hat keinen eigenen
@@ -109,9 +110,9 @@ _RAT_JE_GRUND = (
     ("Hündin und Rüde sind beide angekreuzt",
      "Rat: Das Geschlecht des Hundes erfragen und den Teilnehmer von Hand anlegen."),
     ("kein SHS-Anmeldeformular",
-     "Rat: Das Anmeldeformular aus dem Reiter „Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
+     "Rat: Das Anmeldeformular aus dem Reiter „Ausdrucke/Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
     ("keine Formularfelder",
-     "Rat: Das Anmeldeformular aus dem Reiter „Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
+     "Rat: Das Anmeldeformular aus dem Reiter „Ausdrucke/Export“ verschicken – andere PDFs lassen sich nicht einlesen."),
     ("keine lesbare PDF-Datei",
      "Rat: Die Datei erneut schicken lassen; sie ist vermutlich beschädigt."),
     ("Datei konnte nicht gelesen werden",
@@ -994,6 +995,36 @@ def exportiere_teilnehmer_csv(conn: sqlite3.Connection, pfad: str) -> int:
                 zeile.append("" if wert is None else _csv_zelle_absichern(str(wert)))
             schreiber.writerow(zeile)
     return len(teilnehmer)
+
+
+#: Spalten der CSV-Datei der Leistungsrichter-Abrechnung (für ein Vereinstool mit Ein- und
+#: Ausgaben, Marco 09.11.2026). Beträge mit Dezimalkomma ohne Währungszeichen.
+ABRECHNUNG_CSV_SPALTEN = [
+    "Datum", "Empfänger", "Verwendungszweck", "Kilometer", "Satz je km", "Fahrtkosten",
+    "Tagespauschale", "Betrag", "Art",
+]
+
+
+def exportiere_abrechnung_csv(conn: sqlite3.Connection, pfad: str) -> int:
+    """Schreibt die Abrechnung der Leistungsrichter (eine Zeile je Richter, Art „Ausgabe“) als
+    CSV für den Import in ein Vereinstool. Datum ist das Prüfungsdatum (TT.MM.JJJJ).
+    Liefert die Anzahl der Zeilen."""
+    veranstaltung = get_veranstaltung(conn) or {}
+    zeilen = abrechnungszeilen(veranstaltung)
+    datum = datum_anzeige(veranstaltung.get("datum"))
+    zweck = "Leistungsrichter " + " ".join(
+        teil for teil in (str(veranstaltung.get("verein") or "").strip(), datum) if teil)
+    with open(pfad, "w", newline="", encoding="utf-8-sig") as datei:
+        schreiber = csv.writer(datei, delimiter=";")
+        schreiber.writerow(ABRECHNUNG_CSV_SPALTEN)
+        for z in zeilen:
+            schreiber.writerow([
+                datum, _csv_zelle_absichern(z.name), _csv_zelle_absichern(zweck.strip()),
+                zahl_text(z.km, 1).replace(".", ""), zahl_text(z.km_satz, 2).replace(".", ""),
+                zahl_text(z.fahrtkosten, 2).replace(".", ""), zahl_text(z.pauschale, 2).replace(".", ""),
+                zahl_text(z.summe, 2).replace(".", ""), "Ausgabe",
+            ])
+    return len(zeilen)
 
 
 def schreibe_csv_vorlage(pfad: str) -> None:

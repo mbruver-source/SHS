@@ -63,6 +63,8 @@ Programm danach gefahrlos selbst testen – Anleitung im Handbuch unter
 | **Ergebniserfassung** | Such- und Anzeigeleistung je Disziplin eintragen, auch Disqualifikation und Abbruch. Ungespeicherte Zeilen sind markiert. |
 | **Auswertung** | Wertnote und Rangliste je Leistungsklasse, automatisch berechnet, inklusive „nicht bestanden“ (unter 70 Punkten in einer Disziplin). |
 | **Übersicht** | Teilnehmerzahlen je Art/Leistungsklasse und die Zahl der benötigten Leistungsrichter. |
+| **Abrechnung Leistungsrichter** | Fahrtkosten (Kilometer × Satz, Standard 0,35 €) und Tagespauschale (Standard 50 €) je Leistungsrichter, Sätze je Termin und je Richter änderbar. Übersicht als PDF, Quittung je Richter zum Unterschreiben, CSV für ein Vereinstool. |
+| **Checkliste** | Im Reiter „Verwaltung“: der Ablauf eines Prüfungstermins zum Abhaken, in aufklappbaren Abschnitten, mit eigenen Abschnitten und Punkten. |
 | **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. Teilnehmerliste als CSV für Excel. |
 | **Datensicherung** | Alle Termine in einer Sicherungsdatei (ZIP) sichern und wiederherstellen, auf Wunsch mit Passwort verschlüsselt (AES-256). |
 | **Demoprüfung** | Führt einen ganzen Prüfungstag mit erfundenen Daten vor – vom Termin bis zur Ergebnisliste. Das Programm klickt selbst, ein Fenster erklärt jeden Schritt. Der Demo-Termin wird danach gelöscht. |
