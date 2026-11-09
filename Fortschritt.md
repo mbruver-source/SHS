@@ -9863,3 +9863,8 @@ Befragung mit Marco, Entscheidungen:
 - **Noch offen vor dem Build:** Handbuch (Kapitel 9 oder eigener Abschnitt), Screenshot des neuen
   Reiters in `docs/bilder/` (`tools/screenshots.py`), `README*.md` prüfen. Die Hilfe (F1) hat den
   Abschnitt schon.
+
+## 09.11.2026: Quellcode-Spiegel auf den Stand von 1.0.58 (noch nicht veröffentlicht)
+
+- `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen (alle Dateien aus Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner, im Spiegel nichts gelöscht): 11 Dateien neu, 42 geändert; der Byte-Abgleich danach ist identisch (345 Dateien). Stand: Commit „Website: Abrechnung Leistungsrichter und Checkliste in der Funktionsübersicht“, `v1.0.58` ist noch nicht gepusht und nicht getaggt.
+- Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
