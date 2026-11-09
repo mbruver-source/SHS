@@ -102,6 +102,11 @@ PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen lokal mit 
 die echten PostgreSQL-Tests laufen nur in der CI (`.github/workflows/tests.yml`, Job `test` unter
 Linux). Der zweite Job `test-windows` führt die Suite zusätzlich unter Windows aus (ohne PostgreSQL).
 
+**Test-Suite (eigenes Repo `SHS Test Suite`, token-sparend):** `C:\Users\mbruv\anaconda3\python.exe "C:\Users\mbruv\Documents\Claude\SHS Test Suite\run_tests.py" --kompakt`
+führt alle Tests inkl. GUI aus (grün: eine Zeile; sonst nur die Fehler mit Kurzgrund; Exit-Code 0/1). `--schnell` lässt
+die GUI-Tests aus, `--json` liefert die Fehler maschinenlesbar, `--installation` testet zusätzlich die installierte EXE.
+Details je Test (mit Erklärung): `bericht.md` im Berichtsordner der Suite - nur bei Fehlern nachlesen.
+
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben
 
 ### Feedback-Aufnahme
@@ -136,6 +141,12 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
 - Wenn Marco einen Build anfordert: die Checkliste in `.claude/skills/shs-build/SKILL.md`
   abarbeiten (in Claude Code als Skill `shs-build`; Codex liest die Datei direkt). Die Regeln in diesem Abschnitt gehen vor;
   ändern sie sich, die Checkliste nachziehen.
+- **Gilt auch für delegierte Sessions und Subagents:** Sie committen höchstens lokal und bauen,
+  bumpen oder taggen nie. Wer eine Session startet, schreibt das ausdrücklich in den Brief
+  (bei 1.0.58 hat eine delegierte Session ohne Anforderung gebaut).
+- **Builds laufen in der CI auf GitHub, nicht lokal.** Die lokal installierte EXE ist die
+  Vorversion und für Tests vor dem Build unerheblich; der EXE-Selbsttest der SHS Test Suite
+  folgt erst nach dem Release und Marcos Installation (siehe `shs-build`, Schritt 7).
 - `git tag` und `git push --tags` NIE selbst ausführen - das bleibt immer Marcos eigene
   Aktion. Ihm die genauen Befehle nennen, wenn nötig.
 - `git push` (Marcos Freigabe): Bei Kleinigkeiten ohne Programmcode darf die Sitzung selbst
