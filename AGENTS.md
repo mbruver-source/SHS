@@ -89,8 +89,10 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel
 ```
 
-Ist `python3` nicht im PATH, den Anaconda-Python nehmen: `C:\Users\mbruv\anaconda3\python.exe`
-(dort ist auch PySide6 installiert).
+Lokal unter Windows immer den Anaconda-Python nehmen: `C:\Users\mbruv\anaconda3\python.exe`
+statt `python3`. Das `python3` im PATH ist die Microsoft-Store-Variante (WindowsApps); ihr
+fehlen `pypdf` und `psycopg2`, `test_pdf_export` läuft damit fast leer und meldet trotzdem
+"OK". Der Anaconda-Python hat alles (PySide6, pypdf, psycopg2, Flask, pytest).
 
 Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne
 `pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
