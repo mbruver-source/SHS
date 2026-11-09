@@ -105,6 +105,18 @@ führt alle Tests inkl. GUI aus (grün: eine Zeile; sonst nur die Fehler mit Kur
 die GUI-Tests aus, `--json` liefert die Fehler maschinenlesbar, `--installation` testet zusätzlich die installierte EXE.
 Details je Test (mit Erklärung): `bericht.md` im Berichtsordner der Suite - nur bei Fehlern nachlesen.
 
+## Werkzeuge
+
+- `gh` ist installiert und angemeldet (Konto `mbruver-source`). Für Releases, Release-Texte
+  und Repo-Einstellungen nutzen (z. B. `gh release edit`). Nie behaupten, `gh` sei nicht
+  verfügbar, ohne vorher `gh --version` auszuführen.
+- Dateien mit dem Edit-/Write-Werkzeug ändern, nicht mit sed, PowerShell oder Heredoc-Skripten:
+  Skript-Ersetzungen haben hier wiederholt Escapes, Backslashes, Zeilenenden und Zeilennummern
+  zerstört.
+- Python: lokal Anaconda 3.14, die CI (Tests und Installer-Build) läuft mit 3.11. Code und Tests
+  müssen unter 3.11 laufen (keine Syntax/Bibliotheken erst ab 3.12+). Maßgeblich sind die
+  Workflows in `.github/workflows/`, nicht die lokale Version.
+
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben
 
 ### Feedback-Aufnahme
