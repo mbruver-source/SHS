@@ -9869,3 +9869,15 @@ Befragung mit Marco, Entscheidungen:
 - Marco hat `main` gepusht und `v1.0.58` getaggt (Tag auf 918dad9, die Website-Änderung `c4afc2a` liegt danach auf `main`); alle Workflows sind durchgelaufen (Marcos Meldung).
 - `SHS-Pruefungsprogramm-Quellcode` ist nach der bisherigen Regel nachgezogen (alle Dateien aus Git außer `.claude/`, die Workflows zusätzlich im Wurzelordner, im Spiegel nichts gelöscht): 11 Dateien neu, 42 geändert; der Byte-Abgleich danach ist identisch (345 Dateien).
 - Die claude.ai-Ablage „SHS“ kann diese Sitzung nicht erreichen. Marco lädt dort `Fortschritt.md` und `Architektur.md` neu hoch (`Grobkonzept.md` ist unverändert).
+
+## Nach 1.0.58 (09.11.2026, Arbeitsstand, nichts committet): Reiterbezeichnungen fett, Checkliste Vorgaben ausblenden
+
+- **Reiterbezeichnungen fett:** alle Reiter der Hauptleiste in Stärke 600 (bisher nur der gewählte). Das Stylesheet-Referenzstück in `test_theme.py` ist angepasst, neuer Test `test_reiterbezeichnungen_sind_fett`. Die Screenshots in `docs/bilder/` zeigen noch die alte Schrift und entstehen beim nächsten Build neu. Offen: ob „fett“ nur die Reiterleiste oder auch die Kategorien-Überschriften der Checkliste meinte (die waren schon fett).
+- **Checkliste, Vorgaben ausblenden:** vorgegebene Punkte (✕ hinter dem Punkt) und Kategorien („Kategorie ausblenden“) lassen sich für den Termin ausblenden, mit Rückfrage. Ausgeblendetes wird nicht angezeigt und nicht mitgezählt, der Haken darauf entfällt; „Ausgeblendetes zeigen (n)“ stellt alles wieder her. Gespeichert im JSON `veranstaltung.checkliste_eigene` unter `ausgeblendet`, wird beim neuen Termin mit den eigenen Einträgen vorgeschlagen. Vorgegebene Einträge werden nie gelöscht.
+
+## Version 1.0.59: Reiter fett, Checkliste Vorgaben ausblenden (09.11.2026)
+
+- Gebündelt: die Änderungen aus „Nach 1.0.58“ (Reiterbezeichnungen fett, Checkliste: Vorgaben und Kategorien für den Termin ausblenden). „Fett“ gilt als erledigt für die Reiterleiste; der Punkt zu den Kategorien-Überschriften entfällt.
+- Nacharbeit aus der Verifikation: Die Rückfrage „Kategorie ausblenden“ nennt, dass eigene Punkte darin gespeichert bleiben, aber ebenfalls ausgeblendet sind. `Architektur.md` beschreibt das Ausblenden in `checkliste.py`.
+- Handbuch, Screenshots, Handbuch-PDF und Kurzanleitung neu erzeugt, `RELEASE_NOTES.md` neu geschrieben.
+- Tests: Suite 779 OK (183 übersprungen), Checkliste/Theme-GUI-Tests 75 bestanden. Beobachten: `test_teilnehmer_dialog_startgroesse_und_feldbreite` war im GUI-Gesamtlauf einmal rot, einzeln grün (vermutlich reihenfolgeabhängig).

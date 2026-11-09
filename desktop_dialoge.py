@@ -1620,7 +1620,9 @@ offenen Punkten auf. Die Kategorien lassen sich auf- und zuklappen (beim Öffnen
 gespeichert, "Alle Haken entfernen" setzt sie (nach Rückfrage) zurück. Mit "Punkt hinzufügen…" (in jeder
 Kategorie) und "Kategorie hinzufügen…" legst du eigene Punkte und Kategorien an; sie lassen sich über ✕
 bzw. "Kategorie löschen" wieder entfernen. Eigene Kategorien und Punkte werden beim Anlegen eines neuen
-Termins aus dem letzten Termin vorgeschlagen, die Haken nicht.</p>
+Termins aus dem letzten Termin vorgeschlagen, die Haken nicht. Vorgegebene Punkte und Kategorien, die du nicht
+brauchst, blendest du mit ✕ bzw. "Kategorie ausblenden" für diesen Termin aus (sie zählen dann nicht mit);
+"Ausgeblendetes zeigen" holt alles zurück. Auch das Ausblenden wird für einen neuen Termin vorgeschlagen.</p>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
 Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der

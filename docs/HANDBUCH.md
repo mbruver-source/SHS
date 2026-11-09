@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.58. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.59. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -822,6 +822,11 @@ Eigene Punkte und Abschnitte legst du mit **„Punkt hinzufügen…“** (in jed
 über „Kategorie löschen“ wieder entfernen; die vorgegebenen Schritte bleiben immer erhalten. Beim
 Anlegen eines neuen Termins schlägt das Programm deine eigenen Abschnitte und Punkte aus dem
 letzten Termin vor, die Haken beginnen leer.
+
+Vorgegebene Schritte und Abschnitte, die du nicht brauchst, blendest du für diesen Termin aus: mit dem
+**✕** hinter dem Punkt bzw. mit **„Kategorie ausblenden“**. Ausgeblendetes wird nicht angezeigt und
+nicht mitgezählt, sein Haken entfällt. **„Ausgeblendetes zeigen“** oben stellt alles wieder her. Auch
+die Auswahl, was ausgeblendet ist, schlägt das Programm beim Anlegen eines neuen Termins vor.
 
 ### Abrechnung Leistungsrichter
 

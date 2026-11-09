@@ -403,7 +403,7 @@ class TestChecklisteEigene(unittest.TestCase):
 
     def test_beschaedigte_eigene_daten(self):
         import checkliste  # noqa: PLC0415
-        leer = {"kategorien": [], "punkte": []}
+        leer = {"kategorien": [], "punkte": [], "ausgeblendet": []}
         for roh in ("{kaputt", "[]", "null", '{"kategorien": "x", "punkte": 5}',
                     '{"punkte": [{"id": "e1", "kategorie": [1], "text": "x"}]}',
                     '{"punkte": [{"id": "e1", "kategorie": {"a": 1}, "text": "x"}]}',
@@ -438,3 +438,66 @@ class TestChecklisteEigene(unittest.TestCase):
             conn = db.init_db(pfad)
             self.assertIsNone(db.get_veranstaltung(conn)["checkliste_eigene"])
             conn.close()
+
+
+class TestChecklisteAusblenden(unittest.TestCase):
+    def test_ausblenden_und_struktur(self):
+        import checkliste  # noqa: PLC0415
+        e = checkliste.eigene_lesen(None)
+        e = checkliste.ausblenden(e, "zeitplan")
+        e = checkliste.ausblenden(e, "tag")  # ganze feste Kategorie
+        e = checkliste.ausblenden(e, "zeitplan")  # doppelt: keine zweite Eintragung
+        self.assertEqual(e["ausgeblendet"], ["zeitplan", "tag"])
+        v = {"checkliste_eigene": checkliste.eigene_als_text(e)}
+        kategorien = checkliste.struktur(v)
+        self.assertNotIn("tag", [k.schluessel for k in kategorien])
+        tage8 = next(k for k in kategorien if k.schluessel == "tage8")
+        self.assertEqual([p.kennung for p in tage8.punkte], ["richter_kontakt", "zeitplan_aenderung"])
+        self.assertNotIn("ergebnisse", checkliste.alle_kennungen(kategorien))
+        self.assertEqual(checkliste.anzahl_ausgeblendet(e), 2)
+
+    def test_ausgeblendete_haken_zaehlen_nicht(self):
+        import checkliste  # noqa: PLC0415
+        e = checkliste.ausblenden(checkliste.eigene_lesen(None), "zeitplan")
+        v = {"checkliste_eigene": checkliste.eigene_als_text(e), "checkliste": '["zeitplan", "zahlungen"]'}
+        self.assertEqual(checkliste.erledigte(v), {"zahlungen"})
+
+    def test_alle_einblenden_behaelt_eigenes(self):
+        import checkliste  # noqa: PLC0415
+        e = checkliste.kategorie_hinzufuegen(checkliste.eigene_lesen(None), "Verein")
+        e = checkliste.ausblenden(e, "kurz")
+        e = checkliste.punkt_hinzufuegen(e, "e1", "Pokale")
+        e = checkliste.alle_einblenden(e)
+        self.assertEqual(e["ausgeblendet"], [])
+        self.assertEqual([k["name"] for k in e["kategorien"]], ["Verein"])
+        self.assertEqual(len(e["punkte"]), 1)
+
+    def test_eigenes_wird_nicht_ausgeblendet_und_ausgeblendete_kategorie_nimmt_keine_punkte(self):
+        import checkliste  # noqa: PLC0415
+        e = checkliste.punkt_hinzufuegen(checkliste.kategorie_hinzufuegen(checkliste.eigene_lesen(None), "V"), "e1", "x")
+        with self.assertRaises(ValueError):
+            checkliste.ausblenden(e, "e1")  # eigene Kategorie: löschen statt ausblenden
+        with self.assertRaises(ValueError):
+            checkliste.ausblenden(e, "e2")
+        with self.assertRaises(ValueError):
+            checkliste.ausblenden(e, "gibt-es-nicht")
+        e = checkliste.ausblenden(e, "tag")
+        with self.assertRaises(ValueError):
+            checkliste.punkt_hinzufuegen(e, "tag", "neuer Punkt")
+
+    def test_andere_operationen_behalten_ausgeblendetes(self):
+        import checkliste  # noqa: PLC0415
+        e = checkliste.ausblenden(checkliste.eigene_lesen(None), "tag")
+        e = checkliste.kategorie_hinzufuegen(e, "V")
+        e = checkliste.punkt_hinzufuegen(e, "e1", "x")
+        e = checkliste.punkt_loeschen(e, "e2")
+        e = checkliste.kategorie_loeschen(e, "e1")
+        self.assertEqual(e["ausgeblendet"], ["tag"])
+        self.assertIsNotNone(checkliste.eigene_als_text(e))  # nur Ausgeblendetes wird gespeichert
+
+    def test_beschaedigte_ausblendungen(self):
+        import checkliste  # noqa: PLC0415
+        roh = '{"ausgeblendet": ["tag", "tag", "gibt-es-nicht", 5, ["x"], "e1", "zeitplan"]}'
+        self.assertEqual(checkliste.eigene_lesen({"checkliste_eigene": roh})["ausgeblendet"], ["tag", "zeitplan"])
+        for roh in ('{"ausgeblendet": "tag"}', '{"ausgeblendet": null}', '{"ausgeblendet": {"tag": 1}}'):
+            self.assertEqual(checkliste.eigene_lesen({"checkliste_eigene": roh})["ausgeblendet"], [], roh)

@@ -10,7 +10,10 @@ Gespeichert wird je Termin in zwei Spalten der Tabelle `veranstaltung`:
   `{"kategorien": [{"id": "e1", "name": "..."}], "punkte": [{"id": "e2", "kategorie": "e1", "text": "..."}]}`.
   `kategorie` ist die Kennung einer eigenen Kategorie oder der Schlüssel einer festen
   (z. B. "vorher"). Eigene Kategorien stehen hinter den festen, eigene Punkte hinter den festen
-  Punkten ihrer Kategorie.
+  Punkten ihrer Kategorie. Zusätzlich `"ausgeblendet": ["zeitplan", "tag", ...]`: feste Punkte
+  (Kennungen) und feste Kategorien (Schlüssel), die für diesen Termin nicht angezeigt und nicht
+  mitgezählt werden (Marco 09.11.2026: Teile der Vorauswahl ignorieren). Feste Einträge werden
+  nie gelöscht, nur ausgeblendet; „alle einblenden“ stellt sie wieder her.
 
 Die festen Kennungen und Schlüssel sind stabil (nie umbenennen oder wiederverwenden); unbekannte
 Kennungen in der Datei werden beim Lesen ignoriert. Eigene Kennungen heißen "e1", "e2", ….
@@ -90,7 +93,7 @@ def _bereinigt(text, maximum: int) -> str:
 def eigene_lesen(veranstaltung: dict | None) -> dict:
     """Eigene Kategorien und Punkte aus `checkliste_eigene`; Unlesbares ergibt eine leere
     Struktur, Punkte ohne vorhandene Kategorie entfallen."""
-    leer = {"kategorien": [], "punkte": []}
+    leer = {"kategorien": [], "punkte": [], "ausgeblendet": []}
     roh = (veranstaltung or {}).get("checkliste_eigene")
     if not roh:
         return leer
@@ -117,12 +120,18 @@ def eigene_lesen(veranstaltung: dict | None) -> dict:
                 and text and isinstance(eintrag.get("kategorie"), str) and eintrag["kategorie"] in gueltige):
             benutzt.add(kennung)
             punkte.append({"id": kennung, "kategorie": eintrag["kategorie"], "text": text})
-    return {"kategorien": kategorien, "punkte": punkte}
+    fest = set(ALLE_KENNUNGEN) | set(_FESTE_SCHLUESSEL)
+    roh_ausgeblendet = daten.get("ausgeblendet")
+    ausgeblendet = []
+    for eintrag in roh_ausgeblendet if isinstance(roh_ausgeblendet, list) else []:
+        if isinstance(eintrag, str) and eintrag in fest and eintrag not in ausgeblendet:
+            ausgeblendet.append(eintrag)
+    return {"kategorien": kategorien, "punkte": punkte, "ausgeblendet": ausgeblendet}
 
 
 def eigene_als_text(eigene: dict) -> str | None:
-    """Speicherform der eigenen Kategorien und Punkte; None, wenn es keine gibt."""
-    if not eigene.get("kategorien") and not eigene.get("punkte"):
+    """Speicherform der eigenen Kategorien und Punkte; None, wenn es nichts zu speichern gibt."""
+    if not eigene.get("kategorien") and not eigene.get("punkte") and not eigene.get("ausgeblendet"):
         return None
     return json.dumps(eigene, ensure_ascii=False, sort_keys=True)
 
@@ -131,14 +140,17 @@ def struktur(veranstaltung: dict | None) -> list[Kategorie]:
     """Alle Kategorien in Anzeigereihenfolge: feste, dann eigene; je Kategorie erst die festen,
     dann die eigenen Punkte."""
     eigene = eigene_lesen(veranstaltung)
+    versteckt = set(eigene["ausgeblendet"])
 
     def eigene_punkte(schluessel: str) -> list[Punkt]:
         return [Punkt(p["id"], p["text"], True) for p in eigene["punkte"] if p["kategorie"] == schluessel]
 
     ergebnis = [
         Kategorie(schluessel, titel, False,
-                  tuple([Punkt(k, t, False) for k, t in punkte] + eigene_punkte(schluessel)))
+                  tuple([Punkt(k, t, False) for k, t in punkte if k not in versteckt]
+                        + eigene_punkte(schluessel)))
         for schluessel, titel, punkte in CHECKLISTE
+        if schluessel not in versteckt
     ]
     ergebnis += [Kategorie(k["id"], k["name"], True, tuple(eigene_punkte(k["id"]))) for k in eigene["kategorien"]]
     return ergebnis
@@ -160,7 +172,7 @@ def kategorie_hinzufuegen(eigene: dict, name: str) -> dict:
         raise ValueError("Der Name der Kategorie fehlt.")
     if len(eigene["kategorien"]) >= MAX_KATEGORIEN:
         raise ValueError(f"Es sind höchstens {MAX_KATEGORIEN} eigene Kategorien möglich.")
-    neu = {"kategorien": list(eigene["kategorien"]), "punkte": list(eigene["punkte"])}
+    neu = _kopie(eigene)
     neu["kategorien"].append({"id": _naechste_kennung(eigene), "name": name})
     return neu
 
@@ -170,24 +182,54 @@ def punkt_hinzufuegen(eigene: dict, schluessel: str, text: str) -> dict:
     text = _bereinigt(text, MAX_TEXT)
     if not text:
         raise ValueError("Der Text des Punkts fehlt.")
-    if schluessel not in _FESTE_SCHLUESSEL and schluessel not in {k["id"] for k in eigene["kategorien"]}:
+    if (schluessel not in _FESTE_SCHLUESSEL and schluessel not in {k["id"] for k in eigene["kategorien"]}) \
+            or schluessel in eigene["ausgeblendet"]:
         raise ValueError("Unbekannte Kategorie.")
     if len(eigene["punkte"]) >= MAX_PUNKTE:
         raise ValueError(f"Es sind höchstens {MAX_PUNKTE} eigene Punkte möglich.")
-    neu = {"kategorien": list(eigene["kategorien"]), "punkte": list(eigene["punkte"])}
+    neu = _kopie(eigene)
     neu["punkte"].append({"id": _naechste_kennung(eigene), "kategorie": schluessel, "text": text})
     return neu
 
 
+def _kopie(eigene: dict) -> dict:
+    return {"kategorien": list(eigene["kategorien"]), "punkte": list(eigene["punkte"]),
+            "ausgeblendet": list(eigene.get("ausgeblendet", []))}
+
+
 def punkt_loeschen(eigene: dict, kennung: str) -> dict:
-    return {"kategorien": list(eigene["kategorien"]),
-            "punkte": [p for p in eigene["punkte"] if p["id"] != kennung]}
+    neu = _kopie(eigene)
+    neu["punkte"] = [p for p in eigene["punkte"] if p["id"] != kennung]
+    return neu
 
 
 def kategorie_loeschen(eigene: dict, kennung: str) -> dict:
     """Löscht eine eigene Kategorie samt ihren Punkten."""
-    return {"kategorien": [k for k in eigene["kategorien"] if k["id"] != kennung],
-            "punkte": [p for p in eigene["punkte"] if p["kategorie"] != kennung]}
+    neu = _kopie(eigene)
+    neu["kategorien"] = [k for k in eigene["kategorien"] if k["id"] != kennung]
+    neu["punkte"] = [p for p in eigene["punkte"] if p["kategorie"] != kennung]
+    return neu
+
+
+def ausblenden(eigene: dict, kennung: str) -> dict:
+    """Blendet einen festen Punkt (Kennung) oder eine feste Kategorie (Schlüssel) aus; eigene
+    Einträge werden gelöscht, nicht ausgeblendet (ValueError)."""
+    if kennung not in ALLE_KENNUNGEN and kennung not in _FESTE_SCHLUESSEL:
+        raise ValueError("Nur vorgegebene Einträge lassen sich ausblenden.")
+    neu = _kopie(eigene)
+    if kennung not in neu["ausgeblendet"]:
+        neu["ausgeblendet"].append(kennung)
+    return neu
+
+
+def alle_einblenden(eigene: dict) -> dict:
+    neu = _kopie(eigene)
+    neu["ausgeblendet"] = []
+    return neu
+
+
+def anzahl_ausgeblendet(eigene: dict) -> int:
+    return len(eigene.get("ausgeblendet", []))
 
 
 def erledigte(veranstaltung: dict | None) -> set[str]:

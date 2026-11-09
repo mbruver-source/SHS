@@ -110,6 +110,9 @@ class VerwaltungTab(QWidget):
         kategorie_btn.clicked.connect(self._checkliste_kategorie_hinzufuegen)
         zuruecksetzen_btn = QPushButton("Alle Haken entfernen")
         zuruecksetzen_btn.clicked.connect(self._checkliste_zuruecksetzen)
+        self.checkliste_einblenden_btn = QPushButton("Ausgeblendetes zeigen")
+        self.checkliste_einblenden_btn.setToolTip("Blendet alle ausgeblendeten Schritte und Kategorien wieder ein")
+        self.checkliste_einblenden_btn.clicked.connect(self._checkliste_alle_einblenden)
         self._checkliste_inhalt = QWidget()
         self._checkliste_liste = QVBoxLayout(self._checkliste_inhalt)
         bildlauf = self._checkliste_bildlauf = QScrollArea()
@@ -119,6 +122,7 @@ class VerwaltungTab(QWidget):
         kopf.addWidget(QLabel("Checkliste zum Prüfungstermin"))
         kopf.addWidget(self.checkliste_stand)
         kopf.addStretch()
+        kopf.addWidget(self.checkliste_einblenden_btn)
         kopf.addWidget(kategorie_btn)
         kopf.addWidget(zuruecksetzen_btn)
 
@@ -146,6 +150,10 @@ class VerwaltungTab(QWidget):
         finally:
             self._checkliste_laedt = False
         self._checkliste_stand_anzeigen(erledigt)
+        versteckt = checkliste.anzahl_ausgeblendet(checkliste.eigene_lesen(veranstaltung))
+        self.checkliste_einblenden_btn.setEnabled(versteckt > 0)
+        self.checkliste_einblenden_btn.setText(
+            f"Ausgeblendetes zeigen ({versteckt})" if versteckt else "Ausgeblendetes zeigen")
 
     def zur_checkliste(self) -> None:
         """Zeigt die Checkliste: klappt die erste Kategorie mit offenen Punkten auf (sind alle
@@ -189,12 +197,15 @@ class VerwaltungTab(QWidget):
                 feld.toggled.connect(lambda _an: self._checkliste_geaendert())
                 self.checkliste_felder[punkt.kennung] = feld
                 zeile.addWidget(feld, 1)
+                entfernen = QToolButton()
+                entfernen.setText("✕")
                 if punkt.eigen:
-                    loeschen = QToolButton()
-                    loeschen.setText("✕")
-                    loeschen.setToolTip("Diesen eigenen Punkt löschen")
-                    loeschen.clicked.connect(lambda _=False, k=punkt.kennung: self._checkliste_punkt_loeschen(k))
-                    zeile.addWidget(loeschen)
+                    entfernen.setToolTip("Diesen eigenen Punkt löschen")
+                    entfernen.clicked.connect(lambda _=False, k=punkt.kennung: self._checkliste_punkt_loeschen(k))
+                else:
+                    entfernen.setToolTip("Diesen Punkt ausblenden (für diesen Termin; über „Ausgeblendetes zeigen“ wieder da)")
+                    entfernen.clicked.connect(lambda _=False, k=punkt.kennung: self._checkliste_ausblenden(k, "Punkt"))
+                zeile.addWidget(entfernen)
                 zeilen.addLayout(zeile)
             fuss = QHBoxLayout()
             neu_btn = QPushButton("Punkt hinzufügen…")
@@ -203,7 +214,10 @@ class VerwaltungTab(QWidget):
             if kat.eigen:
                 weg_btn = QPushButton("Kategorie löschen")
                 weg_btn.clicked.connect(lambda _=False, k=kat.schluessel: self._checkliste_kategorie_loeschen(k))
-                fuss.addWidget(weg_btn)
+            else:
+                weg_btn = QPushButton("Kategorie ausblenden")
+                weg_btn.clicked.connect(lambda _=False, k=kat.schluessel: self._checkliste_ausblenden(k, "Kategorie"))
+            fuss.addWidget(weg_btn)
             fuss.addStretch()
             zeilen.addLayout(fuss)
             offen = kat.schluessel in self._checkliste_offen
@@ -281,6 +295,21 @@ class VerwaltungTab(QWidget):
     def _checkliste_punkt_loeschen(self, kennung: str) -> None:
         if _ja_nein(self, "Punkt löschen", "Diesen eigenen Punkt der Checkliste löschen?"):
             self._checkliste_eigene_aendern(lambda e: checkliste.punkt_loeschen(e, kennung))
+
+    def _checkliste_ausblenden(self, kennung: str, art: str) -> None:
+        """Blendet einen vorgegebenen Punkt oder eine vorgegebene Kategorie für diesen Termin aus
+        (Haken darauf entfallen); „Ausgeblendetes zeigen“ stellt alles wieder her."""
+        if not _ja_nein(self, f"{art} ausblenden",
+                        f"Diese{'n' if art == 'Punkt' else ''} {art} für diesen Termin ausblenden? "
+                        "Über „Ausgeblendetes zeigen“ lässt sich alles wieder einblenden."
+                        + (" Eigene Punkte darin bleiben gespeichert, sind aber ebenfalls ausgeblendet."
+                           if art == "Kategorie" else "")):
+            return
+        self._checkliste_offen.discard(kennung)
+        self._checkliste_eigene_aendern(lambda e: checkliste.ausblenden(e, kennung))
+
+    def _checkliste_alle_einblenden(self) -> None:
+        self._checkliste_eigene_aendern(checkliste.alle_einblenden)
 
     def _checkliste_kategorie_loeschen(self, schluessel: str) -> None:
         if _ja_nein(self, "Kategorie löschen", "Diese eigene Kategorie mit allen ihren Punkten löschen?"):

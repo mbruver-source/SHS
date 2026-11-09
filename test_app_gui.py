@@ -12013,3 +12013,50 @@ def test_kopfknopf_checkliste_springt_zur_checkliste(qtbot, termin):
     fenster.checkliste_btn.click()
     assert tab.checkliste_inhalte["vorher"].isHidden()
     assert not tab.checkliste_inhalte["meldungen"].isHidden()
+
+
+def test_verwaltung_checkliste_vorgegebenes_ausblenden_und_wieder_einblenden(qtbot, conn, monkeypatch):
+    import checkliste
+
+    tab = _checkliste_tab(qtbot, conn)
+    assert not tab.checkliste_einblenden_btn.isEnabled()
+    tab.checkliste_felder["zeitplan"].setChecked(True)
+    fragen = iter([False, True, True])
+    monkeypatch.setattr("desktop_verwaltung._ja_nein", lambda *a, **k: next(fragen))
+    tab._checkliste_ausblenden("zeitplan", "Punkt")  # Nein: bleibt
+    assert "zeitplan" in tab.checkliste_felder
+    tab._checkliste_ausblenden("zeitplan", "Punkt")  # Ja: weg samt Haken
+    assert "zeitplan" not in tab.checkliste_felder
+    assert tab.checkliste_koepfe["tage8"].text() == "8 Tage vorher  (0 von 2)"
+    assert tab.checkliste_stand.text() == "0 von 17 erledigt"
+    assert tab.checkliste_einblenden_btn.isEnabled()
+    assert tab.checkliste_einblenden_btn.text() == "Ausgeblendetes zeigen (1)"
+    tab._checkliste_ausblenden("tag", "Kategorie")  # ganze Kategorie
+    assert "tag" not in tab.checkliste_koepfe and "ergebnisse" not in tab.checkliste_felder
+    assert checkliste.eigene_lesen(get_veranstaltung(conn))["ausgeblendet"] == ["zeitplan", "tag"]
+    # neu geöffnet: bleibt ausgeblendet, der Haken ist verschwunden
+    neu = VerwaltungTab(conn)
+    qtbot.addWidget(neu)
+    assert "tag" not in neu.checkliste_koepfe and "zeitplan" not in neu.checkliste_felder
+    neu._checkliste_alle_einblenden()
+    assert "tag" in neu.checkliste_koepfe and "zeitplan" in neu.checkliste_felder
+    assert not neu.checkliste_felder["zeitplan"].isChecked()
+    assert not neu.checkliste_einblenden_btn.isEnabled()
+    assert get_veranstaltung(conn)["checkliste_eigene"] is None
+
+
+def test_verwaltung_checkliste_knoepfe_je_art(qtbot, conn):
+    from PySide6.QtWidgets import QPushButton
+
+    tab = _checkliste_tab(qtbot, conn)
+    texte = [b.text() for b in tab.findChildren(QPushButton)]
+    assert texte.count("Kategorie ausblenden") == 7  # eine je fester Kategorie
+    assert "Kategorie löschen" not in texte
+
+
+def test_reiterbezeichnungen_sind_fett():
+    from desktop_darstellung import _erzeuge_qss, _DESIGN_DEFAULT, _THEME_DEFAULT
+
+    qss = _erzeuge_qss(_THEME_DEFAULT, _DESIGN_DEFAULT)
+    block = qss.split("QTabBar::tab {", 1)[1].split("}", 1)[0]
+    assert "font-weight: 600" in block

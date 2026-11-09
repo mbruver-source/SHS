@@ -66,6 +66,7 @@ QTabBar::tab {
     border: none;
     border-bottom: 3px solid transparent;
     margin-right: 2px;
+    font-weight: 600;
 }
 QTabBar::tab:selected {
     color: @@TEXT_STARK@@;
