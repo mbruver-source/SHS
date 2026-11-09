@@ -63,6 +63,15 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 PY -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
 ```
 
+Zusätzlich die SHS Test Suite (token-sparend, enthält auch die GUI-Tests; grün = eine Zeile):
+
+```
+PY "C:\Users\mbruv\Documents\Claude\SHS Test Suite\run_tests.py" --kompakt
+```
+
+Ohne `--installation`: Der Build läuft erst später in der CI auf GitHub, die installierte EXE
+ist hier noch die Vorversion und sagt nichts über den neuen Stand.
+
 Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
 
 ## 5. Build-Commit
@@ -92,5 +101,13 @@ Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
   kopieren, die Workflows aus `.github/workflows/` zusätzlich in dessen Wurzelordner, nichts
   im Spiegel löschen; danach Byte-Abgleich und eine Zeile in `Fortschritt.md`. Nicht mehr
   Marco überlassen.
+- **Nachlauf nach dem Release (erst möglich, wenn Marco Setup heruntergeladen und installiert
+  hat):** EXE-Selbsttest der installierten Version:
+  ```
+  PY "C:\Users\mbruv\Documents\Claude\SHS Test Suite\run_tests.py" --kompakt --nur-installation --version-pruefen
+  ```
+  `--version-pruefen` bestätigt, dass die installierte Version zu `version.txt` passt. Vorher
+  (alte Installation) schlägt diese Prüfung erwartungsgemäß fehl. Marco bei der Abschlussmeldung
+  daran erinnern.
 - Hinweis an Marco: falls geändert, `Fortschritt.md`/`Architektur.md`/`Grobkonzept.md` in der claude.ai-Ablage
   „SHS“ nachziehen.
