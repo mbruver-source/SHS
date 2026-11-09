@@ -9886,3 +9886,7 @@ Befragung mit Marco, Entscheidungen:
 
 - `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (alle Dateien aus Git außer `.claude/`, Workflows zusätzlich im Wurzelordner, nichts gelöscht); Byte-Abgleich ohne Abweichung.
 - Marco: Den Spiegel zieht die Sitzung künftig beim Build selbst nach. In `CLAUDE.md` und `.claude/skills/shs-build/SKILL.md` festgehalten.
+
+## 09.11.2026: 1.0.59 ausgeliefert
+
+- Marco hat `main` gepusht und `v1.0.59` getaggt; alle Workflows sind grün (Marcos Meldung). Der Quellcode-Spiegel stand schon auf 1.0.59. Offen für Marco: claude.ai-Ablage „SHS“ (`Fortschritt.md`, `Architektur.md`) neu hochladen.
