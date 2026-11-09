@@ -119,6 +119,19 @@ Details je Test (mit Erklärung): `bericht.md` im Berichtsordner der Suite - nur
   müssen unter 3.11 laufen (keine Syntax/Bibliotheken erst ab 3.12+). Maßgeblich sind die
   Workflows in `.github/workflows/`, nicht die lokale Version.
 
+## Fertig-Definition für Funktionen
+
+Eine für Nutzer sichtbare Funktion gilt erst als fertig, wenn zum Stand der Änderung passen:
+Code mit Tests, Demo-Daten, `docs/HANDBUCH.md`, `README*.md`, Screenshots in `docs/bilder/` und
+die Website unter `docs/`. Wann was geschieht, regelt die Build-/Versionsdisziplin unten:
+Änderungen bleiben bis zum Build im Arbeitsstand (kein Commit), das Handbuch-PDF entsteht erst
+beim Build, die Screenshots werden nach dem Versionsbump noch einmal mit der neuen Version
+aufgenommen, und Website-Änderungen zu neuen Funktionen gehen erst mit dem Release online.
+
+- Tests müssen plattformunabhängig sein: keine fest eingebauten Windows-Pfadtrenner oder
+  -Escapes, stattdessen `pathlib`/`os.path` (die CI läuft auch unter Linux).
+- Nur erfundene Testdaten, nie echte Namen, E-Mail-Adressen oder Chipnummern.
+
 ## Sitzungsablauf bei Rückmeldungen/Aufgaben
 
 ### Feedback-Aufnahme
