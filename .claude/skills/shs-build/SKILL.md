@@ -87,6 +87,10 @@ Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
 - Hinweis an Marco: Nach dem Tag-Lauf unter „Actions“ prüfen, ob alle Jobs grün sind, auch
   `build-macos` (2x) und `build-linux`. Ein Fehler dort hält das Release nicht auf, dann
   fehlen nur die betroffenen Dateien (.dmg, AppImage, .deb) im Release.
-- Hinweis an Marco: Quellcode-Spiegel `SHS-Pruefungsprogramm-Quellcode` und, falls
-  geändert, `Fortschritt.md`/`Architektur.md`/`Grobkonzept.md` in der claude.ai-Ablage
+- **Quellcode-Spiegel automatisch nachziehen (Marco 09.11.2026):** Nach dem Build-Commit alle
+  Dateien aus `git ls-files` außer `.claude/` nach `..\SHS-Pruefungsprogramm-Quellcode`
+  kopieren, die Workflows aus `.github/workflows/` zusätzlich in dessen Wurzelordner, nichts
+  im Spiegel löschen; danach Byte-Abgleich und eine Zeile in `Fortschritt.md`. Nicht mehr
+  Marco überlassen.
+- Hinweis an Marco: falls geändert, `Fortschritt.md`/`Architektur.md`/`Grobkonzept.md` in der claude.ai-Ablage
   „SHS“ nachziehen.

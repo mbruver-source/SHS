@@ -9881,3 +9881,8 @@ Befragung mit Marco, Entscheidungen:
 - Nacharbeit aus der Verifikation: Die Rückfrage „Kategorie ausblenden“ nennt, dass eigene Punkte darin gespeichert bleiben, aber ebenfalls ausgeblendet sind. `Architektur.md` beschreibt das Ausblenden in `checkliste.py`.
 - Handbuch, Screenshots, Handbuch-PDF und Kurzanleitung neu erzeugt, `RELEASE_NOTES.md` neu geschrieben.
 - Tests: Suite 779 OK (183 übersprungen), Checkliste/Theme-GUI-Tests 75 bestanden. Beobachten: `test_teilnehmer_dialog_startgroesse_und_feldbreite` war im GUI-Gesamtlauf einmal rot, einzeln grün (vermutlich reihenfolgeabhängig).
+
+## 09.11.2026: Quellcode-Spiegel auf 1.0.59, künftig automatisch beim Build
+
+- `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (alle Dateien aus Git außer `.claude/`, Workflows zusätzlich im Wurzelordner, nichts gelöscht); Byte-Abgleich ohne Abweichung.
+- Marco: Den Spiegel zieht die Sitzung künftig beim Build selbst nach. In `CLAUDE.md` und `.claude/skills/shs-build/SKILL.md` festgehalten.

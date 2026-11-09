@@ -174,6 +174,8 @@ einem späteren Zeitpunkt (z. B. als geplante/automatisierte Aufgabe) laufen sol
 
 - Neben diesem Repo (`SHS-Pruefungsprogramm-Git`) hält Marco einen reinen Quellcode-Spiegel
   ohne Git (`SHS-Pruefungsprogramm-Quellcode`) - bekommt bei Auslieferungen dieselben Dateien.
+  Den Spiegel zieht die Sitzung beim Build automatisch nach (Marco 09.11.2026, Ablauf in
+  `.claude/skills/shs-build/SKILL.md`).
 - `Fortschritt.md`, `Architektur.md` und `Grobkonzept.md` werden zusätzlich in der
   claude.ai-Projekt-Ablage "SHS" synchron gehalten - bei Änderungen an einer der drei Dateien
   auch dort nachziehen, sofern die jeweilige Sitzung Zugriff darauf hat.
