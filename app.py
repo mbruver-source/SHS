@@ -151,6 +151,7 @@ from db_import import (
     rat_bei_ablehnung,
     schreibe_csv_vorlage,
 )
+from db_sicherung import auto_sicherung_erstellen
 import pdf_export  # noqa: F401 - Tests ersetzen app.pdf_export.*
 from shs_core import (
     ABBRUCH_GRUENDE,
@@ -189,6 +190,7 @@ from desktop_gemeinsam import (
     _name_passt,
     absturzprotokoll_einrichten,
     fehlerfenster_einrichten,
+    laufwerksart,
     meldungsfenster_als_klartext,
     programmsymbol,
     _ausdrucke_ordner,
@@ -3581,6 +3583,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.resize(900, 600)
         # Laufende Demoprüfung (desktop_demo.DemoTour) oder None.
         self._demo_tour = None
+        self.auto_sicherung_aktiv = False
         # H-4: True, sobald _sitzungsende_pruefen das Beenden durch Windows/Setup erlaubt
         # hat - das folgende closeEvent prüft dann nicht erneut. Ein abgebrochenes Abmelden
         # setzt es über SitzungsendeFilter zurück.
@@ -4004,6 +4007,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.conn = conn
         self.pfad = pfad
         self._demo_termin = demo
+        self.auto_sicherung_anlegen()
         self._tabs.blockSignals(True)
         try:
             while self._tabs.count():
@@ -4044,6 +4048,33 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         anzahl = len(list_teilnehmer(self.conn, nur_teilnehmende=True))
         self.kopf.termin_setzen(verein, veranstaltung.get("datum"), veranstaltung.get("ort"),
                                 anzahl, getattr(self, "_demo_termin", False))
+
+    def laufwerk_hinweis_zeigen(self) -> None:
+        """Liegt der Termin auf einem USB-Stick oder Netzlaufwerk, einmal darauf hinweisen
+        (Marco 10.11.2026): Abziehen oder Verbindungsverlust stören das Speichern erst spät."""
+        art = laufwerksart(self.pfad)
+        if not art or getattr(self, "_demo_termin", False):
+            return
+        QMessageBox.information(
+            self, f"Termin auf einem {art}",
+            f"Der Termin liegt auf einem {art}:\n{self.pfad}\n\n"
+            "Solange das Programm geöffnet ist, den Datenträger nicht abziehen und die Verbindung "
+            "nicht trennen - Änderungen könnten sonst verloren gehen. Eine automatische Kopie des Termins "
+            "legt das Programm zusätzlich auf diesem Rechner ab.")
+
+    def auto_sicherung_anlegen(self, ohne_mindestabstand: bool = False) -> None:
+        """Automatische Kopie des Termins (Marco 10.11.2026) - nur im echten Programmlauf
+        (`auto_sicherung_aktiv`, von main() gesetzt; Tests und Demo schreiben nichts).
+        Beim Beenden `ohne_mindestabstand`: der Stand der Sitzung wird immer gesichert."""
+        if not self.auto_sicherung_aktiv or getattr(self, "_demo_termin", False):
+            return
+        try:
+            if ohne_mindestabstand:
+                auto_sicherung_erstellen(self.conn, self.pfad, mindestabstand_sekunden=0)
+            else:
+                auto_sicherung_erstellen(self.conn, self.pfad)
+        except Exception as exc:  # noqa: BLE001 - eine Sicherung darf die Arbeit nie stören
+            fehler_protokollieren(exc)
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
@@ -4088,6 +4119,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             )
             return
         alte_verbindung.close()
+        if self.auto_sicherung_aktiv:
+            self.laufwerk_hinweis_zeigen()  # auch beim Wechsel auf einen Termin auf Stick/Netzlaufwerk
 
     def _neu_angelegten_termin_entfernen(self, pfad: str) -> None:
         """Der Startdialog hat den Termin eben erst angelegt, der Wechsel wurde dann bei der
@@ -4569,6 +4602,13 @@ _GEOMETRIE_SCHLUESSEL = "fenster/geometrie"
 _MAXIMIERT_SCHLUESSEL = "fenster/maximiert"
 
 
+def _auto_sicherung_beim_beenden(fenster) -> None:
+    try:
+        fenster.auto_sicherung_anlegen(ohne_mindestabstand=True)
+    except RuntimeError:
+        pass  # Fenster schon zerstört
+
+
 def _fenstergeometrie_merken(fenster: QMainWindow) -> None:
     """Merkt Größe und Lage des Hauptfensters für den nächsten Start (Marco 10.11.2026)."""
     try:
@@ -4634,7 +4674,11 @@ def main() -> int:
         # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
         # Zeitplan-Spalten zu wenig Platz.
         _fenster_zeigen_wie_zuletzt(fenster)
+        fenster.auto_sicherung_aktiv = True
+        fenster.auto_sicherung_anlegen()
+        QTimer.singleShot(0, fenster.laufwerk_hinweis_zeigen)
         app.aboutToQuit.connect(lambda: _fenstergeometrie_merken(fenster))
+        app.aboutToQuit.connect(lambda: _auto_sicherung_beim_beenden(fenster))
     except Exception as exc:  # noqa: BLE001 - Desktop-Prüfung 14.10.2026, Teil 9 Nr. 7
         fehler_protokollieren(exc)
         fehlerfenster_zeigen(

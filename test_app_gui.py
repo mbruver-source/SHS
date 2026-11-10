@@ -8779,6 +8779,9 @@ def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
     "Muster" mehr), und die Startgröße passt auf den verfügbaren Bildschirm."""
     import desktop_dialoge
 
+    # Ausgangszustand herstellen: andere Tests ändern Schrift/Stylesheet der Anwendung, wovon die
+    # Dialogbreite abhängt (sonst nur im Gesamtlauf auf manchen Bildschirmen zu breit).
+    _darstellung_anwenden(QApplication.instance())
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
@@ -8787,7 +8790,9 @@ def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
     assert dialog.nachname.width() >= desktop_dialoge._MINDESTBREITE_TEXTFELD
     frei = dialog.screen().availableGeometry()
     breite, hoehe = desktop_dialoge._TEILNEHMER_DIALOG_GROESSE
-    assert dialog.width() <= min(breite, int(frei.width() * DIALOG_MAX_BREITE_ANTEIL))
+    # Der Dialog wächst mit seinem Inhalt über die Standardbreite hinaus (Nachtest 2, N2) und
+    # wird nur durch den Bildschirm begrenzt; die Höhe bleibt bei der Standardhöhe.
+    assert dialog.width() <= int(frei.width() * DIALOG_MAX_BREITE_ANTEIL)
     assert dialog.height() <= min(hoehe, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))
 
 
@@ -12559,3 +12564,65 @@ def test_druckknoepfe_in_uebersicht_und_verwaltung(qtbot, conn, tmp_path, monkey
     assert "Richter" in PdfReader(str(ziele[-1])).pages[0].extract_text()
     verwaltung.checkliste_pdf_btn.click()
     assert "Checkliste zum Prüfungstermin" in PdfReader(str(ziele[-1])).pages[0].extract_text()
+
+
+def test_laufwerksart_erkennt_usb_stick_und_netzlaufwerk(monkeypatch):
+    """Marco 10.11.2026: Hinweis, wenn der Termin auf einem USB-Stick oder Netzlaufwerk liegt."""
+    import types
+
+    import desktop_gemeinsam
+
+    assert desktop_gemeinsam.laufwerksart("") is None
+    arten = {"C:\\": 3, "E:\\": 2, "Z:\\": 4}
+    attrappe = types.SimpleNamespace(
+        kernel32=types.SimpleNamespace(GetDriveTypeW=lambda wurzel: arten.get(wurzel, 0)))
+    monkeypatch.setattr(desktop_gemeinsam.os, "name", "nt")
+    monkeypatch.setattr(desktop_gemeinsam.os.path, "abspath", lambda p: p)
+    monkeypatch.setattr(desktop_gemeinsam.os.path, "splitdrive", lambda p: (p[:2], p[2:]))
+    monkeypatch.setattr("ctypes.windll", attrappe, raising=False)
+    assert desktop_gemeinsam.laufwerksart(r"C:\Termine\a.sqlite") is None
+    assert "USB-Stick" in desktop_gemeinsam.laufwerksart(r"E:\Termine\a.sqlite")
+    assert desktop_gemeinsam.laufwerksart(r"Z:\a.sqlite") == "Netzlaufwerk"
+    assert desktop_gemeinsam.laufwerksart(r"\\server\freigabe\a.sqlite") == "Netzlaufwerk"
+    # Langpfade: feste Platte bleibt ohne Hinweis, Stick und UNC werden erkannt
+    assert desktop_gemeinsam.laufwerksart(r"\\?\C:\Termine\a.sqlite") is None
+    assert "USB-Stick" in desktop_gemeinsam.laufwerksart(r"\\?\E:\Termine\a.sqlite")
+    assert desktop_gemeinsam.laufwerksart(r"\\?\UNC\server\freigabe\a.sqlite") == "Netzlaufwerk"
+
+
+def test_hauptfenster_auto_sicherung_nur_im_echten_lauf(qtbot, termin, tmp_path, monkeypatch):
+    conn, pfad = termin
+    aufrufe = []
+    monkeypatch.setattr("app.auto_sicherung_erstellen", lambda c, p: aufrufe.append(p))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    assert aufrufe == []  # Tests und Demo schreiben nichts
+    fenster.auto_sicherung_aktiv = True
+    fenster.auto_sicherung_anlegen()
+    assert aufrufe == [pfad]
+    fenster._demo_termin = True
+    fenster.auto_sicherung_anlegen()
+    assert aufrufe == [pfad]  # Demo-Termin wird nicht gesichert
+
+
+def test_hauptfenster_sicherung_beim_beenden_ohne_abstand_und_hinweis(qtbot, termin, monkeypatch):
+    import app
+
+    conn, pfad = termin
+    aufrufe = []
+    monkeypatch.setattr(
+        "app.auto_sicherung_erstellen", lambda c, p, **kw: aufrufe.append(kw))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.auto_sicherung_aktiv = True
+    app._auto_sicherung_beim_beenden(fenster)
+    assert aufrufe == [{"mindestabstand_sekunden": 0}]  # beim Beenden immer sichern
+
+    meldungen = []
+    monkeypatch.setattr(app.QMessageBox, "information", lambda *a, **k: meldungen.append(a[1]))
+    monkeypatch.setattr(app, "laufwerksart", lambda p: "USB-Stick (Wechseldatenträger)")
+    fenster.laufwerk_hinweis_zeigen()
+    assert len(meldungen) == 1 and "USB-Stick" in meldungen[0]
+    fenster._demo_termin = True
+    fenster.laufwerk_hinweis_zeigen()
+    assert len(meldungen) == 1  # in der Demo kein Hinweis

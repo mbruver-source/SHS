@@ -412,6 +412,30 @@ def _kontextmenue_aus_knoepfen(tabelle, eintraege, allgemein=()) -> None:
     tabelle.customContextMenuRequested.connect(anzeigen)
 
 
+def laufwerksart(pfad: str) -> str | None:
+    """„USB-Stick (Wechseldatenträger)“ oder „Netzlaufwerk“, wenn `pfad` unter Windows auf einem
+    solchen liegt, sonst None (feste Platte, andere Systeme, unbekannt) - Marco 10.11.2026."""
+    if os.name != "nt" or not pfad:
+        return None
+    try:
+        import ctypes
+
+        absolut = os.path.abspath(pfad)
+        if absolut.startswith(("\\\\?\\", "\\\\.\\")):
+            absolut = absolut[4:]  # Langpfad-/Geräte-Präfix: weiter mit dem eigentlichen Laufwerk
+            if absolut.upper().startswith("UNC\\"):
+                return "Netzlaufwerk"
+        elif absolut.startswith("\\\\"):
+            return "Netzlaufwerk"  # \\Server\Freigabe
+        laufwerk = os.path.splitdrive(absolut)[0]
+        if not laufwerk:
+            return None
+        art = ctypes.windll.kernel32.GetDriveTypeW(laufwerk + "\\")
+    except (OSError, AttributeError, ValueError):
+        return None
+    return {2: "USB-Stick (Wechseldatenträger)", 4: "Netzlaufwerk"}.get(art)
+
+
 def _ablageort_ordner_oeffnen(parent, ablageort: "_Ablageort") -> None:
     """„Ablageort öffnen“: zeigt den Ordner der PDFs im Dateimanager - gemeinsam für alle
     Reiter mit diesem Knopf (Marco 10.11.2026, UI-Abgleich: vorher nur in zwei Reitern)."""

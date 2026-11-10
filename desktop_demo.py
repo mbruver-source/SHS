@@ -576,11 +576,12 @@ class DemoTour(QObject):
     PAUSE_MS = 600
     #: Automatisch weiter (Marcos Wunsch 05.10.2026): so viele Sekunden nach dem Ende eines
     #: Schritts (alle Aktionen ausgeführt) geht es von allein weiter; 0 = aus (Tests).
-    AUTO_WEITER_S = 10
+    AUTO_WEITER_S = 15
     #: UX-Test 03.11.2026, X6: 10 s reichten für lange Erklärtexte (bis ~90 Wörter) nicht.
     #: Die Wartezeit wächst mit der Textlänge (Lesezeit je Wort), höchstens LESEZEIT_MAX_S.
-    LESEZEIT_JE_WORT_S = 0.35
-    LESEZEIT_MAX_S = 40
+    #: Marco 10.11.2026: Der Text soll langsamer durchlaufen (vorher 10 s, 0,35 s je Wort, 40 s).
+    LESEZEIT_JE_WORT_S = 0.6
+    LESEZEIT_MAX_S = 60
     #: Nach einem geschlossenen sperrenden Fenster bleiben mindestens so viele Sekunden.
     AUTO_WEITER_NACH_MODAL_S = 3
     #: Index des ersten Schritts, der im Demo-Termin spielt (nach „Termin gespeichert“) - ab

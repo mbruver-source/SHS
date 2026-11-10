@@ -12,8 +12,10 @@ zipfile-Modul erzeugt.
 
 from __future__ import annotations
 
+import datetime
 import lzma
 import os
+import re
 import sqlite3
 import tempfile
 import zipfile
@@ -189,6 +191,60 @@ def _momentaufnahme(pfad: Path) -> bytes | None:
         return None
     finally:
         quelle.close()
+
+
+AUTO_SICHERUNG_BEHALTEN = 10
+AUTO_SICHERUNG_MINDESTABSTAND_SEKUNDEN = 600
+
+
+def auto_sicherung_ordner() -> Path:
+    """Ordner der automatischen Kopien (Marco 10.11.2026): neben, nicht in „Termine“, damit
+    weder die Terminübersicht noch die ZIP-Sicherung sie als Termine ansehen."""
+    return termine_ordner().parent / "Auto-Sicherung"
+
+
+def auto_sicherung_erstellen(
+    conn, termin_pfad: str, ordner: Path | None = None, behalten: int = AUTO_SICHERUNG_BEHALTEN,
+    mindestabstand_sekunden: int = AUTO_SICHERUNG_MINDESTABSTAND_SEKUNDEN, jetzt=None,
+) -> str | None:
+    """Legt eine Kopie des geöffneten Termins ab (SQLite-Sicherungsfunktion, konsistent auch bei
+    offener Verbindung) und behält je Termin nur die letzten `behalten`. Liegt die letzte Kopie
+    noch keine `mindestabstand_sekunden` zurück, passiert nichts. Gibt den Pfad der neuen Kopie
+    zurück, sonst None. Fehler (Datenträger voll, Termin auf USB-Stick abgezogen …) stören nie
+    die Arbeit: sie ergeben None."""
+    if not hasattr(conn, "backup") or not termin_pfad:
+        return None  # z. B. PostgreSQL: dort sichert der Datenbankserver
+    jetzt = jetzt or datetime.datetime.now()
+    name = _sicherer_dateiname_teil(Path(termin_pfad).stem)
+    try:
+        ordner = ordner or auto_sicherung_ordner()
+        ordner.mkdir(parents=True, exist_ok=True)
+        vorhandene = sorted(ordner.glob(f"{name}_????-??-??_??????.sqlite"))
+        if vorhandene and mindestabstand_sekunden > 0:
+            letzte = datetime.datetime.fromtimestamp(vorhandene[-1].stat().st_mtime)
+            if 0 <= (jetzt - letzte).total_seconds() < mindestabstand_sekunden:
+                return None
+        ziel = ordner / f"{name}_{jetzt.strftime('%Y-%m-%d_%H%M%S')}.sqlite"
+        kopie = sqlite3.connect(str(ziel))
+        try:
+            conn.backup(kopie)
+        except BaseException:
+            kopie.close()
+            with suppress(OSError):
+                ziel.unlink()  # keine halbe Datei als "letzte Kopie" liegen lassen
+            raise
+        else:
+            kopie.close()
+        for alt in sorted(ordner.glob(f"{name}_????-??-??_??????.sqlite"))[:-max(behalten, 1)]:
+            with suppress(OSError):
+                alt.unlink()
+        return str(ziel)
+    except (OSError, sqlite3.Error):
+        return None
+
+
+def _sicherer_dateiname_teil(text: str) -> str:
+    return re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "-", text).strip(" .-") or "Termin"
 
 
 def sicherung_erstellen(

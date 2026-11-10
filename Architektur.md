@@ -149,6 +149,13 @@ flowchart TB
   PostgreSQL nach (`?`→`%s`-Übersetzung, automatisches `RETURNING id`, `lastrowid`-Emulation) -
   dadurch kann `db.py`s übrige Fachlogik unverändert auf beiden Backends laufen, ohne
   Verzweigungen im Code für "welche Datenbank".
+- **Automatische Kopie des Termins (Desktop, SQLite)**: `db_sicherung.auto_sicherung_erstellen`
+  sichert den geöffneten Termin per SQLite-`backup` nach `Auto-Sicherung` (neben `Termine`), beim
+  Öffnen (Mindestabstand 10 Minuten) und beim Beenden (immer), je Termin die letzten 10; eine
+  misslungene Kopie wird gelöscht, Fehler stören nie. Aktiv nur im echten Lauf
+  (`HauptFenster.auto_sicherung_aktiv`), nicht in Tests/Demo/PostgreSQL. Liegt der Termin auf
+  USB-Stick oder Netzlaufwerk (`desktop_gemeinsam.laufwerksart`), weist `laufwerk_hinweis_zeigen`
+  beim Start und beim Terminwechsel darauf hin.
 - **Web-Umfang bewusst eng gehalten**: nur Ergebniserfassung + Admin (Benutzer/Termine).
   Termin anlegen, Teilnehmerverwaltung, Zeitplan, PDF-Export bleiben Desktop-Aufgaben.
 - **Ergebniserfassung bei großen Prüfungen (Lasttest 16.10.2026, Umbau O8 19.10.2026)**: Die

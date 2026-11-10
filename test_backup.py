@@ -17,6 +17,7 @@ from db import (
     NeuerTeilnehmer,
     add_teilnehmer,
     init_db,
+    list_teilnehmer,
     set_veranstaltung,
 )
 from db_sicherung import (
@@ -859,6 +860,91 @@ class TestZipGrenzen(unittest.TestCase):
     def test_geraetename_wird_nicht_angeboten(self):
         self._zip({"CON.sqlite": b"x", "a.sqlite": b"x"})
         self.assertEqual(sicherung_inhalt(self.zip_pfad), ["a.sqlite"])
+
+
+class TestAutoSicherung(unittest.TestCase):
+    """Marco 10.11.2026: automatische Kopie des geöffneten Termins."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.ordner = pathlib.Path(self._tmp.name) / "Auto"
+        self.pfad = str(pathlib.Path(self._tmp.name) / "2026-11-14_Testverein.sqlite")
+        self.conn = init_db(self.pfad)
+        self.addCleanup(self.conn.close)
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Albers", vorname="Anna", rufname_hund="Aika", art="ED", stufe=1, disziplin="Trümmerfeld"))
+
+    def test_kopie_enthaelt_den_stand_und_wird_begrenzt(self):
+        import datetime
+
+        from db_sicherung import auto_sicherung_erstellen
+
+        start = datetime.datetime(2026, 11, 14, 8, 0, 0)
+        pfade = [
+            auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, behalten=3,
+                                     jetzt=start + datetime.timedelta(minutes=15 * i))
+            for i in range(5)
+        ]
+        self.assertTrue(all(pfade))
+        dateien = sorted(p.name for p in self.ordner.glob("*.sqlite"))
+        self.assertEqual(len(dateien), 3)  # nur die letzten drei
+        self.assertTrue(dateien[0].startswith("2026-11-14_Testverein_2026-11-14_"))
+        kopie = init_db(str(self.ordner / dateien[-1]))
+        try:
+            self.assertEqual(len(list_teilnehmer(kopie)), 1)
+        finally:
+            kopie.close()
+
+    def test_mindestabstand_verhindert_haeufige_kopien(self):
+        import datetime
+
+        from db_sicherung import auto_sicherung_erstellen
+
+        start = datetime.datetime(2026, 11, 14, 8, 0, 0)
+        self.assertIsNotNone(auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, jetzt=start))
+        # Die Datei trägt die echte Änderungszeit (jetzt): der Abstand wird dagegen gemessen.
+        spaeter = datetime.datetime.now() + datetime.timedelta(seconds=30)
+        self.assertIsNone(auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, jetzt=spaeter))
+        mit_abstand = datetime.datetime.now() + datetime.timedelta(minutes=20)
+        self.assertIsNotNone(auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, jetzt=mit_abstand))
+
+    def test_misslungene_kopie_blockiert_und_verdraengt_nichts(self):
+        import datetime
+        import sqlite3
+
+        from db_sicherung import auto_sicherung_erstellen
+
+        start = datetime.datetime(2026, 11, 14, 8, 0, 0)
+        gut =auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, behalten=1, jetzt=start)
+        self.assertIsNotNone(gut)
+
+        class Kaputt:
+            def backup(self, ziel):
+                raise sqlite3.OperationalError("Datenträger voll")
+
+        spaeter = datetime.datetime.now() + datetime.timedelta(minutes=30)
+        self.assertIsNone(auto_sicherung_erstellen(Kaputt(), self.pfad, self.ordner, behalten=1, jetzt=spaeter))
+        self.assertEqual([p.name for p in self.ordner.glob("*.sqlite")], [pathlib.Path(gut).name])
+
+    def test_ohne_mindestabstand_sichert_immer(self):
+        import datetime
+
+        from db_sicherung import auto_sicherung_erstellen
+
+        self.assertIsNotNone(auto_sicherung_erstellen(self.conn, self.pfad, self.ordner))
+        spaeter = datetime.datetime.now() + datetime.timedelta(seconds=30)
+        self.assertIsNotNone(
+            auto_sicherung_erstellen(self.conn, self.pfad, self.ordner, mindestabstand_sekunden=0, jetzt=spaeter))
+
+    def test_fehler_stoeren_nicht(self):
+        from db_sicherung import auto_sicherung_erstellen
+
+        blockiert = pathlib.Path(self._tmp.name) / "Datei"
+        blockiert.write_text("x")  # ein Ordner kann hier nicht angelegt werden
+        self.assertIsNone(auto_sicherung_erstellen(self.conn, self.pfad, blockiert / "Auto"))
+        self.assertIsNone(auto_sicherung_erstellen(object(), self.pfad, self.ordner))  # keine SQLite-Verbindung
+        self.assertIsNone(auto_sicherung_erstellen(self.conn, "", self.ordner))
 
 
 if __name__ == "__main__":

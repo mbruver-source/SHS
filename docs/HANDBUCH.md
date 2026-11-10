@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.59. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.60. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -917,6 +917,8 @@ Gesichert werden immer **alle** Termine aus dem Termine-Ordner in einer einzigen
 Sicherungsdatei (Endung `.zip`). Liegt der geöffnete Termin woanders (z. B. auf einem
 USB-Stick), fragt das Programm, ob er mitgesichert werden soll. Die PDFs im
 Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erzeugen.
+
+**Automatische Kopie:** Zusätzlich legt das Programm beim Öffnen eines Termins und beim Beenden selbstständig eine Kopie des Termins im Ordner „Auto-Sicherung“ neben dem Termine-Ordner ab (je Termin die letzten zehn, höchstens alle zehn Minuten). Sie ersetzt die Sicherung nicht, hilft aber, wenn ein Termin auf einem USB-Stick oder Netzlaufwerk liegt und der Datenträger abgezogen wurde. Liegt der Termin auf einem USB-Stick, einer SD-Karte oder einem Netzlaufwerk, weist das Programm beim Start und bei jedem Wechsel auf einen solchen Termin darauf hin, den Datenträger nicht abzuziehen (externe USB-Festplatten meldet Windows als feste Platte, dafür gibt es keinen Hinweis). Die Kopien enthalten alle Teilnehmerdaten unverschlüsselt und werden beim Löschen eines Termins nicht mitgelöscht; der Ordner „Auto-Sicherung“ darf jederzeit von Hand geleert werden.
 
 - **„Sicherung erstellen…“:** Ein Passwort ist freiwillig. Auf Wunsch **„Mit Passwort schützen“**
   (die Sicherungsdatei wird dann verschlüsselt), danach den Speicherort wählen, z. B. einen

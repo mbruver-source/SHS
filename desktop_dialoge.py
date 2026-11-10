@@ -1797,6 +1797,12 @@ lässt sich nicht wiederherstellen – gut aufbewahren.</p>
 <p>Als Speicherort am besten einen USB-Stick oder ein anderes Laufwerk wählen und den Stick
 getrennt vom Rechner aufbewahren – eine Sicherung auf demselben Rechner hilft nicht, wenn
 dieser ausfällt.</p>
+<p>Zusätzlich legt das Programm beim Öffnen und beim Beenden eines Termins selbst eine Kopie im Ordner
+"Auto-Sicherung" neben dem Termine-Ordner ab (je Termin die letzten zehn). Sie ersetzt die Sicherung
+nicht und enthält alle Teilnehmerdaten unverschlüsselt; der Ordner darf von Hand geleert werden.
+Liegt ein Termin auf einem Wechseldatenträger (USB-Stick, SD-Karte) oder Netzlaufwerk, weist das Programm
+beim Start und beim Terminwechsel darauf hin, ihn nicht abzuziehen. Externe USB-Festplatten meldet Windows
+als feste Platte, dafür erscheint kein Hinweis.</p>
 
 <h3>Versionsanzeige</h3>
 <p>Der Button "Version" oben rechts (zwischen "Anderen Termin öffnen…" und
