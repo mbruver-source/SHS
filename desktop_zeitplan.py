@@ -14,8 +14,9 @@ import datetime
 import html
 import sqlite3
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QDialog,
     QGroupBox,
@@ -63,6 +64,7 @@ from desktop_darstellung import _farbe
 from desktop_dialoge import PauseDialog, PruefungsblockDialog, VerteilenDialog
 from desktop_gemeinsam import (
     _Ablageort,
+    _ablageort_ordner_oeffnen,
     _aktualisiere_veranstaltung_feld,
     _ausfuehren,
     _db_fehler_anzeigen,
@@ -113,6 +115,32 @@ def _anzahl_pruefungen(gruppen: list[dict]) -> int:
     """Zahl der Prüfungen in Zeitplan-Gruppen - der Dreikampf zählt als eine, obwohl er je
     Disziplin eine Gruppe hat (Nachtest 2, N10)."""
     return len({(g["art"], g["stufe"], g["disziplin"] if g["art"] == "ED" else None) for g in gruppen})
+
+
+class _BlockListe(QListWidget):
+    """Liste einer Richter-Spalte, in der sich Prüfungsblöcke und Pausen mit der Maus an eine
+    andere Stelle ziehen lassen (Marco 10.11.2026, UI-Abgleich: bisher nur „Hoch“/„Runter“).
+    Qt verschiebt dabei nichts selbst - die Liste meldet nur (gezogener Eintrag, Ziel-Eintrag),
+    der Reiter ordnet in der Datenbank um und baut die Spalte neu auf."""
+
+    eintrag_verschoben = Signal(int, int)  # gezogener Eintrag, Eintrag an der Zielstelle
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QAbstractItemView.InternalMove)
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        quelle = self.currentItem()
+        ziel = self.itemAt(event.position().toPoint()) if event.source() is self else None
+        event.ignore()  # die Reihenfolge ändert allein die Datenbank
+        if quelle is None or ziel is None:
+            return
+        quell_id, ziel_id = quelle.data(Qt.UserRole), ziel.data(Qt.UserRole)
+        if quell_id is not None and ziel_id is not None and quell_id != ziel_id:
+            self.eintrag_verschoben.emit(int(quell_id), int(ziel_id))
 
 
 class ZeitplanTab(QWidget):
@@ -190,6 +218,10 @@ class ZeitplanTab(QWidget):
 
         export_btn = QPushButton("Zeitplan (PDF)…")
         export_btn.clicked.connect(self._pdf_exportieren)
+        # Marco 10.11.2026 (UI-Abgleich): wie bei den übrigen Reitern mit PDF-Export.
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.setToolTip("Zeigt den Ordner, in dem der Zeitplan gespeichert wird")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
 
         # Marco 05.11.2026 (nach 1.0.56): Einstellungen und Knöpfe in zwei Zeilen - in einer Zeile
         # war die Kopfzeile bei Schrift „Sehr groß“ breiter als ein 1536-px-Bildschirm (1636 px),
@@ -210,6 +242,7 @@ class ZeitplanTab(QWidget):
         knopf_zeile.addWidget(verteilen_btn)
         knopf_zeile.addStretch()
         knopf_zeile.addWidget(export_btn)
+        knopf_zeile.addWidget(self.ablageort_btn)
 
         # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026).
         hinweis = kurzer_hinweis(
@@ -449,7 +482,9 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addWidget(umbenennen_btn)
         kopf_zeile.addStretch()
 
-        liste = QListWidget()
+        liste = _BlockListe()
+        liste.setToolTip("Blöcke und Pausen lassen sich mit der Maus an eine andere Stelle ziehen.")
+        liste.eintrag_verschoben.connect(lambda quelle, ziel, r=richter_id: self._eintrag_ziehen(r, quelle, ziel))
         # Symbole (Blockkopf, Warndreieck) so klein wie die Schrift, nicht in Stil-Größe.
         liste.setIconSize(QSize(14, 14))
         # Lange Blockköpfe umbrechen statt rechts abgeschnitten zu werden (schmale Spalten bei
@@ -831,6 +866,22 @@ class ZeitplanTab(QWidget):
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
             return
+        self.aktualisieren()
+
+    def _eintrag_ziehen(self, richter_id: int, eintrag_id: int, ziel_id: int) -> None:
+        """Der gezogene Eintrag übernimmt die Stelle des Ziel-Eintrags (die dazwischen rücken
+        nach) - über dieselbe Nachbar-Vertauschung wie „Hoch“/„Runter“."""
+        try:
+            reihenfolge = [e["id"] for e in list_zeitplan_eintraege(self.conn, richter_id)]
+            if eintrag_id not in reihenfolge or ziel_id not in reihenfolge:
+                return
+            schritte = reihenfolge.index(ziel_id) - reihenfolge.index(eintrag_id)
+            for _ in range(abs(schritte)):
+                verschiebe_zeitplan_eintrag(self.conn, eintrag_id, 1 if schritte > 0 else -1)
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc)
+            return
+        self._markierter_eintrag_id = eintrag_id
         self.aktualisieren()
 
     def _eintrag_verschieben(self, liste: QListWidget, richtung: int) -> None:

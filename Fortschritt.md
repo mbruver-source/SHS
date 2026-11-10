@@ -9929,3 +9929,60 @@ Quelle: WhatsApp-Nachricht an Marco mit zwei Fotos (Teilnehmer-Dialog DK LK 2, B
 - **Vor dem Build noch zu tun:** Handbuch (`docs/HANDBUCH.md`), Screenshots (Teilnehmer-Dialog, Auswahl Bewertungsbögen, neuer Etiketten-Dialog, Reiter Ausdrucke), Hilfe (F1), `Architektur.md`; Marco testet vorher mit den Muster-PDFs.
 - **Nacharbeit aus der Verifikation (Marco: alle Befunde umsetzen):** A) Behältnis-Etiketten passen die Schrift an die Etikettenhöhe an, der Gegenstand steht gleich unter der Startnummer, Hund und Prüfung teilen sich unter 28 mm eine Zeile, Mindesthöhe im Dialog 20 mm; B) bei ED steht die Disziplin nicht mehr doppelt im Label; C) der Etiketten-Dialog überschreibt vom Nutzer gesetzte Ränder nicht mehr; D) der OK-Knopf-Zugriff im Dialog ist vereinfacht; G) neue Tests (kleine Höhe, 0 Teilnehmer, mehrere Seiten, geladener Teilnehmer, Häkchen „je Disziplin“). E (Schutz gegen zu große Etiketten bleibt als Absicherung) und F (Vorname hinter „…“ bei sehr langen Namen) bewusst unverändert. H) `docs/HANDBUCH.md`, `Architektur.md`, `UML.md` nachgezogen; Screenshots und F1-Hilfe bleiben vor dem Build offen.
 - **Demo:** Die Demodaten (`demo_daten.py`) haben bei den beiden Dreikampf-Teams jetzt alle drei Gegenstände den Disziplinen zugeordnet, damit die Behältnis-Etiketten einen Gegenstand zeigen; der Demo-Schritt 13 (Ausdrucke) nennt die neuen Ausdrucke.
+
+## 10.11.2026: Demoprüfung an den Stand 1.0.58/1.0.59 angepasst (Arbeitsstand, nichts committet)
+
+- Marco: „aktualisiere die Demo-Version“, gewählt: Demoprüfung an den Programmstand anpassen.
+- `desktop_demo.py`: zwei neue Schritte nach dem PDF-Schritt – „14. Abrechnung der Leistungsrichter“ (Reiter zeigen, Tabelle und „Übersicht als PDF…“ markieren) und „15. Checkliste zum Prüfungstermin“ (Reiter „Verwaltung“, `zur_checkliste()`); „Richter am Tablet“ ist jetzt Schritt 16, „Demo-Termin löschen“ Schritt 17.
+- `docs/HANDBUCH.md`: Ablaufliste der Demoprüfung um beide Schritte ergänzt. `test_app_gui.py`: Schrittzahl 17 statt 15. 49 Demo-Tests grün.
+- Offen: kein Versionsbump/Build; Screenshot `handbuch_demo.png` zeigt Schritt 8 und bleibt unverändert; HANDBUCH.pdf entsteht erst beim Build.
+
+## 10.11.2026: Klick-Test-Demo `SHS-Demo-vor-Build` aktualisiert (Arbeitsstand, nichts committet)
+
+- Marco meinte mit „Demo-Version“ den Ordner `C:\Users\mbruv\Documents\SHS-Demo-vor-Build` (nicht nur die Demoprüfung im Programm).
+- `demo_erzeugen.py`: Dreikampf-Teams (Gerdes, Hansen, Ivers) mit drei zugeordneten Gegenständen, ED-Teams mit Gegenstand-Zuordnung; Termine neu erzeugt.
+- `Checkliste.md` neu (Stand 10.11.2026: DK-Sperre, Startnummer Seite 2, Bögen je Disziplin, Behältnis-Etiketten, Abrechnung, Checkliste, Demoprüfung mit 17 Schritten); die alte Liste liegt als `Checkliste_2026-10-15.md` daneben.
+- Marco klickt die Liste noch durch; kein Build, kein Versionsbump.
+
+- **Nachbesserung DK-Sperre (Marco 10.11.2026, Screenshot):** Im geöffneten Auswahlfeld „gesucht in“ waren gesperrte Disziplinen nicht von wählbaren zu unterscheiden (das Stylesheet zeichnet gesperrte Listeneinträge nicht von selbst blasser). `_vergebene_disziplinen_sperren` setzt jetzt zusätzlich Farbe (`TEXT_DISABLED`), Kursivschrift und einen Tooltip an den gesperrten Einträgen und nimmt beides bei Entsperrung zurück. Test in `test_app_gui.py`.
+
+- **Bewertungsbogen je Disziplin auch im Reiter Teilnehmer (Marco 10.11.2026):** „Bewertungsbogen (PDF)…“ fragt bei einem Dreikampf-Teilnehmer „Zwei Seiten / Drei Blätter (je Disziplin) / Abbrechen“ (`app.py`, `_bewertungsbogen_exportieren`); `pdf_export.erstelle_bewertungsbogen_pdf(..., je_disziplin=False)`. ED fragt nicht. Tests in `test_pdf_export.py` und `test_app_gui.py`, Handbuch und F1-Hilfe ergänzt. Der Klick-Test-Liste (`SHS-Demo-vor-Build\Checkliste.md`, B) fehlt dieser Punkt noch.
+
+## 10.11.2026: Abgleich der Oberfläche – gleiche Funktionen an allen passenden Stellen (Marco: „setze alle Punkte um“, Arbeitsstand, nichts committet)
+
+Auslöser: „Bewertungsbogen bei den Teilnehmern“ fehlte die Wahl „drei Blätter“ (siehe oben); Marco bat, die Oberfläche auf ähnliche Lücken zu prüfen, und ließ danach alle acht gefundenen Punkte umsetzen:
+
+1. **Leeres Anmeldeformular im Reiter „Formular-Import“** (`leeres_formular_btn`); die Logik steht jetzt gemeinsam in `desktop_gemeinsam._anmeldeformular_pdf_speichern` (auch für den Export-Reiter).
+2. **„Ablageort öffnen“** auch in Teilnehmer, Zeitplan, Auswertung und Formular-Import-Export (gemeinsam `_ablageort_ordner_oeffnen`; Export-Reiter und Abrechnung rufen sie ebenfalls auf, Tests patchen jetzt `desktop_gemeinsam._url_oeffnen`).
+3. **Suchfeld „Suche“ (Name, Vorname, Hund; Teilwörter, alle Wörter müssen vorkommen)** in Teilnehmer, Ergebniserfassung und Auswertung (`_name_passt`).
+4. **„Bewertungsbogen (PDF)…“ auch in Ergebniserfassung und Auswertung** für die aktuelle bzw. markierte Zeile; gemeinsame Funktion `_bewertungsbogen_fuer_teilnehmer` (mit der Frage zwei Seiten / drei Blätter beim Dreikampf).
+5. **Export-Reiter: „Abrechnung Leistungsrichter (PDF)…“ und „Checkliste (PDF)…“** (neu: `pdf_export.erstelle_checkliste_pdf`, „[x]“/„[ ]“ je Punkt, Kategorien mit Zähler). Knopfanzahl im Export-Reiter jetzt 14.
+6. **„Rangliste drucken“ vs. „Ergebnisliste“:** Es ist dieselbe PDF (`erstelle_ergebnisliste_pdf`), die Auswertung filtert nur nach Art/LK. Tooltip am Knopf erklärt das jetzt.
+7. **Startbildschirm mit Menüs „Ansicht“ (Hintergrund, Akzentfarbe, Schriftgröße) und „Hilfe“** (`StartDialog._menue_aufbauen`, gemeinsame Modulfunktion `_auswahl_menue_aufbauen`); der Hinweistext dort angepasst.
+8. **Rechtsklickmenü** in Teilnehmerliste (alle Aktionen), Ergebniserfassung (Bewertungsbogen) und Auswertung (Bewertungsbogen, Stechen) über `_kontextmenue_aus_knoepfen` (spiegelt die Knöpfe samt Sperrzustand).
+
+Tests in `test_app_gui.py` (Block „UI-Abgleich 10.11.2026“) und `test_pdf_export.py` (Checkliste). Handbuch ergänzt. **Noch zu tun vor dem Build:** Screenshots der geänderten Reiter (Teilnehmer, Ergebniserfassung, Auswertung, Zeitplan, Formular-Import, Ausdrucke/Export, Startbildschirm) neu aufnehmen, F1-Hilfetexte der Reiter durchsehen, Klick-Test (`SHS-Demo-vor-Build\Checkliste.md`).
+
+## 10.11.2026: Weitere Bedienungs-Verbesserungen (Marco: „alle beheben“, Arbeitsstand, nichts committet)
+
+Aus der zweiten Prüfung („was die Bedienung erschwert“), alle acht Punkte:
+
+1. **Speichern ohne Nachfrage:** Haken „Dateien ohne Nachfrage im Ablageort speichern“ im Reiter Ausdrucke/Export (QSettings `export/ohne_nachfrage`, gilt für alle Reiter); `_speicherort_waehlen` nimmt dann den vorgeschlagenen Namen im Ablageort, `_freier_dateipfad` hängt „ (2)“ an, nie überschreiben.
+2. **Fenster merken:** Hauptfenster startet weiter maximiert; wurde es zuletzt in normaler Größe benutzt, kommt es mit Größe und Lage zurück (`_fenster_zeigen_wie_zuletzt`, `_fenstergeometrie_merken` über `aboutToQuit`). Spaltenbreiten werden bewusst **nicht** gemerkt (die Spalten passen sich dem Inhalt und der Schriftgröße automatisch an).
+3. **Startbildschirm:** Suchfeld (Verein, Ort, Datum) und Sortierung per Spaltenklick; Auswahl und Öffnen laufen über `_angezeigt` statt `_termine`.
+4. **Auswertung sortierbar** (Spaltenklick, numerisch für Start-Nr., Punkte, Platz; Klasse in Prüfungsreihenfolge).
+5. **Zeitplan:** Blöcke und Pausen per Maus ziehen (`_BlockListe`, `ZeitplanTab._eintrag_ziehen`); das eigentliche Ziehen mit der Maus ist nur im Handtest prüfbar, die Umordnung selbst ist getestet.
+6. **Tastenkürzel:** Strg+N, Strg+F, Strg+1…9 im Hauptfenster, Strg+F im Startbildschirm, Strg+Z im Reiter Teilnehmer.
+7. **Rückgängig** (eine Ebene) im Reiter Teilnehmer für Löschen (mit Ergebnis, gleiche ID) und Startnummern zurücksetzen (`db.teilnehmer_sichern/-wiederherstellen`, `startnummern_wiederherstellen`; vergebene Nummern bleiben leer).
+8. **Rechtsklickmenü** der Ergebniserfassung um „Alle Ergebnisse speichern“ und „Liste aktualisieren“ erweitert.
+
+Dazu Befunde der Verifikation: Rechtsklick auf leere Fläche zeigt kein Menü mehr; Leerzeichen in `desktop_auswertung.py`. Neu: `conftest.py` leitet QSettings in den Tests in einen Temp-Ordner (vorher schrieben die Tests in die echten Benutzereinstellungen). Tests und Handbuch ergänzt. Vor dem Build noch: Screenshots, F1-Texte, Klick-Test.
+
+- **Nacharbeit nach der Verifikation der zweiten Runde (10.11.2026):** „Rückgängig“ gilt jetzt auch, wenn das Löschen mitten in der Liste scheitert (die schon gelöschten lassen sich zurückholen). DB-Tests für `teilnehmer_sichern`/`teilnehmer_wiederherstellen`/`startnummern_wiederherstellen` in `test_db.py` (laufen in der CI auch gegen PostgreSQL). Ein Hänger im Gesamtlauf kam von den Strg+1…9-Kürzeln: Ein Lambda mit `self` hielt das Hauptfenster am Leben, die Tests schlossen es erst beim Aufräumen mit noch ersetzten Funktionen; jetzt `sender()` mit Property. **Offen:** `UML.md`/`Architektur.md` kennen die neuen gemeinsamen Hilfen (`desktop_gemeinsam`), „Rückgängig“, `_BlockListe` und das Startdialog-Menü noch nicht.
+
+## 10.11.2026: Restliche Angleichungen (Marco: „alles anpassen“, Arbeitsstand, nichts committet)
+
+- **Übersicht:** „Richter-Bedarf (PDF)…“ und „Ablageort öffnen“ im Reiter (`TeilnehmerUebersichtTab(conn, ablageort=…)`). **Verwaltung:** „Checkliste (PDF)…“ und „Ablageort öffnen“ unter der Checkliste (`VerwaltungTab(conn, ablageort=…)`).
+- **Web:** Suche nach Name oder Hund auf der Teilnehmerliste (`/teilnehmer?q=…`), bewusst als GET-Formular ohne JavaScript, weil die Sicherheitsrichtlinie `script-src 'none'` setzt; unveränderte Richtlinie, Eingabe wird maskiert (Test).
+- **F1-Hilfe** der Reiter Teilnehmer, Formular-Import, Zeitplan, Ergebniserfassung, Auswertung, Übersicht, Verwaltung, Ausdrucke/Export und die Tastenkürzel nachgezogen; **Handbuch**, **Architektur.md**, **UML.md** (nur Mermaid-Mitglieder ergänzt, nicht neu gerendert), **Demo-Texte** (Schritte 3, 6, 13) ergänzt.
+- **Bewusst nicht gemacht:** Screenshots der geänderten Reiter - die werden laut Build-Disziplin ohnehin nach dem Versionsbump mit der neuen Version aufgenommen.

@@ -164,6 +164,7 @@ _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
 # UX-Test 02.10.2026, K3: Überschrift einer Prüfung nie allein am Seitenende.
 _ABSCHNITT_MIT_FOLGE = ParagraphStyle("SHSAbschnittMitFolge", parent=_ABSCHNITT, keepWithNext=1)
+_ABSCHNITT_LINKS = ParagraphStyle("SHSAbschnittLinks", parent=_STYLES["Heading2"], fontSize=12, spaceBefore=4 * mm, spaceAfter=1 * mm)
 _HINWEIS = ParagraphStyle("SHSHinweis", parent=_STYLES["Normal"], fontSize=8, alignment=1, spaceAfter=2 * mm)
 _TEXT = ParagraphStyle("SHSText", parent=_STYLES["Normal"], fontSize=9.5)
 _TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT)
@@ -697,14 +698,27 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     return story
 
 
-def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, pfad: str) -> None:
-    """Erzeugt den Bewertungsbogen für genau einen Teilnehmer als eigene PDF-Datei."""
+def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, pfad: str,
+                                 je_disziplin: bool = False) -> None:
+    """Erzeugt den Bewertungsbogen für genau einen Teilnehmer als eigene PDF-Datei.
+
+    `je_disziplin` (Wunsch 10.11.2026, nur Dreikampf): statt des 2-Seiten-Bogens drei Blätter
+    (Trümmerfeld, Flächensuche, Behältnisstrecke) wie in der Sammel-PDF; bei ED ohne Wirkung."""
     t = next(x for x in list_teilnehmer(conn) if x["id"] == teilnehmer_id)
     ergebnis_row = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
     veranstaltung = get_veranstaltung(conn)
+    ergebnis = dict(ergebnis_row) if ergebnis_row else None
 
     dokument = SimpleDocTemplate(pfad, pagesize=A4, topMargin=14 * mm, bottomMargin=14 * mm, leftMargin=20 * mm, rightMargin=20 * mm)
-    dokument.build(_bewertungsbogen_story(t, dict(ergebnis_row) if ergebnis_row else None, veranstaltung))
+    if je_disziplin and t["art"] == "DK":
+        story: list = []
+        for i, disziplin in enumerate(ALLE_DISZIPLINEN):
+            if i > 0:
+                story.append(PageBreak())
+            story.extend(_bewertungsbogen_story(t, ergebnis, veranstaltung, nur_disziplin=disziplin))
+        dokument.build(story)
+    else:
+        dokument.build(_bewertungsbogen_story(t, ergebnis, veranstaltung))
 
 
 def erstelle_alle_bewertungsboegen_pdf(
@@ -1710,6 +1724,42 @@ def erstelle_abrechnung_pdf(conn: sqlite3.Connection, pfad: str) -> None:
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
         ]))
         story.append(tabelle)
+    SimpleDocTemplate(
+        pfad, pagesize=A4,
+        topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
+    ).build(story)
+
+
+def erstelle_checkliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+    """Checkliste zum Prüfungstermin zum Ausdrucken (Marco 10.11.2026, UI-Abgleich): alle
+    Kategorien mit ihren Punkten (feste, eigene; Ausgeblendetes entfällt), erledigte Punkte
+    mit „[x]“, offene mit „[ ]“, dazu der Stand je Kategorie."""
+    import checkliste
+
+    veranstaltung = get_veranstaltung(conn)
+    erledigt = checkliste.erledigte(veranstaltung)
+    kategorien = checkliste.struktur(veranstaltung)
+    alle = checkliste.alle_kennungen(kategorien)
+    story: list = [Paragraph(f"Checkliste zum Prüfungstermin – {_abrechnung_kopf(veranstaltung)}", _TITEL)]
+    story.append(Paragraph(f"{len([k for k in alle if k in erledigt])} von {len(alle)} Punkten erledigt.", _HINWEIS))
+    for kat in kategorien:
+        if not kat.punkte:
+            continue
+        zeilen = [["[x]" if p.kennung in erledigt else "[ ]", Paragraph(_p_wert(p.text), _TEXT)] for p in kat.punkte]
+        erledigte_zahl = sum(1 for p in kat.punkte if p.kennung in erledigt)
+        tabelle = Table(zeilen, colWidths=[12 * mm, 158 * mm])
+        tabelle.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), _SCHRIFT_FETT),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 1 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1 * mm),
+        ]))
+        story.append(KeepTogether([
+            Paragraph(f"{_p_wert(kat.titel)} ({erledigte_zahl}/{len(kat.punkte)})", _ABSCHNITT_LINKS),
+            tabelle,
+        ]))
+    if len(story) == 2:
+        story.append(Paragraph("Die Checkliste ist leer.", _TEXT))
     SimpleDocTemplate(
         pfad, pagesize=A4,
         topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,

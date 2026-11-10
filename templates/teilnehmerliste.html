@@ -6,6 +6,14 @@
   {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum | datum }}</p>{% endif %}
 </div>
 
+<form class="karte" method="get" action="{{ url_for('teilnehmerliste') }}" role="search">
+  <label for="q">Suche nach Name oder Hund</label>
+  <input type="text" id="q" name="q" value="{{ suche }}" maxlength="80" autocomplete="off">
+  <button type="submit" style="margin-top: 0.6em;">Suchen</button>
+  {% if suche %}<a class="knopf" href="{{ url_for('teilnehmerliste') }}" style="margin-top: 0.6em;">Alle anzeigen</a>
+  <p><small>{{ zeilen | length }} von {{ gesamt }} Teilnehmern</small></p>{% endif %}
+</form>
+
 <div class="karte" style="padding: 0;">
   {% for zeile in zeilen %}
     <a class="teilnehmer-zeile" href="{{ url_for('ergebnis_erfassen', teilnehmer_id=zeile.teilnehmer.id) }}">
@@ -27,7 +35,7 @@
       </tr></table>
     </a>
   {% else %}
-    <p style="padding: 1em;">Für diesen Termin sind noch keine Teilnehmer hinterlegt.</p>
+    <p style="padding: 1em;">{% if suche %}Kein Teilnehmer passt zu „{{ suche }}“.{% else %}Für diesen Termin sind noch keine Teilnehmer hinterlegt.{% endif %}</p>
   {% endfor %}
 </div>
 {% endblock %}

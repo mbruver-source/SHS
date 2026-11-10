@@ -34,6 +34,7 @@ from db import (
     init_db,
     list_teilnehmer,
     pruefungen_als_text,
+    get_veranstaltung,
     set_veranstaltung,
     setze_ergebnis_status,
     setze_stechen_sieger,
@@ -303,6 +304,48 @@ class TestPdfExport(unittest.TestCase):
         # Wertungsnoten-Tabelle steht auf jedem Blatt.
         for seite in seiten[1:]:
             self.assertIn("Wertungsnoten", seite)
+
+    def test_checkliste_pdf(self):
+        """Marco 10.11.2026: Checkliste als PDF mit Stand der Haken, Kategorien und eigenen
+        Punkten."""
+        import checkliste
+
+        set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+        kategorien = checkliste.struktur(get_veranstaltung(self.conn))
+        erster = kategorien[0].punkte[0]
+        eigene = checkliste.kategorie_hinzufuegen(checkliste.eigene_lesen(get_veranstaltung(self.conn)), "Zusatz ü")
+        set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2026-09-19",
+                          checkliste=checkliste.als_text({erster.kennung}),
+                          checkliste_eigene=checkliste.eigene_als_text(eigene))
+        ziel = self._pfad("checkliste.pdf")
+        pdf_export.erstelle_checkliste_pdf(self.conn, ziel)
+        text = "\n".join(s.extract_text() for s in PdfReader(ziel).pages)
+        self.assertIn("Checkliste zum Prüfungstermin", text)
+        self.assertIn("[x]", text)
+        self.assertIn("[ ]", text)
+        self.assertIn(kategorien[0].titel, text)
+        self.assertRegex(text, r"1 von \d+ Punkten erledigt")
+
+    def test_einzelner_bewertungsbogen_je_disziplin(self):
+        """Wunsch 10.11.2026: Der Bogen eines einzelnen DK-Teilnehmers (Reiter Teilnehmer)
+        lässt sich als drei Blätter erzeugen; bei ED und ohne Wahl bleibt es wie bisher."""
+        dk = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Drei", vorname="A", rufname_hund="R",
+                                                       art="DK", stufe=1, startnummer=7))
+        ed = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="C", rufname_hund="T", art="ED",
+                                                       stufe=1, disziplin="Trümmerfeld", startnummer=8))
+        ziel = self._pfad("dk_drei.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, dk, ziel, je_disziplin=True)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 3)
+        for seite, disziplin in zip(seiten, ["Trümmerfeld", "Flächensuche", "Behältnisstrecke"]):
+            self.assertIn(f"Bewertung {disziplin}", seite)
+            self.assertNotIn("GESAMT", seite)
+        ziel = self._pfad("dk_zwei.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, dk, ziel)
+        self.assertEqual(len(PdfReader(ziel).pages), 2)
+        ziel = self._pfad("ed.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, ed, ziel, je_disziplin=True)
+        self.assertEqual(len(PdfReader(ziel).pages), 1)
 
     def test_behaeltnis_etiketten(self):
         """Wunsch 10.11.2026: ein Etikett je Hund mit Behältnisstrecke (DK und ED Behältnis),

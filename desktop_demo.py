@@ -1164,7 +1164,8 @@ class DemoTour(QObject):
             ),
             DemoSchritt(
                 "3. Einen Teilnehmer erfassen",
-                "Im Reiter „Teilnehmer“ öffnet „Teilnehmer hinzufügen…“ die Erfassungsmaske.\n\n"
+                "Im Reiter „Teilnehmer“ öffnet „Teilnehmer hinzufügen…“ (oder Strg+N von jedem "
+                "Reiter aus) die Erfassungsmaske.\n\n"
                 f"Wichtig ist das Feld „Prüfung“: „{pruefung_nach_kuerzel('ED1-Trümmerfeld').bezeichnung}“ "
                 "ist eine Einzeldisziplin (ED: Trümmerfeld, Flächensuche oder Behältnisstrecke), "
                 f"„{pruefung_nach_kuerzel('DK1').bezeichnung}“ der Dreikampf aus allen drei. Bei ED "
@@ -1196,7 +1197,8 @@ class DemoTour(QObject):
                 "„Bezahlt umschalten“ setzt den Zahlungsstatus für alle markierten "
                 "Teilnehmer, ohne die Erfassungsmaske zu öffnen – praktisch am Anmeldetisch.\n\n"
                 "Mit dem Filter „Bezahlt“ siehst du sofort, wer noch offen ist: hier Hugo "
-                "Hansen.",
+                "Hansen. Das Suchfeld „Suche“ findet jeden Teilnehmer nach Name oder Hund, "
+                "und ein Rechtsklick auf eine Zeile zeigt die Aktionen der Knöpfe.",
                 self._aktionen_bezahlt,
             ),
             DemoSchritt(
@@ -1271,13 +1273,37 @@ class DemoTour(QObject):
                 "kurz, was er erzeugt; bleibt die Maus darauf, zeigt ein Tooltip "
                 "Einzelheiten.\n\n"
                 "Normalerweise fragt das Programm, wo die Datei hin soll (Standard: Ordner "
-                "„Ausdrucke“ neben dem Termin). Die Demo hat die Ergebnisliste schon "
+                "„Ausdrucke“ neben dem Termin); mit dem Haken „Dateien ohne Nachfrage im "
+                "Ablageort speichern“ entfällt die Frage. Die Demo hat die Ergebnisliste schon "
                 "erzeugt – „PDF öffnen“ zeigt sie dir. Auch diese Datei wird am Ende gelöscht "
                 "(ist sie dann noch im PDF-Programm geöffnet: beim nächsten Programmstart).",
                 self._aktionen_pdf,
             ),
             DemoSchritt(
-                "14. Richter am Tablet",
+                "14. Abrechnung der Leistungsrichter",
+                "Im Reiter „Abrechnung Leistungsrichter“ steht je Richter eine Zeile mit den "
+                "Namen aus den Veranstaltungsdaten. Du trägst die gefahrenen Kilometer (hin und "
+                "zurück) ein; Fahrtkosten und Summe rechnet das Programm aus den Sätzen des "
+                "Termins (Vergütung je km und Tagespauschale), die sich oben und je Richter "
+                "ändern lassen.\n\n"
+                "Darunter erzeugt „Übersicht als PDF…“ die Gesamtabrechnung, „Quittung…“ je "
+                "Richter eine Quittung, und „Export als CSV…“ liefert die Beträge für ein "
+                "Vereinstool mit Ein- und Ausgaben.",
+                self._aktionen_abrechnung,
+            ),
+            DemoSchritt(
+                "15. Checkliste zum Prüfungstermin",
+                "Damit am Prüfungstag nichts vergessen wird, gibt es im Reiter „Verwaltung“ eine "
+                "Checkliste, gegliedert in Kategorien (zum Beispiel vor, während und nach der "
+                "Prüfung). Erledigtes hakst du ab; oben steht, wie viele Punkte schon erledigt "
+                "sind.\n\n"
+                "Eigene Kategorien und Punkte lassen sich hinzufügen, nicht benötigte "
+                "Schritte ausblenden. Der Knopf „Checkliste“ oben im Fenster springt von jedem "
+                "Reiter aus direkt dorthin.",
+                self._aktionen_checkliste,
+            ),
+            DemoSchritt(
+                "16. Richter am Tablet",
                 "Bei größeren Prüfungen müssen die Ergebnisse nicht am Rechner der "
                 "Prüfungsleitung eingetippt werden: Der Termin lässt sich im Web "
                 "veröffentlichen, die Richter tragen ihre Punkte dann am Tablet oder Handy "
@@ -1289,7 +1315,7 @@ class DemoTour(QObject):
                 self._aktionen_nichts_markieren,
             ),
             DemoSchritt(
-                "15. Demo-Termin löschen",
+                "17. Demo-Termin löschen",
                 "Das war ein kompletter Prüfungstag.\n\n"
                 "Mit „Fertig“ wird der Demo-Termin samt Ergebnisliste gelöscht (eine noch im "
                 "PDF-Programm geöffnete Ergebnisliste beim nächsten Programmstart). " + zurueck + "\n\n"
@@ -1625,6 +1651,26 @@ class DemoTour(QObject):
             self._panel.extra("PDF öffnen", lambda: self._pdf_oeffnen(ziel))
 
         return [zeigen, erzeugen]
+
+    def _aktionen_abrechnung(self) -> list[Callable[[], None]]:
+        tab = self._fenster.abrechnung_tab
+
+        def zeigen() -> None:
+            self._reiter_zeigen(tab)
+            tab.aktualisieren()  # die Richternamen stehen erst seit dem Anlegen des Termins fest
+            self._markieren(tab.tabelle)
+
+        return [zeigen, lambda: self._markieren(tab.uebersicht_btn)]
+
+    def _aktionen_checkliste(self) -> list[Callable[[], None]]:
+        tab = self._fenster.verwaltung_tab
+
+        def zeigen() -> None:
+            self._reiter_zeigen(tab)
+            tab.zur_checkliste()
+            self._markieren(tab._checkliste_bildlauf)
+
+        return [zeigen]
 
 
 def demo_ohne_termin_ausfuehren(fenster_fabrik) -> None:

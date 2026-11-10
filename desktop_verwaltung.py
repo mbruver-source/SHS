@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 import checkliste
+import pdf_export
 from db import get_veranstaltung, termine_ordner
 from db_sicherung import (
     PasswortFalschError,
@@ -46,13 +47,17 @@ from desktop_dialoge import (
     VeranstaltungsDialog,
 )
 from desktop_gemeinsam import (
+    _Ablageort,
+    _ablageort_ordner_oeffnen,
     _aktualisiere_veranstaltung_feld,
     _ausfuehren,
     _datei_gespeichert_melden,
     _db_fehler_anzeigen,
+    _export_dateiname,
     _ja_nein,
     _fehlertext,
     _klartext_fehler,
+    _pdf_exportieren,
     _pfad_anzeige,
     _wartecursor,
     fehler_protokollieren,
@@ -69,9 +74,10 @@ class VerwaltungTab(QWidget):
     # Nach dem Speichern der Veranstaltungsdaten - das Hauptfenster aktualisiert den Titel.
     veranstaltung_geaendert = Signal()
 
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, parent=None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
 
         veranstaltung_btn = QPushButton("Veranstaltungsdaten bearbeiten…")
         veranstaltung_btn.setObjectName("primaerButton")  # einzige Aktion dieses Reiters, siehe _QSS_TEMPLATE
@@ -130,10 +136,30 @@ class VerwaltungTab(QWidget):
         layout.addWidget(QLabel("Verwaltung"))
         layout.addWidget(veranstaltung_btn)
         layout.addWidget(hinweis)
+        # Marco 10.11.2026 (UI-Abgleich): die Checkliste ließ sich nur im Reiter „Ausdrucke/Export“
+        # ausdrucken - hier direkt unter der Liste.
+        self.checkliste_pdf_btn = QPushButton("Checkliste (PDF)…")
+        self.checkliste_pdf_btn.setToolTip("Die Checkliste mit dem aktuellen Stand der Haken zum Mitnehmen auf Papier")
+        self.checkliste_pdf_btn.clicked.connect(self._checkliste_exportieren)
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
+        druck_zeile = QHBoxLayout()
+        druck_zeile.addWidget(self.checkliste_pdf_btn)
+        druck_zeile.addWidget(self.ablageort_btn)
+        druck_zeile.addStretch()
+
         layout.addLayout(kopf)
         layout.addWidget(bildlauf, 1)
+        layout.addLayout(druck_zeile)
         layout.addWidget(self.status_label)
         self.aktualisieren()
+
+    def _checkliste_exportieren(self) -> None:
+        _pdf_exportieren(
+            self, self._ablageort, self.status_label, "Checkliste speichern",
+            _export_dateiname(self.conn, "Checkliste"),
+            lambda pfad: pdf_export.erstelle_checkliste_pdf(self.conn, pfad),
+            "Checkliste gespeichert")
 
     def aktualisieren(self) -> None:
         """Liest die Checkliste frisch aus der Datenbank (die Veranstaltungsdaten selbst werden

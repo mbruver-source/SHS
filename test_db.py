@@ -103,7 +103,10 @@ from db import (
     startnummer_bereiche,
     startnummer_bereiche_als_text,
     startnummer_bereichsgroesse,
+    startnummern_wiederherstellen,
     startnummern_zuruecksetzen,
+    teilnehmer_sichern,
+    teilnehmer_wiederherstellen,
     fehlende_startnummern_je_pruefung,
     bereiche_automatisch_berechnen,
     dk_mindestabstand,
@@ -2379,6 +2382,48 @@ class TestZeitplan(unittest.TestCase):
         self.assertEqual([t["id"] for t in ergebnis.ohne_bereich], [ohne])
         self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3)), None)
         self.assertEqual(naechste_freie_startnummer_im_bereich(self.conn, (1, 3), ausser_teilnehmer_id=b), 3)
+
+    def test_teilnehmer_loeschen_und_wiederherstellen(self):
+        """Marco 10.11.2026: „Rückgängig“ nach dem Löschen - gleiche ID, Stammdaten und Ergebnis."""
+        tid = self._teilnehmer("ED", 1, "Flächensuche", startnummer=5, nachname="Albers")
+        eintragen_ergebnis(self.conn, tid, "Flächensuche", 50, 30)
+        sicherung = teilnehmer_sichern(self.conn, tid)
+        self.assertEqual(sicherung["teilnehmer"]["nachname"], "Albers")
+        self.assertIsNotNone(sicherung["ergebnis"])
+        self.assertIsNone(teilnehmer_sichern(self.conn, 99999))
+
+        delete_teilnehmer(self.conn, tid)
+        self.assertEqual(list_teilnehmer(self.conn), [])
+        self.assertTrue(teilnehmer_wiederherstellen(self.conn, sicherung))
+        zurueck = list_teilnehmer(self.conn)
+        self.assertEqual([(t["id"], t["nachname"], t["startnummer"]) for t in zurueck], [(tid, "Albers", 5)])
+        zeile = self.conn.execute(
+            "SELECT suche_flaechensuche, anzeige_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
+        ).fetchone()
+        self.assertEqual((zeile[0], zeile[1]), (50, 30))
+        # Zweimal geht nicht: die ID gibt es schon, nichts ändert sich.
+        self.assertFalse(teilnehmer_wiederherstellen(self.conn, sicherung))
+        self.assertEqual(len(list_teilnehmer(self.conn)), 1)
+
+    def test_teilnehmer_wiederherstellen_mit_vergebener_startnummer(self):
+        erster = self._teilnehmer("ED", 1, "Flächensuche", startnummer=5, nachname="Albers")
+        sicherung = teilnehmer_sichern(self.conn, erster)
+        delete_teilnehmer(self.conn, erster)
+        self._teilnehmer("ED", 1, "Flächensuche", startnummer=5, nachname="Brandt")  # Nummer inzwischen vergeben
+        self.assertTrue(teilnehmer_wiederherstellen(self.conn, sicherung))
+        nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual(nummern, {"Albers": None, "Brandt": 5})
+
+    def test_startnummern_wiederherstellen(self):
+        a = self._teilnehmer("DK", 1, startnummer=5, nachname="Bauer")
+        b = self._teilnehmer("DK", 1, startnummer=7, nachname="Albrecht")
+        vorher = {t["id"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        startnummern_zuruecksetzen(self.conn)
+        c = self._teilnehmer("DK", 1, startnummer=7, nachname="Neu")  # 7 ist inzwischen vergeben
+        self.assertEqual(startnummern_wiederherstellen(self.conn, vorher), 1)
+        nummern = {t["id"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
+        self.assertEqual(nummern, {a: 5, b: None, c: 7})
+        self.assertEqual(startnummern_wiederherstellen(self.conn, vorher), 0)  # nichts mehr zu tun
 
     def test_startnummern_zuruecksetzen(self):
         # Marco 09.10.2026: alle Startnummern auf einmal entfernen, danach neu vergeben.

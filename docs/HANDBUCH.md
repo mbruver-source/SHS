@@ -206,6 +206,10 @@ Teilnahme“) stehen dahinter, z. B. „16 (+1 abgemeldet)“.
 
 Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“** oben rechts.
 
+Über der Liste filtert das Suchfeld (Verein, Ort oder Datum, **Strg+F**); ein Klick auf eine Spaltenüberschrift sortiert die Liste (erneuter Klick kehrt die Richtung um), ohne Klick steht der neueste Termin oben.
+
+Die Menüs **„Ansicht“** (Hintergrund, Akzentfarbe, Schriftgröße) und **„Hilfe“** (Hilfe, Updates, Version und Lizenzen) stehen schon im Startbildschirm oben, nicht erst nach dem Öffnen eines Termins.
+
 ### Demoprüfung
 
 ![Demoprüfung beim Eintragen der Ergebnisse](bilder/handbuch_demo.png)
@@ -220,8 +224,10 @@ Der Button **„Demoprüfung“** steht im Startbildschirm und im Hauptfenster o
 5. Ergebnisse eintragen, eine Disqualifikation setzen und speichern,
 6. die Auswertung ansehen und ein Stechen entscheiden (bei Prüfungen bis Ende 2026),
 7. die Ergebnisliste als PDF erzeugen (**„PDF öffnen“** zeigt sie),
-8. ein Hinweis, wie Richter am Tablet eintragen können,
-9. den Demo-Termin wieder löschen.
+8. die Abrechnung der Leistungsrichter (Kilometer, Quittung, Übersicht),
+9. die Checkliste zum Prüfungstermin im Reiter „Verwaltung“,
+10. ein Hinweis, wie Richter am Tablet eintragen können,
+11. den Demo-Termin wieder löschen.
 
 Das Programm klickt und tippt dabei selbst. Ein kleines Fenster erklärt jeden Schritt: was
 gerade passiert und warum. Ein farbiger Rahmen zeigt, wo gearbeitet wird. Du klickst auf
@@ -306,7 +312,7 @@ du eine vorhandene Datei, fragt das Programm, ob es stattdessen diesen Termin ö
 
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
-**„Filter Start-Nr.“** und **„Filter Bezahlt“** blenden Zeilen nur aus.
+**„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion.
 
 | Button | Wirkung |
 |---|---|
@@ -320,7 +326,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). Die Rückfrage nennt, wie viele davon schon Ergebnisse haben; die Ergebnisse bleiben erhalten. |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
 | **„Teilnehmerliste einlesen (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
-| **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. |
+| **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. Beim Dreikampf fragt das Programm, ob der Bogen zwei Seiten oder drei Blätter (eins je Disziplin) haben soll. |
 
 ### Startnummern vergeben
 
@@ -479,6 +485,8 @@ Nur dieses PDF enthält die Formularfelder, die der Import ausliest. So sieht es
 den Termindaten, ohne Vereins- oder Verbandslogos, ankreuzbar nur die angebotenen Prüfungen:
 
 ![Vom Programm erzeugtes Anmeldeformular (Ausschnitt)](bilder/handbuch_anmeldeformular.png)
+
+Das leere Formular erzeugst du auch gleich hier im Reiter über **„Leeres Anmeldeformular (PDF)…“**, ohne in den Reiter „Ausdrucke/Export“ zu wechseln.
 
 **Nicht** importieren lassen sich: das frühere Word-Anmeldeformular (auch nicht als PDF
 gespeichert), Scans und Fotos, ausgedruckte und von Hand ausgefüllte Formulare sowie ein
@@ -653,7 +661,7 @@ Der Zeitplan hat eine Spalte je Richter.
    feste Uhrzeit bleibt beim Bearbeiten und Verschieben erhalten – schiebt man die Pause weiter nach
    vorn, entsteht davor entsprechend eine größere Lücke. Soll sie wieder normal anschließen, die
    Pause entfernen und neu anlegen.
-5. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter; Richter ohne Einträge fehlen darin.
+5. Blöcke und Pausen lassen sich auch **mit der Maus ziehen**: Der gezogene Eintrag übernimmt die Stelle, auf die du ihn fallen lässt. **„Zeitplan (PDF)…“** erzeugt eine Seite je Richter; Richter ohne Einträge fehlen darin. **„Ablageort öffnen“** daneben zeigt den Ordner der Datei.
 
 Die Seitenleiste **„Offene Starts“** zeigt je Art/Leistungsklasse/Disziplin, ob schon ein Block
 existiert (grün mit Haken) oder noch fehlt (rot mit Kreuz, „noch offen“).
@@ -675,7 +683,7 @@ dann nach. Beheben lässt sich das durch Verschieben der Blöcke, eine Pause ode
 
 ![Reiter „Ergebniserfassung“ mit einer ungespeicherten, gelben Zeile](bilder/handbuch_ergebniserfassung.png)
 
-Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Je Disziplin trägst du
+Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Die Filter **„Art/LK“**, **„Start-Nr.“** und **„Suche“** (Name oder Hund) blenden Zeilen nur aus; **„Bewertungsbogen (PDF)…“** (auch im Rechtsklickmenü) erzeugt den Bogen der aktuellen Zeile. Je Disziplin trägst du
 **Suche (0-60)** und **Anzeige (0-40)** ein. Bei ED sind die anderen Disziplinen mit „–“
 gesperrt.
 
@@ -738,7 +746,7 @@ verloren gehen.
 ![Reiter „Auswertung“](bilder/handbuch_auswertung.png)
 
 Die Rangliste je Leistungsklasse mit Gesamtpunkten, Wertnote und Platzierung („1. von 2“) wird
-automatisch berechnet. **„Auswertung neu berechnen“** aktualisiert die Anzeige. Unten steht,
+automatisch berechnet. Ein Klick auf eine Spaltenüberschrift sortiert die Tabelle (erneuter Klick kehrt die Richtung um). **„Auswertung neu berechnen“** aktualisiert die Anzeige. Das Suchfeld **„Suche“** findet Teilnehmer nach Name oder Hund. **„Rangliste drucken (PDF)…“** erzeugt dieselbe Ergebnisliste wie „Ausdrucke/Export“, hier nur für die gewählte Art/Leistungsklasse; **„Bewertungsbogen (PDF)…“** (auch im Rechtsklickmenü) erzeugt den Bogen der markierten Zeile. Unten steht,
 wer noch kein vollständiges Ergebnis hat.
 
 „von 2“ zählt nur Starter, deren Ergebnis schon **vollständig** eingetragen ist. Sind in einer
@@ -783,7 +791,8 @@ Startnummer wird dabei nicht berücksichtigt.
 
 Teilnehmerzahlen je Art/Leistungsklasse und Disziplin, die Zahl der Abteilungen und die
 **Anzahl benötigter Richter** (1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je
-Richter).
+Richter). **„Richter-Bedarf (PDF)…“** unten im Reiter erzeugt dieselbe Übersicht als PDF (auch unter
+„Ausdrucke/Export“), **„Ablageort öffnen“** zeigt den Ordner.
 
 Darunter zeigt die Tabelle **„Behältnisse Behältnisstrecke“**, wie viele Behältnisse je
 Leistungsklasse bereitliegen müssen. Mitgezählt werden alle Teilnehmer, die die
@@ -815,7 +824,8 @@ Termin gespeichert, oben steht, wie viele Schritte erledigt sind. Der Knopf **�
 Fenster springt von jedem Reiter direkt hierher und klappt den ersten Abschnitt mit offenen Schritten
 auf. Die Abschnitte lassen sich
 auf- und zuklappen (beim Öffnen sind sie zugeklappt, hinter dem Namen steht, wie viele Schritte
-erledigt sind). „Alle Haken entfernen“ setzt die Liste nach einer Rückfrage zurück.
+erledigt sind). „Alle Haken entfernen“ setzt die Liste nach einer Rückfrage zurück. **„Checkliste (PDF)…“**
+unter der Liste druckt sie mit dem aktuellen Stand der Haken („[x]“ erledigt, „[ ]“ offen).
 
 Eigene Punkte und Abschnitte legst du mit **„Punkt hinzufügen…“** (in jedem Abschnitt) und
 **„Kategorie hinzufügen…“** an. Eigene Einträge lassen sich über das ✕ hinter dem Punkt bzw.
@@ -869,18 +879,20 @@ CSV-Datei für Excel. Vorgeschlagen wird der Ordner
 `Ausdrucke\<Termin>` neben der Termin-Datei (z. B. `…\SHS-Pruefungsprogramm\Termine\Ausdrucke\2026-11-14_Verein`),
 nach einem bewusst anderen Ordner dieser. Nach dem Speichern zeigt ein Fenster, wo die Datei
 liegt, mit **„PDF öffnen“** und **„Ordner zeigen“** – praktisch, um sie z. B. an eine E-Mail
-anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimanager (Explorer bzw. Finder).
+anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimanager (Explorer bzw. Finder). Mit dem Haken **„Dateien ohne Nachfrage im Ablageort speichern“** entfällt die Frage nach dem Speicherort in allen Reitern: Die Datei landet mit dem vorgeschlagenen Namen im Ablageort, eine vorhandene Datei wird nie überschrieben, sondern bekommt „ (2)“ im Namen. Praktisch am Prüfungstag, wenn viele Ausdrucke hintereinander entstehen.
 
 | Button | Inhalt |
 |---|---|
 | **Anmeldeformular (PDF)…** | Ausfüllbares Anmeldeformular mit den Termindaten und den angebotenen Prüfungen, siehe [Kapitel 5](#5-formular-import) |
 | **Ergebnisliste (PDF)…** | Rangliste mit Wertnoten je Leistungsklasse |
 | **Ergebnisliste zum Ausfüllen (PDF, leer)…** | Formular mit Start-Nr./Name/Verein, Platz/Punkte/Wertnote leer – z. B. für Papier am Prüfungstag |
-| **Etiketten (PDF)…** | Ergebnis-Etiketten zum Aufkleben (2 Zeilen je Teilnehmer); unvollständige Ergebnisse mit leeren Punktfeldern, Feld „SH-R“ zum Abstempeln |
+| **Etiketten (PDF)…** | Ergebnis-Etiketten zum Aufkleben in der Leistungsurkunde (2 Zeilen je Teilnehmer); unvollständige Ergebnisse mit leeren Punktfeldern, Feld „SH-R“ zum Abstempeln |
 | **Etiketten Behältnisse (PDF)…** | Etiketten zum Beschriften der Behältnisse, in die die Gegenstände eingesammelt werden: ein Etikett je Hund mit Behältnisstrecke (Dreikampf und Einzeldisziplin Behältnisstrecke) mit Start-Nr., Name, Hund, Prüfung und dem Gegenstand der Behältnisstrecke. Im Dialog stellst du die Größe der Klebefelder (Breite/Höhe in mm, ab 20 mm Höhe) und die Ränder ein und wählst zwischen **Etikettenbogen** (Raster, ohne Linien) und **normalem Papier** (mit Schnittlinien zum Ausschneiden). Unter dem Eingabefeld steht, wie viele Etiketten auf eine A4-Seite passen. |
 | **Statistik (PDF)…** | Prädikat-Übersicht je Art/LK inkl. Jugendliche (unter 18); im Kopf Vereins-Nr., Prüfungsnummer, Richter, Prüfungsleiter |
 | **Übersicht für Prüfungsleitung (PDF)…** | Stammdaten, Gebühr, bezahlt?, Impfpass gültig bis (rot bei fehlendem oder abgelaufenem Datum) |
 | **Chipnummernliste (PDF)…** | Start-Nr., Name, Hund, Chip-Nr. – z. B. für den Chip-Abgleich |
+| **Abrechnung Leistungsrichter (PDF)…** | Dieselbe Übersicht wie im Reiter „Abrechnung Leistungsrichter“ (Kilometer, Fahrtkosten, Pauschale, Summe) |
+| **Checkliste (PDF)…** | Die Checkliste aus dem Reiter „Verwaltung“ mit dem aktuellen Stand der Haken („[x]“ erledigt, „[ ]“ offen), eigene Kategorien und Punkte eingeschlossen |
 | **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
 | **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. Mit dem Häkchen **„Dreikampf: ein Blatt je Disziplin“** bekommt jeder Dreikampf-Teilnehmer drei Blätter (Trümmerfeld, Flächensuche, Behältnisstrecke) statt des 2-Seiten-Bogens, sortiert nach Disziplin: erst alle Trümmerfeld-Blätter, dann Fläche, dann Behältnis – jeder Richter bekommt seinen Stapel. Ohne Gesamtzeile, mit der Wertungsnoten-Tabelle unten auf jedem Blatt; Einzeldisziplinen bleiben unverändert und stehen vorweg. Die Startnummer steht auf jedem Blatt, beim 2-Seiten-Bogen auch auf Seite 2. |
@@ -1086,10 +1098,15 @@ Fehlermeldung anhängen (siehe unten).
 | Wo | Taste | Wirkung |
 |---|---|---|
 | überall | **F1** (am Mac Cmd+?) oder Knopf **„Hilfe“** | Hilfe zum aktuellen Reiter |
+| Hauptfenster | **Strg+N** | Teilnehmer hinzufügen (springt zum Reiter „Teilnehmer“) |
+| Hauptfenster | **Strg+F** (am Mac Cmd+F) | ins Suchfeld des Reiters (Teilnehmer, Ergebniserfassung, Auswertung; im Startbildschirm die Terminsuche) |
+| Hauptfenster | **Strg+1** bis **Strg+9** | zum 1. bis 9. Reiter wechseln |
+| Teilnehmer | **Strg+Z** | letztes Löschen bzw. Startnummern-Zurücksetzen rückgängig machen |
 | Hilfe | **Strg+F** (am Mac Cmd+F) | ins Suchfeld |
 | Teilnehmer | **Entf** | markierte Teilnehmer löschen (nach Rückfrage) |
 | Teilnehmer | **Strg-Klick**, **Umschalt-Klick**, **Strg+A** | mehrere bzw. alle sichtbaren Zeilen markieren |
 | Teilnehmer | **Doppelklick** auf eine Zeile | „Bearbeiten…“ öffnen |
+| Teilnehmer, Ergebniserfassung, Auswertung | **Rechtsklick** auf eine Zeile | Menü mit den Aktionen der Knöpfe |
 | Ergebniserfassung | Zahl tippen, **F2** (am Mac Enter) oder **Doppelklick**, **Enter**, **Esc** | Wert ersetzen, ändern, übernehmen, verwerfen |
 | Ergebniserfassung | **Tab** / **Umschalt+Tab** | nächste / vorige Eingabe |
 | Ergebniserfassung | **Leertaste** | Häkchen „Disqualifiziert“ setzen, Liste „Abbruch“ aufklappen |

@@ -105,6 +105,9 @@ classDiagram
     class StartDialog {
         +pfad
         +neu_angelegt
+        -_angezeigt
+        -_menue_aufbauen()
+        -_spalte_geklickt(spalte)
         -_aktualisieren()
         -_termin_oeffnen()
         -_neuer_termin()
@@ -115,10 +118,17 @@ classDiagram
         +farben_aktualisieren()
         +knopf_hinzufuegen(knopf, symbol_name)
     }
-    class TeilnehmerTab
+    class TeilnehmerTab {
+        +filter_name
+        +rueckgaengig_btn
+        -_rueckgaengig_merken(text, aktion)
+        -_rueckgaengig_ausfuehren()
+    }
     class FormularImportTab
     class ErgebnisTab {
         +tabelle
+        +filter_name
+        +bewertungsbogen_btn
         +aktualisieren()
         +aktualisieren_falls_geaendert()
         +alle_speichern(meldungen)

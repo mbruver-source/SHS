@@ -15,7 +15,7 @@ import re
 import sqlite3
 
 from PySide6.QtCore import QRegularExpression, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QBrush, QColor, QFont, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -587,10 +587,25 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 if andere is not combo and andere.currentText() != _GEGENSTAND_ZUORDNUNG_FREI
             }
             modell = combo.model()
+            gesperrt_farbe = QBrush(_farbe("TEXT_DISABLED"))
+            kursiv = QFont(combo.font())
+            kursiv.setItalic(True)
             for index in range(combo.count()):
                 item = modell.item(index)
-                if item is not None:
-                    item.setEnabled(combo.itemText(index) not in vergeben)
+                if item is None:
+                    continue
+                frei = combo.itemText(index) not in vergeben
+                item.setEnabled(frei)
+                # Mit dem Stylesheet zeichnet Qt gesperrte Einträge der Auswahlliste nicht
+                # von selbst abgesetzt (Marco 10.11.2026): Farbe, Kursivschrift und Hinweis.
+                if frei:
+                    item.setData(None, Qt.ForegroundRole)
+                    item.setData(None, Qt.FontRole)
+                    item.setToolTip("")
+                else:
+                    item.setForeground(gesperrt_farbe)
+                    item.setFont(kursiv)
+                    item.setToolTip("Schon bei einem anderen Gegenstand gewählt")
 
     def _gegenstand_felder_aktualisieren(self, *_args) -> None:
         """Abstimmung mit Marco (23.09.): ED hat nur eine Suchdisziplin und damit
@@ -1633,10 +1648,15 @@ gespeichert; "Teilnahme wiederherstellen" macht es rückgängig). "Startnummer t
 tauscht die Nummern zweier Teilnehmer.
 "Aus anderem Termin importieren…" übernimmt Stammdaten aus einem früheren Termin (ohne
 Startnummer, Gegenstände, Bezahlt-Status und Ergebnis). "Bewertungsbogen (PDF)…" erzeugt den
-Bogen nur für den markierten Teilnehmer. Die Filter Art/LK, Start-Nr. und Bezahlt blenden
-Zeilen nur aus.</p>
+Bogen nur für den markierten Teilnehmer (beim Dreikampf wahlweise zwei Seiten oder drei
+Blätter, eins je Disziplin). Die Filter Art/LK, Start-Nr. und Bezahlt sowie das Suchfeld
+"Suche" (Name, Vorname oder Hund, ein Teilwort genügt) blenden Zeilen nur aus. Ein Rechtsklick auf eine
+Zeile öffnet ein Menü mit denselben Aktionen wie die Knöpfe. "Rückgängig" (Strg+Z) nimmt das letzte
+Löschen von Teilnehmern oder "Alle Startnummern zurücksetzen…" zurück; "Ablageort öffnen" zeigt den
+Ordner des Bewertungsbogens.</p>
 
 <h3>Reiter "Formular-Import"</h3>
+<p>Das leere Formular erzeugst du auch hier mit "Leeres Anmeldeformular (PDF)…".</p>
 <p><b>Ausfüllbares Anmeldeformular (empfohlen):</b> Importieren lässt sich nur das
 Anmeldeformular, das dieses Programm selbst erzeugt (Reiter "Ausdrucke/Export" → "Anmeldeformular
 (PDF)…"), und zwar aus demselben Termin. Die Teilnehmer füllen es am Rechner aus, kreuzen
@@ -1660,6 +1680,8 @@ Projektseite: https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (dana
 "Teilnehmer" die Startnummern vergeben).</p>
 
 <h3>Reiter "Zeitplan"</h3>
+<p>Blöcke und Pausen lassen sich auch mit der Maus an eine andere Stelle derselben Spalte ziehen
+(statt "Hoch"/"Runter"); "Ablageort öffnen" zeigt den Ordner des Zeitplan-PDFs.</p>
 <p>Plant den Tagesablauf je Richter. Startzeit oben festlegen, dann je Richter eine
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…" (nach der markierten Zeile;
 wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause; mit "genau um diese Uhrzeit
@@ -1695,11 +1717,16 @@ zurückgewiesen. "Disqualifiziert" ankreuzen leert und sperrt die Punktefelder. 
 den Grund wählen (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF): die Punktefelder
 bleiben offen für die Teilbewertung (bei Ungehorsam die abgebrochene Disziplin leer lassen,
 sonst einen fehlenden Teil mit 0 eintragen).
-Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespeichert.</p>
+Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespeichert.
+Das Suchfeld "Suche" findet Teilnehmer nach Name oder Hund; "Bewertungsbogen (PDF)…" erzeugt den
+Bogen der aktuellen Zeile. Rechtsklick (auch unter den Zeilen) zeigt dazu "Alle Ergebnisse
+speichern" und "Liste aktualisieren".</p>
 
 <h3>Reiter "Auswertung"</h3>
 <p>Zeigt die berechnete Rangliste je Leistungsklasse mit Wertnote. Filter nach
-Art/Leistungsklasse und Startnummer. "Nicht bestanden" wird rot markiert und erhält keine
+Art/Leistungsklasse und Startnummer, Suche nach Name oder Hund; ein Klick auf eine Spaltenüberschrift
+sortiert die Tabelle. "Bewertungsbogen (PDF)…" (auch per Rechtsklick) erzeugt den Bogen der markierten
+Zeile. "Nicht bestanden" wird rot markiert und erhält keine
 Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualisiert die
 Anzeige. "Rangliste drucken (PDF)…" speichert die Rangliste als PDF - ist im Filter eine
 Art/Leistungsklasse gewählt, nur diese, sonst alle (der Startnummer-Filter wird dabei nicht
@@ -1714,7 +1741,7 @@ Anzahl benötigter Richter (1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 
 Richter). Darunter die benötigten Behältnisse der Behältnisstrecke je LK (ED Behältnisstrecke
 + DK): leere einmal je LK, eines mit Gegenstand je Teilnehmer, in LK3 wahlweise zusätzlich ein
 separates Behältnis für die Material-Verleitung je Teilnehmer. Die gleiche Tabelle steht auch
-in der Richter-Bedarf-PDF.</p>
+in der Richter-Bedarf-PDF, die du mit "Richter-Bedarf (PDF)…" gleich hier erzeugst.</p>
 
 <h3>Reiter "Abrechnung Leistungsrichter"</h3>
 <p>Rechnet die Vergütung der Leistungsrichter (Richter 1-5 aus den Veranstaltungsdaten, nur
@@ -1736,7 +1763,8 @@ Kategorie) und "Kategorie hinzufügen…" legst du eigene Punkte und Kategorien 
 bzw. "Kategorie löschen" wieder entfernen. Eigene Kategorien und Punkte werden beim Anlegen eines neuen
 Termins aus dem letzten Termin vorgeschlagen, die Haken nicht. Vorgegebene Punkte und Kategorien, die du nicht
 brauchst, blendest du mit ✕ bzw. "Kategorie ausblenden" für diesen Termin aus (sie zählen dann nicht mit);
-"Ausgeblendetes zeigen" holt alles zurück. Auch das Ausblenden wird für einen neuen Termin vorgeschlagen.</p>
+"Ausgeblendetes zeigen" holt alles zurück. Auch das Ausblenden wird für einen neuen Termin vorgeschlagen.
+"Checkliste (PDF)…" unter der Liste druckt sie mit dem aktuellen Stand der Haken.</p>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
 Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
@@ -1748,13 +1776,15 @@ Anmeldeformulars.</p>
 <p>Neben jedem Knopf steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Hinweis,
 wenn die Maus kurz darauf bleibt. Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
-Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
-Zeitplan sowie
+Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Abrechnung der Leistungsrichter,
+Checkliste, Richter-Bedarf, Zeitplan sowie
 alle Bewertungsbögen gesammelt. "Teilnehmerliste speichern (CSV, für Excel)…" speichert alle Teilnehmer
 mit Stammdaten als Excel-Liste (lässt sich auch wieder einlesen). PDFs landen standardmäßig im
 Ordner "Ausdrucke" des Termins; nach dem Speichern zeigt ein Fenster, wo die Datei liegt.
 "Ablageort öffnen" zeigt den Ordner im Dateimanager (Explorer bzw. Finder) – alle Exporte (auch im Zeitplan-Tab) teilen
-sich denselben Speicherort.</p>
+sich denselben Speicherort. Mit dem Haken "Dateien ohne Nachfrage im Ablageort speichern" entfällt die Frage
+nach dem Speicherort in allen Reitern; eine vorhandene Datei wird nie überschrieben, sondern bekommt " (2)"
+im Namen.</p>
 
 <h3>Reiter "Datensicherung"</h3>
 <p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine Sicherungsdatei
@@ -1792,9 +1822,11 @@ gibt, zählen auch Stellen mitten im Wort. Alle Treffer werden orange markiert, 
 <h3>Tastenkürzel</h3>
 <p><b>Überall:</b> F1 (am Mac Cmd+?) – Hilfe zum aktuellen Reiter. In der Hilfe: Strg+F
 (am Mac Cmd+F) – ins Suchfeld.</p>
+<p><b>Hauptfenster:</b> Strg+N legt einen Teilnehmer an (springt zum Reiter "Teilnehmer"), Strg+F springt ins
+Suchfeld des Reiters (im Startbildschirm in die Terminsuche), Strg+1 bis Strg+9 wechseln den Reiter.</p>
 <p><b>Reiter "Teilnehmer":</b> Strg-Klick bzw. Umschalt-Klick markiert mehrere Zeilen, Strg+A alle
-sichtbaren. Entf löscht die markierten Teilnehmer (nach Rückfrage). Doppelklick auf eine Zeile
-öffnet "Bearbeiten…".</p>
+sichtbaren. Entf löscht die markierten Teilnehmer (nach Rückfrage), Strg+Z macht das (oder "Alle Startnummern
+zurücksetzen…") rückgängig. Doppelklick auf eine Zeile öffnet "Bearbeiten…".</p>
 <p><b>Reiter "Ergebniserfassung":</b> Zelle markieren und die Zahl tippen – sie ersetzt den
 Wert; F2 (am Mac Enter) oder Doppelklick ändert ihn. Enter übernimmt, Esc verwirft die Eingabe.
 Tab bzw. Umschalt+Tab springt zur nächsten bzw. vorigen Eingabe. Die Leertaste setzt das
