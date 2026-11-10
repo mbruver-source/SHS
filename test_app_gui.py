@@ -2505,7 +2505,7 @@ def test_export_tab_jeder_knopf_hat_kurztext_und_tooltip(qtbot, conn):
     tab.show()
 
     knoepfe = [b for b in tab.findChildren(QPushButton) if b.text() != "Ablageort öffnen"]
-    assert len(knoepfe) == 11
+    assert len(knoepfe) == 12  # +1: Etiketten Behältnisse (10.11.2026)
     for knopf in knoepfe:
         assert knopf.toolTip(), knopf.text()
         rechts = [
