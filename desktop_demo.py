@@ -1265,8 +1265,9 @@ class DemoTour(QObject):
             ),
             DemoSchritt(
                 "13. Ergebnisliste als PDF",
-                "Im Reiter „Ausdrucke/Export“ liegen alle Ausdrucke: Ergebnisliste, Etiketten, "
-                "Statistik, Bewertungsbögen, Zeitplan und mehr. Neben jedem Knopf steht "
+                "Im Reiter „Ausdrucke/Export“ liegen alle Ausdrucke: Ergebnisliste, Etiketten "
+                "(auch für die Behältnisse, mit einstellbarer Größe), Statistik, Bewertungsbögen "
+                "(beim Dreikampf wahlweise ein Blatt je Disziplin), Zeitplan und mehr. Neben jedem Knopf steht "
                 "kurz, was er erzeugt; bleibt die Maus darauf, zeigt ein Tooltip "
                 "Einzelheiten.\n\n"
                 "Normalerweise fragt das Programm, wo die Datei hin soll (Standard: Ordner "

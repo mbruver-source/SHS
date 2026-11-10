@@ -330,6 +330,29 @@ class TestPdfExport(unittest.TestCase):
         with self.assertRaises(ValueError):
             pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, breite_mm=300)
 
+    def test_behaeltnis_etiketten_kleine_hoehe_mehrere_seiten_ohne_teilnehmer(self):
+        """Verifikation 10.11.2026 (A, G): auch auf niedrigen Etiketten bleibt der Gegenstand
+        sichtbar; 0 Teilnehmer geben eine Hinweisseite, viele Teilnehmer mehrere Seiten; bei ED
+        steht die Disziplin nicht doppelt im Label."""
+        ziel = self._pfad("leer_etiketten.pdf")
+        self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel), 0)
+        self.assertIn("Keine Teilnehmer", _text(ziel))
+        for n in range(1, 31):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"N{n}", vorname="V", rufname_hund="H", art="ED", stufe=1,
+                disziplin="Behältnisstrecke", startnummer=n, gegenstand_1=f"Ding{n}",
+                gegenstand_1_disziplin="Behältnisstrecke"))
+        for hoehe in (20, 25, 37):
+            ziel = self._pfad(f"etikett_{hoehe}.pdf")
+            self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, hoehe_mm=hoehe), 30)
+            text = _text(ziel)
+            self.assertIn("Gegenstand: Ding1", text)
+            self.assertIn("Gegenstand: Ding30", text)
+            self.assertNotIn("Behältnisse LK 1 – Behältnis", text)
+        # 70 x 20 mm: 3 x 14 = 42 je Seite -> eine Seite; 70 x 37: 24 je Seite -> zwei Seiten.
+        self.assertEqual(len(PdfReader(self._pfad("etikett_20.pdf")).pages), 1)
+        self.assertEqual(len(PdfReader(self._pfad("etikett_37.pdf")).pages), 2)
+
     def test_lange_namen_brechen_in_ergebnislisten_um(self):
         """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner
         String in die Nachbarspalte. Als Paragraph brechen sie um - die Namensspalte endet

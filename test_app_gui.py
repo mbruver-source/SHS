@@ -1826,6 +1826,38 @@ def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
     assert ergebnis.gegenstand_1_disziplin is None
 
 
+def test_geladener_teilnehmer_sperrt_vergebene_disziplinen(qtbot, conn):
+    _teilnehmer_anlegen(conn, art="DK", disziplin=None, gegenstand_1="Holz", gegenstand_1_disziplin="Trümmerfeld",
+                        gegenstand_3="Gummi", gegenstand_3_disziplin="Behältnisstrecke")
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Behältnisstrecke")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Flächensuche")
+    assert _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Trümmerfeld")  # eigene Zeile
+
+
+def test_bewertungsbogen_dialog_je_disziplin_haekchen(qtbot):
+    from desktop_dialoge import BewertungsbogenAuswahlDialog
+    dialog = BewertungsbogenAuswahlDialog(None, ["DK LK 1"])
+    qtbot.addWidget(dialog)
+    assert not dialog.je_disziplin.isChecked()  # Standard: bisheriger 2-Seiten-Bogen
+    dialog.je_disziplin.setChecked(True)
+    assert dialog.je_disziplin.isChecked()
+
+
+def test_behaeltnis_etiketten_dialog_raender_nur_ohne_eigene_eingabe(qtbot):
+    from desktop_dialoge import BehaeltnisEtikettenDialog
+    dialog = BehaeltnisEtikettenDialog()
+    qtbot.addWidget(dialog)
+    dialog.rand_links.setValue(10)  # eigene Eingabe, zufällig 10
+    dialog.papier.setChecked(True)
+    dialog.bogen.setChecked(True)
+    assert dialog.rand_links.value() == 10 and dialog.rand_oben.value() == 0  # Bogen setzt nichts zurück
+    assert dialog.hoehe.minimum() == 20
+
+
 def test_behaeltnis_etiketten_dialog_rechnet_raster(qtbot):
     from desktop_dialoge import BehaeltnisEtikettenDialog
     dialog = BehaeltnisEtikettenDialog()

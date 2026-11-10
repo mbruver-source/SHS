@@ -809,22 +809,32 @@ def erstelle_behaeltnis_etiketten_pdf(
             c.setStrokeColor(colors.grey)
             c.rect(x, y, b, h)
             c.restoreState()
-        innen = min(2.5 * mm, b / 10)
+        innen = min(2.5 * mm, b / 10, h / 10)
         voll = b - 2 * innen
         gegenstand = gegenstand_fuer_disziplin(t, "Behältnisstrecke") or (t["gegenstand_1"] if t["art"] == "ED" else None)
+        # Bei ED nennt das Label die Disziplin schon ("Behältnisse LK 1"), bei DK nicht.
+        pruefung = _wert(leistungsklasse_label(t)) + (" – Behältnis" if t["art"] == "DK" else "")
+        hund = f"Hund: {_wert(t['rufname_hund'])}"
+        # Die Reihenfolge ist die Wichtigkeit: der Gegenstand ist der Zweck des Etiketts und
+        # steht deshalb gleich unter der Startnummer. Auf niedrigen Etiketten (< 28 mm) teilen
+        # sich Hund und Prüfung eine Zeile.
         zeilen_text = [
-            (f"Nr. {_wert(t['startnummer'])}", _SCHRIFT_FETT, min(h * 0.32 / 0.35, 20)),
-            (f"{_wert(t['nachname'])}, {_wert(t['vorname'])}", _SCHRIFT_FETT, 11),
-            (f"Hund: {_wert(t['rufname_hund'])}", _SCHRIFT, 10),
-            (f"{_wert(leistungsklasse_label(t))} – Behältnis", _SCHRIFT, 9),
+            (f"Nr. {_wert(t['startnummer'])}", _SCHRIFT_FETT, 20),
             (f"Gegenstand: {_wert(gegenstand) or '..............'}", _SCHRIFT_FETT, 11),
+            (f"{_wert(t['nachname'])}, {_wert(t['vorname'])}", _SCHRIFT_FETT, 11),
         ]
+        if hoehe_mm < 28:
+            zeilen_text.append((f"{hund} · {pruefung}", _SCHRIFT, 9))
+        else:
+            zeilen_text += [(hund, _SCHRIFT, 10), (pruefung, _SCHRIFT, 9)]
+        # Alle Schriftgrößen gemeinsam an die Etikettenhöhe anpassen, damit keine Zeile wegfällt.
+        bedarf = sum(g * 1.3 for _t, _s, g in zeilen_text)
+        faktor = min(1.0, (h - 2 * innen) / bedarf)
         text_y = y + h - innen
         for text, schrift, groesse in zeilen_text:
-            text, groesse = _text_passend(c, text, schrift, groesse, voll)
+            groesse = max(groesse * faktor, 5.5)
+            text, groesse = _text_passend(c, text, schrift, groesse, voll, min_groesse=5)
             text_y -= groesse * 1.05
-            if text_y < y + innen * 0.4:
-                break
             c.setFont(schrift, groesse)
             c.drawString(x + innen, text_y, text)
             text_y -= groesse * 0.25

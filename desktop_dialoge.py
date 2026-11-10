@@ -1413,12 +1413,17 @@ class BehaeltnisEtikettenDialog(QDialog):
             return box
 
         self.breite = feld(70, 30, 200)
-        self.hoehe = feld(37, 15, 280)
+        self.hoehe = feld(37, 20, 280)
         self.rand_links = feld(0, 0, 100)
         self.rand_oben = feld(0, 0, 100)
         self.hinweis = QLabel("")
         self.hinweis.setWordWrap(True)
+        # Befund C: die Ränder nur beim Umschalten vorbelegen, solange der Nutzer sie nicht selbst geändert hat.
+        self._rand_von_hand = False
+        self._rand_wird_gesetzt = False
         self.papier.toggled.connect(self._papier_umgeschaltet)
+        for box in (self.rand_links, self.rand_oben):
+            box.valueChanged.connect(self._rand_geaendert)
         for box in (self.breite, self.hoehe, self.rand_links, self.rand_oben):
             box.valueChanged.connect(self._hinweis_aktualisieren)
 
@@ -1428,9 +1433,9 @@ class BehaeltnisEtikettenDialog(QDialog):
         form.addRow("Rand links", self.rand_links)
         form.addRow("Rand oben", self.rand_oben)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Ein Etikett je Hund mit Behältnisstrecke: Startnummer, Name, Hund, "
@@ -1439,17 +1444,20 @@ class BehaeltnisEtikettenDialog(QDialog):
         layout.addWidget(self.papier)
         layout.addLayout(form)
         layout.addWidget(self.hinweis)
-        layout.addWidget(buttons)
+        layout.addWidget(self.buttons)
         self._hinweis_aktualisieren()
+
+    def _rand_geaendert(self, *_args) -> None:
+        if not self._rand_wird_gesetzt:
+            self._rand_von_hand = True
 
     def _papier_umgeschaltet(self, papier: bool) -> None:
         # Auf normalem Papier brauchen die Etiketten einen Druckrand, auf dem Bogen sitzen sie am Raster.
-        if papier and self.rand_links.value() == 0 and self.rand_oben.value() == 0:
-            self.rand_links.setValue(10)
-            self.rand_oben.setValue(10)
-        elif not papier and self.rand_links.value() == 10 and self.rand_oben.value() == 10:
-            self.rand_links.setValue(0)
-            self.rand_oben.setValue(0)
+        if not self._rand_von_hand:
+            self._rand_wird_gesetzt = True
+            for box in (self.rand_links, self.rand_oben):
+                box.setValue(10 if papier else 0)
+            self._rand_wird_gesetzt = False
         self._hinweis_aktualisieren()
 
     def spalten_zeilen(self) -> tuple[int, int]:
@@ -1461,11 +1469,7 @@ class BehaeltnisEtikettenDialog(QDialog):
         self.hinweis.setText(
             f"{spalten} x {zeilen} = {spalten * zeilen} Etiketten je A4-Seite." if spalten and zeilen
             else "Das Etikett ist größer als die Seite.")
-        self.buttons_ok_setzen(bool(spalten and zeilen))
-
-    def buttons_ok_setzen(self, ok: bool) -> None:
-        for knopf in self.findChildren(QDialogButtonBox):
-            knopf.button(QDialogButtonBox.Ok).setEnabled(ok)
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(spalten and zeilen))
 
 
 class SicherungErstellenDialog(QDialog):

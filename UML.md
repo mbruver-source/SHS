@@ -263,7 +263,7 @@ flowchart TD
     dlg & csv & form & alt --> nummern[Startnummern vergeben<br/>„Fehlende Startnummern vergeben…“]
     nummern --> bezahlt[Bezahlt / keine Teilnahme<br/>markieren]
     bezahlt --> zeit[Zeitplan<br/>automatisch verteilen,<br/>Blöcke und Pausen anpassen]
-    zeit --> druck1[Ausdrucke vor der Prüfung<br/>Zeitplan, Bewertungsbögen,<br/>Etiketten, Richter-/Behältnisbedarf]
+    zeit --> druck1[Ausdrucke vor der Prüfung<br/>Zeitplan, Bewertungsbögen,<br/>Etiketten (auch für Behältnisse), Richter-/Behältnisbedarf]
     druck1 --> tag{Prüfungstag:<br/>wo werden Ergebnisse erfasst?}
     tag -->|Desktop| erf[Ergebniserfassung<br/>Punkte, DQ, Abbruch<br/>„Alle Ergebnisse speichern“]
     tag -.->|mehrere Richter| webv[Termin im Web veröffentlichen<br/>Richter erfassen im Browser<br/>Ergebnisse zurückholen]
