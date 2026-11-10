@@ -52,7 +52,7 @@ from db import (
 )
 from db_import import exportiere_teilnehmer_csv
 from desktop_darstellung import _farbe
-from desktop_dialoge import BewertungsbogenAuswahlDialog
+from desktop_dialoge import BehaeltnisEtikettenDialog, BewertungsbogenAuswahlDialog
 from desktop_gemeinsam import (
     _Ablageort,
     _ausfuehren,
@@ -534,6 +534,10 @@ class ExportTab(QWidget):
         etiketten_btn = QPushButton("Etiketten (PDF)…")
         etiketten_btn.clicked.connect(self._etiketten_exportieren)
 
+        # Wunsch 10.11.2026: Etiketten zum Beschriften der Behältnisse (Gegenstände einsammeln).
+        behaeltnis_etiketten_btn = QPushButton("Etiketten Behältnisse (PDF)…")
+        behaeltnis_etiketten_btn.clicked.connect(self._behaeltnis_etiketten_exportieren)
+
         statistik_btn = QPushButton("Statistik (PDF)…")
         statistik_btn.clicked.connect(self._statistik_exportieren)
 
@@ -581,6 +585,11 @@ class ExportTab(QWidget):
              "Für Klebe-/Etikettenpapier. Teilnehmer ohne vollständiges Ergebnis bekommen "
              "ebenfalls ein Etikett mit leeren Punktfeldern. Das Feld „SH-R“ bleibt zum "
              "Abstempeln bzw. Unterschreiben frei."),
+            (behaeltnis_etiketten_btn,
+             "Etiketten zum Beschriften der Behältnisse, ein Etikett je Hund",
+             "Startnummer, Name, Hund, Prüfung und der Gegenstand der Behältnisstrecke. Die Größe "
+             "der Klebefelder stellst du ein; wahlweise für einen Etikettenbogen (ohne Linien) "
+             "oder normales Papier (mit Schnittlinien zum Ausschneiden)."),
             (statistik_btn,
              "Prädikat-Übersicht je Art/Leistungsklasse, inkl. Jugendliche",
              "Jugendliche: vollständig bewertete Teilnehmer unter 18 Jahren am Prüfungstag, "
@@ -723,6 +732,19 @@ class ExportTab(QWidget):
             "Etiketten gespeichert",
         )
 
+    def _behaeltnis_etiketten_exportieren(self) -> None:
+        dialog = BehaeltnisEtikettenDialog(self)
+        if _ausfuehren(dialog) != QDialog.Accepted:
+            return
+        self._pdf_export_ausfuehren(
+            "Etiketten Behältnisse speichern", "Etiketten_Behaeltnisse",
+            lambda pfad: pdf_export.erstelle_behaeltnis_etiketten_pdf(
+                self.conn, pfad, breite_mm=dialog.breite.value(), hoehe_mm=dialog.hoehe.value(),
+                rand_links_mm=dialog.rand_links.value(), rand_oben_mm=dialog.rand_oben.value(),
+                schnittlinien=dialog.papier.isChecked()),
+            lambda anzahl: f"{anzahl} Etiketten für Behältnisse gespeichert",
+        )
+
     def _leere_ergebnisliste_exportieren(self) -> None:
         self._pdf_export_ausfuehren(
             "Ergebnisliste zum Ausfüllen speichern", "Ergebnisliste_leer",
@@ -769,9 +791,11 @@ class ExportTab(QWidget):
         if _ausfuehren(auswahl_dialog) != QDialog.Accepted:
             return
         erlaubte_labels = auswahl_dialog.ausgewaehlte_labels()
+        je_disziplin = auswahl_dialog.je_disziplin.isChecked()
 
         self._pdf_export_ausfuehren(
             "Bewertungsbögen speichern", "Bewertungsboegen",
-            lambda pfad: pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad, erlaubte_labels=erlaubte_labels),
+            lambda pfad: pdf_export.erstelle_alle_bewertungsboegen_pdf(
+                self.conn, pfad, erlaubte_labels=erlaubte_labels, je_disziplin=je_disziplin),
             lambda anzahl: f"{anzahl} Bewertungsbögen gespeichert",
         )

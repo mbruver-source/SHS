@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSpinBox,
     QTextBrowser,
@@ -311,6 +313,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         for zuordnung in (self.gegenstand_1_disziplin, self.gegenstand_2_disziplin, self.gegenstand_3_disziplin):
             zuordnung.addItem(_GEGENSTAND_ZUORDNUNG_FREI)
             zuordnung.addItems(ALLE_DISZIPLINEN)
+            # Rückmeldung 10.11.2026: eine schon vergebene Disziplin ist bei den anderen
+            # Gegenständen ausgegraut und nicht wählbar.
+            zuordnung.currentTextChanged.connect(self._vergebene_disziplinen_sperren)
 
         # UX-Test 03.11.2026, X12: Klartext, welche Prüfung Art/LK/Disziplin ergeben und ob der
         # Termin sie anbietet; X4: warum Gegenstand 2/3 bei ED fehlen (seit R5 ausgeblendet).
@@ -569,6 +574,24 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.disziplin.setEnabled(art == "ED")
         self._gegenstand_felder_aktualisieren()
 
+    def _vergebene_disziplinen_sperren(self, *_args) -> None:
+        """Eine Disziplin, die bei einem Gegenstand gewählt ist, ist in den Auswahlen der
+        anderen beiden Gegenstände ausgegraut und nicht wählbar ("frei" bleibt immer
+        wählbar). Bei ED (nur ein Gegenstand, feste Zuordnung) gibt es nichts zu sperren.
+        Die Prüfung "doppelt vergeben" beim Speichern bleibt als Sicherung bestehen."""
+        combos = (self.gegenstand_1_disziplin, self.gegenstand_2_disziplin, self.gegenstand_3_disziplin)
+        ist_ed = self.art.currentText() == "ED"
+        for combo in combos:
+            vergeben = set() if ist_ed else {
+                andere.currentText() for andere in combos
+                if andere is not combo and andere.currentText() != _GEGENSTAND_ZUORDNUNG_FREI
+            }
+            modell = combo.model()
+            for index in range(combo.count()):
+                item = modell.item(index)
+                if item is not None:
+                    item.setEnabled(combo.itemText(index) not in vergeben)
+
     def _gegenstand_felder_aktualisieren(self, *_args) -> None:
         """Abstimmung mit Marco (23.09.): ED hat nur eine Suchdisziplin und damit
         unabhängig von der Leistungsklasse genau einen Gegenstand. Bei ED ist daher nur
@@ -596,6 +619,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # scheinbar bewusste DK-Zuordnung stehen lassen, sondern wieder auf "frei".
             self.gegenstand_1_disziplin.setCurrentText(_GEGENSTAND_ZUORDNUNG_FREI)
         self._gegenstand_1_fest_zugeordnet = ist_ed
+        self._vergebene_disziplinen_sperren()
 
     def _pruefung_auswahl_fuellen(self) -> None:
         """T5: angebotene Prüfungen plus „andere Prüfung …“; ohne Angebot im Termin entfällt die
@@ -1325,6 +1349,14 @@ class BewertungsbogenAuswahlDialog(QDialog):
         auswahl_zeile.addWidget(keine_btn)
         auswahl_zeile.addStretch()
 
+        # Wunsch 10.11.2026: beim Dreikampf wahlweise ein Blatt je Disziplin (drei Stapel für
+        # die Richter) statt des 2-Seiten-Bogens je Teilnehmer; ED bleibt unverändert.
+        self.je_disziplin = QCheckBox("Dreikampf: ein Blatt je Disziplin (Trümmerfeld, Fläche, Behältnis)")
+        self.je_disziplin.setToolTip(
+            "Statt des 2-Seiten-Bogens bekommt jeder Dreikampf-Teilnehmer drei Blätter, nach "
+            "Disziplin sortiert: erst alle Trümmerfeld-Blätter, dann alle Flächensuche, dann alle "
+            "Behältnisstrecke - jeder Richter bekommt seinen Stapel. Einzeldisziplinen bleiben unverändert.")
+
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -1341,6 +1373,7 @@ class BewertungsbogenAuswahlDialog(QDialog):
         ))
         layout.addLayout(auswahl_zeile)
         layout.addWidget(self.liste)
+        layout.addWidget(self.je_disziplin)
         layout.addWidget(self.buttons)
 
     def _alle_umschalten(self, zustand) -> None:
@@ -1356,6 +1389,83 @@ class BewertungsbogenAuswahlDialog(QDialog):
             for row in range(self.liste.count())
             if self.liste.item(row).checkState() == Qt.Checked
         }
+
+
+class BehaeltnisEtikettenDialog(QDialog):
+    """Einstellungen für die Etiketten der Behältnisse (Wunsch 10.11.2026): Größe der
+    Klebefelder in mm, Ränder und ob die Etiketten auf einen Etikettenbogen (Raster, ohne
+    Linien) oder auf normales Papier (mit Schnittlinien) gedruckt werden."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Etiketten für Behältnisse")
+
+        self.bogen = QRadioButton("Etikettenbogen (Klebeetiketten, ohne Linien)")
+        self.papier = QRadioButton("Normales Papier (mit Schnittlinien zum Ausschneiden)")
+        self.bogen.setChecked(True)
+
+        def feld(wert: float, minimum: float, maximum: float) -> QDoubleSpinBox:
+            box = QDoubleSpinBox()
+            box.setRange(minimum, maximum)
+            box.setDecimals(1)
+            box.setSuffix(" mm")
+            box.setValue(wert)
+            return box
+
+        self.breite = feld(70, 30, 200)
+        self.hoehe = feld(37, 15, 280)
+        self.rand_links = feld(0, 0, 100)
+        self.rand_oben = feld(0, 0, 100)
+        self.hinweis = QLabel("")
+        self.hinweis.setWordWrap(True)
+        self.papier.toggled.connect(self._papier_umgeschaltet)
+        for box in (self.breite, self.hoehe, self.rand_links, self.rand_oben):
+            box.valueChanged.connect(self._hinweis_aktualisieren)
+
+        form = QFormLayout()
+        form.addRow("Breite eines Etiketts", self.breite)
+        form.addRow("Höhe eines Etiketts", self.hoehe)
+        form.addRow("Rand links", self.rand_links)
+        form.addRow("Rand oben", self.rand_oben)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Ein Etikett je Hund mit Behältnisstrecke: Startnummer, Name, Hund, "
+                                "Prüfung und Gegenstand."))
+        layout.addWidget(self.bogen)
+        layout.addWidget(self.papier)
+        layout.addLayout(form)
+        layout.addWidget(self.hinweis)
+        layout.addWidget(buttons)
+        self._hinweis_aktualisieren()
+
+    def _papier_umgeschaltet(self, papier: bool) -> None:
+        # Auf normalem Papier brauchen die Etiketten einen Druckrand, auf dem Bogen sitzen sie am Raster.
+        if papier and self.rand_links.value() == 0 and self.rand_oben.value() == 0:
+            self.rand_links.setValue(10)
+            self.rand_oben.setValue(10)
+        elif not papier and self.rand_links.value() == 10 and self.rand_oben.value() == 10:
+            self.rand_links.setValue(0)
+            self.rand_oben.setValue(0)
+        self._hinweis_aktualisieren()
+
+    def spalten_zeilen(self) -> tuple[int, int]:
+        return (int((210 - self.rand_links.value() + 0.01) // self.breite.value()),
+                int((297 - self.rand_oben.value() + 0.01) // self.hoehe.value()))
+
+    def _hinweis_aktualisieren(self, *_args) -> None:
+        spalten, zeilen = self.spalten_zeilen()
+        self.hinweis.setText(
+            f"{spalten} x {zeilen} = {spalten * zeilen} Etiketten je A4-Seite." if spalten and zeilen
+            else "Das Etikett ist größer als die Seite.")
+        self.buttons_ok_setzen(bool(spalten and zeilen))
+
+    def buttons_ok_setzen(self, ok: bool) -> None:
+        for knopf in self.findChildren(QDialogButtonBox):
+            knopf.button(QDialogButtonBox.Ok).setEnabled(ok)
 
 
 class SicherungErstellenDialog(QDialog):

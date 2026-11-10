@@ -1826,6 +1826,56 @@ def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
     assert ergebnis.gegenstand_1_disziplin is None
 
 
+def test_behaeltnis_etiketten_dialog_rechnet_raster(qtbot):
+    from desktop_dialoge import BehaeltnisEtikettenDialog
+    dialog = BehaeltnisEtikettenDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert dialog.spalten_zeilen() == (3, 8)  # Etikettenbogen 70 x 37 mm
+    dialog.papier.setChecked(True)  # normales Papier: Druckrand 10 mm
+    assert (dialog.rand_links.value(), dialog.rand_oben.value()) == (10, 10)
+    assert dialog.spalten_zeilen() == (2, 7)
+    dialog.rand_links.setValue(100)
+    dialog.breite.setValue(200)
+    assert "größer als die Seite" in dialog.hinweis.text()
+
+
+def _disziplin_waehlbar(combo, text):
+    index = combo.findText(text)
+    return combo.model().item(index).isEnabled()
+
+
+def test_vergebene_disziplin_ist_bei_anderen_gegenstaenden_gesperrt(qtbot):
+    """Rückmeldung 10.11.2026: im DK ist eine schon vergebene Disziplin bei den anderen
+    Gegenständen ausgegraut und nicht wählbar; "frei" bleibt immer wählbar."""
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Trümmerfeld")
+    assert _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Trümmerfeld")  # eigene Zeile bleibt
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Flächensuche")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "frei")
+    dialog.gegenstand_2_disziplin.setCurrentText("Flächensuche")
+    assert not _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Flächensuche")
+    assert not _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Flächensuche")
+    # Zurück auf "frei": wieder überall wählbar.
+    dialog.gegenstand_1_disziplin.setCurrentText("frei")
+    assert _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Trümmerfeld")
+
+
+def test_disziplin_sperre_entfaellt_bei_ed(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    dialog.art.setCurrentText("ED")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+
+
 def test_gegenstand_disziplin_frei_waehlbar_unabhaengig_von_position(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)

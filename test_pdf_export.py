@@ -267,6 +267,69 @@ class TestPdfExport(unittest.TestCase):
         self.assertNotIn("Ed, B", _text(ziel))
         self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, erlaubte_labels=set()), 0)
 
+    def test_dk_seite_2_zeigt_die_startnummer(self):
+        """Rückmeldung 10.11.2026: die Startnummer steht auch oben auf Seite 2."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Dk", vorname="A", rufname_hund="R",
+                                                  art="DK", stufe=2, startnummer=47))
+        ziel = self._pfad("seite2.pdf")
+        pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 2)
+        for seite in seiten:
+            self.assertIn("Start-Nr.", seite)
+            self.assertIn("47", seite)
+
+    def test_sammel_bewertungsboegen_je_disziplin(self):
+        """Wunsch 10.11.2026: DK je Disziplin ein Blatt, nach Disziplin sortiert, ohne GESAMT;
+        ED bleibt unverändert und steht vorweg."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Zwei", vorname="A", rufname_hund="R",
+                                                  art="DK", stufe=1, startnummer=2))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Eins", vorname="B", rufname_hund="S",
+                                                  art="DK", stufe=1, startnummer=1))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="C", rufname_hund="T", art="ED",
+                                                  stufe=1, disziplin="Trümmerfeld", startnummer=3))
+        ziel = self._pfad("je_disziplin.pdf")
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, je_disziplin=True), 3)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 7)  # 1 ED + 2 DK x 3 Disziplinen
+        self.assertIn("Ed", seiten[0])
+        erwartet = ["Trümmerfeld", "Trümmerfeld", "Flächensuche", "Flächensuche",
+                    "Behältnisstrecke", "Behältnisstrecke"]
+        for seite, disziplin in zip(seiten[1:], erwartet):
+            self.assertIn(f"Bewertung {disziplin}", seite)
+            self.assertNotIn("GESAMT", seite)
+        self.assertIn("Eins", seiten[1])
+        self.assertIn("Zwei", seiten[2])
+        # Wertungsnoten-Tabelle steht auf jedem Blatt.
+        for seite in seiten[1:]:
+            self.assertIn("Wertungsnoten", seite)
+
+    def test_behaeltnis_etiketten(self):
+        """Wunsch 10.11.2026: ein Etikett je Hund mit Behältnisstrecke (DK und ED Behältnis),
+        mit Startnummer, Name, Hund und dem Gegenstand der Behältnisstrecke."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Dk", vorname="A", rufname_hund="Rex", art="DK", stufe=1, startnummer=5,
+            gegenstand_1="Holz", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="Gummi", gegenstand_2_disziplin="Behältnisstrecke"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ed", vorname="B", rufname_hund="Luna", art="ED", stufe=1,
+            disziplin="Behältnisstrecke", startnummer=6, gegenstand_1="Horstz",
+            gegenstand_1_disziplin="Behältnisstrecke"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fl", vorname="C", rufname_hund="Max", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=7))
+        for linien in (False, True):
+            ziel = self._pfad(f"behaelter_{linien}.pdf")
+            self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, schnittlinien=linien), 2)
+            text = _text(ziel)
+            self.assertIn("Gegenstand: Gummi", text)
+            self.assertIn("Gegenstand: Horstz", text)
+            self.assertNotIn("Holz", text)
+            self.assertNotIn("Fl, C", text)
+        # Eigene Größe: 100 x 60 mm ergibt 2 x 4 = 8 Etiketten je Seite.
+        with self.assertRaises(ValueError):
+            pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, breite_mm=300)
+
     def test_lange_namen_brechen_in_ergebnislisten_um(self):
         """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner
         String in die Nachbarspalte. Als Paragraph brechen sie um - die Namensspalte endet
