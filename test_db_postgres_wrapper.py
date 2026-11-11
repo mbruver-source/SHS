@@ -33,6 +33,16 @@ class TestPostgresConnectionWrapper(unittest.TestCase):
         self.assertEqual(gesendete_params, ("X",))
         self.assertEqual(cur.lastrowid, 42)
 
+    def test_teilnehmer_wiederherstellen_setzt_die_alte_id_mit_overriding_system_value(self):
+        """id ist in PostgreSQL GENERATED ALWAYS: ohne OVERRIDING SYSTEM VALUE scheitert das
+        Rückgängig nach dem Löschen (CI-Fehler 11.11.2026)."""
+        self.roh_cursor.fetchone.side_effect = [None, {"id": 7}]  # ID frei, dann RETURNING id
+        sicherung = {"teilnehmer": {"id": 7, "nachname": "X", "startnummer": None}, "ergebnis": None}
+        self.assertTrue(db.teilnehmer_wiederherstellen(self.conn, sicherung))
+        sqls = [c[0][0] for c in self.roh_cursor.execute.call_args_list]
+        insert = next(s for s in sqls if s.startswith("INSERT INTO teilnehmer"))
+        self.assertIn(") OVERRIDING SYSTEM VALUE VALUES (", insert)
+
     def test_insert_in_andere_tabelle_bekommt_kein_returning(self):
         cur = self.conn.execute("INSERT INTO ergebnisse (teilnehmer_id) VALUES (?)", (1,))
         gesendetes_sql, _ = self.roh_cursor.execute.call_args[0]

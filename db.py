@@ -1152,8 +1152,12 @@ def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bo
             "SELECT 1 FROM teilnehmer WHERE startnummer = ?", (nummer,)).fetchone():
         daten["startnummer"] = None
     spalten = list(daten)
+    # PostgreSQL: id ist GENERATED ALWAYS AS IDENTITY, die alte ID braucht OVERRIDING SYSTEM VALUE
+    # (die Sequenz liegt ohnehin schon darüber, die ID wurde früher von ihr vergeben).
+    ueberschreiben = " OVERRIDING SYSTEM VALUE" if isinstance(conn, _PostgresConnection) else ""
     conn.execute(
-        f"INSERT INTO teilnehmer ({', '.join(spalten)}) VALUES ({', '.join('?' for _ in spalten)})",
+        f"INSERT INTO teilnehmer ({', '.join(spalten)}){ueberschreiben} "
+        f"VALUES ({', '.join('?' for _ in spalten)})",
         [daten[s] for s in spalten],
     )
     if sicherung.get("ergebnis"):

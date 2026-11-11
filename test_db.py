@@ -2400,7 +2400,7 @@ class TestZeitplan(unittest.TestCase):
         zeile = self.conn.execute(
             "SELECT suche_flaechensuche, anzeige_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)
         ).fetchone()
-        self.assertEqual((zeile[0], zeile[1]), (50, 30))
+        self.assertEqual((zeile["suche_flaechensuche"], zeile["anzeige_flaechensuche"]), (50, 30))
         # Zweimal geht nicht: die ID gibt es schon, nichts ändert sich.
         self.assertFalse(teilnehmer_wiederherstellen(self.conn, sicherung))
         self.assertEqual(len(list_teilnehmer(self.conn)), 1)

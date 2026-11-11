@@ -10005,3 +10005,8 @@ Dazu Befunde der Verifikation: Rechtsklick auf leere Fläche zeigt kein Menü me
 ## 10.11.2026: Quellcode-Spiegel auf 1.0.60
 
 - `SHS-Pruefungsprogramm-Quellcode` auf den Stand von 1.0.60 gebracht (351 Dateien, 52 neu kopiert, Workflows zusätzlich in der Wurzel, Byte-Abgleich ohne Abweichung). Gebaut, nicht gepusht und nicht getaggt. Offen für Marco: Push, Tag, Actions prüfen, claude.ai-Ablage „SHS“ (`Fortschritt.md`, `Architektur.md`) neu hochladen.
+
+## 11.11.2026: CI-Fehler PostgreSQL bei „Rückgängig“ behoben
+
+- Die CI meldete zwei Fehler in `test_db.py` (`TestZeitplanPostgres`): `teilnehmer_wiederherstellen` fügte die alte ID ein, in PostgreSQL ist `teilnehmer.id` aber `GENERATED ALWAYS AS IDENTITY`. Jetzt `OVERRIDING SYSTEM VALUE` nur bei `_PostgresConnection` (`db.py`); SQLite unverändert. Zusätzlich ein Wrapper-Test ohne Server (`test_db_postgres_wrapper.py`) und ein positionaler Spaltenzugriff im DB-Test durch Spaltennamen ersetzt.
+- Lokal erstmals gegen einen echten PostgreSQL-16-Container (Podman, `SHS_TEST_POSTGRES_DSN`) geprüft: alle 754 Tests der unittest-Module grün, 1 übersprungen. Das Tag `v1.0.60` muss auf den Stand mit diesem Fix zeigen (Marco, Neu-Taggen wegen Namensbereinigung und CI-Fehler).
