@@ -73,6 +73,16 @@ knapp eine Stunde vor dem Release mit den Fixes im Netz. Das soll nicht wieder p
   zurückgestellt oder nur notiert sind, werden dabei vorher mit Marco abgestimmt.
 - UX-Tests und andere Berichte ohne Sicherheitsbezug sind davon nicht betroffen.
 
+## Keine echten Namen (Marco 11.11.2026)
+
+Das Repo ist öffentlich. Grundsätzlich steht kein echter Personenname außer Marco im Programm,
+in der Dokumentation, in Aufgaben, `Fortschritt.md`, Commit-Nachrichten, Testdaten, Berichten
+oder sonst wo. Rückmeldungen Dritter werden neutral beschrieben („Rückmeldung eines
+Prüfungsteilnehmers“). Vor jedem Commit und Build mit `git grep -i` nach Namen suchen. Anlass:
+Am 10.11.2026 stand ein Name in `Fortschritt.md` und einer Commit-Nachricht und ging mit dem
+Release 1.0.60 raus; das Release musste neu gebaut werden. Erfundene Personas des UX-Tests sind
+keine echten Personen.
+
 ## Bereits bewusst akzeptierte, nicht zu wiederholende QS-Funde
 
 Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entscheidung
