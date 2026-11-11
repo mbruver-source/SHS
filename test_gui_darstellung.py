@@ -1564,6 +1564,7 @@ def test_klartext_tooltip_maskiert_namen():
     assert tooltip.startswith("<qt>") and "<br>" in tooltip
 
 
+@pytest.mark.langsam
 def test_screenshot_skript_erzeugt_alle_bilder(tmp_path, monkeypatch):
     """Marco 09.10.2026: tools/screenshots.py erzeugt alle Desktop-Bilder fürs Handbuch.
     Läuft in einem eigenen Prozess, weil das Skript Qt global einrichtet (Schrift,

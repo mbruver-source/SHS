@@ -669,7 +669,7 @@ def _pdf_feldwerte(pfad: str) -> dict[str, object]:
             # 28.09.2026, Befund L1).
             try:
                 _kreuz_aus_darstellung_ergaenzen(annot.get_object(), werte, nfc)
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - beliebig defekte PDF-Annotation: überspringen, siehe oben
                 continue
     return werte
 

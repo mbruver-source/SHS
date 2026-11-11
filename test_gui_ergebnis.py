@@ -1003,6 +1003,7 @@ def test_ergebnis_sortierung_bleibt_nach_aktualisieren_erhalten(qtbot, conn):
     assert namen() == ["Zorn, Max", "Meier, Max", "Adler, Max"]
 
 
+@pytest.mark.langsam
 def test_ergebnistabelle_sehr_gross_nur_maximiert_voll(qtbot, termin, darstellung_speicher):
     """Marcos Entscheidung R6 (UX-Test 03.11.2026): bei „Sehr groß“ nutzt die Ergebnistabelle
     nicht maximiert nur Faktor 1,15, maximiert den vollen Faktor 1,3."""

@@ -8,6 +8,10 @@
 
 Keine eigene PostgreSQL-Sicherung; maßgeblich sind Termin-Datei und ZIP-Sicherung
 
+## Wann neu bewerten
+
+Vor dem nächsten Einsatz der Web-Version (siehe B16), spätestens bevor sie im Internet statt nur im Vereinsnetz läuft.
+
 ## Fundstellen
 
 - `historie/2026-10.md`, Abschnitt „05.10.2026: Offene Altpunkte geklärt (Marco)“

@@ -304,7 +304,7 @@ class DemoTour(_DemoSchritteMixin, QObject):
             if self.conn is not None:
                 try:
                     self.conn.close()  # unter Windows Voraussetzung für das Löschen
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 - beim Aufräumen darf ein Fehler das Beenden nicht verhindern
                     pass
             rest_geblieben = False
             if self._ordner is not None:

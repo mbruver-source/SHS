@@ -1427,6 +1427,10 @@ def test_entf_in_teilnehmerliste_loescht_nach_rueckfrage(qtbot, conn, monkeypatc
     tab.activateWindow()
     tab.tabelle.setFocus()
     qtbot.waitUntil(lambda: tab.isActiveWindow() and tab.tabelle.hasFocus(), timeout=2000)
+    # Einzeln ausgeführt (ohne vorherige Tests, die die Ereignisschleife schon laufen ließen)
+    # greift das Kürzel erst, nachdem Qt die Ereignisse zum Anzeigen und Fokussieren abgearbeitet
+    # hat - Fenster aktiv und Fokus allein (oben) reichen dafür nicht.
+    qtbot.wait(200)
     qtbot.keyClick(tab.tabelle, Qt.Key_Delete)
     assert "„A, Max“" in fragen[-1] and vorgaben[-1] == QMessageBox.No
     assert len(list_teilnehmer(conn)) == 2

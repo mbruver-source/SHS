@@ -6,7 +6,15 @@
 
 ## Entscheidung
 
-Weitere Testarten (erledigt: Windows in der CI 19.10.2026, V2; Abdeckung und bandit 01.11.2026): gleichzeitige Web-Eingaben, ZAP/XSS, Generalprobe, Barrierefreiheit
+Weitere Testarten, Stand 11.11.2026:
+
+- **Erledigt:** Windows in der CI (19.10.2026, V2), Abdeckung und bandit (01.11.2026).
+- **Offen, Desktop:** Generalprobe (kompletter Prüfungstag mit Probedaten), Barrierefreiheit der Oberfläche.
+- **Offen, Web (gehört zu B16):** gleichzeitige Web-Eingaben, ZAP/XSS-Prüfung.
+
+## Wann neu bewerten
+
+Die Desktop-Punkte vor dem nächsten großen Release; die Web-Punkte mit B16.
 
 ## Fundstellen
 

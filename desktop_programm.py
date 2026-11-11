@@ -428,7 +428,7 @@ class SitzungsendeFilter(QAbstractNativeEventFilter):
                 msg = ctypes.wintypes.MSG.from_address(int(message))
                 if msg.message == _WM_ENDSESSION and not msg.wParam:
                     self._fenster._beenden_freigegeben = False
-        except Exception:
+        except Exception:  # noqa: BLE001 - ein Fehler im nativen Ereignisfilter darf Windows nicht stören
             pass
         return False, 0
 

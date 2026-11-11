@@ -8,6 +8,10 @@
 
 Kein Brute-Force-Schutz beim Web-Login
 
+## Wann neu bewerten
+
+Vor dem nächsten Einsatz der Web-Version (siehe B16), spätestens bevor sie im Internet statt nur im Vereinsnetz läuft.
+
 ## Fundstellen
 
 - `historie/2026-09.md`, Abschnitt „Erledigt“

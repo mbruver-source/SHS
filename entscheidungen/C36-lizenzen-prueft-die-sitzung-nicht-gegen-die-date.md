@@ -8,6 +8,10 @@
 
 `/lizenzen` prüft die Sitzung nicht gegen die Datenbank: bei veralteter Sitzung erscheint dort noch die Navigation (die Links dahinter prüfen wieder)
 
+## Wann neu bewerten
+
+Vor dem nächsten Einsatz der Web-Version (siehe B16), spätestens bevor sie im Internet statt nur im Vereinsnetz läuft.
+
 ## Fundstellen
 
 - `Fortschritt.md`, Abschnitt „01.11.2026: Lizenzen im Versionsfenster und Lizenzseite im Installer (Marco)“

@@ -8,6 +8,10 @@
 
 Sicherheitsprüfung S-5 (gering): Web-App nutzt das DB-Eigentümerkonto; Nutzen gering bei hohem Umbau
 
+## Wann neu bewerten
+
+Vor dem nächsten Einsatz der Web-Version (siehe B16), spätestens bevor sie im Internet statt nur im Vereinsnetz läuft.
+
 ## Fundstellen
 
 - `historie/2026-10.md`, Abschnitt „03.10.2026: Sicherheits-Codeprüfung (Rubrik sicherheit_2026_10)“
