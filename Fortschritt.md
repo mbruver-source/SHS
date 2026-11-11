@@ -9890,3 +9890,123 @@ Befragung mit Marco, Entscheidungen:
 ## 09.11.2026: 1.0.59 ausgeliefert
 
 - Marco hat `main` gepusht und `v1.0.59` getaggt; alle Workflows sind grün (Marcos Meldung). Der Quellcode-Spiegel stand schon auf 1.0.59. Offen für Marco: claude.ai-Ablage „SHS“ (`Fortschritt.md`, `Architektur.md`) neu hochladen.
+
+## 10.11.2026: Rückmeldung eines Prüfungsteilnehmers (zwei Punkte), nur analysiert, Umsetzung folgt am Laptop
+
+Quelle: WhatsApp-Nachricht an Marco mit zwei Fotos (Teilnehmer-Dialog DK LK 2, Bewertungsbogen). Nichts umgesetzt, nichts gebaut.
+
+1. **Teilnehmer-Dialog, DK: schon vergebene Disziplin beim nächsten Gegenstand sperren.** Heute stehen bei Gegenstand 1–3 je eine Combo „gesucht in“ (frei/Trümmerfeld/Flächensuche/Behältnisstrecke), alle mit allen Einträgen; eine doppelte Vergabe wird erst beim Speichern bemängelt (`desktop_dialoge.py`, Warnung „Gegenstand-Zuordnung doppelt vergeben“). Wunsch: wer eine Disziplin in einer Zeile gewählt hat, kann sie in den anderen beiden Zeilen nicht mehr wählen.
+   - Umsetzung: in `desktop_dialoge.py` bei Änderung einer der drei Combos (`currentTextChanged`) in den beiden anderen Combos die Einträge der gewählten Disziplin per Qt-Item-Modell deaktivieren (`model().item(i).setEnabled(False)`); „frei“ bleibt immer wählbar. Auch nach dem Laden eines vorhandenen Teilnehmers (Zeilen ~517–519) und beim Wechsel ED↔DK (`_gegenstand_felder_aktualisieren`) neu anwenden. Die Speichern-Prüfung bleibt als Sicherung.
+   - Entschieden (Marco 10.11.2026): Die Disziplin bleibt in den anderen Zeilen sichtbar, ist aber ausgegraut und nicht auswählbar. Web-Erfassung hat diese Felder nicht, bleibt unberührt. Test in `test_app_gui.py` ergänzen, Handbuch/Screenshot des Dialogs prüfen.
+2. **Bewertungsbogen, Seite 2: Startnummer anzeigen.** Seite 1 zeigt oben rechts das Feld „Start-Nr.“; die DK-Seite 2 (`_dk_folgeseiten_kopf` in `pdf_export.py`, „LK x / HF / Hund“) hat keins. Wunsch: Startnummer auch dort, damit die lose Rückseite eindeutig zuzuordnen ist.
+   - Umsetzung: `_dk_folgeseiten_kopf` um eine dritte Spalte mit derselben „Start-Nr.“-Box wie in `_bewertungsbogen_story` erweitern (Breiten z. B. 25 / 101 / 44 mm, Summe 170 mm), damit lange Namen nicht umbrechen und Seite 2 nicht auf eine dritte Seite rutscht. Das Feld bei fehlender Startnummer leer lassen wie auf Seite 1. Test in `test_pdf_export.py` (Startnummer kommt zweimal im Text vor), Handbuch-/Website-Bilder des Bogens prüfen.
+
+### Nachtrag 10.11.2026: Idee von Marco, DK-Bögen zusätzlich pro Disziplin ausgeben (nur analysiert)
+
+- Wunsch: Beim Dreikampf optional **ein Blatt je Disziplin** statt des 2-Seiten-Bogens, damit jeder Richter gleich sein passendes Paket (nur Trümmer, nur Fläche oder nur Behältnis) bekommt. Als **zusätzliche Auswahl** neben dem bisherigen Bogen, nicht als Ersatz.
+- Bestand: `erstelle_alle_bewertungsboegen_pdf` (Auswahl über `BewertungsbogenAuswahlDialog`, Aufruf in `desktop_auswertung.py`) setzt je Teilnehmer `_bewertungsbogen_story` zusammen: Seite 1 = Kopf, Stammdaten, Trümmerfeld, Fußzeile; Seite 2 = Folgekopf, Fläche, Behältnis, GESAMT. Die Abschnitte kommen schon einzeln aus `_bewertungsabschnitt`.
+- Umsetzungsskizze: neuer Modus (z. B. `je_disziplin`) in `erstelle_alle_bewertungsboegen_pdf` bzw. eine zweite Funktion; Sortierung erst alle Trümmer-Blätter nach Startnummer, dann alle Fläche, dann alle Behältnis (ergibt drei Stapel). Jedes Blatt braucht Start-Nr., LK, HF, Hund und Gegenstand dieser Disziplin (Kopf wie Seite 1, Start-Nr. wie im Punkt oben). Dialog um die Wahl „Bogen je Teilnehmer / je Disziplin“ erweitern; Tests in `test_pdf_export.py`, Handbuch und Screenshot des Dialogs.
+- **Offene Fragen an Marco:** (1) Fläche und Behältnis je ein eigenes Blatt (heute teilen sie sich Seite 2)? (2) Soll die GESAMT-Zeile mit Wertungsnoten-Tabelle auf einem eigenen Blatt je Teilnehmer entstehen oder entfällt sie (Gesamtpunkte rechnet das Programm)? (3) Wertungsnoten-Tabelle auf jedem Disziplin-Blatt oder wie heute nur beim Trümmerfeld/Behältnis? (4) Nur DK oder auch ED (dort ohnehin ein Blatt)?
+- **Entschieden (Marco 10.11.2026):** (1) Fläche und Behältnis bekommen je ein eigenes Blatt, also drei Blätter je DK-Teilnehmer. (2) Die GESAMT-Zeile entfällt im Modus „je Disziplin“. (4) Nur DK, ED bleibt unverändert. Der bisherige 2-Seiten-Bogen bleibt als andere Auswahl erhalten. **Noch offen:** (3) Wertungsnoten-Tabelle auf jedem Blatt oder wie heute (nur Trümmer und Behältnis, nicht Fläche).
+- **Entschieden (Marco 10.11.2026), Punkt (3):** Die Wertungsnoten-Tabelle steht im Modus „je Disziplin“ auf jedem der drei Blätter, jeweils unten. Damit sind alle Fragen zu den Disziplin-Blättern geklärt; Umsetzung folgt am Laptop.
+
+### Idee 10.11.2026 (Marco, nur gesammelt, nicht entschieden): Etiketten zur Beschriftung von Gläsern
+
+- Gedanke: Etiketten für die Gläser (Startnummer, Name, Disziplin, Hund), untereinander zum Ausschneiden und Aufkleben, mit wählbarer Größe der Klebefelder.
+- Anknüpfung: Die vorhandenen Ergebnis-Etiketten (`erstelle_ergebnisliste_etiketten_pdf`, feste Größe `ETIKETT_BREITE_MM` x `ETIKETT_HOEHE_MM`, gestrichelte Schnittlinie) sind das Vorbild; ein neuer Export bräuchte eigene Maße, die der Nutzer einstellt (Breite/Höhe in mm, evtl. mehrere Etiketten nebeneinander als Raster).
+- Offene Fragen: Welche Gläser genau (Geruchsproben, Gegenstände, Proben je Disziplin)? Ein Etikett je Teilnehmer oder je Teilnehmer und Disziplin (bei DK dreimal)? Gewünschte Größen/Vorlagenbogen (z. B. Avery-Raster)? Mit Gegenstand-Text? Sortierung nach Startnummer oder nach Disziplin (passend zu den Disziplin-Blättern)?
+- **Antworten Marco 10.11.2026 (Glas-Etiketten):** Die Gläser sind Behältnisse zum Einsammeln der Gegenstände. Ein Etikett je Hund/Teilnehmer. Raster: „sowohl als auch“, also sowohl Etikettenbogen mit festem Raster als auch normales Papier mit Schnittlinien (beides als Auswahl). Offen: ob der Gegenstand-Text aufs Etikett soll; bei der Antwort „3“ ist unklar, ob damit die dritte Frage gemeint war oder drei Gegenstände je Behältnis (bei DK je Teilnehmer drei Gegenstände).
+- **Klarstellung Marco 10.11.2026:** Das „3“ war die Antwort auf die dritte Frage: sowohl Klebeetiketten (Bogen mit festem Raster) als auch normales Papier mit Schnittlinien, als Auswahl. Offen bleibt nur, ob der Gegenstand-Text aufs Etikett soll.
+- **Marco 10.11.2026:** „2. Ja“, von mir als Antwort auf die Frage nach dem Gegenstand-Text gelesen: Der Gegenstand-Text kommt aufs Etikett (Startnummer, Name, Disziplin, Hund, Gegenstand). Falls „2“ die frühere Frage 2 (ein Etikett je Teilnehmer oder je Teilnehmer und Disziplin) meinte, bei der Umsetzung nachfragen.
+
+## 10.11.2026: Umsetzung der Rückmeldungen eines Prüfungsteilnehmers und Marcos Ideen (Arbeitsstand, kein Build, keine neue Version)
+
+- **Entschieden zu den Glas-Etiketten (Marco, 10.11.2026):** Die Etiketten sind nur für die Behältnisse gedacht (Gegenstände einsammeln), ein Etikett je Hund mit dem einen Gegenstand der Behältnisstrecke. Damit ist die Frage „je Teilnehmer oder je Disziplin“ erledigt.
+- **DK-Dialog:** eine bei einem Gegenstand gewählte Disziplin ist bei den anderen beiden ausgegraut und nicht wählbar (`_vergebene_disziplinen_sperren` in `desktop_dialoge.py`); „frei“ bleibt wählbar, bei ED keine Sperre, die Prüfung „doppelt vergeben“ beim Speichern bleibt. Tests in `test_app_gui.py`.
+- **Bewertungsbogen Seite 2:** Kasten „Start-Nr.“ oben rechts (`_startnummer_box`, `_dk_folgeseiten_kopf` in `pdf_export.py`), Seite 2 bleibt bei zwei Seiten. Test in `test_pdf_export.py`.
+- **DK je Disziplin:** `erstelle_alle_bewertungsboegen_pdf(..., je_disziplin=True)` und Häkchen im Auswahldialog „Bewertungsbögen“: je DK-Teilnehmer drei Blätter, sortiert erst alle Trümmer, dann Fläche, dann Behältnis, ohne GESAMT-Zeile, Wertungsnoten-Tabelle unten auf jedem Blatt; ED unverändert und vorweg.
+- **Etiketten für Behältnisse:** neuer Knopf „Etiketten Behältnisse (PDF)…“ im Reiter Ausdrucke/Export (`erstelle_behaeltnis_etiketten_pdf`, `BehaeltnisEtikettenDialog`): ein Etikett je Hund mit Behältnisstrecke (DK und ED Behältnisstrecke) mit Start-Nr., Name, Hund, Prüfung und Gegenstand der Behältnisstrecke. Größe der Klebefelder und Ränder einstellbar (Standard 70 x 37 mm), wahlweise Etikettenbogen (Raster, ohne Linien) oder normales Papier mit Schnittlinien.
+- **Vor dem Build noch zu tun:** Handbuch (`docs/HANDBUCH.md`), Screenshots (Teilnehmer-Dialog, Auswahl Bewertungsbögen, neuer Etiketten-Dialog, Reiter Ausdrucke), Hilfe (F1), `Architektur.md`; Marco testet vorher mit den Muster-PDFs.
+- **Nacharbeit aus der Verifikation (Marco: alle Befunde umsetzen):** A) Behältnis-Etiketten passen die Schrift an die Etikettenhöhe an, der Gegenstand steht gleich unter der Startnummer, Hund und Prüfung teilen sich unter 28 mm eine Zeile, Mindesthöhe im Dialog 20 mm; B) bei ED steht die Disziplin nicht mehr doppelt im Label; C) der Etiketten-Dialog überschreibt vom Nutzer gesetzte Ränder nicht mehr; D) der OK-Knopf-Zugriff im Dialog ist vereinfacht; G) neue Tests (kleine Höhe, 0 Teilnehmer, mehrere Seiten, geladener Teilnehmer, Häkchen „je Disziplin“). E (Schutz gegen zu große Etiketten bleibt als Absicherung) und F (Vorname hinter „…“ bei sehr langen Namen) bewusst unverändert. H) `docs/HANDBUCH.md`, `Architektur.md`, `UML.md` nachgezogen; Screenshots und F1-Hilfe bleiben vor dem Build offen.
+- **Demo:** Die Demodaten (`demo_daten.py`) haben bei den beiden Dreikampf-Teams jetzt alle drei Gegenstände den Disziplinen zugeordnet, damit die Behältnis-Etiketten einen Gegenstand zeigen; der Demo-Schritt 13 (Ausdrucke) nennt die neuen Ausdrucke.
+
+## 10.11.2026: Demoprüfung an den Stand 1.0.58/1.0.59 angepasst (Arbeitsstand, nichts committet)
+
+- Marco: „aktualisiere die Demo-Version“, gewählt: Demoprüfung an den Programmstand anpassen.
+- `desktop_demo.py`: zwei neue Schritte nach dem PDF-Schritt – „14. Abrechnung der Leistungsrichter“ (Reiter zeigen, Tabelle und „Übersicht als PDF…“ markieren) und „15. Checkliste zum Prüfungstermin“ (Reiter „Verwaltung“, `zur_checkliste()`); „Richter am Tablet“ ist jetzt Schritt 16, „Demo-Termin löschen“ Schritt 17.
+- `docs/HANDBUCH.md`: Ablaufliste der Demoprüfung um beide Schritte ergänzt. `test_app_gui.py`: Schrittzahl 17 statt 15. 49 Demo-Tests grün.
+- Offen: kein Versionsbump/Build; Screenshot `handbuch_demo.png` zeigt Schritt 8 und bleibt unverändert; HANDBUCH.pdf entsteht erst beim Build.
+
+## 10.11.2026: Klick-Test-Demo `SHS-Demo-vor-Build` aktualisiert (Arbeitsstand, nichts committet)
+
+- Marco meinte mit „Demo-Version“ den Ordner `C:\Users\mbruv\Documents\SHS-Demo-vor-Build` (nicht nur die Demoprüfung im Programm).
+- `demo_erzeugen.py`: Dreikampf-Teams (Gerdes, Hansen, Ivers) mit drei zugeordneten Gegenständen, ED-Teams mit Gegenstand-Zuordnung; Termine neu erzeugt.
+- `Checkliste.md` neu (Stand 10.11.2026: DK-Sperre, Startnummer Seite 2, Bögen je Disziplin, Behältnis-Etiketten, Abrechnung, Checkliste, Demoprüfung mit 17 Schritten); die alte Liste liegt als `Checkliste_2026-10-15.md` daneben.
+- Marco klickt die Liste noch durch; kein Build, kein Versionsbump.
+
+- **Nachbesserung DK-Sperre (Marco 10.11.2026, Screenshot):** Im geöffneten Auswahlfeld „gesucht in“ waren gesperrte Disziplinen nicht von wählbaren zu unterscheiden (das Stylesheet zeichnet gesperrte Listeneinträge nicht von selbst blasser). `_vergebene_disziplinen_sperren` setzt jetzt zusätzlich Farbe (`TEXT_DISABLED`), Kursivschrift und einen Tooltip an den gesperrten Einträgen und nimmt beides bei Entsperrung zurück. Test in `test_app_gui.py`.
+
+- **Bewertungsbogen je Disziplin auch im Reiter Teilnehmer (Marco 10.11.2026):** „Bewertungsbogen (PDF)…“ fragt bei einem Dreikampf-Teilnehmer „Zwei Seiten / Drei Blätter (je Disziplin) / Abbrechen“ (`app.py`, `_bewertungsbogen_exportieren`); `pdf_export.erstelle_bewertungsbogen_pdf(..., je_disziplin=False)`. ED fragt nicht. Tests in `test_pdf_export.py` und `test_app_gui.py`, Handbuch und F1-Hilfe ergänzt. Der Klick-Test-Liste (`SHS-Demo-vor-Build\Checkliste.md`, B) fehlt dieser Punkt noch.
+
+## 10.11.2026: Abgleich der Oberfläche – gleiche Funktionen an allen passenden Stellen (Marco: „setze alle Punkte um“, Arbeitsstand, nichts committet)
+
+Auslöser: „Bewertungsbogen bei den Teilnehmern“ fehlte die Wahl „drei Blätter“ (siehe oben); Marco bat, die Oberfläche auf ähnliche Lücken zu prüfen, und ließ danach alle acht gefundenen Punkte umsetzen:
+
+1. **Leeres Anmeldeformular im Reiter „Formular-Import“** (`leeres_formular_btn`); die Logik steht jetzt gemeinsam in `desktop_gemeinsam._anmeldeformular_pdf_speichern` (auch für den Export-Reiter).
+2. **„Ablageort öffnen“** auch in Teilnehmer, Zeitplan, Auswertung und Formular-Import-Export (gemeinsam `_ablageort_ordner_oeffnen`; Export-Reiter und Abrechnung rufen sie ebenfalls auf, Tests patchen jetzt `desktop_gemeinsam._url_oeffnen`).
+3. **Suchfeld „Suche“ (Name, Vorname, Hund; Teilwörter, alle Wörter müssen vorkommen)** in Teilnehmer, Ergebniserfassung und Auswertung (`_name_passt`).
+4. **„Bewertungsbogen (PDF)…“ auch in Ergebniserfassung und Auswertung** für die aktuelle bzw. markierte Zeile; gemeinsame Funktion `_bewertungsbogen_fuer_teilnehmer` (mit der Frage zwei Seiten / drei Blätter beim Dreikampf).
+5. **Export-Reiter: „Abrechnung Leistungsrichter (PDF)…“ und „Checkliste (PDF)…“** (neu: `pdf_export.erstelle_checkliste_pdf`, „[x]“/„[ ]“ je Punkt, Kategorien mit Zähler). Knopfanzahl im Export-Reiter jetzt 14.
+6. **„Rangliste drucken“ vs. „Ergebnisliste“:** Es ist dieselbe PDF (`erstelle_ergebnisliste_pdf`), die Auswertung filtert nur nach Art/LK. Tooltip am Knopf erklärt das jetzt.
+7. **Startbildschirm mit Menüs „Ansicht“ (Hintergrund, Akzentfarbe, Schriftgröße) und „Hilfe“** (`StartDialog._menue_aufbauen`, gemeinsame Modulfunktion `_auswahl_menue_aufbauen`); der Hinweistext dort angepasst.
+8. **Rechtsklickmenü** in Teilnehmerliste (alle Aktionen), Ergebniserfassung (Bewertungsbogen) und Auswertung (Bewertungsbogen, Stechen) über `_kontextmenue_aus_knoepfen` (spiegelt die Knöpfe samt Sperrzustand).
+
+Tests in `test_app_gui.py` (Block „UI-Abgleich 10.11.2026“) und `test_pdf_export.py` (Checkliste). Handbuch ergänzt. **Noch zu tun vor dem Build:** Screenshots der geänderten Reiter (Teilnehmer, Ergebniserfassung, Auswertung, Zeitplan, Formular-Import, Ausdrucke/Export, Startbildschirm) neu aufnehmen, F1-Hilfetexte der Reiter durchsehen, Klick-Test (`SHS-Demo-vor-Build\Checkliste.md`).
+
+## 10.11.2026: Weitere Bedienungs-Verbesserungen (Marco: „alle beheben“, Arbeitsstand, nichts committet)
+
+Aus der zweiten Prüfung („was die Bedienung erschwert“), alle acht Punkte:
+
+1. **Speichern ohne Nachfrage:** Haken „Dateien ohne Nachfrage im Ablageort speichern“ im Reiter Ausdrucke/Export (QSettings `export/ohne_nachfrage`, gilt für alle Reiter); `_speicherort_waehlen` nimmt dann den vorgeschlagenen Namen im Ablageort, `_freier_dateipfad` hängt „ (2)“ an, nie überschreiben.
+2. **Fenster merken:** Hauptfenster startet weiter maximiert; wurde es zuletzt in normaler Größe benutzt, kommt es mit Größe und Lage zurück (`_fenster_zeigen_wie_zuletzt`, `_fenstergeometrie_merken` über `aboutToQuit`). Spaltenbreiten werden bewusst **nicht** gemerkt (die Spalten passen sich dem Inhalt und der Schriftgröße automatisch an).
+3. **Startbildschirm:** Suchfeld (Verein, Ort, Datum) und Sortierung per Spaltenklick; Auswahl und Öffnen laufen über `_angezeigt` statt `_termine`.
+4. **Auswertung sortierbar** (Spaltenklick, numerisch für Start-Nr., Punkte, Platz; Klasse in Prüfungsreihenfolge).
+5. **Zeitplan:** Blöcke und Pausen per Maus ziehen (`_BlockListe`, `ZeitplanTab._eintrag_ziehen`); das eigentliche Ziehen mit der Maus ist nur im Handtest prüfbar, die Umordnung selbst ist getestet.
+6. **Tastenkürzel:** Strg+N, Strg+F, Strg+1…9 im Hauptfenster, Strg+F im Startbildschirm, Strg+Z im Reiter Teilnehmer.
+7. **Rückgängig** (eine Ebene) im Reiter Teilnehmer für Löschen (mit Ergebnis, gleiche ID) und Startnummern zurücksetzen (`db.teilnehmer_sichern/-wiederherstellen`, `startnummern_wiederherstellen`; vergebene Nummern bleiben leer).
+8. **Rechtsklickmenü** der Ergebniserfassung um „Alle Ergebnisse speichern“ und „Liste aktualisieren“ erweitert.
+
+Dazu Befunde der Verifikation: Rechtsklick auf leere Fläche zeigt kein Menü mehr; Leerzeichen in `desktop_auswertung.py`. Neu: `conftest.py` leitet QSettings in den Tests in einen Temp-Ordner (vorher schrieben die Tests in die echten Benutzereinstellungen). Tests und Handbuch ergänzt. Vor dem Build noch: Screenshots, F1-Texte, Klick-Test.
+
+- **Nacharbeit nach der Verifikation der zweiten Runde (10.11.2026):** „Rückgängig“ gilt jetzt auch, wenn das Löschen mitten in der Liste scheitert (die schon gelöschten lassen sich zurückholen). DB-Tests für `teilnehmer_sichern`/`teilnehmer_wiederherstellen`/`startnummern_wiederherstellen` in `test_db.py` (laufen in der CI auch gegen PostgreSQL). Ein Hänger im Gesamtlauf kam von den Strg+1…9-Kürzeln: Ein Lambda mit `self` hielt das Hauptfenster am Leben, die Tests schlossen es erst beim Aufräumen mit noch ersetzten Funktionen; jetzt `sender()` mit Property. **Offen:** `UML.md`/`Architektur.md` kennen die neuen gemeinsamen Hilfen (`desktop_gemeinsam`), „Rückgängig“, `_BlockListe` und das Startdialog-Menü noch nicht.
+
+## 10.11.2026: Restliche Angleichungen (Marco: „alles anpassen“, Arbeitsstand, nichts committet)
+
+- **Übersicht:** „Richter-Bedarf (PDF)…“ und „Ablageort öffnen“ im Reiter (`TeilnehmerUebersichtTab(conn, ablageort=…)`). **Verwaltung:** „Checkliste (PDF)…“ und „Ablageort öffnen“ unter der Checkliste (`VerwaltungTab(conn, ablageort=…)`).
+- **Web:** Suche nach Name oder Hund auf der Teilnehmerliste (`/teilnehmer?q=…`), bewusst als GET-Formular ohne JavaScript, weil die Sicherheitsrichtlinie `script-src 'none'` setzt; unveränderte Richtlinie, Eingabe wird maskiert (Test).
+- **F1-Hilfe** der Reiter Teilnehmer, Formular-Import, Zeitplan, Ergebniserfassung, Auswertung, Übersicht, Verwaltung, Ausdrucke/Export und die Tastenkürzel nachgezogen; **Handbuch**, **Architektur.md**, **UML.md** (nur Mermaid-Mitglieder ergänzt, nicht neu gerendert), **Demo-Texte** (Schritte 3, 6, 13) ergänzt.
+- **Bewusst nicht gemacht:** Screenshots der geänderten Reiter - die werden laut Build-Disziplin ohnehin nach dem Versionsbump mit der neuen Version aufgenommen.
+
+## 10.11.2026: Automatische Kopie des Termins und Hinweis bei USB-Stick/Netzlaufwerk (Marco, Arbeitsstand, nichts committet)
+
+- **Auto-Sicherung:** `db_sicherung.auto_sicherung_erstellen` legt beim Öffnen eines Termins, danach beim Beenden (`aboutToQuit`) eine konsistente Kopie (SQLite-`backup`) im Ordner `Auto-Sicherung` neben `Termine` ab; je Termin bleiben die letzten 10, Mindestabstand 10 Minuten. Fehler (Datenträger voll, Stick abgezogen) ergeben nur `None` und stören die Arbeit nie; PostgreSQL wird übergangen (dort sichert der Server). Nur im echten Programmlauf (`HauptFenster.auto_sicherung_aktiv`, von `main()` gesetzt), nie in Tests oder der Demo.
+- **Laufwerkshinweis:** `desktop_gemeinsam.laufwerksart` erkennt unter Windows USB-Stick und Netzlaufwerk (`GetDriveTypeW`, UNC-Pfade); `HauptFenster.laufwerk_hinweis_zeigen` weist beim Start einmal darauf hin (nicht in der Demo).
+- **Tests:** `TestAutoSicherung` in `test_backup.py` (Inhalt/Begrenzung, Mindestabstand, Fehler), zwei GUI-Tests; `conftest.py` räumt den QSettings-Ordner auf, leert die Einstellungen vor jedem GUI-Test und schließt hängende modale Fenster nach 20 s mit Fehlermeldung (Marke `langsam`). Der Test `startgroesse_und_feldbreite` prüfte fälschlich die feste Startbreite; der Dialog wächst absichtlich mit seinem Inhalt und wird nur durch den Bildschirm (95 %) begrenzt - Test angepasst.
+- **Stand:** unittest-Module 753 Tests OK, GUI-Suite 614 bestanden. **Nacharbeit nach der Verifikation:** Kopie beim Beenden ohne Mindestabstand, misslungene Kopie wird gelöscht, Hinweis auch beim Terminwechsel, Langpfade (`\?`) nicht mehr als Netzlaufwerk, Tests ergänzt, Architektur.md und Handbuch nachgezogen. **Offen:** Hinweisfenster nicht von Hand auf echtem Stick geprüft.
+
+- **Demo langsamer (Marco 10.11.2026):** Der Erklärtext der Demoprüfung läuft langsamer durch: automatisches Weiter frühestens nach 15 s (vorher 10), Lesezeit 0,6 s je Wort (vorher 0,35), höchstens 60 s (vorher 40); `DemoTour.AUTO_WEITER_S`, `LESEZEIT_JE_WORT_S`, `LESEZEIT_MAX_S`. Das Tipptempo der Demo blieb unverändert. 49 Demo-Tests OK.
+
+## Version 1.0.60: Bewertungsbögen/Etiketten, Auto-Sicherung, Bedienung (10.11.2026)
+
+- Gebündelt: DK-Sperre im Teilnehmer-Dialog, Startnummer auf Seite 2 des Bewertungsbogens, Bögen je Disziplin (Sammel-PDF und Einzelbogen), Etiketten für Behältnisse, Abgleich der Oberfläche (Suche, Ablageort öffnen, Bewertungsbogen je Zeile, Rechtsklickmenüs, Start-Menüs), Bedienverbesserungen (ohne Nachfrage speichern, Fenster merken, Sortierung, Zeitplan ziehen, Kürzel, Rückgängig), Web-Suche, automatische Kopie des Termins samt Laufwerkshinweis, langsamere Demoprüfung, Test-Wächter in `conftest.py`.
+- Vor dem Build geklärt (Marco 10.11.2026): Marke `langsam` bleibt liegen (OFFEN B14), Startgrößen-Test geprüft nur noch die Bildschirmgrenze, Glob-Randfall der Auto-Sicherung zurückgestellt (B15), Hinweisfenster am echten Stick offen (A7). Nachgezogen: F1-Hilfe, Handbuch (inkl. Datenschutz-Hinweis zum Ordner Auto-Sicherung), UML.md (Ablauf Auto-Kopie; ein Klammerfehler im Ablaufdiagramm 3 behoben, alle 13 Diagramme rendern), Architektur.md.
+- Tests: 753 unittest OK (186 übersprungen, PostgreSQL nur in der CI), GUI-Suite 614 bestanden, 1 Skip (Vordergrundsperre), 1 xfail. Screenshots und HANDBUCH.pdf/INSTALLATION_KURZ.pdf mit 1.0.60 neu erzeugt.
+
+## 10.11.2026: Quellcode-Spiegel auf 1.0.60
+
+- `SHS-Pruefungsprogramm-Quellcode` auf den Stand von 1.0.60 gebracht (351 Dateien, 52 neu kopiert, Workflows zusätzlich in der Wurzel, Byte-Abgleich ohne Abweichung). Gebaut, nicht gepusht und nicht getaggt. Offen für Marco: Push, Tag, Actions prüfen, claude.ai-Ablage „SHS“ (`Fortschritt.md`, `Architektur.md`) neu hochladen.
+
+## 11.11.2026: CI-Fehler PostgreSQL bei „Rückgängig“ behoben
+
+- Die CI meldete zwei Fehler in `test_db.py` (`TestZeitplanPostgres`): `teilnehmer_wiederherstellen` fügte die alte ID ein, in PostgreSQL ist `teilnehmer.id` aber `GENERATED ALWAYS AS IDENTITY`. Jetzt `OVERRIDING SYSTEM VALUE` nur bei `_PostgresConnection` (`db.py`); SQLite unverändert. Zusätzlich ein Wrapper-Test ohne Server (`test_db_postgres_wrapper.py`) und ein positionaler Spaltenzugriff im DB-Test durch Spaltennamen ersetzt.
+- Lokal erstmals gegen einen echten PostgreSQL-16-Container (Podman, `SHS_TEST_POSTGRES_DSN`) geprüft: alle 754 Tests der unittest-Module grün, 1 übersprungen. Das Tag `v1.0.60` muss auf den Stand mit diesem Fix zeigen (Marco, Neu-Taggen wegen Namensbereinigung und CI-Fehler).

@@ -15,7 +15,7 @@ import re
 import sqlite3
 
 from PySide6.QtCore import QRegularExpression, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QBrush, QColor, QFont, QIntValidator, QKeySequence, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSpinBox,
     QTextBrowser,
@@ -311,6 +313,9 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         for zuordnung in (self.gegenstand_1_disziplin, self.gegenstand_2_disziplin, self.gegenstand_3_disziplin):
             zuordnung.addItem(_GEGENSTAND_ZUORDNUNG_FREI)
             zuordnung.addItems(ALLE_DISZIPLINEN)
+            # Rückmeldung 10.11.2026: eine schon vergebene Disziplin ist bei den anderen
+            # Gegenständen ausgegraut und nicht wählbar.
+            zuordnung.currentTextChanged.connect(self._vergebene_disziplinen_sperren)
 
         # UX-Test 03.11.2026, X12: Klartext, welche Prüfung Art/LK/Disziplin ergeben und ob der
         # Termin sie anbietet; X4: warum Gegenstand 2/3 bei ED fehlen (seit R5 ausgeblendet).
@@ -569,6 +574,39 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.disziplin.setEnabled(art == "ED")
         self._gegenstand_felder_aktualisieren()
 
+    def _vergebene_disziplinen_sperren(self, *_args) -> None:
+        """Eine Disziplin, die bei einem Gegenstand gewählt ist, ist in den Auswahlen der
+        anderen beiden Gegenstände ausgegraut und nicht wählbar ("frei" bleibt immer
+        wählbar). Bei ED (nur ein Gegenstand, feste Zuordnung) gibt es nichts zu sperren.
+        Die Prüfung "doppelt vergeben" beim Speichern bleibt als Sicherung bestehen."""
+        combos = (self.gegenstand_1_disziplin, self.gegenstand_2_disziplin, self.gegenstand_3_disziplin)
+        ist_ed = self.art.currentText() == "ED"
+        for combo in combos:
+            vergeben = set() if ist_ed else {
+                andere.currentText() for andere in combos
+                if andere is not combo and andere.currentText() != _GEGENSTAND_ZUORDNUNG_FREI
+            }
+            modell = combo.model()
+            gesperrt_farbe = QBrush(_farbe("TEXT_DISABLED"))
+            kursiv = QFont(combo.font())
+            kursiv.setItalic(True)
+            for index in range(combo.count()):
+                item = modell.item(index)
+                if item is None:
+                    continue
+                frei = combo.itemText(index) not in vergeben
+                item.setEnabled(frei)
+                # Mit dem Stylesheet zeichnet Qt gesperrte Einträge der Auswahlliste nicht
+                # von selbst abgesetzt (Marco 10.11.2026): Farbe, Kursivschrift und Hinweis.
+                if frei:
+                    item.setData(None, Qt.ForegroundRole)
+                    item.setData(None, Qt.FontRole)
+                    item.setToolTip("")
+                else:
+                    item.setForeground(gesperrt_farbe)
+                    item.setFont(kursiv)
+                    item.setToolTip("Schon bei einem anderen Gegenstand gewählt")
+
     def _gegenstand_felder_aktualisieren(self, *_args) -> None:
         """Abstimmung mit Marco (23.09.): ED hat nur eine Suchdisziplin und damit
         unabhängig von der Leistungsklasse genau einen Gegenstand. Bei ED ist daher nur
@@ -596,6 +634,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
             # scheinbar bewusste DK-Zuordnung stehen lassen, sondern wieder auf "frei".
             self.gegenstand_1_disziplin.setCurrentText(_GEGENSTAND_ZUORDNUNG_FREI)
         self._gegenstand_1_fest_zugeordnet = ist_ed
+        self._vergebene_disziplinen_sperren()
 
     def _pruefung_auswahl_fuellen(self) -> None:
         """T5: angebotene Prüfungen plus „andere Prüfung …“; ohne Angebot im Termin entfällt die
@@ -1325,6 +1364,14 @@ class BewertungsbogenAuswahlDialog(QDialog):
         auswahl_zeile.addWidget(keine_btn)
         auswahl_zeile.addStretch()
 
+        # Wunsch 10.11.2026: beim Dreikampf wahlweise ein Blatt je Disziplin (drei Stapel für
+        # die Richter) statt des 2-Seiten-Bogens je Teilnehmer; ED bleibt unverändert.
+        self.je_disziplin = QCheckBox("Dreikampf: ein Blatt je Disziplin (Trümmerfeld, Fläche, Behältnis)")
+        self.je_disziplin.setToolTip(
+            "Statt des 2-Seiten-Bogens bekommt jeder Dreikampf-Teilnehmer drei Blätter, nach "
+            "Disziplin sortiert: erst alle Trümmerfeld-Blätter, dann alle Flächensuche, dann alle "
+            "Behältnisstrecke - jeder Richter bekommt seinen Stapel. Einzeldisziplinen bleiben unverändert.")
+
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
@@ -1341,6 +1388,7 @@ class BewertungsbogenAuswahlDialog(QDialog):
         ))
         layout.addLayout(auswahl_zeile)
         layout.addWidget(self.liste)
+        layout.addWidget(self.je_disziplin)
         layout.addWidget(self.buttons)
 
     def _alle_umschalten(self, zustand) -> None:
@@ -1356,6 +1404,87 @@ class BewertungsbogenAuswahlDialog(QDialog):
             for row in range(self.liste.count())
             if self.liste.item(row).checkState() == Qt.Checked
         }
+
+
+class BehaeltnisEtikettenDialog(QDialog):
+    """Einstellungen für die Etiketten der Behältnisse (Wunsch 10.11.2026): Größe der
+    Klebefelder in mm, Ränder und ob die Etiketten auf einen Etikettenbogen (Raster, ohne
+    Linien) oder auf normales Papier (mit Schnittlinien) gedruckt werden."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Etiketten für Behältnisse")
+
+        self.bogen = QRadioButton("Etikettenbogen (Klebeetiketten, ohne Linien)")
+        self.papier = QRadioButton("Normales Papier (mit Schnittlinien zum Ausschneiden)")
+        self.bogen.setChecked(True)
+
+        def feld(wert: float, minimum: float, maximum: float) -> QDoubleSpinBox:
+            box = QDoubleSpinBox()
+            box.setRange(minimum, maximum)
+            box.setDecimals(1)
+            box.setSuffix(" mm")
+            box.setValue(wert)
+            return box
+
+        self.breite = feld(70, 30, 200)
+        self.hoehe = feld(37, 20, 280)
+        self.rand_links = feld(0, 0, 100)
+        self.rand_oben = feld(0, 0, 100)
+        self.hinweis = QLabel("")
+        self.hinweis.setWordWrap(True)
+        # Befund C: die Ränder nur beim Umschalten vorbelegen, solange der Nutzer sie nicht selbst geändert hat.
+        self._rand_von_hand = False
+        self._rand_wird_gesetzt = False
+        self.papier.toggled.connect(self._papier_umgeschaltet)
+        for box in (self.rand_links, self.rand_oben):
+            box.valueChanged.connect(self._rand_geaendert)
+        for box in (self.breite, self.hoehe, self.rand_links, self.rand_oben):
+            box.valueChanged.connect(self._hinweis_aktualisieren)
+
+        form = QFormLayout()
+        form.addRow("Breite eines Etiketts", self.breite)
+        form.addRow("Höhe eines Etiketts", self.hoehe)
+        form.addRow("Rand links", self.rand_links)
+        form.addRow("Rand oben", self.rand_oben)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Ein Etikett je Hund mit Behältnisstrecke: Startnummer, Name, Hund, "
+                                "Prüfung und Gegenstand."))
+        layout.addWidget(self.bogen)
+        layout.addWidget(self.papier)
+        layout.addLayout(form)
+        layout.addWidget(self.hinweis)
+        layout.addWidget(self.buttons)
+        self._hinweis_aktualisieren()
+
+    def _rand_geaendert(self, *_args) -> None:
+        if not self._rand_wird_gesetzt:
+            self._rand_von_hand = True
+
+    def _papier_umgeschaltet(self, papier: bool) -> None:
+        # Auf normalem Papier brauchen die Etiketten einen Druckrand, auf dem Bogen sitzen sie am Raster.
+        if not self._rand_von_hand:
+            self._rand_wird_gesetzt = True
+            for box in (self.rand_links, self.rand_oben):
+                box.setValue(10 if papier else 0)
+            self._rand_wird_gesetzt = False
+        self._hinweis_aktualisieren()
+
+    def spalten_zeilen(self) -> tuple[int, int]:
+        return (int((210 - self.rand_links.value() + 0.01) // self.breite.value()),
+                int((297 - self.rand_oben.value() + 0.01) // self.hoehe.value()))
+
+    def _hinweis_aktualisieren(self, *_args) -> None:
+        spalten, zeilen = self.spalten_zeilen()
+        self.hinweis.setText(
+            f"{spalten} x {zeilen} = {spalten * zeilen} Etiketten je A4-Seite." if spalten and zeilen
+            else "Das Etikett ist größer als die Seite.")
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(bool(spalten and zeilen))
 
 
 class SicherungErstellenDialog(QDialog):
@@ -1519,10 +1648,15 @@ gespeichert; "Teilnahme wiederherstellen" macht es rückgängig). "Startnummer t
 tauscht die Nummern zweier Teilnehmer.
 "Aus anderem Termin importieren…" übernimmt Stammdaten aus einem früheren Termin (ohne
 Startnummer, Gegenstände, Bezahlt-Status und Ergebnis). "Bewertungsbogen (PDF)…" erzeugt den
-Bogen nur für den markierten Teilnehmer. Die Filter Art/LK, Start-Nr. und Bezahlt blenden
-Zeilen nur aus.</p>
+Bogen nur für den markierten Teilnehmer (beim Dreikampf wahlweise zwei Seiten oder drei
+Blätter, eins je Disziplin). Die Filter Art/LK, Start-Nr. und Bezahlt sowie das Suchfeld
+"Suche" (Name, Vorname oder Hund, ein Teilwort genügt) blenden Zeilen nur aus. Ein Rechtsklick auf eine
+Zeile öffnet ein Menü mit denselben Aktionen wie die Knöpfe. "Rückgängig" (Strg+Z) nimmt das letzte
+Löschen von Teilnehmern oder "Alle Startnummern zurücksetzen…" zurück; "Ablageort öffnen" zeigt den
+Ordner des Bewertungsbogens.</p>
 
 <h3>Reiter "Formular-Import"</h3>
+<p>Das leere Formular erzeugst du auch hier mit "Leeres Anmeldeformular (PDF)…".</p>
 <p><b>Ausfüllbares Anmeldeformular (empfohlen):</b> Importieren lässt sich nur das
 Anmeldeformular, das dieses Programm selbst erzeugt (Reiter "Ausdrucke/Export" → "Anmeldeformular
 (PDF)…"), und zwar aus demselben Termin. Die Teilnehmer füllen es am Rechner aus, kreuzen
@@ -1546,6 +1680,8 @@ Projektseite: https://mbruver-source.github.io/SHS/beispiel_teilnehmer.csv (dana
 "Teilnehmer" die Startnummern vergeben).</p>
 
 <h3>Reiter "Zeitplan"</h3>
+<p>Blöcke und Pausen lassen sich auch mit der Maus an eine andere Stelle derselben Spalte ziehen
+(statt "Hoch"/"Runter"); "Ablageort öffnen" zeigt den Ordner des Zeitplan-PDFs.</p>
 <p>Plant den Tagesablauf je Richter. Startzeit oben festlegen, dann je Richter eine
 Spalte mit "Prüfungsblock hinzufügen…" oder "Pause hinzufügen…" (nach der markierten Zeile;
 wahlweise bei allen Richtern zu einer Uhrzeit, z. B. Mittagspause; mit "genau um diese Uhrzeit
@@ -1581,11 +1717,16 @@ zurückgewiesen. "Disqualifiziert" ankreuzen leert und sperrt die Punktefelder. 
 den Grund wählen (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF): die Punktefelder
 bleiben offen für die Teilbewertung (bei Ungehorsam die abgebrochene Disziplin leer lassen,
 sonst einen fehlenden Teil mit 0 eintragen).
-Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespeichert.</p>
+Beim Schließen des Programms werden ungespeicherte Ergebnisse automatisch gespeichert.
+Das Suchfeld "Suche" findet Teilnehmer nach Name oder Hund; "Bewertungsbogen (PDF)…" erzeugt den
+Bogen der aktuellen Zeile. Rechtsklick (auch unter den Zeilen) zeigt dazu "Alle Ergebnisse
+speichern" und "Liste aktualisieren".</p>
 
 <h3>Reiter "Auswertung"</h3>
 <p>Zeigt die berechnete Rangliste je Leistungsklasse mit Wertnote. Filter nach
-Art/Leistungsklasse und Startnummer. "Nicht bestanden" wird rot markiert und erhält keine
+Art/Leistungsklasse und Startnummer, Suche nach Name oder Hund; ein Klick auf eine Spaltenüberschrift
+sortiert die Tabelle. "Bewertungsbogen (PDF)…" (auch per Rechtsklick) erzeugt den Bogen der markierten
+Zeile. "Nicht bestanden" wird rot markiert und erhält keine
 Platzzahl, zählt aber bei den Startern mit. "Auswertung neu berechnen" aktualisiert die
 Anzeige. "Rangliste drucken (PDF)…" speichert die Rangliste als PDF - ist im Filter eine
 Art/Leistungsklasse gewählt, nur diese, sonst alle (der Startnummer-Filter wird dabei nicht
@@ -1600,7 +1741,7 @@ Anzahl benötigter Richter (1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 
 Richter). Darunter die benötigten Behältnisse der Behältnisstrecke je LK (ED Behältnisstrecke
 + DK): leere einmal je LK, eines mit Gegenstand je Teilnehmer, in LK3 wahlweise zusätzlich ein
 separates Behältnis für die Material-Verleitung je Teilnehmer. Die gleiche Tabelle steht auch
-in der Richter-Bedarf-PDF.</p>
+in der Richter-Bedarf-PDF, die du mit "Richter-Bedarf (PDF)…" gleich hier erzeugst.</p>
 
 <h3>Reiter "Abrechnung Leistungsrichter"</h3>
 <p>Rechnet die Vergütung der Leistungsrichter (Richter 1-5 aus den Veranstaltungsdaten, nur
@@ -1622,7 +1763,8 @@ Kategorie) und "Kategorie hinzufügen…" legst du eigene Punkte und Kategorien 
 bzw. "Kategorie löschen" wieder entfernen. Eigene Kategorien und Punkte werden beim Anlegen eines neuen
 Termins aus dem letzten Termin vorgeschlagen, die Haken nicht. Vorgegebene Punkte und Kategorien, die du nicht
 brauchst, blendest du mit ✕ bzw. "Kategorie ausblenden" für diesen Termin aus (sie zählen dann nicht mit);
-"Ausgeblendetes zeigen" holt alles zurück. Auch das Ausblenden wird für einen neuen Termin vorgeschlagen.</p>
+"Ausgeblendetes zeigen" holt alles zurück. Auch das Ausblenden wird für einen neuen Termin vorgeschlagen.
+"Checkliste (PDF)…" unter der Liste druckt sie mit dem aktuellen Stand der Haken.</p>
 <p>"Veranstaltungsdaten bearbeiten…" ändert Verein/Ort/Datum sowie Vereins-Nr.,
 Prüfungsnummer, Richter 1-5, Prüfungsleiter und Prüfungsgebühr ED/DK nachträglich –
 diese Angaben stehen oft erst kurz vor dem Prüfungstag fest und erscheinen im Kopf der
@@ -1634,13 +1776,15 @@ Anmeldeformulars.</p>
 <p>Neben jedem Knopf steht in einer Zeile, was er erzeugt; Einzelheiten zeigt der Hinweis,
 wenn die Maus kurz darauf bleibt. Alle PDF-Ausgaben an einer Stelle: ausfüllbares Anmeldeformular (siehe Reiter
 "Formular-Import"), Ergebnisliste, leere Ergebnisliste zum Ausfüllen,
-Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Richter-Bedarf,
-Zeitplan sowie
+Etiketten, Statistik, Übersicht für Prüfungsleitung, Chipnummernliste, Abrechnung der Leistungsrichter,
+Checkliste, Richter-Bedarf, Zeitplan sowie
 alle Bewertungsbögen gesammelt. "Teilnehmerliste speichern (CSV, für Excel)…" speichert alle Teilnehmer
 mit Stammdaten als Excel-Liste (lässt sich auch wieder einlesen). PDFs landen standardmäßig im
 Ordner "Ausdrucke" des Termins; nach dem Speichern zeigt ein Fenster, wo die Datei liegt.
 "Ablageort öffnen" zeigt den Ordner im Dateimanager (Explorer bzw. Finder) – alle Exporte (auch im Zeitplan-Tab) teilen
-sich denselben Speicherort.</p>
+sich denselben Speicherort. Mit dem Haken "Dateien ohne Nachfrage im Ablageort speichern" entfällt die Frage
+nach dem Speicherort in allen Reitern; eine vorhandene Datei wird nie überschrieben, sondern bekommt " (2)"
+im Namen.</p>
 
 <h3>Reiter "Datensicherung"</h3>
 <p>Sichert bzw. liest ALLE Termine aus dem gemeinsamen Termine-Ordner als eine Sicherungsdatei
@@ -1653,6 +1797,12 @@ lässt sich nicht wiederherstellen – gut aufbewahren.</p>
 <p>Als Speicherort am besten einen USB-Stick oder ein anderes Laufwerk wählen und den Stick
 getrennt vom Rechner aufbewahren – eine Sicherung auf demselben Rechner hilft nicht, wenn
 dieser ausfällt.</p>
+<p>Zusätzlich legt das Programm beim Öffnen und beim Beenden eines Termins selbst eine Kopie im Ordner
+"Auto-Sicherung" neben dem Termine-Ordner ab (je Termin die letzten zehn). Sie ersetzt die Sicherung
+nicht und enthält alle Teilnehmerdaten unverschlüsselt; der Ordner darf von Hand geleert werden.
+Liegt ein Termin auf einem Wechseldatenträger (USB-Stick, SD-Karte) oder Netzlaufwerk, weist das Programm
+beim Start und beim Terminwechsel darauf hin, ihn nicht abzuziehen. Externe USB-Festplatten meldet Windows
+als feste Platte, dafür erscheint kein Hinweis.</p>
 
 <h3>Versionsanzeige</h3>
 <p>Der Button "Version" oben rechts (zwischen "Anderen Termin öffnen…" und
@@ -1678,9 +1828,11 @@ gibt, zählen auch Stellen mitten im Wort. Alle Treffer werden orange markiert, 
 <h3>Tastenkürzel</h3>
 <p><b>Überall:</b> F1 (am Mac Cmd+?) – Hilfe zum aktuellen Reiter. In der Hilfe: Strg+F
 (am Mac Cmd+F) – ins Suchfeld.</p>
+<p><b>Hauptfenster:</b> Strg+N legt einen Teilnehmer an (springt zum Reiter "Teilnehmer"), Strg+F springt ins
+Suchfeld des Reiters (im Startbildschirm in die Terminsuche), Strg+1 bis Strg+9 wechseln den Reiter.</p>
 <p><b>Reiter "Teilnehmer":</b> Strg-Klick bzw. Umschalt-Klick markiert mehrere Zeilen, Strg+A alle
-sichtbaren. Entf löscht die markierten Teilnehmer (nach Rückfrage). Doppelklick auf eine Zeile
-öffnet "Bearbeiten…".</p>
+sichtbaren. Entf löscht die markierten Teilnehmer (nach Rückfrage), Strg+Z macht das (oder "Alle Startnummern
+zurücksetzen…") rückgängig. Doppelklick auf eine Zeile öffnet "Bearbeiten…".</p>
 <p><b>Reiter "Ergebniserfassung":</b> Zelle markieren und die Zahl tippen – sie ersetzt den
 Wert; F2 (am Mac Enter) oder Doppelklick ändert ihn. Enter übernimmt, Esc verwirft die Eingabe.
 Tab bzw. Umschalt+Tab springt zur nächsten bzw. vorigen Eingabe. Die Leertaste setzt das

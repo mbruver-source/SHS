@@ -701,6 +701,29 @@ class TestAppWeb(_AppWebTestBasis):
 
     # --- Teilnehmerliste ---------------------------------------------------------
 
+    def test_teilnehmerliste_suche_nach_name_oder_hund(self):
+        """Marco 10.11.2026: Suche ohne JavaScript (GET-Formular), Treffer nach Name oder Hund."""
+        db.set_veranstaltung(self.conn, verein="Testverein", datum="2026-09-19")
+        for nr, (nach, hund) in enumerate([("Albers", "Aika"), ("Brandt", "Bruno <b>"), ("Claasen", "Cleo")], start=1):
+            db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+                nachname=nach, vorname="A", rufname_hund=hund, art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr))
+        self._anmelden()
+        text = self.client.get("/teilnehmer").data.decode()
+        self.assertIn("Albers, A", text)
+        self.assertIn("Brandt, A", text)
+        text = self.client.get("/teilnehmer?q=bruno").data.decode()
+        self.assertIn("Brandt, A", text)
+        self.assertNotIn("Albers, A", text)
+        self.assertIn("1 von 3 Teilnehmern", text)
+        text = self.client.get("/teilnehmer?q=ALB+a").data.decode()
+        self.assertIn("Albers, A", text)
+        self.assertNotIn("Claasen, A", text)
+        # Eingabe wird maskiert zurückgegeben, nichts gefunden -> Hinweis
+        text = self.client.get("/teilnehmer?q=%3Cscript%3E").data.decode()
+        self.assertNotIn("<script>", text)
+        self.assertIn("Kein Teilnehmer passt", text)
+
     def test_teilnehmerliste_zeigt_status_offen_und_fertig(self):
         db.set_veranstaltung(self.conn, verein="Testverein", datum="2026-09-19")
         db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(

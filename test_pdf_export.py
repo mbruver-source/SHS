@@ -34,6 +34,7 @@ from db import (
     init_db,
     list_teilnehmer,
     pruefungen_als_text,
+    get_veranstaltung,
     set_veranstaltung,
     setze_ergebnis_status,
     setze_stechen_sieger,
@@ -266,6 +267,134 @@ class TestPdfExport(unittest.TestCase):
         self.assertIn("Dk", _text(ziel))
         self.assertNotIn("Ed, B", _text(ziel))
         self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, erlaubte_labels=set()), 0)
+
+    def test_dk_seite_2_zeigt_die_startnummer(self):
+        """Rückmeldung 10.11.2026: die Startnummer steht auch oben auf Seite 2."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Dk", vorname="A", rufname_hund="R",
+                                                  art="DK", stufe=2, startnummer=47))
+        ziel = self._pfad("seite2.pdf")
+        pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 2)
+        for seite in seiten:
+            self.assertIn("Start-Nr.", seite)
+            self.assertIn("47", seite)
+
+    def test_sammel_bewertungsboegen_je_disziplin(self):
+        """Wunsch 10.11.2026: DK je Disziplin ein Blatt, nach Disziplin sortiert, ohne GESAMT;
+        ED bleibt unverändert und steht vorweg."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Zwei", vorname="A", rufname_hund="R",
+                                                  art="DK", stufe=1, startnummer=2))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Eins", vorname="B", rufname_hund="S",
+                                                  art="DK", stufe=1, startnummer=1))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="C", rufname_hund="T", art="ED",
+                                                  stufe=1, disziplin="Trümmerfeld", startnummer=3))
+        ziel = self._pfad("je_disziplin.pdf")
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, je_disziplin=True), 3)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 7)  # 1 ED + 2 DK x 3 Disziplinen
+        self.assertIn("Ed", seiten[0])
+        erwartet = ["Trümmerfeld", "Trümmerfeld", "Flächensuche", "Flächensuche",
+                    "Behältnisstrecke", "Behältnisstrecke"]
+        for seite, disziplin in zip(seiten[1:], erwartet):
+            self.assertIn(f"Bewertung {disziplin}", seite)
+            self.assertNotIn("GESAMT", seite)
+        self.assertIn("Eins", seiten[1])
+        self.assertIn("Zwei", seiten[2])
+        # Wertungsnoten-Tabelle steht auf jedem Blatt.
+        for seite in seiten[1:]:
+            self.assertIn("Wertungsnoten", seite)
+
+    def test_checkliste_pdf(self):
+        """Marco 10.11.2026: Checkliste als PDF mit Stand der Haken, Kategorien und eigenen
+        Punkten."""
+        import checkliste
+
+        set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2026-09-19")
+        kategorien = checkliste.struktur(get_veranstaltung(self.conn))
+        erster = kategorien[0].punkte[0]
+        eigene = checkliste.kategorie_hinzufuegen(checkliste.eigene_lesen(get_veranstaltung(self.conn)), "Zusatz ü")
+        set_veranstaltung(self.conn, verein="SGV Köppern e.V.", datum="2026-09-19",
+                          checkliste=checkliste.als_text({erster.kennung}),
+                          checkliste_eigene=checkliste.eigene_als_text(eigene))
+        ziel = self._pfad("checkliste.pdf")
+        pdf_export.erstelle_checkliste_pdf(self.conn, ziel)
+        text = "\n".join(s.extract_text() for s in PdfReader(ziel).pages)
+        self.assertIn("Checkliste zum Prüfungstermin", text)
+        self.assertIn("[x]", text)
+        self.assertIn("[ ]", text)
+        self.assertIn(kategorien[0].titel, text)
+        self.assertRegex(text, r"1 von \d+ Punkten erledigt")
+
+    def test_einzelner_bewertungsbogen_je_disziplin(self):
+        """Wunsch 10.11.2026: Der Bogen eines einzelnen DK-Teilnehmers (Reiter Teilnehmer)
+        lässt sich als drei Blätter erzeugen; bei ED und ohne Wahl bleibt es wie bisher."""
+        dk = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Drei", vorname="A", rufname_hund="R",
+                                                       art="DK", stufe=1, startnummer=7))
+        ed = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="C", rufname_hund="T", art="ED",
+                                                       stufe=1, disziplin="Trümmerfeld", startnummer=8))
+        ziel = self._pfad("dk_drei.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, dk, ziel, je_disziplin=True)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 3)
+        for seite, disziplin in zip(seiten, ["Trümmerfeld", "Flächensuche", "Behältnisstrecke"]):
+            self.assertIn(f"Bewertung {disziplin}", seite)
+            self.assertNotIn("GESAMT", seite)
+        ziel = self._pfad("dk_zwei.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, dk, ziel)
+        self.assertEqual(len(PdfReader(ziel).pages), 2)
+        ziel = self._pfad("ed.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, ed, ziel, je_disziplin=True)
+        self.assertEqual(len(PdfReader(ziel).pages), 1)
+
+    def test_behaeltnis_etiketten(self):
+        """Wunsch 10.11.2026: ein Etikett je Hund mit Behältnisstrecke (DK und ED Behältnis),
+        mit Startnummer, Name, Hund und dem Gegenstand der Behältnisstrecke."""
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Dk", vorname="A", rufname_hund="Rex", art="DK", stufe=1, startnummer=5,
+            gegenstand_1="Holz", gegenstand_1_disziplin="Trümmerfeld",
+            gegenstand_2="Gummi", gegenstand_2_disziplin="Behältnisstrecke"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Ed", vorname="B", rufname_hund="Luna", art="ED", stufe=1,
+            disziplin="Behältnisstrecke", startnummer=6, gegenstand_1="Horstz",
+            gegenstand_1_disziplin="Behältnisstrecke"))
+        add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Fl", vorname="C", rufname_hund="Max", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=7))
+        for linien in (False, True):
+            ziel = self._pfad(f"behaelter_{linien}.pdf")
+            self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, schnittlinien=linien), 2)
+            text = _text(ziel)
+            self.assertIn("Gegenstand: Gummi", text)
+            self.assertIn("Gegenstand: Horstz", text)
+            self.assertNotIn("Holz", text)
+            self.assertNotIn("Fl, C", text)
+        # Eigene Größe: 100 x 60 mm ergibt 2 x 4 = 8 Etiketten je Seite.
+        with self.assertRaises(ValueError):
+            pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, breite_mm=300)
+
+    def test_behaeltnis_etiketten_kleine_hoehe_mehrere_seiten_ohne_teilnehmer(self):
+        """Verifikation 10.11.2026 (A, G): auch auf niedrigen Etiketten bleibt der Gegenstand
+        sichtbar; 0 Teilnehmer geben eine Hinweisseite, viele Teilnehmer mehrere Seiten; bei ED
+        steht die Disziplin nicht doppelt im Label."""
+        ziel = self._pfad("leer_etiketten.pdf")
+        self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel), 0)
+        self.assertIn("Keine Teilnehmer", _text(ziel))
+        for n in range(1, 31):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=f"N{n}", vorname="V", rufname_hund="H", art="ED", stufe=1,
+                disziplin="Behältnisstrecke", startnummer=n, gegenstand_1=f"Ding{n}",
+                gegenstand_1_disziplin="Behältnisstrecke"))
+        for hoehe in (20, 25, 37):
+            ziel = self._pfad(f"etikett_{hoehe}.pdf")
+            self.assertEqual(pdf_export.erstelle_behaeltnis_etiketten_pdf(self.conn, ziel, hoehe_mm=hoehe), 30)
+            text = _text(ziel)
+            self.assertIn("Gegenstand: Ding1", text)
+            self.assertIn("Gegenstand: Ding30", text)
+            self.assertNotIn("Behältnisse LK 1 – Behältnis", text)
+        # 70 x 20 mm: 3 x 14 = 42 je Seite -> eine Seite; 70 x 37: 24 je Seite -> zwei Seiten.
+        self.assertEqual(len(PdfReader(self._pfad("etikett_20.pdf")).pages), 1)
+        self.assertEqual(len(PdfReader(self._pfad("etikett_37.pdf")).pages), 2)
 
     def test_lange_namen_brechen_in_ergebnislisten_um(self):
         """Desktop-Prüfung 14.10.2026, Teil 6 Nr. 4: lange Doppelnamen ragten als reiner

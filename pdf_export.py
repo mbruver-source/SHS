@@ -164,6 +164,7 @@ _LK_TITEL = ParagraphStyle("SHSLkTitel", parent=_STYLES["Heading1"], fontSize=20
 _ABSCHNITT = ParagraphStyle("SHSAbschnitt", parent=_STYLES["Heading2"], fontSize=13, spaceBefore=4 * mm, spaceAfter=1 * mm, alignment=1)
 # UX-Test 02.10.2026, K3: Überschrift einer Prüfung nie allein am Seitenende.
 _ABSCHNITT_MIT_FOLGE = ParagraphStyle("SHSAbschnittMitFolge", parent=_ABSCHNITT, keepWithNext=1)
+_ABSCHNITT_LINKS = ParagraphStyle("SHSAbschnittLinks", parent=_STYLES["Heading2"], fontSize=12, spaceBefore=4 * mm, spaceAfter=1 * mm)
 _HINWEIS = ParagraphStyle("SHSHinweis", parent=_STYLES["Normal"], fontSize=8, alignment=1, spaceAfter=2 * mm)
 _TEXT = ParagraphStyle("SHSText", parent=_STYLES["Normal"], fontSize=9.5)
 _TEXT_FETT = ParagraphStyle("SHSTextFett", parent=_STYLES["Normal"], fontSize=9.5, fontName=_SCHRIFT_FETT)
@@ -515,9 +516,16 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     return elemente
 
 
+def _startnummer_box(t: dict) -> Table:
+    """Kasten "Start-Nr." wie oben rechts auf Seite 1 (auch auf Seite 2 und den
+    Disziplin-Blättern, damit jedes lose Blatt eindeutig zuzuordnen ist; Rückmeldung 10.11.2026)."""
+    return Table([["Start-Nr.", _wert(t["startnummer"])]], colWidths=[22 * mm, 22 * mm],
+                 style=TableStyle([("GRID", (0, 0), (-1, -1), 0.8, colors.black), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+
+
 def _dk_folgeseiten_kopf(t: dict) -> Table:
-    """Kopfzeile der DK-Seite 2 ("LK x  HF: ...  Hund: ..."), wie in der Vorlage - damit
-    die zweite Seite auch lose eindeutig einem Team zugeordnet werden kann."""
+    """Kopfzeile der DK-Seite 2 ("LK x  HF: ...  Hund: ...  Start-Nr."), wie in der Vorlage -
+    damit die zweite Seite auch lose eindeutig einem Team zugeordnet werden kann."""
     hund = _p_wert(t["zwingername"])
     rufname = _p_wert(t["rufname_hund"])
     hund_text = f"{hund}, Rufname: „{rufname}“" if hund else f"Rufname: „{rufname}“"
@@ -527,22 +535,27 @@ def _dk_folgeseiten_kopf(t: dict) -> Table:
     kopf = Table(
         [[Paragraph(f"LK {_p_wert(t['stufe'])}", _LK_TITEL),
           [Paragraph(f"<b>HF:</b> {_p_wert(t['nachname'])}, {_p_wert(t['vorname'])}", _TEXT),
-           Paragraph(f"<b>Hund:</b> {hund_text}", _TEXT)]]],
-        colWidths=[25 * mm, 145 * mm],
+           Paragraph(f"<b>Hund:</b> {hund_text}", _TEXT)],
+          _startnummer_box(t)]],
+        colWidths=[25 * mm, 101 * mm, 44 * mm],
     )
     kopf.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     return kopf
 
 
-def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict | None) -> list:
+def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict | None,
+                           nur_disziplin: str | None = None) -> list:
     """Baut den vollständigen Bewertungsbogen (als reportlab-"Story") für einen
-    Teilnehmer - je nach Art (ED/DK) mit einem bzw. drei Bewertungsabschnitten."""
+    Teilnehmer - je nach Art (ED/DK) mit einem bzw. drei Bewertungsabschnitten.
+
+    `nur_disziplin` (nur DK, Wunsch 10.11.2026): baut stattdessen EIN Blatt für diese eine
+    Disziplin - Kopf wie Seite 1, ein Bewertungsabschnitt mit Wertungsnoten-Tabelle unten,
+    ohne GESAMT-Zeile -, damit jeder Richter seinen Stapel bekommt."""
     story: list = []
 
     kopf = Table(
         [[Paragraph("Bewertungsbogen SHS – Spürhundsport", _TITEL),
-          Table([["Start-Nr.", _wert(t["startnummer"])]], colWidths=[22 * mm, 22 * mm],
-                style=TableStyle([("GRID", (0, 0), (-1, -1), 0.8, colors.black), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))]],
+          _startnummer_box(t)]],
         colWidths=[124 * mm, 46 * mm],
     )
     kopf.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
@@ -602,6 +615,10 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     ]
 
     status_abk = _status_abkuerzung(ergebnis)
+    if t["art"] == "DK" and nur_disziplin is not None:
+        story.append(abschnitt(nur_disziplin))
+        story.extend(fusszeile)
+        return story
     if t["art"] == "DK":
         # Feste Seitenaufteilung wie in der Vorlage (Nutzerwunsch 24.09.): Seite 1 =
         # Stammdaten + Trümmerfeld + Fußzeile, Seite 2 = Kopfzeile "LK x HF/Hund" +
@@ -681,18 +698,32 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
     return story
 
 
-def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, pfad: str) -> None:
-    """Erzeugt den Bewertungsbogen für genau einen Teilnehmer als eigene PDF-Datei."""
+def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, pfad: str,
+                                 je_disziplin: bool = False) -> None:
+    """Erzeugt den Bewertungsbogen für genau einen Teilnehmer als eigene PDF-Datei.
+
+    `je_disziplin` (Wunsch 10.11.2026, nur Dreikampf): statt des 2-Seiten-Bogens drei Blätter
+    (Trümmerfeld, Flächensuche, Behältnisstrecke) wie in der Sammel-PDF; bei ED ohne Wirkung."""
     t = next(x for x in list_teilnehmer(conn) if x["id"] == teilnehmer_id)
     ergebnis_row = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
     veranstaltung = get_veranstaltung(conn)
+    ergebnis = dict(ergebnis_row) if ergebnis_row else None
 
     dokument = SimpleDocTemplate(pfad, pagesize=A4, topMargin=14 * mm, bottomMargin=14 * mm, leftMargin=20 * mm, rightMargin=20 * mm)
-    dokument.build(_bewertungsbogen_story(t, dict(ergebnis_row) if ergebnis_row else None, veranstaltung))
+    if je_disziplin and t["art"] == "DK":
+        story: list = []
+        for i, disziplin in enumerate(ALLE_DISZIPLINEN):
+            if i > 0:
+                story.append(PageBreak())
+            story.extend(_bewertungsbogen_story(t, ergebnis, veranstaltung, nur_disziplin=disziplin))
+        dokument.build(story)
+    else:
+        dokument.build(_bewertungsbogen_story(t, ergebnis, veranstaltung))
 
 
 def erstelle_alle_bewertungsboegen_pdf(
     conn: sqlite3.Connection, pfad: str, erlaubte_labels: set[str] | None = None,
+    je_disziplin: bool = False,
 ) -> int:
     """Erzeugt EINE Sammel-PDF mit dem Bewertungsbogen jedes Teilnehmers (sortiert nach
     Startnummer, wie die Teilnehmerliste) - praktisch zum Ausdrucken für alle Richter auf
@@ -705,7 +736,13 @@ def erstelle_alle_bewertungsboegen_pdf(
     Labels ein (wie leistungsklasse_label() sie liefert, z. B. "DK LK 1", "Trümmer LK 2"
     - siehe BewertungsbogenAuswahlDialog in desktop_dialoge.py). None
     (Standard) bedeutet ALLE Teilnehmer; ein leeres Set bedeutet keine (der Dialog lässt OK
-    dann gar nicht zu, Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6)."""
+    dann gar nicht zu, Desktop-Prüfung 14.10.2026, Teil 6 Nr. 6).
+
+    `je_disziplin` (Wunsch 10.11.2026): Dreikampf-Teilnehmer bekommen statt des 2-Seiten-
+    Bogens drei Blätter (Trümmerfeld, Flächensuche, Behältnisstrecke), nach Disziplin
+    sortiert - erst alle Trümmer-Blätter nach Startnummer, dann alle Fläche, dann alle
+    Behältnis -, damit jeder Richter seinen Stapel bekommt. Einzeldisziplinen (ED) bleiben
+    unverändert und stehen vorweg. Die Rückgabe zählt die Teilnehmer, nicht die Blätter."""
     teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     if erlaubte_labels is not None:
         teilnehmer = [t for t in teilnehmer if leistungsklasse_label(t) in erlaubte_labels]
@@ -713,14 +750,112 @@ def erstelle_alle_bewertungsboegen_pdf(
     ergebnis_rows = {r["teilnehmer_id"]: dict(r) for r in conn.execute("SELECT * FROM ergebnisse").fetchall()}
 
     dokument = SimpleDocTemplate(pfad, pagesize=A4, topMargin=14 * mm, bottomMargin=14 * mm, leftMargin=20 * mm, rightMargin=20 * mm)
+    # Blätter als (Teilnehmer, Disziplin oder None) in Druckreihenfolge.
+    blaetter: list[tuple[dict, str | None]] = []
+    if je_disziplin:
+        blaetter = [(t, None) for t in teilnehmer if t["art"] != "DK"]
+        for disziplin in ALLE_DISZIPLINEN:
+            blaetter.extend((t, disziplin) for t in teilnehmer if t["art"] == "DK")
+    else:
+        blaetter = [(t, None) for t in teilnehmer]
     story: list = []
-    for i, t in enumerate(teilnehmer):
+    for i, (t, disziplin) in enumerate(blaetter):
         if i > 0:
             story.append(PageBreak())
-        story.extend(_bewertungsbogen_story(t, ergebnis_rows.get(t["id"]), veranstaltung))
+        story.extend(_bewertungsbogen_story(t, ergebnis_rows.get(t["id"]), veranstaltung, nur_disziplin=disziplin))
     if not story:
         story = [Paragraph("Keine Teilnehmer erfasst.", _TEXT)]
     dokument.build(story)
+    return len(teilnehmer)
+
+
+# --- Etiketten für die Behältnisse (Gegenstände einsammeln) ------------------
+
+def _text_passend(c, text: str, schrift: str, groesse: float, max_breite: float, min_groesse: float = 6) -> tuple[str, float]:
+    """Verkleinert die Schrift schrittweise, bis der Text in `max_breite` passt; reicht auch
+    die Mindestgröße nicht, wird er mit "…" gekürzt (die Etikettengröße ist fest)."""
+    while stringWidth(text, schrift, groesse) > max_breite and groesse > min_groesse:
+        groesse -= 0.5
+    while stringWidth(text, schrift, groesse) > max_breite and len(text) > 1:
+        text = text[:-2] + "…"
+    return text, groesse
+
+
+def behaeltnis_etiketten_teilnehmer(conn: sqlite3.Connection) -> list[dict]:
+    """Teilnehmer mit Behältnisstrecke (DK und ED Behältnisstrecke), nach Startnummer."""
+    return [t for t in list_teilnehmer(conn, nur_teilnehmende=True)
+            if t["art"] == "DK" or t["disziplin"] == "Behältnisstrecke"]
+
+
+def erstelle_behaeltnis_etiketten_pdf(
+    conn: sqlite3.Connection, pfad: str, breite_mm: float = 70, hoehe_mm: float = 37,
+    rand_links_mm: float = 0, rand_oben_mm: float = 0, schnittlinien: bool = False,
+) -> int:
+    """Etiketten zum Beschriften der Behältnisse, in die die Gegenstände eingesammelt werden
+    (Wunsch 10.11.2026): ein Etikett je Hund mit Startnummer, Name, Hund, Prüfung/Disziplin
+    und dem Gegenstand der Behältnisstrecke. Gibt die Anzahl der Etiketten zurück.
+
+    Die Größe der Klebefelder ist einstellbar (`breite_mm` x `hoehe_mm`); Spalten und Zeilen
+    ergeben sich aus der A4-Seite abzüglich der Ränder. Etikettenbogen (Standard): die Felder
+    sitzen auf dem Raster des Bogens, ohne Linien. `schnittlinien=True` für normales Papier:
+    gestrichelter Rahmen um jedes Etikett zum Ausschneiden."""
+    seite_b, seite_h = A4
+    b, h = breite_mm * mm, hoehe_mm * mm
+    links, oben = rand_links_mm * mm, rand_oben_mm * mm
+    spalten = int((seite_b - links + 0.01) // b)
+    zeilen = int((seite_h - oben + 0.01) // h)
+    if spalten < 1 or zeilen < 1:
+        raise ValueError("Das Etikett ist größer als die Seite (Breite/Höhe/Rand prüfen).")
+
+    teilnehmer = behaeltnis_etiketten_teilnehmer(conn)
+    c = rl_canvas.Canvas(pfad, pagesize=A4)
+    pro_seite = spalten * zeilen
+    for i, t in enumerate(teilnehmer):
+        if i and i % pro_seite == 0:
+            c.showPage()
+        platz = i % pro_seite
+        x = links + (platz % spalten) * b
+        y = seite_h - oben - (platz // spalten + 1) * h
+        if schnittlinien:
+            c.saveState()
+            c.setDash(2, 2)
+            c.setLineWidth(0.6)
+            c.setStrokeColor(colors.grey)
+            c.rect(x, y, b, h)
+            c.restoreState()
+        innen = min(2.5 * mm, b / 10, h / 10)
+        voll = b - 2 * innen
+        gegenstand = gegenstand_fuer_disziplin(t, "Behältnisstrecke") or (t["gegenstand_1"] if t["art"] == "ED" else None)
+        # Bei ED nennt das Label die Disziplin schon ("Behältnisse LK 1"), bei DK nicht.
+        pruefung = _wert(leistungsklasse_label(t)) + (" – Behältnis" if t["art"] == "DK" else "")
+        hund = f"Hund: {_wert(t['rufname_hund'])}"
+        # Die Reihenfolge ist die Wichtigkeit: der Gegenstand ist der Zweck des Etiketts und
+        # steht deshalb gleich unter der Startnummer. Auf niedrigen Etiketten (< 28 mm) teilen
+        # sich Hund und Prüfung eine Zeile.
+        zeilen_text = [
+            (f"Nr. {_wert(t['startnummer'])}", _SCHRIFT_FETT, 20),
+            (f"Gegenstand: {_wert(gegenstand) or '..............'}", _SCHRIFT_FETT, 11),
+            (f"{_wert(t['nachname'])}, {_wert(t['vorname'])}", _SCHRIFT_FETT, 11),
+        ]
+        if hoehe_mm < 28:
+            zeilen_text.append((f"{hund} · {pruefung}", _SCHRIFT, 9))
+        else:
+            zeilen_text += [(hund, _SCHRIFT, 10), (pruefung, _SCHRIFT, 9)]
+        # Alle Schriftgrößen gemeinsam an die Etikettenhöhe anpassen, damit keine Zeile wegfällt.
+        bedarf = sum(g * 1.3 for _t, _s, g in zeilen_text)
+        faktor = min(1.0, (h - 2 * innen) / bedarf)
+        text_y = y + h - innen
+        for text, schrift, groesse in zeilen_text:
+            groesse = max(groesse * faktor, 5.5)
+            text, groesse = _text_passend(c, text, schrift, groesse, voll, min_groesse=5)
+            text_y -= groesse * 1.05
+            c.setFont(schrift, groesse)
+            c.drawString(x + innen, text_y, text)
+            text_y -= groesse * 0.25
+    if not teilnehmer:
+        c.setFont(_SCHRIFT, 10)
+        c.drawString(20 * mm, seite_h - 20 * mm, "Keine Teilnehmer mit Behältnisstrecke erfasst.")
+    c.save()
     return len(teilnehmer)
 
 
@@ -1589,6 +1724,42 @@ def erstelle_abrechnung_pdf(conn: sqlite3.Connection, pfad: str) -> None:
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
         ]))
         story.append(tabelle)
+    SimpleDocTemplate(
+        pfad, pagesize=A4,
+        topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
+    ).build(story)
+
+
+def erstelle_checkliste_pdf(conn: sqlite3.Connection, pfad: str) -> None:
+    """Checkliste zum Prüfungstermin zum Ausdrucken (Marco 10.11.2026, UI-Abgleich): alle
+    Kategorien mit ihren Punkten (feste, eigene; Ausgeblendetes entfällt), erledigte Punkte
+    mit „[x]“, offene mit „[ ]“, dazu der Stand je Kategorie."""
+    import checkliste
+
+    veranstaltung = get_veranstaltung(conn)
+    erledigt = checkliste.erledigte(veranstaltung)
+    kategorien = checkliste.struktur(veranstaltung)
+    alle = checkliste.alle_kennungen(kategorien)
+    story: list = [Paragraph(f"Checkliste zum Prüfungstermin – {_abrechnung_kopf(veranstaltung)}", _TITEL)]
+    story.append(Paragraph(f"{len([k for k in alle if k in erledigt])} von {len(alle)} Punkten erledigt.", _HINWEIS))
+    for kat in kategorien:
+        if not kat.punkte:
+            continue
+        zeilen = [["[x]" if p.kennung in erledigt else "[ ]", Paragraph(_p_wert(p.text), _TEXT)] for p in kat.punkte]
+        erledigte_zahl = sum(1 for p in kat.punkte if p.kennung in erledigt)
+        tabelle = Table(zeilen, colWidths=[12 * mm, 158 * mm])
+        tabelle.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), _SCHRIFT_FETT),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 1 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1 * mm),
+        ]))
+        story.append(KeepTogether([
+            Paragraph(f"{_p_wert(kat.titel)} ({erledigte_zahl}/{len(kat.punkte)})", _ABSCHNITT_LINKS),
+            tabelle,
+        ]))
+    if len(story) == 2:
+        story.append(Paragraph("Die Checkliste ist leer.", _TEXT))
     SimpleDocTemplate(
         pfad, pagesize=A4,
         topMargin=16 * mm, bottomMargin=16 * mm, leftMargin=18 * mm, rightMargin=18 * mm,

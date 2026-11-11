@@ -105,6 +105,9 @@ classDiagram
     class StartDialog {
         +pfad
         +neu_angelegt
+        -_angezeigt
+        -_menue_aufbauen()
+        -_spalte_geklickt(spalte)
         -_aktualisieren()
         -_termin_oeffnen()
         -_neuer_termin()
@@ -115,10 +118,17 @@ classDiagram
         +farben_aktualisieren()
         +knopf_hinzufuegen(knopf, symbol_name)
     }
-    class TeilnehmerTab
+    class TeilnehmerTab {
+        +filter_name
+        +rueckgaengig_btn
+        -_rueckgaengig_merken(text, aktion)
+        -_rueckgaengig_ausfuehren()
+    }
     class FormularImportTab
     class ErgebnisTab {
         +tabelle
+        +filter_name
+        +bewertungsbogen_btn
         +aktualisieren()
         +aktualisieren_falls_geaendert()
         +alle_speichern(meldungen)
@@ -263,7 +273,7 @@ flowchart TD
     dlg & csv & form & alt --> nummern[Startnummern vergeben<br/>„Fehlende Startnummern vergeben…“]
     nummern --> bezahlt[Bezahlt / keine Teilnahme<br/>markieren]
     bezahlt --> zeit[Zeitplan<br/>automatisch verteilen,<br/>Blöcke und Pausen anpassen]
-    zeit --> druck1[Ausdrucke vor der Prüfung<br/>Zeitplan, Bewertungsbögen,<br/>Etiketten, Richter-/Behältnisbedarf]
+    zeit --> druck1[Ausdrucke vor der Prüfung<br/>Zeitplan, Bewertungsbögen,<br/>Etiketten auch für Behältnisse, Richter-/Behältnisbedarf]
     druck1 --> tag{Prüfungstag:<br/>wo werden Ergebnisse erfasst?}
     tag -->|Desktop| erf[Ergebniserfassung<br/>Punkte, DQ, Abbruch<br/>„Alle Ergebnisse speichern“]
     tag -.->|mehrere Richter| webv[Termin im Web veröffentlichen<br/>Richter erfassen im Browser<br/>Ergebnisse zurückholen]
@@ -592,6 +602,22 @@ sequenceDiagram
     participant S as db_sicherung
     participant F as Termine-Ordner
     participant Z as Sicherungs-ZIP
+    participant HF as HauptFenster
+    participant A as Auto-Sicherung-Ordner
+
+    rect rgba(127,127,127,0.08)
+    N->>HF: Termin öffnen / Termin wechseln / Programm beenden
+    HF->>S: auto_sicherung_erstellen(conn, pfad)<br/>(Beenden: ohne Mindestabstand)
+    alt Demo, Test oder PostgreSQL
+        S-->>HF: nichts (kein SQLite-backup)
+    else letzte Kopie jünger als 10 Minuten
+        S-->>HF: None
+    else
+        S->>A: backup() in neue Datei, bei Fehler wieder löschen
+        S->>A: je Termin nur die letzten 10 behalten
+    end
+    HF->>N: Hinweis, wenn der Termin auf USB-Stick/Netzlaufwerk liegt<br/>(Start und Terminwechsel, laufwerksart)
+    end
 
     rect rgba(127,127,127,0.08)
     N->>DT: „Sicherung erstellen…“ (optional Passwort)

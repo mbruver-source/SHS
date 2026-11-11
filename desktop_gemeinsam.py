@@ -25,7 +25,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QLibraryInfo, QLocale, QRectF, QSize, Qt, QTranslator, QUrl
+from PySide6.QtCore import QByteArray, QLibraryInfo, QLocale, QRectF, QSettings, QSize, Qt, QTranslator, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QPainterPath, QPixmap
 # QtSvg ausdrücklich importieren, damit PyInstaller das Modul samt Bibliothek mitnimmt
 # (Symbole, siehe symbol() unten; der Selbsttest prüft es in der gebauten Fassung).
@@ -238,8 +238,42 @@ def _import_ordner_merken(pfad: str) -> None:
         _letzter_import_ordner = os.path.dirname(pfad)
 
 
+_OHNE_NACHFRAGE_SCHLUESSEL = "export/ohne_nachfrage"
+
+
+def _ohne_nachfrage_lesen() -> bool:
+    """Einstellung „Dateien ohne Nachfrage im Ablageort speichern“ (Marco 10.11.2026)."""
+    wert = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).value(
+        _OHNE_NACHFRAGE_SCHLUESSEL, False)
+    return wert in (True, "true", "True", 1, "1")
+
+
+def _ohne_nachfrage_speichern(an: bool) -> None:
+    QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).setValue(
+        _OHNE_NACHFRAGE_SCHLUESSEL, bool(an))
+
+
+def _freier_dateipfad(pfad: str) -> str:
+    """Hängt „ (2)“, „ (3)“ … an den Dateinamen, solange die Datei schon existiert - ohne
+    Nachfrage wird nie eine vorhandene Datei überschrieben."""
+    wurzel, endung = os.path.splitext(pfad)
+    kandidat, nummer = pfad, 2
+    while os.path.exists(kandidat):
+        kandidat = f"{wurzel} ({nummer}){endung}"
+        nummer += 1
+    return kandidat
+
+
 def _speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschlag_dateiname: str,
                          dateifilter: str = "PDF-Datei (*.pdf)") -> str | None:
+    if _ohne_nachfrage_lesen():
+        # Marco 10.11.2026: am Prüfungstag viele Ausdrucke hintereinander - ohne Speichern-Dialog
+        # direkt in den Ablageort, eine vorhandene Datei bleibt erhalten (Nummer im Namen).
+        try:
+            os.makedirs(ablageort.pfad, exist_ok=True)
+        except OSError:
+            pass
+        return _freier_dateipfad(os.path.join(ablageort.pfad, vorschlag_dateiname))
     try:
         # Der Ausdrucke-Ordner (siehe _ausdrucke_ordner) entsteht erst hier - sonst würde
         # der Dialog bei einem fehlenden Ordner an einer anderen Stelle starten.
@@ -296,6 +330,163 @@ def _pdf_exportieren(parent, ablageort: "_Ablageort", status_label: QLabel, tite
                      vorschlag: str, export_fn, status_text) -> None:
     """PDF-Export über den gemeinsamen Ablauf _datei_exportieren."""
     _datei_exportieren(parent, ablageort, status_label, titel, vorschlag, export_fn, status_text)
+
+
+def _bewertungsbogen_fuer_teilnehmer(parent, conn, ablageort: "_Ablageort", status_label: QLabel,
+                                     teilnehmer_id: int) -> None:
+    """Bewertungsbogen (PDF) für genau einen Teilnehmer - gemeinsam für die Reiter Teilnehmer,
+    Ergebniserfassung und Auswertung (Marco 10.11.2026). Beim Dreikampf wahlweise zwei Seiten
+    oder drei Blätter (je Disziplin)."""
+    from db import get_teilnehmer
+
+    t = get_teilnehmer(conn, teilnehmer_id)
+    if t is None:
+        return
+    start_teil = str(t["startnummer"]) if t["startnummer"] is not None else "ohne-Nr"
+    vorschlag = f"Bewertungsbogen_{start_teil}_{_dateiname_teil(t['nachname'])}.pdf"
+    je_disziplin = False
+    if t["art"] == "DK":
+        frage = QMessageBox(parent)
+        frage.setIcon(QMessageBox.Question)
+        frage.setWindowTitle("Bewertungsbogen Dreikampf")
+        frage.setText("Wie soll der Bewertungsbogen aussehen?")
+        zwei_btn = frage.addButton("Zwei Seiten", QMessageBox.AcceptRole)
+        drei_btn = frage.addButton("Drei Blätter (je Disziplin)", QMessageBox.AcceptRole)
+        abbrechen_btn = frage.addButton("Abbrechen", QMessageBox.RejectRole)
+        frage.setDefaultButton(zwei_btn)
+        frage.setEscapeButton(abbrechen_btn)
+        frage.exec()
+        if frage.clickedButton() is drei_btn:
+            je_disziplin = True
+            vorschlag = vorschlag.replace(".pdf", "_je-Disziplin.pdf")
+        elif frage.clickedButton() is not zwei_btn:
+            return
+    _pdf_exportieren(parent, ablageort, status_label, "Bewertungsbogen speichern", vorschlag,
+                     lambda pfad: pdf_export.erstelle_bewertungsbogen_pdf(
+                         conn, teilnehmer_id, pfad, je_disziplin=je_disziplin),
+                     "Bewertungsbogen gespeichert")
+
+
+def _name_passt(suchtext: str, *felder) -> bool:
+    """Suchfeld „Name/Hund“ (Marco 10.11.2026): jedes durch Leerzeichen getrennte Wort muss
+    in einem der Felder vorkommen (ohne Beachtung von Groß-/Kleinschreibung)."""
+    woerter = suchtext.casefold().split()
+    if not woerter:
+        return True
+    text = " ".join(str(f) for f in felder if f).casefold()
+    return all(w in text for w in woerter)
+
+
+def _kontextmenue_bauen(tabelle, eintraege, allgemein, auf_zeile: bool):
+    """Baut das Rechtsklick-Menü (siehe _kontextmenue_aus_knoepfen). Auf leerer Fläche unter den
+    Zeilen (`auf_zeile` False) bleiben nur die Knöpfe in `allgemein` bedienbar, alle anderen
+    sind grau - sie würden sonst auf eine zuvor markierte, nicht angeklickte Zeile wirken."""
+    from PySide6.QtWidgets import QMenu
+
+    menue = QMenu(tabelle)
+    for knopf in eintraege:
+        if knopf is None:
+            menue.addSeparator()
+            continue
+        aktion = menue.addAction(knopf.text().replace("&", "&&"))
+        aktion.setEnabled(knopf.isEnabled() and (auf_zeile or knopf in allgemein))
+        aktion.triggered.connect(lambda _=False, k=knopf: k.click())
+    return menue
+
+
+def _kontextmenue_aus_knoepfen(tabelle, eintraege, allgemein=()) -> None:
+    """Rechtsklick-Menü für eine Tabelle: `eintraege` sind Knöpfe des Reiters; das Menü zeigt
+    ihre aktuelle Beschriftung, gesperrte Knöpfe grau, und löst bei Auswahl den Klick aus
+    (Marco 10.11.2026, UI-Abgleich: alles ging nur über die Knöpfe unter der Tabelle).
+    Ein Eintrag `None` ergibt eine Trennlinie. Das Menü erscheint auch auf der leeren Fläche
+    unter den Zeilen; dort gelten nur die Knöpfe in `allgemein` (die nicht an eine Zeile
+    gebunden sind, z. B. „Alle Ergebnisse speichern“)."""
+    def anzeigen(position) -> None:
+        index = tabelle.indexAt(position)
+        if index.isValid() and not tabelle.selectionModel().isRowSelected(index.row(), index.parent()):
+            tabelle.selectRow(index.row())  # wie im Explorer: Rechtsklick markiert die Zeile
+        menue = _kontextmenue_bauen(tabelle, eintraege, allgemein, index.isValid())
+        menue.exec(tabelle.viewport().mapToGlobal(position))
+
+    tabelle.setContextMenuPolicy(Qt.CustomContextMenu)
+    tabelle.customContextMenuRequested.connect(anzeigen)
+
+
+def laufwerksart(pfad: str) -> str | None:
+    """„USB-Stick (Wechseldatenträger)“ oder „Netzlaufwerk“, wenn `pfad` unter Windows auf einem
+    solchen liegt, sonst None (feste Platte, andere Systeme, unbekannt) - Marco 10.11.2026."""
+    if os.name != "nt" or not pfad:
+        return None
+    try:
+        import ctypes
+
+        absolut = os.path.abspath(pfad)
+        if absolut.startswith(("\\\\?\\", "\\\\.\\")):
+            absolut = absolut[4:]  # Langpfad-/Geräte-Präfix: weiter mit dem eigentlichen Laufwerk
+            if absolut.upper().startswith("UNC\\"):
+                return "Netzlaufwerk"
+        elif absolut.startswith("\\\\"):
+            return "Netzlaufwerk"  # \\Server\Freigabe
+        laufwerk = os.path.splitdrive(absolut)[0]
+        if not laufwerk:
+            return None
+        art = ctypes.windll.kernel32.GetDriveTypeW(laufwerk + "\\")
+    except (OSError, AttributeError, ValueError):
+        return None
+    return {2: "USB-Stick (Wechseldatenträger)", 4: "Netzlaufwerk"}.get(art)
+
+
+def _ablageort_ordner_oeffnen(parent, ablageort: "_Ablageort") -> None:
+    """„Ablageort öffnen“: zeigt den Ordner der PDFs im Dateimanager - gemeinsam für alle
+    Reiter mit diesem Knopf (Marco 10.11.2026, UI-Abgleich: vorher nur in zwei Reitern)."""
+    if os.path.basename(os.path.dirname(ablageort.pfad)) == "Ausdrucke":
+        try:
+            os.makedirs(ablageort.pfad, exist_ok=True)
+        except OSError:
+            pass  # Meldung "existiert nicht" folgt direkt darunter
+    if not os.path.isdir(ablageort.pfad):
+        QMessageBox.warning(
+            parent, "Ordner nicht gefunden",
+            f"Der Ablageort „{_pfad_anzeige(ablageort.pfad)}“ existiert nicht (mehr).",
+        )
+        return
+    _url_oeffnen(parent, QUrl.fromLocalFile(ablageort.pfad), _pfad_anzeige(ablageort.pfad))
+
+
+def _anmeldeformular_pdf_speichern(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:
+    """Leeres, ausfüllbares Anmeldeformular als PDF speichern - gemeinsam für den Reiter
+    „Ausdrucke/Export“ und „Formular-Import“ (Marco 10.11.2026, UI-Abgleich)."""
+    from db import angebotene_pruefungen
+
+    # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf
+    # wirft dann ValueError) - Hinweis deshalb schon VOR dem Speichern-Dialog statt
+    # danach als irreführende "Export fehlgeschlagen (Zielpfad ...)"-Meldung.
+    veranstaltung = get_veranstaltung(conn)
+    if not angebotene_pruefungen(veranstaltung):
+        QMessageBox.information(
+            parent, "Keine Prüfungen ausgewählt",
+            "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“, Button "
+            "„Veranstaltungsdaten bearbeiten…“) die angebotenen Prüfungen auswählen.",
+        )
+        return
+    # UX-Test 2026-11, T7 (Marco 04.11.2026): Fehlen Verband oder Meldestelle, noch einmal
+    # warnen - beim Anlegen des Termins wird die Rückfrage leicht weggeklickt.
+    fehlend = fehlende_formularangaben(veranstaltung.get("verband"), veranstaltung.get("meldestelle"))
+    if fehlend and not _ja_nein(
+        parent, "Angaben fehlen auf dem Formular",
+        fehlende_formularangaben_satz(fehlend) + "."
+        + (" Die Teilnehmer wissen so nicht, wohin sie die Meldung schicken sollen."
+           if "Meldestelle" in fehlend else "")
+        + "\n\nNachtragen kannst du das im Reiter „Verwaltung“ über „Veranstaltungsdaten "
+        "bearbeiten…“.\n\nTrotzdem jetzt erstellen?",
+    ):
+        return
+    _pdf_exportieren(
+        parent, ablageort, status_label, "Anmeldeformular speichern",
+        _export_dateiname(conn, "Anmeldeformular"),
+        lambda pfad: pdf_export.erstelle_anmeldeformular_pdf(conn, pfad),
+        "Anmeldeformular gespeichert",
+    )
 
 
 def _zeitplan_pdf_exportieren(parent, conn, ablageort: "_Ablageort", status_label: QLabel) -> None:

@@ -1129,6 +1129,69 @@ def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeil
     conn.commit()
 
 
+def teilnehmer_sichern(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
+    """Vollständiger Stand eines Teilnehmers (Stammdaten und Ergebnis) für „Rückgängig“ nach
+    dem Löschen (Marco 10.11.2026); None, wenn es ihn nicht gibt."""
+    row = conn.execute("SELECT * FROM teilnehmer WHERE id = ?", (teilnehmer_id,)).fetchone()
+    if row is None:
+        return None
+    ergebnis = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
+    return {"teilnehmer": dict(row), "ergebnis": dict(ergebnis) if ergebnis else None}
+
+
+@_mit_rollback
+def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bool:
+    """Legt einen mit teilnehmer_sichern() gesicherten Teilnehmer wieder an (gleiche ID, mit
+    Ergebnis). Ist seine Startnummer inzwischen vergeben, bleibt er ohne Nummer. Liefert
+    False, wenn es die ID schon gibt (nichts wird geändert)."""
+    daten = dict(sicherung["teilnehmer"])
+    if conn.execute("SELECT 1 FROM teilnehmer WHERE id = ?", (daten["id"],)).fetchone():
+        return False
+    nummer = daten.get("startnummer")
+    if nummer is not None and conn.execute(
+            "SELECT 1 FROM teilnehmer WHERE startnummer = ?", (nummer,)).fetchone():
+        daten["startnummer"] = None
+    spalten = list(daten)
+    # PostgreSQL: id ist GENERATED ALWAYS AS IDENTITY, die alte ID braucht OVERRIDING SYSTEM VALUE
+    # (die Sequenz liegt ohnehin schon darüber, die ID wurde früher von ihr vergeben).
+    ueberschreiben = " OVERRIDING SYSTEM VALUE" if isinstance(conn, _PostgresConnection) else ""
+    conn.execute(
+        f"INSERT INTO teilnehmer ({', '.join(spalten)}){ueberschreiben} "
+        f"VALUES ({', '.join('?' for _ in spalten)})",
+        [daten[s] for s in spalten],
+    )
+    if sicherung.get("ergebnis"):
+        ergebnis = dict(sicherung["ergebnis"])
+        spalten = list(ergebnis)
+        conn.execute(
+            f"INSERT INTO ergebnisse ({', '.join(spalten)}) VALUES ({', '.join('?' for _ in spalten)})",
+            [ergebnis[s] for s in spalten],
+        )
+    conn.commit()
+    return True
+
+
+def startnummern_wiederherstellen(conn: sqlite3.Connection, nummern: dict[int, int]) -> int:
+    """Setzt Startnummern (Teilnehmer-ID -> Nummer) zurück, soweit der Teilnehmer noch keine
+    hat und die Nummer frei ist - „Rückgängig“ nach „Startnummern zurücksetzen“. Liefert die
+    Zahl der wiederhergestellten Nummern."""
+    zahl = 0
+    try:
+        for teilnehmer_id, nummer in nummern.items():
+            hat = conn.execute("SELECT startnummer FROM teilnehmer WHERE id = ?", (teilnehmer_id,)).fetchone()
+            if hat is None or hat["startnummer"] is not None:
+                continue
+            if conn.execute("SELECT 1 FROM teilnehmer WHERE startnummer = ?", (nummer,)).fetchone():
+                continue
+            conn.execute("UPDATE teilnehmer SET startnummer = ? WHERE id = ?", (nummer, teilnehmer_id))
+            zahl += 1
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return zahl
+
+
 def startnummern_zuruecksetzen(conn: sqlite3.Connection, pruefung: str | None = None) -> int:
     """Entfernt die Startnummern ALLER Teilnehmer des Termins (Marco 09.10.2026), z. B.
     um sie danach mit fehlende_startnummern_vergeben() neu zu vergeben - mit `pruefung`

@@ -1826,6 +1826,109 @@ def test_gegenstand_ohne_zuordnung_bleibt_frei_kein_default(qtbot):
     assert ergebnis.gegenstand_1_disziplin is None
 
 
+def test_geladener_teilnehmer_sperrt_vergebene_disziplinen(qtbot, conn):
+    _teilnehmer_anlegen(conn, art="DK", disziplin=None, gegenstand_1="Holz", gegenstand_1_disziplin="Trümmerfeld",
+                        gegenstand_3="Gummi", gegenstand_3_disziplin="Behältnisstrecke")
+    dialog = TeilnehmerDialog(vorhandener=list_teilnehmer(conn)[0])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Behältnisstrecke")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Flächensuche")
+    assert _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Trümmerfeld")  # eigene Zeile
+
+
+def test_bewertungsbogen_dialog_je_disziplin_haekchen(qtbot):
+    from desktop_dialoge import BewertungsbogenAuswahlDialog
+    dialog = BewertungsbogenAuswahlDialog(None, ["DK LK 1"])
+    qtbot.addWidget(dialog)
+    assert not dialog.je_disziplin.isChecked()  # Standard: bisheriger 2-Seiten-Bogen
+    dialog.je_disziplin.setChecked(True)
+    assert dialog.je_disziplin.isChecked()
+
+
+def test_behaeltnis_etiketten_dialog_raender_nur_ohne_eigene_eingabe(qtbot):
+    from desktop_dialoge import BehaeltnisEtikettenDialog
+    dialog = BehaeltnisEtikettenDialog()
+    qtbot.addWidget(dialog)
+    dialog.rand_links.setValue(10)  # eigene Eingabe, zufällig 10
+    dialog.papier.setChecked(True)
+    dialog.bogen.setChecked(True)
+    assert dialog.rand_links.value() == 10 and dialog.rand_oben.value() == 0  # Bogen setzt nichts zurück
+    assert dialog.hoehe.minimum() == 20
+
+
+def test_behaeltnis_etiketten_dialog_rechnet_raster(qtbot):
+    from desktop_dialoge import BehaeltnisEtikettenDialog
+    dialog = BehaeltnisEtikettenDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert dialog.spalten_zeilen() == (3, 8)  # Etikettenbogen 70 x 37 mm
+    dialog.papier.setChecked(True)  # normales Papier: Druckrand 10 mm
+    assert (dialog.rand_links.value(), dialog.rand_oben.value()) == (10, 10)
+    assert dialog.spalten_zeilen() == (2, 7)
+    dialog.rand_links.setValue(100)
+    dialog.breite.setValue(200)
+    assert "größer als die Seite" in dialog.hinweis.text()
+
+
+def _disziplin_waehlbar(combo, text):
+    index = combo.findText(text)
+    return combo.model().item(index).isEnabled()
+
+
+def test_gesperrte_disziplin_ist_in_der_auswahlliste_sichtbar_abgesetzt(qtbot):
+    """Marco 10.11.2026: mit dem Stylesheet sah man gesperrte Einträge nicht - sie müssen in der
+    geöffneten Liste blasser (Farbe) und kursiv gezeichnet werden."""
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    combo = dialog.gegenstand_2_disziplin
+    modell = combo.model()
+    gesperrt = modell.item(combo.findText("Trümmerfeld"))
+    frei = modell.item(combo.findText("Flächensuche"))
+    assert gesperrt.foreground().style() != Qt.NoBrush and frei.foreground().style() == Qt.NoBrush
+    assert gesperrt.font().italic() and not frei.font().italic()
+    assert gesperrt.toolTip() and not frei.toolTip()
+    # Wird die Sperre aufgehoben, verschwindet auch die Darstellung wieder.
+    dialog.gegenstand_1_disziplin.setCurrentText("frei")
+    entsperrt = modell.item(combo.findText("Trümmerfeld"))
+    assert entsperrt.foreground().style() == Qt.NoBrush and not entsperrt.font().italic()
+
+
+def test_vergebene_disziplin_ist_bei_anderen_gegenstaenden_gesperrt(qtbot):
+    """Rückmeldung 10.11.2026: im DK ist eine schon vergebene Disziplin bei den anderen
+    Gegenständen ausgegraut und nicht wählbar; "frei" bleibt immer wählbar."""
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+    assert not _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Trümmerfeld")
+    assert _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Trümmerfeld")  # eigene Zeile bleibt
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Flächensuche")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "frei")
+    dialog.gegenstand_2_disziplin.setCurrentText("Flächensuche")
+    assert not _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Flächensuche")
+    assert not _disziplin_waehlbar(dialog.gegenstand_1_disziplin, "Flächensuche")
+    # Zurück auf "frei": wieder überall wählbar.
+    dialog.gegenstand_1_disziplin.setCurrentText("frei")
+    assert _disziplin_waehlbar(dialog.gegenstand_3_disziplin, "Trümmerfeld")
+
+
+def test_disziplin_sperre_entfaellt_bei_ed(qtbot):
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.art.setCurrentText("DK")
+    dialog.gegenstand_1_disziplin.setCurrentText("Trümmerfeld")
+    dialog.art.setCurrentText("ED")
+    assert _disziplin_waehlbar(dialog.gegenstand_2_disziplin, "Trümmerfeld")
+
+
 def test_gegenstand_disziplin_frei_waehlbar_unabhaengig_von_position(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
@@ -2423,7 +2526,7 @@ def test_export_tab_jeder_knopf_hat_kurztext_und_tooltip(qtbot, conn):
     tab.show()
 
     knoepfe = [b for b in tab.findChildren(QPushButton) if b.text() != "Ablageort öffnen"]
-    assert len(knoepfe) == 11
+    assert len(knoepfe) == 14  # +2: Abrechnung und Checkliste (10.11.2026)
     for knopf in knoepfe:
         assert knopf.toolTip(), knopf.text()
         rechts = [
@@ -5056,6 +5159,49 @@ def test_bewertungsbogen_direktexport_erzeugt_pdf_fuer_ausgewaehlten_teilnehmer(
     assert vorschlaege == ["Bewertungsbogen_2_Meier-Schulz-Zwei.pdf"]
     assert "gespeichert" in tab.status_label.text()
     assert str(ziel_pfad) in tab.status_label.text()
+
+
+def test_bewertungsbogen_direktexport_dreikampf_fragt_nach_der_form(qtbot, conn, tmp_path, monkeypatch):
+    """Wunsch 10.11.2026: Beim Dreikampf fragt der Knopf, ob zwei Seiten oder drei Blätter
+    (je Disziplin) erzeugt werden; Abbrechen erzeugt nichts, ED fragt nicht."""
+    from PySide6.QtWidgets import QMessageBox
+    from pypdf import PdfReader
+
+    _teilnehmer_anlegen(conn, nachname="Drei", art="DK", disziplin=None, startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Ed", startnummer=2)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    ziel_pfad = tmp_path / "bogen.pdf"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel_pfad), "PDF-Datei (*.pdf)"))
+    zeile_dk = next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Drei")
+    zeile_ed = next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["nachname"] == "Ed")
+
+    gewaehlt = []
+
+    def waehle(text):
+        def exec_(box):
+            gewaehlt.append(box)
+            box._antwort = next(b for b in box.buttons() if b.text() == text)
+        return exec_
+
+    for text, seiten in (("Drei Blätter (je Disziplin)", 3), ("Zwei Seiten", 2)):
+        monkeypatch.setattr(QMessageBox, "exec", waehle(text))
+        monkeypatch.setattr(QMessageBox, "clickedButton", lambda box: box._antwort)
+        ziel_pfad.unlink(missing_ok=True)
+        tab.tabelle.selectRow(zeile_dk)
+        qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+        assert len(PdfReader(str(ziel_pfad)).pages) == seiten
+
+    ziel_pfad.unlink()
+    monkeypatch.setattr(QMessageBox, "exec", waehle("Abbrechen"))
+    qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+    assert not ziel_pfad.exists()
+
+    anzahl = len(gewaehlt)
+    tab.tabelle.selectRow(zeile_ed)
+    qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+    assert len(gewaehlt) == anzahl and ziel_pfad.exists()  # ED: keine Rückfrage
 
 
 def test_teilnehmerdialog_geburtsdatum_wird_gespeichert_und_geladen(qtbot, conn):
@@ -8633,6 +8779,9 @@ def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
     "Muster" mehr), und die Startgröße passt auf den verfügbaren Bildschirm."""
     import desktop_dialoge
 
+    # Ausgangszustand herstellen: andere Tests ändern Schrift/Stylesheet der Anwendung, wovon die
+    # Dialogbreite abhängt (sonst nur im Gesamtlauf auf manchen Bildschirmen zu breit).
+    _darstellung_anwenden(QApplication.instance())
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)
     dialog.show()
@@ -8641,7 +8790,9 @@ def test_teilnehmer_dialog_startgroesse_und_feldbreite(qtbot):
     assert dialog.nachname.width() >= desktop_dialoge._MINDESTBREITE_TEXTFELD
     frei = dialog.screen().availableGeometry()
     breite, hoehe = desktop_dialoge._TEILNEHMER_DIALOG_GROESSE
-    assert dialog.width() <= min(breite, int(frei.width() * DIALOG_MAX_BREITE_ANTEIL))
+    # Der Dialog wächst mit seinem Inhalt über die Standardbreite hinaus (Nachtest 2, N2) und
+    # wird nur durch den Bildschirm begrenzt; die Höhe bleibt bei der Standardhöhe.
+    assert dialog.width() <= int(frei.width() * DIALOG_MAX_BREITE_ANTEIL)
     assert dialog.height() <= min(hoehe, int(frei.height() * DIALOG_MAX_HOEHE_ANTEIL))
 
 
@@ -9718,7 +9869,7 @@ def test_demopruefung_kompletter_durchlauf_aus_hauptfenster(qtbot, termin, demo_
 
     _demo_bis(tour, None, pruefen)
 
-    assert gesehen == [""] + [str(n) for n in range(1, 16)]
+    assert gesehen == [""] + [str(n) for n in range(1, 18)]
     assert fenster._demo_tour is None
     assert fenster.conn is conn and fenster.pfad == pfad
     assert fenster._tabs.currentIndex() == alter_index
@@ -10487,7 +10638,7 @@ def test_demo_automatisch_weiter_abschaltbar(qtbot, termin, demo_umgebung, monke
 
 def test_demo_kein_countdown_im_letzten_schritt_und_nach_fehler(qtbot, termin, demo_umgebung, monkeypatch):
     tour = _demo_mit_countdown(qtbot, termin, monkeypatch)
-    _demo_bis(tour, "15.")
+    _demo_bis(tour, "17.")
     assert not tour._countdown.isActive()
     assert tour._panel.weiter_btn.text() == "Fertig"
     tour.beenden()
@@ -11815,7 +11966,7 @@ def test_abrechnung_tab_uebersicht_und_ablageort_oeffnen(qtbot, conn, tmp_path, 
                         lambda *a, **k: (str(tmp_path / "a.pdf"), ""))
     ueberall_ersetzen(monkeypatch, "_datei_gespeichert_melden", lambda *a, **k: None)
     geoeffnet = []
-    monkeypatch.setattr("desktop_abrechnung._url_oeffnen", lambda _p, url, _a: geoeffnet.append(url.toLocalFile()) or True)
+    monkeypatch.setattr("desktop_gemeinsam._url_oeffnen", lambda _p, url, _a: geoeffnet.append(url.toLocalFile()) or True)
     tab = AbrechnungTab(conn, _Ablageort(str(tmp_path)))
     qtbot.addWidget(tab)
     tab.uebersicht_btn.click()
@@ -11835,7 +11986,7 @@ def test_abrechnung_tab_uebersicht_und_ablageort_oeffnen(qtbot, conn, tmp_path, 
     assert [os.path.normpath(p) for p in geoeffnet] == [os.path.normpath(str(tmp_path))]
     # fehlender Ordner: Meldung statt Öffnen
     warnungen = []
-    monkeypatch.setattr("desktop_abrechnung.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
+    monkeypatch.setattr("desktop_gemeinsam.QMessageBox.warning", lambda *a, **k: warnungen.append(a[1]))
     tab2 = AbrechnungTab(conn, _Ablageort(str(tmp_path / "gibt-es-nicht")))
     qtbot.addWidget(tab2)
     tab2.ablageort_btn.click()
@@ -12060,3 +12211,418 @@ def test_reiterbezeichnungen_sind_fett():
     qss = _erzeuge_qss(_THEME_DEFAULT, _DESIGN_DEFAULT)
     block = qss.split("QTabBar::tab {", 1)[1].split("}", 1)[0]
     assert "font-weight: 600" in block
+
+
+# --- UI-Abgleich 10.11.2026: gleiche Funktionen an allen passenden Stellen -----------------
+
+
+def test_name_passt_sucht_teilwoerter_ohne_gross_klein():
+    from desktop_gemeinsam import _name_passt
+
+    assert _name_passt("", "Muster")
+    assert _name_passt("mus", "Muster", "Max")
+    assert _name_passt("max bel", "Muster", "Max", "Bello")
+    assert not _name_passt("max rex", "Muster", "Max", "Bello")
+    assert not _name_passt("xyz", "Muster", None)
+
+
+def test_suchfeld_filtert_teilnehmer_ergebnisse_und_auswertung(qtbot, conn):
+    _teilnehmer_anlegen(conn, nachname="Albers", rufname_hund="Aika", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Brandt", rufname_hund="Bruno", startnummer=2)
+    teilnehmer_tab, ergebnis_tab, auswertung_tab = TeilnehmerTab(conn), ErgebnisTab(conn), AuswertungTab(conn)
+    for tab in (teilnehmer_tab, ergebnis_tab, auswertung_tab):
+        qtbot.addWidget(tab)
+        tab.show()
+
+    def sichtbar(tab, anzahl_zeilen):
+        return [r for r in range(anzahl_zeilen) if not tab.tabelle.isRowHidden(r)]
+
+    teilnehmer_tab.filter_name.setText("bruno")
+    assert len(sichtbar(teilnehmer_tab, teilnehmer_tab.tabelle.rowCount())) == 1
+    teilnehmer_tab.filter_name.setText("")
+    assert len(sichtbar(teilnehmer_tab, teilnehmer_tab.tabelle.rowCount())) == 2
+
+    ergebnis_tab.filter_name.setText("alb")
+    assert len(sichtbar(ergebnis_tab, ergebnis_tab.tabelle.rowCount())) == 1
+    ergebnis_tab.filter_name.setText("")
+    assert len(sichtbar(ergebnis_tab, ergebnis_tab.tabelle.rowCount())) == 2
+
+    _db_modul.eintragen_ergebnis(conn, _db_modul.list_teilnehmer(conn)[0]["id"], "Flächensuche", 50, 30)
+    _db_modul.eintragen_ergebnis(conn, _db_modul.list_teilnehmer(conn)[1]["id"], "Flächensuche", 40, 30)
+    auswertung_tab.aktualisieren()
+    assert auswertung_tab.tabelle.rowCount() == 2
+    auswertung_tab.filter_name.setText("Brandt")
+    assert auswertung_tab.tabelle.rowCount() == 1
+    auswertung_tab.filter_name.setText("")
+    assert auswertung_tab.tabelle.rowCount() == 2
+
+
+def test_bewertungsbogen_auch_in_ergebniserfassung_und_auswertung(qtbot, conn, tmp_path, monkeypatch):
+    from pypdf import PdfReader
+
+    tid = _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    _db_modul.eintragen_ergebnis(conn, tid, "Flächensuche", 50, 30)
+    ziel = tmp_path / "bogen.pdf"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), "PDF-Datei (*.pdf)"))
+    ergebnis_tab, auswertung_tab = ErgebnisTab(conn), AuswertungTab(conn)
+    for tab in (ergebnis_tab, auswertung_tab):
+        qtbot.addWidget(tab)
+        tab.show()
+        assert not tab.bewertungsbogen_btn.isEnabled()  # noch keine Zeile gewählt
+        tab.tabelle.setCurrentCell(0, 0)
+        assert tab.bewertungsbogen_btn.isEnabled()
+        ziel.unlink(missing_ok=True)
+        qtbot.mouseClick(tab.bewertungsbogen_btn, Qt.MouseButton.LeftButton)
+        assert len(PdfReader(str(ziel)).pages) >= 1
+
+
+def test_ablageort_knopf_in_teilnehmer_zeitplan_auswertung_und_formular_import(qtbot, conn, monkeypatch):
+    geoeffnet = []
+    monkeypatch.setattr("desktop_gemeinsam._url_oeffnen", lambda _p, url, _a: geoeffnet.append(url.toLocalFile()) or True)
+    from desktop_gemeinsam import _Ablageort
+
+    ablageort = _Ablageort(str(__import__('pathlib').Path(conn.execute("PRAGMA database_list").fetchone()[2]).parent))
+    for tab in (TeilnehmerTab(conn, ablageort=ablageort), ZeitplanTab(conn, ablageort),
+                AuswertungTab(conn, ablageort), ExportTab(conn, None, ablageort)):
+        qtbot.addWidget(tab)
+        tab.show()
+        knopf = tab.ablageort_btn if hasattr(tab, "ablageort_btn") else next(
+            b for b in tab.findChildren(QPushButton) if b.text() == "Ablageort öffnen")
+        assert knopf.isVisible()
+        knopf.click()
+    assert len(geoeffnet) == 4
+
+
+def test_leeres_anmeldeformular_auch_im_formular_import(qtbot, conn, tmp_path, monkeypatch):
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", angebotene_pruefungen="DK1",
+                      verband="HSVRM", meldestelle="E. Muster")
+    ziel = tmp_path / "formular.pdf"
+    monkeypatch.setattr("app.QFileDialog.getSaveFileName", lambda *a, **k: (str(ziel), "PDF-Datei (*.pdf)"))
+    tab = FormularImportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    assert tab.leeres_formular_btn.isVisible()
+    qtbot.mouseClick(tab.leeres_formular_btn, Qt.MouseButton.LeftButton)
+    assert ziel.exists()
+    assert "gespeichert" in tab.formular_status_label.text()
+
+
+def test_export_tab_hat_abrechnung_und_checkliste(qtbot, conn, tmp_path, monkeypatch):
+    from pypdf import PdfReader
+
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14", wertungsrichter_1="Erika Beispiel")
+    tab = ExportTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    ziele = []
+
+    def waehle(*_a, **_k):
+        ziel = tmp_path / f"datei{len(ziele)}.pdf"
+        ziele.append(ziel)
+        return str(ziel), "PDF-Datei (*.pdf)"
+
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", waehle)
+    for text, inhalt in (("Abrechnung Leistungsrichter (PDF)…", "Erika Beispiel"), ("Checkliste (PDF)…", "Punkten erledigt")):
+        knopf = next(b for b in tab.findChildren(QPushButton) if b.text() == text)
+        knopf.click()
+        seite = PdfReader(str(ziele[-1])).pages[0].extract_text()
+        assert inhalt in seite
+
+
+def test_startdialog_hat_menues_ansicht_und_hilfe(qtbot):
+    from PySide6.QtWidgets import QMenuBar
+
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    menues = [a.text().replace("&", "") for a in dialog.findChildren(QMenuBar)[0].actions()]
+    assert menues == ["Ansicht", "Hilfe"]
+    assert set(dialog._schrift_actions) and set(dialog._design_actions) and set(dialog._theme_actions)
+
+
+def test_rechtsklickmenue_der_teilnehmerliste_spiegelt_die_knoepfe(qtbot, conn):
+    from PySide6.QtWidgets import QTableWidget
+    from desktop_gemeinsam import _kontextmenue_aus_knoepfen
+
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    assert tab.tabelle.contextMenuPolicy() == Qt.CustomContextMenu
+    geklickt = []
+    knopf = QPushButton("Test")
+    knopf.clicked.connect(lambda: geklickt.append(1))
+    tabelle = QTableWidget(1, 1)
+    qtbot.addWidget(tabelle)
+    _kontextmenue_aus_knoepfen(tabelle, [knopf, None])
+    assert tabelle.contextMenuPolicy() == Qt.CustomContextMenu
+
+
+def test_loeschen_und_startnummern_zuruecksetzen_lassen_sich_rueckgaengig_machen(qtbot, conn, monkeypatch):
+    """Marco 10.11.2026: eine Ebene „Rückgängig“ im Reiter Teilnehmer."""
+    erste = _teilnehmer_anlegen(conn, nachname="Albers", rufname_hund="Aika", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Brandt", rufname_hund="Bruno", startnummer=2)
+    _db_modul.eintragen_ergebnis(conn, erste, "Flächensuche", 50, 30)
+    monkeypatch.setattr("app._ja_nein", lambda *a, **k: True)
+    tab = TeilnehmerTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    assert not tab.rueckgaengig_btn.isEnabled()
+
+    # Löschen samt Ergebnis, dann zurückholen - gleiche ID, Nummer und Punkte.
+    zeile = next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["id"] == erste)
+    tab.tabelle.selectRow(zeile)
+    tab._teilnehmer_loeschen()
+    assert _db_modul.get_teilnehmer(conn, erste) is None and tab.rueckgaengig_btn.isEnabled()
+    qtbot.mouseClick(tab.rueckgaengig_btn, Qt.MouseButton.LeftButton)
+    zurueck = _db_modul.get_teilnehmer(conn, erste)
+    assert zurueck["nachname"] == "Albers" and zurueck["startnummer"] == 1
+    assert conn.execute("SELECT suche_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (erste,)).fetchone()[0] == 50
+    assert not tab.rueckgaengig_btn.isEnabled() and "Rückgängig" in tab.status_label.text()
+
+    # Ist die Nummer inzwischen vergeben, kommt der Teilnehmer ohne Nummer zurück.
+    tab.tabelle.selectRow(next(r for r, t in enumerate(tab._teilnehmer_je_zeile) if t["id"] == erste))
+    tab._teilnehmer_loeschen()
+    conn.execute("UPDATE teilnehmer SET startnummer = 1 WHERE nachname = 'Brandt'")
+    conn.commit()
+    tab.aktualisieren()
+    tab._rueckgaengig_ausfuehren()
+    assert _db_modul.get_teilnehmer(conn, erste)["startnummer"] is None
+
+    # Startnummern zurücksetzen und wiederherstellen (nur, was noch frei ist).
+    conn.execute("UPDATE teilnehmer SET startnummer = 5 WHERE id = ?", (erste,))
+    conn.commit()
+    tab.aktualisieren()
+    tab._alle_startnummern_zuruecksetzen()
+    assert all(t["startnummer"] is None for t in _db_modul.list_teilnehmer(conn))
+    tab._rueckgaengig_ausfuehren()
+    assert {t["startnummer"] for t in _db_modul.list_teilnehmer(conn)} == {1, 5}
+
+
+def test_hauptfenster_kuerzel_und_startdialog_suche_sortierung(qtbot, termin, monkeypatch):
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.show()
+    fenster._reiter_per_kuerzel(1)
+    assert fenster._tabs.currentIndex() == 1
+    fenster._tabs.setCurrentWidget(fenster.teilnehmer_tab)
+    fenster._suche_fokussieren()
+    # focusWidget statt hasFocus: das Fenster ist im Testlauf nicht unbedingt das aktive Fenster
+    assert fenster.focusWidget() is fenster.teilnehmer_tab.filter_name
+    geoeffnet = []
+    monkeypatch.setattr(fenster.teilnehmer_tab, "_teilnehmer_hinzufuegen", lambda: geoeffnet.append(1))
+    fenster.teilnehmer_tab.hinzufuegen_btn.clicked.disconnect()
+    fenster.teilnehmer_tab.hinzufuegen_btn.clicked.connect(lambda: geoeffnet.append(1))
+    fenster._tabs.setCurrentIndex(3)
+    fenster._neuer_teilnehmer_per_kuerzel()
+    assert geoeffnet == [1] and fenster._tabs.currentWidget() is fenster.teilnehmer_tab
+
+
+def test_ohne_nachfrage_speichert_direkt_und_ueberschreibt_nie(qtbot, conn, tmp_path, monkeypatch):
+    from desktop_gemeinsam import _Ablageort, _ohne_nachfrage_speichern, _speicherort_waehlen
+
+    ablageort = _Ablageort(str(tmp_path / "Ausdrucke"))
+    fragen = []
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", lambda *a, **k: fragen.append(1) or ("", ""))
+    _ohne_nachfrage_speichern(False)
+    assert _speicherort_waehlen(None, ablageort, "Titel", "Liste.pdf") is None and fragen  # fragt nach
+    fragen.clear()
+    _ohne_nachfrage_speichern(True)
+    try:
+        erster = _speicherort_waehlen(None, ablageort, "Titel", "Liste.pdf")
+        assert erster == str(tmp_path / "Ausdrucke" / "Liste.pdf") and not fragen
+        (tmp_path / "Ausdrucke" / "Liste.pdf").write_bytes(b"x")
+        assert _speicherort_waehlen(None, ablageort, "Titel", "Liste.pdf").endswith("Liste (2).pdf")
+    finally:
+        _ohne_nachfrage_speichern(False)
+
+
+def test_auswertung_und_startdialog_sortierung_per_spaltenklick(qtbot, conn):
+    for nr, (name, punkte) in enumerate([("Albers", 40), ("Brandt", 55), ("Claasen", 48)], start=1):
+        tid = _teilnehmer_anlegen(conn, nachname=name, startnummer=nr)
+        _db_modul.eintragen_ergebnis(conn, tid, "Flächensuche", punkte, 30)
+    tab = AuswertungTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    namen = lambda: [tab.tabelle.item(r, 2).text() for r in range(tab.tabelle.rowCount())]  # noqa: E731
+    standard = namen()
+    tab._spalte_geklickt(4)  # Gesamtpunkte aufsteigend
+    assert [n.split(",")[0] for n in namen()] == ["Albers", "Claasen", "Brandt"]
+    tab._spalte_geklickt(4)  # absteigend
+    assert [n.split(",")[0] for n in namen()] == ["Brandt", "Claasen", "Albers"]
+    assert sorted(namen()) == sorted(standard)
+    # ID bleibt an der Zeile (Bewertungsbogen der angeklickten Zeile)
+    tab.tabelle.setCurrentCell(0, 0)
+    ids = {tab._teilnehmer_id_der_aktuellen_zeile()}
+    assert None not in ids
+
+
+def test_startdialog_suche_und_sortierung(qtbot, monkeypatch):
+    """Marco 10.11.2026: Terminliste durchsuchen und per Spaltenklick sortieren; die Auswahl
+    gehört danach zum richtigen Termin."""
+    from db import TerminInfo
+
+    def termin(verein, ort, datum, anzahl):
+        return TerminInfo(pfad=f"/x/{verein}.sqlite", dateiname=f"{verein}.sqlite", verein=verein, vereins_nr=None,
+                          ort=ort, datum=datum, anzahl_teilnehmer=anzahl, lesbar=True)
+
+    termine = [termin("SV Zeta", "Aachen", "2026-11-14", 5), termin("SV Alpha", "Zeven", "2026-10-03", 30),
+               termin("SV Mitte", "Bonn", "2025-05-01", 12)]
+    monkeypatch.setattr("app.liste_termine", lambda: list(termine))
+    dialog = StartDialog()
+    qtbot.addWidget(dialog)
+    spalte = lambda n: [dialog.tabelle.item(r, n).text() for r in range(dialog.tabelle.rowCount())]  # noqa: E731
+    assert spalte(1) == ["SV Zeta", "SV Alpha", "SV Mitte"]  # Standard: wie geliefert (neueste oben)
+    dialog._spalte_geklickt(1)
+    assert spalte(1) == ["SV Alpha", "SV Mitte", "SV Zeta"]
+    dialog._spalte_geklickt(1)
+    assert spalte(1) == ["SV Zeta", "SV Mitte", "SV Alpha"]
+    dialog._spalte_geklickt(3)  # Teilnehmerzahl numerisch
+    assert spalte(3) == ["5", "12", "30"]
+    dialog.tabelle.selectRow(2)
+    assert dialog._ausgewaehlter_termin().verein == "SV Alpha"
+    dialog.suche_feld.setText("bonn")
+    assert spalte(1) == ["SV Mitte"]
+    dialog.suche_feld.setText("")
+    assert len(spalte(1)) == 3
+
+
+def test_zeitplan_bloecke_lassen_sich_ziehen(qtbot, conn):
+    """Marco 10.11.2026: Ziehen mit der Maus ordnet Blöcke um (wie „Hoch“/„Runter“)."""
+    from db import add_zeitplan_pruefungsblock, add_zeitplan_richter, list_zeitplan_eintraege
+
+    _teilnehmer_anlegen(conn, nachname="A", disziplin="Trümmerfeld", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="B", disziplin="Flächensuche", startnummer=2)
+    _teilnehmer_anlegen(conn, nachname="C", disziplin="Behältnisstrecke", startnummer=3)
+    richter = add_zeitplan_richter(conn, "Erika")
+    ids = [add_zeitplan_pruefungsblock(conn, richter, "ED", 1, d, 10)
+           for d in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke")]
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab._eintrag_ziehen(richter, ids[0], ids[2])  # erster Block an die Stelle des letzten
+    assert [e["id"] for e in list_zeitplan_eintraege(conn, richter)] == [ids[1], ids[2], ids[0]]
+    tab._eintrag_ziehen(richter, ids[0], ids[1])  # zurück nach vorn
+    assert [e["id"] for e in list_zeitplan_eintraege(conn, richter)] == [ids[0], ids[1], ids[2]]
+    tab._eintrag_ziehen(richter, ids[1], ids[1])  # auf sich selbst: nichts
+    assert [e["id"] for e in list_zeitplan_eintraege(conn, richter)] == ids
+
+
+def test_rechtsklickmenue_auch_auf_leerer_flaeche(qtbot, conn):
+    """Marco 10.11.2026: Das Menü erscheint auch unter den Zeilen; dort sind nur die nicht an eine
+    Zeile gebundenen Einträge bedienbar."""
+    from desktop_gemeinsam import _kontextmenue_bauen
+
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    tab = ErgebnisTab(conn)
+    qtbot.addWidget(tab)
+    tab.show()
+    tab.tabelle.setCurrentCell(0, 0)  # eine Zeile ist markiert, aber nicht angeklickt
+    eintraege = [tab.bewertungsbogen_btn, None, tab.speichern_btn, tab.aktualisieren_btn]
+    allgemein = (tab.speichern_btn, tab.aktualisieren_btn)
+
+    def zustand(auf_zeile):
+        menue = _kontextmenue_bauen(tab.tabelle, eintraege, allgemein, auf_zeile)
+        return {a.text(): a.isEnabled() for a in menue.actions() if a.text()}
+
+    assert zustand(True)["Bewertungsbogen (PDF)…"] is True
+    leer = zustand(False)
+    assert leer["Bewertungsbogen (PDF)…"] is False
+    assert leer["Alle Ergebnisse speichern"] is True and leer["Liste aktualisieren"] is True
+    # Das Menü selbst wird auf einer leeren Fläche geöffnet (kein stilles Verschlucken des Rechtsklicks)
+    assert tab.tabelle.contextMenuPolicy() == Qt.CustomContextMenu
+
+
+def test_druckknoepfe_in_uebersicht_und_verwaltung(qtbot, conn, tmp_path, monkeypatch):
+    """Marco 10.11.2026: Richter-Bedarf (Übersicht) und Checkliste (Verwaltung) lassen sich direkt
+    im eigenen Reiter als PDF speichern; „Ablageort öffnen“ ist dort ebenfalls da."""
+    from pypdf import PdfReader
+
+    from desktop_gemeinsam import _Ablageort
+
+    set_veranstaltung(conn, verein="SGV", datum="2026-11-14")
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    ablageort = _Ablageort(str(tmp_path))
+    geoeffnet = []
+    monkeypatch.setattr("desktop_gemeinsam._url_oeffnen", lambda _p, url, _a: geoeffnet.append(url.toLocalFile()) or True)
+    ziele = []
+
+    def waehle(*_a, **_k):
+        ziel = tmp_path / f"datei{len(ziele)}.pdf"
+        ziele.append(ziel)
+        return str(ziel), "PDF-Datei (*.pdf)"
+
+    monkeypatch.setattr("desktop_gemeinsam.QFileDialog.getSaveFileName", waehle)
+    uebersicht = TeilnehmerUebersichtTab(conn, ablageort=ablageort)
+    verwaltung = VerwaltungTab(conn, ablageort=ablageort)
+    for tab in (uebersicht, verwaltung):
+        qtbot.addWidget(tab)
+        tab.show()
+        assert tab.ablageort_btn.isVisible()
+        tab.ablageort_btn.click()
+    assert len(geoeffnet) == 2
+    uebersicht.richterbedarf_btn.click()
+    assert "Richter" in PdfReader(str(ziele[-1])).pages[0].extract_text()
+    verwaltung.checkliste_pdf_btn.click()
+    assert "Checkliste zum Prüfungstermin" in PdfReader(str(ziele[-1])).pages[0].extract_text()
+
+
+def test_laufwerksart_erkennt_usb_stick_und_netzlaufwerk(monkeypatch):
+    """Marco 10.11.2026: Hinweis, wenn der Termin auf einem USB-Stick oder Netzlaufwerk liegt."""
+    import types
+
+    import desktop_gemeinsam
+
+    assert desktop_gemeinsam.laufwerksart("") is None
+    arten = {"C:\\": 3, "E:\\": 2, "Z:\\": 4}
+    attrappe = types.SimpleNamespace(
+        kernel32=types.SimpleNamespace(GetDriveTypeW=lambda wurzel: arten.get(wurzel, 0)))
+    monkeypatch.setattr(desktop_gemeinsam.os, "name", "nt")
+    monkeypatch.setattr(desktop_gemeinsam.os.path, "abspath", lambda p: p)
+    monkeypatch.setattr(desktop_gemeinsam.os.path, "splitdrive", lambda p: (p[:2], p[2:]))
+    monkeypatch.setattr("ctypes.windll", attrappe, raising=False)
+    assert desktop_gemeinsam.laufwerksart(r"C:\Termine\a.sqlite") is None
+    assert "USB-Stick" in desktop_gemeinsam.laufwerksart(r"E:\Termine\a.sqlite")
+    assert desktop_gemeinsam.laufwerksart(r"Z:\a.sqlite") == "Netzlaufwerk"
+    assert desktop_gemeinsam.laufwerksart(r"\\server\freigabe\a.sqlite") == "Netzlaufwerk"
+    # Langpfade: feste Platte bleibt ohne Hinweis, Stick und UNC werden erkannt
+    assert desktop_gemeinsam.laufwerksart(r"\\?\C:\Termine\a.sqlite") is None
+    assert "USB-Stick" in desktop_gemeinsam.laufwerksart(r"\\?\E:\Termine\a.sqlite")
+    assert desktop_gemeinsam.laufwerksart(r"\\?\UNC\server\freigabe\a.sqlite") == "Netzlaufwerk"
+
+
+def test_hauptfenster_auto_sicherung_nur_im_echten_lauf(qtbot, termin, tmp_path, monkeypatch):
+    conn, pfad = termin
+    aufrufe = []
+    monkeypatch.setattr("app.auto_sicherung_erstellen", lambda c, p: aufrufe.append(p))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    assert aufrufe == []  # Tests und Demo schreiben nichts
+    fenster.auto_sicherung_aktiv = True
+    fenster.auto_sicherung_anlegen()
+    assert aufrufe == [pfad]
+    fenster._demo_termin = True
+    fenster.auto_sicherung_anlegen()
+    assert aufrufe == [pfad]  # Demo-Termin wird nicht gesichert
+
+
+def test_hauptfenster_sicherung_beim_beenden_ohne_abstand_und_hinweis(qtbot, termin, monkeypatch):
+    import app
+
+    conn, pfad = termin
+    aufrufe = []
+    monkeypatch.setattr(
+        "app.auto_sicherung_erstellen", lambda c, p, **kw: aufrufe.append(kw))
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    fenster.auto_sicherung_aktiv = True
+    app._auto_sicherung_beim_beenden(fenster)
+    assert aufrufe == [{"mindestabstand_sekunden": 0}]  # beim Beenden immer sichern
+
+    meldungen = []
+    monkeypatch.setattr(app.QMessageBox, "information", lambda *a, **k: meldungen.append(a[1]))
+    monkeypatch.setattr(app, "laufwerksart", lambda p: "USB-Stick (Wechseldatenträger)")
+    fenster.laufwerk_hinweis_zeigen()
+    assert len(meldungen) == 1 and "USB-Stick" in meldungen[0]
+    fenster._demo_termin = True
+    fenster.laufwerk_hinweis_zeigen()
+    assert len(meldungen) == 1  # in der Demo kein Hinweis

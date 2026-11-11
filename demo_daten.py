@@ -78,14 +78,18 @@ TEILNEHMER: list[dict] = [
     },
     {
         "daten": dict(nachname="Gerdes", vorname="Greta", rufname_hund="Gino", art="DK", stufe=1,
-                      verein="SV Musterstadt", chip_nr="999000000000107", gegenstand_1="Brille"),
+                      verein="SV Musterstadt", chip_nr="999000000000107", gegenstand_1="Brille",
+                      gegenstand_1_disziplin="Trümmerfeld", gegenstand_2="Brille", gegenstand_2_disziplin="Flächensuche",
+                      gegenstand_3="Brille", gegenstand_3_disziplin="Behältnisstrecke"),
         # 86 + 92 + 92 = 270 - SG
         "ergebnis": {"Trümmerfeld": (52, 34), "Flächensuche": (55, 37), "Behältnisstrecke": (56, 36)},
     },
     {
         # Ohne Chip-Nr. - zeigt die Warnung "⚠ Chip-Nr. fehlt" in der Teilnehmerliste.
         "daten": dict(nachname="Hansen", vorname="Hugo", rufname_hund="Hexe", art="DK", stufe=1,
-                      verein="Hundesport Beispielhausen", gegenstand_1="Kugelschreiber"),
+                      verein="Hundesport Beispielhausen", gegenstand_1="Kugelschreiber",
+                      gegenstand_1_disziplin="Trümmerfeld", gegenstand_2="Kugelschreiber", gegenstand_2_disziplin="Flächensuche",
+                      gegenstand_3="Kugelschreiber", gegenstand_3_disziplin="Behältnisstrecke"),
         # 80 + 78 + 82 = 240 - G
         "ergebnis": {"Trümmerfeld": (48, 32), "Flächensuche": (47, 31), "Behältnisstrecke": (50, 32)},
     },

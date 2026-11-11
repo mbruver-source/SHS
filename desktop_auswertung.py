@@ -13,8 +13,9 @@ from __future__ import annotations
 import os
 import sqlite3
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QGridLayout,
@@ -33,7 +34,6 @@ from PySide6.QtWidgets import (
 import pdf_export
 from db import (
     alle_leistungsklassen,
-    angebotene_pruefungen,
     BEHAELTNIS_BEDARF_HINWEIS,
     BEHAELTNIS_BEDARF_SPALTEN,
     BEHAELTNIS_BEDARF_TITEL,
@@ -41,7 +41,6 @@ from db import (
     berechne_auswertung,
     berechne_behaeltnis_bedarf,
     berechne_teilnehmer_lk_uebersicht,
-    get_veranstaltung,
     leistungsklasse_label,
     pruefung_sortierschluessel,
     sortiere_pruefungen,
@@ -52,19 +51,24 @@ from db import (
 )
 from db_import import exportiere_teilnehmer_csv
 from desktop_darstellung import _farbe
-from desktop_dialoge import BewertungsbogenAuswahlDialog
+from desktop_dialoge import BehaeltnisEtikettenDialog, BewertungsbogenAuswahlDialog
 from desktop_gemeinsam import (
     _Ablageort,
     _ausfuehren,
     _datei_exportieren,
+    _NumerischSortierbaresItem,
+    _PruefungSortierbaresItem,
+    _ohne_nachfrage_lesen,
+    _ohne_nachfrage_speichern,
+    _ablageort_ordner_oeffnen,
+    _anmeldeformular_pdf_speichern,
+    _bewertungsbogen_fuer_teilnehmer,
+    _kontextmenue_aus_knoepfen,
+    _name_passt,
     _db_fehler_anzeigen,
     _export_dateiname,
     _ja_nein,
-    fehlende_formularangaben,
-    fehlende_formularangaben_satz,
     _pdf_exportieren,
-    _pfad_anzeige,
-    _url_oeffnen,
     _zeitplan_pdf_exportieren,
 )
 from shs_core import (
@@ -136,6 +140,12 @@ class AuswertungTab(QWidget):
         # Zeilennummern links ausblenden - wie bereits bei TeilnehmerTab/ErgebnisTab, hier
         # bisher übersehen (Nutzerhinweis 20.09.).
         self.tabelle.verticalHeader().setVisible(False)
+        # Marco 10.11.2026 (UI-Abgleich): Klick auf die Spaltenüberschrift sortiert wie in
+        # Teilnehmer und Ergebniserfassung; ohne Klick bleibt die Reihenfolge nach Klasse und Platz.
+        self._sortspalte: int | None = None
+        self._sortaufsteigend = True
+        self.tabelle.horizontalHeader().setSectionsClickable(True)
+        self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
 
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
@@ -147,6 +157,14 @@ class AuswertungTab(QWidget):
         self.filter_startnummer.setPlaceholderText("z.B. 13")
         self.filter_startnummer.setMaximumWidth(80)
         self.filter_startnummer.textChanged.connect(self._rendern)
+
+        # Marco 10.11.2026 (UI-Abgleich): Suche nach Name oder Hund wie in den Reitern
+        # Teilnehmer und Ergebniserfassung.
+        self.filter_name = QLineEdit()
+        self.filter_name.setPlaceholderText("Name oder Hund")
+        self.filter_name.setMaximumWidth(160)
+        self.filter_name.setClearButtonEnabled(True)
+        self.filter_name.textChanged.connect(self._rendern)
 
         self.ausstehend_label = QLabel()
         # UX-Test 02.10.2026, U12: die Namensliste kann sehr lang werden - ohne Umbruch zog
@@ -162,10 +180,26 @@ class AuswertungTab(QWidget):
         # Start-Nr.-Filter (Marcos Entscheidung).
         self.drucken_btn = QPushButton("Rangliste drucken (PDF)…")
         self.drucken_btn.clicked.connect(self._rangliste_drucken)
+        self.drucken_btn.setToolTip(
+            "Dieselbe Ergebnisliste wie unter „Ausdrucke/Export“ → „Ergebnisliste (PDF)…“, hier nur "
+            "für die oben gewählte Art/Leistungsklasse (bei „Alle“ komplett).")
         # S1 (Marco 03.10.2026): Sieger eines Stechens bei Gleichstand um Platz 1 festlegen.
         self.stechen_btn = QPushButton("Stechen-Sieger festlegen…")
         self.stechen_btn.setToolTip("Bei Punktgleichheit auf Platz 1 entscheidet ein Stechen – hier den Sieger eintragen.")
         self.stechen_btn.clicked.connect(self._stechen_sieger_festlegen)
+
+        # Marco 10.11.2026 (UI-Abgleich): Bewertungsbogen der markierten Zeile und der
+        # Ablageort wie in den Reitern Teilnehmer und Ausdrucke/Export.
+        self.bewertungsbogen_btn = QPushButton("Bewertungsbogen (PDF)…")
+        self.bewertungsbogen_btn.setToolTip("Bewertungsbogen für den Teilnehmer der markierten Zeile")
+        self.bewertungsbogen_btn.setEnabled(False)
+        self.bewertungsbogen_btn.clicked.connect(self._bewertungsbogen_exportieren)
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
+        self.tabelle.currentCellChanged.connect(lambda *_: self._bewertungsbogen_knopf_aktualisieren())
+        _kontextmenue_aus_knoepfen(
+            self.tabelle, [self.bewertungsbogen_btn, None, self.stechen_btn, aktualisieren_btn],
+            allgemein=(self.stechen_btn, aktualisieren_btn))
 
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
@@ -177,6 +211,9 @@ class AuswertungTab(QWidget):
         filter_zeile.addSpacing(16)
         filter_zeile.addWidget(QLabel("Filter Start-Nr.:"))
         filter_zeile.addWidget(self.filter_startnummer)
+        filter_zeile.addSpacing(16)
+        filter_zeile.addWidget(QLabel("Suche:"))
+        filter_zeile.addWidget(self.filter_name)
         filter_zeile.addStretch()
 
         layout = QVBoxLayout(self)
@@ -187,11 +224,35 @@ class AuswertungTab(QWidget):
         button_zeile.addWidget(aktualisieren_btn)
         button_zeile.addWidget(self.drucken_btn)
         button_zeile.addWidget(self.stechen_btn)
+        button_zeile.addWidget(self.bewertungsbogen_btn)
+        button_zeile.addWidget(self.ablageort_btn)
         button_zeile.addStretch()
         layout.addLayout(button_zeile)
         layout.addWidget(self.status_label)
 
         self.aktualisieren()
+
+    def _spalte_geklickt(self, spalte: int) -> None:
+        self._sortaufsteigend = not self._sortaufsteigend if self._sortspalte == spalte else True
+        self._sortspalte = spalte
+        self._sortierung_anwenden()
+
+    def _sortierung_anwenden(self) -> None:
+        self.tabelle.sortItems(
+            self._sortspalte, Qt.AscendingOrder if self._sortaufsteigend else Qt.DescendingOrder)
+
+    def _teilnehmer_id_der_aktuellen_zeile(self) -> int | None:
+        row = self.tabelle.currentRow()
+        item = self.tabelle.item(row, 0) if row >= 0 else None
+        return item.data(Qt.UserRole) if item is not None else None
+
+    def _bewertungsbogen_knopf_aktualisieren(self) -> None:
+        self.bewertungsbogen_btn.setEnabled(self._teilnehmer_id_der_aktuellen_zeile() is not None)
+
+    def _bewertungsbogen_exportieren(self) -> None:
+        teilnehmer_id = self._teilnehmer_id_der_aktuellen_zeile()
+        if teilnehmer_id is not None:
+            _bewertungsbogen_fuer_teilnehmer(self, self.conn, self._ablageort, self.status_label, teilnehmer_id)
 
     def _stechen_bezeichnung(self, t) -> str:
         """Name mit Hund und Start-Nr. (Teil 4 Nr. 2), z. B. „Max Muster mit Ali (Nr. 1)“."""
@@ -285,22 +346,25 @@ class AuswertungTab(QWidget):
         """Zeigt die zwischengespeicherte Auswertung gefiltert nach der aktuellen Filterauswahl an."""
         filter_wert = self.filter_combo.currentText()
         filter_startnr = self.filter_startnummer.text().strip()
+        filter_name = self.filter_name.text()
 
-        def passt(label: str, startnummer: int | None) -> bool:
+        def passt(label: str, startnummer: int | None, *namen) -> bool:
             if filter_wert not in ("Alle", "") and label != filter_wert:
                 return False
             if filter_startnr and str(startnummer or "") != filter_startnr:
                 return False
-            return True
+            return _name_passt(filter_name, *namen)
 
         fertig_gefiltert = sorted(
-            (t for t in self._fertig if passt(t.leistungsklasse, self._startnummer_je_id.get(t.id))),
+            (t for t in self._fertig if passt(t.leistungsklasse, self._startnummer_je_id.get(t.id),
+                                              t.name, self._rufname_hund_je_id.get(t.id, ""))),
             # nicht bestandene Teilnehmer (platzierung=None) einsortieren wir ans Ende
             # ihrer Leistungsklasse, statt sie mit Platz 1 zu verwechseln.
             key=lambda t: (pruefung_sortierschluessel(t.leistungsklasse), t.platzierung is None, t.platzierung or 0),
         )
         ausstehend_gefiltert = [
-            t for t in self._ausstehend if passt(leistungsklasse_label(t), t["startnummer"])
+            t for t in self._ausstehend
+            if passt(leistungsklasse_label(t), t["startnummer"], t["nachname"], t["vorname"], t["rufname_hund"])
         ]
 
         # UX-Test 02.10.2026, K9 (Marco 03.10.: Hinweiszeile + Tooltip): "von x" zählt nur
@@ -349,14 +413,26 @@ class AuswertungTab(QWidget):
                 f"„von {t.von_startern}“ zählt nur Starter mit vollständigem Ergebnis in {t.leistungsklasse}"
                 + (f" – {offen} noch offen." if offen else ".")
             )
+            sortwerte = {0: self._startnummer_je_id.get(t.id) or 0, 4: t.gesamtpunkte if punkte_text != "–" else -1,
+                         6: t.platzierung if t.platzierung is not None else 10_000}
             for col, wert in enumerate(werte):
-                item = QTableWidgetItem(wert)
+                if col in sortwerte:
+                    item = _NumerischSortierbaresItem(wert, sortwerte[col])
+                elif col == 1:
+                    item = _PruefungSortierbaresItem(wert)
+                else:
+                    item = QTableWidgetItem(wert)
+                if col == 0:
+                    item.setData(Qt.UserRole, int(t.id))  # für „Bewertungsbogen (PDF)…“ der Zeile
                 if not t.bestanden:
                     item.setForeground(_farbe("fehler"))
                 if col == len(werte) - 1:
                     item.setToolTip(platz_tooltip)
                 self.tabelle.setItem(row, col, item)
         self.tabelle.resizeColumnsToContents()
+        if self._sortspalte is not None:
+            self._sortierung_anwenden()
+        self._bewertungsbogen_knopf_aktualisieren()
 
         von_je_lk = {t.leistungsklasse: t.von_startern for t in fertig_gefiltert}
         von_hinweise = [
@@ -414,9 +490,10 @@ class TeilnehmerUebersichtTab(QWidget):
         ("dk", 3, "DK LK 3"),
     ]
 
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, parent=None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
 
         self.tabelle = QTableWidget(6, 6)
         self.tabelle.setHorizontalHeaderLabels(
@@ -452,7 +529,31 @@ class TeilnehmerUebersichtTab(QWidget):
         layout.addWidget(self.behaeltnis_tabelle)
         layout.addWidget(behaeltnis_hinweis)
 
+        # Marco 10.11.2026 (UI-Abgleich): den Richter-Bedarf gab es als PDF nur im Reiter
+        # „Ausdrucke/Export“ - hier direkt unter der Übersicht.
+        self.richterbedarf_btn = QPushButton("Richter-Bedarf (PDF)…")
+        self.richterbedarf_btn.setToolTip("Dieselbe Übersicht als PDF (auch unter „Ausdrucke/Export“)")
+        self.richterbedarf_btn.clicked.connect(self._richterbedarf_exportieren)
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
+        self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # enthält Pfade
+        self.status_label.setWordWrap(True)
+        knopf_zeile = QHBoxLayout()
+        knopf_zeile.addWidget(self.richterbedarf_btn)
+        knopf_zeile.addWidget(self.ablageort_btn)
+        knopf_zeile.addStretch()
+        layout.addLayout(knopf_zeile)
+        layout.addWidget(self.status_label)
+
         self.aktualisieren()
+
+    def _richterbedarf_exportieren(self) -> None:
+        _pdf_exportieren(
+            self, self._ablageort, self.status_label, "Richter-Bedarf speichern",
+            _export_dateiname(self.conn, "Richter_Bedarf"),
+            lambda pfad: pdf_export.erstelle_leistungsrichter_bedarf_pdf(self.conn, pfad),
+            "Richter-Bedarf gespeichert")
 
     def aktualisieren(self) -> None:
         """Berechnet die Übersicht aus der Datenbank neu und aktualisiert Tabelle und
@@ -534,6 +635,10 @@ class ExportTab(QWidget):
         etiketten_btn = QPushButton("Etiketten (PDF)…")
         etiketten_btn.clicked.connect(self._etiketten_exportieren)
 
+        # Wunsch 10.11.2026: Etiketten zum Beschriften der Behältnisse (Gegenstände einsammeln).
+        behaeltnis_etiketten_btn = QPushButton("Etiketten Behältnisse (PDF)…")
+        behaeltnis_etiketten_btn.clicked.connect(self._behaeltnis_etiketten_exportieren)
+
         statistik_btn = QPushButton("Statistik (PDF)…")
         statistik_btn.clicked.connect(self._statistik_exportieren)
 
@@ -549,6 +654,13 @@ class ExportTab(QWidget):
 
         leistungsrichter_btn = QPushButton("Richter-Bedarf (PDF)…")
         leistungsrichter_btn.clicked.connect(self._leistungsrichter_exportieren)
+
+        # Marco 10.11.2026 (UI-Abgleich): Abrechnung und Checkliste ließen sich nur in ihren
+        # eigenen Reitern ausgeben - hier mit den übrigen Ausdrucken.
+        abrechnung_btn = QPushButton("Abrechnung Leistungsrichter (PDF)…")
+        abrechnung_btn.clicked.connect(self._abrechnung_exportieren)
+        checkliste_btn = QPushButton("Checkliste (PDF)…")
+        checkliste_btn.clicked.connect(self._checkliste_exportieren)
 
         zeitplan_btn = QPushButton("Zeitplan (PDF)…")
         zeitplan_btn.clicked.connect(self._zeitplan_exportieren)
@@ -577,10 +689,15 @@ class ExportTab(QWidget):
              "Start-Nr., Name und Verein sind vorausgefüllt, Platz, Punkte und Wertnote bleiben "
              "leer – zum späteren Übertragen in die Ergebniserfassung."),
             (etiketten_btn,
-             "Ergebnisse zum Aufkleben, zwei Zeilen je Teilnehmer",
+             "Ergebnisse zum Aufkleben in der Leistungsurkunde, zwei Zeilen je Teilnehmer",
              "Für Klebe-/Etikettenpapier. Teilnehmer ohne vollständiges Ergebnis bekommen "
              "ebenfalls ein Etikett mit leeren Punktfeldern. Das Feld „SH-R“ bleibt zum "
              "Abstempeln bzw. Unterschreiben frei."),
+            (behaeltnis_etiketten_btn,
+             "Etiketten zum Beschriften der Behältnisse, ein Etikett je Hund",
+             "Startnummer, Name, Hund, Prüfung und der Gegenstand der Behältnisstrecke. Die Größe "
+             "der Klebefelder stellst du ein; wahlweise für einen Etikettenbogen (ohne Linien) "
+             "oder normales Papier (mit Schnittlinien zum Ausschneiden)."),
             (statistik_btn,
              "Prädikat-Übersicht je Art/Leistungsklasse, inkl. Jugendliche",
              "Jugendliche: vollständig bewertete Teilnehmer unter 18 Jahren am Prüfungstag, "
@@ -597,6 +714,14 @@ class ExportTab(QWidget):
             (leistungsrichter_btn,
              "Benötigte Richterzahl aus der Teilnehmerzahl",
              "1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je Richter."),
+            (abrechnung_btn,
+             "Kilometer, Fahrtkosten, Pauschale und Summe je Leistungsrichter",
+             "Dieselbe Übersicht wie im Reiter „Abrechnung Leistungsrichter“; dort trägst du die "
+             "Kilometer ein und erzeugst auch die Quittungen und die CSV-Datei."),
+            (checkliste_btn,
+             "Checkliste zum Prüfungstermin mit dem aktuellen Stand der Haken",
+             "Alle Kategorien und Punkte aus dem Reiter „Verwaltung“ (auch eigene), erledigte "
+             "mit „[x]“, offene mit „[ ]“ – zum Mitnehmen auf Papier."),
             (zeitplan_btn,
              "Ablauf aus dem Reiter „Zeitplan“, eine Seite je Richter",
              "Prüfungsblöcke mit Start- und Endzeit je Teilnehmer sowie die Pausen, farbig "
@@ -626,8 +751,17 @@ class ExportTab(QWidget):
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
+        # Marco 10.11.2026 (UI-Abgleich): jede Datei fragt sonst nach dem Speicherort.
+        self.ohne_nachfrage_check = QCheckBox("Dateien ohne Nachfrage im Ablageort speichern")
+        self.ohne_nachfrage_check.setToolTip(
+            "Gilt für alle Reiter mit PDF-Export. Der Dateiname kommt aus dem Vorschlag; eine "
+            "vorhandene Datei wird nie überschrieben, sondern bekommt „ (2)“ im Namen.")
+        self.ohne_nachfrage_check.setChecked(_ohne_nachfrage_lesen())
+        self.ohne_nachfrage_check.toggled.connect(_ohne_nachfrage_speichern)
+
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(ablageort_btn)
+        button_zeile.addWidget(self.ohne_nachfrage_check)
         button_zeile.addStretch()
 
         layout = QVBoxLayout(self)
@@ -645,19 +779,7 @@ class ExportTab(QWidget):
         return _export_dateiname(self.conn, praefix)
 
     def _ablageort_oeffnen(self) -> None:
-        if os.path.basename(os.path.dirname(self._ablageort.pfad)) == "Ausdrucke":
-            try:
-                os.makedirs(self._ablageort.pfad, exist_ok=True)
-            except OSError:
-                pass  # Meldung "existiert nicht" folgt direkt darunter
-        if not os.path.isdir(self._ablageort.pfad):
-            QMessageBox.warning(
-                self,
-                "Ordner nicht gefunden",
-                f"Der Ablageort „{_pfad_anzeige(self._ablageort.pfad)}“ existiert nicht (mehr).",
-            )
-            return
-        _url_oeffnen(self, QUrl.fromLocalFile(self._ablageort.pfad), _pfad_anzeige(self._ablageort.pfad))
+        _ablageort_ordner_oeffnen(self, self._ablageort)
 
     def _pdf_export_ausfuehren(self, titel: str, dateiname_praefix: str, export_fn, status_text) -> None:
         """PDF-Export dieses Tabs mit dem Dateinamen-Präfix des Termins - der Ablauf selbst
@@ -678,33 +800,20 @@ class ExportTab(QWidget):
         )
 
     def _anmeldeformular_exportieren(self) -> None:
-        # Ohne angebotene Prüfungen gäbe es nichts anzukreuzen (erstelle_anmeldeformular_pdf
-        # wirft dann ValueError) - Hinweis deshalb schon VOR dem Speichern-Dialog statt
-        # danach als irreführende "Export fehlgeschlagen (Zielpfad ...)"-Meldung.
-        veranstaltung = get_veranstaltung(self.conn)
-        if not angebotene_pruefungen(veranstaltung):
-            QMessageBox.information(
-                self, "Keine Prüfungen ausgewählt",
-                "Bitte zuerst in den Veranstaltungsdaten (Reiter „Verwaltung“, Button "
-                "„Veranstaltungsdaten bearbeiten…“) die angebotenen Prüfungen auswählen.",
-            )
-            return
-        # UX-Test 2026-11, T7 (Marco 04.11.2026): Fehlen Verband oder Meldestelle, noch einmal
-        # warnen - beim Anlegen des Termins wird die Rückfrage leicht weggeklickt.
-        fehlend = fehlende_formularangaben(veranstaltung.get("verband"), veranstaltung.get("meldestelle"))
-        if fehlend and not _ja_nein(
-            self, "Angaben fehlen auf dem Formular",
-            fehlende_formularangaben_satz(fehlend) + "."
-            + (" Die Teilnehmer wissen so nicht, wohin sie die Meldung schicken sollen."
-               if "Meldestelle" in fehlend else "")
-            + "\n\nNachtragen kannst du das im Reiter „Verwaltung“ über „Veranstaltungsdaten "
-            "bearbeiten…“.\n\nTrotzdem jetzt erstellen?",
-        ):
-            return
+        _anmeldeformular_pdf_speichern(self, self.conn, self._ablageort, self.status_label)
+
+    def _abrechnung_exportieren(self) -> None:
         self._pdf_export_ausfuehren(
-            "Anmeldeformular speichern", "Anmeldeformular",
-            lambda pfad: pdf_export.erstelle_anmeldeformular_pdf(self.conn, pfad),
-            "Anmeldeformular gespeichert",
+            "Abrechnung speichern", "Abrechnung_Leistungsrichter",
+            lambda pfad: pdf_export.erstelle_abrechnung_pdf(self.conn, pfad),
+            "Abrechnung gespeichert",
+        )
+
+    def _checkliste_exportieren(self) -> None:
+        self._pdf_export_ausfuehren(
+            "Checkliste speichern", "Checkliste",
+            lambda pfad: pdf_export.erstelle_checkliste_pdf(self.conn, pfad),
+            "Checkliste gespeichert",
         )
 
     def _ergebnisliste_exportieren(self) -> None:
@@ -721,6 +830,19 @@ class ExportTab(QWidget):
             "Etiketten speichern", "Etiketten",
             lambda pfad: pdf_export.erstelle_ergebnisliste_etiketten_pdf(self.conn, pfad),
             "Etiketten gespeichert",
+        )
+
+    def _behaeltnis_etiketten_exportieren(self) -> None:
+        dialog = BehaeltnisEtikettenDialog(self)
+        if _ausfuehren(dialog) != QDialog.Accepted:
+            return
+        self._pdf_export_ausfuehren(
+            "Etiketten Behältnisse speichern", "Etiketten_Behaeltnisse",
+            lambda pfad: pdf_export.erstelle_behaeltnis_etiketten_pdf(
+                self.conn, pfad, breite_mm=dialog.breite.value(), hoehe_mm=dialog.hoehe.value(),
+                rand_links_mm=dialog.rand_links.value(), rand_oben_mm=dialog.rand_oben.value(),
+                schnittlinien=dialog.papier.isChecked()),
+            lambda anzahl: f"{anzahl} Etiketten für Behältnisse gespeichert",
         )
 
     def _leere_ergebnisliste_exportieren(self) -> None:
@@ -769,9 +891,11 @@ class ExportTab(QWidget):
         if _ausfuehren(auswahl_dialog) != QDialog.Accepted:
             return
         erlaubte_labels = auswahl_dialog.ausgewaehlte_labels()
+        je_disziplin = auswahl_dialog.je_disziplin.isChecked()
 
         self._pdf_export_ausfuehren(
             "Bewertungsbögen speichern", "Bewertungsboegen",
-            lambda pfad: pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad, erlaubte_labels=erlaubte_labels),
+            lambda pfad: pdf_export.erstelle_alle_bewertungsboegen_pdf(
+                self.conn, pfad, erlaubte_labels=erlaubte_labels, je_disziplin=je_disziplin),
             lambda anzahl: f"{anzahl} Bewertungsbögen gespeichert",
         )

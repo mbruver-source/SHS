@@ -17,6 +17,7 @@ suchen.
 | A1 | Rückmeldungen zur Mac-/Linux-Vorschau von echten Geräten, dazu die Lizenzabfrage beim Öffnen der .dmg ansehen (seit 01.11.2026) | 07.10.2026 | F:5352, F:7617, F:8124 |
 | A2 | Update-Prüfung am echten Mac: klappt HTTPS (CA-Zertifikate im Bundle)? Der Selbsttest zeigt die Anzahl | 15.10.2026 | F:6380 |
 | A6 | PDF-Ausdrucke auf Papier ansehen, vor allem Etiketten auf Klebepapier (Bildschirmprüfung am 01.11.2026 erledigt) | 15.10.2026 | F:6403, F:8128 |
+| A7 | Hinweisfenster „Termin liegt auf USB-Stick/Netzlaufwerk“ und automatische Kopie am echten Stick/Netzlaufwerk ansehen | 10.11.2026 | F:Abschnitt „Automatische Kopie des Termins“ |
 
 ## PO. Neue Prüfungsordnung ab 01.01.2027
 
@@ -38,6 +39,8 @@ abgebildete“ Regeln (R10 Mindestalter, R14, R16, R18) einen Hinweis bekommen.
 | B11 | Altdaten-Tests erweitern (Web-Sync, CSV-Export, Anmeldeformular mit Altdaten) | 03.10.2026 | F:4383 |
 | B12 | `app.py` nicht weiter aufteilen: Teilnehmer-, Formular-Import-, Ergebnis-Reiter, Hauptfenster, StartDialog und `main` bleiben dort | 18.10.2026 | F:6474 |
 | B13 | Python-Version anheben (heute 3.11 in CI, Installer, Paketen, Container; Sicherheitsupdates bis Oktober 2027): etwa Mitte 2027 direkt auf 3.13/3.14, nicht über 3.12. Dabei sqlite3-Datumsumwandlungen prüfen (heute ungenutzt) | 19.10.2026 | F:7861 |
+| B14 | Marke `langsam` in `conftest.py` ist an keinem Test angebracht; bleibt unverändert liegen | 10.11.2026 | F:Abschnitt „Automatische Kopie des Termins“ |
+| B15 | Auto-Sicherung: Das Dateimuster `{name}_JJJJ-MM-TT_HHMMSS.sqlite` kann bei einem Terminnamen, der selbst so endet, Kopien eines anderen Termins mitzählen und löschen (sehr unwahrscheinlich) | 10.11.2026 | F:Abschnitt „Automatische Kopie des Termins“ |
 
 ## C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
 

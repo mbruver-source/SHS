@@ -852,7 +852,20 @@ def teilnehmerliste(conn):
         }
         for t in alle_teilnehmer
     ]
-    return render_template("teilnehmerliste.html", veranstaltung=veranstaltung, zeilen=zeilen)
+    # Marco 10.11.2026 (UI-Abgleich, wie im Desktop-Programm): Suche nach Name oder Hund. Ohne
+    # JavaScript (die Sicherheitsrichtlinie erlaubt keine Skripte), deshalb als GET-Formular:
+    # jedes Wort muss in Nachname, Vorname oder Hund vorkommen (Groß-/Kleinschreibung egal).
+    suche = (request.args.get("q") or "").strip()[:80]
+    woerter = suche.casefold().split()
+    if woerter:
+        zeilen = [
+            z for z in zeilen
+            if all(w in " ".join(
+                str(z["teilnehmer"][feld] or "") for feld in ("nachname", "vorname", "rufname_hund")
+            ).casefold() for w in woerter)
+        ]
+    return render_template("teilnehmerliste.html", veranstaltung=veranstaltung, zeilen=zeilen,
+                           suche=suche, gesamt=len(alle_teilnehmer))
 
 
 def _feld_zu_text(formular, name: str) -> str:

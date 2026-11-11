@@ -14,14 +14,13 @@ import os
 
 from decimal import Decimal
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -35,13 +34,12 @@ from db_import import exportiere_abrechnung_csv
 from desktop_gemeinsam import (
     _aktualisiere_veranstaltung_feld,
     _Ablageort,
+    _ablageort_ordner_oeffnen,
     _datei_exportieren,
     _db_fehler_anzeigen,
     _dateiname_teil,
     _export_dateiname,
     _pdf_exportieren,
-    _pfad_anzeige,
-    _url_oeffnen,
     kurzer_hinweis,
 )
 from lr_abrechnung import (
@@ -302,14 +300,4 @@ class AbrechnungTab(QWidget):
             f"Quittung für {name} gespeichert")
 
     def _ablageort_oeffnen(self) -> None:
-        if os.path.basename(os.path.dirname(self._ablageort.pfad)) == "Ausdrucke":
-            try:
-                os.makedirs(self._ablageort.pfad, exist_ok=True)
-            except OSError:
-                pass  # Meldung "existiert nicht" folgt direkt darunter
-        if not os.path.isdir(self._ablageort.pfad):
-            QMessageBox.warning(
-                self, "Ordner nicht gefunden",
-                f"Der Ablageort „{_pfad_anzeige(self._ablageort.pfad)}“ existiert nicht (mehr).")
-            return
-        _url_oeffnen(self, QUrl.fromLocalFile(self._ablageort.pfad), _pfad_anzeige(self._ablageort.pfad))
+        _ablageort_ordner_oeffnen(self, self._ablageort)

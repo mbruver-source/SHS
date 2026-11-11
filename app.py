@@ -45,6 +45,7 @@ from PySide6.QtCore import (
     QRect,
     QRectF,
     QRegularExpression,
+    QSettings,
     Qt,
     QTimer,
     Signal,
@@ -54,7 +55,7 @@ from PySide6.QtGui import (
     QActionGroup,
     QBrush,
     QCloseEvent,
-    QDesktopServices,
+    QDesktopServices,  # noqa: F401 - Tests ersetzen app.QDesktopServices.openUrl
     QIcon,
     QPainter,
     QPalette,
@@ -76,6 +77,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -134,7 +136,10 @@ from db import (
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
     startnummer_bereiche,
+    startnummern_wiederherstellen,
     startnummern_zuruecksetzen,
+    teilnehmer_sichern,
+    teilnehmer_wiederherstellen,
 )
 from db_import import (
     CSV_IMPORT_SPALTEN,
@@ -146,13 +151,16 @@ from db_import import (
     rat_bei_ablehnung,
     schreibe_csv_vorlage,
 )
-import pdf_export
+from db_sicherung import auto_sicherung_erstellen
+import pdf_export  # noqa: F401 - Tests ersetzen app.pdf_export.*
 from shs_core import (
     ABBRUCH_GRUENDE,
     ANZEIGE_MAX,
     SUCHE_MAX,
 )
 from desktop_darstellung import (
+    _SETTINGS_APP,
+    _SETTINGS_ORG,
     _darstellung_anwenden,
     _design_speichern,
     _DESIGNS,
@@ -175,8 +183,14 @@ from desktop_gemeinsam import (
     meldung_protokollieren,
     qt_meldungen_protokollieren,
     _Ablageort,
+    _ablageort_ordner_oeffnen,
+    _anmeldeformular_pdf_speichern,
+    _bewertungsbogen_fuer_teilnehmer,
+    _kontextmenue_aus_knoepfen,
+    _name_passt,
     absturzprotokoll_einrichten,
     fehlerfenster_einrichten,
+    laufwerksart,
     meldungsfenster_als_klartext,
     programmsymbol,
     _ausdrucke_ordner,
@@ -187,13 +201,11 @@ from desktop_gemeinsam import (
     _DQ_SPALTE,
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
     _ergebnis_spaltenbreiten_verteilen,
-    _dateiname_teil,
     _fehler_anzeigen,
     _import_ordner_merken,
     _import_startordner,
     _NumerischSortierbaresItem,
     _PruefungSortierbaresItem,
-    _pdf_exportieren,
     _ausfuehren,
     _wartecursor,
     _pfad_anzeige,
@@ -510,6 +522,13 @@ class TeilnehmerTab(QWidget):
         self.filter_startnummer.setMaximumWidth(80)
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
+        # Marco 10.11.2026 (UI-Abgleich): Suche nach Name oder Hund (Teilwort genügt).
+        self.filter_name = QLineEdit()
+        self.filter_name.setPlaceholderText("Name oder Hund")
+        self.filter_name.setMaximumWidth(160)
+        self.filter_name.setClearButtonEnabled(True)
+        self.filter_name.textChanged.connect(self._filter_anwenden)
+
         # Nutzerwunsch (20.09.): zusätzlicher Filter nach Bezahlt-Status, z.B. um am
         # Anmeldetisch schnell zu sehen, wer noch nicht bezahlt hat. Feste drei Einträge
         # (anders als filter_combo oben) - keine Neubefüllung bei jedem aktualisieren() nötig.
@@ -608,6 +627,28 @@ class TeilnehmerTab(QWidget):
         for knopf in (vergeben_btn, self.zuruecksetzen_btn, import_btn, liste_btn):
             button_zeile_2.addWidget(knopf)
         button_zeile_2.addStretch()
+        # Marco 10.11.2026 (UI-Abgleich): wie bei den übrigen Reitern mit PDF-Export; eigene
+        # Zeile, damit die beiden Knopfzeilen oben bei großer Schrift nicht breiter werden.
+        # Marco 10.11.2026 (UI-Abgleich): Löschen und Startnummern zurücksetzen ließen sich nicht
+        # zurücknehmen - eine Ebene „Rückgängig“ (Strg+Z in diesem Reiter).
+        self._rueckgaengig_aktion = None
+        self.rueckgaengig_btn = QPushButton("Rückgängig")
+        self.rueckgaengig_btn.setEnabled(False)
+        self.rueckgaengig_btn.setToolTip("Nichts zum Rückgängigmachen")
+        self.rueckgaengig_btn.clicked.connect(self._rueckgaengig_ausfuehren)
+        rueckgaengig_kuerzel = QShortcut(QKeySequence.Undo, self)
+        rueckgaengig_kuerzel.setContext(Qt.WidgetWithChildrenShortcut)
+        rueckgaengig_kuerzel.activated.connect(
+            lambda: self.rueckgaengig_btn.isEnabled() and self._rueckgaengig_ausfuehren())
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.setToolTip("Zeigt den Ordner, in dem der Bewertungsbogen gespeichert wird")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
+        # Rechtsklick auf eine Zeile (Marco 10.11.2026): dieselben Aktionen wie die Knöpfe.
+        _kontextmenue_aus_knoepfen(self.tabelle, [
+            hinzufuegen_btn, None, self.bearbeiten_btn, self.bewertungsbogen_btn, None,
+            self.bezahlt_btn, self.teilnahme_btn, self.tauschen_btn, None, self.loeschen_btn,
+            self.rueckgaengig_btn,
+        ], allgemein=(hinzufuegen_btn, self.rueckgaengig_btn))
 
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
@@ -618,6 +659,9 @@ class TeilnehmerTab(QWidget):
         filter_zeile.addSpacing(16)
         filter_zeile.addWidget(QLabel("Filter Bezahlt:"))
         filter_zeile.addWidget(self.filter_bezahlt)
+        filter_zeile.addSpacing(16)
+        filter_zeile.addWidget(QLabel("Suche:"))
+        filter_zeile.addWidget(self.filter_name)
         filter_zeile.addStretch()
 
         self.status_label = QLabel("")
@@ -635,7 +679,11 @@ class TeilnehmerTab(QWidget):
         self.startnummern_hinweis.setTextFormat(Qt.PlainText)
         self.startnummern_hinweis.setWordWrap(True)
         layout.addWidget(self.startnummern_hinweis)
-        layout.addWidget(self.status_label)
+        status_zeile = QHBoxLayout()
+        status_zeile.addWidget(self.status_label, 1)
+        status_zeile.addWidget(self.rueckgaengig_btn, 0, Qt.AlignTop)
+        status_zeile.addWidget(self.ablageort_btn, 0, Qt.AlignTop)
+        layout.addLayout(status_zeile)
 
         self.aktualisieren()
 
@@ -692,6 +740,7 @@ class TeilnehmerTab(QWidget):
         filter_wert = self.filter_combo.currentText()
         filter_startnr = self.filter_startnummer.text().strip()
         filter_bezahlt = self.filter_bezahlt.currentText()
+        filter_name = self.filter_name.text()
         for row in range(self.tabelle.rowCount()):
             item = self.tabelle.item(row, 0)
             t = self._teilnehmer_je_id.get(item.data(Qt.UserRole)) if item is not None else None
@@ -700,6 +749,7 @@ class TeilnehmerTab(QWidget):
             passt = (
                 (filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert)
                 and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
+                and _name_passt(filter_name, t["nachname"], t["vorname"], t["rufname_hund"])
                 and (
                     filter_bezahlt == "Alle"
                     or (filter_bezahlt == "Bezahlt") == bool(t["bezahlt"])
@@ -967,11 +1017,15 @@ class TeilnehmerTab(QWidget):
             "Fortfahren?",
         ):
             return
+        vorher = {t["id"]: t["startnummer"] for t in betroffen}
         try:
             entfernt = startnummern_zuruecksetzen(self.conn, pruefung)
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
             return
+        self._rueckgaengig_merken(
+            f"Zurücksetzen von {entfernt} Startnummer(n)",
+            lambda: f"{startnummern_wiederherstellen(self.conn, vorher)} Startnummer(n) wiederhergestellt.")
         self.aktualisieren()
         self.status_label.setText(f"{entfernt} Startnummer(n){wo} zurückgesetzt.")
 
@@ -1043,14 +1097,7 @@ class TeilnehmerTab(QWidget):
         teilnehmer_id = self._ausgewaehlte_id()
         if teilnehmer_id is None:
             return
-        aktuell = next((t for t in self._teilnehmer_je_zeile if t["id"] == teilnehmer_id), None)
-        if aktuell is None:
-            return
-        start_teil = str(aktuell["startnummer"]) if aktuell["startnummer"] is not None else "ohne-Nr"
-        vorschlag = f"Bewertungsbogen_{start_teil}_{_dateiname_teil(aktuell['nachname'])}.pdf"
-        _pdf_exportieren(self, self._ablageort, self.status_label, "Bewertungsbogen speichern", vorschlag,
-                         lambda pfad: pdf_export.erstelle_bewertungsbogen_pdf(self.conn, teilnehmer_id, pfad),
-                         "Bewertungsbogen gespeichert")
+        _bewertungsbogen_fuer_teilnehmer(self, self.conn, self._ablageort, self.status_label, teilnehmer_id)
 
     def _teilnehmer_loeschen(self) -> None:
         # K7-Verifikation: Namen aus den IDs statt aus currentRow() - bei Mehrfachmarkierung
@@ -1071,12 +1118,50 @@ class TeilnehmerTab(QWidget):
         # Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 3): Vorgabe „Nein“ - sonst löschte
         # Strg+A, „Löschen“, Enter alle sichtbaren Teilnehmer.
         if _ja_nein(self, "Teilnehmer löschen", frage):
+            geloescht: list = []  # gesichert, bevor gelöscht wird - auch bei einem Abbruch mittendrin
             try:
                 for t in teilnehmer:
+                    sicherung = teilnehmer_sichern(self.conn, t["id"])
                     delete_teilnehmer(self.conn, t["id"])
+                    if sicherung:
+                        geloescht.append(sicherung)
             except sqlite3.Error as exc:
                 _db_fehler_anzeigen(self, exc, "Nicht alle Teilnehmer konnten gelöscht werden.")
+            if geloescht:
+                self._rueckgaengig_merken(
+                    f"Löschen von {len(geloescht)} Teilnehmer(n)" if len(geloescht) > 1
+                    else f"Löschen von „{geloescht[0]['teilnehmer']['nachname']}“",
+                    lambda: self._teilnehmer_zurueckholen(geloescht))
             self.aktualisieren()
+
+    def _rueckgaengig_merken(self, beschreibung: str, aktion) -> None:
+        """Merkt die letzte rückgängig zu machende Aktion (eine Ebene, Marco 10.11.2026)."""
+        self._rueckgaengig_aktion = (beschreibung, aktion)
+        self.rueckgaengig_btn.setEnabled(True)
+        self.rueckgaengig_btn.setToolTip(f"Macht rückgängig: {beschreibung} (Strg+Z)")
+
+    def _rueckgaengig_ausfuehren(self) -> None:
+        if self._rueckgaengig_aktion is None:
+            return
+        beschreibung, aktion = self._rueckgaengig_aktion
+        self._rueckgaengig_aktion = None
+        self.rueckgaengig_btn.setEnabled(False)
+        self.rueckgaengig_btn.setToolTip("Nichts zum Rückgängigmachen")
+        try:
+            meldung = aktion()
+        except sqlite3.Error as exc:
+            _db_fehler_anzeigen(self, exc, "Das ließ sich nicht rückgängig machen.")
+            return
+        self.aktualisieren()
+        self.status_label.setText(f"Rückgängig: {beschreibung}. {meldung}".strip())
+
+    def _teilnehmer_zurueckholen(self, sicherungen: list) -> str:
+        zahl = sum(1 for s in sicherungen if teilnehmer_wiederherstellen(self.conn, s))
+        ohne_nr = [s["teilnehmer"]["nachname"] for s in sicherungen
+                   if s["teilnehmer"].get("startnummer") is not None
+                   and (get_teilnehmer(self.conn, s["teilnehmer"]["id"]) or {}).get("startnummer") is None]
+        hinweis = f" Ohne Startnummer, weil die Nummer inzwischen vergeben ist: {', '.join(ohne_nr)}." if ohne_nr else ""
+        return f"{zahl} Teilnehmer wiederhergestellt.{hinweis}"
 
     def _bezahlt_umschalten(self) -> None:
         ids = set(self._ausgewaehlte_ids())
@@ -1339,9 +1424,10 @@ class FormularImportTab(QWidget):
 
     _KI_UMSCHALTER_TEXT = "Andere Meldeformulare (Foto, Scan, Word) über ein KI-System einlesen"
 
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, parent=None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
 
         # UX-Test 02.10.2026, U10: drei Wege als eigene, kurz erklärte Abschnitte statt eines
         # langen Textes über einem dominanten KI-Prompt; der KI-Weg ist eingeklappt.
@@ -1361,6 +1447,15 @@ class FormularImportTab(QWidget):
         anmeldeformular_btn = QPushButton("Anmeldeformulare (PDF) importieren…")
         anmeldeformular_btn.setObjectName("primaerButton")
         anmeldeformular_btn.clicked.connect(self._anmeldeformulare_importieren)
+        # Marco 10.11.2026 (UI-Abgleich): das leere Formular lässt sich auch hier erzeugen,
+        # nicht nur im Reiter „Ausdrucke/Export“.
+        self.leeres_formular_btn = QPushButton("Leeres Anmeldeformular (PDF)…")
+        self.leeres_formular_btn.setToolTip(
+            "Das ausfüllbare Formular zum Verschicken an die Teilnehmer (wie im Reiter „Ausdrucke/Export“)")
+        self.leeres_formular_btn.clicked.connect(self._leeres_formular_speichern)
+        self.formular_status_label = QLabel("")
+        self.formular_status_label.setTextFormat(Qt.PlainText)  # enthält Pfade
+        self.formular_status_label.setWordWrap(True)
 
         import_btn = QPushButton("Teilnehmerliste einlesen (Excel/CSV)…")
         import_btn.clicked.connect(self._csv_importieren)
@@ -1435,8 +1530,9 @@ class FormularImportTab(QWidget):
             "Das Anmeldeformular erzeugst du im Reiter „Ausdrucke/Export“ und verschickst es an die "
             "Teilnehmer. Die ausgefüllt zurückgeschickten PDF-Dateien hier einlesen – mehrere "
             "auf einmal möglich, bereits vorhandene Meldungen werden übersprungen.",
-            anmeldeformular_btn,
+            anmeldeformular_btn, self.leeres_formular_btn,
         ))
+        layout.addWidget(self.formular_status_label)
         layout.addWidget(abschnitt(
             "2. Teilnehmerliste aus Excel (CSV-Datei)",
             "Eine Liste mit einer Zeile je Teilnehmer, z. B. vom Schriftführer. Die leere "
@@ -1472,6 +1568,9 @@ class FormularImportTab(QWidget):
 
     def _csv_importieren(self) -> None:
         _teilnehmerliste_importieren(self, self.conn)
+
+    def _leeres_formular_speichern(self) -> None:
+        _anmeldeformular_pdf_speichern(self, self.conn, self._ablageort, self.formular_status_label)
 
     def _vorlage_speichern(self) -> None:
         """UX-Test 02.10.2026, U10: leere Excel-Vorlage mit den passenden Spalten."""
@@ -2068,9 +2167,10 @@ class ErgebnisTab(QWidget):
     "Alle Ergebnisse speichern"-Button - noch nicht gespeicherte Zeilen werden dabei
     gelb hervorgehoben und im Status deutlich gekennzeichnet."""
 
-    def __init__(self, conn, parent=None):
+    def __init__(self, conn, parent=None, ablageort: _Ablageort | None = None):
         super().__init__(parent)
         self.conn = conn
+        self._ablageort = ablageort if ablageort is not None else _Ablageort(str(termine_ordner()))
         # Pro Tabellenzeile: Teilnehmer-Stammdaten, die Punktezellen je Disziplin
         # und die zuletzt aus der DB geladenen (= gespeicherten) Werte je Disziplin -
         # der Vergleich der beiden liefert den "ungespeichert"-Status. Ein leeres Feld
@@ -2165,6 +2265,13 @@ class ErgebnisTab(QWidget):
         self.filter_startnummer.setMaximumWidth(80)
         self.filter_startnummer.textChanged.connect(self._filter_anwenden)
 
+        # Marco 10.11.2026 (UI-Abgleich): Suche nach Name oder Hund, wie im Reiter Teilnehmer.
+        self.filter_name = QLineEdit()
+        self.filter_name.setPlaceholderText("Name oder Hund")
+        self.filter_name.setMaximumWidth(160)
+        self.filter_name.setClearButtonEnabled(True)
+        self.filter_name.textChanged.connect(self._filter_anwenden)
+
         self.speichern_btn = speichern_btn = QPushButton("Alle Ergebnisse speichern")  # Attribut für die Demoprüfung
         speichern_btn.setObjectName("primaerButton")  # Haupt-Aktion dieses Reiters, siehe _QSS_TEMPLATE
         # Lambda: clicked(bool) würde sonst als meldungen=False ankommen.
@@ -2177,8 +2284,20 @@ class ErgebnisTab(QWidget):
         speichern_kuerzel.setContext(Qt.WidgetWithChildrenShortcut)
         speichern_kuerzel.activated.connect(lambda: self.alle_speichern())
 
-        aktualisieren_btn = QPushButton("Liste aktualisieren")
+        self.aktualisieren_btn = aktualisieren_btn = QPushButton("Liste aktualisieren")
         aktualisieren_btn.clicked.connect(self._aktualisieren_mit_rueckfrage)
+        # Marco 10.11.2026 (UI-Abgleich): Bewertungsbogen der Zeile, in der man gerade steht,
+        # wie im Reiter Teilnehmer.
+        self.bewertungsbogen_btn = QPushButton("Bewertungsbogen (PDF)…")
+        self.bewertungsbogen_btn.setToolTip("Bewertungsbogen für den Teilnehmer der aktuellen Zeile")
+        self.bewertungsbogen_btn.setEnabled(False)
+        self.bewertungsbogen_btn.clicked.connect(self._bewertungsbogen_exportieren)
+        self.ablageort_btn = QPushButton("Ablageort öffnen")
+        self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
+        self.tabelle.currentCellChanged.connect(lambda *_: self._bewertungsbogen_knopf_aktualisieren())
+        _kontextmenue_aus_knoepfen(
+            self.tabelle, [self.bewertungsbogen_btn, None, speichern_btn, aktualisieren_btn],
+            allgemein=(speichern_btn, aktualisieren_btn))
 
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: Meldungen immer als Klartext
@@ -2206,6 +2325,9 @@ class ErgebnisTab(QWidget):
         filter_zeile.addSpacing(16)
         filter_zeile.addWidget(QLabel("Filter Start-Nr.:"))
         filter_zeile.addWidget(self.filter_startnummer)
+        filter_zeile.addSpacing(16)
+        filter_zeile.addWidget(QLabel("Suche:"))
+        filter_zeile.addWidget(self.filter_name)
         filter_zeile.addStretch()
 
         hinweis = QLabel(
@@ -2217,6 +2339,8 @@ class ErgebnisTab(QWidget):
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(speichern_btn)
         button_zeile.addWidget(aktualisieren_btn)
+        button_zeile.addWidget(self.bewertungsbogen_btn)
+        button_zeile.addWidget(self.ablageort_btn)
         button_zeile.addStretch()
 
         layout = QVBoxLayout(self)
@@ -2876,11 +3000,28 @@ class ErgebnisTab(QWidget):
         Eingaben in ausgeblendeten Zeilen erhalten."""
         filter_wert = self.filter_combo.currentText()
         filter_startnr = self.filter_startnummer.text().strip()
+        filter_name = self.filter_name.text()
         for row, t in enumerate(self._teilnehmer_je_zeile):
             passt = (
                 filter_wert in ("Alle", "") or leistungsklasse_label(t) == filter_wert
-            ) and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr)
+            ) and (not filter_startnr or str(t["startnummer"] or "") == filter_startnr) and _name_passt(
+                filter_name, t["nachname"], t["vorname"], t["rufname_hund"])
             self.tabelle.setRowHidden(row, not passt)
+        self._bewertungsbogen_knopf_aktualisieren()
+
+    def _teilnehmer_der_aktuellen_zeile(self) -> dict | None:
+        row = self.tabelle.currentRow()
+        if row < 0 or row >= len(self._teilnehmer_je_zeile) or self.tabelle.isRowHidden(row):
+            return None
+        return self._teilnehmer_je_zeile[row]
+
+    def _bewertungsbogen_knopf_aktualisieren(self) -> None:
+        self.bewertungsbogen_btn.setEnabled(self._teilnehmer_der_aktuellen_zeile() is not None)
+
+    def _bewertungsbogen_exportieren(self) -> None:
+        t = self._teilnehmer_der_aktuellen_zeile()
+        if t is not None:
+            _bewertungsbogen_fuer_teilnehmer(self, self.conn, self._ablageort, self.status_label, t["id"])
 
     @staticmethod
     def _feldwert(feld: QTableWidgetItem) -> int | None:
@@ -3418,12 +3559,31 @@ def _fremdobjekte_melden(parent) -> None:
         )
 
 
+def _auswahl_menue_aufbauen(besitzer, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
+    """Menü mit genau einer wählbaren Möglichkeit (Hintergrund, Akzentfarbe, Schriftgröße) -
+    gemeinsam für das Hauptfenster und den Startbildschirm (Marco 10.11.2026)."""
+    actions: dict[str, QAction] = {}
+    gruppe = QActionGroup(besitzer)
+    gruppe.setExclusive(True)
+    gruppe.triggered.connect(slot)
+    for schluessel, daten in eintraege.items():
+        action = QAction(daten["anzeigename"], besitzer)
+        action.setCheckable(True)
+        action.setChecked(schluessel == aktiv)
+        action.setData(schluessel)
+        menue.addAction(action)
+        gruppe.addAction(action)
+        actions[schluessel] = action
+    return actions
+
+
 class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def __init__(self, conn, pfad: str, demo: bool = False):
         super().__init__()
         self.resize(900, 600)
         # Laufende Demoprüfung (desktop_demo.DemoTour) oder None.
         self._demo_tour = None
+        self.auto_sicherung_aktiv = False
         # H-4: True, sobald _sitzungsende_pruefen das Beenden durch Windows/Setup erlaubt
         # hat - das folgende closeEvent prüft dann nicht erneut. Ein abgebrochenes Abmelden
         # setzt es über SitzungsendeFilter zurück.
@@ -3529,21 +3689,45 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         hilfe_menue.addAction("Hilfe anzeigen", QKeySequence.HelpContents, self._hilfe_zum_reiter)
         hilfe_menue.addAction("Nach Updates suchen…", self._updates_suchen)
         hilfe_menue.addAction("Version und Lizenzen", self._version_anzeigen)
+        self._kuerzel_einrichten()
+
+    def _kuerzel_einrichten(self) -> None:
+        """Tastenkürzel (Marco 10.11.2026, UI-Abgleich: es gab nur Entf, Strg+S und F1):
+        Strg+F springt ins Suchfeld des Reiters, Strg+N legt einen Teilnehmer an, Strg+1 bis
+        Strg+9 wechseln den Reiter."""
+        QShortcut(QKeySequence.Find, self, activated=self._suche_fokussieren)
+        QShortcut(QKeySequence("Ctrl+N"), self, activated=self._neuer_teilnehmer_per_kuerzel)
+        for nummer in range(1, 10):
+            kuerzel = QShortcut(QKeySequence(f"Ctrl+{nummer}"), self)
+            kuerzel.setProperty("reiter_index", nummer - 1)
+            # Kein Lambda mit self: das hielte das Hauptfenster über einen Verweis am Leben
+            # (Tests schließen es dann erst beim Aufräumen, mit noch ersetzten Funktionen).
+            kuerzel.activated.connect(self._reiter_kuerzel_ausgeloest)
+
+    def _suche_fokussieren(self) -> None:
+        feld = getattr(self._tabs.currentWidget(), "filter_name", None)
+        if feld is not None:
+            feld.setFocus()
+            feld.selectAll()
+
+    def _neuer_teilnehmer_per_kuerzel(self) -> None:
+        index = self._tabs.indexOf(self.teilnehmer_tab)
+        if self._demo_tour is not None or index < 0 or not self._tabs.isTabEnabled(index):
+            return  # z. B. während der Demoprüfung gesperrt
+        self._tabs.setCurrentIndex(index)
+        self.teilnehmer_tab.hinzufuegen_btn.click()
+
+    def _reiter_kuerzel_ausgeloest(self) -> None:
+        index = self.sender().property("reiter_index") if self.sender() is not None else None
+        if index is not None:
+            self._reiter_per_kuerzel(int(index))
+
+    def _reiter_per_kuerzel(self, index: int) -> None:
+        if 0 <= index < self._tabs.count() and self._tabs.isTabEnabled(index):
+            self._tabs.setCurrentIndex(index)
 
     def _auswahl_menue_aufbauen(self, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
-        actions: dict[str, QAction] = {}
-        gruppe = QActionGroup(self)
-        gruppe.setExclusive(True)
-        gruppe.triggered.connect(slot)
-        for schluessel, daten in eintraege.items():
-            action = QAction(daten["anzeigename"], self)
-            action.setCheckable(True)
-            action.setChecked(schluessel == aktiv)
-            action.setData(schluessel)
-            menue.addAction(action)
-            gruppe.addAction(action)
-            actions[schluessel] = action
-        return actions
+        return _auswahl_menue_aufbauen(self, menue, eintraege, aktiv, slot)
 
     def _theme_aktion_ausgeloest(self, action: QAction) -> None:
         self._theme_wechseln(action.data())
@@ -3788,13 +3972,13 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         ablageort = _Ablageort(_ausdrucke_ordner(pfad) if pfad else str(termine_ordner()))
         fabriken = [
             ("teilnehmer_tab", "Teilnehmer", lambda: TeilnehmerTab(conn, pfad=pfad, ablageort=ablageort)),
-            ("formular_import_tab", "Formular-Import", lambda: FormularImportTab(conn)),
+            ("formular_import_tab", "Formular-Import", lambda: FormularImportTab(conn, ablageort=ablageort)),
             ("zeitplan_tab", "Zeitplan", lambda: ZeitplanTab(conn, ablageort)),
-            ("ergebnis_tab", "Ergebniserfassung", lambda: ErgebnisTab(conn)),
+            ("ergebnis_tab", "Ergebniserfassung", lambda: ErgebnisTab(conn, ablageort=ablageort)),
             ("auswertung_tab", "Auswertung", lambda: AuswertungTab(conn, ablageort)),
-            ("teilnehmer_uebersicht_tab", "Übersicht", lambda: TeilnehmerUebersichtTab(conn)),
+            ("teilnehmer_uebersicht_tab", "Übersicht", lambda: TeilnehmerUebersichtTab(conn, ablageort=ablageort)),
             ("abrechnung_tab", "Abrechnung Leistungsrichter", lambda: AbrechnungTab(conn, ablageort)),
-            ("verwaltung_tab", "Verwaltung", lambda: VerwaltungTab(conn)),
+            ("verwaltung_tab", "Verwaltung", lambda: VerwaltungTab(conn, ablageort=ablageort)),
             ("export_tab", "Ausdrucke/Export", lambda: ExportTab(conn, pfad, ablageort)),
             # Anders als die übrigen Tabs NICHT an conn/pfad gebunden - arbeitet immer auf dem
             # gesamten Termine-Ordner (siehe DatensicherungTab oben), wird aber trotzdem hier
@@ -3823,6 +4007,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self.conn = conn
         self.pfad = pfad
         self._demo_termin = demo
+        self.auto_sicherung_anlegen()
         self._tabs.blockSignals(True)
         try:
             while self._tabs.count():
@@ -3863,6 +4048,33 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         anzahl = len(list_teilnehmer(self.conn, nur_teilnehmende=True))
         self.kopf.termin_setzen(verein, veranstaltung.get("datum"), veranstaltung.get("ort"),
                                 anzahl, getattr(self, "_demo_termin", False))
+
+    def laufwerk_hinweis_zeigen(self) -> None:
+        """Liegt der Termin auf einem USB-Stick oder Netzlaufwerk, einmal darauf hinweisen
+        (Marco 10.11.2026): Abziehen oder Verbindungsverlust stören das Speichern erst spät."""
+        art = laufwerksart(self.pfad)
+        if not art or getattr(self, "_demo_termin", False):
+            return
+        QMessageBox.information(
+            self, f"Termin auf einem {art}",
+            f"Der Termin liegt auf einem {art}:\n{self.pfad}\n\n"
+            "Solange das Programm geöffnet ist, den Datenträger nicht abziehen und die Verbindung "
+            "nicht trennen - Änderungen könnten sonst verloren gehen. Eine automatische Kopie des Termins "
+            "legt das Programm zusätzlich auf diesem Rechner ab.")
+
+    def auto_sicherung_anlegen(self, ohne_mindestabstand: bool = False) -> None:
+        """Automatische Kopie des Termins (Marco 10.11.2026) - nur im echten Programmlauf
+        (`auto_sicherung_aktiv`, von main() gesetzt; Tests und Demo schreiben nichts).
+        Beim Beenden `ohne_mindestabstand`: der Stand der Sitzung wird immer gesichert."""
+        if not self.auto_sicherung_aktiv or getattr(self, "_demo_termin", False):
+            return
+        try:
+            if ohne_mindestabstand:
+                auto_sicherung_erstellen(self.conn, self.pfad, mindestabstand_sekunden=0)
+            else:
+                auto_sicherung_erstellen(self.conn, self.pfad)
+        except Exception as exc:  # noqa: BLE001 - eine Sicherung darf die Arbeit nie stören
+            fehler_protokollieren(exc)
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
@@ -3907,6 +4119,8 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             )
             return
         alte_verbindung.close()
+        if self.auto_sicherung_aktiv:
+            self.laufwerk_hinweis_zeigen()  # auch beim Wechsel auf einen Termin auf Stick/Netzlaufwerk
 
     def _neu_angelegten_termin_entfernen(self, pfad: str) -> None:
         """Der Startdialog hat den Termin eben erst angelegt, der Wechsel wurde dann bei der
@@ -4069,6 +4283,18 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # Standardknopf „Neuen Termin anlegen…“).
         self.tabelle.installEventFilter(self)
         self.tabelle.horizontalHeader().setStretchLastSection(True)
+        # Marco 10.11.2026 (UI-Abgleich): bei vielen Terminen Suche (Verein, Ort, Datum) und
+        # Sortierung per Klick auf die Spaltenüberschrift; Standard bleibt „neueste oben“.
+        self._angezeigt: list = []
+        self._sortspalte: int | None = None
+        self._sortaufsteigend = True
+        self.tabelle.horizontalHeader().setSectionsClickable(True)
+        self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
+        self.suche_feld = QLineEdit()
+        self.suche_feld.setPlaceholderText("Suche nach Verein, Ort oder Datum")
+        self.suche_feld.setClearButtonEnabled(True)
+        self.suche_feld.textChanged.connect(lambda _text: self._aktualisieren())
+        QShortcut(QKeySequence.Find, self, activated=self.suche_feld.setFocus)
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
         neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_TEMPLATE
@@ -4094,7 +4320,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # UX-Test 02.10.2026, U14: Laien fanden das Design "Hoher Kontrast" nicht.
         hinweis = QLabel(
             f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.\n"
-            "Tipp: Schrift zu klein oder zu blass? Nach dem Öffnen eines Termins oben im Menü "
+            "Tipp: Schrift zu klein oder zu blass? Oben im Menü "
             "„Ansicht“ → „Schriftgröße“ bzw. „Hintergrund“ → „Hoher Kontrast“ wählen."
         )
         hinweis.setWordWrap(True)
@@ -4118,6 +4344,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         innen = QVBoxLayout()
         innen.setContentsMargins(12, 10, 12, 10)
         innen.addWidget(willkommen)
+        innen.addWidget(self.suche_feld)
         innen.addWidget(self.tabelle)
         innen.addLayout(button_zeile)
         innen.addWidget(hinweis)
@@ -4125,6 +4352,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        layout.setMenuBar(self._menue_aufbauen())
         layout.addWidget(self.kopf)
         layout.addLayout(innen, 1)
 
@@ -4132,10 +4360,68 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self._aktualisieren()
         self._schriftgroesse_anwenden()
 
-    def _aktualisieren(self) -> None:
-        self._termine = liste_termine()
-        self.tabelle.setRowCount(len(self._termine))
-        for row, t in enumerate(self._termine):
+    def _menue_aufbauen(self) -> QMenuBar:
+        """Menüs „Ansicht“ und „Hilfe“ wie im Hauptfenster (Marco 10.11.2026, UI-Abgleich: im
+        Startbildschirm ließen sich Schrift und Hintergrund nicht einstellen)."""
+        leiste = QMenuBar(self)
+        ansicht_menue = leiste.addMenu("&Ansicht")
+        self._design_actions = _auswahl_menue_aufbauen(
+            self, ansicht_menue.addMenu("Hintergrund"), _DESIGNS, _gespeichertes_design_lesen(),
+            lambda action: self._darstellung_wechseln(_design_speichern, action.data()))
+        self._theme_actions = _auswahl_menue_aufbauen(
+            self, ansicht_menue.addMenu("Akzentfarbe"), _THEMES, _gespeichertes_theme_lesen(),
+            lambda action: self._darstellung_wechseln(_theme_speichern, action.data()))
+        self._schrift_actions = _auswahl_menue_aufbauen(
+            self, ansicht_menue.addMenu("Schriftgröße"), _SCHRIFTSTUFEN, _gespeicherte_schriftstufe_lesen(),
+            lambda action: self._darstellung_wechseln(_schriftstufe_speichern, action.data()))
+        hilfe_menue = leiste.addMenu("&Hilfe")
+        hilfe_menue.addAction("Hilfe anzeigen", QKeySequence.HelpContents, lambda: _ausfuehren(HilfeDialog(self)))
+        hilfe_menue.addAction("Nach Updates suchen…",
+                              lambda: _ausfuehren(VersionDialog(self, updates_sofort_suchen=True)))
+        hilfe_menue.addAction("Version und Lizenzen", lambda: _ausfuehren(VersionDialog(self)))
+        return leiste
+
+    def _darstellung_wechseln(self, speichern, wert: str) -> None:
+        speichern(wert)
+        with _wartecursor():
+            _darstellung_anwenden(QApplication.instance())
+            self.kopf.farben_aktualisieren()
+            symbole_auffrischen(self)
+        ResponsiveSchriftMixin.alle_neu_anwenden()
+
+    def _spalte_geklickt(self, spalte: int) -> None:
+        self._sortaufsteigend = not self._sortaufsteigend if self._sortspalte == spalte else True
+        self._sortspalte = spalte
+        self._aktualisieren(neu_lesen=False)
+
+    @staticmethod
+    def _termin_anzeigename(t) -> str:
+        return (t.verein or t.dateiname) if t.lesbar else t.dateiname
+
+    def _termine_anzeigen(self) -> list:
+        """Die Termine nach Suchtext gefiltert und nach der gewählten Spalte sortiert."""
+        woerter = self.suche_feld.text().casefold().split()
+        termine = [
+            t for t in self._termine
+            if all(w in " ".join(str(x) for x in (self._termin_anzeigename(t), t.ort, datum_anzeige(t.datum), t.datum)
+                                 if x).casefold() for w in woerter)
+        ]
+        if self._sortspalte is not None:
+            schluessel = {
+                0: lambda t: t.datum or "",
+                1: lambda t: self._termin_anzeigename(t).casefold(),
+                2: lambda t: (t.ort or "").casefold(),
+                3: lambda t: t.teilnehmend if t.lesbar else -1,
+            }[self._sortspalte]
+            termine.sort(key=schluessel, reverse=not self._sortaufsteigend)
+        return termine
+
+    def _aktualisieren(self, neu_lesen: bool = True) -> None:
+        if neu_lesen:
+            self._termine = liste_termine()
+        self._angezeigt = self._termine_anzeigen()
+        self.tabelle.setRowCount(len(self._angezeigt))
+        for row, t in enumerate(self._angezeigt):
             werte = [
                 datum_anzeige(t.datum) or "?",
                 (t.verein or t.dateiname) if t.lesbar
@@ -4153,7 +4439,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.tabelle.resizeColumnsToContents()
         # UX-Test 03.11.2026, X15: Bei genau einem Termin diesen gleich markieren - „Öffnen“
         # war sonst ausgegraut, obwohl es nur einen gibt.
-        if len(self._termine) == 1 and self._termine[0].lesbar:
+        if len(self._angezeigt) == 1 and self._angezeigt[0].lesbar:
             self.tabelle.selectRow(0)
         self._auswahl_geaendert()
 
@@ -4166,8 +4452,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
     def _ausgewaehlter_termin(self):
         zeile = self.tabelle.currentRow()
-        if 0 <= zeile < len(self._termine):
-            return self._termine[zeile]
+        if 0 <= zeile < len(self._angezeigt):
+            return self._angezeigt[zeile]
         return None
 
     def _auswahl_geaendert(self) -> None:
@@ -4312,6 +4598,41 @@ def _startdialog_schleife() -> str | None:
         return start.pfad or None
 
 
+_GEOMETRIE_SCHLUESSEL = "fenster/geometrie"
+_MAXIMIERT_SCHLUESSEL = "fenster/maximiert"
+
+
+def _auto_sicherung_beim_beenden(fenster) -> None:
+    try:
+        fenster.auto_sicherung_anlegen(ohne_mindestabstand=True)
+    except RuntimeError:
+        pass  # Fenster schon zerstört
+
+
+def _fenstergeometrie_merken(fenster: QMainWindow) -> None:
+    """Merkt Größe und Lage des Hauptfensters für den nächsten Start (Marco 10.11.2026)."""
+    try:
+        einstellungen = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        einstellungen.setValue(_MAXIMIERT_SCHLUESSEL, fenster.isMaximized())
+        if not fenster.isMaximized():
+            einstellungen.setValue(_GEOMETRIE_SCHLUESSEL, fenster.saveGeometry())
+    except RuntimeError:
+        pass  # Fenster schon zerstört
+
+
+def _fenster_zeigen_wie_zuletzt(fenster: QMainWindow) -> None:
+    """Maximiert (Standard, UX-Test 02.10.2026, U12) - hat der Anwender das Fenster zuletzt
+    in normaler Größe benutzt, mit dieser Größe und Lage."""
+    einstellungen = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    maximiert = einstellungen.value(_MAXIMIERT_SCHLUESSEL, True) in (True, "true", "True", 1, "1")
+    geometrie = einstellungen.value(_GEOMETRIE_SCHLUESSEL)
+    if not maximiert and geometrie and fenster.restoreGeometry(geometrie):
+        fenster.show()
+        fenster._an_bildschirm_anpassen()
+    else:
+        fenster.showMaximized()
+
+
 def main() -> int:
     # T1 (Marco 03.10.2026): "--selbsttest [protokoll]" prüft die gebündelte EXE ohne
     # Fenster (CI nach dem PyInstaller-Build und nach der Installation; auch zur
@@ -4352,7 +4673,12 @@ def main() -> int:
         sitzungsende_einrichten(app, fenster)
         # UX-Test 02.10.2026, U12: maximiert starten - bei 900x600 blieb für Tabellen und die
         # Zeitplan-Spalten zu wenig Platz.
-        fenster.showMaximized()
+        _fenster_zeigen_wie_zuletzt(fenster)
+        fenster.auto_sicherung_aktiv = True
+        fenster.auto_sicherung_anlegen()
+        QTimer.singleShot(0, fenster.laufwerk_hinweis_zeigen)
+        app.aboutToQuit.connect(lambda: _fenstergeometrie_merken(fenster))
+        app.aboutToQuit.connect(lambda: _auto_sicherung_beim_beenden(fenster))
     except Exception as exc:  # noqa: BLE001 - Desktop-Prüfung 14.10.2026, Teil 9 Nr. 7
         fehler_protokollieren(exc)
         fehlerfenster_zeigen(
