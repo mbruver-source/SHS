@@ -1,7 +1,7 @@
 # Zusätzliche Abhängigkeiten NUR für die Tests (CI: tests.yml, lokal bei Bedarf) - fließen
 # weder in den Desktop-Installer noch in das Web-/Container-Image ein.
 #
-# pytest/pytest-qt: Testlauf inkl. der PySide6-GUI-Tests (test_app_gui.py).
+# pytest/pytest-qt: Testlauf inkl. der PySide6-GUI-Tests (test_gui_*.py).
 # pypdf: liest die erzeugten PDFs in test_pdf_export.py wieder ein. Ohne pypdf wird die
 # komplette Klasse TestPdfExport STILL übersprungen - bis 22.09. war das auch in der CI der
 # Fall (Codeprüfung 22.09., M4), d. h. die PDF-Inhaltstests liefen nirgends. Seit 28.09.2026

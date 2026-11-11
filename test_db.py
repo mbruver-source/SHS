@@ -8,6 +8,7 @@ import logging
 import unittest
 from contextlib import closing
 from unittest.mock import MagicMock, patch
+from db_testhilfen import patch_db
 
 from db import (
     ALLE_PRUEFUNGEN,
@@ -2901,7 +2902,7 @@ class TestZeitplan(unittest.TestCase):
             {"art": "ED", "stufe": 99, "disziplin": "Trümmerfeld", "teilnehmer": [1]},
         ]
 
-        with patch("db.zeitplan_gruppen", return_value=gefaelschte_gruppen):
+        with patch_db("zeitplan_gruppen", return_value=gefaelschte_gruppen):
             with self.assertRaises(self.IntegrityErrorTyp):
                 automatische_zeitplan_verteilung(self.conn, [rid], standard_dauer_minuten=10)
 
@@ -3320,7 +3321,7 @@ class TestTerminOeffnen(unittest.TestCase):
         Terminübersicht und lesende Prüfung behandeln die Datei als nicht lesbar."""
         import db
         pfad = self._termin()
-        with patch("db.TERMIN_GROESSE_GRENZE", 100):
+        with patch_db("TERMIN_GROESSE_GRENZE", 100):
             with self.assertRaises(db.TerminUngewoehnlichGross) as kontext:
                 termin_oeffnen(str(pfad))
             self.assertIn("ungewöhnlich groß", str(kontext.exception))
@@ -3331,20 +3332,20 @@ class TestTerminOeffnen(unittest.TestCase):
             [info] = db.liste_termine(self.ordner)
             self.assertFalse(info.lesbar)
             self.assertEqual(info.grund, db.GRUND_ZU_GROSS)
-        with patch("db.TERMIN_GROESSE_GRENZE", 50 * 1024 * 1024), patch("db.os.path.getsize", return_value=50 * 1024 * 1024 + 300 * 1024):
+        with patch_db("TERMIN_GROESSE_GRENZE", 50 * 1024 * 1024), patch("db.os.path.getsize", return_value=50 * 1024 * 1024 + 300 * 1024):
             with self.assertRaises(db.TerminUngewoehnlichGross) as kontext:
                 termin_oeffnen(str(pfad))
             self.assertIn("(50,3 MB)", str(kontext.exception))
         # Nach dem „Ja“ gilt die Schrittgrenze nicht mehr (Marco 19.10.2026), sonst schon.
-        with patch("db._LESE_SCHRITTWEITE", 1), patch("db._LESE_HOECHSTSCHRITTE", 1):
+        with patch_db("_LESE_SCHRITTWEITE", 1), patch_db("_LESE_HOECHSTSCHRITTE", 1):
             with self.assertRaises(db.TerminNichtOeffenbar) as kontext:
                 termin_oeffnen(str(pfad))
             self.assertEqual(str(kontext.exception), db.SCHRITTGRENZE_TEXT)
-            with patch("db.TERMIN_GROESSE_GRENZE", 100):
+            with patch_db("TERMIN_GROESSE_GRENZE", 100):
                 with closing(termin_oeffnen(str(pfad), groesse_bestaetigt=True)) as conn:
                     self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
         # Genau auf der Grenze gilt die Datei noch nicht als zu groß.
-        with patch("db.TERMIN_GROESSE_GRENZE", pfad.stat().st_size):
+        with patch_db("TERMIN_GROESSE_GRENZE", pfad.stat().st_size):
             with closing(termin_oeffnen(str(pfad))):
                 pass
         # Gegenprobe: unter der Grenze bleibt alles wie bisher.
@@ -3359,7 +3360,7 @@ class TestTerminOeffnen(unittest.TestCase):
         Öffnen das statt „beschädigt“."""
         import db
         pfad = self._termin()
-        with patch("db._LESE_SCHRITTWEITE", 1), patch("db._LESE_HOECHSTSCHRITTE", 0):
+        with patch_db("_LESE_SCHRITTWEITE", 1), patch_db("_LESE_HOECHSTSCHRITTE", 0):
             [info] = db.liste_termine(self.ordner)
             with self.assertRaises(TerminNichtOeffenbar) as kontext:
                 termin_oeffnen(str(pfad))
@@ -3770,7 +3771,7 @@ class TestTerminSync(unittest.TestCase):
                 raise sqlite3.IntegrityError("simulierter Fehler")
             return echtes_eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
 
-        with patch("db.eintragen_ergebnis", side_effect=_eintragen_ergebnis_mit_fehler):
+        with patch_db("eintragen_ergebnis", side_effect=_eintragen_ergebnis_mit_fehler):
             bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
 
         self.assertEqual(bericht.aktualisiert, 1)
@@ -3921,11 +3922,11 @@ class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
         postgres_conn = MagicMock()
         sqlite_conn = object()
 
-        with patch("db.erstelle_termin_postgres", return_value=neuer_termin) as mock_erstelle, \
-             patch("db._setze_termin_suchpfad") as mock_suchpfad, \
-             patch("db.kopiere_termin_daten", side_effect=RuntimeError("Verbindungsabbruch")) as mock_kopiere, \
-             patch("db.loesche_termin_postgres") as mock_loesche, \
-             patch("db.liste_termine_postgres") as mock_liste:
+        with patch_db("erstelle_termin_postgres", return_value=neuer_termin) as mock_erstelle, \
+             patch_db("_setze_termin_suchpfad") as mock_suchpfad, \
+             patch_db("kopiere_termin_daten", side_effect=RuntimeError("Verbindungsabbruch")) as mock_kopiere, \
+             patch_db("loesche_termin_postgres") as mock_loesche, \
+             patch_db("liste_termine_postgres") as mock_liste:
             with self.assertRaises(RuntimeError):
                 exportiere_termin_nach_postgres(sqlite_conn, postgres_conn)
 
@@ -3952,10 +3953,10 @@ class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
         reihenfolge = MagicMock()
         postgres_conn = reihenfolge.conn
 
-        with patch("db.erstelle_termin_postgres", return_value=neuer_termin), \
-             patch("db._setze_termin_suchpfad", reihenfolge.suchpfad), \
-             patch("db.kopiere_termin_daten", side_effect=RuntimeError("PG-Fehler")), \
-             patch("db.loesche_termin_postgres", reihenfolge.loesche):
+        with patch_db("erstelle_termin_postgres", return_value=neuer_termin), \
+             patch_db("_setze_termin_suchpfad", reihenfolge.suchpfad), \
+             patch_db("kopiere_termin_daten", side_effect=RuntimeError("PG-Fehler")), \
+             patch_db("loesche_termin_postgres", reihenfolge.loesche):
             with self.assertRaises(RuntimeError):
                 exportiere_termin_nach_postgres(object(), postgres_conn)
 
@@ -3971,10 +3972,10 @@ class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):
             id=42, schema_name="termin_42", verein=None, ort=None, datum=None,
             anzahl_teilnehmer=0, erstellt_am="2026-09-22T00:00:00Z",
         )
-        with patch("db.erstelle_termin_postgres", return_value=neuer_termin), \
-             patch("db._setze_termin_suchpfad"), \
-             patch("db.kopiere_termin_daten", side_effect=RuntimeError("Ursprungsfehler")), \
-             patch("db.loesche_termin_postgres", side_effect=ValueError("Bereinigung kaputt")):
+        with patch_db("erstelle_termin_postgres", return_value=neuer_termin), \
+             patch_db("_setze_termin_suchpfad"), \
+             patch_db("kopiere_termin_daten", side_effect=RuntimeError("Ursprungsfehler")), \
+             patch_db("loesche_termin_postgres", side_effect=ValueError("Bereinigung kaputt")):
             with self.assertRaises(RuntimeError) as kontext:
                 exportiere_termin_nach_postgres(object(), MagicMock())
         self.assertEqual(str(kontext.exception), "Ursprungsfehler")

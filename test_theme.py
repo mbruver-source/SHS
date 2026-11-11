@@ -1,7 +1,7 @@
 """Reine String-Logik-Tests fuer die Theme-Erzeugung in desktop_darstellung.py - kein
 Qt-Import noetig ausser dem, den desktop_darstellung.py selbst am Kopf schon mitbringt
 (PySide6). Laeuft daher nur lokal, wenn PySide6 installiert ist - genau wie
-test_app_gui.py."""
+die test_gui_*.py."""
 
 import unittest
 from unittest import mock

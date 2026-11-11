@@ -34,6 +34,7 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
+from db_testhilfen import patch_db
 
 from flask.testing import FlaskClient
 
@@ -177,13 +178,13 @@ class _AppWebTestBasis(unittest.TestCase):
         self.geloeschte_termine = []
 
         self._patches = [
-            patch("db.verbinde_postgres_server", lambda dsn, password=None: _NichtSchliessendeVerbindung(self.conn)),
-            patch("db.oeffne_termin_postgres", _fake_oeffne_termin),
-            patch("db.liste_termine_postgres", lambda conn: self.termine),
-            patch("db._setze_termin_suchpfad", _fake_setze_termin_suchpfad),
-            patch("db.loesche_termin_postgres", lambda conn, schema_name: _fake_loesche_termin(self, conn, schema_name)),
-            patch("db.exportiere_termin_nach_postgres", lambda sqlite_conn, postgres_conn: _fake_exportiere_termin(self, sqlite_conn, postgres_conn)),
-            patch("db.importiere_ergebnisse_aus_postgres", lambda postgres_conn, schema_name, sqlite_conn: _fake_importiere_ergebnisse(self, postgres_conn, schema_name, sqlite_conn)),
+            patch_db("verbinde_postgres_server", lambda dsn, password=None: _NichtSchliessendeVerbindung(self.conn)),
+            patch_db("oeffne_termin_postgres", _fake_oeffne_termin),
+            patch_db("liste_termine_postgres", lambda conn: self.termine),
+            patch_db("_setze_termin_suchpfad", _fake_setze_termin_suchpfad),
+            patch_db("loesche_termin_postgres", lambda conn, schema_name: _fake_loesche_termin(self, conn, schema_name)),
+            patch_db("exportiere_termin_nach_postgres", lambda sqlite_conn, postgres_conn: _fake_exportiere_termin(self, sqlite_conn, postgres_conn)),
+            patch_db("importiere_ergebnisse_aus_postgres", lambda postgres_conn, schema_name, sqlite_conn: _fake_importiere_ergebnisse(self, postgres_conn, schema_name, sqlite_conn)),
         ]
         for p in self._patches:
             p.start()

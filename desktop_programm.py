@@ -434,7 +434,7 @@ class SitzungsendeFilter(QAbstractNativeEventFilter):
 
 
 # Kennung, an der das Setup ein laufendes Programm erkennt (installer.iss, AppMutex).
-# NIE ändern ohne installer.iss mitzuziehen - test_app_gui prüft, dass beide gleich sind.
+# NIE ändern ohne installer.iss mitzuziehen - test_gui_termin prüft, dass beide gleich sind.
 LAUF_MUTEX_NAME = "SHS-Pruefungsprogramm-Laufend"
 # Zusätzlich im globalen Namensraum: erkennt auch ein Setup unter einem anderen Konto bzw.
 # eine laufende App in einer anderen Windows-Sitzung (Empfehlung der Inno-Setup-Doku).

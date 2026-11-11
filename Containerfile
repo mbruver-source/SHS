@@ -16,7 +16,7 @@ FROM python:3.11.17-slim@sha256:6f31d6e9ba2b0a787a3f81c37b004155b87b9efa1b771182
 WORKDIR /app
 
 # Erst nur die Abhängigkeiten kopieren (eigener Layer) - bei einer reinen Code-Änderung
-# an db.py/app_web.py muss `pip install` dadurch nicht jedes Mal neu laufen.
+# an db.py (und den db_*.py)/app_web.py muss `pip install` dadurch nicht jedes Mal neu laufen.
 COPY requirements-postgres.txt requirements-web.txt ./
 RUN pip install --no-cache-dir -r requirements-postgres.txt -r requirements-web.txt
 
@@ -30,7 +30,10 @@ RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools sy
 # version.py (nicht version.txt/version_info.txt - die dienen nur dem PyInstaller-Build
 # der Desktop-.exe, siehe bump_version.py) liefert dieselbe Versionsnummer wie die
 # Desktop-Version, sichtbar in der Fußzeile jeder Web-Seite (siehe templates/base.html).
-COPY db.py shs_core.py app_web.py version.py ./
+# db.py ist seit 11.11.2026 eine Fassade über die Schichtmodule db_*.py (Liste ausdrücklich,
+# damit db_import.py/db_sicherung.py - Desktop, brauchen pypdf/pyzipper - nicht mitkommen).
+COPY db.py db_verbindung.py db_stamm.py db_ergebnisse.py db_zeitplan.py db_termine.py db_web.py db_sync.py ./
+COPY shs_core.py app_web.py version.py ./
 COPY templates/ ./templates/
 # Bilder der Web-Oberfläche (Beagle im Kopf, templates/base.html), ausgeliefert von Flask
 # unter /static (Marco 01.11.2026, Erscheinungsbild „Beagle“).
