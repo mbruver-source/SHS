@@ -44,7 +44,7 @@ flowchart TB
     end
 
     subgraph Shared["Gemeinsame Schicht"]
-        DbPy["db.py (größtes Modul)<br/>Datenzugriff SQLite + PostgreSQL<br/>(_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten,<br/>Ergebnisse, Zeitplan-Berechnung"]
+        DbPy["db.py = Fassade über db_verbindung, db_stamm,<br/>db_ergebnisse, db_zeitplan, db_termine, db_web, db_sync<br/>Datenzugriff SQLite + PostgreSQL (_PostgresConnection-Wrapper),<br/>Terminverwaltung, Benutzerkonten, Ergebnisse, Zeitplan"]
         ShsCore["shs_core.py (klein)<br/>Wertnoten- &amp; Rangliste-Logik<br/>(reine Funktionen, KEIN DB-Zugriff)"]
         PdfExport["pdf_export.py<br/>PDF-Reports (reportlab): Bewertungsbögen,<br/>Ergebnislisten, Statistik, Zeitplan,<br/>ausfüllbares Anmeldeformular"]
     end
@@ -103,43 +103,57 @@ flowchart TB
 
 ## 2. Modultabelle
 
-| Datei | Zweck | Zugehöriger Test |
-|---|---|---|
-| `app.py` | Desktop-GUI (PySide6): Reiter Teilnehmer, Formular-Import (mit Bereich „Letzter Import“ zum Nachlesen und Kopieren) und Ergebnis (Punkte über dem Höchstwert schon beim Tippen markiert), `HauptFenster` (Menüs „Ansicht“ und „Hilfe“, Tastenkürzel Strg+N/F/1-9), `TeilnehmerTab` mit einer Ebene „Rückgängig“ (Löschen, Startnummern zurücksetzen über `db.teilnehmer_sichern`/`teilnehmer_wiederherstellen`/`startnummern_wiederherstellen`) (`closeEvent`-Handling, Auto-Save; Beenden durch Windows/Setup über `commitDataRequest` → `_sitzungsende_pruefen`), `StartDialog` (mit Terminsuche, Spaltensortierung und denselben Menüs „Ansicht“/„Hilfe“); `main()` merkt Größe und Lage des Hauptfensters (QSettings) lädt die deutschen Qt-Texte und richtet das Absturzprotokoll ein. Die übrigen Reiter und das Programm-Drumherum liegen seit 19.10.2026 (offene Punkte O3–O6) in den vier Modulen darunter; `app.py` holt nur zurück, was es selbst nutzt | `test_app_gui.py` |
-| `desktop_auswertung.py` | Reiter Auswertung (Rangliste, Stechen), Teilnehmerübersicht (je Leistungsklasse, Behältnis-Bedarf) und Export (PDF-Ausdrucke, CSV) | `test_app_gui.py` |
-| `desktop_zeitplan.py` | Reiter Zeitplan (Richter-Spuren, Prüfungsblöcke/Pausen, Verteilung, Überschneidungen, PDF); Planungslogik in `db.py` | `test_app_gui.py`, `test_db.py` (`TestZeitplan`) |
-| `desktop_verwaltung.py` | Reiter Verwaltung (Veranstaltungsdaten, Checkliste zum Abhaken je Termin über `checkliste.py`) und Datensicherung (Erstellen/Wiederherstellen samt Konfliktabfrage; Logik in `db_sicherung.py`) | `test_app_gui.py`, `test_backup.py` |
-| `desktop_programm.py` | `VersionDialog` + Update-Prüfung (im Hintergrund-Thread mit Zeitgrenze), „Diagnose kopieren“ und `LizenzDialog` (MIT-`LICENSE` und `THIRD_PARTY_LICENSES.txt` aus dem Bundle), Sitzungsende (`SitzungsendeFilter`, `sitzungsende_einrichten`), Rückfrage beim zweiten Programmstart (`zweitstart_pruefen`, QLockFile) und Mutex (`laufkennung_setzen`) | `test_app_gui.py` |
-| `lr_abrechnung.py` | Abrechnung Leistungsrichter, reine Fachlogik ohne Qt und DB: Lesen der Zahlen (deutsch/englisch, Tausenderpunkt nur bei km und Pauschale), Rechnen mit Decimal (kaufmännisch auf Cent), Eingaben je Richter-Position als JSON (`veranstaltung.lr_abrechnung`, tolerant gegen beschädigte Dateien), Betrag in Worten für die Quittung | `test_lr_abrechnung.py` |
-| `checkliste.py` | Checkliste zum Abhaken im Reiter Verwaltung, reine Fachlogik: feste Kategorien/Schritte mit stabilen Kennungen, eigene Kategorien und Punkte (`veranstaltung.checkliste_eigene`), erledigte Schritte (`veranstaltung.checkliste`), für den Termin ausgeblendete Vorgaben (`ausblenden`/`alle_einblenden`, Schlüssel `ausgeblendet` in `checkliste_eigene`), tolerantes Lesen | `test_lr_abrechnung.py` (`TestCheckliste*`), `test_app_gui.py` |
-| `desktop_abrechnung.py` | Reiter „Abrechnung Leistungsrichter“ (seit 09.11.2026): je Wertungsrichter mit Namen km und Pauschale, Fahrtkosten und Summe, Sätze je Termin änderbar, PDF-Übersicht und Quittungen; Rechenlogik (Decimal, Betrag in Worten, Eingaben als JSON in `veranstaltung.lr_abrechnung`) in `lr_abrechnung.py` (ohne Qt/DB), PDFs in `pdf_export.py` | `test_app_gui.py`, `test_lr_abrechnung.py` |
-| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer mit Auswahl „Prüfung“ aus den angebotenen Prüfungen (sonst „andere Prüfung …“ mit Art/LK/Disziplin), Startnummern tauschen, Termin-Import, Prüfungsblock/Pause, Bewertungsbogen-Auswahl, Sicherung erstellen, `VerteilenDialog` (automatisch verteilen mit optionaler Mittagspause), Hilfe mit Suchfeld und Sprung zum Abschnitt des aktuellen Reiters (F1), Veranstaltung inkl. Startnummern-Bereichen mit Standardgröße/Anzahl und „Bereiche automatisch festlegen“); von `app.py` und den ausgelagerten Reiter-Modulen per `from … import` eingebunden | `test_app_gui.py` |
-| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen: Ablageorte/Speicherdialog für PDF und CSV (Ordner `Termine\Ausdrucke\<Termin>`, Meldung „gespeichert“ mit „PDF öffnen“/„Ordner zeigen“), Startordner der Importe, Fehlermeldungen (Datenbank- und Dateifehler im Klartext über `_klartext_fehler`/`_db_fehler_anzeigen`; breite Fänger über `_fehlertext`: Programmfehler kommen mit Typ ins Absturzprotokoll), Öffnen von Dateien/Adressen mit Meldung bei Fehlschlag (`_url_oeffnen`), modale Dialoge über `_ausfuehren` (danach freigegeben), Ja/Nein-Rückfragen über `_ja_nein` (Vorgabe „Nein“, nur ausdrücklich „Ja“), Wartecursor `_wartecursor`, gemeinsamer Exportablauf `_datei_exportieren` für PDF und CSV (Hülle `_pdf_exportieren`), responsive Schriftgröße, Tabellen-Hilfsklassen, Spaltenkonstanten der Ergebnistabelle, deutsche Qt-Texte (`deutsche_qt_texte_laden`), Absturzprotokoll (`absturzprotokoll_einrichten`: `sys.excepthook` + `faulthandler` → `absturzprotokoll.txt`, über 1 MB beim Start umbenannt zu `absturzprotokoll.alt.txt`; je Lauf begrenzt, Wiederholungen nur gezählt; Qt-Warnungen über `qt_meldungen_protokollieren`), Fehlerfenster bei unbehandelten Fehlern (`fehlerfenster_einrichten`) und kopierbare Diagnose ohne Benutzerpfad (`diagnose_text`); seit 10.11.2026 auch gemeinsame Bedienhilfen für mehrere Reiter (`_ablageort_ordner_oeffnen`, `_anmeldeformular_pdf_speichern`, `_bewertungsbogen_fuer_teilnehmer`, Namenssuche `_name_passt`, Rechtsklickmenü `_kontextmenue_aus_knoepfen` und die Einstellung „Speichern ohne Nachfrage“ in `_speicherort_waehlen`); seit 01.11.2026 auch `KopfBalken` (Kopf mit Beagle und Termin-Angaben für Haupt- und Startfenster), `symbol()`/`symbol_html()` (Tabler-SVGs aus `symbole/`, je Design eingefärbt) und `kurzer_hinweis()` (einzeiliger Hinweis mit „?“-Tooltip) | `test_app_gui.py` |
-| `desktop_darstellung.py` | Darstellung: Hintergrund-Designs `_DESIGNS` × Akzentfarben `_THEMES` → `_erzeuge_qss()`, angewendet über `_darstellung_anwenden()`: jedes Design (auch „Hell“) setzt eine feste QPalette und fordert ab Qt 6.8 das passende Farbschema an, „Dunkel“ zusätzlich den Fusion-Stil; das Häkchen-Bild der Nicht-Hell-Designs liegt im Programmordner `~/SHS-Pruefungsprogramm`; Farben im Code über `_farbe()`; gespeicherte Auswahl (QSettings); Standard seit 01.11.2026 Design „Beagle“ (ersetzt „Sand“, gespeichertes `sand` wird zu `beagle`) mit Akzent „Lohbraun“, Kopfbalken-Farben je Design, Pfeil- und Haken-Bilder; Schriftgröße in drei Stufen `_SCHRIFTSTUFEN` (Faktor über `schrift_faktor()`, wirkt auf die Anwendungsschrift und `_responsive_schriftgroesse`, UX-Test 03.11.2026) | `test_theme.py` (Stylesheet-Erzeugung + WCAG-Kontrast; braucht PySide6), `test_app_gui.py` |
-| `desktop_demo.py` | Geführte Demoprüfung (Button „Demoprüfung“ im Hauptfenster und im Startdialog): `DemoTour` legt einen Termin in einem eigenen Temp-Ordner an (nie im Termine-Ordner), führt 15 Schritte über die echten Reiter vor (ohne modale Rückfragen), `DemoPanel` erklärt, `DemoMarkierung` rahmt das aktive Element (selbst gezeichnet, kein Stylesheet); nach jedem fertigen Schritt automatisch weiter nach einer Lesezeit je nach Textlänge (`DemoTour._wartezeit`: mindestens `AUTO_WEITER_S`, höchstens `LESEZEIT_MAX_S`; „Vorheriger Text“ blättert in Schritt 1–3 die Erklärung zurück, ab Schritt 4 nimmt „Schritt zurück“ den vorigen Schritt zurück (aus Schritt 10/11 bis „Ergebnisse eintragen“, weil die Punkte erst in Schritt 10 gespeichert werden; `DemoTour._zurueck_ziel`): Stand des Demo-Termins je Schritt als SQLite-Kopie im Speicher, wiederhergestellt per `backup`, Reiter neu aufgebaut; Enter = Weiter; UX-Test 03.11.2026 und 2026-11 T12) (abschaltbar; wartet bei offener Meldung, hält bei „PDF öffnen“ und eigener Eingabe im Demo-Dialog an); am Ende wird der vorherige Termin wiederhergestellt und der Temp-Ordner gelöscht. Importiert bewusst NICHT `app` (bekommt das Hauptfenster bzw. eine Fenster-Fabrik übergeben, sonst doppelter Import über `__main__`) | `test_app_gui.py` |
-| `demo_daten.py` | Erfundene Daten der Demoprüfung (Veranstaltung, 8 Teilnehmer mit Ergebnissen: V/V-Stechen, SG, G, nB, DQ, 2× DK), ohne Qt | `test_db.py` (`TestDemoDaten`) |
-| `app_web.py` | Flask-Web-Backend: Login/Session/CSRF, Termin-Auswahl, Ergebniserfassung, Admin-Benutzer- und Termin-Verwaltung, öffentliche Seite `/lizenzen`; Geheimnisse über `geheimnis_lesen` (`<NAME>_FILE` vor `<NAME>`) | `test_app_web.py` |
-| `db.py` | Datenzugriffsschicht für BEIDE Backends: Schema, Migrationen, sicheres Öffnen eines Termins im Desktop (`termin_oeffnen`/`TerminNichtOeffenbar`: fehlende Datei melden, fremde Dateien erst nur lesend über `oeffne_termin_lesend` mit `lesen_begrenzen` und `pruefe_termin_aufbau` (berechnete Spalten in allen Tabellen; dieselbe Reihenfolge bündelt `termin_lesend_pruefen` für Terminübersicht `liste_termine` und Termin-Import, der ein Journal nicht zurückspielt), liegengebliebenes Journal zurückspielen, Schreibprobe, Wertebereichsprüfung; Schreibfunktionen mit Rollback `_mit_rollback`), Teilnehmer, Startnummern-Bereiche je Prüfung (`veranstaltung.startnummer_bereiche`, Standardgröße `veranstaltung.startnummer_bereichsgroesse`/`startnummer_bereichsgroesse()`, `bereiche_automatisch_berechnen`, `fehlende_startnummern_vergeben`, `startnummern_zuruecksetzen` - beide optional je Prüfung -, `fehlende_startnummern_je_pruefung`), Prüfungsbezeichnungen in einer Schreibweise wie auf dem Anmeldeformular („DK LK 1“, „Trümmer LK 2“; `pruefung_bezeichnung`, `leistungsklasse_label`, `zeitplan_bezeichnung`, Reihenfolge des Formulars über `sortiere_pruefungen`/`pruefung_sortierschluessel`, Suche über `pruefung_nach_bezeichnung`), Ergebnisse/Auswertung, Terminverwaltung (SQLite + PostgreSQL), Benutzerkonten, Zeitplan-Berechnung (automatische Verteilung mit DK-Mindestabstand, Überschneidungsprüfung `zeitplan_ueberschneidungen`, Pausen an Position bzw. bei allen Richtern, feste Pausenzeit `zeitplan_eintrag.fest_um` mit Lücke davor über `_pausen_beginn`, Richter aus den Veranstaltungsdaten), Sync SQLite↔PostgreSQL | `test_db.py`, `test_db_postgres_wrapper.py` |
-| `db_import.py` | Teilnehmer-Import und -Export (Desktop): CSV (Excel-Liste oder KI; UTF-8/Windows-Kodierung, `;`/`,` erkannt, leere Vorlage), OMA-Meldeliste, ausgefüllte Anmeldeformulare (PDF-Formularfelder per `pypdf`, Laufzeitabhängigkeit seit 28.09.2026), Stammdaten aus einem anderen Termin; CSV, OMA und Anmeldeformulare lehnen nicht angebotene Prüfungen ab (`_angebot_pruefen`, `NichtAngebotenError`; Dublette vor Angebot; ein Rat je Ablehnungsgrund über `rat_bei_ablehnung`), der Import aus einem anderen Termin übernimmt sie und weist danach darauf hin (`nicht_angebotene`); Teilnehmerliste als CSV-Export (`exportiere_teilnehmer_csv`, mit Schutz vor CSV-Formeln); baut auf `db.py` auf, `db.py` importiert es nicht | `test_db.py` |
-| `db_sicherung.py` | Backup/Restore aller Termin-Dateien (ZIP, optional `pyzipper`-verschlüsselt); baut auf `db.py` auf | `test_backup.py` |
-| `shs_core.py` | Reine Fachlogik ohne DB-Zugriff: Wertnoten-Berechnung (ED/DK), Abbruchgründe laut PO (`ABBRUCH_GRUENDE`, Teilbewertung über `Wertnote.teilbewertung`, Spalte `ergebnisse.abbruch_grund`), Rangliste-Bildung (Stechen um Platz 1 nur vor dem Stichtag der neuen PO, `PO_2027_STICHTAG`/`stechen_gilt`, siehe `PO_01012027.md`), Punktgrenzen `SUCHE_MAX`/`ANZEIGE_MAX` (gemeinsam für Desktop und Web) | `test_shs_core.py`, `test_bewertung_referenz.py` (mit Marco abgestimmte Referenzfälle + Eigenschaftstests mit `hypothesis`) |
-| `pdf_export.py` | PDF-Erzeugung (reportlab, Schrift DejaVu Sans Condensed aus `fonts/` für Sonderzeichen, Rückfall Helvetica): Bewertungsbögen (DK wahlweise ein Blatt je Disziplin, `je_disziplin`), Ergebnislisten, Etiketten (Ergebnis-Etiketten und Etiketten für die Behältnisse, `erstelle_behaeltnis_etiketten_pdf`), Statistik, Zeitplan, Richter-Bedarf, ausfüllbares Anmeldeformular (Canvas + AcroForm; Feldnamen als Konstanten `ANMELDEFORMULAR_*` in `db.py`, gemeinsam mit dem Import) | `test_pdf_export.py` |
-| `sync_termin.py` | CLI-Alternative zum Web-Upload/Download: Termin per Kommandozeile veröffentlichen/zurückholen (für Automatisierung/Skripte) | (über `db.py`-Tests abgedeckt) |
-| `selbsttest.py` | `--selbsttest [protokoll]` der Desktop-App (aus `app.main()`): prüft ohne Fenster Termin, Auswertung, PDFs, pypdf, CSV, verschlüsselte Sicherung, alle Reiter und das Programmsymbol; Exit-Code 0/1 + Protokoll. Die CI startet damit die gebaute und die still installierte EXE, die Mac-App (gebaut und aus dem .dmg) sowie unter Linux den Programmordner, das AppImage und das installierte .deb (`build-installer.yml`) | `test_app_gui.py` (`test_selbsttest_erfolg_und_fehlerfall`, `test_programmsymbol_und_selbsttest_schritt`) |
-| `tools/screenshots.py` | Erzeugt die 17 Desktop-Screenshots in `docs/bilder/` (Handbuch, README, Website) reproduzierbar: offscreen, Segoe UI, Standard-Design, deutsche Qt-Texte, feste erfundene Testdaten in einem Temp-Ordner, Anzeigepfad `C:\Users\Name\…`; Aufruf beim Build (siehe Skill `shs-build`) | `test_app_gui.py` (`test_screenshot_skript_erzeugt_alle_bilder`, eigener Prozess) |
-| `tools/handbuch_pdf.py` | Erzeugt `docs/HANDBUCH.pdf` aus `docs/HANDBUCH.md`, mit `--kurzanleitung` `docs/INSTALLATION_KURZ.pdf` (bebilderte Installationsanleitung zum Ausdrucken) aus `docs/INSTALLATION_KURZ.md`; über Edge/Chrome headless, Aufruf beim Build (Skill `shs-build`) | – |
-| `tools/altdaten_erzeugen.py`, `testdaten/altversionen/` | Termin-Dateien und Sicherungen älterer Versionen (mit dem Code des jeweiligen Git-Tags erzeugt, erfundene Daten) für die Upgrade-Tests; beim Build mit `--aktuell` um die neue Version ergänzen | `test_altversionen.py`, Altdatei-Test in `test_app_gui.py` |
-| `bump_version.py` | Versionsnummer (`version.txt`/`version_info.txt`/`version.py`, Stand-Zeile in `docs/HANDBUCH.md`, Image-Tag `shs-web:X.Y.Z` in `compose.yaml`) für Releases hochzählen | `test_bump_version.py` |
-| `templates/*.html` | Jinja2-Templates für `app_web.py` (Login, Ersteinrichtung, Termin-/Benutzerverwaltung, Ergebniserfassung) | (über `test_app_web.py` abgedeckt) |
-| `Containerfile`, `compose.yaml` | Container-Image + lokales Podman/Docker-Compose-Setup für die Web-Variante; Basis-Images per Digest, Geheimnisse als Secrets aus `secrets/` | `.github/workflows/build-container.yml` |
-| `installer.iss`, `build.spec` | Windows-Installer (Inno Setup) bzw. PyInstaller-Bundling für die Desktop-Variante; `build.spec` baut unter macOS die `.app`, unter Linux einen Programmordner (Vorschau seit 07.10.2026) | `.github/workflows/build-installer.yml` |
-| `tools/drittlizenzen.py`, `lizenzen/` | erzeugt beim Build `THIRD_PARTY_LICENSES.txt` (vorne eine Übersicht je Komponente) mit den Lizenzen aller mitgelieferten Fremdkomponenten (Python, Pakete samt Abhängigkeiten, DejaVu, LGPL-/GPL-Text für Qt); Aufruf aus `build.spec` (Desktop) und `Containerfile` (Web), bricht ab, wenn ein Paket fehlt oder keine Lizenzdatei hat | `test_drittlizenzen.py`, Build selbst (`build-installer.yml`, `build-container.yml`) |
-| `symbole/` | Tabler Icons 3.49.0 (MIT, unverändert) für die Desktop-Oberfläche; Lizenz in `symbole/LICENSE-Tabler.txt`, über `build.spec` gebündelt und in `THIRD_PARTY_LICENSES.txt` aufgeführt | `test_app_gui.py`, Selbsttest-Schritt „Symbole“ |
-| `static/` | Statische Dateien der Web-Version (`beagle.png` für den Kopf), von Flask unter `/static` ausgeliefert, im Container mitkopiert | `test_app_web.py` (`TestErscheinungsbild`) |
-| `tools/linux_pakete.sh` | baut aus dem Linux-Programmordner AppImage und .deb | `.github/workflows/build-installer.yml` (Job `build-linux`) |
-| `symbol/`, `tools/programmsymbol.py` | Programmsymbol (Beagle) als `.png`/`.ico`/`.icns`; `desktop_gemeinsam.programmsymbol()` lädt es zur Laufzeit | Selbsttest-Schritt „Programmsymbol“ |
+Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `Modulreferenz.md` und im Docstring des Moduls.
 
-## 3. Wichtige Architekturentscheidungen (Kurzfassung - Details in `Fortschritt.md`)
+| Datei | Zweck | Test |
+|---|---|---|
+| `app.py` | Desktop-Einstieg: `HauptFenster`, `StartDialog`, `main()` | `test_gui_termin.py` |
+| `desktop_teilnehmer.py` | Reiter Teilnehmer (Tabelle, Dialoge, Tauschen, Rückgängig) | `test_gui_teilnehmer.py` |
+| `desktop_import_meldungen.py` | Meldungen und Abläufe nach Importen (CSV, OMA, Formular, anderer Termin) | `test_gui_teilnehmer.py` |
+| `desktop_formular.py` | Reiter Formular-Import (Anmeldeformulare, KI-Liste) | `test_gui_teilnehmer.py` |
+| `desktop_ergebnis.py` | Reiter Ergebniserfassung (Aufbau, Zeilen, Filter, Sortierung) | `test_gui_ergebnis.py` |
+| `desktop_ergebnis_speichern.py` | Speichern der Ergebniserfassung (Einzel- und Sammel-Commit, Meldungen; Mixin von `ErgebnisTab`) | `test_gui_ergebnis.py` |
+| `desktop_rueckgaengig.py` | `RueckgaengigSpeicher`: eine Ebene „Rückgängig“ samt Knopf (genutzt von `TeilnehmerTab`) | `test_gui_teilnehmer.py` |
+| `desktop_ergebnis_zellen.py` | Zellen, Delegates, Punktefeld und Tabelle der Ergebniserfassung | `test_gui_ergebnis.py` |
+| `desktop_auswertung.py` | Reiter Auswertung, Teilnehmerübersicht und Export | `test_gui_auswertung.py` |
+| `desktop_zeitplan.py` | Reiter Zeitplan (Spuren, Blöcke, Pausen, Verteilung) | `test_gui_zeitplan.py`, `test_db.py` |
+| `desktop_verwaltung.py` | Reiter Verwaltung (Veranstaltung, Checkliste) und Datensicherung | `test_gui_verwaltung.py`, `test_backup.py` |
+| `desktop_abrechnung.py` | Reiter Abrechnung Leistungsrichter | `test_gui_verwaltung.py`, `test_lr_abrechnung.py` |
+| `desktop_programm.py` | Versionsfenster, Update-Prüfung, Sitzungsende, Zweitstart | `test_gui_darstellung.py`, `test_gui_termin.py` |
+| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Veranstaltung, Import, Hilfe …) | `test_gui_teilnehmer.py` |
+| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |
+| `desktop_darstellung.py` | Designs, Akzentfarben, Stylesheet | `test_theme.py`, `test_gui_darstellung.py` |
+| `desktop_demo.py` | Geführte Demoprüfung: `DemoTour` (Steuerung, Countdown, Beenden) | `test_gui_demo.py` |
+| `desktop_demo_panel.py` | Erklärfenster `DemoPanel`, Markierung `DemoMarkierung`, `DemoSchritt` | `test_gui_demo.py` |
+| `desktop_demo_schritte.py` | Schrittliste und Aktionen der Demo (Mixin von `DemoTour`) | `test_gui_demo.py` |
+| `demo_daten.py` | Erfundene Daten der Demoprüfung | `test_db.py` |
+| `desktop_beagle.py` | Beagle im Kopf (Klickzähler, Zeichnung) | `test_gui_darstellung.py` |
+| `lr_abrechnung.py` | Rechenlogik der Leistungsrichter-Abrechnung (ohne Qt/DB) | `test_lr_abrechnung.py` |
+| `checkliste.py` | Fachlogik der Checkliste (ohne Qt/DB) | `test_lr_abrechnung.py` |
+| `app_web.py`, `templates/` | Flask-Web-Backend: Login, Ergebniserfassung, Admin | `test_app_web.py` |
+| `db.py` | Fassade der Datenschicht (seit 11.11.2026): reicht alle Namen der sieben Schichtmodule weiter, `from db import …` und `db.<Name>` gelten wie vorher | `test_db_fassade.py` |
+| `db_verbindung.py` | Schicht 0: Verbindung, Schema, Migrationen, `_PostgresConnection`, `_mit_rollback` | `test_db.py`, `test_db_postgres_wrapper.py` |
+| `db_stamm.py` | Schicht 1: Veranstaltung, Teilnehmer, Startnummern-Bereiche, Datumsfelder | `test_db.py` |
+| `db_ergebnisse.py` | Schicht 2: Ergebnisse, Bewertung und Auswertung je Teilnehmer | `test_db.py` |
+| `db_zeitplan.py` | Schicht 2: Zeitplan, Überschneidungen, automatische Verteilung | `test_db.py`, `test_gui_zeitplan.py` |
+| `db_termine.py` | Schicht 2: Terminübersicht, sicheres Öffnen und Lesen von Termin-Dateien | `test_db.py` |
+| `db_web.py` | Schicht 3: PostgreSQL-Termine und Benutzerkonten der Web-Version | `test_db.py`, `test_app_web.py` |
+| `db_sync.py` | Schicht 4: Austausch SQLite-Termin-Datei ↔ PostgreSQL | `test_db.py` |
+| `db_testhilfen.py` | nur Tests: `patch_db` ersetzt einen Namen in der Fassade und allen Schichtmodulen | – |
+| `db_import.py` | Teilnehmer-Import (CSV, OMA, Formular-PDF) und CSV-Export | `test_db.py` |
+| `db_sicherung.py` | Datensicherung (ZIP) und automatische Kopie | `test_backup.py` |
+| `shs_core.py` | Reine Fachlogik: Wertnoten, Rangliste, Punktgrenzen | `test_shs_core.py`, `test_bewertung_referenz.py` |
+| `pdf_export.py` | Alle PDFs (Bewertungsbögen, Listen, Etiketten, Zeitplan, Formular) | `test_pdf_export.py` |
+| `sync_termin.py` | Kommandozeile zum Veröffentlichen/Zurückholen eines Termins (Web) | über `test_db.py` |
+| `selbsttest.py` | `--selbsttest` der Desktop-App (auch für die CI) | `test_gui_termin.py` |
+| `gui_hilfen.py` | Gemeinsame Fixtures und Hilfen der GUI-Tests | – |
+| `bump_version.py` | Versionsnummer für Releases hochzählen | `test_bump_version.py` |
+| `tools/` | Screenshots, Handbuch-PDF, Altdaten, Lizenzliste, Programmsymbol, Linux-Pakete | `test_gui_darstellung.py`, `test_altversionen.py`, `test_drittlizenzen.py` |
+| `Containerfile`, `compose.yaml` | Container und Compose-Setup der Web-Version | `build-container.yml` |
+| `installer.iss`, `build.spec` | Windows-Installer und PyInstaller-Bündelung | `build-installer.yml` |
+| `symbole/`, `symbol/`, `fonts/`, `static/`, `lizenzen/` | Icons, Programmsymbol, Schrift, Web-Dateien, Lizenztexte | Selbsttest |
+
+## 3. Wichtige Architekturentscheidungen (Kurzfassung - Details in `Fortschritt.md`, `historie/` und `entscheidungen/`)
 
 - **"Weg B" (Schema-pro-Termin) statt eigener Datenbank je Termin**: alle Termine teilen sich
   eine PostgreSQL-Datenbank, aber je Termin ein eigenes Schema (`_setze_termin_suchpfad`,
@@ -169,12 +183,25 @@ flowchart TB
   geändert hat (`ErgebnisTab._datenstand`: `total_changes` plus `PRAGMA data_version`).
   „Alle speichern“ schreibt bis 200 Teilnehmer mit einem Commit je Ergebnis. Darüber nutzt es
   eine Transaktion (`_SAMMELSPEICHERN_UEBER_TEILNEHMER`, ganz oder gar nicht).
+- **Modulzuschnitt (11.11.2026, mit Marco abgestimmt):**
+  - `db.py` ist eine **Fassade** über sieben Schichtmodule (Fassade statt Paket `db/`: `from db import …` und
+    die `Containerfile` bleiben einfach); Schichten verweisen nur nach unten, geprüft von `test_db_fassade.py`.
+    In Tests ersetzt `db_testhilfen.patch_db` einen Namen in allen Schichtmodulen, weil `patch("db.NAME")`
+    interne Aufrufe nicht erreicht.
+  - Die Desktop-Reiter liegen je in eigener Datei (`desktop_teilnehmer`, `desktop_formular`, `desktop_ergebnis`);
+    sehr große Klassen sind teils als **Mixin** auf Dateien verteilt (`_ErgebnisSpeichernMixin`,
+    `_DemoSchritteMixin`), weil ihre Methoden viel gemeinsamen Zustand brauchen. Das senkt die Dateigröße,
+    nicht die Kopplung; wo der Zustand klar trennbar war, gibt es echte Klassen (`RueckgaengigSpeicher`).
+    Der Countdown der `DemoTour` bleibt bewusst in der Klasse (acht gemeinsame Zustände, viele Teststellen).
+  - Die GUI-Tests teilen sich Fixtures über `gui_hilfen.py` (`from gui_hilfen import *`, `__all__` mit allen
+    Namen, auch den automatischen Fixtures). Ein Sternimport verdeckt fehlende Namen vor ruff; Namen
+    deshalb auch im Test explizit importieren, wenn sie dort direkt gebraucht werden.
 - **Benutzerkonten statt gemeinsamem Zugangscode**: zwei Rollen (Administrator, "Nur
   Eintragen"), global über alle Termine (nicht mehr an einen einzelnen Termin gebunden).
 - **Datei-Upload/Download statt direktem Dateizugriff des Containers**: funktioniert
   unabhängig davon, ob Container und Desktop-App auf demselben Gerät laufen.
 - **Sicherheitsgrundsätze (Sicherheitsprüfung 03.10.2026, Details in `Fortschritt.md` und
-  `Sicherheitspruefung-2026-10/`)**:
+  `berichte/Sicherheitspruefung-2026-10/`)**:
   - Termin-Dateien und Sicherungen gelten als fremde Eingaben: `init_db` entfernt fremde
     Trigger und Views, Sicherungs-ZIPs haben Obergrenzen und lehnen Pfadanteile und
     Windows-Gerätenamen ab.
@@ -209,7 +236,7 @@ flowchart TB
 ## 4. Test-Suite-Struktur
 
 Mindestens ein Testmodul je Kern-Modul (Zuordnung in der Tabelle oben - nicht 1:1: die
-Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py` mitgeprüft,
+Desktop-Module teilen sich `test_gui_*.py`, `db_import.py` wird in `test_db.py` mitgeprüft,
 `sync_termin.py` und `templates/` haben keine eigenen), plus Besonderheiten:
 
 - **PostgreSQL-Tests** (`Test*Postgres`-Klassen in `test_db.py` sowie `TestAppWebPostgres` in
@@ -219,7 +246,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   mit einem Wegwerf-Container (`podman run --rm -p 55432:5432 -e POSTGRES_USER=shs_test
   -e POSTGRES_PASSWORD=shs_test -e POSTGRES_DB=shs_test docker.io/library/postgres:16`);
   die Tests setzen die Datenbank selbst zurück und lassen sich beliebig oft wiederholen.
-- **GUI-Tests** (`test_app_gui.py`) brauchen PySide6 + `pytest-qt`; `test_theme.py` braucht
+- **GUI-Tests** (`test_gui_*.py`) brauchen PySide6 + `pytest-qt`; `test_theme.py` braucht
   PySide6 (importiert `desktop_darstellung`). Sie laufen lokal mit Anaconda und in der CI.
 - **Zwei CI-Jobs** in `tests.yml` (seit 19.10.2026): `test` unter Linux mit PostgreSQL und
   `test-windows` unter Windows ohne PostgreSQL (dort keine Service-Container; die
@@ -238,7 +265,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
   - Namen, die mehrere Module selbst importieren (`termine_ordner`, `_db_fehler_anzeigen`,
     `_ausfuehren`, `_datei_gespeichert_melden`, `_aktualisiere_veranstaltung_feld`,
     `_zeitplan_pdf_exportieren`), ersetzt der Helfer `ueberall_ersetzen(monkeypatch, name, wert)`
-    in allen Modulen aus `DESKTOP_MODULE` (`test_app_gui.py`). Ein neues Desktop-Modul gehört in
+    in allen Modulen aus `DESKTOP_MODULE` (`test_gui_*.py`). Ein neues Desktop-Modul gehört in
     diese Liste und in die Modulliste von `tools/screenshots.py`.
   - Ein autouse-Fixture lenkt `termine_ordner` in allen Desktop-Modulen, `db` und `db_sicherung`
     auf einen Temp-Ordner; kein Test schreibt in den echten Termine-Ordner.
@@ -247,7 +274,7 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
     Hauptfenster in `__main__`, ein `import app` lädt eine zweite Kopie). Was sie aus dem
     Hauptfenster brauchen, bekommen sie als Argument; gemeinsame Helfer stehen in
     `desktop_gemeinsam.py`. `desktop_demo.py` ruft Tab-Methoden über die übergebene
-    Fenster-Instanz auf; Demo-Tests patchen `desktop_demo.X` bzw. `db.X`.
+    Fenster-Instanz auf; Demo-Tests patchen `desktop_demo.X` bzw. `db.X` (nur für Namen, die in `desktop_demo.py` bleiben, z. B. `init_db`, `datetime`, `DemoTour`; verschobene Namen stehen in `desktop_demo_panel.py` bzw. `desktop_demo_schritte.py`). Für Namen, die mehrere Desktop-Module importieren, gibt es `ueberall_ersetzen` in `gui_hilfen.py` (Liste `DESKTOP_MODULE` bei neuen Modulen ergänzen).
   - Die intern gepatchten `db`-Funktionen (Konten, PostgreSQL-Terminverwaltung, Sync) bleiben in
     `db.py`.
 - Lokale Verifikation (ohne PySide6/psycopg2/pytest): `python3 -m unittest test_db
@@ -257,7 +284,9 @@ Desktop-Module teilen sich `test_app_gui.py`, `db_import.py` wird in `test_db.py
 ## 5. Woher kommt was (Verweise)
 
 - Fachlicher Hintergrund/Migrationsplan: `Grobkonzept.md`
-- Vollständige Entscheidungs-/Fix-Historie, offene Punkte: `Fortschritt.md`
+- Entscheidungs-/Fix-Historie: `Fortschritt.md` (laufender Monat) und `historie/` (ältere Monate);
+  offene und zurückgestellte Punkte: `OFFEN.md` mit `entscheidungen/`; Prüfberichte: `berichte/`;
+  ausführliche Modulbeschreibung: `Modulreferenz.md`
 - Web-Deployment im Detail: `README_CONTAINER.md`
 - Installer/Signierung im Detail: `README_INSTALLER.md`, `CODE_SIGNING_POLICY.md`
 

@@ -13,13 +13,19 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
   selbst durch die großen Module (`app.py`, `db.py`, `desktop_dialoge.py`) durcharbeitest.
   Die Abläufe und Klassen als UML (Mermaid) stehen in `UML.md`.
 - **Offene, zurückgestellte und akzeptierte Punkte auf einen Blick:** `OFFEN.md` - vor jeder
-  Planung und bevor du einen Befund meldest dort nachsehen; Fundstellen verweisen in
-  `Fortschritt.md`.
+  Planung und bevor du einen Befund meldest dort nachsehen; jede zurückgestellte oder
+  akzeptierte Entscheidung hat ein Dokument in `entscheidungen/` (Vorlage dort), die
+  Fundstellen nennen Datei und Abschnittstitel in `Fortschritt.md` bzw. `historie/`.
 - **Neue Prüfungsordnung ab 01.01.2027:** `PO_01012027.md` - ToDo-Liste der nötigen Anpassungen
   (Umschaltung über das Prüfungsdatum).
-- **Vollständige Entscheidungs-/Fix-Historie, offene Punkte, akzeptierte Restrisiken:**
-  `Fortschritt.md` - insbesondere die "Noch offen"-Abschnitte, bevor du einen bereits
-  besprochenen und bewusst abgelehnten Punkt erneut als neuen Befund meldest.
+- **Entscheidungs-/Fix-Historie:** `Fortschritt.md` enthält nur den laufenden Monat; ältere
+  Monate stehen unverändert in `historie/` (Übersicht dort). Vor einem erneuten Befund zu
+  einem bereits besprochenen Punkt `OFFEN.md` und `entscheidungen/` lesen und die Historie mit
+  `git grep -i "Stichwort" -- historie Fortschritt.md` durchsuchen, nicht komplett lesen.
+  Am Monatsende den laufenden Monat nach `historie/JJJJ-MM.md` verschieben.
+- **Berichte der Prüfungen** (Sicherheit, UX-Test, Desktop-Prüfung, QS, Abdeckung): `berichte/`.
+- **Ausführliche Modulbeschreibung:** `Modulreferenz.md` (in `Architektur.md` steht nur ein
+  Satz je Modul).
 - **Ursprünglicher fachlicher Hintergrund/Migrationsplan:** `Grobkonzept.md`
 
 ## Arbeitsweise mit Subagents (mit dem Nutzer am 20.09.2026 abgestimmt)
@@ -28,9 +34,9 @@ Verwaltungssoftware für Spürhundsport-Prüfungen (SHS) eines Vereins. Bevor du
    komplett selbst zu lesen, zuerst einen schnellen Such-Subagent die relevante Stelle
    lokalisieren lassen.
 2. **Bereichs-Subagents bei bereichsübergreifenden Änderungen.** Betrifft eine Änderung
-   mehrere der drei Bereiche Desktop (`app.py`, `desktop_*.py`, `test_app_gui.py`,
-   `test_theme.py`), Web (`app_web.py`, `templates/`, `test_app_web.py`) und Daten (`db.py`,
-   `db_import.py`, `db_sicherung.py`, `shs_core.py`, `test_db.py`, `test_backup.py`,
+   mehrere der drei Bereiche Desktop (`app.py`, `desktop_*.py`, `test_gui_*.py`,
+   `gui_hilfen.py`, `test_theme.py`), Web (`app_web.py`, `templates/`, `test_app_web.py`) und Daten (`db.py` und die
+   Schichtmodule `db_*.py`, `db_import.py`, `db_sicherung.py`, `shs_core.py`, `test_db.py`, `test_backup.py`,
    `test_db_postgres_wrapper.py`), parallele Subagents je Bereich statt sequenziell
    nacheinander.
 3. **QS-Prüfungen mit differenzierten Rollen statt identischer Aufträge.** Bei einer
@@ -96,7 +102,7 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ## Tests lokal ausführen (ohne PySide6/psycopg2/pytest)
 
 ```
-python3 -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel
+python3 -m unittest test_db test_db_fassade test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel
 ```
 
 Lokal unter Windows immer den Anaconda-Python nehmen: `C:\Users\mbruv\anaconda3\python.exe`
@@ -107,7 +113,7 @@ fehlen `pypdf` und `psycopg2`, `test_pdf_export` läuft damit fast leer und meld
 Test-/Dev-Abhängigkeiten (pytest, pytest-qt, pypdf, hypothesis) stehen in `requirements-dev.txt`. Ohne
 `pypdf` wird `test_pdf_export` fast komplett übersprungen (nur wenige Tests laufen dann).
 
-GUI-Tests (`test_app_gui.py`, `test_theme.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
+GUI-Tests (`test_gui_*.py` mit den gemeinsamen Fixtures in `gui_hilfen.py`, `test_theme.py`) und die echten PostgreSQL-Tests in `test_db.py` brauchen
 PySide6 bzw. `SHS_TEST_POSTGRES_DSN`+`psycopg2`. Die GUI-Tests laufen lokal mit dem Anaconda-Python;
 die echten PostgreSQL-Tests laufen nur in der CI (`.github/workflows/tests.yml`, Job `test` unter
 Linux). Der zweite Job `test-windows` führt die Suite zusätzlich unter Windows aus (ohne PostgreSQL).
@@ -153,8 +159,9 @@ Wenn Marco Rückmeldungen gibt (Text oder Fotos handschriftlicher Notizen):
 2. Bei Unklarheiten (z. B. Datenmodell-Entscheidungen, Umfang eines Wunsches) IMMER zuerst
    nachfragen, bevor Code geändert wird - nicht raten.
 3. Jeden Punkt in `Fortschritt.md` dokumentieren, auch wenn er nur geklärt und nicht
-   code-seitig umgesetzt wurde (z. B. Erklärung statt Fix). `Fortschritt.md` ist die einzige
-   durchgängige Historie über alle Sitzungen hinweg.
+   code-seitig umgesetzt wurde (z. B. Erklärung statt Fix). `Fortschritt.md` (laufender Monat) und
+   `historie/` (ältere Monate) sind zusammen die einzige durchgängige Historie über alle
+   Sitzungen hinweg.
 
 ### Build-/Versionsdisziplin ("erst nach Absprache")
 

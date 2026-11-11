@@ -60,7 +60,7 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 ## 4. Tests
 
 ```
-PY -m unittest test_db test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
+PY -m unittest test_db test_db_fassade test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen
 ```
 
 Zusätzlich die SHS Test Suite (token-sparend, enthält auch die GUI-Tests; grün = eine Zeile):
@@ -100,7 +100,10 @@ Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
   Dateien aus `git ls-files` außer `.claude/` nach `..\SHS-Pruefungsprogramm-Quellcode`
   kopieren, die Workflows aus `.github/workflows/` zusätzlich in dessen Wurzelordner, nichts
   im Spiegel löschen; danach Byte-Abgleich und eine Zeile in `Fortschritt.md`. Nicht mehr
-  Marco überlassen.
+  Marco überlassen. Seit 11.11.2026 sind Dateien verschoben bzw. ersetzt worden
+  (`berichte/`, `historie/`, `entscheidungen/`, `test_gui_*.py` statt `test_app_gui.py`):
+  Im Spiegel liegen dann veraltete Altdateien an den früheren Orten. Sie dem Nutzer
+  nennen und nur mit seinem Ja löschen.
 - **Nachlauf nach dem Release (erst möglich, wenn Marco Setup heruntergeladen und installiert
   hat):** EXE-Selbsttest der installierten Version:
   ```
@@ -110,4 +113,5 @@ Schlägt etwas fehl: nicht committen, Marco das Ergebnis zeigen.
   (alte Installation) schlägt diese Prüfung erwartungsgemäß fehl. Marco bei der Abschlussmeldung
   daran erinnern.
 - Hinweis an Marco: falls geändert, `Fortschritt.md`/`Architektur.md`/`Grobkonzept.md` in der claude.ai-Ablage
-  „SHS“ nachziehen.
+  „SHS“ nachziehen (seit 11.11.2026 ist `Fortschritt.md` kurz; `historie/` und `Modulreferenz.md`
+  müssen dort nicht liegen).

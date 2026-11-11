@@ -124,6 +124,12 @@ classDiagram
         -_rueckgaengig_merken(text, aktion)
         -_rueckgaengig_ausfuehren()
     }
+    class RueckgaengigSpeicher {
+        +knopf
+        +merken(beschreibung, aktion)
+        +entnehmen()
+    }
+    TeilnehmerTab *-- RueckgaengigSpeicher
     class FormularImportTab
     class ErgebnisTab {
         +tabelle

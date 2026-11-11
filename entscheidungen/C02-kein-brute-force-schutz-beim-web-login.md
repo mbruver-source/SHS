@@ -1,0 +1,16 @@
+# C2: Kein Brute-Force-Schutz beim Web-Login
+
+- **Status:** akzeptiertes Restrisiko / abgelehnt
+- **Bereich:** C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
+- **Seit:** 20.09.2026
+
+## Entscheidung
+
+Kein Brute-Force-Schutz beim Web-Login
+
+## Fundstellen
+
+- `historie/2026-09.md`, Abschnitt „Erledigt“
+- CLAUDE.md
+
+Neue Entscheidungen bitte nach `entscheidungen/VORLAGE.md` anlegen und in `OFFEN.md` eintragen.

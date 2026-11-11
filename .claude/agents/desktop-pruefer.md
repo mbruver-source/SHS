@@ -35,7 +35,7 @@ Prüfe alle Dimensionen in einem Durchgang:
   Programmwechsel, Zustand nach Fehlern mitten im Vorgang.
 - **Fehlerbehandlung:** verschluckte Ausnahmen, zu breite `except`, unklare Meldungen.
 - **Wartbarkeit:** Duplikate, toter Code, unnötig komplizierte Stellen, veraltete Kommentare.
-- **Testlücken:** fehlende Tests für die geprüften Stellen (`test_app_gui.py`, `test_db.py` usw.).
+- **Testlücken:** fehlende Tests für die geprüften Stellen (`test_gui_*.py`, `test_db.py` usw.).
 
 Rahmen: Seit 19.10.2026 ist `app.py` aufgeteilt (Teilnehmer-, Import- und Ergebnis-Reiter,
 Hauptfenster und Start bleiben dort; Auswertung/Export, Zeitplan, Verwaltung/Datensicherung und
