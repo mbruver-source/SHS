@@ -150,6 +150,8 @@ def import_meldungen_sammeln(monkeypatch):
 #: Module der Desktop-Oberfläche, die gemeinsame Namen (z. B. termine_ordner) jeweils selbst
 #: importieren - siehe ueberall_ersetzen.
 DESKTOP_MODULE = ("app", "desktop_abrechnung", "desktop_auswertung", "desktop_darstellung", "desktop_demo", "desktop_dialoge",
+                  "desktop_dialoge_basis", "desktop_dialoge_planung", "desktop_dialoge_teilnehmer",
+                  "desktop_dialoge_termin", "desktop_hilfe",
                   "desktop_demo_panel", "desktop_demo_schritte",
                   "desktop_ergebnis", "desktop_ergebnis_speichern", "desktop_ergebnis_zellen",
                   "desktop_formular", "desktop_gemeinsam",

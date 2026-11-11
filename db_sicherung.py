@@ -129,7 +129,7 @@ def eindeutigen_dateinamen_finden(
     """Hängt bei einem im Ordner bereits vergebenen Dateinamen einen Zähler an (z.B.
     'Termin (2).sqlite'), bis ein noch freier Name gefunden ist - für die Option "als
     Kopie importieren" beim Wiederherstellen einer Sicherung (siehe
-    desktop_dialoge._wiederherstellungsziele_planen).
+    desktop_dialoge_termin._wiederherstellungsziele_planen).
 
     `bereits_vergeben`: Namen, die noch nicht auf der Platte liegen, aber im selben
     Vorgang schon als Ziel eingeplant sind (Codeprüfung 22.09., G5: enthielt eine

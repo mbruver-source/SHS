@@ -236,50 +236,8 @@ class VersionDialog(QDialog):
         )
         hinweis.setWordWrap(True)
 
-        self._update_lauf = 0
-        self._fokus_zurueck = False
-        self._update_bote = _UpdateBote(self)
-        self._update_bote.ergebnis.connect(self._update_ergebnis)
-        self._updates_btn = QPushButton("Nach Updates suchen")
-        self._updates_btn.clicked.connect(self._updates_pruefen)
-
-        self._ergebnis_zeile = QLabel("")
-        self._ergebnis_zeile.setWordWrap(True)
-        # Reiner Text statt Qts automatischer Rich-Text-Erkennung - der angezeigte Text
-        # stammt aus der GitHub-API (tag_name), ein dort manipulierter Rich-Text-artiger
-        # Inhalt soll im Label keinesfalls als HTML interpretiert werden.
-        self._ergebnis_zeile.setTextFormat(Qt.PlainText)
-        self._ergebnis_zeile.hide()
-
-        self._download_btn = QPushButton("Neue Version herunterladen (GitHub öffnen)")
-        self._download_btn.clicked.connect(self._releases_seite_oeffnen)
-        self._download_btn.hide()
-
-        seite_link_btn = QPushButton("Download-Seite im Browser öffnen")
-        seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
-
-        # Rückmeldung Marco 13.10.2026: Diagnose für Fehlermeldungen zum Kopieren statt eines
-        # Dumps mit Termindaten (siehe desktop_gemeinsam.diagnose_text). UX-Test 2026-11, T9:
-        # in einem eigenen Bereich „Für Fehlermeldungen“ - Werner hielt „Diagnose“ und
-        # „Absturzprotokoll“ für etwas, das er bedienen müsse.
-        fehler_hinweis = QLabel(
-            "Nur nötig, wenn du einen Fehler melden möchtest: „Diagnose kopieren“ und in die "
-            "Nachricht einfügen. Sie enthält Version, System und die letzten Fehlermeldungen des "
-            "Programms, aber keine Termin-Datei. Vor dem Einfügen kurz prüfen, ob Teilnehmerdaten "
-            "darin stehen (z. B. in Fehlertexten)."
-        )
-        fehler_hinweis.setWordWrap(True)
-        diagnose_btn = QPushButton("Diagnose kopieren")
-        diagnose_btn.clicked.connect(self._diagnose_kopieren)
-        protokoll_btn = QPushButton("Protokoll-Ordner öffnen")
-        protokoll_btn.clicked.connect(lambda: _ordner_zeigen(str(absturzprotokoll_pfad()), self))
-        protokoll_btn.setEnabled(absturzprotokoll_pfad() is not None)
-        self._diagnose_status = QLabel("")
-        diagnose_zeile = QHBoxLayout()
-        diagnose_zeile.addWidget(diagnose_btn)
-        diagnose_zeile.addWidget(protokoll_btn)
-        diagnose_zeile.addWidget(self._diagnose_status)
-        diagnose_zeile.addStretch()
+        seite_link_btn = self._update_widgets_aufbauen()
+        fehler_bereich = self._fehler_bereich_aufbauen()
 
         schliessen_btn = QPushButton("Schließen")
         schliessen_btn.clicked.connect(self.accept)
@@ -305,10 +263,6 @@ class VersionDialog(QDialog):
         layout.addWidget(self._updates_btn)
         layout.addWidget(self._ergebnis_zeile)
         layout.addWidget(self._download_btn)
-        fehler_bereich = QGroupBox("Für Fehlermeldungen")
-        fehler_layout = QVBoxLayout(fehler_bereich)
-        fehler_layout.addWidget(fehler_hinweis)
-        fehler_layout.addLayout(diagnose_zeile)
         layout.addSpacing(8)
         layout.addWidget(fehler_bereich)
         layout.addSpacing(8)
@@ -317,6 +271,61 @@ class VersionDialog(QDialog):
         # UX-Test 2026-11, T9: „Hilfe → Nach Updates suchen…“ öffnet das Fenster und sucht gleich.
         if updates_sofort_suchen:
             QTimer.singleShot(0, self, self._updates_pruefen)
+
+    def _update_widgets_aufbauen(self) -> QPushButton:
+        """Update-Prüfung (Knopf, Ergebniszeile, Download); liefert den Knopf „Download-Seite öffnen“."""
+        self._update_lauf = 0
+        self._fokus_zurueck = False
+        self._update_bote = _UpdateBote(self)
+        self._update_bote.ergebnis.connect(self._update_ergebnis)
+        self._updates_btn = QPushButton("Nach Updates suchen")
+        self._updates_btn.clicked.connect(self._updates_pruefen)
+
+        self._ergebnis_zeile = QLabel("")
+        self._ergebnis_zeile.setWordWrap(True)
+        # Reiner Text statt Qts automatischer Rich-Text-Erkennung - der angezeigte Text
+        # stammt aus der GitHub-API (tag_name), ein dort manipulierter Rich-Text-artiger
+        # Inhalt soll im Label keinesfalls als HTML interpretiert werden.
+        self._ergebnis_zeile.setTextFormat(Qt.PlainText)
+        self._ergebnis_zeile.hide()
+
+        self._download_btn = QPushButton("Neue Version herunterladen (GitHub öffnen)")
+        self._download_btn.clicked.connect(self._releases_seite_oeffnen)
+        self._download_btn.hide()
+
+        seite_link_btn = QPushButton("Download-Seite im Browser öffnen")
+        seite_link_btn.clicked.connect(self._releases_seite_oeffnen)
+        return seite_link_btn
+
+    def _fehler_bereich_aufbauen(self) -> QGroupBox:
+        """Bereich „Für Fehlermeldungen“ (Diagnose kopieren, Protokoll-Ordner)."""
+        # Rückmeldung Marco 13.10.2026: Diagnose für Fehlermeldungen zum Kopieren statt eines
+        # Dumps mit Termindaten (siehe desktop_gemeinsam.diagnose_text). UX-Test 2026-11, T9:
+        # in einem eigenen Bereich „Für Fehlermeldungen“ - ein Teilnehmer hielt „Diagnose“ und
+        # „Absturzprotokoll“ für etwas, das er bedienen müsse.
+        fehler_hinweis = QLabel(
+            "Nur nötig, wenn du einen Fehler melden möchtest: „Diagnose kopieren“ und in die "
+            "Nachricht einfügen. Sie enthält Version, System und die letzten Fehlermeldungen des "
+            "Programms, aber keine Termin-Datei. Vor dem Einfügen kurz prüfen, ob Teilnehmerdaten "
+            "darin stehen (z. B. in Fehlertexten)."
+        )
+        fehler_hinweis.setWordWrap(True)
+        diagnose_btn = QPushButton("Diagnose kopieren")
+        diagnose_btn.clicked.connect(self._diagnose_kopieren)
+        protokoll_btn = QPushButton("Protokoll-Ordner öffnen")
+        protokoll_btn.clicked.connect(lambda: _ordner_zeigen(str(absturzprotokoll_pfad()), self))
+        protokoll_btn.setEnabled(absturzprotokoll_pfad() is not None)
+        self._diagnose_status = QLabel("")
+        diagnose_zeile = QHBoxLayout()
+        diagnose_zeile.addWidget(diagnose_btn)
+        diagnose_zeile.addWidget(protokoll_btn)
+        diagnose_zeile.addWidget(self._diagnose_status)
+        diagnose_zeile.addStretch()
+        fehler_bereich = QGroupBox("Für Fehlermeldungen")
+        fehler_layout = QVBoxLayout(fehler_bereich)
+        fehler_layout.addWidget(fehler_hinweis)
+        fehler_layout.addLayout(diagnose_zeile)
+        return fehler_bereich
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)

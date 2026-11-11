@@ -155,6 +155,38 @@ class FormularImportTab(QWidget):
         oma_btn = QPushButton("OMA-Export importieren…")
         oma_btn.clicked.connect(self._oma_importieren)
 
+        self._ki_bereich_aufbauen()
+        self._letzter_import_aufbauen()
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(abschnitt(
+            "1. Ausgefüllte Anmeldeformulare (PDF) – empfohlen",
+            "Das Anmeldeformular erzeugst du im Reiter „Ausdrucke/Export“ und verschickst es an die "
+            "Teilnehmer. Die ausgefüllt zurückgeschickten PDF-Dateien hier einlesen – mehrere "
+            "auf einmal möglich, bereits vorhandene Meldungen werden übersprungen.",
+            anmeldeformular_btn, self.leeres_formular_btn,
+        ))
+        layout.addWidget(self.formular_status_label)
+        layout.addWidget(abschnitt(
+            "2. Teilnehmerliste aus Excel (CSV-Datei)",
+            "Eine Liste mit einer Zeile je Teilnehmer, z. B. vom Schriftführer. Die leere "
+            "Vorlage enthält die passenden Spaltenüberschriften: in Excel ausfüllen, als "
+            "„CSV“ speichern und hier einlesen.",
+            import_btn, vorlage_btn,
+        ))
+        layout.addWidget(abschnitt(
+            "3. Meldungen aus der OMA (Online-Meldeannahme)",
+            "Den Meldungs-Export der OMA direkt einlesen – bereits vorhandene Meldungen werden "
+            "übersprungen.",
+            oma_btn,
+        ))
+        layout.addWidget(self.letzter_import)
+        layout.addWidget(self._ki_umschalter)
+        layout.addWidget(self._ki_bereich, 1)
+        layout.addStretch()
+
+    def _ki_bereich_aufbauen(self) -> None:
+        """Eingeklappter Bereich „Mit KI-System einlesen“ (Prompt, Anleitung, Umschalter)."""
         self.prompt_feld = QPlainTextEdit(_formular_import_prompt())
         self.prompt_feld.setReadOnly(True)
         self.prompt_feld.setLineWrapMode(QPlainTextEdit.WidgetWidth)
@@ -195,6 +227,7 @@ class FormularImportTab(QWidget):
         )
         self._ki_umschalter.toggled.connect(self._ki_bereich_umschalten)
 
+    def _letzter_import_aufbauen(self) -> None:
         # UX-Test 2026-11, T2: Ergebnis des letzten Imports (bis zum nächsten bzw. bis zum
         # Terminwechsel, nur im Speicher), siehe _letzten_import_zeigen.
         self.letzter_import = QGroupBox("Letzter Import")
@@ -213,33 +246,6 @@ class FormularImportTab(QWidget):
         letzter_layout.addWidget(self.letzter_import_text)
         letzter_layout.addLayout(letzter_zeile)
         self.letzter_import.setVisible(False)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(abschnitt(
-            "1. Ausgefüllte Anmeldeformulare (PDF) – empfohlen",
-            "Das Anmeldeformular erzeugst du im Reiter „Ausdrucke/Export“ und verschickst es an die "
-            "Teilnehmer. Die ausgefüllt zurückgeschickten PDF-Dateien hier einlesen – mehrere "
-            "auf einmal möglich, bereits vorhandene Meldungen werden übersprungen.",
-            anmeldeformular_btn, self.leeres_formular_btn,
-        ))
-        layout.addWidget(self.formular_status_label)
-        layout.addWidget(abschnitt(
-            "2. Teilnehmerliste aus Excel (CSV-Datei)",
-            "Eine Liste mit einer Zeile je Teilnehmer, z. B. vom Schriftführer. Die leere "
-            "Vorlage enthält die passenden Spaltenüberschriften: in Excel ausfüllen, als "
-            "„CSV“ speichern und hier einlesen.",
-            import_btn, vorlage_btn,
-        ))
-        layout.addWidget(abschnitt(
-            "3. Meldungen aus der OMA (Online-Meldeannahme)",
-            "Den Meldungs-Export der OMA direkt einlesen – bereits vorhandene Meldungen werden "
-            "übersprungen.",
-            oma_btn,
-        ))
-        layout.addWidget(self.letzter_import)
-        layout.addWidget(self._ki_umschalter)
-        layout.addWidget(self._ki_bereich, 1)
-        layout.addStretch()
 
     def _prompt_kopieren(self) -> None:
         QApplication.clipboard().setText(self.prompt_feld.toPlainText())

@@ -177,6 +177,25 @@ class ZeitplanTab(QWidget):
 
         veranstaltung = get_veranstaltung(conn) or {}
 
+        kopf_zeile, knopf_zeile = self._kopf_aufbauen(veranstaltung)
+        hinweis, inhalt_zeile = self._inhalt_aufbauen()
+
+        self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
+        self.status_label.setWordWrap(True)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Zeitplan"))
+        layout.addLayout(kopf_zeile)
+        layout.addLayout(knopf_zeile)
+        layout.addWidget(hinweis)
+        layout.addLayout(inhalt_zeile, stretch=1)
+        layout.addWidget(self.status_label)
+
+        self.aktualisieren()
+
+    def _kopf_aufbauen(self, veranstaltung: dict) -> tuple[QHBoxLayout, QHBoxLayout]:
+        """Kopfzeile (Startzeit, Dauer, Mindestabstand) und Knopfzeile."""
         self.zeitplan_start = QLineEdit(veranstaltung.get("zeitplan_start") or "09:00")
         self.zeitplan_start.setPlaceholderText("HH:MM")
         self.zeitplan_start.setMaximumWidth(70)
@@ -243,7 +262,10 @@ class ZeitplanTab(QWidget):
         knopf_zeile.addStretch()
         knopf_zeile.addWidget(export_btn)
         knopf_zeile.addWidget(self.ablageort_btn)
+        return kopf_zeile, knopf_zeile
 
+    def _inhalt_aufbauen(self) -> tuple[QWidget, QHBoxLayout]:
+        """Hinweis, Richter-Spalten (scrollbar) und die feste Seitenleiste „Offene Starts“."""
         # Kurz mit Hilfe-Symbol, der volle Text im Tooltip (Marco 01.11.2026).
         hinweis = kurzer_hinweis(
             "Je Richter eine Spalte – Blöcke und Pausen frei anordnen. „Automatisch "
@@ -287,20 +309,7 @@ class ZeitplanTab(QWidget):
         inhalt_zeile = QHBoxLayout()
         inhalt_zeile.addWidget(self._scroll, stretch=1)
         inhalt_zeile.addWidget(self._offene_starts_box)
-
-        self.status_label = QLabel("")
-        self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
-        self.status_label.setWordWrap(True)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Zeitplan"))
-        layout.addLayout(kopf_zeile)
-        layout.addLayout(knopf_zeile)
-        layout.addWidget(hinweis)
-        layout.addLayout(inhalt_zeile, stretch=1)
-        layout.addWidget(self.status_label)
-
-        self.aktualisieren()
+        return hinweis, inhalt_zeile
 
     # --- Aufbau --------------------------------------------------------------
 
@@ -465,6 +474,45 @@ class ZeitplanTab(QWidget):
         box = QGroupBox(richter["name"])
         box.setMinimumWidth(300)
 
+        kopf_zeile = self._richter_kopf(richter_id)
+        liste = self._block_liste(richter_id, zeilen)
+
+        hoch_btn = QPushButton("Hoch")
+        hoch_btn.clicked.connect(lambda: self._eintrag_verschieben(liste, -1))
+        runter_btn = QPushButton("Runter")
+        runter_btn.clicked.connect(lambda: self._eintrag_verschieben(liste, 1))
+        bearbeiten_btn = QPushButton("Bearbeiten…")
+        bearbeiten_btn.clicked.connect(lambda: self._eintrag_bearbeiten(liste))
+        entfernen_btn = QPushButton("Entfernen")
+        entfernen_btn.clicked.connect(lambda: self._eintrag_entfernen(liste))
+
+        # UX-Test 02.10.2026, U9: Knöpfe in zwei statt fünf Zeilen - mehr Höhe für die Liste.
+        eintrag_buttons_1 = QHBoxLayout()
+        eintrag_buttons_1.addWidget(hoch_btn)
+        eintrag_buttons_1.addWidget(runter_btn)
+        eintrag_buttons_1.addWidget(bearbeiten_btn)
+        eintrag_buttons_1.addWidget(entfernen_btn)
+        eintrag_buttons_2 = QHBoxLayout()
+
+        block_btn = QPushButton("Prüfungsblock hinzufügen…")
+        block_btn.clicked.connect(lambda: self._pruefungsblock_hinzufuegen(richter_id))
+        pause_btn = QPushButton("Pause hinzufügen…")
+        pause_btn.clicked.connect(lambda: self._pause_hinzufuegen(richter_id, liste))
+        loeschen_btn = QPushButton("Richter löschen")
+        loeschen_btn.clicked.connect(lambda: self._richter_loeschen(richter_id, richter["name"]))
+
+        layout = QVBoxLayout(box)
+        layout.addLayout(kopf_zeile)
+        layout.addWidget(liste, stretch=1)
+        eintrag_buttons_2.addWidget(block_btn)
+        eintrag_buttons_2.addWidget(pause_btn)
+        layout.addLayout(eintrag_buttons_1)
+        layout.addLayout(eintrag_buttons_2)
+        layout.addWidget(loeschen_btn)
+        return box
+
+    def _richter_kopf(self, richter_id: int) -> QHBoxLayout:
+        """Kopfzeile einer Richter-Spalte: verschieben und umbenennen."""
         links_btn = QPushButton()
         symbol_setzen(links_btn, "chevron-left")
         links_btn.setToolTip("Spalte nach links verschieben")
@@ -481,7 +529,10 @@ class ZeitplanTab(QWidget):
         kopf_zeile.addWidget(rechts_btn)
         kopf_zeile.addWidget(umbenennen_btn)
         kopf_zeile.addStretch()
+        return kopf_zeile
 
+    def _block_liste(self, richter_id: int, zeilen: list) -> "_BlockListe":
+        """Liste der Blöcke und Pausen einer Richter-Spalte (Kopfzeile je Block, Teilnehmer darunter)."""
         liste = _BlockListe()
         liste.setToolTip("Blöcke und Pausen lassen sich mit der Maus an eine andere Stelle ziehen.")
         liste.eintrag_verschoben.connect(lambda quelle, ziel, r=richter_id: self._eintrag_ziehen(r, quelle, ziel))
@@ -537,40 +588,7 @@ class ZeitplanTab(QWidget):
                 markierte_zeile = liste.count() - 1
         if markierte_zeile is not None:
             liste.setCurrentRow(markierte_zeile)
-
-        hoch_btn = QPushButton("Hoch")
-        hoch_btn.clicked.connect(lambda: self._eintrag_verschieben(liste, -1))
-        runter_btn = QPushButton("Runter")
-        runter_btn.clicked.connect(lambda: self._eintrag_verschieben(liste, 1))
-        bearbeiten_btn = QPushButton("Bearbeiten…")
-        bearbeiten_btn.clicked.connect(lambda: self._eintrag_bearbeiten(liste))
-        entfernen_btn = QPushButton("Entfernen")
-        entfernen_btn.clicked.connect(lambda: self._eintrag_entfernen(liste))
-
-        # UX-Test 02.10.2026, U9: Knöpfe in zwei statt fünf Zeilen - mehr Höhe für die Liste.
-        eintrag_buttons_1 = QHBoxLayout()
-        eintrag_buttons_1.addWidget(hoch_btn)
-        eintrag_buttons_1.addWidget(runter_btn)
-        eintrag_buttons_1.addWidget(bearbeiten_btn)
-        eintrag_buttons_1.addWidget(entfernen_btn)
-        eintrag_buttons_2 = QHBoxLayout()
-
-        block_btn = QPushButton("Prüfungsblock hinzufügen…")
-        block_btn.clicked.connect(lambda: self._pruefungsblock_hinzufuegen(richter_id))
-        pause_btn = QPushButton("Pause hinzufügen…")
-        pause_btn.clicked.connect(lambda: self._pause_hinzufuegen(richter_id, liste))
-        loeschen_btn = QPushButton("Richter löschen")
-        loeschen_btn.clicked.connect(lambda: self._richter_loeschen(richter_id, richter["name"]))
-
-        layout = QVBoxLayout(box)
-        layout.addLayout(kopf_zeile)
-        layout.addWidget(liste, stretch=1)
-        eintrag_buttons_2.addWidget(block_btn)
-        eintrag_buttons_2.addWidget(pause_btn)
-        layout.addLayout(eintrag_buttons_1)
-        layout.addLayout(eintrag_buttons_2)
-        layout.addWidget(loeschen_btn)
-        return box
+        return liste
 
     def _zeile_listenelement(self, zeile: dict) -> QListWidgetItem:
         """Eine Listenzeile je einzelnem Teilnehmer (bzw. je Pause) - "Hoch"/"Runter"/

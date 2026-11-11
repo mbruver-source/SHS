@@ -32,7 +32,7 @@ flowchart LR
         app["app.py<br/>HauptFenster, StartDialog,<br/>Teilnehmer, Formular-Import,<br/>Ergebniserfassung, main()"]
         reiter["desktop_auswertung.py<br/>desktop_zeitplan.py<br/>desktop_verwaltung.py<br/>desktop_abrechnung.py"]
         programm["desktop_programm.py<br/>Version/Update, Sitzungsende,<br/>Zweitstart"]
-        dialoge["desktop_dialoge.py"]
+        dialoge["desktop_dialoge.py (Fassade)<br/>+ desktop_dialoge_basis/_teilnehmer/_termin/_planung, desktop_hilfe"]
         gemeinsam["desktop_gemeinsam.py"]
         darstellung["desktop_darstellung.py"]
         demo["desktop_demo.py<br/>+ demo_daten.py"]

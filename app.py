@@ -900,6 +900,11 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         # ("Anderen Termin öffnen…") gestartet wurde - siehe _termin_loeschen.
         self._aktueller_pfad = aktueller_pfad
 
+        button_zeile = self._liste_und_knoepfe_aufbauen()
+        self._kopf_und_layout_aufbauen(button_zeile)
+
+    def _liste_und_knoepfe_aufbauen(self) -> QHBoxLayout:
+        """Terminliste mit Suche und die Knopfzeile (Neu, Öffnen, Löschen, andere Datei)."""
         self.tabelle = QTableWidget(0, 4)
         self.tabelle.setHorizontalHeaderLabels(["Datum", "Verein", "Ort", "Teilnehmer"])
         self.tabelle.verticalHeader().setVisible(False)  # keine Zeilennummern „1“, „2“ (Marco 01.11.2026)
@@ -945,7 +950,10 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         button_zeile.addWidget(self.loeschen_btn)
         button_zeile.addStretch()
         button_zeile.addWidget(andere_datei_btn)
+        return button_zeile
 
+    def _kopf_und_layout_aufbauen(self, button_zeile: QHBoxLayout) -> None:
+        """Hinweis, Kopfbalken mit Demo-Knopf und das Gesamtlayout."""
         # UX-Test 02.10.2026, U14: Laien fanden das Design "Hoher Kontrast" nicht.
         hinweis = QLabel(
             f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.\n"

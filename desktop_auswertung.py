@@ -131,6 +131,13 @@ class AuswertungTab(QWidget):
         self._startnummer_je_id: dict[str, int | None] = {}
         self._rufname_hund_je_id: dict[str, str] = {}
 
+        self._tabelle_aufbauen()
+        self._filter_aufbauen()
+        self._knoepfe_aufbauen()
+        self._layout_aufbauen()
+        self.aktualisieren()
+
+    def _tabelle_aufbauen(self) -> None:
         self.tabelle = QTableWidget(0, 7)
         self.tabelle.setHorizontalHeaderLabels(
             ["Start-Nr.", "Leistungsklasse", "Name", "Hund", "Gesamtpunkte", "Wertnote", "Platzierung"]
@@ -147,6 +154,7 @@ class AuswertungTab(QWidget):
         self.tabelle.horizontalHeader().setSectionsClickable(True)
         self.tabelle.horizontalHeader().sectionClicked.connect(self._spalte_geklickt)
 
+    def _filter_aufbauen(self) -> None:
         self.filter_combo = QComboBox()
         # Passt die Breite der Box an den längsten enthaltenen Eintrag an (z.B. lange
         # Art/LK-Bezeichnungen wie "Behältnisse LK 3"), statt Text abzuschneiden.
@@ -166,13 +174,15 @@ class AuswertungTab(QWidget):
         self.filter_name.setClearButtonEnabled(True)
         self.filter_name.textChanged.connect(self._rendern)
 
+    def _knoepfe_aufbauen(self) -> None:
+        """Knöpfe, Kontextmenü und die beiden Textzeilen (ausstehend, Status)."""
         self.ausstehend_label = QLabel()
         # UX-Test 02.10.2026, U12: die Namensliste kann sehr lang werden - ohne Umbruch zog
         # dieses Label das ganze Hauptfenster über die Bildschirmbreite (~1800 px).
         self.ausstehend_label.setWordWrap(True)
         self.ausstehend_label.setTextFormat(Qt.PlainText)  # S-1: enthält Namen
 
-        aktualisieren_btn = QPushButton("Auswertung neu berechnen")
+        self.aktualisieren_btn = aktualisieren_btn = QPushButton("Auswertung neu berechnen")
         aktualisieren_btn.clicked.connect(self.aktualisieren)
 
         # Nutzerwunsch 23.09.: Rangliste direkt aus der Auswertung als PDF ausgeben (bisher
@@ -205,6 +215,7 @@ class AuswertungTab(QWidget):
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)  # enthält nach "Rangliste drucken" einen langen Pfad (U12)
 
+    def _layout_aufbauen(self) -> None:
         filter_zeile = QHBoxLayout()
         filter_zeile.addWidget(QLabel("Filter Art/LK:"))
         filter_zeile.addWidget(self.filter_combo)
@@ -221,7 +232,7 @@ class AuswertungTab(QWidget):
         layout.addWidget(self.tabelle)
         layout.addWidget(self.ausstehend_label)
         button_zeile = QHBoxLayout()
-        button_zeile.addWidget(aktualisieren_btn)
+        button_zeile.addWidget(self.aktualisieren_btn)
         button_zeile.addWidget(self.drucken_btn)
         button_zeile.addWidget(self.stechen_btn)
         button_zeile.addWidget(self.bewertungsbogen_btn)
@@ -229,8 +240,6 @@ class AuswertungTab(QWidget):
         button_zeile.addStretch()
         layout.addLayout(button_zeile)
         layout.addWidget(self.status_label)
-
-        self.aktualisieren()
 
     def _spalte_geklickt(self, spalte: int) -> None:
         self._sortaufsteigend = not self._sortaufsteigend if self._sortspalte == spalte else True
@@ -376,64 +385,71 @@ class AuswertungTab(QWidget):
 
         self.tabelle.setRowCount(len(fertig_gefiltert))
         for row, t in enumerate(fertig_gefiltert):
-            # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): db.berechne_auswertung() gibt
-            # solchen Teilnehmern eine Platzhalter-Wertnote mit abkuerzung=DISQUALIFIZIERT_ABK/
-            # ABBRUCH_ABK (bei einem Abbruch mit Grund mit den Teilpunkten, R7) statt einer
-            # Wertnote - hier ähnlich der bestehenden
-            # "nicht bestanden"-Behandlung (keine Platzierung, zählt als Starter, rot
-            # markiert über t.bestanden weiter unten), aber mit eigenem Text statt "nB"/
-            # Wertnote.
-            ist_disqualifiziert = t.wertnote.abkuerzung == DISQUALIFIZIERT_ABK
-            ist_abbruch = t.wertnote.abkuerzung == ABBRUCH_ABK
-            if ist_disqualifiziert or ist_abbruch:
-                status_text = DISQUALIFIZIERT_TEXT if ist_disqualifiziert else ABBRUCH_TEXT
-                # R7 (Marco 01.11.2026): Abbruch mit Grund -> Eintrag laut PO und Teilpunkte.
-                wertnote_text = t.wertnote.notentext if t.wertnote.teilbewertung else status_text
-                punkte_text = str(t.gesamtpunkte) if t.wertnote.teilbewertung else "–"
-            else:
-                # nicht bestanden (mind. eine Disziplin unter 70 Punkten) -> keine
-                # Platzierung, entspricht im Original dem Kürzel "nB" in der Rankingliste.
-                status_text = "nB"
-                wertnote_text = f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"
-                punkte_text = str(t.gesamtpunkte)
-
-            # S1 (03.10.2026): "(Stechen offen)" / "(nach Stechen)" über shs_core.platz_text.
-            platz = platz_text(t) or f"{status_text} (von {t.von_startern} Startern)"
-            werte = [
-                str(self._startnummer_je_id.get(t.id) or ""),
-                t.leistungsklasse,
-                t.name,
-                self._rufname_hund_je_id.get(t.id, ""),
-                punkte_text,
-                wertnote_text,
-                platz,
-            ]
-            offen = offen_je_lk.get(t.leistungsklasse, 0)
-            platz_tooltip = (
-                f"„von {t.von_startern}“ zählt nur Starter mit vollständigem Ergebnis in {t.leistungsklasse}"
-                + (f" – {offen} noch offen." if offen else ".")
-            )
-            sortwerte = {0: self._startnummer_je_id.get(t.id) or 0, 4: t.gesamtpunkte if punkte_text != "–" else -1,
-                         6: t.platzierung if t.platzierung is not None else 10_000}
-            for col, wert in enumerate(werte):
-                if col in sortwerte:
-                    item = _NumerischSortierbaresItem(wert, sortwerte[col])
-                elif col == 1:
-                    item = _PruefungSortierbaresItem(wert)
-                else:
-                    item = QTableWidgetItem(wert)
-                if col == 0:
-                    item.setData(Qt.UserRole, int(t.id))  # für „Bewertungsbogen (PDF)…“ der Zeile
-                if not t.bestanden:
-                    item.setForeground(_farbe("fehler"))
-                if col == len(werte) - 1:
-                    item.setToolTip(platz_tooltip)
-                self.tabelle.setItem(row, col, item)
+            self._ergebniszeile_fuellen(row, t, offen_je_lk)
         self.tabelle.resizeColumnsToContents()
         if self._sortspalte is not None:
             self._sortierung_anwenden()
         self._bewertungsbogen_knopf_aktualisieren()
+        self._hinweise_setzen(fertig_gefiltert, ausstehend_gefiltert, offen_je_lk)
 
+    def _ergebniszeile_fuellen(self, row: int, t, offen_je_lk: dict[str, int]) -> None:
+        """Eine Zeile der Rangliste (Wertnote, Platzierung, Sortierwerte, Tooltip)."""
+        # Disqualifiziert/Abbruch (Nutzerwunsch 21.09.): db.berechne_auswertung() gibt
+        # solchen Teilnehmern eine Platzhalter-Wertnote mit abkuerzung=DISQUALIFIZIERT_ABK/
+        # ABBRUCH_ABK (bei einem Abbruch mit Grund mit den Teilpunkten, R7) statt einer
+        # Wertnote - hier ähnlich der bestehenden
+        # "nicht bestanden"-Behandlung (keine Platzierung, zählt als Starter, rot
+        # markiert über t.bestanden weiter unten), aber mit eigenem Text statt "nB"/
+        # Wertnote.
+        ist_disqualifiziert = t.wertnote.abkuerzung == DISQUALIFIZIERT_ABK
+        ist_abbruch = t.wertnote.abkuerzung == ABBRUCH_ABK
+        if ist_disqualifiziert or ist_abbruch:
+            status_text = DISQUALIFIZIERT_TEXT if ist_disqualifiziert else ABBRUCH_TEXT
+            # R7 (Marco 01.11.2026): Abbruch mit Grund -> Eintrag laut PO und Teilpunkte.
+            wertnote_text = t.wertnote.notentext if t.wertnote.teilbewertung else status_text
+            punkte_text = str(t.gesamtpunkte) if t.wertnote.teilbewertung else "–"
+        else:
+            # nicht bestanden (mind. eine Disziplin unter 70 Punkten) -> keine
+            # Platzierung, entspricht im Original dem Kürzel "nB" in der Rankingliste.
+            status_text = "nB"
+            wertnote_text = f"{t.wertnote.notentext} ({t.wertnote.abkuerzung})"
+            punkte_text = str(t.gesamtpunkte)
+
+        # S1 (03.10.2026): "(Stechen offen)" / "(nach Stechen)" über shs_core.platz_text.
+        platz = platz_text(t) or f"{status_text} (von {t.von_startern} Startern)"
+        werte = [
+            str(self._startnummer_je_id.get(t.id) or ""),
+            t.leistungsklasse,
+            t.name,
+            self._rufname_hund_je_id.get(t.id, ""),
+            punkte_text,
+            wertnote_text,
+            platz,
+        ]
+        offen = offen_je_lk.get(t.leistungsklasse, 0)
+        platz_tooltip = (
+            f"„von {t.von_startern}“ zählt nur Starter mit vollständigem Ergebnis in {t.leistungsklasse}"
+            + (f" – {offen} noch offen." if offen else ".")
+        )
+        sortwerte = {0: self._startnummer_je_id.get(t.id) or 0, 4: t.gesamtpunkte if punkte_text != "–" else -1,
+                     6: t.platzierung if t.platzierung is not None else 10_000}
+        for col, wert in enumerate(werte):
+            if col in sortwerte:
+                item = _NumerischSortierbaresItem(wert, sortwerte[col])
+            elif col == 1:
+                item = _PruefungSortierbaresItem(wert)
+            else:
+                item = QTableWidgetItem(wert)
+            if col == 0:
+                item.setData(Qt.UserRole, int(t.id))  # für „Bewertungsbogen (PDF)…“ der Zeile
+            if not t.bestanden:
+                item.setForeground(_farbe("fehler"))
+            if col == len(werte) - 1:
+                item.setToolTip(platz_tooltip)
+            self.tabelle.setItem(row, col, item)
+
+    def _hinweise_setzen(self, fertig_gefiltert: list, ausstehend_gefiltert: list, offen_je_lk: dict[str, int]) -> None:
+        """Hinweiszeilen unter der Tabelle: offene Starter, Stechen, Namen ohne Ergebnis."""
         von_je_lk = {t.leistungsklasse: t.von_startern for t in fertig_gefiltert}
         von_hinweise = [
             f"Hinweis {lk}: „von {von}“ zählt nur Starter mit vollständigem Ergebnis – "
@@ -604,6 +620,59 @@ _EXCEL_CSV_HINWEIS = (
 )
 
 
+# Reiter "Ausdrucke/Export": je Knopf Beschriftung, Methode, Kurztext neben dem Knopf und Tooltip.
+# Rückmeldung Marco 13.10.2026: statt eines langen, unübersichtlichen Erklärtextes unter den
+# Knöpfen steht neben jedem Knopf eine kurze Zeile; Einzelheiten zeigt der Tooltip an Knopf und
+# Kurztext (ausführlich: Handbuch, Abschnitt "Ausdrucke/Export"). Reihenfolge = Reihenfolge im Reiter.
+# Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der Word-Vorlage; 21.09.: eigene
+# Chipnummernliste zum Abgleich am Prüfungstag; Wunsch 10.11.2026: Etiketten für Behältnisse sowie
+# Abrechnung und Checkliste auch hier (UI-Abgleich).
+_AUSDRUCK_KNOEPFE = (
+    ('Anmeldeformular (PDF)…', '_anmeldeformular_exportieren',
+     'Ausfüllbares Formular zum Verschicken; Kopf und Prüfungen aus dem Reiter „Verwaltung“',
+     'Im Reiter „Verwaltung“ über „Veranstaltungsdaten bearbeiten…“ zuerst die angebotenen Prüfungen anhaken. Ausgefüllt zurückgeschickte Formulare im Reiter „Formular-Import“ einlesen.'),
+    ('Ergebnisliste (PDF)…', '_ergebnisliste_exportieren',
+     'Rangliste mit Wertnoten je Leistungsklasse',
+     'Platz, Start-Nr., Name, Gesamtpunkte und Wertnote. Teilnehmer, die nicht bestanden haben, stehen ohne Platz in der Liste.'),
+    ('Ergebnisliste zum Ausfüllen (PDF, leer)…', '_leere_ergebnisliste_exportieren',
+     'Leeres Formular, um Ergebnisse erst auf Papier festzuhalten',
+     'Start-Nr., Name und Verein sind vorausgefüllt, Platz, Punkte und Wertnote bleiben leer – zum späteren Übertragen in die Ergebniserfassung.'),
+    ('Etiketten (PDF)…', '_etiketten_exportieren',
+     'Ergebnisse zum Aufkleben in der Leistungsurkunde, zwei Zeilen je Teilnehmer',
+     'Für Klebe-/Etikettenpapier. Teilnehmer ohne vollständiges Ergebnis bekommen ebenfalls ein Etikett mit leeren Punktfeldern. Das Feld „SH-R“ bleibt zum Abstempeln bzw. Unterschreiben frei.'),
+    ('Etiketten Behältnisse (PDF)…', '_behaeltnis_etiketten_exportieren',
+     'Etiketten zum Beschriften der Behältnisse, ein Etikett je Hund',
+     'Startnummer, Name, Hund, Prüfung und der Gegenstand der Behältnisstrecke. Die Größe der Klebefelder stellst du ein; wahlweise für einen Etikettenbogen (ohne Linien) oder normales Papier (mit Schnittlinien zum Ausschneiden).'),
+    ('Statistik (PDF)…', '_statistik_exportieren',
+     'Prädikat-Übersicht je Art/Leistungsklasse, inkl. Jugendliche',
+     'Jugendliche: vollständig bewertete Teilnehmer unter 18 Jahren am Prüfungstag, nach dem Geburtsdatum im Teilnehmer-Dialog. Vereins-Nr., Prüfungsnummer, Richter und Prüfungsleiter im Kopf kommen aus dem Reiter „Verwaltung“.'),
+    ('Übersicht für Prüfungsleitung (PDF)…', '_pruefungsleitung_exportieren',
+     'Stammdaten, Gebühr, bezahlt?, Impfpass',
+     '„bezahlt?“ kommt aus dem Bezahlt-Status, „Impfpass gültig bis“ aus der Tollwutimpfung im Teilnehmer-Dialog – rot, wenn das Datum fehlt oder am Prüfungstag abgelaufen ist. Die Gebühren ED/DK stehen im Reiter „Verwaltung“.'),
+    ('Chipnummernliste (PDF)…', '_chipliste_exportieren',
+     'Start-Nr., Name, Hund, Chip-Nr. zum Abgleich am Prüfungstag',
+     'Sortiert nach Startnummer, z. B. für eine Chip-Scanner-Station.'),
+    ('Richter-Bedarf (PDF)…', '_leistungsrichter_exportieren',
+     'Benötigte Richterzahl aus der Teilnehmerzahl',
+     '1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je Richter.'),
+    ('Abrechnung Leistungsrichter (PDF)…', '_abrechnung_exportieren',
+     'Kilometer, Fahrtkosten, Pauschale und Summe je Leistungsrichter',
+     'Dieselbe Übersicht wie im Reiter „Abrechnung Leistungsrichter“; dort trägst du die Kilometer ein und erzeugst auch die Quittungen und die CSV-Datei.'),
+    ('Checkliste (PDF)…', '_checkliste_exportieren',
+     'Checkliste zum Prüfungstermin mit dem aktuellen Stand der Haken',
+     'Alle Kategorien und Punkte aus dem Reiter „Verwaltung“ (auch eigene), erledigte mit „[x]“, offene mit „[ ]“ – zum Mitnehmen auf Papier.'),
+    ('Zeitplan (PDF)…', '_zeitplan_exportieren',
+     'Ablauf aus dem Reiter „Zeitplan“, eine Seite je Richter',
+     'Prüfungsblöcke mit Start- und Endzeit je Teilnehmer sowie die Pausen, farbig nach Art/Leistungsklasse.'),
+    ('Bewertungsbögen – alle Teilnehmer (PDF)…', '_bewertungsboegen_exportieren',
+     'Sammel-PDF; vorher Auswahl der Leistungsklassen/Disziplinen. Einzelbogen: Reiter „Teilnehmer“',
+     'Bereits eingetragene Ergebnisse sind vorausgefüllt, offene Felder bleiben zum Ausfüllen vor Ort leer. Die Auswahl hilft beim doppelseitigen Druck, damit kein anderes Team auf der Rückseite landet.'),
+    ('Teilnehmerliste speichern (CSV, für Excel)…', '_teilnehmerliste_exportieren',
+     'Alle Teilnehmer mit Stammdaten, für Excel (lässt sich wieder einlesen)',
+     'Eine CSV-Datei mit Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“. Sie öffnet sich per Doppelklick in Excel und lässt sich im Reiter „Formular-Import“ wieder einlesen.'),
+)
+
+
 class ExportTab(QWidget):
     """Reiter "Ausdrucke/Export" (Ausdrucke und Listen): PDFs wie Ergebnislisten, Statistik und
     Bewertungsbögen (siehe pdf_export.py) sowie die Teilnehmerliste als CSV. Liest bei jedem Klick direkt den aktuellen Datenbankstand, hält also nichts vor."""
@@ -619,137 +688,10 @@ class ExportTab(QWidget):
             os.path.dirname(termin_pfad) if termin_pfad else str(termine_ordner())
         )
 
-        teilnehmerliste_btn = QPushButton("Teilnehmerliste speichern (CSV, für Excel)…")
-        teilnehmerliste_btn.clicked.connect(self._teilnehmerliste_exportieren)
-        # Nutzerwunsch 28.09.2026: ausfüllbares Anmeldeformular statt der bisherigen
-        # Word-Vorlage (siehe pdf_export.erstelle_anmeldeformular_pdf).
-        anmeldeformular_btn = QPushButton("Anmeldeformular (PDF)…")
-        anmeldeformular_btn.clicked.connect(self._anmeldeformular_exportieren)
-
-        self.ergebnisliste_btn = ergebnisliste_btn = QPushButton("Ergebnisliste (PDF)…")  # Attribut für die Demoprüfung
-        ergebnisliste_btn.clicked.connect(self._ergebnisliste_exportieren)
-
-        leere_ergebnisliste_btn = QPushButton("Ergebnisliste zum Ausfüllen (PDF, leer)…")
-        leere_ergebnisliste_btn.clicked.connect(self._leere_ergebnisliste_exportieren)
-
-        etiketten_btn = QPushButton("Etiketten (PDF)…")
-        etiketten_btn.clicked.connect(self._etiketten_exportieren)
-
-        # Wunsch 10.11.2026: Etiketten zum Beschriften der Behältnisse (Gegenstände einsammeln).
-        behaeltnis_etiketten_btn = QPushButton("Etiketten Behältnisse (PDF)…")
-        behaeltnis_etiketten_btn.clicked.connect(self._behaeltnis_etiketten_exportieren)
-
-        statistik_btn = QPushButton("Statistik (PDF)…")
-        statistik_btn.clicked.connect(self._statistik_exportieren)
-
-        pruefungsleitung_btn = QPushButton("Übersicht für Prüfungsleitung (PDF)…")
-        pruefungsleitung_btn.clicked.connect(self._pruefungsleitung_exportieren)
-
-        # Nutzerwunsch (21.09.): Chip-Nr. steht zwar schon auf jedem Bewertungsbogen und
-        # in der Übersicht für Prüfungsleitung, Marco bekommt aber weiterhin Nachfragen
-        # anderer Vereinsmitglieder danach - eigener, kompakter Export zum Abgleich am
-        # Prüfungstag (siehe pdf_export.erstelle_chipnummernliste_pdf).
-        chipliste_btn = QPushButton("Chipnummernliste (PDF)…")
-        chipliste_btn.clicked.connect(self._chipliste_exportieren)
-
-        leistungsrichter_btn = QPushButton("Richter-Bedarf (PDF)…")
-        leistungsrichter_btn.clicked.connect(self._leistungsrichter_exportieren)
-
-        # Marco 10.11.2026 (UI-Abgleich): Abrechnung und Checkliste ließen sich nur in ihren
-        # eigenen Reitern ausgeben - hier mit den übrigen Ausdrucken.
-        abrechnung_btn = QPushButton("Abrechnung Leistungsrichter (PDF)…")
-        abrechnung_btn.clicked.connect(self._abrechnung_exportieren)
-        checkliste_btn = QPushButton("Checkliste (PDF)…")
-        checkliste_btn.clicked.connect(self._checkliste_exportieren)
-
-        zeitplan_btn = QPushButton("Zeitplan (PDF)…")
-        zeitplan_btn.clicked.connect(self._zeitplan_exportieren)
-
-        boegen_btn = QPushButton("Bewertungsbögen – alle Teilnehmer (PDF)…")
-        boegen_btn.clicked.connect(self._bewertungsboegen_exportieren)
-
-        ablageort_btn = QPushButton("Ablageort öffnen")
-        ablageort_btn.clicked.connect(self._ablageort_oeffnen)
-
-        # Rückmeldung Marco 13.10.2026: statt eines langen, unübersichtlichen Erklärtextes
-        # unter den Knöpfen steht neben jedem Knopf eine kurze Zeile; Einzelheiten zeigt der
-        # Tooltip an Knopf und Kurztext (ausführlich: Handbuch, Abschnitt "Ausdrucke/Export").
-        knoepfe = [
-            (anmeldeformular_btn,
-             "Ausfüllbares Formular zum Verschicken; Kopf und Prüfungen aus dem Reiter „Verwaltung“",
-             "Im Reiter „Verwaltung“ über „Veranstaltungsdaten bearbeiten…“ zuerst die "
-             "angebotenen Prüfungen anhaken. Ausgefüllt zurückgeschickte "
-             "Formulare im Reiter „Formular-Import“ einlesen."),
-            (ergebnisliste_btn,
-             "Rangliste mit Wertnoten je Leistungsklasse",
-             "Platz, Start-Nr., Name, Gesamtpunkte und Wertnote. Teilnehmer, die nicht "
-             "bestanden haben, stehen ohne Platz in der Liste."),
-            (leere_ergebnisliste_btn,
-             "Leeres Formular, um Ergebnisse erst auf Papier festzuhalten",
-             "Start-Nr., Name und Verein sind vorausgefüllt, Platz, Punkte und Wertnote bleiben "
-             "leer – zum späteren Übertragen in die Ergebniserfassung."),
-            (etiketten_btn,
-             "Ergebnisse zum Aufkleben in der Leistungsurkunde, zwei Zeilen je Teilnehmer",
-             "Für Klebe-/Etikettenpapier. Teilnehmer ohne vollständiges Ergebnis bekommen "
-             "ebenfalls ein Etikett mit leeren Punktfeldern. Das Feld „SH-R“ bleibt zum "
-             "Abstempeln bzw. Unterschreiben frei."),
-            (behaeltnis_etiketten_btn,
-             "Etiketten zum Beschriften der Behältnisse, ein Etikett je Hund",
-             "Startnummer, Name, Hund, Prüfung und der Gegenstand der Behältnisstrecke. Die Größe "
-             "der Klebefelder stellst du ein; wahlweise für einen Etikettenbogen (ohne Linien) "
-             "oder normales Papier (mit Schnittlinien zum Ausschneiden)."),
-            (statistik_btn,
-             "Prädikat-Übersicht je Art/Leistungsklasse, inkl. Jugendliche",
-             "Jugendliche: vollständig bewertete Teilnehmer unter 18 Jahren am Prüfungstag, "
-             "nach dem Geburtsdatum im Teilnehmer-Dialog. Vereins-Nr., Prüfungsnummer, Richter und Prüfungsleiter im "
-             "Kopf kommen aus dem Reiter „Verwaltung“."),
-            (pruefungsleitung_btn,
-             "Stammdaten, Gebühr, bezahlt?, Impfpass",
-             "„bezahlt?“ kommt aus dem Bezahlt-Status, „Impfpass gültig bis“ aus der "
-             "Tollwutimpfung im Teilnehmer-Dialog – rot, wenn das Datum fehlt oder am "
-             "Prüfungstag abgelaufen ist. Die Gebühren ED/DK stehen im Reiter „Verwaltung“."),
-            (chipliste_btn,
-             "Start-Nr., Name, Hund, Chip-Nr. zum Abgleich am Prüfungstag",
-             "Sortiert nach Startnummer, z. B. für eine Chip-Scanner-Station."),
-            (leistungsrichter_btn,
-             "Benötigte Richterzahl aus der Teilnehmerzahl",
-             "1 ED = 1 Einheit, 1 DK = 3 Einheiten, höchstens 36 Einheiten je Richter."),
-            (abrechnung_btn,
-             "Kilometer, Fahrtkosten, Pauschale und Summe je Leistungsrichter",
-             "Dieselbe Übersicht wie im Reiter „Abrechnung Leistungsrichter“; dort trägst du die "
-             "Kilometer ein und erzeugst auch die Quittungen und die CSV-Datei."),
-            (checkliste_btn,
-             "Checkliste zum Prüfungstermin mit dem aktuellen Stand der Haken",
-             "Alle Kategorien und Punkte aus dem Reiter „Verwaltung“ (auch eigene), erledigte "
-             "mit „[x]“, offene mit „[ ]“ – zum Mitnehmen auf Papier."),
-            (zeitplan_btn,
-             "Ablauf aus dem Reiter „Zeitplan“, eine Seite je Richter",
-             "Prüfungsblöcke mit Start- und Endzeit je Teilnehmer sowie die Pausen, farbig "
-             "nach Art/Leistungsklasse."),
-            (boegen_btn,
-             "Sammel-PDF; vorher Auswahl der Leistungsklassen/Disziplinen. Einzelbogen: Reiter „Teilnehmer“",
-             "Bereits eingetragene Ergebnisse sind vorausgefüllt, offene Felder bleiben zum "
-             "Ausfüllen vor Ort leer. Die Auswahl hilft beim doppelseitigen Druck, damit kein "
-             "anderes Team auf der Rückseite landet."),
-            (teilnehmerliste_btn,
-             "Alle Teilnehmer mit Stammdaten, für Excel (lässt sich wieder einlesen)",
-             "Eine CSV-Datei mit Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“. Sie "
-             "öffnet sich per Doppelklick in Excel und lässt sich im Reiter „Formular-Import“ "
-             "wieder einlesen."),
-        ]
-        knopf_raster = QGridLayout()
-        knopf_raster.setColumnStretch(1, 1)
-        for zeile, (knopf, kurztext, tooltip) in enumerate(knoepfe):
-            beschreibung = QLabel(kurztext)
-            beschreibung.setWordWrap(True)
-            knopf.setToolTip(tooltip)
-            beschreibung.setToolTip(tooltip)
-            knopf_raster.addWidget(knopf, zeile, 0)
-            knopf_raster.addWidget(beschreibung, zeile, 1)
-
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
+        knopf_raster = self._knoepfe_aufbauen()
 
         # Marco 10.11.2026 (UI-Abgleich): jede Datei fragt sonst nach dem Speicherort.
         self.ohne_nachfrage_check = QCheckBox("Dateien ohne Nachfrage im Ablageort speichern")
@@ -759,6 +701,8 @@ class ExportTab(QWidget):
         self.ohne_nachfrage_check.setChecked(_ohne_nachfrage_lesen())
         self.ohne_nachfrage_check.toggled.connect(_ohne_nachfrage_speichern)
 
+        ablageort_btn = QPushButton("Ablageort öffnen")
+        ablageort_btn.clicked.connect(self._ablageort_oeffnen)
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(ablageort_btn)
         button_zeile.addWidget(self.ohne_nachfrage_check)
@@ -771,6 +715,23 @@ class ExportTab(QWidget):
         # UX-Test 02.10.2026, U7: Statuszeile direkt unter den Knöpfen.
         layout.addWidget(self.status_label)
         layout.addStretch()
+
+    def _knoepfe_aufbauen(self) -> QGridLayout:
+        """Knöpfe mit Kurztext und Tooltip nach _AUSDRUCK_KNOEPFE."""
+        knopf_raster = QGridLayout()
+        knopf_raster.setColumnStretch(1, 1)
+        for zeile, (text, methode, kurztext, tooltip) in enumerate(_AUSDRUCK_KNOEPFE):
+            knopf = QPushButton(text)
+            knopf.clicked.connect(getattr(self, methode))
+            if methode == "_ergebnisliste_exportieren":
+                self.ergebnisliste_btn = knopf  # Attribut für die Demoprüfung
+            beschreibung = QLabel(kurztext)
+            beschreibung.setWordWrap(True)
+            knopf.setToolTip(tooltip)
+            beschreibung.setToolTip(tooltip)
+            knopf_raster.addWidget(knopf, zeile, 0)
+            knopf_raster.addWidget(beschreibung, zeile, 1)
+        return knopf_raster
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - wird bei jedem Export frisch aus der DB gelesen
@@ -885,7 +846,7 @@ class ExportTab(QWidget):
 
     def _bewertungsboegen_exportieren(self) -> None:
         # Nutzerwunsch (21.09.): Auswahl, welche LK/Disziplin gedruckt werden sollen (siehe
-        # BewertungsbogenAuswahlDialog in desktop_dialoge.py) - Standard bleibt "alle" (Dialog startet mit
+        # BewertungsbogenAuswahlDialog in desktop_dialoge_planung.py) - Standard bleibt "alle" (Dialog startet mit
         # allen Einträgen angehakt), Abbrechen bricht den kompletten Export ab.
         auswahl_dialog = BewertungsbogenAuswahlDialog(self, alle_leistungsklassen(self.conn))
         if _ausfuehren(auswahl_dialog) != QDialog.Accepted:

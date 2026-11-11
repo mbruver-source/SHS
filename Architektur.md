@@ -30,7 +30,7 @@ flowchart TB
         AppPy["app.py<br/>Reiter Teilnehmer, Formular-Import, Ergebnis,<br/>Hauptfenster, Startdialog, main()"]
         DeskReiter["desktop_auswertung.py, desktop_zeitplan.py,<br/>desktop_verwaltung.py: weitere Reiter<br/>(Auswertung, Übersicht, Export, Zeitplan,<br/>Verwaltung, Datensicherung)"]
         DeskProgramm["desktop_programm.py<br/>Versionsfenster/Update,<br/>Sitzungsende, Zweitstart"]
-        DeskDialoge["desktop_dialoge.py<br/>Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
+        DeskDialoge["desktop_dialoge.py (Fassade) über<br/>desktop_dialoge_basis/_teilnehmer/_termin/_planung<br/>und desktop_hilfe: Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
         DeskGemeinsam["desktop_gemeinsam.py<br/>gemeinsame GUI-Hilfen<br/>(Ablageorte, PDF-Speichern, Fehlermeldungen)"]
         DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Akzentfarben"]
         DeskDemo["desktop_demo.py + demo_daten.py<br/>geführte Demoprüfung<br/>(Temp-Termin, Erklärfenster)"]
@@ -120,7 +120,12 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `desktop_verwaltung.py` | Reiter Verwaltung (Veranstaltung, Checkliste) und Datensicherung | `test_gui_verwaltung.py`, `test_backup.py` |
 | `desktop_abrechnung.py` | Reiter Abrechnung Leistungsrichter | `test_gui_verwaltung.py`, `test_lr_abrechnung.py` |
 | `desktop_programm.py` | Versionsfenster, Update-Prüfung, Sitzungsende, Zweitstart | `test_gui_darstellung.py`, `test_gui_termin.py` |
-| `desktop_dialoge.py` | Dialoge der Desktop-GUI (Teilnehmer, Veranstaltung, Import, Hilfe …) | `test_gui_teilnehmer.py` |
+| `desktop_dialoge.py` | Fassade der Dialoge (seit 11.11.2026): reicht alle Namen der fünf Module darunter weiter, `from desktop_dialoge import …` gilt wie vorher | `test_gui_*.py` |
+| `desktop_dialoge_basis.py` | Gemeinsame Dialog-Hilfen: Größe an den Bildschirm anpassen, scrollbare Fläche, Speichern vor dem Schließen | `test_gui_darstellung.py` |
+| `desktop_dialoge_teilnehmer.py` | `TeilnehmerDialog` und `StartnummerTauschenDialog` | `test_gui_teilnehmer.py` |
+| `desktop_dialoge_termin.py` | `VeranstaltungsDialog`, `TerminImportDialog`, `SicherungErstellenDialog` | `test_gui_termin.py` |
+| `desktop_dialoge_planung.py` | Prüfungsblock, Pause, automatisch verteilen, Bewertungsbogen- und Etiketten-Auswahl | `test_gui_zeitplan.py`, `test_gui_auswertung.py` |
+| `desktop_hilfe.py` | `HilfeDialog` mit Suchfeld, Inhaltsverzeichnis und dem Hilfetext | `test_gui_darstellung.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |
 | `desktop_darstellung.py` | Designs, Akzentfarben, Stylesheet | `test_theme.py`, `test_gui_darstellung.py` |
 | `desktop_demo.py` | Geführte Demoprüfung: `DemoTour` (Steuerung, Countdown, Beenden) | `test_gui_demo.py` |

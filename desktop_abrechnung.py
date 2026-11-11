@@ -76,6 +76,14 @@ class AbrechnungTab(QWidget):
         self._ablageort = ablageort or _Ablageort("")
         self._aufbau = False  # True, solange die Tabelle befüllt wird (kein Speichern)
 
+        saetze = self._saetze_aufbauen()
+        self._tabelle_aufbauen()
+        knoepfe = self._knoepfe_aufbauen()
+        self._layout_aufbauen(saetze, knoepfe)
+        self.aktualisieren()
+
+    def _saetze_aufbauen(self) -> QHBoxLayout:
+        """Felder für Kilometersatz und Tagespauschale des Termins."""
         self.km_satz_feld = QLineEdit()
         self.km_satz_feld.setMaximumWidth(110)
         self.km_satz_feld.editingFinished.connect(lambda: self._satz_geaendert("lr_km_satz"))
@@ -90,7 +98,9 @@ class AbrechnungTab(QWidget):
         saetze.addWidget(QLabel("Tagespauschale je Richter (€):"))
         saetze.addWidget(self.pauschale_feld)
         saetze.addStretch()
+        return saetze
 
+    def _tabelle_aufbauen(self) -> None:
         self.tabelle = QTableWidget(0, 7)
         self.tabelle.setHorizontalHeaderLabels(
             ["Leistungsrichter", "Kilometer (Hin und zurück)", "Satz je km (€)", "Tagespauschale (€)",
@@ -111,6 +121,7 @@ class AbrechnungTab(QWidget):
         self.gesamt_label = QLabel("")
         self.gesamt_label.setObjectName("abrechnungGesamt")
 
+    def _knoepfe_aufbauen(self) -> QHBoxLayout:
         self.uebersicht_btn = QPushButton("Übersicht als PDF…")
         self.uebersicht_btn.clicked.connect(self._uebersicht_exportieren)
         self.csv_btn = QPushButton("Export als CSV…")
@@ -126,7 +137,9 @@ class AbrechnungTab(QWidget):
         knoepfe.addWidget(self.csv_btn)
         knoepfe.addWidget(self.ablageort_btn)
         knoepfe.addStretch()
+        return knoepfe
 
+    def _layout_aufbauen(self, saetze: QHBoxLayout, knoepfe: QHBoxLayout) -> None:
         hinweis = kurzer_hinweis(
             "Kilometer als Gesamtstrecke eintragen; Satz und Pauschale je Richter bleiben leer, "
             "wenn der Satz des Termins gilt (er steht dann vorbelegt in der Zeile).",
@@ -149,8 +162,6 @@ class AbrechnungTab(QWidget):
         layout.addWidget(self.gesamt_label)
         layout.addLayout(knoepfe)
         layout.addWidget(self.status_label)
-
-        self.aktualisieren()
 
     # --- Anzeige -------------------------------------------------------------
 

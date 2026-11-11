@@ -406,7 +406,7 @@ def _dk_gegenstand_status(teilnehmer: dict, stufe: int) -> str:
       ein Hinweis, kein Fehler.
     Nutzt aus, dass eine Disziplin nie zwei Gegenstand-Feldern zugleich zugeordnet sein
     kann (wird beim Speichern in TeilnehmerDialog._pruefen_und_akzeptieren,
-    desktop_dialoge.py, verhindert).
+    desktop_dialoge_teilnehmer.py, verhindert).
 
     Liefert "ok", "fehlt" (zu wenig unterschiedliche Gegenstand-Texte - echter Fehler)
     oder "nicht_zugeordnet" (genug Texte, aber die begonnene Disziplin-Zuordnung ist

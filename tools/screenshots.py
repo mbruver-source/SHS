@@ -136,14 +136,6 @@ def _umgebung_einrichten() -> QApplication:
     """QApplication mit fester Darstellung; leitet Termine-Ordner und Meldungen um."""
     import app as app_modul
     import desktop_darstellung
-    import desktop_demo
-    import desktop_dialoge
-    import desktop_abrechnung
-    import desktop_auswertung
-    import desktop_gemeinsam
-    import desktop_programm
-    import desktop_verwaltung
-    import desktop_zeitplan
     from desktop_gemeinsam import deutsche_qt_texte_laden, meldungsfenster_als_klartext
 
     for modul in (app_modul, desktop_darstellung):
@@ -153,9 +145,12 @@ def _umgebung_einrichten() -> QApplication:
             modul._gespeichertes_design_lesen = lambda: desktop_darstellung._DESIGN_DEFAULT
         if hasattr(modul, "_gespeicherte_schriftstufe_lesen"):  # X2: Bilder immer in „Normal“
             modul._gespeicherte_schriftstufe_lesen = lambda: desktop_darstellung._SCHRIFT_DEFAULT
-    # Jedes Desktop-Modul, das termine_ordner selbst importiert (seit der Aufteilung von app.py).
-    desktop_module = (app_modul, desktop_abrechnung, desktop_auswertung, desktop_dialoge, desktop_demo, desktop_gemeinsam,
-                      desktop_programm, desktop_verwaltung, desktop_zeitplan)
+    # Jedes Desktop-Modul, das termine_ordner selbst importiert (seit der Aufteilung von app.py):
+    # alle desktop_*.py des Repos, damit neue Module (Reiter, Dialoggruppen …) nicht vergessen werden.
+    import importlib
+
+    desktop_module = (app_modul, *(importlib.import_module(p.stem)
+                                   for p in sorted(Path(__file__).resolve().parent.parent.glob("desktop_*.py"))))
     for modul in desktop_module:
         if hasattr(modul, "termine_ordner"):
             modul.termine_ordner = lambda: ANZEIGE_ORDNER

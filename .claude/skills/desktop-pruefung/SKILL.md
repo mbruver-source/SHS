@@ -27,7 +27,7 @@ veröffentlicht mit 1.0.48) liegt im Repo unter `berichte/Desktop-Pruefung-2026-
 ## Teilekatalog
 
 Zeilenangaben sind ungefähr (Stand 19.10.2026, nach der Aufteilung von `app.py`). Maßgeblich sind die Klassen- und Funktionsnamen.
-Abkürzungen: `dlg` = `desktop_dialoge.py`, `gem` = `desktop_gemeinsam.py`.
+Abkürzungen: `dlg` = `desktop_dialoge.py` (Fassade; Code in `desktop_dialoge_*.py` und `desktop_hilfe.py`), `gem` = `desktop_gemeinsam.py`.
 
 | Teil | Bereich | Code | Bezug und Tests |
 |---|---|---|---|

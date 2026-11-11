@@ -116,6 +116,11 @@ class DemoPanel(QWidget):
         self._extra_aktion: Callable[[], None] | None = None
         self._letzter = False
 
+        self._labels_aufbauen()
+        self._knoepfe_aufbauen()
+        self._layout_aufbauen()
+
+    def _labels_aufbauen(self) -> None:
         self.schritt_label = QLabel()
         self.titel_label = QLabel()
         schrift = QFont(self.titel_label.font())
@@ -133,6 +138,7 @@ class DemoPanel(QWidget):
         self.text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.hinweis_label.setVisible(False)
 
+    def _knoepfe_aufbauen(self) -> None:
         self.extra_btn = QPushButton()
         self.extra_btn.setVisible(False)
         self.extra_btn.clicked.connect(self._extra_ausfuehren)
@@ -175,6 +181,7 @@ class DemoPanel(QWidget):
         for taste in (Qt.Key_Return, Qt.Key_Enter):
             QShortcut(QKeySequence(taste), self, activated=self._enter_gedrueckt)
 
+    def _layout_aufbauen(self) -> None:
         knopf_zeile = QHBoxLayout()
         knopf_zeile.addWidget(self.zurueck_btn)
         knopf_zeile.addWidget(self.extra_btn)

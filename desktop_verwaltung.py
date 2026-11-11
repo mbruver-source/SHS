@@ -516,6 +516,33 @@ class DatensicherungTab(QWidget):
         if not zip_pfad:
             return
 
+        gelesen = self._sicherung_inhalt_lesen(zip_pfad)
+        if gelesen is None:
+            return
+        namen, passwort = gelesen
+
+        ordner = termine_ordner()
+        vorhandene = {p.name for p in ordner.glob("*.sqlite")}
+        # Sicherheitskorrektur Q-1 (07.10.2026), Details folgen. Teil 7 Nr. 1: nur, wenn der
+        # geöffnete Termin auch wirklich im Termine-Ordner liegt (sonst ist eine gleichnamige
+        # Datei dort eine andere).
+        offener_name = (os.path.basename(self._aktueller_pfad).casefold()
+                        if self._aktueller_pfad and self._offener_termin_im_ordner() else None)
+
+        entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
+            namen, vorhandene, ordner,
+            lambda name: self._konflikt_abfragen(name, ist_offener_termin=(name.casefold() == offener_name)),
+        )
+
+        if not entscheidungen:
+            self.status_label.setText("Wiederherstellen abgebrochen: kein Termin ausgewählt.")
+            return
+        self._wiederherstellung_ausfuehren(zip_pfad, entscheidungen, passwort, uebersprungen)
+
+    def _sicherung_inhalt_lesen(self, zip_pfad: str) -> tuple[list[str], str | None] | None:
+        """Liest das Inhaltsverzeichnis der Sicherung und fragt bei Bedarf das Passwort ab.
+        Liefert (Namen, Passwort) oder None nach Abbruch bzw. Fehler (die Meldung ist dann schon
+        gezeigt)."""
         passwort: str | None = None
         namen: list[str] | None = None
         # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 2): einmal ohne und dreimal mit Passwort -
@@ -534,38 +561,25 @@ class DatensicherungTab(QWidget):
                 while not eingabe:
                     eingabe, ok = QInputDialog.getText(self, titel, text, QLineEdit.Password)
                     if not ok:
-                        return
+                        return None
                     # Teil 7 Nr. 11: leere Eingabe kostet keinen Versuch.
                     titel, text = "Passwort fehlt", "Bitte ein Passwort eingeben:"
                 passwort = eingabe
             except ValueError as exc:
                 QMessageBox.warning(self, "Sicherung nicht lesbar", str(exc))
-                return
+                return None
             except OSError as exc:
                 QMessageBox.warning(self, "Sicherung nicht lesbar",
                                     f"Die Sicherung konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
-                return
+                return None
         if namen is None:
             QMessageBox.warning(self, "Passwort falsch", "Das Passwort war auch beim dritten Versuch falsch. Abgebrochen.")
-            return
+            return None
+        return namen, passwort
 
-        ordner = termine_ordner()
-        vorhandene = {p.name for p in ordner.glob("*.sqlite")}
-        # Sicherheitskorrektur Q-1 (07.10.2026), Details folgen. Teil 7 Nr. 1: nur, wenn der
-        # geöffnete Termin auch wirklich im Termine-Ordner liegt (sonst ist eine gleichnamige
-        # Datei dort eine andere).
-        offener_name = (os.path.basename(self._aktueller_pfad).casefold()
-                        if self._aktueller_pfad and self._offener_termin_im_ordner() else None)
-
-        entscheidungen, uebersprungen = _wiederherstellungsziele_planen(
-            namen, vorhandene, ordner,
-            lambda name: self._konflikt_abfragen(name, ist_offener_termin=(name.casefold() == offener_name)),
-        )
-
-        if not entscheidungen:
-            self.status_label.setText("Wiederherstellen abgebrochen: kein Termin ausgewählt.")
-            return
-
+    def _wiederherstellung_ausfuehren(self, zip_pfad: str, entscheidungen: dict, passwort: str | None,
+                                      uebersprungen: int) -> None:
+        """Stellt die gewählten Termine wieder her und meldet das Ergebnis (auch Teilfehler)."""
         try:
             with _wartecursor():
                 wiederhergestellt = sicherung_wiederherstellen(zip_pfad, entscheidungen, passwort=passwort)

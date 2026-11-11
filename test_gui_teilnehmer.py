@@ -883,7 +883,7 @@ def test_teilnehmer_dialog_bleibt_bei_schreibfehler_offen(qtbot, conn, monkeypat
     """Desktop-Prüfung 14.10.2026, Teil 2 Nr. 1: gespeichert wird vor dem Schließen; scheitert
     es, bleiben Dialog und Eingaben erhalten."""
     meldungen = []
-    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    monkeypatch.setattr("desktop_dialoge_basis._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
     dialog = TeilnehmerDialog(None, speichern=_schreibfehler)
     qtbot.addWidget(dialog)
     dialog.nachname.setText("Neu")

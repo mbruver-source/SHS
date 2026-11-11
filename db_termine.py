@@ -50,7 +50,7 @@ class TerminInfo:
     """Eintrag für die Terminübersicht im Startdialog. `vereins_nr` steht zusätzlich zu
     den in der Tabelle angezeigten Spalten bereit, damit sich beim Anlegen eines neuen
     Termins Verein/Vereins-Nr./Ort des zuletzt angelegten Termins vorschlagen lassen
-    (Nutzerwunsch 20.09., siehe VeranstaltungsDialog in desktop_dialoge.py und
+    (Nutzerwunsch 20.09., siehe VeranstaltungsDialog in desktop_dialoge_termin.py und
     StartDialog._neuer_termin in app.py) - erspart die erneute Eingabe, wenn ohnehin derselbe Verein gemeint ist."""
     pfad: str
     dateiname: str

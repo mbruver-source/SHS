@@ -1443,13 +1443,13 @@ def test_dialoggroesse_richtet_sich_nach_dem_inhalt(qtbot, monkeypatch):
 
     # Der Teilnehmer-Dialog misst sein Formular (Verdrahtung).
     from PySide6.QtWidgets import QScrollArea
-    import desktop_dialoge
+    import desktop_dialoge_teilnehmer
 
     gemessen = []
-    echt = desktop_dialoge._groesse_auf_bildschirm_begrenzen
-    monkeypatch.setattr(desktop_dialoge, "_groesse_auf_bildschirm_begrenzen",
+    echt = desktop_dialoge_teilnehmer._groesse_auf_bildschirm_begrenzen
+    monkeypatch.setattr(desktop_dialoge_teilnehmer, "_groesse_auf_bildschirm_begrenzen",
                         lambda d, b, h, inhalt=None, **k: gemessen.append(inhalt) or echt(d, b, h, inhalt=inhalt, **k))
-    teilnehmer_dialog = desktop_dialoge.TeilnehmerDialog(None)
+    teilnehmer_dialog = desktop_dialoge_teilnehmer.TeilnehmerDialog(None)
     qtbot.addWidget(teilnehmer_dialog)
     assert gemessen == [teilnehmer_dialog.findChild(QScrollArea).widget()]
 

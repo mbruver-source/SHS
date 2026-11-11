@@ -877,7 +877,7 @@ def importiere_teilnehmer_stammdaten(
     """Übernimmt die ausgewählten Teilnehmer (per ID in quelle_conn) als NEUE Teilnehmer in
     ziel_conn - für 'Teilnehmer aus anderem Termin importieren' (Nutzerwunsch 20.09.,
     Anmerkung zum Programm: 'Teilnehmer müssen wieder einzeln eingegeben werden [...] ist
-    Option möglich, von anderem Termin importieren?'). Siehe TerminImportDialog in desktop_dialoge.py.
+    Option möglich, von anderem Termin importieren?'). Siehe TerminImportDialog in desktop_dialoge_termin.py.
 
     Anders als db.kopiere_termin_daten() (die für die Web-Sync einen KOMPLETTEN
     Termin 1:1 überträgt, inkl. Startnummer/Gegenstand-Zuordnung/Bezahlt-Status/Ergebnis)

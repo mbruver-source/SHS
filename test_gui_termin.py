@@ -587,7 +587,7 @@ def test_neuer_termin_legt_datei_an_und_fragt_bei_vorhandener(qtbot, tmp_path, m
 def test_veranstaltung_bearbeiten_bleibt_bei_schreibfehler_offen(qtbot, conn, monkeypatch):
     set_veranstaltung(conn, verein="SGV", datum="2026-11-14", verband="HSVRM", meldestelle="x")
     meldungen = []
-    monkeypatch.setattr("desktop_dialoge._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
+    monkeypatch.setattr("desktop_dialoge_basis._db_fehler_anzeigen", lambda parent, exc, *a: meldungen.append(str(exc)))
     ueberall_ersetzen(monkeypatch, "_aktualisiere_veranstaltung_feld", _schreibfehler)
 
     def _exec(dialog):
@@ -635,7 +635,7 @@ def test_neuer_termin_speicherort_wird_geprueft(qtbot, tmp_path, monkeypatch):
     def speichern_dialog(*a, **k):
         optionen.append(k.get("options"))
         return str(tmp_path / "neu"), ""
-    monkeypatch.setattr("desktop_dialoge.QFileDialog.getSaveFileName", speichern_dialog)
+    monkeypatch.setattr("desktop_dialoge_termin.QFileDialog.getSaveFileName", speichern_dialog)
     dialog._durchsuchen()
     assert dialog.pfad_feld.text() == str(tmp_path / "neu.sqlite")
     assert optionen == [QFileDialog.DontConfirmOverwrite]
@@ -1048,7 +1048,7 @@ def test_termin_import_dialog_listet_teilnehmer_und_importiert_auswahl(qtbot, tm
         pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
         ort="Testort", datum="2026-01-01", anzahl_teilnehmer=2, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [termin_info])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1078,7 +1078,7 @@ def test_termin_import_dialog_vermerkt_nicht_erschienene(qtbot, tmp_path, monkey
         pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
         ort="Testort", datum="2026-01-01", anzahl_teilnehmer=2, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [termin_info])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1100,10 +1100,10 @@ def test_termin_import_dialog_alte_quelle_ohne_keine_teilnahme(qtbot, tmp_path, 
         pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
         ort="Testort", datum="2026-01-01", anzahl_teilnehmer=1, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [termin_info])
     alt = {"id": 1, "nachname": "Alt", "vorname": "A", "rufname_hund": "Rex",
            "art": "ED", "stufe": 1, "disziplin": "Trümmerfeld"}
-    monkeypatch.setattr("desktop_dialoge.list_teilnehmer", lambda conn: [alt])
+    monkeypatch.setattr("desktop_dialoge_termin.list_teilnehmer", lambda conn: [alt])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1123,8 +1123,8 @@ def test_termin_import_dialog_fehlende_spalte_erklaert(qtbot, tmp_path, monkeypa
         pfad=quelle_pfad, dateiname="quelle.sqlite", verein="Testverein", vereins_nr=None,
         ort="Testort", datum="2026-01-01", anzahl_teilnehmer=1, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [termin_info])
-    monkeypatch.setattr("desktop_dialoge.list_teilnehmer", lambda conn: [{"id": 1}])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [termin_info])
+    monkeypatch.setattr("desktop_dialoge_termin.list_teilnehmer", lambda conn: [{"id": 1}])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1144,7 +1144,7 @@ def test_termin_import_dialog_eigener_termin_wird_ausgeschlossen(qtbot, monkeypa
         pfad="anderer.sqlite", dateiname="anderer.sqlite", verein="Anderer", vereins_nr=None,
         ort="Y", datum="2026-01-02", anzahl_teilnehmer=1, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [eigener, anderer])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [eigener, anderer])
 
     dialog = TerminImportDialog(None, aktueller_pfad="eigen.sqlite")
     qtbot.addWidget(dialog)
@@ -1161,7 +1161,7 @@ def test_termin_import_dialog_schliesst_eigenen_termin_bei_anderer_schreibweise_
     eigen = tmp_path / "eigen.sqlite"
     _termin_mit_teilnehmer(tmp_path / "alt.sqlite", "Alt", "2026-01-01", "Alt")
     _termin_mit_teilnehmer(eigen, "Eigen", "2026-12-01", "Eigen")
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: db.liste_termine(tmp_path))
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: db.liste_termine(tmp_path))
     aktueller_pfad = str(eigen).replace("\\", "/")
     if os.name == "nt":
         aktueller_pfad = aktueller_pfad.upper()
@@ -1192,7 +1192,7 @@ def test_termin_import_dialog_liest_schreibgeschuetzte_altdatei(qtbot, monkeypat
     inhalt = quelle.read_bytes()
     os.chmod(quelle, stat.S_IREAD)
     try:
-        monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: db.liste_termine(tmp_path))
+        monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: db.liste_termine(tmp_path))
         dialog = TerminImportDialog(None, aktueller_pfad=None)
         qtbot.addWidget(dialog)
         assert dialog.termin_combo.count() == 1
@@ -1212,7 +1212,7 @@ def test_termin_import_dialog_meldet_nicht_lesbare_quelle(qtbot, monkeypatch, tm
         pfad=str(tmp_path / "weg.sqlite"), dateiname="weg.sqlite", verein="Weg", vereins_nr=None,
         ort="Y", datum="2026-01-02", anzahl_teilnehmer=1, lesbar=True,
     )
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [weg])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [weg])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1241,7 +1241,7 @@ def test_termin_import_dialog_prueft_quelle_mit_quick_check(qtbot, monkeypatch, 
         assert c.execute("SELECT COUNT(*) FROM teilnehmer").fetchone()[0] == 1
     info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
                       ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [info])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
@@ -1262,7 +1262,7 @@ def test_termin_import_dialog_nennt_schrittgrenze(qtbot, monkeypatch, tmp_path):
         _teilnehmer_anlegen(c, nachname="Q")
     info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
                       ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [info])
     monkeypatch.setattr("db_termine._LESE_SCHRITTWEITE", 1)
     monkeypatch.setattr("db_termine._LESE_HOECHSTSCHRITTE", 0)
 
@@ -1347,7 +1347,7 @@ def test_termin_import_dialog_prueft_wie_termin_oeffnen(qtbot, monkeypatch, tmp_
     def dialog_fuer(pfad):
         info = TerminInfo(pfad=str(pfad), dateiname=pfad.name, verein="Quelle", vereins_nr=None,
                           ort=None, datum="2026-11-14", anzahl_teilnehmer=1, lesbar=True)
-        monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [info])
+        monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [info])
         dialog = TerminImportDialog(None, aktueller_pfad=None)
         qtbot.addWidget(dialog)
         return dialog
@@ -1388,7 +1388,7 @@ def test_termin_import_dialog_prueft_wie_termin_oeffnen(qtbot, monkeypatch, tmp_
 
 
 def test_termin_import_dialog_ohne_anderen_termin_deaktiviert_ok(qtbot, monkeypatch):
-    monkeypatch.setattr("desktop_dialoge.liste_termine", lambda: [])
+    monkeypatch.setattr("desktop_dialoge_termin.liste_termine", lambda: [])
 
     dialog = TerminImportDialog(None, aktueller_pfad=None)
     qtbot.addWidget(dialog)
