@@ -62,6 +62,7 @@ from db import (
 )
 from desktop_darstellung import _farbe
 from desktop_dialoge import PauseDialog, PruefungsblockDialog, VerteilenDialog
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _Ablageort,
     _ablageort_ordner_oeffnen,
@@ -179,6 +180,11 @@ class ZeitplanTab(QWidget):
 
         kopf_zeile, knopf_zeile = self._kopf_aufbauen(veranstaltung)
         hinweis, inhalt_zeile = self._inhalt_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "zeitplan_start": "Zeitplan-Start (Uhrzeit HH:MM)",
+            "standard_dauer": "Standard-Prüfungsdauer in Minuten",
+            "mindestabstand": "Mindestabstand zwischen zwei Starts desselben Teams in Minuten",
+        })
 
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
@@ -476,6 +482,8 @@ class ZeitplanTab(QWidget):
 
         kopf_zeile = self._richter_kopf(richter_id)
         liste = self._block_liste(richter_id, zeilen)
+        # Für Bildschirmleser; Umsortieren geht auch ohne Maus über „Hoch“ und „Runter“.
+        liste.setAccessibleName(f"Blöcke und Pausen von {richter['name']}")
 
         hoch_btn = QPushButton("Hoch")
         hoch_btn.clicked.connect(lambda: self._eintrag_verschieben(liste, -1))
@@ -516,10 +524,12 @@ class ZeitplanTab(QWidget):
         links_btn = QPushButton()
         symbol_setzen(links_btn, "chevron-left")
         links_btn.setToolTip("Spalte nach links verschieben")
+        links_btn.setAccessibleName("Spalte nach links verschieben")  # Knopf nur mit Symbol
         links_btn.clicked.connect(lambda: self._richter_verschieben(richter_id, -1))
         rechts_btn = QPushButton()
         symbol_setzen(rechts_btn, "chevron-right")
         rechts_btn.setToolTip("Spalte nach rechts verschieben")
+        rechts_btn.setAccessibleName("Spalte nach rechts verschieben")  # Knopf nur mit Symbol
         rechts_btn.clicked.connect(lambda: self._richter_verschieben(richter_id, 1))
         umbenennen_btn = QPushButton("Umbenennen…")
         umbenennen_btn.clicked.connect(lambda: self._richter_umbenennen(richter_id))

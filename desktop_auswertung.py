@@ -52,6 +52,7 @@ from db import (
 from db_import import exportiere_teilnehmer_csv
 from desktop_darstellung import _farbe
 from desktop_dialoge import BehaeltnisEtikettenDialog, BewertungsbogenAuswahlDialog
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _Ablageort,
     _ausfuehren,
@@ -134,6 +135,12 @@ class AuswertungTab(QWidget):
         self._tabelle_aufbauen()
         self._filter_aufbauen()
         self._knoepfe_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Rangliste",
+            "filter_combo": "Filter nach Art und Leistungsklasse",
+            "filter_startnummer": "Filter nach Startnummer",
+            "filter_name": "Suche nach Name oder Hund",
+        })
         self._layout_aufbauen()
         self.aktualisieren()
 
@@ -528,6 +535,10 @@ class TeilnehmerUebersichtTab(QWidget):
 
         self.behaeltnis_tabelle = QTableWidget(4, len(BEHAELTNIS_BEDARF_SPALTEN))
         self.behaeltnis_tabelle.setHorizontalHeaderLabels(BEHAELTNIS_BEDARF_SPALTEN)
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Teilnehmerzahlen je Art und Leistungsklasse",
+            "behaeltnis_tabelle": "Bedarf an Behältnissen",
+        })
         self.behaeltnis_tabelle.setEditTriggers(QTableWidget.NoEditTriggers)
         self.behaeltnis_tabelle.horizontalHeader().setStretchLastSection(True)
         self.behaeltnis_tabelle.verticalHeader().setVisible(False)

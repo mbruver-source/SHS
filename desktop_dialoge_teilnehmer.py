@@ -36,6 +36,7 @@ from db import (
     pruefungs_kuerzel,
 )
 from desktop_darstellung import _farbe
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _ja_nein,
     _gegenstand_zeile,
@@ -273,6 +274,14 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
     def _layout_aufbauen(self) -> None:
         """Ordnet die in _felder_erstellen angelegten Widgets in Formularen/Gruppen an und
         setzt das Dialog-Layout (Gesamtinhalt scrollbar, siehe Kommentare unten)."""
+        # Namen für Bildschirmleser: diese Felder stehen in Zeilen ohne eigenes Beschriftungsfeld
+        # (Startnummer neben der Checkbox, Gegenstand neben der Zuordnung).
+        zugaengliche_namen_setzen(self, {
+            "startnummer": "Startnummer",
+            "gegenstand_1": "Gegenstand 1", "gegenstand_1_disziplin": "Gegenstand 1 gesucht in Disziplin",
+            "gegenstand_2": "Gegenstand 2", "gegenstand_2_disziplin": "Gegenstand 2 gesucht in Disziplin",
+            "gegenstand_3": "Gegenstand 3", "gegenstand_3_disziplin": "Gegenstand 3 gesucht in Disziplin",
+        })
         # Zwei Spalten nebeneinander statt einer langen Liste untereinander - bei allen
         # Feldern (inkl. der neuen Verwaltungs-/Kontaktfelder) ging das Fenster sonst in
         # der Höhe über den Bildschirm hinaus, ohne dass sich der Dialog scrollen ließ.

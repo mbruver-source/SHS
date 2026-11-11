@@ -54,6 +54,7 @@ from db import (
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
 )
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _ja_nein,
     fehlende_formularangaben,
@@ -537,6 +538,15 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         return form
 
     def _layout_aufbauen(self, form: QFormLayout) -> None:
+        # Namen für Bildschirmleser: Felder ohne eigenes Beschriftungsfeld.
+        zugaengliche_namen_setzen(self, {"standard_groesse": "Standardgröße der Startnummern-Bereiche je Prüfung"})
+        if hasattr(self, "pfad_feld"):
+            self.pfad_feld.setAccessibleName("Speicherort der Termin-Datei")
+        for pruefung in ALLE_PRUEFUNGEN:
+            self.anzahl_felder[pruefung.kuerzel].setAccessibleName(f"Anzahl Startnummern {pruefung.bezeichnung}")
+            _beschriftung, von_feld, bis_feld = self.bereich_felder[pruefung.kuerzel]
+            von_feld.setAccessibleName(f"Startnummer von, {pruefung.bezeichnung}")
+            bis_feld.setAccessibleName(f"Startnummer bis, {pruefung.bezeichnung}")
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._pruefen_und_akzeptieren)
         buttons.rejected.connect(self.reject)

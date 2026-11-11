@@ -9,7 +9,8 @@
 Weitere Testarten, Stand 11.11.2026:
 
 - **Erledigt:** Windows in der CI (19.10.2026, V2), Abdeckung und bandit (01.11.2026).
-- **Offen, Desktop:** Generalprobe (kompletter Prüfungstag mit Probedaten), Barrierefreiheit der Oberfläche.
+- **Offen, Desktop:** Generalprobe (kompletter Prüfungstag mit Probedaten).
+- **Teilweise erledigt (11.11.2026), Barrierefreiheit:** Namen für Bildschirmleser und Tab-Erreichbarkeit sind umgesetzt und werden von `test_gui_barrierefreiheit.py` geprüft. Offen bleibt die Prüfung mit einem echten Bildschirmleser (NVDA, Narrator), Farbe als einziger Hinweis und die selten genutzten Dialoge.
 - **Offen, Web (gehört zu B16):** gleichzeitige Web-Eingaben, ZAP/XSS-Prüfung.
 
 ## Wann neu bewerten

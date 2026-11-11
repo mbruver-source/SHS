@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 import pdf_export
 from db import get_veranstaltung
 from db_import import exportiere_abrechnung_csv
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _aktualisiere_veranstaltung_feld,
     _Ablageort,
@@ -79,6 +80,11 @@ class AbrechnungTab(QWidget):
         saetze = self._saetze_aufbauen()
         self._tabelle_aufbauen()
         knoepfe = self._knoepfe_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Abrechnung Leistungsrichter",
+            "km_satz_feld": "Vergütung je Kilometer in Euro",
+            "pauschale_feld": "Tagespauschale je Richter in Euro",
+        })
         self._layout_aufbauen(saetze, knoepfe)
         self.aktualisieren()
 

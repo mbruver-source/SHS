@@ -98,6 +98,7 @@ from desktop_darstellung import (
     _theme_speichern,
     _THEMES,
 )
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _fehlertext,
     _klartext_fehler,
@@ -929,6 +930,10 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         self.suche_feld.setClearButtonEnabled(True)
         self.suche_feld.textChanged.connect(lambda _text: self._aktualisieren())
         QShortcut(QKeySequence.Find, self, activated=self.suche_feld.setFocus)
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Terminliste",
+            "suche_feld": "Suche nach Verein, Ort oder Datum",
+        })
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
         neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_TEMPLATE

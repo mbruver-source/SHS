@@ -33,6 +33,7 @@ from db_import import (
     importiere_teilnehmer_aus_oma,
     schreibe_csv_vorlage,
 )
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _klartext_fehler,
     _Ablageort,
@@ -157,6 +158,10 @@ class FormularImportTab(QWidget):
 
         self._ki_bereich_aufbauen()
         self._letzter_import_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "prompt_feld": "Prompt für das KI-System (zum Kopieren)",
+            "letzter_import_text": "Ergebnis des letzten Imports",
+        })
 
         layout = QVBoxLayout(self)
         layout.addWidget(abschnitt(

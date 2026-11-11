@@ -336,6 +336,9 @@ class HilfeDialog(QDialog):
         self.suchfeld.setClearButtonEnabled(True)
         self.suchfeld.textChanged.connect(self._treffer_markieren)
         self.suchfeld.returnPressed.connect(self.weitersuchen)
+        # Namen für Bildschirmleser (Barrierefreiheit): Feld und Anzeige haben keinen eigenen Text.
+        self.suchfeld.setAccessibleName("In der Hilfe suchen")
+        self.anzeige.setAccessibleName("Hilfetext")
         weiter_btn = QPushButton("Weiter")
         weiter_btn.setAutoDefault(False)
         weiter_btn.clicked.connect(self.weitersuchen)

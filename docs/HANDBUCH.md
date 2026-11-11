@@ -1116,6 +1116,12 @@ Fehlermeldung anhängen (siehe unten).
 | Ergebniserfassung | **Strg+S** (am Mac Cmd+S) | alle Ergebnisse speichern |
 | Rückfragen | **Enter** / **Esc** | vorgegebene Antwort (bei Datenänderungen „Nein“) / abbrechen |
 
+### Bedienung ohne Maus und mit Bildschirmleser
+
+Das Programm lässt sich vollständig mit der Tastatur bedienen: **Tab** und **Umschalt+Tab** wechseln zwischen den Feldern und Knöpfen, **Leertaste** und **Enter** lösen Knöpfe aus, die Pfeiltasten bewegen sich in Tabellen und Listen. Die Aktionen der Rechtsklick-Menüs in den Listen gibt es auch als Knöpfe, und das Ziehen im Zeitplan ersetzen „Hoch“ und „Runter“. Dazu gibt es drei Schriftgrößen und das Design „Hoher Kontrast“ im Menü „Ansicht“.
+
+Felder, Filter, Tabellen und Knöpfe, die nur ein Symbol tragen, haben einen Namen, den ein Bildschirmleser vorliest (zum Beispiel „Filter nach Startnummer“ oder „Spalte nach links verschieben“). Ein automatischer Test prüft das bei jeder Änderung; ob die Ansage mit dem Bildschirmleser deines Rechners gut klingt, ist nicht geprüft. Rückmeldungen dazu bitte wie unten beschrieben melden.
+
 ### Fehler melden oder Wunsch äußern
 
 Bitte über die [Issues auf GitHub](https://github.com/mbruver-source/SHS/issues/new/choose) mit

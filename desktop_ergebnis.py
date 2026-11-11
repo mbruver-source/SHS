@@ -73,6 +73,7 @@ from desktop_ergebnis_zellen import (
     _PunkteFeld,
     _PunkteItem,
 )
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _ABBRUCH_SPALTE,
     _Ablageort,
@@ -132,6 +133,12 @@ class ErgebnisTab(_ErgebnisSpeichernMixin, QWidget):
         self._filter_aufbauen()
         self._knoepfe_aufbauen()
         self._hinweise_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Ergebniserfassung",
+            "filter_combo": "Filter nach Art und Leistungsklasse",
+            "filter_startnummer": "Filter nach Startnummer",
+            "filter_name": "Suche nach Name oder Hund",
+        })
         self._layout_aufbauen()
         self.aktualisieren()
 

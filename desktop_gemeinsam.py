@@ -1632,3 +1632,12 @@ def fehlerfenster_einrichten(version: str) -> None:
             _fehlerfenster_offen = False
 
     sys.excepthook = _melden
+
+
+def zugaengliche_namen_setzen(objekt, namen: dict[str, str]) -> None:
+    """Setzt den Namen, den ein Bildschirmleser für Bedienelemente vorliest (Barrierefreiheit,
+    11.11.2026). Elemente ohne eigenen Text - Suchfelder, Filter, Zahlenfelder, Tabellen - haben
+    sonst keinen Namen, wenn ihre Beschriftung ein getrenntes Textfeld daneben ist.
+    `namen` ordnet Attributnamen des Objekts den Namen zu."""
+    for attribut, name in namen.items():
+        getattr(objekt, attribut).setAccessibleName(name)

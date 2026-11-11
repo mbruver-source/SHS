@@ -186,6 +186,10 @@ class _AbbruchAuswahl(QComboBox):
     sonst würde jede Zwischenstufe sofort übernommen. Sie klappen die Liste auf; übernommen
     wird erst die Wahl in der Liste (Klick oder Enter)."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAccessibleName("Abbruchgrund")  # entsteht nur beim Bearbeiten der Zelle, ohne Beschriftung
+
     def keyPressEvent(self, event):  # noqa: N802
         # Durchreichen: Übernehmen/Abbrechen/Weiterspringen, reine Umschalt-/Strg-/Alt-Tasten
         # und Kürzel mit Strg/Alt (z. B. Strg+S, Umschalt+Tab) - Vor-Build-Verifikation 1.0.55,

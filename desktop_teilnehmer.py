@@ -66,6 +66,7 @@ from db_import import (
 from desktop_darstellung import (
     _farbe,
 )
+from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
     _Ablageort,
     _ablageort_ordner_oeffnen,
@@ -127,6 +128,13 @@ class TeilnehmerTab(QWidget):
         self._filter_aufbauen()
         self._knoepfe_aufbauen()
         self._rueckgaengig_aufbauen()
+        zugaengliche_namen_setzen(self, {
+            "tabelle": "Teilnehmerliste",
+            "filter_combo": "Filter nach Art und Leistungsklasse",
+            "filter_startnummer": "Filter nach Startnummer",
+            "filter_name": "Suche nach Name oder Hund",
+            "filter_bezahlt": "Filter nach Bezahlt-Status",
+        })
         self._layout_aufbauen()
         self.aktualisieren()
 
