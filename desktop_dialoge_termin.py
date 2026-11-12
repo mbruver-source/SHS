@@ -29,11 +29,15 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 from db import (
     ALLE_PRUEFUNGEN,
+    ergebnis_unterschiede,
+    ergebnis_wert_text,
     angebotene_pruefungen,
     bereiche_automatisch_berechnen,
     dateiname_vorschlagen,
@@ -54,6 +58,7 @@ from db import (
 )
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
+    ist_loeschen_kopie,
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
@@ -231,7 +236,7 @@ class SicherungTeilnehmerDialog(QDialog):
     Zurückholen (mit Ergebnis, gleiche ID) macht der Aufrufer mit der offenen `quelle_conn()`
     und muss danach `schliesse_quelle()` rufen."""
 
-    def __init__(self, parent, conn, kopien: list):
+    def __init__(self, parent, conn, kopien: list, loeschkopien: bool | None = None):
         super().__init__(parent)
         self.setWindowTitle("Gelöschte Teilnehmer aus Sicherung holen")
         self.resize(560, 460)
@@ -244,8 +249,10 @@ class SicherungTeilnehmerDialog(QDialog):
         # Kopie mit Fehlenden ist vorgewählt (Marco 12.11.2026: die neueste Kopie entsteht beim
         # Beenden und enthält den Gelöschten oft nicht mehr).
         anzahlen = [self._fehlende_zaehlen(pfad) for pfad, _zeit in kopien]
-        for (_pfad, zeit), anzahl in zip(kopien, anzahlen):
+        for (pfad, zeit), anzahl in zip(kopien, anzahlen):
             text = zeit.strftime("Kopie vom %d.%m.%Y um %H:%M:%S Uhr")
+            if ist_loeschen_kopie(pfad):
+                text += " (vor dem Löschen)"
             if anzahl is None:
                 text += " – nicht lesbar"
             elif anzahl == 0:
@@ -277,15 +284,31 @@ class SicherungTeilnehmerDialog(QDialog):
 
         layout = QVBoxLayout(self)
         if not kopien:
-            layout.addWidget(QLabel(
-                "Es gibt keine automatische Kopie dieses Termins. Sie entsteht beim Öffnen und "
-                "Beenden des Programms sowie vor dem Löschen, wenn der Schalter im Menü "
-                "„Einstellungen“ eingeschaltet ist."))
+            if loeschkopien:
+                text = ("Es gibt keine Kopie vor dem Löschen für diesen Termin. Sie entsteht vor jedem "
+                        "Löschen von Teilnehmern, solange der Schalter im Menü „Einstellungen“ an ist. "
+                        "Ist er aus, zeigt dieser Dialog die normalen automatischen Kopien.")
+            elif loeschkopien is not None:
+                text = ("Es gibt keine automatische Kopie dieses Termins. Sie entsteht beim Öffnen und "
+                        "Beenden des Programms. Ist der Schalter „Vor dem Löschen von Teilnehmern eine "
+                        "Sicherung anlegen“ im Menü „Einstellungen“ an, zeigt dieser Dialog stattdessen "
+                        "die Kopien vor dem Löschen.")
+            else:
+                text = ("Es gibt keine automatische Kopie dieses Termins. Sie entsteht beim Öffnen und "
+                        "Beenden des Programms sowie vor dem Löschen, wenn der Schalter im Menü "
+                        "„Einstellungen“ eingeschaltet ist.")
+            kein = QLabel(text)
+            kein.setWordWrap(True)
+            layout.addWidget(kein)
             self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
         else:
             layout.addWidget(QLabel(
                 "Sicherungskopie dieses Termins (Pfeil rechts aufklappen, um eine andere Kopie "
                 "zu wählen; vorgewählt ist die neueste, in der jemand fehlt):"))
+            if loeschkopien is not None:
+                layout.addWidget(QLabel(
+                    "Angezeigt werden die Kopien vor dem Löschen (Schalter in „Einstellungen“ an)." if loeschkopien
+                    else "Angezeigt werden die normalen automatischen Kopien (Schalter „Vor dem Löschen …“ aus)."))
             layout.addWidget(self.kopie_combo)
             layout.addWidget(QLabel(
                 "Teilnehmer, die in der Kopie stehen, im Termin aber fehlen (sie kommen mit "
@@ -357,6 +380,169 @@ class SicherungTeilnehmerDialog(QDialog):
             for row in range(self.teilnehmer_liste.count())
             if self.teilnehmer_liste.item(row).checkState() == Qt.Checked
         ]
+
+    def quelle_conn(self) -> sqlite3.Connection | None:
+        return self._quelle_conn
+
+    def schliesse_quelle(self) -> None:
+        if self._quelle_conn is not None:
+            self._quelle_conn.close()
+            self._quelle_conn = None
+
+
+class ErgebnisseSicherungDialog(QDialog):
+    """Holt einzelne Ergebniswerte aus einer automatischen Kopie des Termins zurück (Marco
+    12.11.2026, Reiter „Datensicherung“). Je Teilnehmer mit Unterschieden stehen die Werte (eine
+    Disziplin, Disqualifiziert, Abbruch, Stechen-Sieger) mit dem jetzigen Stand und dem der Kopie
+    nebeneinander; angekreuzte Werte werden auf den Stand der Kopie gesetzt. Nichts ist
+    vorangekreuzt. Die Kopie wird nur gelesen; das Schreiben macht der Aufrufer mit der offenen
+    `quelle_conn()` und muss danach `schliesse_quelle()` rufen."""
+
+    def __init__(self, parent, conn, kopien: list):
+        super().__init__(parent)
+        self.setWindowTitle("Ergebnisse aus automatischer Kopie wiederherstellen")
+        self.resize(760, 520)
+        self._conn = conn
+        self._kopien = kopien
+        self._quelle_conn: sqlite3.Connection | None = None
+
+        self.kopie_combo = QComboBox()
+        anzahlen = [self._unterschiede_zaehlen(pfad) for pfad, _zeit in kopien]
+        for (pfad, zeit), anzahl in zip(kopien, anzahlen):
+            text = zeit.strftime("Kopie vom %d.%m.%Y um %H:%M:%S Uhr")
+            if ist_loeschen_kopie(pfad):
+                text += " (vor dem Löschen)"
+            if anzahl is None:
+                text += " – nicht lesbar"
+            elif anzahl == 0:
+                text += " – keine Unterschiede"
+            else:
+                text += f" – {anzahl} Teilnehmer mit Unterschieden"
+            self.kopie_combo.addItem(text)
+        vorauswahl = next((i for i, a in enumerate(anzahlen) if a), 0)
+        self.kopie_combo.setCurrentIndex(vorauswahl)
+        self.kopie_combo.currentIndexChanged.connect(self._kopie_gewaehlt)
+
+        self.baum = QTreeWidget()
+        self.baum.setColumnCount(3)
+        self.baum.setHeaderLabels(["Teilnehmer / Wert", "Jetzt im Termin", "In der Kopie"])
+        self.baum.setRootIsDecorated(True)
+        self.baum.header().setStretchLastSection(True)
+        self.baum.setColumnWidth(0, 260)
+        self.baum.setColumnWidth(1, 220)
+        zugaengliche_namen_setzen(self, {
+            "kopie_combo": "Automatische Kopie des Termins",
+            "baum": "Ergebniswerte, die sich von der Kopie unterscheiden",
+        })
+        alle_btn = QPushButton("Alle auswählen")
+        alle_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Checked))
+        keine_btn = QPushButton("Keine auswählen")
+        keine_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Unchecked))
+        auswahl_zeile = QHBoxLayout()
+        auswahl_zeile.addWidget(alle_btn)
+        auswahl_zeile.addWidget(keine_btn)
+        auswahl_zeile.addStretch()
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        if not kopien:
+            layout.addWidget(QLabel(
+                "Es gibt keine automatische Kopie dieses Termins. Sie entsteht beim Öffnen und "
+                "Beenden des Programms sowie vor dem Löschen, wenn der Schalter im Menü "
+                "„Einstellungen“ eingeschaltet ist."))
+            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        else:
+            hinweis = QLabel(
+                "Automatische Kopie des Termins (Pfeil rechts aufklappen, um eine andere zu wählen; "
+                "vorgewählt ist die neueste mit Unterschieden). Angekreuzte Werte werden auf den "
+                "Stand der Kopie zurückgesetzt, die jetzigen Werte dabei überschrieben. "
+                "Gelöschte Teilnehmer holt der Knopf „Aus Sicherung holen…“ im Reiter Teilnehmer.")
+            hinweis.setWordWrap(True)
+            layout.addWidget(hinweis)
+            layout.addWidget(self.kopie_combo)
+            layout.addLayout(auswahl_zeile)
+            layout.addWidget(self.baum)
+        layout.addWidget(self.buttons)
+        if kopien:
+            self._kopie_gewaehlt(vorauswahl)
+
+    def _unterschiede_lesen(self, pfad) -> tuple[sqlite3.Connection, list[dict]]:
+        quelle = termin_lesend_pruefen(pfad)
+        try:
+            termin_unversehrt_pruefen(quelle)
+            unterschiede = ergebnis_unterschiede(quelle, self._conn)
+            quelle.set_progress_handler(None, 0)
+        except BaseException:
+            quelle.close()
+            raise
+        return quelle, unterschiede
+
+    def _unterschiede_zaehlen(self, pfad) -> int | None:
+        try:
+            quelle, unterschiede = self._unterschiede_lesen(pfad)
+        except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError):
+            return None
+        quelle.close()
+        return len(unterschiede)
+
+    def _hinweis(self, text: str) -> None:
+        item = QTreeWidgetItem([text])
+        item.setFlags(Qt.NoItemFlags)
+        self.baum.addTopLevelItem(item)
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+
+    def _kopie_gewaehlt(self, index: int) -> None:
+        self.schliesse_quelle()
+        self.baum.clear()
+        if not (0 <= index < len(self._kopien)):
+            return
+        try:
+            self._quelle_conn, unterschiede = self._unterschiede_lesen(self._kopien[index][0])
+        except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+            grund = _klartext_fehler(exc).replace(chr(10) * 2, " ") if isinstance(exc, (sqlite3.Error, OSError)) \
+                else f"Die Datei enthält nicht alle erwarteten Angaben (Technisch: {type(exc).__name__}: {exc})."
+            self._hinweis(f"Diese Kopie konnte nicht gelesen werden. {grund} Bitte eine andere Kopie wählen.")
+            return
+        if not unterschiede:
+            self._hinweis("Die Ergebnisse in dieser Kopie stimmen mit dem Termin überein. "
+                          "Eine ältere oder neuere Kopie wählen?")
+            return
+        for eintrag in unterschiede:
+            kopf = QTreeWidgetItem([eintrag["name"]])
+            kopf.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+            kopf.setCheckState(0, Qt.Unchecked)  # nichts ohne bewusstes Ankreuzen überschreiben
+            self.baum.addTopLevelItem(kopf)
+            for wert in eintrag["werte"]:
+                kind = QTreeWidgetItem([
+                    wert["bezeichnung"],
+                    ergebnis_wert_text(wert["schluessel"], wert["aktuell"]),
+                    ergebnis_wert_text(wert["schluessel"], wert["kopie"]),
+                ])
+                kind.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+                kind.setCheckState(0, Qt.Unchecked)
+                kind.setData(0, Qt.UserRole, (eintrag["teilnehmer_id"], wert["schluessel"]))
+                kopf.addChild(kind)
+            kopf.setExpanded(True)
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
+
+    def _alle_umschalten(self, zustand) -> None:
+        for i in range(self.baum.topLevelItemCount()):
+            kopf = self.baum.topLevelItem(i)
+            for j in range(kopf.childCount()):
+                kopf.child(j).setCheckState(0, zustand)
+
+    def ausgewaehlte_werte(self) -> list[tuple[int, str]]:
+        """Die angekreuzten Werte als (Teilnehmer-ID, Schlüssel)."""
+        auswahl = []
+        for i in range(self.baum.topLevelItemCount()):
+            kopf = self.baum.topLevelItem(i)
+            for j in range(kopf.childCount()):
+                kind = kopf.child(j)
+                if kind.checkState(0) == Qt.Checked:
+                    auswahl.append(kind.data(0, Qt.UserRole))
+        return auswahl
 
     def quelle_conn(self) -> sqlite3.Connection | None:
         return self._quelle_conn

@@ -2531,7 +2531,7 @@ def test_sicherung_vor_loeschen_nur_per_schalter(qtbot, termin, monkeypatch):
     action.setChecked(True)  # speichert die Einstellung
     assert desktop_gemeinsam._sicherung_vor_loeschen_lesen()
     tab._teilnehmer_loeschen()
-    assert aufrufe == [{"ohne_mindestabstand": True}]
+    assert aufrufe == [{"vor_loeschen": True}]
 
 
 def test_ohne_nachfrage_menue_und_reiter_bleiben_gleich(qtbot, termin):

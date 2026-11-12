@@ -33,8 +33,9 @@ from PySide6.QtWidgets import (
 
 import checkliste
 import pdf_export
-from db import get_veranstaltung, termine_ordner
+from db import ergebnis_werte_wiederherstellen, get_veranstaltung, termine_ordner
 from db_sicherung import (
+    auto_sicherungen_zu_termin,
     PasswortFalschError,
     sicherung_erstellen,
     sicherung_inhalt,
@@ -43,6 +44,7 @@ from db_sicherung import (
 )
 from desktop_dialoge import (
     _wiederherstellungsziele_planen,
+    ErgebnisseSicherungDialog,
     SicherungErstellenDialog,
     VeranstaltungsDialog,
 )
@@ -403,6 +405,18 @@ class DatensicherungTab(QWidget):
         wiederherstellen_btn = QPushButton("Sicherung wiederherstellen…")
         wiederherstellen_btn.clicked.connect(self._sicherung_wiederherstellen)
 
+        # Marco 12.11.2026: einzelne Ergebniswerte aus den automatischen Kopien des geöffneten Termins
+        # zurückholen (nicht aus der ZIP-Sicherung). Nicht bei PostgreSQL (dort gibt es keine Kopien).
+        self.ergebnisse_aus_kopie_btn = QPushButton("Ergebnisse aus automatischer Kopie wiederherstellen…")
+        self.ergebnisse_aus_kopie_btn.setToolTip(
+            "Zeigt die automatischen Kopien des geöffneten Termins (Ordner „Auto-Sicherung“) und lässt "
+            "einzelne Ergebniswerte per Haken auf deren Stand zurücksetzen.")
+        self.ergebnisse_aus_kopie_btn.clicked.connect(self._ergebnisse_aus_kopie_holen)
+        if conn is None or not hasattr(conn, "backup") or not aktueller_pfad:
+            self.ergebnisse_aus_kopie_btn.setEnabled(False)
+            self.ergebnisse_aus_kopie_btn.setToolTip(
+                "Nur für Termine als Datei (SQLite); bei PostgreSQL sichert der Datenbankserver.")
+
         self.status_label = QLabel("")
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
@@ -412,11 +426,42 @@ class DatensicherungTab(QWidget):
         layout.addWidget(hinweis)
         layout.addWidget(erstellen_btn)
         layout.addWidget(wiederherstellen_btn)
+        layout.addWidget(self.ergebnisse_aus_kopie_btn)
         layout.addStretch()
         layout.addWidget(self.status_label)
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner
+
+    def _ergebnisse_aus_kopie_holen(self) -> None:
+        """Setzt angekreuzte Ergebniswerte des geöffneten Termins auf den Stand einer automatischen
+        Kopie zurück (Marco 12.11.2026). Vor dem Überschreiben fragt das Programm nach."""
+        kopien = auto_sicherungen_zu_termin(self._aktueller_pfad) if self._aktueller_pfad else []
+        dialog = ErgebnisseSicherungDialog(self, self.conn, kopien)
+        try:
+            if _ausfuehren(dialog) != QDialog.Accepted:
+                return
+            auswahl = dialog.ausgewaehlte_werte()
+            if not auswahl:
+                self.status_label.setText("Nichts ausgewählt, die Ergebnisse sind unverändert.")
+                return
+            teilnehmer = len({teilnehmer_id for teilnehmer_id, _wert in auswahl})
+            if not _ja_nein(
+                self, "Ergebnisse überschreiben",
+                f"{len(auswahl)} Wert(e) von {teilnehmer} Teilnehmer(n) auf den Stand der Kopie "
+                "zurücksetzen?\n\nDie jetzigen Werte werden überschrieben und lassen sich nicht "
+                "rückgängig machen.",
+            ):
+                return
+            try:
+                with _wartecursor():
+                    zahl = ergebnis_werte_wiederherstellen(self.conn, dialog.quelle_conn(), auswahl)
+            except Exception as exc:  # noqa: BLE001 - z. B. gesperrte Datei; die Funktion rollt zurück
+                _db_fehler_anzeigen(self, exc, "Die Ergebnisse konnten nicht zurückgesetzt werden.")
+                return
+        finally:
+            dialog.schliesse_quelle()
+        self.status_label.setText(f"Aus automatischer Kopie wiederhergestellt: {zahl} Wert(e).")
 
     @staticmethod
     def _dateiname_vorschlag() -> str:

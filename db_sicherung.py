@@ -196,6 +196,10 @@ def _momentaufnahme(pfad: Path) -> bytes | None:
 
 AUTO_SICHERUNG_BEHALTEN = 10
 AUTO_SICHERUNG_MINDESTABSTAND_SEKUNDEN = 600
+# Kopien „vor dem Löschen“ (Marco 12.11.2026) liegen getrennt von den normalen: eigener Namensteil,
+# eigene Rotation. So verdrängt normales Starten und Beenden nie eine Kopie mit einem Gelöschten.
+AUTO_SICHERUNG_LOESCHEN_BEHALTEN = 5
+AUTO_SICHERUNG_LOESCHEN_ENDUNG = "_vor-Loeschen"
 
 
 def auto_sicherung_ordner() -> Path:
@@ -205,28 +209,40 @@ def auto_sicherung_ordner() -> Path:
 
 
 def auto_sicherung_erstellen(
-    conn, termin_pfad: str, ordner: Path | None = None, behalten: int = AUTO_SICHERUNG_BEHALTEN,
+    conn, termin_pfad: str, ordner: Path | None = None, behalten: int | None = None,
     mindestabstand_sekunden: int = AUTO_SICHERUNG_MINDESTABSTAND_SEKUNDEN, jetzt=None,
+    vor_loeschen: bool = False,
 ) -> str | None:
     """Legt eine Kopie des geöffneten Termins ab (SQLite-Sicherungsfunktion, konsistent auch bei
     offener Verbindung) und behält je Termin nur die letzten `behalten`. Liegt die letzte Kopie
     noch keine `mindestabstand_sekunden` zurück, passiert nichts. Gibt den Pfad der neuen Kopie
     zurück, sonst None. Fehler (Datenträger voll, Termin auf USB-Stick abgezogen …) stören nie
-    die Arbeit: sie ergeben None."""
+    die Arbeit: sie ergeben None.
+
+    `vor_loeschen`: Kopie unmittelbar vor dem Löschen von Teilnehmern, getrennt von den normalen
+    Kopien (eigene Endung, eigene Rotation, Standard 5). Liegt die letzte solche Kopie noch keine
+    `mindestabstand_sekunden` zurück, entfällt die neue: die ältere enthält alle damals vorhandenen
+    Teilnehmer (nicht aber seither neu angelegte oder geänderte Ergebnisse) und würde sonst durch
+    Serien von Löschungen verdrängt. `behalten` None = 10 bzw. bei `vor_loeschen` 5."""
     if not hasattr(conn, "backup") or not termin_pfad:
         return None  # z. B. PostgreSQL: dort sichert der Datenbankserver
     jetzt = jetzt or datetime.datetime.now()
     name = _sicherer_dateiname_teil(Path(termin_pfad).stem)
+    endung = AUTO_SICHERUNG_LOESCHEN_ENDUNG if vor_loeschen else ""
+    if behalten is None:
+        behalten = AUTO_SICHERUNG_LOESCHEN_BEHALTEN if vor_loeschen else AUTO_SICHERUNG_BEHALTEN
     try:
         ordner = ordner or auto_sicherung_ordner()
         ordner.mkdir(parents=True, exist_ok=True)
-        muster = f"{glob.escape(name)}_????-??-??_??????.sqlite"  # Klammern im Terminnamen sind keine Platzhalter
+        # Klammern im Terminnamen sind keine Platzhalter; das Muster der normalen Kopien passt nicht
+        # auf die „vor dem Löschen“ (dort steht die Endung vor „.sqlite“) und umgekehrt.
+        muster = f"{glob.escape(name)}_????-??-??_??????{endung}.sqlite"
         vorhandene = sorted(ordner.glob(muster))
         if vorhandene and mindestabstand_sekunden > 0:
             letzte = datetime.datetime.fromtimestamp(vorhandene[-1].stat().st_mtime)
             if 0 <= (jetzt - letzte).total_seconds() < mindestabstand_sekunden:
                 return None
-        ziel = ordner / f"{name}_{jetzt.strftime('%Y-%m-%d_%H%M%S')}.sqlite"
+        ziel = ordner / f"{name}_{jetzt.strftime('%Y-%m-%d_%H%M%S')}{endung}.sqlite"
         kopie = sqlite3.connect(str(ziel))
         try:
             conn.backup(kopie)
@@ -247,21 +263,30 @@ def auto_sicherung_erstellen(
 
 def auto_sicherungen_zu_termin(termin_pfad: str, ordner: Path | None = None) -> list[tuple[Path, datetime.datetime]]:
     """Die automatischen Kopien eines Termins (Marco 12.11.2026, Teilnehmer aus der Sicherung
-    zurückholen): (Pfad, Zeitpunkt aus dem Dateinamen), neueste zuerst. Leer, wenn der Ordner
-    fehlt oder nichts passt."""
+    zurückholen), normale und „vor dem Löschen“ gemischt: (Pfad, Zeitpunkt aus dem Dateinamen),
+    neueste zuerst. Leer, wenn der Ordner fehlt oder nichts passt. Welche Art eine Kopie ist,
+    sagt `ist_loeschen_kopie`."""
     name = _sicherer_dateiname_teil(Path(termin_pfad).stem)
     try:
-        dateien = list((ordner or auto_sicherung_ordner()).glob(f"{glob.escape(name)}_????-??-??_??????.sqlite"))
+        ordner = ordner or auto_sicherung_ordner()
+        dateien = list(ordner.glob(f"{glob.escape(name)}_????-??-??_??????.sqlite"))
+        dateien += ordner.glob(f"{glob.escape(name)}_????-??-??_??????{AUTO_SICHERUNG_LOESCHEN_ENDUNG}.sqlite")
     except OSError:
         return []
     ergebnis = []
     for datei in dateien:
         try:
-            zeit = datetime.datetime.strptime(datei.stem[len(name) + 1:], "%Y-%m-%d_%H%M%S")
+            zeit = datetime.datetime.strptime(
+                datei.stem[len(name) + 1:].removesuffix(AUTO_SICHERUNG_LOESCHEN_ENDUNG), "%Y-%m-%d_%H%M%S")
         except ValueError:
             continue
         ergebnis.append((datei, zeit))
     return sorted(ergebnis, key=lambda eintrag: eintrag[1], reverse=True)
+
+
+def ist_loeschen_kopie(pfad) -> bool:
+    """True für eine Kopie, die vor dem Löschen von Teilnehmern angelegt wurde."""
+    return Path(pfad).stem.endswith(AUTO_SICHERUNG_LOESCHEN_ENDUNG)
 
 
 def _sicherer_dateiname_teil(text: str) -> str:

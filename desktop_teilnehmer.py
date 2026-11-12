@@ -96,7 +96,7 @@ from desktop_import_meldungen import (
     _teilnehmerliste_importieren,
     _teilnehmerzahl,
 )
-from db_sicherung import auto_sicherungen_zu_termin
+from db_sicherung import auto_sicherungen_zu_termin, ist_loeschen_kopie
 from desktop_dialoge import (
     SicherungTeilnehmerDialog,
     StartnummerTauschenDialog,
@@ -806,7 +806,7 @@ class TeilnehmerTab(QWidget):
                 # Löschen; das Hauptfenster legt sie nur im echten Programmlauf an.
                 sichern = getattr(self.window(), "auto_sicherung_anlegen", None)
                 if sichern is not None:
-                    sichern(ohne_mindestabstand=True)
+                    sichern(vor_loeschen=True)
             geloescht: list = []  # gesichert, bevor gelöscht wird - auch bei einem Abbruch mittendrin
             try:
                 for t in teilnehmer:
@@ -826,8 +826,12 @@ class TeilnehmerTab(QWidget):
     def _aus_sicherung_holen(self) -> None:
         """Holt gelöschte Teilnehmer aus einer automatischen Kopie zurück (Marco 12.11.2026):
         gleiche ID, mit Ergebnis; ist die Startnummer inzwischen vergeben, ohne Nummer."""
-        kopien = auto_sicherungen_zu_termin(self._pfad) if self._pfad else []
-        dialog = SicherungTeilnehmerDialog(self, self.conn, kopien)
+        # Schalter „Vor dem Löschen eine Sicherung anlegen“ an: nur die Kopien vor dem Löschen;
+        # aus: nur die normalen automatischen Kopien (Marco 12.11.2026).
+        loeschkopien = _sicherung_vor_loeschen_lesen()
+        kopien = [k for k in (auto_sicherungen_zu_termin(self._pfad) if self._pfad else [])
+                  if ist_loeschen_kopie(k[0]) == loeschkopien]
+        dialog = SicherungTeilnehmerDialog(self, self.conn, kopien, loeschkopien=loeschkopien)
         try:
             if _ausfuehren(dialog) != QDialog.Accepted:
                 return

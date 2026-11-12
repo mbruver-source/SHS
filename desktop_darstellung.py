@@ -135,6 +135,16 @@ QComboBox::drop-down {
     border: none;
     width: 20px;
 }
+/* Ohne eigenes Bild zeichnet Qt bei gestaltetem Rahmen keinen Pfeil: Auswahlfelder sahen aus
+wie Textfelder und niemand erkannte, dass sie sich aufklappen lassen (Marco 12.11.2026). */
+QComboBox::down-arrow {
+    image: url("@@PFEIL_RUNTER@@");
+    width: 10px;
+    height: 10px;
+}
+QComboBox::down-arrow:disabled {
+    image: url("@@PFEIL_RUNTER_AUS@@");
+}
 /* Pfeilknöpfe der Zahlenfelder (Marco 01.11.2026, Erscheinungsbild „Beagle“): Sobald das
 Feld selbst einen Rahmen aus dem Stylesheet hat, zeichnet Qt die Knöpfe nur noch als flache
 Kästchen ohne Pfeil. Deshalb eigene Knöpfe und Pfeile als Bild (_pfeile_bereitstellen()). */

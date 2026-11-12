@@ -74,6 +74,89 @@ def ergebnisse_je_teilnehmer(conn: sqlite3.Connection) -> dict[int, dict]:
         for r in conn.execute("SELECT * FROM ergebnisse").fetchall()
     }
 
+# Einzeln zurückholbare Werte einer Ergebniszeile (Marco 12.11.2026, „Aus automatischer Kopie
+# wiederherstellen“): Schlüssel -> (Bezeichnung, Spalten). Suche und Anzeige einer Disziplin bilden
+# einen Wert (nur beide oder keiner, siehe pruefe_ergebnis_eingabe), Abbruch gehört mit seinem Grund
+# zusammen.
+ERGEBNIS_WERTE: dict[str, tuple[str, tuple[str, ...]]] = {
+    **{d: (d, spalten) for d, spalten in DISZIPLIN_SPALTEN.items()},
+    "disqualifiziert": ("Disqualifiziert", ("disqualifiziert",)),
+    "abbruch": ("Abbruch", ("abbruch", "abbruch_grund")),
+    "stechen_sieger": ("Stechen-Sieger", ("stechen_sieger",)),
+}
+
+
+def ergebnis_wert_text(schluessel: str, werte: tuple | None) -> str:
+    """Lesbarer Text eines Wertes aus ERGEBNIS_WERTE für die Anzeige (None = Spalten fehlen)."""
+    if werte is None:
+        return "–"
+    if schluessel in DISZIPLIN_SPALTEN:
+        suche, anzeige = werte
+        return "nicht eingetragen" if suche is None and anzeige is None else f"Suche {suche} / Anzeige {anzeige}"
+    if schluessel == "abbruch":
+        if not werte[0]:
+            return "nein"
+        grund = ABBRUCH_GRUENDE.get(werte[1], (None,))[0] if len(werte) > 1 else None
+        return f"ja ({grund})" if grund else "ja"
+    return "ja" if werte[0] else "nein"
+
+
+def ergebnis_unterschiede(quelle: sqlite3.Connection, conn: sqlite3.Connection) -> list[dict]:
+    """Vergleicht die Ergebnisse einer Kopie `quelle` mit dem Termin `conn` für Teilnehmer, die es
+    in beiden gibt (gleiche ID). Je Teilnehmer mit Unterschieden:
+    {"teilnehmer_id", "name", "werte": [{"schluessel", "bezeichnung", "aktuell", "kopie"}]};
+    `aktuell`/`kopie` sind Tupel der Spaltenwerte. Spalten, die die Kopie nicht kennt (ältere
+    Programmversion), werden übersprungen. Sortiert nach Nachname, Vorname."""
+    aus_kopie = {r["teilnehmer_id"]: dict(r) for r in quelle.execute("SELECT * FROM ergebnisse").fetchall()}
+    aktuell = ergebnisse_je_teilnehmer(conn)
+    ergebnis = []
+    for t in conn.execute("SELECT id, nachname, vorname, rufname_hund FROM teilnehmer "
+                          "ORDER BY nachname, vorname, id").fetchall():
+        alt, neu = aus_kopie.get(t["id"]), aktuell.get(t["id"])
+        if alt is None or neu is None:
+            continue
+        werte = []
+        for schluessel, (bezeichnung, spalten) in ERGEBNIS_WERTE.items():
+            if not all(s in alt and s in neu for s in spalten):
+                continue
+            wert_kopie = tuple(alt[s] for s in spalten)
+            wert_aktuell = tuple(neu[s] for s in spalten)
+            if wert_kopie != wert_aktuell:
+                werte.append({"schluessel": schluessel, "bezeichnung": bezeichnung,
+                              "aktuell": wert_aktuell, "kopie": wert_kopie})
+        if werte:
+            ergebnis.append({
+                "teilnehmer_id": t["id"],
+                "name": f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']}",
+                "werte": werte,
+            })
+    return ergebnis
+
+
+@_mit_rollback
+def ergebnis_werte_wiederherstellen(
+    conn: sqlite3.Connection, quelle: sqlite3.Connection, auswahl: list[tuple[int, str]],
+) -> int:
+    """Setzt die gewählten Werte (Teilnehmer-ID, Schlüssel aus ERGEBNIS_WERTE) auf den Stand der
+    Kopie `quelle` zurück und committet einmal; ein Fehler macht alles rückgängig. Liefert die Zahl
+    der geschriebenen Werte (Teilnehmer oder Wert, die es nicht mehr gibt, zählen nicht)."""
+    zahl = 0
+    for teilnehmer_id, schluessel in auswahl:
+        if schluessel not in ERGEBNIS_WERTE:
+            raise ValueError(f"Unbekannter Wert: {schluessel!r}")
+        spalten = ERGEBNIS_WERTE[schluessel][1]
+        zeile = quelle.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
+        if zeile is None or not all(s in zeile.keys() for s in spalten):
+            continue
+        cursor = conn.execute(
+            f"UPDATE ergebnisse SET {', '.join(f'{s} = ?' for s in spalten)} WHERE teilnehmer_id = ?",
+            [zeile[s] for s in spalten] + [teilnehmer_id],
+        )
+        zahl += 1 if cursor.rowcount else 0
+    conn.commit()
+    return zahl
+
+
 def pruefe_ergebnis_eingabe(suche: int | None, anzeige: int | None) -> str | None:
     """Gemeinsame Eingaberegel für Desktop und Web (Codeprüfung 22.09., G6): eine
     Disziplin ist entweder komplett (Suche UND Anzeige) oder gar nicht eingetragen.

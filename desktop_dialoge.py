@@ -30,6 +30,7 @@ from desktop_dialoge_teilnehmer import (  # noqa: F401
     _TEILNEHMER_DIALOG_GROESSE,
 )
 from desktop_dialoge_termin import (  # noqa: F401
+    ErgebnisseSicherungDialog,
     SicherungErstellenDialog,
     SicherungTeilnehmerDialog,
     TerminImportDialog,

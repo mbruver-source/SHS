@@ -742,14 +742,17 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             "nicht trennen - Änderungen könnten sonst verloren gehen. Eine automatische Kopie des Termins "
             "legt das Programm zusätzlich auf diesem Rechner ab.")
 
-    def auto_sicherung_anlegen(self, ohne_mindestabstand: bool = False) -> None:
+    def auto_sicherung_anlegen(self, ohne_mindestabstand: bool = False, vor_loeschen: bool = False) -> None:
         """Automatische Kopie des Termins (Marco 10.11.2026) - nur im echten Programmlauf
         (`auto_sicherung_aktiv`, von main() gesetzt; Tests und Demo schreiben nichts).
-        Beim Beenden `ohne_mindestabstand`: der Stand der Sitzung wird immer gesichert."""
+        Beim Beenden `ohne_mindestabstand`: der Stand der Sitzung wird immer gesichert.
+        `vor_loeschen`: getrennte Kopie vor dem Löschen von Teilnehmern (eigene Rotation)."""
         if not self.auto_sicherung_aktiv or getattr(self, "_demo_termin", False):
             return
         try:
-            if ohne_mindestabstand:
+            if vor_loeschen:
+                auto_sicherung_erstellen(self.conn, self.pfad, vor_loeschen=True)
+            elif ohne_mindestabstand:
                 auto_sicherung_erstellen(self.conn, self.pfad, mindestabstand_sekunden=0)
             else:
                 auto_sicherung_erstellen(self.conn, self.pfad)

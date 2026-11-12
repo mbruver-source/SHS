@@ -212,6 +212,7 @@ classDiagram
     class VeranstaltungsDialog
     class SicherungErstellenDialog
     class SicherungTeilnehmerDialog
+    class ErgebnisseSicherungDialog
     class PruefungsblockDialog
     class PauseDialog
     class BewertungsbogenAuswahlDialog
@@ -255,6 +256,7 @@ classDiagram
     AbrechnungTab ..> lr_abrechnung : Rechnung
     StartDialog ..> VeranstaltungsDialog : neuer Termin
     DatensicherungTab ..> SicherungErstellenDialog
+    DatensicherungTab ..> ErgebnisseSicherungDialog : Ergebnisse aus Kopie
     TeilnehmerTab ..> SicherungTeilnehmerDialog : Aus Sicherung holen
     HauptFenster ..> HilfeDialog
 
@@ -616,15 +618,18 @@ sequenceDiagram
 
     rect rgba(127,127,127,0.08)
     N->>HF: Termin öffnen / Termin wechseln / Programm beenden
-    HF->>S: auto_sicherung_erstellen(conn, pfad)<br/>(Beenden: ohne Mindestabstand)
+    HF->>S: auto_sicherung_erstellen(conn, pfad)<br/>(Beenden: ohne Mindestabstand;<br/>vor dem Löschen: vor_loeschen=True)
     alt Demo, Test oder PostgreSQL
         S-->>HF: nichts (kein SQLite-backup)
-    else letzte Kopie jünger als 10 Minuten
+    else letzte Kopie der gleichen Art jünger als 10 Minuten
         S-->>HF: None
     else
         S->>A: backup() in neue Datei, bei Fehler wieder löschen
-        S->>A: je Termin nur die letzten 10 behalten
+        S->>A: normale Kopien: letzte 10 behalten,<br/>Kopien vor dem Löschen (_vor-Loeschen): letzte 5, getrennt
     end
+    N->>DT: Ergebnisse aus automatischer Kopie wiederherstellen…
+    DT->>A: gewählte Kopie nur lesend öffnen (ErgebnisseSicherungDialog)
+    DT->>S: ergebnis_werte_wiederherstellen(angekreuzte Werte)
     HF->>N: Hinweis, wenn der Termin auf USB-Stick/Netzlaufwerk liegt<br/>(Start und Terminwechsel, laufwerksart)
     end
 

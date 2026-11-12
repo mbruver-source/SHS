@@ -312,7 +312,7 @@ du eine vorhandene Datei, fragt das Programm, ob es stattdessen diesen Termin ö
 
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
-**„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion. Nach einem **Löschen** fragt das Programm beim **Beenden** noch einmal nach (Vorgabe „Nein“), solange „Rückgängig“ das Löschen noch zurücknehmen kann; nach dem Beenden ist es endgültig. Ohne vorheriges Löschen erscheint diese Frage nicht. Wer vor jedem Löschen eine Kopie des Termins haben möchte, schaltet im Menü **Einstellungen** „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ ein (Standard: aus; die Kopie liegt im Ordner „Auto-Sicherung“, es bleiben die letzten 10 je Termin). **Gelöschte Teilnehmer zurückholen, auch nach dem Beenden:** Der Knopf **„Aus Sicherung holen…“** (unten, neben „Rückgängig“) zeigt die Kopien dieses Termins; nach Auswahl einer Kopie erscheinen die Teilnehmer, die dort stehen, im Termin aber fehlen. Wer angekreuzt wird (anfangs ist nichts angekreuzt), kommt mit Ergebnis zurück; ist seine Startnummer inzwischen vergeben, bleibt sie leer. Das geht nur, wenn eine Kopie vor dem Löschen entstanden ist: beim Öffnen und Beenden des Programms oder vor dem Löschen bei eingeschaltetem Schalter.
+**„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion. Nach einem **Löschen** fragt das Programm beim **Beenden** noch einmal nach (Vorgabe „Nein“), solange „Rückgängig“ das Löschen noch zurücknehmen kann; nach dem Beenden ist es endgültig. Ohne vorheriges Löschen erscheint diese Frage nicht. Wer vor jedem Löschen eine Kopie des Termins haben möchte, schaltet im Menü **Einstellungen** „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ ein (Standard: aus; die Kopie liegt im Ordner „Auto-Sicherung“, getrennt von den normalen Kopien; es bleiben die letzten 5 je Termin und normales Starten verdrängt sie nicht). **„Aus Sicherung holen…“ zeigt bei eingeschaltetem Schalter nur diese Kopien vor dem Löschen, bei ausgeschaltetem nur die normalen automatischen Kopien**. **Gelöschte Teilnehmer zurückholen, auch nach dem Beenden:** Der Knopf **„Aus Sicherung holen…“** (unten, neben „Rückgängig“) zeigt die Kopien dieses Termins; nach Auswahl einer Kopie erscheinen die Teilnehmer, die dort stehen, im Termin aber fehlen. Wer angekreuzt wird (anfangs ist nichts angekreuzt), kommt mit Ergebnis zurück; ist seine Startnummer inzwischen vergeben, bleibt sie leer. Das geht nur, wenn eine Kopie vor dem Löschen entstanden ist: beim Öffnen und Beenden des Programms oder vor dem Löschen bei eingeschaltetem Schalter.
 
 | Button | Wirkung |
 |---|---|
@@ -938,6 +938,17 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
   gerade in einem anderen Programm geöffnet ist, meldet das Programm **„Wiederherstellen
   unvollständig“** und nennt die Termine, die schon aus der Sicherung übernommen sind.
   Alle anderen Termine sind unverändert.
+- **„Ergebnisse aus automatischer Kopie wiederherstellen…“:** Arbeitet nicht mit der ZIP-Sicherung,
+  sondern nur mit den automatischen Kopien des **geöffneten** Termins (Ordner „Auto-Sicherung“,
+  normale Kopien und Kopien vor dem Löschen). Du wählst oben eine Kopie (vorgewählt ist die neueste
+  mit Unterschieden; die Liste zeigt je Kopie, wie viele Teilnehmer sich unterscheiden). Darunter
+  steht je Teilnehmer, welche Ergebniswerte sich von der Kopie unterscheiden, mit dem **jetzigen
+  Stand** und dem **Stand in der Kopie**: eine Disziplin (Suche und Anzeige zusammen),
+  Disqualifiziert, Abbruch (mit Grund) oder Stechen-Sieger. Per **Haken** wählst du, welche Werte auf
+  den Stand der Kopie zurückgesetzt werden (der Haken am Teilnehmer wählt alle seine Werte).
+  Nichts ist vorangekreuzt. Vor dem Überschreiben fragt das Programm nach; die jetzigen Werte lassen
+  sich danach **nicht** zurückholen. Gelöschte Teilnehmer holst du im Reiter Teilnehmer mit „Aus
+  Sicherung holen…“. Der Knopf ist bei PostgreSQL gesperrt (dort gibt es keine Kopien).
 
 **Umzug auf einen anderen Rechner:** Auf dem alten Rechner eine Sicherung erstellen, auf dem neuen
 Rechner das Programm installieren und die Sicherung wiederherstellen.
@@ -1122,7 +1133,7 @@ Im Hauptfenster gibt es neben „Ansicht“ und „Hilfe“ das Menü **Einstell
 
 | Schalter | Standard | Wirkung |
 |---|---|---|
-| **Vor dem Löschen von Teilnehmern eine Sicherung anlegen** | aus | Vor jedem Löschen entsteht eine Kopie des Termins im Ordner „Auto-Sicherung“ (die letzten 10 je Termin). Mit **„Aus Sicherung holen…“** im Reiter Teilnehmer lassen sich gelöschte Teilnehmer daraus zurückholen, auch nach dem Beenden (Kapitel 4). |
+| **Vor dem Löschen von Teilnehmern eine Sicherung anlegen** | aus | Vor jedem Löschen entsteht eine Kopie des Termins im Ordner „Auto-Sicherung“ (getrennt von den normalen Kopien, die letzten 5 je Termin; normales Starten und Beenden verdrängt sie nicht). Mit **„Aus Sicherung holen…“** im Reiter Teilnehmer lassen sich gelöschte Teilnehmer daraus zurückholen, auch nach dem Beenden (Kapitel 4). |
 | **Dateien ohne Nachfrage im Ablageort speichern** | aus | PDFs und Dateien landen mit dem vorgeschlagenen Namen im Ablageort, ohne Frage nach dem Speicherort; eine vorhandene Datei wird nie überschrieben. Dieselbe Einstellung steht als Haken im Reiter „Ausdrucke/Export“ (Kapitel 9). |
 
 Das Menü „Ansicht“ stellt Hintergrund, Akzentfarbe und Schriftgröße ein. Unabhängig von den Schaltern fragt das Programm beim **Beenden** nach, wenn gerade Teilnehmer gelöscht wurden und „Rückgängig“ das noch zurücknehmen könnte.

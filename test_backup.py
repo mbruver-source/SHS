@@ -947,5 +947,87 @@ class TestAutoSicherung(unittest.TestCase):
         self.assertIsNone(auto_sicherung_erstellen(self.conn, "", self.ordner))
 
 
+class TestKopienVorDemLoeschen(unittest.TestCase):
+    """Marco 12.11.2026: Kopien vor dem Löschen getrennt von den normalen (eigene Endung, eigene
+    Rotation) und Rückholen einzelner Ergebniswerte - ohne PySide6 lauffähig."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._tmp.cleanup)
+        self.ordner = pathlib.Path(self._tmp.name) / "Auto"
+
+    def _termin(self, name):
+        pfad = str(pathlib.Path(self._tmp.name) / f"{name}.sqlite")
+        conn = init_db(pfad)
+        self.addCleanup(conn.close)
+        return conn, pfad
+
+    def test_getrennte_rotation_und_mindestabstand(self):
+        import datetime
+        import os
+
+        from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin, ist_loeschen_kopie
+
+        conn, pfad = self._termin("Pruefung")
+        tag = datetime.datetime(2026, 1, 2, 8, 0, 0)  # Vergangenheit: der Abstand zählt ab der Dateizeit
+        for i in range(7):
+            self.assertIsNotNone(auto_sicherung_erstellen(
+                conn, pfad, self.ordner, vor_loeschen=True, jetzt=tag + datetime.timedelta(minutes=20 * i)))
+        letzte = max(self.ordner.glob("*_vor-Loeschen.sqlite"))
+        zeit = (tag + datetime.timedelta(minutes=120)).timestamp()
+        os.utime(letzte, (zeit, zeit))
+        self.assertIsNone(auto_sicherung_erstellen(
+            conn, pfad, self.ordner, vor_loeschen=True, jetzt=tag + datetime.timedelta(minutes=125)))
+        for i in range(15):
+            auto_sicherung_erstellen(conn, pfad, self.ordner, mindestabstand_sekunden=0,
+                                     jetzt=tag + datetime.timedelta(hours=5, minutes=i))
+        kopien = auto_sicherungen_zu_termin(pfad, self.ordner)
+        self.assertEqual(sum(ist_loeschen_kopie(p) for p, _z in kopien), 5)
+        self.assertEqual(sum(not ist_loeschen_kopie(p) for p, _z in kopien), 10)
+        # Ein ausdrückliches `behalten` gilt auch mit vor_loeschen.
+        auto_sicherung_erstellen(conn, pfad, self.ordner, vor_loeschen=True, behalten=2,
+                                 mindestabstand_sekunden=0, jetzt=tag + datetime.timedelta(days=1))
+        self.assertEqual(len(list(self.ordner.glob("*_vor-Loeschen.sqlite"))), 2)
+
+    def test_namen_mit_klammern_und_endung_vor_loeschen(self):
+        import datetime
+
+        from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin, ist_loeschen_kopie
+
+        jetzt = datetime.datetime(2026, 1, 2, 8, 0, 0)
+        for name in ("Prüfung [A]", "Prüfung_vor-Loeschen"):
+            conn, pfad = self._termin(name)
+            for art in (False, True):
+                self.assertIsNotNone(auto_sicherung_erstellen(
+                    conn, pfad, self.ordner, vor_loeschen=art, mindestabstand_sekunden=0, jetzt=jetzt))
+            kopien = auto_sicherungen_zu_termin(pfad, self.ordner)
+            with self.subTest(name=name):
+                self.assertEqual(sorted(ist_loeschen_kopie(p) for p, _z in kopien), [False, True])
+                self.assertTrue(all(z == jetzt for _p, z in kopien))
+
+    def test_ergebnis_unterschiede_ueberspringt_fehlende_spalten(self):
+        import sqlite3
+
+        from db import eintragen_ergebnis, ergebnis_unterschiede, ergebnis_werte_wiederherstellen
+
+        conn, _pfad = self._termin("Aktuell")
+        tid = add_teilnehmer(conn, NeuerTeilnehmer(
+            nachname="Albers", vorname="Anna", rufname_hund="Aika", art="ED", stufe=1, disziplin="Trümmerfeld"))
+        eintragen_ergebnis(conn, tid, "Trümmerfeld", 10, 5)
+        # Kopie einer älteren Version: kein abbruch_grund, kein stechen_sieger.
+        alt = sqlite3.connect(":memory:")
+        self.addCleanup(alt.close)
+        alt.row_factory = sqlite3.Row
+        alt.execute("CREATE TABLE ergebnisse (teilnehmer_id INTEGER PRIMARY KEY, suche_truemmerfeld INTEGER, "
+                    "anzeige_truemmerfeld INTEGER, disqualifiziert INTEGER, abbruch INTEGER)")
+        alt.execute("INSERT INTO ergebnisse VALUES (?, 40, 20, 1, 1)", (tid,))
+        unterschiede = ergebnis_unterschiede(alt, conn)
+        werte = {w["schluessel"] for w in unterschiede[0]["werte"]}
+        self.assertEqual(werte, {"Trümmerfeld", "disqualifiziert"})  # Abbruch (ohne Grund-Spalte) und Stechen fehlen
+        self.assertEqual(ergebnis_werte_wiederherstellen(conn, alt, [(tid, "abbruch"), (tid, "Trümmerfeld")]), 1)
+        row = conn.execute("SELECT suche_truemmerfeld, abbruch FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)).fetchone()
+        self.assertEqual((row["suche_truemmerfeld"], row["abbruch"]), (40, 0))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

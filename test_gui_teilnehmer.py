@@ -2599,6 +2599,139 @@ def test_sicherung_dialog_ohne_kopie_und_ohne_fehlende(qtbot, termin, tmp_path):
         dialog.schliesse_quelle()
 
 
+def test_aus_sicherung_holen_zeigt_je_nach_schalter_nur_eine_kopienart(qtbot, termin, tmp_path, monkeypatch):
+    """Marco 12.11.2026: Schalter an -> nur Kopien vor dem Löschen, aus -> nur die normalen."""
+    import datetime
+
+    import desktop_gemeinsam
+    import desktop_teilnehmer
+    from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    ordner = tmp_path / "Auto-Sicherung"
+    auto_sicherung_erstellen(conn, pfad, ordner=ordner, mindestabstand_sekunden=0,
+                             jetzt=datetime.datetime(2026, 11, 12, 9, 0, 0))
+    auto_sicherung_erstellen(conn, pfad, ordner=ordner, vor_loeschen=True,
+                             jetzt=datetime.datetime(2026, 11, 12, 10, 0, 0))
+    monkeypatch.setattr(desktop_teilnehmer, "auto_sicherungen_zu_termin",
+                        lambda p: auto_sicherungen_zu_termin(p, ordner=ordner))
+    gesehen = []
+
+    def ausfuehren(dialog):
+        gesehen.append([dialog.kopie_combo.itemText(i) for i in range(dialog.kopie_combo.count())])
+        return QDialog.Rejected
+
+    monkeypatch.setattr(desktop_teilnehmer, "_ausfuehren", ausfuehren)
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    desktop_gemeinsam._sicherung_vor_loeschen_speichern(False)
+    tab._aus_sicherung_holen()
+    desktop_gemeinsam._sicherung_vor_loeschen_speichern(True)
+    tab._aus_sicherung_holen()
+    desktop_gemeinsam._sicherung_vor_loeschen_speichern(False)
+    assert len(gesehen) == 2
+    assert len(gesehen[0]) == 1 and "09:00:00" in gesehen[0][0] and "vor dem Löschen" not in gesehen[0][0]
+    assert len(gesehen[1]) == 1 and "10:00:00" in gesehen[1][0] and "vor dem Löschen" in gesehen[1][0]
+
+
+def _ergebnis_kopie_vorbereiten(conn, pfad, tmp_path):
+    """Zwei Teilnehmer mit Ergebnissen, Kopie, danach Änderungen im Termin."""
+    import datetime
+
+    albers = _teilnehmer_anlegen(conn, nachname="Albers", rufname_hund="Aika", startnummer=1)
+    brandt = _teilnehmer_anlegen(conn, nachname="Brandt", rufname_hund="Bruno", startnummer=2)
+    _db_modul.eintragen_ergebnis(conn, albers, "Flächensuche", 50, 30)
+    _db_modul.eintragen_ergebnis(conn, albers, "Trümmerfeld", 40, 20)
+    _db_modul.eintragen_ergebnis(conn, brandt, "Flächensuche", 45, 35)
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 10, 0, 0))
+    _db_modul.eintragen_ergebnis(conn, albers, "Flächensuche", 10, 5)      # überschrieben
+    _db_modul.eintragen_ergebnis(conn, albers, "Trümmerfeld", None, None)  # versehentlich geleert
+    _db_modul.setze_ergebnis_status(conn, brandt, True, False)             # disqualifiziert
+    return albers, brandt, ordner
+
+
+def test_ergebnis_unterschiede_und_werte_wiederherstellen(termin, tmp_path):
+    from db import ergebnis_unterschiede, ergebnis_werte_wiederherstellen, termin_lesend_pruefen
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    albers, brandt, ordner = _ergebnis_kopie_vorbereiten(conn, pfad, tmp_path)
+    quelle = termin_lesend_pruefen(auto_sicherungen_zu_termin(pfad, ordner=ordner)[0][0])
+    try:
+        unterschiede = ergebnis_unterschiede(quelle, conn)
+        assert [u["name"].split(",")[0] for u in unterschiede] == ["Albers", "Brandt"]
+        albers_werte = {w["schluessel"]: w for w in unterschiede[0]["werte"]}
+        assert set(albers_werte) == {"Flächensuche", "Trümmerfeld"}
+        assert albers_werte["Flächensuche"]["aktuell"] == (10, 5) and albers_werte["Flächensuche"]["kopie"] == (50, 30)
+        assert [w["schluessel"] for w in unterschiede[1]["werte"]] == ["disqualifiziert"]
+        # Nur gewählte Werte werden zurückgesetzt, alles andere bleibt.
+        zahl = ergebnis_werte_wiederherstellen(conn, quelle, [(albers, "Trümmerfeld"), (brandt, "disqualifiziert")])
+        assert zahl == 2
+        assert _db_modul.get_ergebnis(conn, albers)["suche_truemmerfeld"] == 40
+        assert _db_modul.get_ergebnis(conn, albers)["suche_flaechensuche"] == 10  # nicht angekreuzt
+        assert _db_modul.get_ergebnis(conn, brandt)["disqualifiziert"] == 0
+        with pytest.raises(ValueError):
+            ergebnis_werte_wiederherstellen(conn, quelle, [(albers, "startnummer")])
+        assert [u["name"].split(",")[0] for u in ergebnis_unterschiede(quelle, conn)] == ["Albers"]
+    finally:
+        quelle.close()
+
+
+def test_datensicherung_ergebnisse_aus_kopie_per_haken(qtbot, termin, tmp_path, monkeypatch):
+    import desktop_verwaltung
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    albers, brandt, ordner = _ergebnis_kopie_vorbereiten(conn, pfad, tmp_path)
+    monkeypatch.setattr(desktop_verwaltung, "auto_sicherungen_zu_termin",
+                        lambda p: auto_sicherungen_zu_termin(p, ordner=ordner))
+    gesehen = {}
+
+    def ausfuehren(dialog):
+        baum = dialog.baum
+        gesehen["koepfe"] = [baum.topLevelItem(i).text(0).split(",")[0] for i in range(baum.topLevelItemCount())]
+        gesehen["vorher"] = dialog.ausgewaehlte_werte()  # nichts vorangekreuzt
+        kopf = baum.topLevelItem(0)  # Albers: beide Werte über den Haken des Teilnehmers
+        kopf.setCheckState(0, Qt.Checked)
+        gesehen["gewaehlt"] = sorted(w for _i, w in dialog.ausgewaehlte_werte())
+        return QDialog.Accepted
+
+    monkeypatch.setattr(desktop_verwaltung, "_ausfuehren", ausfuehren)
+    fragen = []
+    monkeypatch.setattr(desktop_verwaltung, "_ja_nein", lambda *a, **k: fragen.append(a[2]) or True)
+    tab = desktop_verwaltung.DatensicherungTab(aktueller_pfad=pfad, conn=conn)
+    qtbot.addWidget(tab)
+    assert tab.ergebnisse_aus_kopie_btn.isEnabled()
+    tab._ergebnisse_aus_kopie_holen()
+
+    assert gesehen["koepfe"] == ["Albers", "Brandt"] and gesehen["vorher"] == []
+    assert gesehen["gewaehlt"] == ["Flächensuche", "Trümmerfeld"]
+    assert len(fragen) == 1 and "2 Wert(e) von 1 Teilnehmer" in fragen[0]
+    ergebnis = _db_modul.get_ergebnis(conn, albers)
+    assert (ergebnis["suche_flaechensuche"], ergebnis["suche_truemmerfeld"]) == (50, 40)
+    assert _db_modul.get_ergebnis(conn, brandt)["disqualifiziert"] == 1  # nicht angekreuzt
+    assert "2 Wert(e)" in tab.status_label.text()
+
+
+def test_datensicherung_ergebnisse_knopf_ohne_sqlite_gesperrt(qtbot, termin):
+    import desktop_verwaltung
+
+    class _OhneBackup:
+        def __getattr__(self, name):
+            if name == "backup":
+                raise AttributeError(name)
+            return getattr(termin[0], name)
+
+    tab = desktop_verwaltung.DatensicherungTab(aktueller_pfad=termin[1], conn=_OhneBackup())
+    qtbot.addWidget(tab)
+    assert not tab.ergebnisse_aus_kopie_btn.isEnabled()
+    tab2 = desktop_verwaltung.DatensicherungTab()
+    qtbot.addWidget(tab2)
+    assert not tab2.ergebnisse_aus_kopie_btn.isEnabled()
+
+
 def test_sicherung_dialog_waehlt_juengste_kopie_mit_fehlenden_vor(qtbot, termin, tmp_path):
     import datetime
 
@@ -2624,6 +2757,42 @@ def test_sicherung_dialog_waehlt_juengste_kopie_mit_fehlenden_vor(qtbot, termin,
         assert dialog.teilnehmer_liste.item(0).text().startswith("Brandt")
     finally:
         dialog.schliesse_quelle()
+
+
+def test_kopien_vor_dem_loeschen_sind_getrennt_und_werden_nicht_verdraengt(tmp_path):
+    import datetime
+
+    from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin, ist_loeschen_kopie
+
+    pfad = str(tmp_path / "Prüfung [A].sqlite")
+    quelle = _db_modul.init_db(pfad)
+    try:
+        ordner = tmp_path / "Auto-Sicherung"
+        tag = datetime.datetime(2026, 1, 2, 8, 0, 0)  # in der Vergangenheit: der Abstand zählt ab der Dateizeit
+        # Löschkopien: im Abstand von je 20 Minuten; sieben Stück, behalten werden 5.
+        for i in range(7):
+            assert auto_sicherung_erstellen(quelle, pfad, ordner=ordner, vor_loeschen=True,
+                                            jetzt=tag + datetime.timedelta(minutes=20 * i))
+        # Eine zweite innerhalb von 10 Minuten entfällt (die ältere enthält schon alles). Der Abstand
+        # zählt ab der Änderungszeit der Datei, die hier auf den gespielten Zeitpunkt gesetzt wird.
+        import os
+        letzte = max(ordner.glob("*_vor-Loeschen.sqlite"))
+        zeitstempel = (tag + datetime.timedelta(minutes=20 * 6)).timestamp()
+        os.utime(letzte, (zeitstempel, zeitstempel))
+        assert auto_sicherung_erstellen(quelle, pfad, ordner=ordner, vor_loeschen=True,
+                                        jetzt=tag + datetime.timedelta(minutes=20 * 6 + 5)) is None
+        # Viele normale Kopien danach verdrängen keine Löschkopie und umgekehrt.
+        for i in range(15):
+            auto_sicherung_erstellen(quelle, pfad, ordner=ordner, mindestabstand_sekunden=0,
+                                     jetzt=tag + datetime.timedelta(hours=5, minutes=i))
+        kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+        loesch = [(p, z) for p, z in kopien if ist_loeschen_kopie(p)]
+        normal = [(p, z) for p, z in kopien if not ist_loeschen_kopie(p)]
+        assert len(loesch) == 5 and len(normal) == 10
+        assert [z.minute + 60 * z.hour for _p, z in loesch] == [8 * 60 + 20 * i for i in (6, 5, 4, 3, 2)]
+        assert kopien == sorted(kopien, key=lambda e: e[1], reverse=True)  # gemischt, neueste zuerst
+    finally:
+        quelle.close()
 
 
 def test_auto_sicherungen_finden_nur_eigene_kopien_auch_mit_klammern_im_namen(tmp_path):

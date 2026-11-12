@@ -229,6 +229,10 @@ dieser ausfällt.</p>
 nicht und enthält alle Teilnehmerdaten unverschlüsselt; der Ordner darf von Hand geleert werden.
 Gelöschte Teilnehmer holt der Knopf "Aus Sicherung holen…" im Reiter "Teilnehmer" aus diesen Kopien zurück
 (auch nach dem Beenden); vor jedem Löschen entsteht eine Kopie, wenn der Schalter im Menü "Einstellungen" an ist.
+Der Knopf zeigt bei eingeschaltetem Schalter nur diese Kopien vor dem Löschen, bei ausgeschaltetem die normalen.
+"Ergebnisse aus automatischer Kopie wiederherstellen…" (hier im Reiter "Datensicherung") zeigt alle Kopien des
+geöffneten Termins und setzt per Haken einzelne Ergebniswerte (eine Disziplin, Disqualifiziert, Abbruch,
+Stechen-Sieger) auf den Stand der Kopie zurück; die jetzigen Werte werden dabei überschrieben.
 Liegt ein Termin auf einem Wechseldatenträger (USB-Stick, SD-Karte) oder Netzlaufwerk, weist das Programm
 beim Start und beim Terminwechsel darauf hin, ihn nicht abzuziehen. Externe USB-Festplatten meldet Windows
 als feste Platte, dafür erscheint kein Hinweis.</p>
@@ -287,7 +291,8 @@ ausführliche Text, wenn du die Maus darüber hältst.</p>
 Beide werden gespeichert und gelten beim nächsten Start weiter:</p>
 <ul>
 <li><b>Vor dem Löschen von Teilnehmern eine Sicherung anlegen</b> (Standard: aus): Vor jedem Löschen
-entsteht eine Kopie des Termins im Ordner "Auto-Sicherung". Daraus holt "Aus Sicherung holen…" im
+entsteht eine Kopie des Termins im Ordner "Auto-Sicherung" (getrennt von den normalen Kopien, die letzten
+fünf je Termin; normales Starten und Beenden verdrängt sie nicht). Daraus holt "Aus Sicherung holen…" im
 Reiter "Teilnehmer" gelöschte Teilnehmer zurück, auch nach dem Beenden des Programms.</li>
 <li><b>Dateien ohne Nachfrage im Ablageort speichern</b> (Standard: aus): Alle PDFs und Dateien
 landen mit dem vorgeschlagenen Namen im Ablageort, ohne nach dem Speicherort zu fragen. Dieselbe
