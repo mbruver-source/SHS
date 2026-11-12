@@ -154,6 +154,12 @@ def _umgebung_einrichten() -> QApplication:
     for modul in desktop_module:
         if hasattr(modul, "termine_ordner"):
             modul.termine_ordner = lambda: ANZEIGE_ORDNER
+    # Die zwei Schalter im Menü „Einstellungen“ zeigen in allen Bildern den Werkszustand (an), nicht
+    # die gespeicherte Auswahl des Rechners.
+    for modul in desktop_module:
+        for lesen in ("_ohne_nachfrage_lesen", "_sicherung_vor_loeschen_lesen"):
+            if hasattr(modul, lesen):
+                setattr(modul, lesen, lambda: True)
     stumm = lambda *args, **kwargs: None  # noqa: E731
     for modul in desktop_module:
         if hasattr(modul, "_datei_gespeichert_melden"):
@@ -317,6 +323,83 @@ def _bild_teilnehmer_dialoge(termine: _Termine, ziel: Path) -> list[Path]:
         dialog.close()
     conn.close()
     return pfade
+
+
+def _kopien_vorbereiten(termine: _Termine):
+    """Termin mit Ergebnissen, eine Kopie „vor dem Löschen“ und eine normale Kopie (beide mit
+    allen Teilnehmern), danach ein gelöschter Teilnehmer und geänderte Ergebnisse. Liefert
+    (conn, pfad, ids, ordner der Kopien, Liste der Kopien)."""
+    import datetime
+
+    from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin
+
+    conn, pfad, ids = termine.neu(ergebnisse="vorhanden")
+    ordner = Path(tempfile.mkdtemp(prefix="shs_kopien_"))
+    auto_sicherung_erstellen(conn, pfad, ordner=ordner, mindestabstand_sekunden=0,
+                             jetzt=datetime.datetime(2026, 11, 14, 8, 5, 12))
+    auto_sicherung_erstellen(conn, pfad, ordner=ordner, vor_loeschen=True,
+                             jetzt=datetime.datetime(2026, 11, 14, 9, 41, 30))
+    db.delete_teilnehmer(conn, ids["Testuser3"])
+    db.delete_teilnehmer(conn, ids["Testuser2"])
+    # Ergebnisse, die sich vom Stand der Kopie unterscheiden (überschrieben bzw. geleert).
+    db.eintragen_ergebnis(conn, ids["Testuser1"], "Trümmerfeld", 41, 22)
+    db.eintragen_ergebnis(conn, ids["Testuser1"], "Flächensuche", None, None)
+    db.setze_ergebnis_status(conn, ids["Testuser6"], True, False)
+    return conn, pfad, ids, ordner, auto_sicherungen_zu_termin(pfad, ordner=ordner)
+
+
+def _bild_sicherung_dialoge(termine: _Termine, ziel: Path) -> list[Path]:
+    import shutil
+
+    from desktop_dialoge import ErgebnisseSicherungDialog, SicherungTeilnehmerDialog
+
+    conn, _pfad, _ids, ordner, kopien = _kopien_vorbereiten(termine)
+    pfade = []
+    dialog = SicherungTeilnehmerDialog(None, conn, [k for k in kopien if "_vor-Loeschen" in k[0].name],
+                                       loeschkopien=True)
+    dialog.resize(900, 420)
+    dialog.show()
+    pfade.append(_speichern(dialog, ziel, "handbuch_aus_sicherung_holen", (900, 420)))
+    dialog.schliesse_quelle()
+    dialog.close()
+    dialog = ErgebnisseSicherungDialog(None, conn, kopien)
+    dialog.resize(900, 520)
+    dialog.show()
+    _warten()
+    for i in range(dialog.baum.topLevelItemCount()):  # Haken setzen, damit die Bedienung sichtbar wird
+        kopf = dialog.baum.topLevelItem(i)
+        if kopf.text(0).startswith("Testuser1"):
+            kopf.setCheckState(0, kopf.checkState(0).__class__.Checked)
+    pfade.append(_speichern(dialog, ziel, "handbuch_ergebnisse_aus_kopie", (900, 520)))
+    dialog.schliesse_quelle()
+    dialog.close()
+    conn.close()
+    shutil.rmtree(ordner, ignore_errors=True)
+    return pfade
+
+
+def _bild_einstellungen_menue(termine: _Termine, ziel: Path) -> list[Path]:
+    """Das aufgeklappte Menü „Einstellungen“ auf einer festen Fläche (die Menübreite hängt von der
+    Schrift ab)."""
+    from PySide6.QtGui import QColor as _Farbe, QPixmap as _Pixmap, QPainter as _Maler
+    from PySide6.QtWidgets import QMenu
+
+    conn, pfad, _ids = termine.neu()
+    fenster = _hauptfenster(conn, pfad)
+    menue = next(m for m in fenster.findChildren(QMenu) if m.title().replace("&", "") == "Einstellungen")
+    menue.popup(fenster.mapToGlobal(QPoint(20, 40)))
+    _warten(250)
+    bild = menue.grab()
+    menue.hide()
+    flaeche = _Pixmap(400, 80)
+    flaeche.fill(_Farbe("#FBF8F3"))
+    maler = _Maler(flaeche)
+    maler.drawPixmap(10, 10, bild)
+    maler.end()
+    datei = ziel / "handbuch_einstellungen_menue.png"
+    flaeche.save(str(datei))
+    _schliessen(fenster, conn)
+    return [datei]
 
 
 def _bild_einfacher_reiter(reiter: str, name: str):
@@ -499,6 +582,8 @@ BILDER = {
     "handbuch_verwaltung": _bild_verwaltung,
     "handbuch_export": _bild_einfacher_reiter("export_tab", "handbuch_export"),
     "handbuch_datensicherung": _bild_einfacher_reiter("datensicherung_tab", "handbuch_datensicherung"),
+    "handbuch_sicherung_dialoge": _bild_sicherung_dialoge,
+    "handbuch_einstellungen_menue": _bild_einstellungen_menue,
     "handbuch_demo": _bild_demo,
 }
 
@@ -520,6 +605,9 @@ BILD_DATEIEN = {
     "handbuch_verwaltung": HAUPTFENSTER,
     "handbuch_export": HAUPTFENSTER,
     "handbuch_datensicherung": HAUPTFENSTER,
+    "handbuch_aus_sicherung_holen": (900, 420),
+    "handbuch_ergebnisse_aus_kopie": (900, 520),
+    "handbuch_einstellungen_menue": (400, 80),
     "handbuch_demo": HAUPTFENSTER,
 }
 

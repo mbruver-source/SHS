@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.60. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.61. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -313,6 +313,8 @@ du eine vorhandene Datei, fragt das Programm, ob es stattdessen diesen Termin ö
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
 **„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion. Nach einem **Löschen** fragt das Programm beim **Beenden** noch einmal nach (Vorgabe „Nein“), solange „Rückgängig“ das Löschen noch zurücknehmen kann; nach dem Beenden ist es endgültig. Ohne vorheriges Löschen erscheint diese Frage nicht. Vor jedem Löschen legt das Programm eine Kopie des Termins an; wer das nicht möchte, schaltet im Menü **Einstellungen** „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ aus (Standard: an; die Kopie liegt im Ordner „Auto-Sicherung“, getrennt von den normalen Kopien; es bleiben die letzten 5 je Termin und normales Starten verdrängt sie nicht). **„Aus Sicherung holen…“ zeigt bei eingeschaltetem Schalter nur diese Kopien vor dem Löschen, bei ausgeschaltetem nur die normalen automatischen Kopien**. **Gelöschte Teilnehmer zurückholen, auch nach dem Beenden:** Der Knopf **„Aus Sicherung holen…“** (unten, neben „Rückgängig“) zeigt die Kopien dieses Termins; nach Auswahl einer Kopie erscheinen die Teilnehmer, die dort stehen, im Termin aber fehlen. Wer angekreuzt wird (anfangs ist nichts angekreuzt), kommt mit Ergebnis zurück; ist seine Startnummer inzwischen vergeben, bleibt sie leer. Das geht nur, wenn eine Kopie vor dem Löschen entstanden ist: beim Öffnen und Beenden des Programms oder vor dem Löschen bei eingeschaltetem Schalter.
+
+![Dialog „Gelöschte Teilnehmer aus Sicherung holen“: Kopie wählen, fehlende Teilnehmer ankreuzen](bilder/handbuch_aus_sicherung_holen.png)
 
 | Button | Wirkung |
 |---|---|
@@ -950,6 +952,8 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
   sich danach **nicht** zurückholen. Gelöschte Teilnehmer holst du im Reiter Teilnehmer mit „Aus
   Sicherung holen…“. Der Knopf ist bei PostgreSQL gesperrt (dort gibt es keine Kopien).
 
+  ![Dialog „Ergebnisse aus automatischer Kopie wiederherstellen“: je Teilnehmer die abweichenden Werte, jetzt und in der Kopie, mit Haken](bilder/handbuch_ergebnisse_aus_kopie.png)
+
 **Umzug auf einen anderen Rechner:** Auf dem alten Rechner eine Sicherung erstellen, auf dem neuen
 Rechner das Programm installieren und die Sicherung wiederherstellen.
 
@@ -1128,6 +1132,8 @@ Fehlermeldung anhängen (siehe unten).
 | Rückfragen | **Enter** / **Esc** | vorgegebene Antwort (bei Datenänderungen „Nein“) / abbrechen |
 
 ### Einstellungen (Menü „Einstellungen“)
+
+![Menü „Einstellungen“ mit den zwei Schaltern](bilder/handbuch_einstellungen_menue.png)
 
 Im Hauptfenster gibt es neben „Ansicht“ und „Hilfe“ das Menü **Einstellungen** mit zwei Schaltern. Beide werden pro Windows-Benutzer gespeichert und gelten beim nächsten Start weiter.
 

@@ -326,7 +326,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._sicherung_vor_loeschen_action.toggled.connect(_sicherung_vor_loeschen_speichern)
         self._sicherung_vor_loeschen_action.setToolTip(
             "Legt vor jedem Löschen eine Kopie des Termins im Ordner „Auto-Sicherung“ an "
-            "(die letzten 10 je Termin).")
+            "(getrennt von den normalen Kopien, die letzten 5 je Termin).")
         # Marco 12.11.2026: dieselbe Einstellung wie das Kästchen im Reiter „Ausdrucke/Export“,
         # damit alle Schalter an einem Ort zu finden sind; beide bleiben gleich (siehe
         # _ohne_nachfrage_aus_menue / _ohne_nachfrage_vom_reiter).
