@@ -317,7 +317,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             self._schrift_aktion_ausgeloest,
         )
         # Marco 12.11.2026: Wer weiß, was er tut, soll nicht bei jedem Löschen gebremst werden -
-        # die Sicherung vor dem Löschen ist deshalb ein Schalter (Standard aus).
+        # die Sicherung vor dem Löschen ist deshalb ein Schalter (Standard an).
         einstellungen_menue = self.menuBar().addMenu("&Einstellungen")
         self._sicherung_vor_loeschen_action = einstellungen_menue.addAction(
             "Vor dem Löschen von Teilnehmern eine Sicherung anlegen")

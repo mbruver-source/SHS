@@ -2511,8 +2511,9 @@ def test_andere_aktion_ersetzt_geloeschten_vermerk(qtbot, termin, monkeypatch):
     assert not tab.loeschung_noch_rueckgaengig()
 
 
-def test_sicherung_vor_loeschen_nur_per_schalter(qtbot, termin, monkeypatch):
-    """Marco 12.11.2026: Schalter im Menü „Einstellungen“, Standard aus."""
+@pytest.mark.werksstandard
+def test_sicherung_vor_loeschen_per_schalter(qtbot, termin, monkeypatch):
+    """Marco 12.11.2026: Schalter im Menü „Einstellungen“, Standard an."""
     import desktop_gemeinsam
 
     fenster, tab = _fenster_mit_teilnehmer(qtbot, termin)
@@ -2520,20 +2521,21 @@ def test_sicherung_vor_loeschen_nur_per_schalter(qtbot, termin, monkeypatch):
     monkeypatch.setattr(fenster, "auto_sicherung_anlegen", lambda **kw: aufrufe.append(kw))
     ueberall_ersetzen(monkeypatch, "_ja_nein", lambda *a, **k: True)
     action = fenster._sicherung_vor_loeschen_action
-    assert action.isCheckable() and not action.isChecked()  # Standard aus
-    assert not desktop_gemeinsam._sicherung_vor_loeschen_lesen()
-
-    tab._teilnehmer_loeschen()
-    assert aufrufe == []  # Schalter aus: keine Sicherung, keine Bremse
-
-    tab._rueckgaengig_ausfuehren()
-    tab.tabelle.selectRow(0)
-    action.setChecked(True)  # speichert die Einstellung
+    assert action.isCheckable() and action.isChecked()  # Standard an
     assert desktop_gemeinsam._sicherung_vor_loeschen_lesen()
+
     tab._teilnehmer_loeschen()
     assert aufrufe == [{"vor_loeschen": True}]
 
+    tab._rueckgaengig_ausfuehren()
+    tab.tabelle.selectRow(0)
+    action.setChecked(False)  # speichert die Einstellung
+    assert not desktop_gemeinsam._sicherung_vor_loeschen_lesen()
+    tab._teilnehmer_loeschen()
+    assert aufrufe == [{"vor_loeschen": True}]  # Schalter aus: keine weitere Sicherung
 
+
+@pytest.mark.werksstandard
 def test_ohne_nachfrage_menue_und_reiter_bleiben_gleich(qtbot, termin):
     """Marco 12.11.2026: „Dateien ohne Nachfrage speichern“ steht im Menü „Einstellungen“ und im
     Reiter „Ausdrucke/Export“ - beides ist dieselbe, gespeicherte Einstellung."""
@@ -2543,16 +2545,16 @@ def test_ohne_nachfrage_menue_und_reiter_bleiben_gleich(qtbot, termin):
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     aktion, kaestchen = fenster._ohne_nachfrage_action, fenster.export_tab.ohne_nachfrage_check
-    assert not aktion.isChecked() and not kaestchen.isChecked() and not _ohne_nachfrage_lesen()
+    assert aktion.isChecked() and kaestchen.isChecked() and _ohne_nachfrage_lesen()  # Standard an
 
-    aktion.setChecked(True)  # Menü -> Reiter und Speicher
-    assert kaestchen.isChecked() and _ohne_nachfrage_lesen()
-    kaestchen.setChecked(False)  # Reiter -> Menü und Speicher
-    assert not aktion.isChecked() and not _ohne_nachfrage_lesen()
+    aktion.setChecked(False)  # Menü -> Reiter und Speicher
+    assert not kaestchen.isChecked() and not _ohne_nachfrage_lesen()
+    kaestchen.setChecked(True)  # Reiter -> Menü und Speicher
+    assert aktion.isChecked() and _ohne_nachfrage_lesen()
 
-    kaestchen.setChecked(True)
+    kaestchen.setChecked(False)
     fenster._termin_setzen(conn, pfad)  # neue Reiter lesen die Einstellung und bleiben mit dem Menü verbunden
     neu = fenster.export_tab.ohne_nachfrage_check
-    assert neu is not kaestchen and neu.isChecked() and aktion.isChecked()
-    aktion.setChecked(False)
-    assert not neu.isChecked() and not _ohne_nachfrage_lesen()
+    assert neu is not kaestchen and not neu.isChecked() and not aktion.isChecked()
+    aktion.setChecked(True)
+    assert neu.isChecked() and _ohne_nachfrage_lesen()

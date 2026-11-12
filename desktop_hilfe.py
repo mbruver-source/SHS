@@ -290,11 +290,11 @@ ausführliche Text, wenn du die Maus darüber hältst.</p>
 <p>Im Hauptfenster gibt es neben "Ansicht" und "Hilfe" das Menü "Einstellungen" mit zwei Schaltern.
 Beide werden gespeichert und gelten beim nächsten Start weiter:</p>
 <ul>
-<li><b>Vor dem Löschen von Teilnehmern eine Sicherung anlegen</b> (Standard: aus): Vor jedem Löschen
+<li><b>Vor dem Löschen von Teilnehmern eine Sicherung anlegen</b> (Standard: an): Vor jedem Löschen
 entsteht eine Kopie des Termins im Ordner "Auto-Sicherung" (getrennt von den normalen Kopien, die letzten
 fünf je Termin; normales Starten und Beenden verdrängt sie nicht). Daraus holt "Aus Sicherung holen…" im
 Reiter "Teilnehmer" gelöschte Teilnehmer zurück, auch nach dem Beenden des Programms.</li>
-<li><b>Dateien ohne Nachfrage im Ablageort speichern</b> (Standard: aus): Alle PDFs und Dateien
+<li><b>Dateien ohne Nachfrage im Ablageort speichern</b> (Standard: an): Alle PDFs und Dateien
 landen mit dem vorgeschlagenen Namen im Ablageort, ohne nach dem Speicherort zu fragen. Dieselbe
 Einstellung steht auch als Haken im Reiter "Ausdrucke/Export".</li>
 </ul>

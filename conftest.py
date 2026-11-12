@@ -30,6 +30,7 @@ _WARTEZEIT_SEKUNDEN = 20
 
 
 def pytest_configure(config):
+    config.addinivalue_line("markers", "werksstandard: Test sieht die Einstellungen im Werkszustand (die Schalter im Menü „Einstellungen“ sind an)")
     config.addinivalue_line("markers", "langsam: dauert über etwa 10 Sekunden (pytest -m \"not langsam\" lässt sie aus)")
 
 
@@ -45,7 +46,16 @@ def _einstellungen_leeren_und_fenster_wachen(request):
 
     import desktop_darstellung
 
-    QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).clear()
+    einstellungen = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP)
+    einstellungen.clear()
+    if request.node.get_closest_marker("werksstandard") is None:
+        # Die zwei Schalter im Menü „Einstellungen“ sind ab Werk an (Marco 12.11.2026). Die meisten
+        # Tests setzen ihre Dateien ohne Dialog-Stubs voraus und kennen den Zustand „aus“; nur
+        # Tests mit der Marke `werksstandard` sehen den echten Werksstand.
+        import desktop_gemeinsam
+
+        einstellungen.setValue(desktop_gemeinsam._OHNE_NACHFRAGE_SCHLUESSEL, False)
+        einstellungen.setValue(desktop_gemeinsam._SICHERUNG_VOR_LOESCHEN_SCHLUESSEL, False)
     haengende: list[str] = []
     zustand = {"fenster": None, "seit": 0.0}
 

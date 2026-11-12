@@ -244,7 +244,7 @@ _OHNE_NACHFRAGE_SCHLUESSEL = "export/ohne_nachfrage"
 def _ohne_nachfrage_lesen() -> bool:
     """Einstellung „Dateien ohne Nachfrage im Ablageort speichern“ (Marco 10.11.2026)."""
     wert = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).value(
-        _OHNE_NACHFRAGE_SCHLUESSEL, False)
+        _OHNE_NACHFRAGE_SCHLUESSEL, True)  # Standard an (Marco 12.11.2026)
     return wert in (True, "true", "True", 1, "1")
 
 
@@ -257,9 +257,9 @@ _SICHERUNG_VOR_LOESCHEN_SCHLUESSEL = "teilnehmer/sicherung_vor_loeschen"
 
 
 def _sicherung_vor_loeschen_lesen() -> bool:
-    """Schalter „Vor dem Löschen eine Sicherung anlegen“ (Marco 12.11.2026), Standard aus."""
+    """Schalter „Vor dem Löschen eine Sicherung anlegen“ (Marco 12.11.2026), Standard an."""
     wert = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).value(
-        _SICHERUNG_VOR_LOESCHEN_SCHLUESSEL, False)
+        _SICHERUNG_VOR_LOESCHEN_SCHLUESSEL, True)
     return wert in (True, "true", "True", 1, "1")
 
 
