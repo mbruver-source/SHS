@@ -13,6 +13,7 @@ zipfile-Modul erzeugt.
 from __future__ import annotations
 
 import datetime
+import glob
 import lzma
 import os
 import re
@@ -219,7 +220,8 @@ def auto_sicherung_erstellen(
     try:
         ordner = ordner or auto_sicherung_ordner()
         ordner.mkdir(parents=True, exist_ok=True)
-        vorhandene = sorted(ordner.glob(f"{name}_????-??-??_??????.sqlite"))
+        muster = f"{glob.escape(name)}_????-??-??_??????.sqlite"  # Klammern im Terminnamen sind keine Platzhalter
+        vorhandene = sorted(ordner.glob(muster))
         if vorhandene and mindestabstand_sekunden > 0:
             letzte = datetime.datetime.fromtimestamp(vorhandene[-1].stat().st_mtime)
             if 0 <= (jetzt - letzte).total_seconds() < mindestabstand_sekunden:
@@ -235,12 +237,31 @@ def auto_sicherung_erstellen(
             raise
         else:
             kopie.close()
-        for alt in sorted(ordner.glob(f"{name}_????-??-??_??????.sqlite"))[:-max(behalten, 1)]:
+        for alt in sorted(ordner.glob(muster))[:-max(behalten, 1)]:
             with suppress(OSError):
                 alt.unlink()
         return str(ziel)
     except (OSError, sqlite3.Error):
         return None
+
+
+def auto_sicherungen_zu_termin(termin_pfad: str, ordner: Path | None = None) -> list[tuple[Path, datetime.datetime]]:
+    """Die automatischen Kopien eines Termins (Marco 12.11.2026, Teilnehmer aus der Sicherung
+    zurückholen): (Pfad, Zeitpunkt aus dem Dateinamen), neueste zuerst. Leer, wenn der Ordner
+    fehlt oder nichts passt."""
+    name = _sicherer_dateiname_teil(Path(termin_pfad).stem)
+    try:
+        dateien = list((ordner or auto_sicherung_ordner()).glob(f"{glob.escape(name)}_????-??-??_??????.sqlite"))
+    except OSError:
+        return []
+    ergebnis = []
+    for datei in dateien:
+        try:
+            zeit = datetime.datetime.strptime(datei.stem[len(name) + 1:], "%Y-%m-%d_%H%M%S")
+        except ValueError:
+            continue
+        ergebnis.append((datei, zeit))
+    return sorted(ergebnis, key=lambda eintrag: eintrag[1], reverse=True)
 
 
 def _sicherer_dateiname_teil(text: str) -> str:

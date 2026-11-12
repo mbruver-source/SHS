@@ -123,7 +123,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `desktop_dialoge.py` | Fassade der Dialoge (seit 11.11.2026): reicht alle Namen der fünf Module darunter weiter, `from desktop_dialoge import …` gilt wie vorher | `test_gui_*.py` |
 | `desktop_dialoge_basis.py` | Gemeinsame Dialog-Hilfen: Größe an den Bildschirm anpassen, scrollbare Fläche, Speichern vor dem Schließen | `test_gui_darstellung.py` |
 | `desktop_dialoge_teilnehmer.py` | `TeilnehmerDialog` und `StartnummerTauschenDialog` | `test_gui_teilnehmer.py` |
-| `desktop_dialoge_termin.py` | `VeranstaltungsDialog`, `TerminImportDialog`, `SicherungErstellenDialog` | `test_gui_termin.py` |
+| `desktop_dialoge_termin.py` | `VeranstaltungsDialog`, `TerminImportDialog`, `SicherungTeilnehmerDialog`, `SicherungErstellenDialog` | `test_gui_termin.py` |
 | `desktop_dialoge_planung.py` | Prüfungsblock, Pause, automatisch verteilen, Bewertungsbogen- und Etiketten-Auswahl | `test_gui_zeitplan.py`, `test_gui_auswertung.py` |
 | `desktop_hilfe.py` | `HilfeDialog` mit Suchfeld, Inhaltsverzeichnis und dem Hilfetext | `test_gui_darstellung.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |

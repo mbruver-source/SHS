@@ -38,6 +38,7 @@ from db import (
     bereiche_automatisch_berechnen,
     dateiname_vorschlagen,
     datum_anzeige,
+    fehlende_teilnehmer,
     leistungsklasse_label,
     liste_termine,
     list_teilnehmer,
@@ -218,6 +219,149 @@ class TerminImportDialog(QDialog):
         """Muss vom Aufrufer nach exec() gerufen werden (egal ob akzeptiert oder
         abgebrochen), damit die zweite, nur für den Import geöffnete Verbindung nicht
         offen bleibt."""
+        if self._quelle_conn is not None:
+            self._quelle_conn.close()
+            self._quelle_conn = None
+
+
+class SicherungTeilnehmerDialog(QDialog):
+    """Holt gelöschte Teilnehmer aus einer automatischen Kopie des Termins zurück (Marco
+    12.11.2026; Ordner „Auto-Sicherung“, siehe db_sicherung.auto_sicherungen_zu_termin). Zeigt je
+    Kopie die Teilnehmer, die im geöffneten Termin fehlen. Die Kopie wird nur gelesen; das
+    Zurückholen (mit Ergebnis, gleiche ID) macht der Aufrufer mit der offenen `quelle_conn()`
+    und muss danach `schliesse_quelle()` rufen."""
+
+    def __init__(self, parent, conn, kopien: list):
+        super().__init__(parent)
+        self.setWindowTitle("Gelöschte Teilnehmer aus Sicherung holen")
+        self.resize(560, 460)
+        self._conn = conn
+        self._kopien = kopien
+        self._quelle_conn: sqlite3.Connection | None = None
+
+        self.kopie_combo = QComboBox()
+        # Je Kopie vorab zählen, wer im Termin fehlt: Die Klappliste zeigt es an und die jüngste
+        # Kopie mit Fehlenden ist vorgewählt (Marco 12.11.2026: die neueste Kopie entsteht beim
+        # Beenden und enthält den Gelöschten oft nicht mehr).
+        anzahlen = [self._fehlende_zaehlen(pfad) for pfad, _zeit in kopien]
+        for (_pfad, zeit), anzahl in zip(kopien, anzahlen):
+            text = zeit.strftime("Kopie vom %d.%m.%Y um %H:%M:%S Uhr")
+            if anzahl is None:
+                text += " – nicht lesbar"
+            elif anzahl == 0:
+                text += " – niemand fehlt"
+            elif anzahl == 1:
+                text += " – 1 Teilnehmer fehlt"
+            else:
+                text += f" – {anzahl} Teilnehmer fehlen"
+            self.kopie_combo.addItem(text)
+        vorauswahl = next((i for i, a in enumerate(anzahlen) if a), 0)
+        self.kopie_combo.setCurrentIndex(vorauswahl)
+        self.kopie_combo.currentIndexChanged.connect(self._kopie_gewaehlt)
+        self.teilnehmer_liste = QListWidget()
+        zugaengliche_namen_setzen(self, {
+            "kopie_combo": "Sicherungskopie des Termins",
+            "teilnehmer_liste": "Teilnehmer, die im Termin fehlen",
+        })
+        alle_btn = QPushButton("Alle auswählen")
+        alle_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Checked))
+        keine_btn = QPushButton("Keine auswählen")
+        keine_btn.clicked.connect(lambda: self._alle_umschalten(Qt.Unchecked))
+        auswahl_zeile = QHBoxLayout()
+        auswahl_zeile.addWidget(alle_btn)
+        auswahl_zeile.addWidget(keine_btn)
+        auswahl_zeile.addStretch()
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        if not kopien:
+            layout.addWidget(QLabel(
+                "Es gibt keine automatische Kopie dieses Termins. Sie entsteht beim Öffnen und "
+                "Beenden des Programms sowie vor dem Löschen, wenn der Schalter im Menü "
+                "„Einstellungen“ eingeschaltet ist."))
+            self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+        else:
+            layout.addWidget(QLabel(
+                "Sicherungskopie dieses Termins (Pfeil rechts aufklappen, um eine andere Kopie "
+                "zu wählen; vorgewählt ist die neueste, in der jemand fehlt):"))
+            layout.addWidget(self.kopie_combo)
+            layout.addWidget(QLabel(
+                "Teilnehmer, die in der Kopie stehen, im Termin aber fehlen (sie kommen mit "
+                "Ergebnis zurück; ist ihre Startnummer inzwischen vergeben, ohne Nummer):"))
+            layout.addLayout(auswahl_zeile)
+            layout.addWidget(self.teilnehmer_liste)
+        layout.addWidget(self.buttons)
+        if kopien:
+            self._kopie_gewaehlt(vorauswahl)
+
+    def _fehlende_zaehlen(self, pfad) -> int | None:
+        """Anzahl der im Termin fehlenden Teilnehmer in dieser Kopie, None wenn nicht lesbar."""
+        quelle = None
+        try:
+            quelle = termin_lesend_pruefen(pfad)
+            termin_unversehrt_pruefen(quelle)
+            anzahl = len(fehlende_teilnehmer(quelle, self._conn))
+            quelle.set_progress_handler(None, 0)
+            return anzahl
+        except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError):
+            return None
+        finally:
+            if quelle is not None:
+                quelle.close()
+
+    def _hinweis(self, text: str) -> None:
+        hinweis = QListWidgetItem(text)
+        hinweis.setFlags(Qt.NoItemFlags)
+        self.teilnehmer_liste.addItem(hinweis)
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
+
+    def _kopie_gewaehlt(self, index: int) -> None:
+        self.schliesse_quelle()
+        self.teilnehmer_liste.clear()
+        if not (0 <= index < len(self._kopien)):
+            return
+        try:
+            self._quelle_conn = termin_lesend_pruefen(self._kopien[index][0])
+            termin_unversehrt_pruefen(self._quelle_conn)
+            fehlende = fehlende_teilnehmer(self._quelle_conn, self._conn)
+            self._quelle_conn.set_progress_handler(None, 0)
+        except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+            self.schliesse_quelle()
+            grund = _klartext_fehler(exc).replace(chr(10) * 2, " ") if isinstance(exc, (sqlite3.Error, OSError)) \
+                else f"Die Datei enthält nicht alle erwarteten Angaben (Technisch: {type(exc).__name__}: {exc})."
+            self._hinweis(f"Diese Kopie konnte nicht gelesen werden. {grund}\nBitte eine andere Kopie wählen.")
+            return
+        if not fehlende:
+            self._hinweis("In dieser Kopie steht niemand, der im Termin fehlt. Eine ältere oder "
+                          "neuere Kopie wählen?")
+            return
+        for t in fehlende:
+            item = QListWidgetItem(
+                f"{t['nachname']}, {t['vorname']} – {t['rufname_hund']} ({leistungsklasse_label(t)})")
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)  # nichts ohne bewusstes Ankreuzen zurückholen
+            item.setData(Qt.UserRole, t["id"])
+            self.teilnehmer_liste.addItem(item)
+        self.buttons.button(QDialogButtonBox.Ok).setEnabled(True)
+
+    def _alle_umschalten(self, zustand) -> None:
+        for row in range(self.teilnehmer_liste.count()):
+            if self.teilnehmer_liste.item(row).flags() & Qt.ItemIsUserCheckable:
+                self.teilnehmer_liste.item(row).setCheckState(zustand)
+
+    def ausgewaehlte_ids(self) -> list[int]:
+        return [
+            self.teilnehmer_liste.item(row).data(Qt.UserRole)
+            for row in range(self.teilnehmer_liste.count())
+            if self.teilnehmer_liste.item(row).checkState() == Qt.Checked
+        ]
+
+    def quelle_conn(self) -> sqlite3.Connection | None:
+        return self._quelle_conn
+
+    def schliesse_quelle(self) -> None:
         if self._quelle_conn is not None:
             self._quelle_conn.close()
             self._quelle_conn = None

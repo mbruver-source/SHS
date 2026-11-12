@@ -96,7 +96,9 @@ from desktop_import_meldungen import (
     _teilnehmerliste_importieren,
     _teilnehmerzahl,
 )
+from db_sicherung import auto_sicherungen_zu_termin
 from desktop_dialoge import (
+    SicherungTeilnehmerDialog,
     StartnummerTauschenDialog,
     TeilnehmerDialog,
     TerminImportDialog,
@@ -296,6 +298,16 @@ class TeilnehmerTab(QWidget):
         rueckgaengig_kuerzel.setContext(Qt.WidgetWithChildrenShortcut)
         rueckgaengig_kuerzel.activated.connect(
             lambda: self.rueckgaengig_btn.isEnabled() and self._rueckgaengig_ausfuehren())
+        # Marco 12.11.2026: die Kopien aus „Auto-Sicherung“ ließen sich nirgends nutzen; ein
+        # gelöschter Teilnehmer kam nach dem Beenden nicht zurück.
+        self.sicherung_holen_btn = QPushButton("Aus Sicherung holen…")
+        self.sicherung_holen_btn.setToolTip(
+            "Holt gelöschte Teilnehmer aus einer automatischen Kopie des Termins zurück "
+            "(Ordner „Auto-Sicherung“).")
+        self.sicherung_holen_btn.clicked.connect(self._aus_sicherung_holen)
+        if not hasattr(self.conn, "backup"):  # PostgreSQL: dort sichert der Datenbankserver
+            self.sicherung_holen_btn.setEnabled(False)
+            self.sicherung_holen_btn.setToolTip("Bei PostgreSQL gibt es keine automatischen Kopien des Termins.")
         self.ablageort_btn = QPushButton("Ablageort öffnen")
         self.ablageort_btn.setToolTip("Zeigt den Ordner, in dem der Bewertungsbogen gespeichert wird")
         self.ablageort_btn.clicked.connect(lambda: _ablageort_ordner_oeffnen(self, self._ablageort))
@@ -354,6 +366,7 @@ class TeilnehmerTab(QWidget):
         status_zeile = QHBoxLayout()
         status_zeile.addWidget(self.status_label, 1)
         status_zeile.addWidget(self.rueckgaengig_btn, 0, Qt.AlignTop)
+        status_zeile.addWidget(self.sicherung_holen_btn, 0, Qt.AlignTop)
         status_zeile.addWidget(self.ablageort_btn, 0, Qt.AlignTop)
         layout.addLayout(status_zeile)
 
@@ -809,6 +822,29 @@ class TeilnehmerTab(QWidget):
                     else f"Löschen von „{geloescht[0]['teilnehmer']['nachname']}“",
                     lambda: self._teilnehmer_zurueckholen(geloescht), loeschung=True)
             self.aktualisieren()
+
+    def _aus_sicherung_holen(self) -> None:
+        """Holt gelöschte Teilnehmer aus einer automatischen Kopie zurück (Marco 12.11.2026):
+        gleiche ID, mit Ergebnis; ist die Startnummer inzwischen vergeben, ohne Nummer."""
+        kopien = auto_sicherungen_zu_termin(self._pfad) if self._pfad else []
+        dialog = SicherungTeilnehmerDialog(self, self.conn, kopien)
+        try:
+            if _ausfuehren(dialog) != QDialog.Accepted:
+                return
+            quelle = dialog.quelle_conn()
+            ids = dialog.ausgewaehlte_ids()
+            if quelle is None or not ids:
+                return
+            sicherungen = [s for s in (teilnehmer_sichern(quelle, i) for i in ids) if s]
+            try:
+                meldung = self._teilnehmer_zurueckholen(sicherungen)
+            except sqlite3.Error as exc:
+                _db_fehler_anzeigen(self, exc, "Die Teilnehmer ließen sich nicht zurückholen.")
+                return
+        finally:
+            dialog.schliesse_quelle()
+        self.aktualisieren()
+        self.status_label.setText(f"Aus Sicherung geholt: {meldung}")
 
     def _rueckgaengig_merken(self, beschreibung: str, aktion, loeschung: bool = False) -> None:
         """Merkt die letzte rückgängig zu machende Aktion (eine Ebene, Marco 10.11.2026)."""

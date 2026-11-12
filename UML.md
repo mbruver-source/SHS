@@ -211,6 +211,7 @@ classDiagram
     class TerminImportDialog
     class VeranstaltungsDialog
     class SicherungErstellenDialog
+    class SicherungTeilnehmerDialog
     class PruefungsblockDialog
     class PauseDialog
     class BewertungsbogenAuswahlDialog
@@ -254,6 +255,7 @@ classDiagram
     AbrechnungTab ..> lr_abrechnung : Rechnung
     StartDialog ..> VeranstaltungsDialog : neuer Termin
     DatensicherungTab ..> SicherungErstellenDialog
+    TeilnehmerTab ..> SicherungTeilnehmerDialog : Aus Sicherung holen
     HauptFenster ..> HilfeDialog
 
     DemoTour *-- DemoPanel

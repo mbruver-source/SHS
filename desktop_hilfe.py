@@ -227,6 +227,8 @@ dieser ausfällt.</p>
 <p>Zusätzlich legt das Programm beim Öffnen und beim Beenden eines Termins selbst eine Kopie im Ordner
 "Auto-Sicherung" neben dem Termine-Ordner ab (je Termin die letzten zehn). Sie ersetzt die Sicherung
 nicht und enthält alle Teilnehmerdaten unverschlüsselt; der Ordner darf von Hand geleert werden.
+Gelöschte Teilnehmer holt der Knopf "Aus Sicherung holen…" im Reiter "Teilnehmer" aus diesen Kopien zurück
+(auch nach dem Beenden); vor jedem Löschen entsteht eine Kopie, wenn der Schalter im Menü "Einstellungen" an ist.
 Liegt ein Termin auf einem Wechseldatenträger (USB-Stick, SD-Karte) oder Netzlaufwerk, weist das Programm
 beim Start und beim Terminwechsel darauf hin, ihn nicht abzuziehen. Externe USB-Festplatten meldet Windows
 als feste Platte, dafür erscheint kein Hinweis.</p>
@@ -279,6 +281,20 @@ Windows hell.</p>
 <p>Der dunkle Balken oben zeigt Verein, Datum, Ort und die Zahl der Teilnehmer des geöffneten
 Termins. Steht hinter einer kurzen grauen Erklärung ein Fragezeichen-Symbol, erscheint der
 ausführliche Text, wenn du die Maus darüber hältst.</p>
+
+<h3>Einstellungen (Menü "Einstellungen")</h3>
+<p>Im Hauptfenster gibt es neben "Ansicht" und "Hilfe" das Menü "Einstellungen" mit zwei Schaltern.
+Beide werden gespeichert und gelten beim nächsten Start weiter:</p>
+<ul>
+<li><b>Vor dem Löschen von Teilnehmern eine Sicherung anlegen</b> (Standard: aus): Vor jedem Löschen
+entsteht eine Kopie des Termins im Ordner "Auto-Sicherung". Daraus holt "Aus Sicherung holen…" im
+Reiter "Teilnehmer" gelöschte Teilnehmer zurück, auch nach dem Beenden des Programms.</li>
+<li><b>Dateien ohne Nachfrage im Ablageort speichern</b> (Standard: aus): Alle PDFs und Dateien
+landen mit dem vorgeschlagenen Namen im Ablageort, ohne nach dem Speicherort zu fragen. Dieselbe
+Einstellung steht auch als Haken im Reiter "Ausdrucke/Export".</li>
+</ul>
+<p>Unabhängig davon fragt das Programm beim Beenden nach, wenn gerade Teilnehmer gelöscht wurden und
+"Rückgängig" das noch zurücknehmen könnte.</p>
 
 <h3>Ausführliches Handbuch</h3>
 <p>Ein ausführliches Benutzerhandbuch mit Screenshots (auch als PDF zum Ausdrucken) steht auf

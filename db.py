@@ -119,6 +119,7 @@ from db_stamm import (  # noqa: F401
     dk_mindestabstand,
     fehlende_startnummern_je_pruefung,
     fehlende_startnummern_vergeben,
+    fehlende_teilnehmer,
     get_teilnehmer,
     get_veranstaltung,
     HOECHSTE_STARTNUMMER,

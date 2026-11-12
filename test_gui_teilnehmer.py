@@ -2520,3 +2520,161 @@ def test_rueckgaengig_speicher_merkt_eine_aktion_und_steuert_den_knopf(qtbot):
     assert beschreibung == "Zweite" and aktion() == "zwei"
     assert not knopf.isEnabled() and knopf.toolTip() == "Nichts zum Rückgängigmachen"
     assert speicher.entnehmen() is None
+
+
+def _kopie_ablegen(conn, pfad, ordner, jetzt):
+    from db_sicherung import auto_sicherung_erstellen
+
+    return auto_sicherung_erstellen(conn, pfad, ordner=ordner, mindestabstand_sekunden=0, jetzt=jetzt)
+
+
+def test_geloeschten_teilnehmer_aus_sicherung_holen(qtbot, termin, tmp_path, monkeypatch):
+    """Marco 12.11.2026: gelöschte Teilnehmer aus der automatischen Kopie zurückholen, auch nach
+    dem Beenden (gleiche ID, mit Ergebnis; vergebene Startnummer bleibt leer)."""
+    import datetime
+
+    import desktop_teilnehmer
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    albers = _teilnehmer_anlegen(conn, nachname="Albers", rufname_hund="Aika", startnummer=1)
+    brandt = _teilnehmer_anlegen(conn, nachname="Brandt", rufname_hund="Bruno", startnummer=2)
+    _db_modul.eintragen_ergebnis(conn, albers, "Flächensuche", 50, 30)
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 10, 0, 0))
+    _db_modul.delete_teilnehmer(conn, albers)
+    _db_modul.delete_teilnehmer(conn, brandt)
+    neu = _teilnehmer_anlegen(conn, nachname="Neu", rufname_hund="Nero", startnummer=1)  # Nummer 1 vergeben
+
+    monkeypatch.setattr(desktop_teilnehmer, "auto_sicherungen_zu_termin",
+                        lambda p: auto_sicherungen_zu_termin(p, ordner=ordner))
+    gewaehlt = {}
+
+    def ausfuehren(dialog):
+        liste = dialog.teilnehmer_liste
+        gewaehlt["texte"] = [liste.item(r).text() for r in range(liste.count())]
+        gewaehlt["abgehakt_vorher"] = dialog.ausgewaehlte_ids()  # nichts ohne bewusstes Ankreuzen
+        liste.item(0).setCheckState(Qt.Checked)  # Albers (alphabetisch zuerst)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(desktop_teilnehmer, "_ausfuehren", ausfuehren)
+    tab = TeilnehmerTab(conn, pfad=pfad)
+    qtbot.addWidget(tab)
+    tab._aus_sicherung_holen()
+
+    assert [t.split(",")[0] for t in gewaehlt["texte"]] == ["Albers", "Brandt"]
+    assert gewaehlt["abgehakt_vorher"] == []
+    zurueck = _db_modul.get_teilnehmer(conn, albers)
+    assert zurueck["nachname"] == "Albers" and zurueck["startnummer"] is None  # Nummer 1 gehört jetzt Neu
+    assert conn.execute("SELECT suche_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?", (albers,)).fetchone()[0] == 50
+    assert _db_modul.get_teilnehmer(conn, brandt) is None and _db_modul.get_teilnehmer(conn, neu)
+    assert "Aus Sicherung geholt" in tab.status_label.text() and "Ohne Startnummer" in tab.status_label.text()
+
+
+def test_sicherung_dialog_ohne_kopie_und_ohne_fehlende(qtbot, termin, tmp_path):
+    import datetime
+
+    from desktop_dialoge import SicherungTeilnehmerDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers")
+    assert auto_sicherungen_zu_termin(pfad, ordner=tmp_path / "gibt-es-nicht") == []
+    dialog = SicherungTeilnehmerDialog(None, conn, [])
+    qtbot.addWidget(dialog)
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 10, 0, 0))
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 11, 0, 0))
+    kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+    assert [z.hour for _p, z in kopien] == [11, 10]  # neueste zuerst
+    dialog = SicherungTeilnehmerDialog(None, conn, kopien)
+    qtbot.addWidget(dialog)
+    try:
+        assert dialog.ausgewaehlte_ids() == []
+        assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()  # in der Kopie fehlt niemand
+        assert "niemand" in dialog.teilnehmer_liste.item(0).text()
+    finally:
+        dialog.schliesse_quelle()
+
+
+def test_sicherung_dialog_waehlt_juengste_kopie_mit_fehlenden_vor(qtbot, termin, tmp_path):
+    import datetime
+
+    from desktop_dialoge import SicherungTeilnehmerDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    geloescht = _teilnehmer_anlegen(conn, nachname="Brandt", startnummer=2)
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 9, 0, 0))   # enthält Brandt
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 10, 0, 0))  # enthält Brandt
+    _db_modul.delete_teilnehmer(conn, geloescht)
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 11, 0, 0))  # nach dem Löschen: ohne Brandt
+    kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+    dialog = SicherungTeilnehmerDialog(None, conn, kopien)
+    qtbot.addWidget(dialog)
+    try:
+        assert [z.hour for _p, z in kopien] == [11, 10, 9]
+        assert dialog.kopie_combo.currentIndex() == 1  # die neueste Kopie (11 Uhr) hat niemanden zum Zurückholen
+        assert "niemand fehlt" in dialog.kopie_combo.itemText(0)
+        assert "1 Teilnehmer fehlt" in dialog.kopie_combo.itemText(1)
+        assert dialog.teilnehmer_liste.item(0).text().startswith("Brandt")
+    finally:
+        dialog.schliesse_quelle()
+
+
+def test_auto_sicherungen_finden_nur_eigene_kopien_auch_mit_klammern_im_namen(tmp_path):
+    import datetime
+
+    from db_sicherung import auto_sicherung_erstellen, auto_sicherungen_zu_termin
+
+    pfad = str(tmp_path / "Prüfung [A] (2026).sqlite")
+    quelle = _db_modul.init_db(pfad)
+    try:
+        ordner = tmp_path / "Auto-Sicherung"
+        for stunde in (9, 10):
+            assert auto_sicherung_erstellen(quelle, pfad, ordner=ordner, mindestabstand_sekunden=0,
+                                            jetzt=datetime.datetime(2026, 11, 12, stunde, 0, 0))
+        # Fremde Dateien: anderer Termin mit gleichem Namensanfang, unmögliches Datum, Fremdes.
+        for fremd in ("Prüfung [A] (2026) neu_2026-11-12_100000.sqlite", "Prüfung [A] (2026)_2026-13-45_999999.sqlite",
+                      "Prüfung A (2026)_2026-11-12_100000.sqlite"):
+            (ordner / fremd).write_bytes(b"")
+        kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+        assert [z.hour for _p, z in kopien] == [10, 9]  # Fantasiedatum und fremde Namen bleiben draußen
+        (ordner / "Prüfung [A] (2026)_2026-13-45_999999.sqlite").unlink()  # passt aufs Muster, zählt sonst bei „behalten“ mit
+        # Die Begrenzung auf „behalten“ zählt dank maskierter Klammern auch hier nur die eigenen Kopien.
+        auto_sicherung_erstellen(quelle, pfad, ordner=ordner, behalten=2, mindestabstand_sekunden=0,
+                                 jetzt=datetime.datetime(2026, 11, 12, 11, 0, 0))
+        assert [z.hour for _p, z in auto_sicherungen_zu_termin(pfad, ordner=ordner)] == [11, 10]
+    finally:
+        quelle.close()
+
+
+def test_sicherung_dialog_meldet_beschaedigte_kopie_und_schliesst_sie(qtbot, termin, tmp_path):
+    import datetime
+
+    from desktop_dialoge import SicherungTeilnehmerDialog
+
+    conn, pfad = termin
+    kaputt = tmp_path / "kaputt.sqlite"
+    kaputt.write_bytes(b"das ist keine Datenbank" * 50)
+    dialog = SicherungTeilnehmerDialog(None, conn, [(kaputt, datetime.datetime(2026, 11, 12, 10, 0, 0))])
+    qtbot.addWidget(dialog)
+    assert dialog.quelle_conn() is None  # nach dem Fehler geschlossen
+    assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+    assert "nicht gelesen" in dialog.teilnehmer_liste.item(0).text()
+
+
+def test_sicherung_holen_knopf_bei_postgresql_gesperrt(qtbot, termin):
+    class _OhneBackup:  # wie die PostgreSQL-Verbindung: kein sqlite3-`backup`
+        def __getattr__(self, name):
+            if name == "backup":
+                raise AttributeError(name)
+            return getattr(termin[0], name)
+
+    tab = TeilnehmerTab(_OhneBackup())
+    qtbot.addWidget(tab)
+    assert not tab.sicherung_holen_btn.isEnabled()

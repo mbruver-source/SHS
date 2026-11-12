@@ -312,7 +312,7 @@ du eine vorhandene Datei, fragt das Programm, ob es stattdessen diesen Termin ö
 
 Die Liste zeigt Startnummer, Name, Hund, Art/LK, Verein, Bezahlt-Status und **Anmerkungen**.
 Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK“**,
-**„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion. Nach einem **Löschen** fragt das Programm beim **Beenden** noch einmal nach (Vorgabe „Nein“), solange „Rückgängig“ das Löschen noch zurücknehmen kann; nach dem Beenden ist es endgültig. Ohne vorheriges Löschen erscheint diese Frage nicht. Wer vor jedem Löschen eine Kopie des Termins haben möchte, schaltet im Menü **Einstellungen** „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ ein (Standard: aus; die Kopie liegt im Ordner „Auto-Sicherung“, es bleiben die letzten 10 je Termin).
+**„Filter Start-Nr.“**, **„Filter Bezahlt“** und das Suchfeld **„Suche“** (Name, Vorname oder Hund, ein Teilwort genügt, mehrere Wörter müssen alle vorkommen) blenden Zeilen nur aus. Mit der **rechten Maustaste** auf einer Zeile öffnet sich ein Menü mit denselben Aktionen wie die Knöpfe (Bearbeiten, Bewertungsbogen, Bezahlt, Keine Teilnahme, Startnummer tauschen, Löschen). **„Ablageort öffnen“** unten rechts zeigt den Ordner der Bewertungsbögen. **„Rückgängig“** daneben (auch **Strg+Z** in diesem Reiter) nimmt das letzte **Löschen** von Teilnehmern (mit Ergebnis) oder **„Alle Startnummern zurücksetzen…“** zurück; eine Startnummer, die inzwischen anderweitig vergeben wurde, bleibt dabei leer. Es gilt immer nur die letzte Aktion. Nach einem **Löschen** fragt das Programm beim **Beenden** noch einmal nach (Vorgabe „Nein“), solange „Rückgängig“ das Löschen noch zurücknehmen kann; nach dem Beenden ist es endgültig. Ohne vorheriges Löschen erscheint diese Frage nicht. Wer vor jedem Löschen eine Kopie des Termins haben möchte, schaltet im Menü **Einstellungen** „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ ein (Standard: aus; die Kopie liegt im Ordner „Auto-Sicherung“, es bleiben die letzten 10 je Termin). **Gelöschte Teilnehmer zurückholen, auch nach dem Beenden:** Der Knopf **„Aus Sicherung holen…“** (unten, neben „Rückgängig“) zeigt die Kopien dieses Termins; nach Auswahl einer Kopie erscheinen die Teilnehmer, die dort stehen, im Termin aber fehlen. Wer angekreuzt wird (anfangs ist nichts angekreuzt), kommt mit Ergebnis zurück; ist seine Startnummer inzwischen vergeben, bleibt sie leer. Das geht nur, wenn eine Kopie vor dem Löschen entstanden ist: beim Öffnen und Beenden des Programms oder vor dem Löschen bei eingeschaltetem Schalter.
 
 | Button | Wirkung |
 |---|---|
@@ -879,7 +879,7 @@ CSV-Datei für Excel. Vorgeschlagen wird der Ordner
 `Ausdrucke\<Termin>` neben der Termin-Datei (z. B. `…\SHS-Pruefungsprogramm\Termine\Ausdrucke\2026-11-14_Verein`),
 nach einem bewusst anderen Ordner dieser. Nach dem Speichern zeigt ein Fenster, wo die Datei
 liegt, mit **„PDF öffnen“** und **„Ordner zeigen“** – praktisch, um sie z. B. an eine E-Mail
-anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimanager (Explorer bzw. Finder). Mit dem Haken **„Dateien ohne Nachfrage im Ablageort speichern“** entfällt die Frage nach dem Speicherort in allen Reitern: Die Datei landet mit dem vorgeschlagenen Namen im Ablageort, eine vorhandene Datei wird nie überschrieben, sondern bekommt „ (2)“ im Namen. Praktisch am Prüfungstag, wenn viele Ausdrucke hintereinander entstehen.
+anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimanager (Explorer bzw. Finder). Mit dem Haken **„Dateien ohne Nachfrage im Ablageort speichern“** (auch im Menü **Einstellungen**, beide zeigen dieselbe Einstellung) entfällt die Frage nach dem Speicherort in allen Reitern: Die Datei landet mit dem vorgeschlagenen Namen im Ablageort, eine vorhandene Datei wird nie überschrieben, sondern bekommt „ (2)“ im Namen. Praktisch am Prüfungstag, wenn viele Ausdrucke hintereinander entstehen.
 
 | Button | Inhalt |
 |---|---|
@@ -1115,6 +1115,17 @@ Fehlermeldung anhängen (siehe unten).
 | Ergebniserfassung | **Entf** / **Rücktaste** | Zelle leeren bzw. Abbruch zurücknehmen |
 | Ergebniserfassung | **Strg+S** (am Mac Cmd+S) | alle Ergebnisse speichern |
 | Rückfragen | **Enter** / **Esc** | vorgegebene Antwort (bei Datenänderungen „Nein“) / abbrechen |
+
+### Einstellungen (Menü „Einstellungen“)
+
+Im Hauptfenster gibt es neben „Ansicht“ und „Hilfe“ das Menü **Einstellungen** mit zwei Schaltern. Beide werden pro Windows-Benutzer gespeichert und gelten beim nächsten Start weiter.
+
+| Schalter | Standard | Wirkung |
+|---|---|---|
+| **Vor dem Löschen von Teilnehmern eine Sicherung anlegen** | aus | Vor jedem Löschen entsteht eine Kopie des Termins im Ordner „Auto-Sicherung“ (die letzten 10 je Termin). Mit **„Aus Sicherung holen…“** im Reiter Teilnehmer lassen sich gelöschte Teilnehmer daraus zurückholen, auch nach dem Beenden (Kapitel 4). |
+| **Dateien ohne Nachfrage im Ablageort speichern** | aus | PDFs und Dateien landen mit dem vorgeschlagenen Namen im Ablageort, ohne Frage nach dem Speicherort; eine vorhandene Datei wird nie überschrieben. Dieselbe Einstellung steht als Haken im Reiter „Ausdrucke/Export“ (Kapitel 9). |
+
+Das Menü „Ansicht“ stellt Hintergrund, Akzentfarbe und Schriftgröße ein. Unabhängig von den Schaltern fragt das Programm beim **Beenden** nach, wenn gerade Teilnehmer gelöscht wurden und „Rückgängig“ das noch zurücknehmen könnte.
 
 ### Bedienung ohne Maus und mit Bildschirmleser
 

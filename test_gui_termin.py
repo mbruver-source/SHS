@@ -2532,3 +2532,27 @@ def test_sicherung_vor_loeschen_nur_per_schalter(qtbot, termin, monkeypatch):
     assert desktop_gemeinsam._sicherung_vor_loeschen_lesen()
     tab._teilnehmer_loeschen()
     assert aufrufe == [{"ohne_mindestabstand": True}]
+
+
+def test_ohne_nachfrage_menue_und_reiter_bleiben_gleich(qtbot, termin):
+    """Marco 12.11.2026: „Dateien ohne Nachfrage speichern“ steht im Menü „Einstellungen“ und im
+    Reiter „Ausdrucke/Export“ - beides ist dieselbe, gespeicherte Einstellung."""
+    from desktop_gemeinsam import _ohne_nachfrage_lesen
+
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    aktion, kaestchen = fenster._ohne_nachfrage_action, fenster.export_tab.ohne_nachfrage_check
+    assert not aktion.isChecked() and not kaestchen.isChecked() and not _ohne_nachfrage_lesen()
+
+    aktion.setChecked(True)  # Menü -> Reiter und Speicher
+    assert kaestchen.isChecked() and _ohne_nachfrage_lesen()
+    kaestchen.setChecked(False)  # Reiter -> Menü und Speicher
+    assert not aktion.isChecked() and not _ohne_nachfrage_lesen()
+
+    kaestchen.setChecked(True)
+    fenster._termin_setzen(conn, pfad)  # neue Reiter lesen die Einstellung und bleiben mit dem Menü verbunden
+    neu = fenster.export_tab.ohne_nachfrage_check
+    assert neu is not kaestchen and neu.isChecked() and aktion.isChecked()
+    aktion.setChecked(False)
+    assert not neu.isChecked() and not _ohne_nachfrage_lesen()

@@ -100,6 +100,8 @@ from desktop_darstellung import (
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
+    _ohne_nachfrage_lesen,
+    _ohne_nachfrage_speichern,
     _sicherung_vor_loeschen_lesen,
     _sicherung_vor_loeschen_speichern,
     _fehlertext,
@@ -325,6 +327,17 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._sicherung_vor_loeschen_action.setToolTip(
             "Legt vor jedem Löschen eine Kopie des Termins im Ordner „Auto-Sicherung“ an "
             "(die letzten 10 je Termin).")
+        # Marco 12.11.2026: dieselbe Einstellung wie das Kästchen im Reiter „Ausdrucke/Export“,
+        # damit alle Schalter an einem Ort zu finden sind; beide bleiben gleich (siehe
+        # _ohne_nachfrage_aus_menue / _ohne_nachfrage_vom_reiter).
+        self._ohne_nachfrage_action = einstellungen_menue.addAction(
+            "Dateien ohne Nachfrage im Ablageort speichern")
+        self._ohne_nachfrage_action.setCheckable(True)
+        self._ohne_nachfrage_action.setChecked(_ohne_nachfrage_lesen())
+        self._ohne_nachfrage_action.setToolTip(
+            "Gilt für alle Reiter mit PDF-Export. Der Dateiname kommt aus dem Vorschlag; eine "
+            "vorhandene Datei wird nie überschrieben, sondern bekommt „ (2)“ im Namen.")
+        self._ohne_nachfrage_action.toggled.connect(self._ohne_nachfrage_aus_menue)
         # UX-Test 2026-11, T9: Die Update-Suche stand nur hinter dem Knopf „Version …“ - Werner
         # suchte sie in einem Menü.
         hilfe_menue = self.menuBar().addMenu("&Hilfe")
@@ -680,10 +693,24 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             self._tabs.blockSignals(False)
         self.verwaltung_tab.veranstaltung_geaendert.connect(self._titel_aktualisieren)
         self.teilnehmer_tab.teilnehmer_geaendert.connect(self._kopf_aktualisieren)
+        self.export_tab.ohne_nachfrage_check.toggled.connect(self._ohne_nachfrage_vom_reiter)
+        self._ohne_nachfrage_action.setChecked(self.export_tab.ohne_nachfrage_check.isChecked())
         self.setWindowTitle(fenstertitel)
         self._kopf_aktualisieren()
 
         self._vorheriger_tab_index = 0
+
+    def _ohne_nachfrage_aus_menue(self, an: bool) -> None:
+        """Menü „Einstellungen“ geändert: speichern und das Kästchen im Reiter angleichen."""
+        _ohne_nachfrage_speichern(an)
+        kaestchen = self.export_tab.ohne_nachfrage_check
+        if kaestchen.isChecked() != an:
+            kaestchen.setChecked(an)
+
+    def _ohne_nachfrage_vom_reiter(self, an: bool) -> None:
+        """Kästchen im Reiter geändert (es speichert selbst): Menüeintrag angleichen."""
+        if self._ohne_nachfrage_action.isChecked() != an:
+            self._ohne_nachfrage_action.setChecked(an)
 
     def _titel_aktualisieren(self) -> None:
         """Fenstertitel aus Verein und Datum; fehlt der Verein (fremde Datei), der Dateiname

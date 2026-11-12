@@ -421,6 +421,16 @@ def teilnehmer_sichern(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | N
     ergebnis = conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
     return {"teilnehmer": dict(row), "ergebnis": dict(ergebnis) if ergebnis else None}
 
+
+def fehlende_teilnehmer(quelle: sqlite3.Connection, conn: sqlite3.Connection) -> list[dict]:
+    """Teilnehmer der Kopie `quelle` (z. B. aus „Auto-Sicherung“), die im Termin `conn` fehlen
+    (Marco 12.11.2026: gelöschten Teilnehmer aus der Sicherung zurückholen). Verglichen wird die
+    ID: sie wird nie neu vergeben (AUTOINCREMENT), eine fehlende ID ist also ein gelöschter
+    Teilnehmer. Sortiert nach Nachname, Vorname."""
+    vorhandene = {row["id"] for row in conn.execute("SELECT id FROM teilnehmer")}
+    zeilen = quelle.execute("SELECT * FROM teilnehmer ORDER BY nachname, vorname, id").fetchall()
+    return [dict(z) for z in zeilen if z["id"] not in vorhandene]
+
 @_mit_rollback
 def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bool:
     """Legt einen mit teilnehmer_sichern() gesicherten Teilnehmer wieder an (gleiche ID, mit

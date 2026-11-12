@@ -31,6 +31,7 @@ from desktop_dialoge_teilnehmer import (  # noqa: F401
 )
 from desktop_dialoge_termin import (  # noqa: F401
     SicherungErstellenDialog,
+    SicherungTeilnehmerDialog,
     TerminImportDialog,
     VeranstaltungsDialog,
     _gleicher_pfad,
