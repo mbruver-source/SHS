@@ -170,7 +170,8 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
   Verzweigungen im Code für "welche Datenbank".
 - **Automatische Kopie des Termins (Desktop, SQLite)**: `db_sicherung.auto_sicherung_erstellen`
   sichert den geöffneten Termin per SQLite-`backup` nach `Auto-Sicherung` (neben `Termine`), beim
-  Öffnen (Mindestabstand 10 Minuten) und beim Beenden (immer), je Termin die letzten 10; eine
+  Öffnen (Mindestabstand 10 Minuten), beim Beenden (immer) und - nur bei eingeschaltetem Schalter
+  im Menü „Einstellungen“ - vor jedem Löschen von Teilnehmern, je Termin die letzten 10; eine
   misslungene Kopie wird gelöscht, Fehler stören nie. Aktiv nur im echten Lauf
   (`HauptFenster.auto_sicherung_aktiv`), nicht in Tests/Demo/PostgreSQL. Liegt der Termin auf
   USB-Stick oder Netzlaufwerk (`desktop_gemeinsam.laufwerksart`), weist `laufwerk_hinweis_zeigen`

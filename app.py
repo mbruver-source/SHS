@@ -100,6 +100,8 @@ from desktop_darstellung import (
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
+    _sicherung_vor_loeschen_lesen,
+    _sicherung_vor_loeschen_speichern,
     _fehlertext,
     _klartext_fehler,
     fehler_protokollieren,
@@ -312,6 +314,17 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             ansicht_menue.addMenu("Schriftgröße"), _SCHRIFTSTUFEN, _gespeicherte_schriftstufe_lesen(),
             self._schrift_aktion_ausgeloest,
         )
+        # Marco 12.11.2026: Wer weiß, was er tut, soll nicht bei jedem Löschen gebremst werden -
+        # die Sicherung vor dem Löschen ist deshalb ein Schalter (Standard aus).
+        einstellungen_menue = self.menuBar().addMenu("&Einstellungen")
+        self._sicherung_vor_loeschen_action = einstellungen_menue.addAction(
+            "Vor dem Löschen von Teilnehmern eine Sicherung anlegen")
+        self._sicherung_vor_loeschen_action.setCheckable(True)
+        self._sicherung_vor_loeschen_action.setChecked(_sicherung_vor_loeschen_lesen())
+        self._sicherung_vor_loeschen_action.toggled.connect(_sicherung_vor_loeschen_speichern)
+        self._sicherung_vor_loeschen_action.setToolTip(
+            "Legt vor jedem Löschen eine Kopie des Termins im Ordner „Auto-Sicherung“ an "
+            "(die letzten 10 je Termin).")
         # UX-Test 2026-11, T9: Die Update-Suche stand nur hinter dem Knopf „Version …“ - Werner
         # suchte sie in einem Menü.
         hilfe_menue = self.menuBar().addMenu("&Hilfe")
@@ -560,6 +573,16 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                     "vorherige Meldung).\n\nProgramm trotzdem beenden und diese ungespeicherten "
                     "Änderungen verwerfen?",
                 )
+        # Marco 12.11.2026: Ein Löschen lässt sich nach dem Beenden nicht mehr zurücknehmen
+        # („Rückgängig“ gilt nur bis dahin). Gefragt wird nur, solange es noch offen ist - nicht
+        # bei jedem Beenden - und nie beim Beenden durch Windows/Setup (keine Meldungsfenster).
+        if rueckfrage_moeglich and self.teilnehmer_tab.loeschung_noch_rueckgaengig():
+            return _ja_nein(
+                self,
+                "Beenden nach dem Löschen",
+                "Du hast Teilnehmer gelöscht. Nach dem Beenden lässt sich das nicht mehr "
+                "rückgängig machen.\n\nProgramm trotzdem beenden?",
+            )
         return True
 
     def _sitzungsende_pruefen(self, manager) -> None:

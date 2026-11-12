@@ -253,6 +253,21 @@ def _ohne_nachfrage_speichern(an: bool) -> None:
         _OHNE_NACHFRAGE_SCHLUESSEL, bool(an))
 
 
+_SICHERUNG_VOR_LOESCHEN_SCHLUESSEL = "teilnehmer/sicherung_vor_loeschen"
+
+
+def _sicherung_vor_loeschen_lesen() -> bool:
+    """Schalter „Vor dem Löschen eine Sicherung anlegen“ (Marco 12.11.2026), Standard aus."""
+    wert = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).value(
+        _SICHERUNG_VOR_LOESCHEN_SCHLUESSEL, False)
+    return wert in (True, "true", "True", 1, "1")
+
+
+def _sicherung_vor_loeschen_speichern(an: bool) -> None:
+    QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP).setValue(
+        _SICHERUNG_VOR_LOESCHEN_SCHLUESSEL, bool(an))
+
+
 def _freier_dateipfad(pfad: str) -> str:
     """Hängt „ (2)“, „ (3)“ … an den Dateinamen, solange die Datei schon existiert - ohne
     Nachfrage wird nie eine vorhandene Datei überschrieben."""

@@ -75,6 +75,7 @@ from desktop_gemeinsam import (
     _name_passt,
     _db_fehler_anzeigen,
     _ja_nein,
+    _sicherung_vor_loeschen_lesen,
     _fehler_anzeigen,
     _NumerischSortierbaresItem,
     _PruefungSortierbaresItem,
@@ -289,6 +290,7 @@ class TeilnehmerTab(QWidget):
         # zurücknehmen - eine Ebene „Rückgängig“ (Strg+Z in diesem Reiter).
         self.rueckgaengig_btn = QPushButton("Rückgängig")
         self._rueckgaengig = RueckgaengigSpeicher(self.rueckgaengig_btn)
+        self._loeschung_rueckgaengig_offen = False
         self.rueckgaengig_btn.clicked.connect(self._rueckgaengig_ausfuehren)
         rueckgaengig_kuerzel = QShortcut(QKeySequence.Undo, self)
         rueckgaengig_kuerzel.setContext(Qt.WidgetWithChildrenShortcut)
@@ -786,6 +788,12 @@ class TeilnehmerTab(QWidget):
         # Desktop-Prüfung 14.10.2026 (Teil 1 Nr. 3): Vorgabe „Nein“ - sonst löschte
         # Strg+A, „Löschen“, Enter alle sichtbaren Teilnehmer.
         if _ja_nein(self, "Teilnehmer löschen", frage):
+            if _sicherung_vor_loeschen_lesen():
+                # Schalter im Menü „Einstellungen“ (Marco 12.11.2026): Kopie des Termins vor dem
+                # Löschen; das Hauptfenster legt sie nur im echten Programmlauf an.
+                sichern = getattr(self.window(), "auto_sicherung_anlegen", None)
+                if sichern is not None:
+                    sichern(ohne_mindestabstand=True)
             geloescht: list = []  # gesichert, bevor gelöscht wird - auch bei einem Abbruch mittendrin
             try:
                 for t in teilnehmer:
@@ -799,15 +807,22 @@ class TeilnehmerTab(QWidget):
                 self._rueckgaengig_merken(
                     f"Löschen von {len(geloescht)} Teilnehmer(n)" if len(geloescht) > 1
                     else f"Löschen von „{geloescht[0]['teilnehmer']['nachname']}“",
-                    lambda: self._teilnehmer_zurueckholen(geloescht))
+                    lambda: self._teilnehmer_zurueckholen(geloescht), loeschung=True)
             self.aktualisieren()
 
-    def _rueckgaengig_merken(self, beschreibung: str, aktion) -> None:
+    def _rueckgaengig_merken(self, beschreibung: str, aktion, loeschung: bool = False) -> None:
         """Merkt die letzte rückgängig zu machende Aktion (eine Ebene, Marco 10.11.2026)."""
         self._rueckgaengig.merken(beschreibung, aktion)
+        self._loeschung_rueckgaengig_offen = loeschung
+
+    def loeschung_noch_rueckgaengig(self) -> bool:
+        """True, solange die gemerkte Aktion ein Löschen ist (das Hauptfenster fragt dann beim
+        Beenden nach, Marco 12.11.2026: danach lässt es sich nicht mehr zurücknehmen)."""
+        return self._loeschung_rueckgaengig_offen and self.rueckgaengig_btn.isEnabled()
 
     def _rueckgaengig_ausfuehren(self) -> None:
         eintrag = self._rueckgaengig.entnehmen()
+        self._loeschung_rueckgaengig_offen = False
         if eintrag is None:
             return
         beschreibung, aktion = eintrag

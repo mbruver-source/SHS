@@ -2460,3 +2460,75 @@ def test_hauptfenster_sicherung_beim_beenden_ohne_abstand_und_hinweis(qtbot, ter
     fenster._demo_termin = True
     fenster.laufwerk_hinweis_zeigen()
     assert len(meldungen) == 1  # in der Demo kein Hinweis
+
+
+def _fenster_mit_teilnehmer(qtbot, termin):
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    tab = fenster.teilnehmer_tab
+    tab.show()
+    tab.tabelle.selectRow(0)
+    return fenster, tab
+
+
+def test_beenden_fragt_nach_loeschen_solange_rueckgaengig_offen(qtbot, termin, monkeypatch):
+    """Marco 12.11.2026: Rückfrage beim Beenden nur, solange ein Löschen noch zurückgenommen werden kann."""
+    fenster, tab = _fenster_mit_teilnehmer(qtbot, termin)
+    fragen = []
+    antwort = {"ja": True}
+    ueberall_ersetzen(monkeypatch, "_ja_nein", lambda parent, titel, text: fragen.append(titel) or antwort["ja"])
+
+    # Ohne Löschen: keine Rückfrage (Wissende werden nicht genervt).
+    assert fenster._beenden_vorbereiten() is True and fragen == []
+
+    tab._teilnehmer_loeschen()  # „Teilnehmer löschen“ bestätigt (Ersatz oben)
+    assert tab.loeschung_noch_rueckgaengig()
+    fragen.clear()
+    antwort["ja"] = False
+    assert fenster._beenden_vorbereiten() is False and fragen == ["Beenden nach dem Löschen"]
+    antwort["ja"] = True
+    assert fenster._beenden_vorbereiten() is True
+
+    # Beim Beenden durch Windows/Setup keine Rückfrage und kein Blockieren.
+    fragen.clear()
+    assert fenster._beenden_vorbereiten(rueckfrage_moeglich=False) is True and fragen == []
+
+    # Nach „Rückgängig“ oder einer anderen Aktion ist nichts mehr offen.
+    tab._rueckgaengig_ausfuehren()
+    assert not tab.loeschung_noch_rueckgaengig()
+    fragen.clear()
+    assert fenster._beenden_vorbereiten() is True and fragen == []
+
+
+def test_andere_aktion_ersetzt_geloeschten_vermerk(qtbot, termin, monkeypatch):
+    fenster, tab = _fenster_mit_teilnehmer(qtbot, termin)
+    ueberall_ersetzen(monkeypatch, "_ja_nein", lambda *a, **k: True)
+    tab._teilnehmer_loeschen()
+    assert tab.loeschung_noch_rueckgaengig()
+    tab._rueckgaengig_merken("Anderes", lambda: "")
+    assert not tab.loeschung_noch_rueckgaengig()
+
+
+def test_sicherung_vor_loeschen_nur_per_schalter(qtbot, termin, monkeypatch):
+    """Marco 12.11.2026: Schalter im Menü „Einstellungen“, Standard aus."""
+    import desktop_gemeinsam
+
+    fenster, tab = _fenster_mit_teilnehmer(qtbot, termin)
+    aufrufe = []
+    monkeypatch.setattr(fenster, "auto_sicherung_anlegen", lambda **kw: aufrufe.append(kw))
+    ueberall_ersetzen(monkeypatch, "_ja_nein", lambda *a, **k: True)
+    action = fenster._sicherung_vor_loeschen_action
+    assert action.isCheckable() and not action.isChecked()  # Standard aus
+    assert not desktop_gemeinsam._sicherung_vor_loeschen_lesen()
+
+    tab._teilnehmer_loeschen()
+    assert aufrufe == []  # Schalter aus: keine Sicherung, keine Bremse
+
+    tab._rueckgaengig_ausfuehren()
+    tab.tabelle.selectRow(0)
+    action.setChecked(True)  # speichert die Einstellung
+    assert desktop_gemeinsam._sicherung_vor_loeschen_lesen()
+    tab._teilnehmer_loeschen()
+    assert aufrufe == [{"ohne_mindestabstand": True}]

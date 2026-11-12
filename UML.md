@@ -341,6 +341,7 @@ stateDiagram-v2
     state Schliessen {
         [*] --> AutoSpeichern : ungespeicherte Ergebnisse
         [*] --> Ende : nichts offen
+        [*] --> Nachfrage : Löschen noch rückgängig (nur Fenster-X, nicht Windows/Setup)
         AutoSpeichern --> Ende : alles gespeichert
         AutoSpeichern --> Nachfrage : Zeile nicht speicherbar
         Nachfrage --> Ende : „Ja, verwerfen“
