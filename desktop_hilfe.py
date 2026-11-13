@@ -233,6 +233,8 @@ Der Knopf zeigt bei eingeschaltetem Schalter nur diese Kopien vor dem Löschen, 
 "Ergebnisse aus automatischer Kopie wiederherstellen…" (hier im Reiter "Datensicherung") zeigt alle Kopien des
 geöffneten Termins und setzt per Haken einzelne Ergebniswerte (eine Disziplin, Disqualifiziert, Abbruch,
 Stechen-Sieger) auf den Stand der Kopie zurück; die jetzigen Werte werden dabei überschrieben.
+Passen Verein oder Datum einer Kopie nicht zum Termin, steht das in der Liste ("Verein/Datum weichen ab"),
+die Kopie wird nie vorgewählt, und beim Übernehmen fragt das Programm nach (so auch bei "Aus Sicherung holen…").
 Liegt ein Termin auf einem Wechseldatenträger (USB-Stick, SD-Karte) oder Netzlaufwerk, weist das Programm
 beim Start und beim Terminwechsel darauf hin, ihn nicht abzuziehen. Externe USB-Festplatten meldet Windows
 als feste Platte, dafür erscheint kein Hinweis.</p>

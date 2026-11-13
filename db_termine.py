@@ -108,6 +108,9 @@ GRUND_ZU_GROSS = "zu groß"
 
 GRUND_ZU_AUFWENDIG = "zu aufwendig zu prüfen"
 
+# Sicherheitskorrektur D-2: neben der Datei liegt ein Journal, das das Programm nicht verarbeitet.
+GRUND_JOURNAL = "mit einer unbekannten Journal-Datei verbunden"
+
 SCHRITTGRENZE_TEXT = (
     "Die Datei ist zu groß bzw. zu aufwendig zu prüfen. Sie stammt vermutlich nicht aus "
     "diesem Programm und wird deshalb nicht gelesen."
@@ -428,6 +431,8 @@ def liste_termine(ordner: Path | None = None) -> list[TerminInfo]:
                 grund = GRUND_ZU_GROSS
             elif ist_schrittgrenze(exc):
                 grund = GRUND_ZU_AUFWENDIG
+            elif isinstance(exc, JournalMitVerweis):
+                grund = GRUND_JOURNAL
             else:
                 grund = None
             ergebnisse.append(TerminInfo(

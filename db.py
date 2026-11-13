@@ -259,6 +259,7 @@ from db_zeitplan import (  # noqa: F401
 from db_termine import (  # noqa: F401
     dateiname_slug,
     dateiname_vorschlagen,
+    GRUND_JOURNAL,
     GRUND_ZU_AUFWENDIG,
     GRUND_ZU_GROSS,
     ist_schrittgrenze,

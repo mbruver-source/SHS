@@ -548,6 +548,12 @@ Knopf gibt es auch im Reiter „Teilnehmer“).
 Pflicht sind Nachname, Vorname, Rufname des Hundes, Art (ED oder DK), Leistungsklasse (1–3) und
 bei ED die Disziplin (Trümmerfeld, Flächensuche oder Behältnisstrecke).
 
+**Grenzen beim Einlesen:** Listen (CSV, OMA) dürfen höchstens 2 MB, ausgefüllte Anmeldeformulare
+(PDF) höchstens 5 MB groß sein; größere Dateien werden mit einer Meldung abgelehnt. Textfelder haben
+Höchstlängen (Namen 100, übrige Texte 200, E-Mail 254, Nummern 40 Zeichen; Schulterhöhe 1 bis
+100 cm). Eine Zeile mit einem zu langen Wert wird mit dem Feldnamen als Fehler gemeldet, der Rest der
+Datei wird importiert. Dasselbe gilt für Eingaben im Teilnehmer-Dialog und für Veranstaltungsdaten.
+
 **Wichtig bei Excel:** Excel zeigt lange Nummern als „2,76E+14“ und entfernt führende Nullen –
 beim Speichern sind die Ziffern dann verloren. Formatiere die Spalten `chip_nr`, `plz`,
 `telefon` und `mitgliedsnummer` deshalb **vor dem Ausfüllen als „Text“** (Spalte markieren →
@@ -951,6 +957,11 @@ Ordner „Ausdrucke“ gehören nicht dazu – sie lassen sich jederzeit neu erz
   Nichts ist vorangekreuzt. Vor dem Überschreiben fragt das Programm nach; die jetzigen Werte lassen
   sich danach **nicht** zurückholen. Gelöschte Teilnehmer holst du im Reiter Teilnehmer mit „Aus
   Sicherung holen…“. Der Knopf ist bei PostgreSQL gesperrt (dort gibt es keine Kopien).
+  Passen Verein oder Datum einer Kopie nicht zum geöffneten Termin, steht in der Liste
+  „Verein/Datum weichen ab“, und über der Liste erscheint ein Hinweis. Eine solche Kopie wird nie
+  vorgewählt, und beim Übernehmen fragt das Programm nach (das gilt auch für „Aus Sicherung
+  holen…“). Enthält eine Kopie Werte, die das Programm nicht kennt, oder fremde Objekte, wird sie
+  als „nicht lesbar“ angezeigt bzw. nichts übernommen.
 
   ![Dialog „Ergebnisse aus automatischer Kopie wiederherstellen“: je Teilnehmer die abweichenden Werte, jetzt und in der Kopie, mit Haken](bilder/handbuch_ergebnisse_aus_kopie.png)
 

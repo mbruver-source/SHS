@@ -12,9 +12,10 @@ hilft bei der Fehlersuche beim Nutzer. Er berührt keine echten Termine: alles p
 einem Temp-Ordner, der danach gelöscht wird.
 
 Ergebnis: Exit-Code 0 (alles OK) bzw. 1, dazu eine Protokolldatei (die EXE hat keine
-Konsole) - Standard: %TEMP%\\shs_selbsttest.log, unter macOS/Linux im System-Temp-Ordner
-(z. B. /tmp/shs_selbsttest.log). Unter macOS und Linux startet die CI damit die .app bzw. das
-AppImage und das installierte .deb-Paket.
+Konsole) - Standard: %TEMP%\\shs_selbsttest.log, unter macOS/Linux im eigenen Benutzerordner
+(~/shs_selbsttest.log; der gemeinsame Temp-Ordner /tmp ist dafür ungeeignet, Sicherheitskorrektur
+P-1). Unter macOS und Linux startet die CI damit die .app bzw. das AppImage und das installierte
+.deb-Paket (immer mit ausdrücklichem Pfad).
 """
 from __future__ import annotations
 
@@ -31,7 +32,12 @@ SELBSTTEST_ZEITGRENZE_S = 300
 
 
 def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
-    protokoll = Path(protokoll_pfad or Path(tempfile.gettempdir()) / "shs_selbsttest.log")
+    if protokoll_pfad:
+        protokoll = Path(protokoll_pfad)
+    elif os.name == "nt":
+        protokoll = Path(tempfile.gettempdir()) / "shs_selbsttest.log"  # der Windows-Temp-Ordner gehört dem Benutzer
+    else:
+        protokoll = Path.home() / "shs_selbsttest.log"  # /tmp wäre für alle Benutzer beschreibbar (P-1)
     zeilen: list[str] = []
     fehler = 0
 

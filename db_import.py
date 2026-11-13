@@ -396,6 +396,19 @@ def _excel_verdacht(zeile: dict, bezeichnung: str) -> list[str]:
 CSV_PFLICHTSPALTEN = ["nachname", "vorname", "rufname_hund", "art", "stufe"]
 
 
+# Sicherheitskorrektur I-9: Größengrenzen vor dem Lesen. Eine Meldeliste mit tausend Teilnehmern ist
+# rund 300 KB groß, ein ausgefülltes Anmeldeformular unter 1 MB; größere Dateien sind keine solchen
+# und würden das Fenster lange festhalten.
+MAX_LISTE_BYTES = 2 * 1024 * 1024
+MAX_FORMULAR_BYTES = 5 * 1024 * 1024
+
+
+def _zu_gross_text(groesse: int, hoechstens: int, art: str) -> str:
+    megabyte = f"{groesse / (1024 * 1024):.1f}".replace(".", ",")
+    return (f"Die Datei ist zu groß ({megabyte} MB, höchstens {hoechstens // (1024 * 1024)} MB) - "
+            f"das ist keine {art} dieses Programms.")
+
+
 def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImportErgebnis:
     """Liest eine CSV-Datei (Kopfzeile mit Spaltennamen aus CSV_IMPORT_SPALTEN - zusätzliche
     oder fehlende optionale Spalten werden toleriert, fehlen Pflichtspalten
@@ -425,6 +438,9 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
     # UX-Test 02.10.2026, U10/N1: Excel speichert auf deutschem Windows mit Semikolon und
     # (bei "CSV (Trennzeichen-getrennt)") in Windows-1252 - beides wird jetzt erkannt,
     # statt mit "nicht UTF-8-kodiert" abzubrechen (wie beim OMA-Import).
+    groesse = os.path.getsize(pfad)
+    if groesse > MAX_LISTE_BYTES:
+        return CsvImportErgebnis(importiert=0, fehler=[], abbruch=_zu_gross_text(groesse, MAX_LISTE_BYTES, "Meldeliste"))
     with open(pfad, "rb") as datei:
         rohdaten = datei.read()
     if rohdaten[:2] in (b"\xff\xfe", b"\xfe\xff"):
@@ -595,6 +611,10 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
 
     Kodierung: die OMA liefert Windows-1252; UTF-8 (auch mit BOM) wird ebenfalls erkannt.
     Zeilennummern in den Meldungen beziehen sich auf die Datei (inkl. Metazeile/Kopf)."""
+    groesse = os.path.getsize(pfad)
+    if groesse > MAX_LISTE_BYTES:
+        return CsvImportErgebnis(importiert=0, fehler=[
+            _zu_gross_text(groesse, MAX_LISTE_BYTES, "OMA-Liste") + " Es wurde nichts importiert."])
     with open(pfad, "rb") as datei:
         rohdaten = datei.read()
     if rohdaten[:2] in (b"\xff\xfe", b"\xfe\xff"):
@@ -880,6 +900,14 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
     importiert = 0
     for pfad in pfade:
         name = os.path.basename(pfad)
+        try:
+            groesse = os.path.getsize(pfad)
+        except OSError as exc:
+            fehler.append(f"{name}: Datei konnte nicht gelesen werden ({exc.strerror or exc})")
+            continue
+        if groesse > MAX_FORMULAR_BYTES:
+            fehler.append(f"{name}: {_zu_gross_text(groesse, MAX_FORMULAR_BYTES, 'Anmeldeformular')}")
+            continue
         try:
             werte = _pdf_feldwerte(pfad)
         except ImportError:

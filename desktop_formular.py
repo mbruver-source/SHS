@@ -35,6 +35,7 @@ from db_import import (
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
+    _wartecursor,
     _klartext_fehler,
     _Ablageort,
     _anmeldeformular_pdf_speichern,
@@ -303,7 +304,8 @@ class FormularImportTab(QWidget):
         vorher = _teilnehmerzahl(self.conn)
         vorher_ohne = _ohne_startnummer_ids(self.conn)
         try:
-            ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
+            with _wartecursor():
+                ergebnis = importiere_teilnehmer_aus_oma(self.conn, pfad)
         except OSError as exc:
             QMessageBox.warning(self, "Import fehlgeschlagen",
                                 f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
@@ -333,7 +335,8 @@ class FormularImportTab(QWidget):
         vorher = _teilnehmerzahl(self.conn)
         vorher_ohne = _ohne_startnummer_ids(self.conn)
         try:
-            ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
+            with _wartecursor():
+                ergebnis = importiere_anmeldeformular_pdf(self.conn, pfade)
         except sqlite3.Error as exc:
             _import_db_fehler_melden(self, exc, self.conn, vorher)
             self.aktualisieren()

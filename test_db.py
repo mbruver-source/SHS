@@ -1888,6 +1888,33 @@ class TestDatenbank(unittest.TestCase):
         self.assertIn("unvollständig", ergebnis.fehler[0])
         self.assertNotIn("Disziplin", ergebnis.fehler[0])
 
+    def test_import_lehnt_zu_grosse_dateien_vor_dem_lesen_ab(self):
+        """Sicherheitskorrektur I-9: Listen über 2 MB und Anmeldeformulare über 5 MB werden mit einer
+        Meldung abgelehnt, ohne sie zu lesen; kleinere Dateien laufen wie bisher."""
+        from db_import import (
+            MAX_FORMULAR_BYTES,
+            MAX_LISTE_BYTES,
+            importiere_anmeldeformular_pdf,
+            importiere_teilnehmer_aus_oma,
+        )
+        ordner = tempfile.mkdtemp()
+        self.addCleanup(lambda: [os.remove(os.path.join(ordner, n)) for n in os.listdir(ordner)] and os.rmdir(ordner))
+        csv_pfad, oma_pfad, pdf_pfad = (os.path.join(ordner, n) for n in ("liste.csv", "liste.txt", "formular.pdf"))
+        for pfad, groesse in ((csv_pfad, MAX_LISTE_BYTES + 1), (oma_pfad, MAX_LISTE_BYTES + 1),
+                              (pdf_pfad, MAX_FORMULAR_BYTES + 1)):
+            with open(pfad, "wb") as datei:
+                datei.write(b"x" * groesse)
+        csv_ergebnis = importiere_teilnehmer_aus_csv(self.conn, csv_pfad)
+        self.assertEqual(csv_ergebnis.importiert, 0)
+        self.assertIn("zu groß", csv_ergebnis.abbruch)
+        oma_ergebnis = importiere_teilnehmer_aus_oma(self.conn, oma_pfad)
+        self.assertEqual(oma_ergebnis.importiert, 0)
+        self.assertIn("zu groß", oma_ergebnis.fehler[0])
+        pdf_ergebnis = importiere_anmeldeformular_pdf(self.conn, [pdf_pfad])
+        self.assertEqual(pdf_ergebnis.importiert, 0)
+        self.assertIn("formular.pdf: Die Datei ist zu groß", pdf_ergebnis.fehler[0])
+        self.assertEqual(list_teilnehmer(self.conn), [])
+
     def test_importiere_teilnehmer_aus_csv_riesiges_feld_bricht_sauber_ab(self):
         # Gleicher Randfall im bestehenden Formular-CSV-Import: sauberer Abbruch statt
         # unbehandelter csv.Error.
@@ -3706,6 +3733,7 @@ class TestTerminOeffnen(unittest.TestCase):
         db._journal_zurueckspielen(pfad)
         eintraege = db.liste_termine(self.ordner)
         self.assertEqual([(t.dateiname, t.lesbar) for t in eintraege], [("t.sqlite", False)])
+        self.assertEqual(eintraege[0].grund, db.GRUND_JOURNAL)  # die Übersicht nennt den Grund
 
         self.assertEqual(journal.read_bytes(), journal_vorher)
         self.assertEqual(fremd.read_bytes(), b"erfundene Daten, keine Termin-Datei\n" * 20)

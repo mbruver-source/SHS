@@ -32,6 +32,7 @@ from db_import import (
     rat_bei_ablehnung,
 )
 from desktop_gemeinsam import (
+    _wartecursor,
     _klartext_fehler,
     _db_fehler_anzeigen,
     _ja_nein,
@@ -246,7 +247,8 @@ def _teilnehmerliste_importieren(parent, conn) -> None:
     vorher = _teilnehmerzahl(conn)
     vorher_ohne = _ohne_startnummer_ids(conn)
     try:
-        ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
+        with _wartecursor():
+            ergebnis = importiere_teilnehmer_aus_csv(conn, pfad)
     except OSError as exc:
         QMessageBox.warning(parent, "Import fehlgeschlagen",
                             f"Die Datei konnte nicht gelesen werden.\n\n{_klartext_fehler(exc)}")
