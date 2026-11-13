@@ -733,10 +733,12 @@ class TeilnehmerTab(QWidget):
                 elif ausgewaehlt:
                     vorher = _teilnehmerzahl(self.conn)
                     vorher_ohne = _ohne_startnummer_ids(self.conn)
+                    nicht_uebernommen: list[str] = []
                     try:
                         # Vor dem Import lesen: so gilt ein Lesefehler hier noch als Abbruch.
                         uebernommen = [t for t in (get_teilnehmer(quelle, i) for i in ausgewaehlt) if t is not None]
-                        anzahl = importiere_teilnehmer_stammdaten(quelle, self.conn, ausgewaehlt)
+                        anzahl = importiere_teilnehmer_stammdaten(
+                            quelle, self.conn, ausgewaehlt, fehler=nicht_uebernommen)
                     except sqlite3.Error as exc:
                         # Lese- oder Schreibfehler mitten im Import: bereits übernommene
                         # Teilnehmer bleiben (Commit je Teilnehmer) und sind nach dem
@@ -761,6 +763,8 @@ class TeilnehmerTab(QWidget):
                          "Veranstaltungsdaten anbieten:",
                          [f"{t['nachname']}, {t['vorname']} – {leistungsklasse_label(t)}" for t in fremde]),
                     ]
+                    if nicht_uebernommen:
+                        abschnitte.append((f"{len(nicht_uebernommen)} Teilnehmer nicht übernommen:", nicht_uebernommen))
                     _letzten_import_zeigen(self, _meldungstext_voll(einleitung, abschnitte))
                     _meldung_mit_listen(self, "Import abgeschlossen", einleitung, abschnitte)
                     if anzahl:

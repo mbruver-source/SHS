@@ -561,10 +561,16 @@ class TestPdfExport(unittest.TestCase):
             "nachname", "vorname", "rufname_hund", "verein", "zwingername", "rasse", "chip_nr",
             "strasse", "ort", "verband", "mitgliedsnummer", "email", "telefon", "gegenstand_1",
             "halter_vorname", "halter_nachname", "halter_ort", "halter_mitgliedsverein")}
+        # add_teilnehmer begrenzt die Länge der Felder (Sicherheitskorrektur I-5); die langen Markup-Werte
+        # kommen deshalb wie aus einer fremden Termin-Datei direkt in die Datenbank.
+        kurz = {f: "x" for f in text_werte}
         ed = add_teilnehmer(self.conn, NeuerTeilnehmer(
-            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1, **text_werte))
+            art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1, **kurz))
         dk = add_teilnehmer(self.conn, NeuerTeilnehmer(
-            art="DK", stufe=1, startnummer=2, **text_werte))
+            art="DK", stufe=1, startnummer=2, **kurz))
+        for feld, wert in text_werte.items():
+            self.conn.execute(f"UPDATE teilnehmer SET {feld} = ?", (wert,))
+        self.conn.commit()
         eintragen_ergebnis(self.conn, ed, "Trümmerfeld", 50, 30)
         richter = add_zeitplan_richter(self.conn, f"Richterin {markup}")
         add_zeitplan_pruefungsblock(self.conn, richter, "ED", 1, "Trümmerfeld", 10)

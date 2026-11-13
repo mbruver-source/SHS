@@ -323,6 +323,38 @@ def test_filter_bezahlt_blendet_zeilen_nach_status_aus(qtbot, conn):
     assert not tab.tabelle.isRowHidden(1)
 
 
+def test_teilnehmer_dialog_begrenzt_textfelder_und_schulterhoehe(qtbot):
+    """Sicherheitskorrektur I-5/I-1: dieselben Obergrenzen wie beim Import."""
+    from PySide6.QtWidgets import QLineEdit
+
+    from db import FELD_LAENGEN, SCHULTERHOEHE_MAX
+
+    dialog = TeilnehmerDialog(vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    geprueft = 0
+    for feld, hoechstens in FELD_LAENGEN.items():
+        eingabe = getattr(dialog, feld, None)
+        if isinstance(eingabe, QLineEdit):
+            assert eingabe.maxLength() == hoechstens, feld
+            geprueft += 1
+    assert geprueft >= 25
+    assert dialog.schulterhoehe.maximum() == SCHULTERHOEHE_MAX
+
+
+def test_teilnehmer_dialog_kuerzt_vorhandenen_langen_wert_nicht_still(qtbot, termin):
+    """Sicherheitskorrektur I-5: Ein schon vorhandener, längerer Wert bleibt beim Bearbeiten
+    erhalten (das Feld bleibt unbegrenzt), die übrigen Felder sind begrenzt."""
+    conn, _pfad = termin
+    tid = _teilnehmer_anlegen(conn, nachname="Kurz")
+    conn.execute("UPDATE teilnehmer SET nachname = ? WHERE id = ?", ("N" * 150, tid))
+    conn.commit()
+    dialog = TeilnehmerDialog(vorhandener=_db_modul.get_teilnehmer(conn, tid), vergebene_nummern=set())
+    qtbot.addWidget(dialog)
+    assert dialog.nachname.text() == "N" * 150
+    assert dialog.ergebnis().nachname == "N" * 150
+    assert dialog.vorname.maxLength() == 100
+
+
 def test_bezahlt_checkbox_im_teilnehmer_dialog(qtbot):
     dialog = TeilnehmerDialog(vergebene_nummern=set())
     qtbot.addWidget(dialog)

@@ -28,7 +28,9 @@ from PySide6.QtWidgets import (
 from db import (
     ALLE_DISZIPLINEN,
     ALLE_PRUEFUNGEN,
+    FELD_LAENGEN,
     NeuerTeilnehmer,
+    SCHULTERHOEHE_MAX,
     datum_anzeige,
     datum_oder_none,
     normalisiere_datum,
@@ -133,6 +135,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
                 self.stufe.setCurrentText(str(erste.stufe))
                 if erste.disziplin:
                     self.disziplin.setCurrentText(erste.disziplin)
+        self._laengen_begrenzen()
 
         # Stand beim Öffnen (X11: Bereichs-Rückfrage nur nach einer Änderung).
         self._gespeicherte_nummer_und_pruefung = (
@@ -182,7 +185,7 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         # Angabe starten statt still auf "Hündin" (siehe _GESCHLECHT_UNBEKANNT).
         self.geschlecht.addItems([_GESCHLECHT_UNBEKANNT, "Hündin", "Rüde"])
         self.schulterhoehe = QSpinBox()
-        self.schulterhoehe.setRange(0, 100)
+        self.schulterhoehe.setRange(0, SCHULTERHOEHE_MAX)
         self.chip_nr = QLineEdit()
         self.rasse = QLineEdit()
         self.wurftag = QLineEdit()
@@ -270,6 +273,15 @@ class TeilnehmerDialog(ResponsiveSchriftMixin, QDialog):
         self.halter_mitgliedsverein = QLineEdit()
         self.halter_mitgliedsnummer = QLineEdit()
         self.halter_lu_nr = QLineEdit()
+
+    def _laengen_begrenzen(self) -> None:
+        """Sicherheitskorrektur I-5: dieselben Obergrenzen wie beim Import (db.FELD_LAENGEN). Erst
+        nach der Vorbelegung gesetzt, und ein Feld mit einem schon vorhandenen, längeren Altwert
+        bleibt unbegrenzt: QLineEdit.setMaxLength würde den Wert sonst still kürzen."""
+        for feld, hoechstens in FELD_LAENGEN.items():
+            eingabe = getattr(self, feld, None)
+            if isinstance(eingabe, QLineEdit) and len(eingabe.text()) <= hoechstens:
+                eingabe.setMaxLength(hoechstens)
 
     def _layout_aufbauen(self) -> None:
         """Ordnet die in _felder_erstellen angelegten Widgets in Formularen/Gruppen an und

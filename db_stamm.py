@@ -161,8 +161,50 @@ class NeuerTeilnehmer:
     halter_mitgliedsnummer: str | None = None
     halter_lu_nr: str | None = None
 
+# Sicherheitskorrektur I-5/I-1: Obergrenzen für Textfelder und die Schulterhöhe. Ein einzelner
+# überlanger Wert (z. B. aus einem Formular oder einer CSV-Datei) darf keine Ausdrucke des ganzen
+# Termins verhindern. Über der Grenze wird die Meldung mit Feldname abgelehnt, nichts wird still
+# gekürzt. (Feldname im NeuerTeilnehmer, Anzeigename, höchstens Zeichen.)
+_FELD_LAENGEN: tuple[tuple[str, str, int], ...] = (
+    ("nachname", "Nachname", 100), ("vorname", "Vorname", 100), ("rufname_hund", "Rufname des Hundes", 100),
+    ("halter_vorname", "Vorname des Halters", 100), ("halter_nachname", "Nachname des Halters", 100),
+    ("verein", "Verein", 200), ("zwingername", "Zwingername", 200), ("rasse", "Rasse", 200),
+    ("verband", "Verband", 200), ("strasse", "Straße", 200), ("ort", "Ort", 200),
+    ("halter_strasse", "Straße des Halters", 200), ("halter_ort", "Ort des Halters", 200),
+    ("halter_mitgliedsverein", "Mitgliedsverein des Halters", 200),
+    ("gegenstand_1", "Gegenstand 1", 200), ("gegenstand_2", "Gegenstand 2", 200),
+    ("gegenstand_3", "Gegenstand 3", 200), ("email", "E-Mail", 254),
+    ("chip_nr", "Kennzeichnung", 40), ("mitgliedsnummer", "Mitgliedsnummer", 40),
+    ("wurftag", "Wurftag", 40), ("geburtsdatum", "Geburtsdatum", 40),
+    ("tollwutimpfung_bis", "Tollwutimpfung", 40), ("hausnummer", "Hausnummer", 40), ("plz", "PLZ", 40),
+    ("telefon", "Telefon", 40), ("geschlecht", "Geschlecht", 40),
+    ("halter_hausnummer", "Hausnummer des Halters", 40), ("halter_plz", "PLZ des Halters", 40),
+    ("halter_mitgliedsnummer", "Mitgliedsnummer des Halters", 40), ("halter_lu_nr", "LU-Nr. des Halters", 40),
+)
+FELD_LAENGEN: dict[str, int] = {feld: hoechstens for feld, _name, hoechstens in _FELD_LAENGEN}
+SCHULTERHOEHE_MIN = 1
+SCHULTERHOEHE_MAX = 100  # wie die Eingabe im Teilnehmer-Dialog
+
+def pruefe_teilnehmer_werte(t: NeuerTeilnehmer) -> None:
+    """Wirft ValueError mit einer für den Nutzer verständlichen Begründung, wenn ein Textfeld von `t`
+    die Obergrenze aus FELD_LAENGEN überschreitet, die Schulterhöhe außerhalb von 1 bis 100 cm liegt
+    oder eine Zahl nicht in die Datenbank passt (Sicherheitskorrektur I-5/I-1)."""
+    for feld, bezeichnung, hoechstens in _FELD_LAENGEN:
+        wert = getattr(t, feld)
+        if isinstance(wert, str) and len(wert) > hoechstens:
+            raise ValueError(f"{bezeichnung} ist zu lang (höchstens {hoechstens} Zeichen, hier {len(wert)})")
+    hoehe = t.schulterhoehe_cm
+    if hoehe is not None and not SCHULTERHOEHE_MIN <= hoehe <= SCHULTERHOEHE_MAX:
+        raise ValueError(f"Schulterhöhe {hoehe if abs(hoehe) < 10**6 else 'außerhalb des Bereichs'} ist ungültig "
+                         f"– bitte eine ganze Zahl von {SCHULTERHOEHE_MIN} bis {SCHULTERHOEHE_MAX} cm angeben")
+    for feld in ("startnummer", "stufe"):
+        wert = getattr(t, feld)
+        if isinstance(wert, int) and abs(wert) >= 2 ** 62:
+            raise ValueError(f"{feld} ist zu groß")
+
 @_mit_rollback
 def add_teilnehmer(conn: sqlite3.Connection, t: NeuerTeilnehmer) -> int:
+    pruefe_teilnehmer_werte(t)
     cur = conn.execute(
         """
         INSERT INTO teilnehmer (

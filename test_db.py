@@ -1230,6 +1230,60 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
 
+    def test_add_teilnehmer_lehnt_ueberlange_felder_ab(self):
+        """Sicherheitskorrektur I-5: Jedes Textfeld hat eine Obergrenze; darüber wird mit Feldname
+        abgelehnt (nichts wird still gekürzt), genau auf der Grenze geht es noch."""
+        import dataclasses
+
+        from db import FELD_LAENGEN
+        basis = NeuerTeilnehmer(nachname="A", vorname="B", rufname_hund="H", art="DK", stufe=1)
+        for feld, hoechstens in FELD_LAENGEN.items():
+            with self.subTest(feld=feld):
+                if feld != "geschlecht":  # dort lässt die CHECK-Regel nur zwei Werte zu
+                    add_teilnehmer(self.conn, dataclasses.replace(basis, **{feld: "x" * hoechstens}))
+                with self.assertRaises(ValueError) as fehler:
+                    add_teilnehmer(self.conn, dataclasses.replace(basis, **{feld: "x" * (hoechstens + 1)}))
+                self.assertIn("zu lang", str(fehler.exception))
+        self.assertEqual(len(list_teilnehmer(self.conn)), len(FELD_LAENGEN) - 1)
+
+    def test_add_teilnehmer_prueft_schulterhoehe_und_zu_grosse_zahlen(self):
+        """Sicherheitskorrektur I-1: Schulterhöhe nur 1 bis 100 cm, riesige Zahlen werden abgelehnt
+        statt in der Datenbank zu scheitern."""
+        basis = {"nachname": "A", "vorname": "B", "rufname_hund": "H", "art": "DK", "stufe": 1}
+        for wert in (0, -1, 101, 10 ** 40):
+            with self.subTest(schulterhoehe=wert), self.assertRaises(ValueError):
+                add_teilnehmer(self.conn, NeuerTeilnehmer(schulterhoehe_cm=wert, **basis))
+        with self.assertRaises(ValueError):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(startnummer=10 ** 40, **basis))
+        for wert in (None, 1, 100):
+            add_teilnehmer(self.conn, NeuerTeilnehmer(schulterhoehe_cm=wert, **basis))
+        self.assertEqual(len(list_teilnehmer(self.conn)), 3)
+
+    def test_csv_import_lehnt_ueberlange_werte_und_riesige_schulterhoehe_je_zeile_ab(self):
+        """Sicherheitskorrektur I-5/I-1: Eine solche Zeile ist nur ihr eigener Fehler, der Rest wird
+        importiert (vorher brach eine riesige Schulterhöhe den ganzen Import ab)."""
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin,schulterhoehe_cm\n"
+                "Gut,Erster,Hund1,DK,1,,45\n"
+                f"{'N' * 101},Zweiter,Hund2,DK,1,,\n"
+                "Gut,Dritter,Hund3,DK,1,,1" + "0" * 40 + "\n"
+                "Gut,Vierter,Hund4,DK,1,,0\n"
+                "Gut,Fuenfter,Hund5,DK,1,,101\n"
+                "Gut,Sechster,Hund6,DK,1,,100\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual(ergebnis.importiert, 2)
+        self.assertEqual(len(ergebnis.fehler), 4)
+        self.assertIn("zu lang", ergebnis.fehler[0])
+        for fehler in ergebnis.fehler[1:]:
+            self.assertIn("Schulterhöhe", fehler)
+
     def test_importiere_teilnehmer_aus_csv_ueberspringt_ungueltiges_geschlecht(self):
         # Regression: geschlecht wurde bisher nicht validiert, sodass ein von einer KI
         # gelieferter Wert wie "weiblich" statt "Hündin"/"Rüde" eine sqlite3.IntegrityError
@@ -4110,6 +4164,25 @@ class TestTerminImportStammdaten(unittest.TestCase):
         with closing(termin_oeffnen(self.ziel_pfad)) as conn:
             self.assertEqual(len(list_teilnehmer(conn)), 1)
         self.ziel = init_db(self.ziel_pfad)
+
+    def test_ueberlange_altwerte_der_quelle_werden_gemeldet_statt_den_import_abzubrechen(self):
+        """Sicherheitskorrektur I-5/I-1: Ein Teilnehmer der Quelle mit zu langem Wert oder
+        unzulässiger Schulterhöhe wird als Fehlerzeile gemeldet, die übrigen werden importiert;
+        ohne Fehlerliste wird die Ausnahme weitergereicht."""
+        ids = [add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname=name, vorname="Anna", rufname_hund="Rex", art="DK", stufe=1))
+            for name in ("Gut", "Lang", "Hoch", "Gut2")]
+        self.quelle.execute("UPDATE teilnehmer SET nachname = ? WHERE id = ?", ("N" * 150, ids[1]))
+        self.quelle.execute("UPDATE teilnehmer SET schulterhoehe_cm = 150 WHERE id = ?", (ids[2],))
+        self.quelle.commit()
+        fehler: list[str] = []
+        self.assertEqual(importiere_teilnehmer_stammdaten(self.quelle, self.ziel, ids, fehler=fehler), 2)
+        self.assertEqual(len(fehler), 2)
+        self.assertIn("zu lang", fehler[0])
+        self.assertIn("Schulterhöhe", fehler[1])
+        self.assertEqual(len(list_teilnehmer(self.ziel)), 2)
+        with self.assertRaises(ValueError):
+            importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [ids[1]])
 
     def test_importiert_nur_ausgewaehlte_teilnehmer_mit_stammdaten(self):
         a = add_teilnehmer(self.quelle, NeuerTeilnehmer(

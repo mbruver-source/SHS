@@ -32,6 +32,7 @@ from db import (
     get_veranstaltung,
     list_teilnehmer,
     normalisiere_datum,
+    pruefe_teilnehmer_werte,
     pruefung_bezeichnung,
     pruefung_nach_kuerzel,
     pruefungs_kuerzel,
@@ -258,8 +259,11 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     schulterhoehe_cm = None
     if schulterhoehe_text is not None:
         try:
-            schulterhoehe_cm = int(schulterhoehe_text)
+            # Sehr lange Ziffernfolgen gar nicht erst wandeln (Sicherheitskorrektur I-1).
+            schulterhoehe_cm = int(schulterhoehe_text) if len(schulterhoehe_text) <= 12 else None
         except ValueError:
+            schulterhoehe_cm = None
+        if schulterhoehe_cm is None:
             raise ValueError(_csv_feld_fehler("Schulterhöhe", schulterhoehe_text, "eine ganze Zahl in cm, z. B. 45"))
 
     geschlecht = _csv_wert(zeile, "geschlecht")
@@ -278,7 +282,7 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
         except ValueError as fehler:
             raise ValueError(f"{bezeichnung}: {fehler}") from None
 
-    return NeuerTeilnehmer(
+    teilnehmer = NeuerTeilnehmer(
         nachname=nachname, vorname=vorname, rufname_hund=rufname_hund,
         art=art, stufe=stufe, disziplin=disziplin,
         verein=_csv_wert(zeile, "verein"), zwingername=_csv_wert(zeile, "zwingername"),
@@ -296,6 +300,10 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
         halter_mitgliedsnummer=_csv_wert(zeile, "halter_mitgliedsnummer"),
         halter_lu_nr=_csv_wert(zeile, "halter_lu_nr"),
     )
+    # Überlange Werte und eine Schulterhöhe außerhalb des Bereichs: Zeile abgelehnt, bevor weiter
+    # damit gerechnet wird (Sicherheitskorrektur I-5/I-1; add_teilnehmer prüft ebenso).
+    pruefe_teilnehmer_werte(teilnehmer)
+    return teilnehmer
 
 
 # Desktop-Prüfung 14.10.2026, Teil 5 Nr. 1 (Marcos Entscheidung: übernehmen und je Zeile
@@ -433,7 +441,7 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 continue
             _angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
-        except (ValueError, sqlite3.IntegrityError) as exc:
+        except (ValueError, OverflowError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{bezeichnung}: {exc}")
             nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
@@ -601,7 +609,7 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 continue
             _angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
-        except (ValueError, sqlite3.IntegrityError) as exc:
+        except (ValueError, OverflowError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{bezeichnung}: {exc}")
             nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
@@ -849,7 +857,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
                 continue
             _formular_angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
-        except (ValueError, sqlite3.IntegrityError) as exc:
+        except (ValueError, OverflowError, sqlite3.IntegrityError) as exc:
             fehler.append(f"{name}: {exc}")
             nicht_angeboten |= isinstance(exc, NichtAngebotenError)
             continue
@@ -872,7 +880,8 @@ def _als_text(wert):
 
 
 def importiere_teilnehmer_stammdaten(
-    quelle_conn: sqlite3.Connection, ziel_conn: sqlite3.Connection, teilnehmer_ids: list[int]
+    quelle_conn: sqlite3.Connection, ziel_conn: sqlite3.Connection, teilnehmer_ids: list[int],
+    fehler: list[str] | None = None,
 ) -> int:
     """Übernimmt die ausgewählten Teilnehmer (per ID in quelle_conn) als NEUE Teilnehmer in
     ziel_conn - für 'Teilnehmer aus anderem Termin importieren' (Nutzerwunsch 20.09.,
@@ -893,7 +902,11 @@ def importiere_teilnehmer_stammdaten(
     Keine Dubletten-Prüfung (Absprache mit dem Nutzer: einfach zusätzlich anlegen - der
     Nutzer erkennt und bereinigt Dubletten im Zweifel selbst). Liefert die Anzahl der
     tatsächlich importierten Teilnehmer (übersprungen wird nur eine in quelle_conn nicht
-    mehr vorhandene ID, z.B. durch eine zwischenzeitliche Änderung)."""
+    mehr vorhandene ID, z.B. durch eine zwischenzeitliche Änderung).
+
+    `fehler` (Sicherheitskorrektur I-5/I-1): Wird eine Liste übergeben, kommt ein Teilnehmer, den
+    add_teilnehmer ablehnt (Wert zu lang, Schulterhöhe außerhalb des Bereichs), als Zeile
+    „Name: Grund“ hinein und der Import läuft weiter; ohne Liste wird die ValueError weitergereicht."""
     importiert = 0
     for teilnehmer_id in teilnehmer_ids:
         alt = get_teilnehmer(quelle_conn, teilnehmer_id)
@@ -921,7 +934,14 @@ def importiere_teilnehmer_stammdaten(
             # Bewusst NICHT übernommen: startnummer, gegenstand_1/2/3(_disziplin), bezahlt -
             # bleiben auf ihren NeuerTeilnehmer-Defaults (None/False), siehe Docstring oben.
         )
-        add_teilnehmer(ziel_conn, neu)
+        try:
+            add_teilnehmer(ziel_conn, neu)
+        except ValueError as exc:
+            if fehler is None:
+                raise
+            name = " ".join(f"{alt['nachname']}, {alt['vorname']}".split())[:60]
+            fehler.append(f"{name}: {exc}")
+            continue
         importiert += 1
     return importiert
 

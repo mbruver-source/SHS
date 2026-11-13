@@ -71,7 +71,7 @@ def _speichern_vor_dem_schliessen(dialog: QDialog, speichern) -> bool:
         return True
     try:
         speichern(dialog)
-    except sqlite3.IntegrityError as exc:
+    except (sqlite3.IntegrityError, ValueError) as exc:  # ValueError: Wert zu lang o. Ä. (I-5)
         _fehler_anzeigen(dialog, exc)
         return False
     except sqlite3.Error as exc:
