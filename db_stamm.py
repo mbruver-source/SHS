@@ -21,6 +21,14 @@ from db_verbindung import (
 )
 
 
+def kurzer_text(wert, laenge: int = 60) -> str:
+    """Ein Wert aus einer womöglich fremden Quelle (Datei, Import) für eine Meldung: einzeilig,
+    nur druckbare Zeichen, auf `laenge` Zeichen gekürzt (Sicherheitskorrektur I-6)."""
+    text = " ".join(str(wert if wert is not None else "").split())
+    text = "".join(zeichen for zeichen in text if zeichen.isprintable())
+    return text if len(text) <= laenge else text[:laenge - 1] + "…"
+
+
 # --- Veranstaltung -----------------------------------------------------
 
 # Sicherheitskorrektur I-5 (Veranstaltungsfelder): wie bei den Teilnehmern ein Höchstmaß je Textfeld,
@@ -31,7 +39,7 @@ VERANSTALTUNG_LAENGEN: dict[str, tuple[str, int]] = {
     "wertungsrichter_1": ("Wertungsrichter 1", 100), "wertungsrichter_2": ("Wertungsrichter 2", 100),
     "wertungsrichter_3": ("Wertungsrichter 3", 100), "wertungsrichter_4": ("Wertungsrichter 4", 100),
     "wertungsrichter_5": ("Wertungsrichter 5", 100), "pruefungsleiter": ("Prüfungsleiter", 100),
-    "meldestelle": ("Meldestelle", 500),
+    "meldestelle": ("Meldestelle", 2000),
 }
 
 def pruefe_veranstaltung_werte(conn: sqlite3.Connection, werte: dict) -> None:
@@ -694,7 +702,8 @@ def lies_datum(text: str | None) -> datetime.date | None:
         tag, monat, jahr = deutsch.groups()
     else:
         # UX-Test 02.10.2026, U14: mit Beispiel statt nur Formatkürzeln.
-        raise ValueError(f"„{wert}“ ist kein gültiges Datum – bitte z. B. 14.11.2026 eingeben (TT.MM.JJJJ)")
+        raise ValueError(
+            f"„{kurzer_text(wert)}“ ist kein gültiges Datum – bitte z. B. 14.11.2026 eingeben (TT.MM.JJJJ)")
     try:
         return datetime.date(int(jahr), int(monat), int(tag))
     except ValueError:

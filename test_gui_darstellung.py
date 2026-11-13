@@ -1157,6 +1157,20 @@ def test_absturzprotokoll_ohne_schreibrecht_startet_trotzdem(tmp_path):
     assert desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=unmoeglich) is None
 
 
+def test_dateiname_teil_ist_begrenzt_und_schnell():
+    """Sicherheitskorrektur I-2: Auch ein sehr langer Wert mit viel Leerraum braucht kaum Zeit."""
+    import time
+
+    import desktop_gemeinsam
+
+    beginn = time.monotonic()
+    ergebnis = desktop_gemeinsam._dateiname_teil("A" + " " * 400_000 + "B")
+    assert time.monotonic() - beginn < 2
+    assert len(ergebnis) <= 120
+    assert desktop_gemeinsam._dateiname_teil("Meier/Schulz") == "Meier-Schulz"
+    assert desktop_gemeinsam._dateiname_teil("") == "Teilnehmer"
+
+
 def test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende(tmp_path, monkeypatch):
     """Rückmeldung 13.10.2026: Diagnose zum Kopieren - Version, System, Ende des
     Absturzprotokolls; der Benutzerordner erscheint nur als "~", der Benutzername als

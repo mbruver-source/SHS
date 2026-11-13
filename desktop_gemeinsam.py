@@ -95,7 +95,9 @@ def _dateiname_teil(text: str) -> str:
     machte „Meier/Schulz“ den Vorschlag zu Ordner plus Datei."""
     import re
 
-    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", text or "").strip(" .-") or "Teilnehmer"
+    # Auf 120 Zeichen begrenzt, bevor der Ausdruck läuft: auf sehr langen Werten mit viel Leerraum
+    # wäre er quadratisch langsam (Sicherheitskorrektur I-2).
+    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", (text or "")[:120]).strip(" .-") or "Teilnehmer"
 
 
 def _export_dateiname(conn, praefix: str) -> str:

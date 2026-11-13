@@ -1192,10 +1192,16 @@ class TestKopienVorDemLoeschen(unittest.TestCase):
         self.assertIn("2026-12-24", andere_datum)
         andere_verein = kopie_abweichung(termin("Verein", "Fremdverein", "2026-11-20"), eigen)
         self.assertIn("Fremdverein", andere_verein)
-        lang = kopie_abweichung(termin("Lang", "Zeile eins\nZeile zwei\x00" + "x" * 200 + "​", "2026-11-20"), eigen)
+        nullbreit = chr(0x200B)
+        # Der lange Wert kommt wie aus einer fremden Datei direkt in die Datenbank (set_veranstaltung
+        # begrenzt die Länge, I-5).
+        quelle = termin("Lang", "kurz", "2026-11-20")
+        quelle.execute("UPDATE veranstaltung SET verein = ?", ("Zeile eins\nZeile zwei\x00" + "x" * 200 + nullbreit,))
+        quelle.commit()
+        lang = kopie_abweichung(quelle, eigen)
         self.assertNotIn("\n", lang)
         self.assertNotIn("\x00", lang)
-        self.assertNotIn("​", lang)
+        self.assertNotIn(nullbreit, lang)
         self.assertLess(len(lang), 250)
         self.assertIn("…", lang)
 

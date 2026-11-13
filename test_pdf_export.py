@@ -553,9 +553,14 @@ class TestPdfExport(unittest.TestCase):
         markup = f'<img src="{bild}" width="5" height="5"/>&<font color="kaputt">X</font>'
         textfelder = ["verein", "ort", "vereins_nr", "pruefungsnummer", "pruefungsleiter",
                       "verband", "meldestelle"] + [f"wertungsrichter_{i}" for i in range(1, 6)]
+        # set_veranstaltung begrenzt die Länge der Felder (Sicherheitskorrektur I-5); die langen
+        # Markup-Werte kommen wie aus einer fremden Termin-Datei direkt in die Datenbank.
         set_veranstaltung(self.conn, datum="2026-09-19",
                           angebotene_pruefungen="DK1,ED1-Trümmerfeld",
-                          **{feld: f"{feld} {markup}" for feld in textfelder})
+                          **{feld: "x" for feld in textfelder})
+        for feld in textfelder:
+            self.conn.execute(f"UPDATE veranstaltung SET {feld} = ?", (f"{feld} {markup}",))
+        self.conn.commit()
         felder = {f.name for f in dataclasses.fields(NeuerTeilnehmer)}
         text_werte = {f: f"{f} {markup}" for f in felder if f in (
             "nachname", "vorname", "rufname_hund", "verein", "zwingername", "rasse", "chip_nr",

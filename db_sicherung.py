@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pyzipper
 
-from db import JOURNAL_VERWEIS_TEXT, journal_hat_verweis, oeffne_termin_lesend, termine_ordner
+from db import JOURNAL_VERWEIS_TEXT, journal_hat_verweis, kurzer_text, oeffne_termin_lesend, termine_ordner
 
 
 class PasswortFalschError(Exception):
@@ -285,11 +285,8 @@ def auto_sicherungen_zu_termin(termin_pfad: str, ordner: Path | None = None) -> 
 
 
 def _kurz(wert, laenge: int = 40) -> str:
-    """Wert aus einer womöglich fremden Datei für eine Meldung: nur druckbare Zeichen, Umbrüche und
-    Mehrfach-Leerzeichen zu einem Leerzeichen, auf `laenge` Zeichen gekürzt."""
-    text = " ".join(str(wert if wert is not None else "").split())
-    text = "".join(zeichen for zeichen in text if zeichen.isprintable())
-    return text if len(text) <= laenge else text[:laenge - 1] + "…"
+    """Wert aus einer womöglich fremden Datei für eine Meldung (db.kurzer_text, hier 40 Zeichen)."""
+    return kurzer_text(wert, laenge)
 
 
 def _verein_datum(verbindung) -> tuple[str, str]:

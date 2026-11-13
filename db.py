@@ -139,6 +139,7 @@ from db_stamm import (  # noqa: F401
     get_teilnehmer,
     get_veranstaltung,
     HOECHSTE_STARTNUMMER,
+    kurzer_text,
     lies_datum,
     list_teilnehmer,
     naechste_freie_startnummer,

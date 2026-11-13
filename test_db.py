@@ -1230,6 +1230,76 @@ class TestDatenbank(unittest.TestCase):
         finally:
             os.remove(pfad)
 
+    def test_import_ausdruecke_sind_gleichwertig_und_linear(self):
+        """Sicherheitskorrektur I-2: Die Ersatzfunktionen für `\\s*cm\\s*$` und `„[^“]*“` liefern
+        dasselbe wie die früheren Ausdrücke und brauchen auf sehr langen Werten kaum Zeit."""
+        import re
+        import time
+
+        from db_import import _ohne_cm, _ohne_werte_in_anfuehrungszeichen
+        for text in ("45 cm", "45cm", "45 CM  ", "cm", "  ", "", "45", "4 5 cm", "45 c m", "x cm cm", "12 Cm\t"):
+            with self.subTest(cm=text):
+                self.assertEqual(_ohne_cm(text), re.sub(r"\s*cm\s*$", "", text, flags=re.IGNORECASE))
+        for text in ("Art „X“ ist ungültig", "„a“ und „b“ fehlt", "„offen", "a „x“ „y", "„“", "ohne", "„a„b“c“"):
+            with self.subTest(zitat=text):
+                self.assertEqual(_ohne_werte_in_anfuehrungszeichen(text), re.sub(r"„[^“]*“", "", text))
+        beginn = time.monotonic()
+        _ohne_cm("4" + " " * 400_000 + "5")
+        _ohne_werte_in_anfuehrungszeichen("„" * 200_000)
+        self.assertLess(time.monotonic() - beginn, 5)
+
+    def test_csv_import_entfernt_unsichtbare_zeichen_und_kuerzt_meldungen(self):
+        """Sicherheitskorrektur I-6/I-7: Nullbreiten-Zeichen im Namen verhindern die Dublettenerkennung
+        nicht mehr, und ein langer Wert mit Umbruch erscheint einzeilig und gekürzt in der Meldung."""
+        fd, pfad = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        nullbreit, weiches_trennzeichen = chr(0x200B), chr(0x00AD)
+        with open(pfad, "w", newline="", encoding="utf-8") as f:
+            f.write(
+                "nachname,vorname,rufname_hund,art,stufe,disziplin\n"
+                "Beispiel,Erster,Hund1,DK,1,\n"
+                f"Beispiel{nullbreit},Erster,Hund{weiches_trennzeichen}1,DK,1,\n"
+                f"Zeile,Zweiter,Hund2,\"X{chr(10)}{'Y' * 5000}\",1,\n"
+            )
+        try:
+            ergebnis = importiere_teilnehmer_aus_csv(self.conn, pfad)
+        finally:
+            os.remove(pfad)
+        self.assertEqual(ergebnis.importiert, 1)
+        self.assertEqual(len(ergebnis.uebersprungen), 1)
+        self.assertIn("bereits gemeldet", ergebnis.uebersprungen[0])
+        self.assertEqual(len(ergebnis.fehler), 1)
+        self.assertNotIn("\n", ergebnis.fehler[0])
+        self.assertLess(len(ergebnis.fehler[0]), 300)
+
+    def test_csv_formelschutz_sieht_hinter_unsichtbare_zeichen(self):
+        """Sicherheitskorrektur I-8: Formelanfang hinter Steuer- oder Formatzeichen wird geschützt."""
+        from db_import import _csv_zelle_absichern
+        # Nullbreites Leerzeichen, Byte-Reihenfolge-Marke, Wortverbinder, weiches Trennzeichen,
+        # Schreibrichtungs-Umkehr und Steuerzeichen (als Codepunkte, damit sie im Quelltext sichtbar sind).
+        versteckte = [chr(punkt) for punkt in (0x200B, 0xFEFF, 0x2060, 0x00AD, 0x202E, 0x00)]
+        for versteckt in (*versteckte, " " + chr(0x200B) + " "):
+            for formel in ("=1+1", "+1+1", "@SUM(1)"):
+                with self.subTest(versteckt=repr(versteckt), formel=formel):
+                    self.assertTrue(_csv_zelle_absichern(versteckt + formel).startswith("'"))
+        self.assertEqual(_csv_zelle_absichern("Anna"), "Anna")
+        self.assertEqual(_csv_zelle_absichern(chr(0x200B) + "Anna"), chr(0x200B) + "Anna")
+
+    def test_formelschutz_ist_linear_und_dublettenschluessel_ignoriert_unsichtbares(self):
+        """Sicherheitskorrektur I-2/I-7: viele führende Hochkommas brauchen kaum Zeit; ein gespeicherter
+        Name mit Nullbreiten-Zeichen gilt für die Dublettenerkennung als derselbe Name."""
+        import time
+
+        from db_import import _braucht_schutz, _meldungs_schluessel
+        beginn = time.monotonic()
+        self.assertTrue(_braucht_schutz("'" * 200_000 + "=1"))  # quadratisch wären das rund 5 s
+        self.assertLess(time.monotonic() - beginn, 4)
+        nullbreit = chr(0x200B)
+        self.assertEqual(
+            _meldungs_schluessel("Anna" + nullbreit, "B", "C", "DK", 1, None),
+            _meldungs_schluessel("Anna", "B", "C", "DK", 1, None),
+        )
+
     def test_add_teilnehmer_lehnt_ueberlange_felder_ab(self):
         """Sicherheitskorrektur I-5: Jedes Textfeld hat eine Obergrenze; darüber wird mit Feldname
         abgelehnt (nichts wird still gekürzt), genau auf der Grenze geht es noch."""

@@ -30,6 +30,7 @@ from db import (
     angebotene_pruefungen,
     get_teilnehmer,
     get_veranstaltung,
+    kurzer_text,
     list_teilnehmer,
     normalisiere_datum,
     pruefe_teilnehmer_werte,
@@ -134,8 +135,26 @@ def rat_bei_ablehnung(fehler: str) -> str | None:
     """Rat zum Grund eines abgelehnten Import-Eintrags (N12) oder None, wenn keiner passt.
     Gesucht wird nur im Grund - ohne Zeile/Datei davor und ohne eingegebene Werte in „…“,
     sonst gäbe ein Name, Dateiname oder Wert wie „fehlt“ den falschen Rat (Verifikation B16)."""
-    grund = re.sub(r"„[^“]*“", "", fehler.split(": ", 1)[-1])
+    grund = _ohne_werte_in_anfuehrungszeichen(fehler.split(": ", 1)[-1])
     return next((rat for merkmal, rat in _RAT_JE_GRUND if merkmal in grund), None)
+
+
+def _ohne_werte_in_anfuehrungszeichen(text: str) -> str:
+    """Entfernt alle Abschnitte „…“ aus `text`. Linear statt per regulärem Ausdruck: viele „ ohne
+    schließendes “ ließen den Ausdruck quadratisch langsam werden (Sicherheitskorrektur I-2)."""
+    teile = []
+    position = 0
+    while True:
+        anfang = text.find("„", position)
+        if anfang < 0:
+            break
+        ende = text.find("“", anfang + 1)
+        if ende < 0:
+            break
+        teile.append(text[position:anfang])
+        position = ende + 1
+    teile.append(text[position:])
+    return "".join(teile)
 
 
 #: Nachtest 2 (N11): Gegenstände stehen weder in der CSV-Liste noch im OMA-Export.
@@ -173,7 +192,7 @@ def _hinweise_ergaenzen(hinweise: list[str], nicht_angeboten: bool) -> list[str]
 
 def _zeilen_bezeichnung(zeilennummer: int, vorname: str | None, nachname: str | None) -> str:
     """"Zeile 8 (Mia Meyer)" statt nur "Zeile 8" (UX-Nachtest 03.10.2026, N5)."""
-    name = " ".join(t for t in (vorname, nachname) if t)
+    name = kurzer_text(" ".join(t for t in (vorname, nachname) if t))
     return f"Zeile {zeilennummer} ({name})" if name else f"Zeile {zeilennummer}"
 
 
@@ -183,7 +202,7 @@ def _csv_feld_fehler(feld: str, wert: str | None, erlaubt: str, fehlt_zusatz: st
     eintragen" bzw. "Art „EDX“ ist ungültig – bitte ED (…) oder DK (…) eintragen"."""
     if wert is None:
         return f"{feld} fehlt{fehlt_zusatz} – bitte {erlaubt} eintragen"
-    return f"{feld} „{wert}“ ist ungültig – bitte {erlaubt} eintragen"
+    return f"{feld} „{kurzer_text(wert)}“ ist ungültig – bitte {erlaubt} eintragen"
 
 
 def nicht_angebotene(conn: sqlite3.Connection, teilnehmer: list[dict]) -> list[dict]:
@@ -208,10 +227,45 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
         raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung))
 
 
+#: Formatzeichen, die in manchen Schriften nötig sind (Nullbreiten-Nichtverbinder und -Verbinder).
+_ERLAUBTE_FORMATZEICHEN = frozenset({chr(0x200C), chr(0x200D)})  # in manchen Schriften nötig, bewusst nicht entfernt
+
+
+def _ohne_unsichtbare_zeichen(text: str) -> str:
+    """Entfernt Steuer- und Formatzeichen (Unicode-Kategorien Cc und Cf); Tabulator, Zeilenumbruch und
+    die in manchen Schriften nötigen Verbinder bleiben, damit der Rundlauf Export und Import
+    unverändert bleibt (Sicherheitskorrektur I-7/I-8)."""
+    return "".join(
+        zeichen for zeichen in text
+        if zeichen in "\t\n\r" or zeichen in _ERLAUBTE_FORMATZEICHEN
+        or unicodedata.category(zeichen) not in ("Cc", "Cf")
+    )
+
+
+def _ueberspringe_unsichtbare(text: str, position: int) -> int:
+    """Index des ersten Zeichens ab `position`, das weder Leerraum noch Steuer- oder Formatzeichen
+    (Cc, Cf) ist (wie str.lstrip, nur mit diesen Zeichen zusätzlich)."""
+    while position < len(text) and (
+        text[position].isspace() or unicodedata.category(text[position]) in ("Cc", "Cf")
+    ):
+        position += 1
+    return position
+
+
+def _ohne_cm(text: str) -> str:
+    """Entfernt eine Einheit „cm“ (ohne Beachtung der Großschreibung) samt Leerzeichen am Ende. Ohne
+    regulären Ausdruck: `\\s*cm\\s*$` wurde auf langen Leerzeichenfolgen quadratisch langsam
+    (Sicherheitskorrektur I-2)."""
+    rest = text.rstrip()
+    if rest[-2:].lower() == "cm":
+        return rest[:-2].rstrip()
+    return text
+
+
 def _csv_wert(zeile: dict, spalte: str) -> str | None:
     # NFC: "Mu" + kombinierendes Trema und "Mü" sind derselbe Name (Desktop-Prüfung
     # 14.10.2026, Teil 5 Nr. 6) - wie beim PDF-Import.
-    wert = unicodedata.normalize("NFC", zeile.get(spalte) or "").strip()
+    wert = _ohne_unsichtbare_zeichen(unicodedata.normalize("NFC", zeile.get(spalte) or "")).strip()
     # Gegenstück zu _csv_zelle_absichern (Export): das vorangestellte "'" wieder entfernen -
     # genau dann, wenn der Export es gesetzt hätte (gemeinsame Regel _braucht_schutz), damit
     # Export -> Import verlustfrei bleibt.
@@ -326,12 +380,12 @@ def _excel_verdacht(zeile: dict, bezeichnung: str) -> list[str]:
         if wert is None:
             continue
         if _EXCEL_EXPONENT.fullmatch(wert):
-            hinweise.append(f"{bezeichnung}: {name} „{wert}“ wurde von Excel gekürzt – {_EXCEL_HINWEIS}.")
+            hinweise.append(f"{bezeichnung}: {name} „{kurzer_text(wert)}“ wurde von Excel gekürzt – {_EXCEL_HINWEIS}.")
         # Erst ab 9 Ziffern: Ortsnummern ohne Vorwahl (6-8 Ziffern) sind kein Excel-Verlust
         # (OFFEN.md B3, 19.10.2026).
         elif spalte == "telefon" and wert.isdigit() and len(wert) >= 9 and not wert.startswith("0"):
             hinweise.append(
-                f"{bezeichnung}: Telefon „{wert}“ hat keine führende 0 – vermutlich von Excel "
+                f"{bezeichnung}: Telefon „{kurzer_text(wert)}“ hat keine führende 0 – vermutlich von Excel "
                 f"entfernt; {_EXCEL_HINWEIS}."
             )
     return hinweise
@@ -437,7 +491,7 @@ def importiere_teilnehmer_aus_csv(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
             )
             if schluessel in vorhandene:
-                uebersprungen.append(f"{bezeichnung} mit {teilnehmer.rufname_hund} ist bereits gemeldet")
+                uebersprungen.append(f"{bezeichnung} mit {kurzer_text(teilnehmer.rufname_hund)} ist bereits gemeldet")
                 continue
             _angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
@@ -506,7 +560,8 @@ def _oma_zeile_zu_csv_zeile(werte: list[str], kopf_index: dict[str, int]) -> dic
     geschlecht = _oma_wert(werte, kopf_index, "Hund_Geschlecht")
     if geschlecht:
         if geschlecht not in OMA_GESCHLECHT:
-            raise ValueError(f"unbekanntes Geschlecht {geschlecht!r} (erwartet 0 = Hündin oder 1 = Rüde)")
+            raise ValueError(
+                f"unbekanntes Geschlecht {kurzer_text(geschlecht)!r} (erwartet 0 = Hündin oder 1 = Rüde)")
         zeile["geschlecht"] = OMA_GESCHLECHT[geschlecht]
 
     disziplin_text = _oma_wert(werte, kopf_index, "SHS_Disziplinen")
@@ -514,7 +569,7 @@ def _oma_zeile_zu_csv_zeile(werte: list[str], kopf_index: dict[str, int]) -> dic
     zuordnung = OMA_DISZIPLINEN.get(treffer.group(2).strip()) if treffer else None
     if zuordnung is None:
         raise ValueError(
-            f"unbekannte Disziplin {disziplin_text!r} (erwartet z. B. 'LK1 Trümmersuche', "
+            f"unbekannte Disziplin {kurzer_text(disziplin_text)!r} (erwartet z. B. 'LK1 Trümmersuche', "
             "'LK2 Flächensuche', 'LK3 Behältnissuche' oder 'LK1 Dreikampf')"
         )
     zeile["art"], zeile["disziplin"] = zuordnung
@@ -525,7 +580,8 @@ def _oma_zeile_zu_csv_zeile(werte: list[str], kopf_index: dict[str, int]) -> dic
 def _meldungs_schluessel(nachname, vorname, rufname_hund, art, stufe, disziplin) -> tuple:
     """Vergleichsschlüssel für die Dublettenerkennung beim CSV-, OMA- und PDF-Import."""
     def norm(text):
-        return unicodedata.normalize("NFC", text or "").strip().casefold()
+        # Auch Bestandsdaten mit unsichtbaren Zeichen werden so als Dublette erkannt (I-7).
+        return _ohne_unsichtbare_zeichen(unicodedata.normalize("NFC", text or "")).strip().casefold()
     return (norm(nachname), norm(vorname), norm(rufname_hund), art, int(stufe), disziplin)
 
 
@@ -605,7 +661,7 @@ def importiere_teilnehmer_aus_oma(conn: sqlite3.Connection, pfad: str) -> CsvImp
                 teilnehmer.art, teilnehmer.stufe, teilnehmer.disziplin,
             )
             if schluessel in vorhandene:
-                uebersprungen.append(f"{bezeichnung} mit {teilnehmer.rufname_hund} ist bereits gemeldet")
+                uebersprungen.append(f"{bezeichnung} mit {kurzer_text(teilnehmer.rufname_hund)} ist bereits gemeldet")
                 continue
             _angebot_pruefen(teilnehmer, angebotene)
             add_teilnehmer(conn, teilnehmer)
@@ -755,14 +811,14 @@ def _anmeldeformular_zu_teilnehmer(werte: dict) -> tuple[NeuerTeilnehmer, list[s
         )
     pruefung = pruefung_nach_kuerzel(angekreuzt[0])
     if pruefung is None:
-        raise ValueError(f"unbekannte Prüfung {angekreuzt[0]!r} angekreuzt")
+        raise ValueError(f"unbekannte Prüfung {kurzer_text(angekreuzt[0])!r} angekreuzt")
     zeile = {spalte: _pdf_text(werte, feld) for feld, spalte in ANMELDEFORMULAR_TEXTFELDER.items()}
     zeile["art"], zeile["stufe"], zeile["disziplin"] = pruefung.art, str(pruefung.stufe), pruefung.disziplin or ""
 
     # Schulterhöhe: Teilnehmer schreiben erfahrungsgemäß oft "45 cm" - die Einheit wird
     # toleriert, alles andere (Kommazahlen usw.) prüft _csv_zeile_zu_teilnehmer() wie beim
     # CSV-Import.
-    zeile["schulterhoehe_cm"] = re.sub(r"\s*cm\s*$", "", zeile["schulterhoehe_cm"], flags=re.IGNORECASE)
+    zeile["schulterhoehe_cm"] = _ohne_cm(zeile["schulterhoehe_cm"])
 
     huendin = _pdf_angekreuzt(werte, ANMELDEFORMULAR_HUENDIN)
     ruede = _pdf_angekreuzt(werte, ANMELDEFORMULAR_RUEDE)
@@ -838,7 +894,7 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             # Bewusst breit: pypdf wirft bei beschädigten/fremden Dateien je nach Defekt
             # PdfReadError, aber auch ValueError/KeyError/TypeError u. a. - eine einzelne
             # kaputte Datei darf den Import der übrigen nie verhindern.
-            fehler.append(f"{name}: Datei ist keine lesbare PDF-Datei ({exc})")
+            fehler.append(f"{name}: Datei ist keine lesbare PDF-Datei ({kurzer_text(exc, 200)})")
             continue
         if not werte:
             fehler.append(f"{name}: die PDF enthält keine Formularfelder (kein ausfüllbares Anmeldeformular)")
@@ -851,8 +907,8 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
             )
             if schluessel in vorhandene:
                 uebersprungen.append(
-                    f"{name}: {teilnehmer.vorname} {teilnehmer.nachname} mit "
-                    f"{teilnehmer.rufname_hund} ist bereits gemeldet"
+                    f"{name}: {kurzer_text(teilnehmer.vorname)} {kurzer_text(teilnehmer.nachname)} mit "
+                    f"{kurzer_text(teilnehmer.rufname_hund)} ist bereits gemeldet"
                 )
                 continue
             _formular_angebot_pruefen(teilnehmer, angebotene)
@@ -865,8 +921,8 @@ def importiere_anmeldeformular_pdf(conn: sqlite3.Connection, pfade: list[str]) -
         importiert += 1
         if verworfen:
             hinweise.append(
-                f"{name}: bei Einzeldisziplin nur ein Gegenstand – übernommen „{teilnehmer.gegenstand_1}“, "
-                "nicht übernommen " + ", ".join(f"„{g}“" for g in verworfen)
+                f"{name}: bei Einzeldisziplin nur ein Gegenstand – übernommen „{kurzer_text(teilnehmer.gegenstand_1)}“, "
+                "nicht übernommen " + ", ".join(f"„{kurzer_text(g)}“" for g in verworfen)
             )
     return CsvImportErgebnis(
         importiert=importiert, fehler=fehler, uebersprungen=uebersprungen,
@@ -977,10 +1033,13 @@ def _braucht_schutz(wert: str) -> bool:
     nimmt dieses "'" damit wieder ab (OFFEN.md B3, 19.10.2026). Kehrseite: ein Altexport mit dem
     echten Wert "''-" bzw. "''+49 …" verliert ein "'" - die Zeile ist mehrdeutig, gewählt ist
     der wahrscheinlichere Fall."""
-    kern = wert.lstrip()
-    mit_hochkomma = kern[:1] == "'"
-    while kern[:1] == "'":
-        kern = kern[1:].lstrip()
+    # Mit Index statt wiederholtem Zerschneiden: viele führende "'" ließen die Schleife sonst
+    # quadratisch langsam werden (Sicherheitskorrektur I-2).
+    position = _ueberspringe_unsichtbare(wert, 0)
+    mit_hochkomma = wert[position:position + 1] == "'"
+    while wert[position:position + 1] == "'":
+        position = _ueberspringe_unsichtbare(wert, position + 1)
+    kern = wert[position:]
     if not kern or kern[0] not in _FORMEL_ZEICHEN:
         return False
     if mit_hochkomma:
