@@ -287,6 +287,36 @@ class TestSicherungMomentaufnahme(unittest.TestCase):
         with closing(termin_oeffnen(str(self.zurueck / "neu.sqlite"))) as conn:
             self.assertEqual(get_veranstaltung(conn)["verein"], "Testverein")
 
+    def test_journal_mit_verweis_in_der_sicherung_wird_abgelehnt(self):
+        """Sicherheitskorrektur D-2: Eine Sicherung mit einem Journal mit Verweis auf eine weitere
+        Datei wird abgelehnt, bevor ein Termin ersetzt ist; die weitere Datei bleibt unberührt."""
+        from db_testhilfen import journal_mit_verweis_schreiben
+        fremd = self.zurueck / "fremd.txt"
+        fremd.write_bytes(b"erfundene Daten, keine Termin-Datei\n" * 20)
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        journal = journal_mit_verweis_schreiben(pfad, fremd)
+        with zipfile.ZipFile(self.ziel, "w") as zf:
+            zf.write(pfad, arcname="a.sqlite")
+            zf.write(journal, arcname="a.sqlite-journal")
+        with self.assertRaises(ValueError) as fehler:
+            sicherung_wiederherstellen(str(self.ziel), {"a.sqlite": "neu.sqlite"}, ordner=self.zurueck)
+        self.assertIn("Verweis", str(fehler.exception))
+        self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["fremd.txt"])
+        self.assertEqual(fremd.read_bytes(), b"erfundene Daten, keine Termin-Datei\n" * 20)
+
+    def test_journal_mit_verweis_kommt_nicht_in_eine_neue_sicherung(self):
+        """D-2: Ein solches Journal neben einer Termin-Datei wird nicht mitgesichert, damit die
+        Sicherung wiederherstellbar bleibt; die Quelle bleibt unberührt."""
+        from db_testhilfen import journal_mit_verweis_schreiben
+        pfad = _termin_anlegen(self.ordner, "a.sqlite")
+        journal = journal_mit_verweis_schreiben(pfad, self.zurueck / "fremd.txt")
+        journal_vorher = journal.read_bytes()
+        roh = []
+        sicherung_erstellen(str(self.ziel), ordner=self.ordner, roh_gesichert=roh)
+        with zipfile.ZipFile(self.ziel) as zf:
+            self.assertEqual(zf.namelist(), ["a.sqlite"])
+        self.assertEqual(journal.read_bytes(), journal_vorher)
+
     def test_gesperrte_datei_wird_ohne_endloses_warten_roh_gesichert(self):
         """Verifikation O1: backup() wartete bei einer exklusiv gesperrten Quelle endlos."""
         import sqlite3
@@ -1021,12 +1051,153 @@ class TestKopienVorDemLoeschen(unittest.TestCase):
         alt.execute("CREATE TABLE ergebnisse (teilnehmer_id INTEGER PRIMARY KEY, suche_truemmerfeld INTEGER, "
                     "anzeige_truemmerfeld INTEGER, disqualifiziert INTEGER, abbruch INTEGER)")
         alt.execute("INSERT INTO ergebnisse VALUES (?, 40, 20, 1, 1)", (tid,))
+        alt.execute("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, nachname, vorname, rufname_hund)")
+        alt.execute("INSERT INTO teilnehmer VALUES (?, 'Albers', 'Anna', 'Aika')", (tid,))
         unterschiede = ergebnis_unterschiede(alt, conn)
         werte = {w["schluessel"] for w in unterschiede[0]["werte"]}
         self.assertEqual(werte, {"Trümmerfeld", "disqualifiziert"})  # Abbruch (ohne Grund-Spalte) und Stechen fehlen
         self.assertEqual(ergebnis_werte_wiederherstellen(conn, alt, [(tid, "abbruch"), (tid, "Trümmerfeld")]), 1)
         row = conn.execute("SELECT suche_truemmerfeld, abbruch FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)).fetchone()
         self.assertEqual((row["suche_truemmerfeld"], row["abbruch"]), (40, 0))
+
+    def test_ergebnisse_aus_kopie_nur_fuer_denselben_teilnehmer(self):
+        """Sicherheitskorrektur D-5: Die ID allein genügt nicht; Name und Hund müssen übereinstimmen
+        (ohne Groß-/Kleinschreibung und überzählige Leerzeichen). Sonst wird nichts angeboten und
+        nichts zurückgeschrieben."""
+        import sqlite3
+
+        from db import eintragen_ergebnis, ergebnis_unterschiede, ergebnis_werte_wiederherstellen
+
+        faelle = (
+            ("Albers", "Anna", "Aika", True),
+            ("  albers ", "ANNA", "aika", True),
+            ("Brandt", "Anna", "Aika", False),
+            ("Albers", "Berta", "Aika", False),
+            ("Albers", "Anna", "Bruno", False),
+        )
+        for nachname, vorname, hund, erwartet in faelle:
+            with self.subTest(nachname=nachname, vorname=vorname, hund=hund):
+                conn, _pfad = self._termin(f"Aktuell-{nachname.strip()}-{vorname}-{hund}")
+                tid = add_teilnehmer(conn, NeuerTeilnehmer(
+                    nachname="Albers", vorname="Anna", rufname_hund="Aika", art="ED", stufe=1,
+                    disziplin="Trümmerfeld"))
+                eintragen_ergebnis(conn, tid, "Trümmerfeld", 10, 5)
+                kopie = sqlite3.connect(":memory:")
+                self.addCleanup(kopie.close)
+                kopie.row_factory = sqlite3.Row
+                kopie.execute("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, nachname, vorname, rufname_hund)")
+                kopie.execute("INSERT INTO teilnehmer VALUES (?, ?, ?, ?)", (tid, nachname, vorname, hund))
+                kopie.execute("CREATE TABLE ergebnisse (teilnehmer_id INTEGER PRIMARY KEY, "
+                              "suche_truemmerfeld INTEGER, anzeige_truemmerfeld INTEGER)")
+                kopie.execute("INSERT INTO ergebnisse VALUES (?, 40, 20)", (tid,))
+                unterschiede = ergebnis_unterschiede(kopie, conn)
+                zahl = ergebnis_werte_wiederherstellen(conn, kopie, [(tid, "Trümmerfeld")])
+                row = conn.execute("SELECT suche_truemmerfeld FROM ergebnisse WHERE teilnehmer_id = ?",
+                                   (tid,)).fetchone()
+                self.assertEqual(bool(unterschiede), erwartet)
+                self.assertEqual(zahl, 1 if erwartet else 0)
+                self.assertEqual(row["suche_truemmerfeld"], 40 if erwartet else 10)
+
+    def test_werte_aus_der_kopie_werden_vor_dem_speichern_geprueft(self):
+        """Sicherheitskorrektur D-6: Stünden nach dem Zurückholen Werte in der Datei, die das Programm
+        beim Öffnen ablehnt (Dezimalzahl als Punkte, Binärwert als Name), wird nichts geändert."""
+        import sqlite3
+        from contextlib import closing
+
+        from db import (
+            KopieWerteUnzulaessig,
+            eintragen_ergebnis,
+            ergebnis_werte_wiederherstellen,
+            get_ergebnis,
+            list_teilnehmer,
+            teilnehmer_sichern,
+            teilnehmer_wiederherstellen,
+            delete_teilnehmer,
+            termin_oeffnen,
+        )
+
+        conn, pfad = self._termin("Aktuell")
+        tid = add_teilnehmer(conn, NeuerTeilnehmer(
+            nachname="Albers", vorname="Anna", rufname_hund="Aika", art="ED", stufe=1, disziplin="Trümmerfeld"))
+        eintragen_ergebnis(conn, tid, "Trümmerfeld", 10, 5)
+
+        # Ergebnisse: Kopie mit einem unzulässigen Wertetyp bei den Punkten.
+        kopie = sqlite3.connect(":memory:")
+        self.addCleanup(kopie.close)
+        kopie.row_factory = sqlite3.Row
+        kopie.execute("CREATE TABLE teilnehmer (id INTEGER PRIMARY KEY, nachname, vorname, rufname_hund)")
+        kopie.execute("INSERT INTO teilnehmer VALUES (?, 'Albers', 'Anna', 'Aika')", (tid,))
+        kopie.execute("CREATE TABLE ergebnisse (teilnehmer_id INTEGER PRIMARY KEY, "
+                      "suche_truemmerfeld, anzeige_truemmerfeld)")
+        kopie.execute("INSERT INTO ergebnisse VALUES (?, 30.5, 20)", (tid,))
+        with self.assertRaises(KopieWerteUnzulaessig):
+            ergebnis_werte_wiederherstellen(conn, kopie, [(tid, "Trümmerfeld")])
+        self.assertEqual(get_ergebnis(conn, tid)["suche_truemmerfeld"], 10)
+        kopie.execute("UPDATE ergebnisse SET suche_truemmerfeld = 40")
+        self.assertEqual(ergebnis_werte_wiederherstellen(conn, kopie, [(tid, "Trümmerfeld")]), 1)
+        self.assertEqual(get_ergebnis(conn, tid)["suche_truemmerfeld"], 40)
+
+        # Teilnehmer: ein gesicherter Datensatz mit Binärwert als Nachname.
+        sicherung = teilnehmer_sichern(conn, tid)
+        delete_teilnehmer(conn, tid)
+        sicherung["teilnehmer"]["nachname"] = b"Alb\xffers"
+        with self.assertRaises(KopieWerteUnzulaessig):
+            teilnehmer_wiederherstellen(conn, sicherung)
+        self.assertEqual(list_teilnehmer(conn), [])  # zurückgerollt, nichts steht halb in der Datei
+        sicherung["teilnehmer"]["nachname"] = "Albers"
+        self.assertTrue(teilnehmer_wiederherstellen(conn, sicherung))
+        conn.close()
+        with closing(termin_oeffnen(pfad)) as offen:  # der Termin lässt sich weiter öffnen
+            self.assertEqual([t["nachname"] for t in list_teilnehmer(offen)], ["Albers"])
+
+    def test_kopie_mit_ansicht_oder_trigger_wird_in_den_dialogen_abgelehnt(self):
+        """D-6: Das Programm legt nie Ansichten oder Trigger an; eine Kopie damit wird nicht gelesen
+        (Option ohne_fremdobjekte); ohne die Option bleibt das Lesen wie bisher."""
+        import sqlite3
+        from contextlib import closing
+
+        from db import KopieMitFremdobjekten, termin_lesend_pruefen
+
+        for sql in ("CREATE VIEW v AS SELECT 1 AS x",
+                    "CREATE TRIGGER t AFTER INSERT ON teilnehmer BEGIN SELECT 1; END"):
+            with self.subTest(sql=sql.split()[1]):
+                _conn, pfad = self._termin(f"Kopie-{sql.split()[1]}")
+                _conn.close()
+                with closing(sqlite3.connect(pfad)) as roh:
+                    roh.execute(sql)
+                    roh.commit()
+                with self.assertRaises(KopieMitFremdobjekten):
+                    termin_lesend_pruefen(pfad, ohne_fremdobjekte=True)
+                with closing(termin_lesend_pruefen(pfad)) as gelesen:
+                    self.assertIsNotNone(gelesen)
+        _conn, sauber = self._termin("Sauber")
+        _conn.close()
+        with closing(termin_lesend_pruefen(sauber, ohne_fremdobjekte=True)) as gelesen:
+            self.assertIsNotNone(gelesen)
+
+    def test_kopie_abweichung_vergleicht_verein_und_datum(self):
+        """D-5: Hinweis nur bei abweichendem Verein oder Datum; Werte aus der Kopie erscheinen
+        gekürzt, einzeilig und ohne Steuerzeichen."""
+        from db_sicherung import kopie_abweichung
+
+        def termin(name, verein, datum):
+            conn, _pfad = self._termin(name)
+            set_veranstaltung(conn, verein=verein, datum=datum)
+            return conn
+
+        eigen = termin("Eigen", "Eigener Verein", "2026-11-20")
+        self.assertIsNone(kopie_abweichung(termin("Gleich", "eigener  verein", "2026-11-20"), eigen))
+        self.assertIsNone(kopie_abweichung(termin("Leer1", "x", "2026-11-20"), termin("Leer2", "x", "2026-11-20")))
+        andere_datum = kopie_abweichung(termin("Datum", "Eigener Verein", "2026-12-24"), eigen)
+        self.assertIn("2026-12-24", andere_datum)
+        andere_verein = kopie_abweichung(termin("Verein", "Fremdverein", "2026-11-20"), eigen)
+        self.assertIn("Fremdverein", andere_verein)
+        lang = kopie_abweichung(termin("Lang", "Zeile eins\nZeile zwei\x00" + "x" * 200 + "​", "2026-11-20"), eigen)
+        self.assertNotIn("\n", lang)
+        self.assertNotIn("\x00", lang)
+        self.assertNotIn("​", lang)
+        self.assertLess(len(lang), 250)
+        self.assertIn("…", lang)
 
 
 if __name__ == "__main__":

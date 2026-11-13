@@ -7,11 +7,14 @@ Namen weiter. Code unverändert. Siehe Architektur.md.
 
 from __future__ import annotations
 import functools
+import os
 import re
 import sqlite3
 import unicodedata
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
+
+from shs_core import ANZEIGE_MAX, SUCHE_MAX
 
 
 
@@ -550,6 +553,47 @@ def _migriere_zeitplan_spalten(conn) -> None:
     """Ergänzt die neuen Zeitplan-Spalten in älteren Termin-Dateien (siehe _migriere_spalten)."""
     _migriere_spalten(conn, "zeitplan_eintrag", _ZEITPLAN_EINTRAG_NEUE_SPALTEN)
 
+# Sicherheitskorrektur D-2 (13.11.2026): Rücksprung-Journale mit Verweis auf eine weitere Datei.
+# Ein Journal kann am Ende auf eine zweite Datei verweisen (Aufbau am Dateiende: Name, 4 Byte
+# Namenslänge, 4 Byte Prüfsumme, 8 Byte Kennung). Das Programm schreibt nie in zwei
+# Datenbanken zugleich, ein solches Journal stammt also immer von außen. Es wird nicht
+# verarbeitet; die Datei daneben wird nicht geöffnet.
+_JOURNAL_VERWEIS_KENNUNG = bytes.fromhex("d9d505f920a163d7")
+JOURNAL_ENDUNG = "-journal"
+JOURNAL_VERWEIS_TEXT = (
+    "Neben der Termin-Datei liegt eine Rücksprung-Datei („-journal“) mit einem Verweis auf eine "
+    "weitere Datei. Das Programm erzeugt so etwas nie, die Datei wird deshalb nicht geöffnet. "
+    "Bitte nur Termin-Dateien aus vertrauenswürdiger Quelle verwenden."
+)
+
+class JournalMitVerweis(sqlite3.DatabaseError):
+    """Neben einer Termin-Datei liegt ein Journal mit Verweis auf eine weitere Datei (siehe
+    oben); der Text ist für den Nutzer bestimmt."""
+
+def journal_daten_haben_verweis(ende: bytes) -> bool:
+    """True, wenn `ende` (die letzten Bytes eines Journals, mindestens 16) einen Verweis auf
+    eine weitere Datei anzeigt: Kennung am Ende und Namenslänge ungleich 0."""
+    return (len(ende) >= 16 and ende[-8:] == _JOURNAL_VERWEIS_KENNUNG
+            and int.from_bytes(ende[-16:-12], "big") != 0)
+
+def journal_hat_verweis(pfad) -> bool:
+    """Wie journal_daten_haben_verweis für die Journal-Datei `pfad`; False, wenn es sie nicht
+    gibt oder sie sich nicht lesen lässt (dann scheitert auch SQLite)."""
+    try:
+        with open(pfad, "rb") as datei:
+            groesse = datei.seek(0, os.SEEK_END)
+            if groesse < 16:
+                return False
+            datei.seek(groesse - 16)
+            return journal_daten_haben_verweis(datei.read(16))
+    except OSError:
+        return False
+
+def pruefe_journal_ohne_verweis(termin_pfad) -> None:
+    """Wirft JournalMitVerweis, wenn neben der Termin-Datei ein Journal mit Verweis liegt."""
+    if journal_hat_verweis(f"{termin_pfad}{JOURNAL_ENDUNG}"):
+        raise JournalMitVerweis(JOURNAL_VERWEIS_TEXT)
+
 # Sicherheitsprüfung 03.10.2026, H-1: Das Programm legt selbst NIE Trigger oder Views an.
 # Stehen welche in einer Termin-Datei, stammen sie von außen (präparierte oder fremde Datei)
 # und könnten z. B. eingetragene Ergebnisse still verändern (Codex-Nachweis: 50 -> 0).
@@ -566,6 +610,82 @@ def _fremde_trigger_und_views_entfernen(conn) -> list[str]:
         conn.commit()
     return [f"{typ} {name}" for typ, name in objekte]
 
+def _soll_spalten() -> dict[str, set[str]]:
+    """Spalten, die eine aktuelle Termin-Datei je Tabelle hat (aus SCHEMA). Für teilnehmer und
+    ergebnisse deckt SCHEMA alle Spalten ab; bei veranstaltung fehlen die später per Migration
+    ergänzten (nur dort relevant, siehe db_termine._termin_werte_pruefen). Liegt hier unten, weil
+    auch db_stamm die Liste der dem Programm bekannten Spalten braucht (Sicherheitskorrektur D-1)."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(SCHEMA)
+        tabellen = [z[0] for z in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        return {
+            tabelle: {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
+            for tabelle in tabellen if not tabelle.startswith("sqlite_")
+        }
+
+def termin_werte_verletzt(conn: sqlite3.Connection) -> bool:
+    """True, wenn in den Tabellen teilnehmer, ergebnisse, zeitplan_eintrag oder veranstaltung Werte
+    stehen, die das Programm nicht kennt: unbekannte Prüfungsart, Stufe, Disziplin, Punkte außerhalb
+    des Bereichs oder vom falschen Typ, Namen, die kein Text sind. Gemeinsame Regel für das Öffnen
+    einer Termin-Datei (db_termine._termin_werte_pruefen) und das Zurückholen aus einer Kopie
+    (pruefe_werte_der_kopie). Vergleiche immer binär und mit Typprüfung, damit fremde
+    Spaltendefinitionen (Sortierregel, Datentyp) nichts durchlassen. Nur SQLite (typeof)."""
+    disz = "(" + ", ".join(f"'{d}'" for d in ALLE_DISZIPLINEN) + ")"
+
+    def text_in(spalte: str, liste: str) -> str:
+        return f"(typeof({spalte}) = 'text' AND ({spalte} COLLATE BINARY) IN {liste})"
+
+    def stufe_ok(spalte: str) -> str:
+        return f"(typeof({spalte}) IN ('integer', 'real') AND {spalte} IN (1, 2, 3))"
+
+    def text_oder_null(spalte: str) -> str:
+        return f"(typeof({spalte}) IN ('text', 'null'))"
+
+    gegenstaende = " AND ".join(
+        f"(gegenstand_{i}_disziplin IS NULL OR {text_in(f'gegenstand_{i}_disziplin', disz)})" for i in (1, 2, 3)
+    )
+    punkte = " AND ".join(
+        f"({spalte} IS NULL OR (typeof({spalte}) = 'integer' AND {spalte} BETWEEN 0 AND {maximum}))"
+        for suche, anzeige in DISZIPLIN_SPALTEN.values()
+        for spalte, maximum in ((suche, SUCHE_MAX), (anzeige, ANZEIGE_MAX))
+    )
+    namen = " AND ".join(text_oder_null(s) for s in ("nachname", "vorname", "rufname_hund", "verein"))
+    arten, pause, pruefung = "('ED', 'DK')", "('pause')", "('pruefung')"
+    abfragen = [
+        "SELECT COUNT(*) FROM teilnehmer WHERE NOT ("
+        f"{text_in('art', arten)} AND {stufe_ok('stufe')} "
+        f"AND (disziplin IS NULL OR {text_in('disziplin', disz)}) "
+        f"AND (art COLLATE BINARY <> 'ED' OR disziplin IS NOT NULL) AND {gegenstaende} AND {namen})",
+        f"SELECT COUNT(*) FROM ergebnisse WHERE NOT ({punkte})",
+        "SELECT COUNT(*) FROM zeitplan_eintrag WHERE NOT ("
+        f"(typeof(dauer_minuten) = 'integer' AND dauer_minuten > 0) AND ("
+        f"({text_in('typ', pause)}) OR ({text_in('typ', pruefung)} "
+        f"AND {text_in('art', arten)} AND {stufe_ok('stufe')} AND {text_in('disziplin', disz)})))",
+        f"SELECT COUNT(*) FROM veranstaltung WHERE NOT ({text_oder_null('verein')} AND {text_oder_null('datum')})",
+    ]
+    return any(conn.execute(abfrage).fetchone()[0] for abfrage in abfragen)
+
+# Sicherheitskorrektur D-6: Werte aus einer Kopie werden vor dem Speichern mit derselben Regel
+# geprüft wie beim Öffnen einer Termin-Datei.
+UNZULAESSIGE_KOPIE_WERTE_TEXT = (
+    "Die Kopie enthält Werte, die das Programm nicht kennt (z. B. eine unbekannte Prüfungsart, "
+    "Leistungsklasse oder Punktzahl). Die Werte aus der Kopie wurden nicht übernommen."
+)
+
+class KopieWerteUnzulaessig(sqlite3.DatabaseError):
+    """Nach dem Zurückholen aus einer Kopie stünden Werte in der Termin-Datei, die das Programm
+    beim Öffnen ablehnt; der Text ist für den Nutzer bestimmt."""
+
+def pruefe_werte_der_kopie(conn) -> None:
+    """Wirft KopieWerteUnzulaessig, wenn die Termin-Datei `conn` nach dem Zurückholen von Daten aus
+    einer Kopie (vor dem Commit) Werte enthält, die beim Öffnen abgelehnt würden. Der Aufrufer
+    rollt dann zurück (_mit_rollback). Bei PostgreSQL entfällt die Prüfung (dort ist das Schema
+    vom Programm und typeof gibt es nicht)."""
+    if isinstance(conn, _PostgresConnection):
+        return
+    if termin_werte_verletzt(conn):
+        raise KopieWerteUnzulaessig(UNZULAESSIGE_KOPIE_WERTE_TEXT)
+
 def entfernte_fremdobjekte() -> list[str]:
     """Trigger/Views, die das zuletzt per init_db() geöffnete Termin-File enthielt und die
     dabei entfernt wurden (leer im Normalfall) - für einen Hinweis in der Oberfläche."""
@@ -581,6 +701,7 @@ def init_db(pfad: str) -> sqlite3.Connection:
     gesperrt (unter Windows verhindert das ein anschließendes os.remove() der
     temporären Upload-Datei mit einem PermissionError)."""
     global _ENTFERNTE_FREMDOBJEKTE
+    pruefe_journal_ohne_verweis(pfad)  # D-2: vor jedem Öffnen mit Schreibrecht
     conn = sqlite3.connect(pfad)
     try:
         conn.row_factory = sqlite3.Row

@@ -33,6 +33,7 @@ from db_verbindung import (
     ALLE_DISZIPLINEN,
     ALLE_PRUEFUNGEN,
     DISZIPLIN_SPALTEN,
+    pruefe_werte_der_kopie,
     pruefung_nach_kuerzel,
     sortierschluessel_text,
     _FORMULAR_POSITION,
@@ -101,19 +102,33 @@ def ergebnis_wert_text(schluessel: str, werte: tuple | None) -> str:
     return "ja" if werte[0] else "nein"
 
 
+def _teilnehmer_schluessel(zeile) -> tuple[str, str, str]:
+    """Nachname, Vorname und Hundename eines Teilnehmers zum Vergleich: ohne Groß-/Kleinschreibung
+    und ohne überzählige Leerzeichen."""
+    return tuple(
+        " ".join(str(zeile[spalte] if zeile[spalte] is not None else "").split()).casefold()
+        for spalte in ("nachname", "vorname", "rufname_hund")
+    )
+
+
 def ergebnis_unterschiede(quelle: sqlite3.Connection, conn: sqlite3.Connection) -> list[dict]:
     """Vergleicht die Ergebnisse einer Kopie `quelle` mit dem Termin `conn` für Teilnehmer, die es
-    in beiden gibt (gleiche ID). Je Teilnehmer mit Unterschieden:
+    in beiden gibt (gleiche ID und gleicher Name samt Hund, Sicherheitskorrektur D-5). Je Teilnehmer
+    mit Unterschieden:
     {"teilnehmer_id", "name", "werte": [{"schluessel", "bezeichnung", "aktuell", "kopie"}]};
     `aktuell`/`kopie` sind Tupel der Spaltenwerte. Spalten, die die Kopie nicht kennt (ältere
     Programmversion), werden übersprungen. Sortiert nach Nachname, Vorname."""
     aus_kopie = {r["teilnehmer_id"]: dict(r) for r in quelle.execute("SELECT * FROM ergebnisse").fetchall()}
     aktuell = ergebnisse_je_teilnehmer(conn)
+    kopie_namen = {
+        r["id"]: _teilnehmer_schluessel(r)
+        for r in quelle.execute("SELECT id, nachname, vorname, rufname_hund FROM teilnehmer").fetchall()
+    }
     ergebnis = []
     for t in conn.execute("SELECT id, nachname, vorname, rufname_hund FROM teilnehmer "
                           "ORDER BY nachname, vorname, id").fetchall():
         alt, neu = aus_kopie.get(t["id"]), aktuell.get(t["id"])
-        if alt is None or neu is None:
+        if alt is None or neu is None or kopie_namen.get(t["id"]) != _teilnehmer_schluessel(t):
             continue
         werte = []
         for schluessel, (bezeichnung, spalten) in ERGEBNIS_WERTE.items():
@@ -139,11 +154,26 @@ def ergebnis_werte_wiederherstellen(
 ) -> int:
     """Setzt die gewählten Werte (Teilnehmer-ID, Schlüssel aus ERGEBNIS_WERTE) auf den Stand der
     Kopie `quelle` zurück und committet einmal; ein Fehler macht alles rückgängig. Liefert die Zahl
-    der geschriebenen Werte (Teilnehmer oder Wert, die es nicht mehr gibt, zählen nicht)."""
+    der geschriebenen Werte (Teilnehmer oder Wert, die es nicht mehr gibt, zählen nicht; ebenso
+    ein Teilnehmer, dessen Name oder Hund in der Kopie ein anderer ist, Sicherheitskorrektur D-5).
+    Stünden danach Werte in der Datei, die das Programm beim Öffnen ablehnt, wirft sie
+    KopieWerteUnzulaessig und nichts wird geändert (Sicherheitskorrektur D-6)."""
     zahl = 0
+    gleich: dict[int, bool] = {}
+
+    def gleicher_teilnehmer(teilnehmer_id: int) -> bool:
+        if teilnehmer_id not in gleich:
+            abfrage = "SELECT nachname, vorname, rufname_hund FROM teilnehmer WHERE id = ?"
+            kopie, eigen = (v.execute(abfrage, (teilnehmer_id,)).fetchone() for v in (quelle, conn))
+            gleich[teilnehmer_id] = (kopie is not None and eigen is not None
+                                     and _teilnehmer_schluessel(kopie) == _teilnehmer_schluessel(eigen))
+        return gleich[teilnehmer_id]
+
     for teilnehmer_id, schluessel in auswahl:
         if schluessel not in ERGEBNIS_WERTE:
             raise ValueError(f"Unbekannter Wert: {schluessel!r}")
+        if not gleicher_teilnehmer(teilnehmer_id):
+            continue
         spalten = ERGEBNIS_WERTE[schluessel][1]
         zeile = quelle.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone()
         if zeile is None or not all(s in zeile.keys() for s in spalten):
@@ -153,6 +183,7 @@ def ergebnis_werte_wiederherstellen(
             [zeile[s] for s in spalten] + [teilnehmer_id],
         )
         zahl += 1 if cursor.rowcount else 0
+    pruefe_werte_der_kopie(conn)  # D-6: keine Werte speichern, die beim Öffnen abgelehnt würden
     conn.commit()
     return zahl
 

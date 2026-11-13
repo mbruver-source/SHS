@@ -14,8 +14,10 @@ from dataclasses import dataclass, field
 from db_verbindung import (
     ALLE_PRUEFUNGEN,
     pruefung_nach_kuerzel,
+    pruefe_werte_der_kopie,
     _mit_rollback,
     _PostgresConnection,
+    _soll_spalten,
 )
 
 
@@ -435,7 +437,9 @@ def fehlende_teilnehmer(quelle: sqlite3.Connection, conn: sqlite3.Connection) ->
 def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bool:
     """Legt einen mit teilnehmer_sichern() gesicherten Teilnehmer wieder an (gleiche ID, mit
     Ergebnis). Ist seine Startnummer inzwischen vergeben, bleibt er ohne Nummer. Liefert
-    False, wenn es die ID schon gibt (nichts wird geändert)."""
+    False, wenn es die ID schon gibt (nichts wird geändert). Stünden danach Werte in der Datei,
+    die das Programm beim Öffnen ablehnt, wirft sie KopieWerteUnzulaessig und nichts wird
+    geändert (Sicherheitskorrektur D-6)."""
     daten = dict(sicherung["teilnehmer"])
     if conn.execute("SELECT 1 FROM teilnehmer WHERE id = ?", (daten["id"],)).fetchone():
         return False
@@ -443,24 +447,41 @@ def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bo
     if nummer is not None and conn.execute(
             "SELECT 1 FROM teilnehmer WHERE startnummer = ?", (nummer,)).fetchone():
         daten["startnummer"] = None
-    spalten = list(daten)
+    postgres = isinstance(conn, _PostgresConnection)
+    spalten = _spalten_fuer_einfuegen(postgres, "teilnehmer", daten)
     # PostgreSQL: id ist GENERATED ALWAYS AS IDENTITY, die alte ID braucht OVERRIDING SYSTEM VALUE
     # (die Sequenz liegt ohnehin schon darüber, die ID wurde früher von ihr vergeben).
-    ueberschreiben = " OVERRIDING SYSTEM VALUE" if isinstance(conn, _PostgresConnection) else ""
+    ueberschreiben = " OVERRIDING SYSTEM VALUE" if postgres else ""
     conn.execute(
-        f"INSERT INTO teilnehmer ({', '.join(spalten)}){ueberschreiben} "
+        f"INSERT INTO teilnehmer ({_spaltenliste(postgres, spalten)}){ueberschreiben} "
         f"VALUES ({', '.join('?' for _ in spalten)})",
         [daten[s] for s in spalten],
     )
     if sicherung.get("ergebnis"):
         ergebnis = dict(sicherung["ergebnis"])
-        spalten = list(ergebnis)
+        spalten = _spalten_fuer_einfuegen(postgres, "ergebnisse", ergebnis)
         conn.execute(
-            f"INSERT INTO ergebnisse ({', '.join(spalten)}) VALUES ({', '.join('?' for _ in spalten)})",
+            f"INSERT INTO ergebnisse ({_spaltenliste(postgres, spalten)}) "
+            f"VALUES ({', '.join('?' for _ in spalten)})",
             [ergebnis[s] for s in spalten],
         )
+    pruefe_werte_der_kopie(conn)  # D-6: keine Werte speichern, die beim Öffnen abgelehnt würden
     conn.commit()
     return True
+
+def _spalten_fuer_einfuegen(postgres: bool, tabelle: str, werte: dict) -> list[str]:
+    """Spaltennamen für das INSERT in teilnehmer_wiederherstellen (Sicherheitskorrektur D-1).
+    Die Namen stammen aus einer gesicherten, womöglich fremden Termin-Datei: bei SQLite werden
+    nur Spalten übernommen, die das Programm selbst kennt (SCHEMA); alles andere wird nicht
+    zurückgeholt. PostgreSQL: das Schema stammt vom Programm, dort unverändert."""
+    if postgres:
+        return list(werte)
+    bekannt = _soll_spalten()[tabelle]
+    return [spalte for spalte in werte if spalte in bekannt]
+
+def _spaltenliste(postgres: bool, spalten: list[str]) -> str:
+    """Kommagetrennte Spaltenliste für ein INSERT; bei SQLite zusätzlich in Anführungszeichen."""
+    return ", ".join(spalten if postgres else (f'"{spalte}"' for spalte in spalten))
 
 def startnummern_wiederherstellen(conn: sqlite3.Connection, nummern: dict[int, int]) -> int:
     """Setzt Startnummern (Teilnehmer-ID -> Nummer) zurück, soweit der Teilnehmer noch keine

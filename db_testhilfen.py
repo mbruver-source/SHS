@@ -11,7 +11,22 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import pathlib
+import struct
 from unittest import mock
+
+
+def journal_mit_verweis_schreiben(termin_pfad, ziel) -> pathlib.Path:
+    """Schreibt neben `termin_pfad` ein Rücksprung-Journal („-journal“) mit Verweis auf die weitere
+    Datei `ziel` (Sicherheitskorrektur D-2; Aufbau siehe db_verbindung). Liefert den Journal-Pfad."""
+    kennung = bytes.fromhex("d9d505f920a163d7")
+    name = str(ziel).encode()
+    kopf = kennung + struct.pack(">IIIII", 0, 0, 1, 512, 4096)
+    kopf += b"\0" * (512 - len(kopf))
+    journal = pathlib.Path(f"{termin_pfad}-journal")
+    journal.write_bytes(kopf + name + struct.pack(">II", len(name), sum(name) & 0xFFFFFFFF) + kennung)
+    return journal
+
 
 MODULE = (
     "db", "db_verbindung", "db_stamm", "db_ergebnisse", "db_zeitplan", "db_termine", "db_web", "db_sync",

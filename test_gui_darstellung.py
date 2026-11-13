@@ -1182,6 +1182,7 @@ def test_diagnose_text_ohne_benutzerpfad_und_mit_protokollende(tmp_path, monkeyp
 
     text = desktop_gemeinsam.diagnose_text("9.9.9", fehler="Traceback: aktueller Fehler")
     assert "Version: 9.9.9" in text
+    assert "SQLite " in text  # D-2: die gebündelte SQLite-Version gehört in die Diagnose
     assert "Aktueller Fehler:\nTraceback: aktueller Fehler" in text
     assert "RuntimeError: zuletzt (Benutzer <Benutzer>)" in text
     assert text.count("alte Zeile") < 100

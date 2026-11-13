@@ -2406,6 +2406,55 @@ class TestZeitplan(unittest.TestCase):
         self.assertFalse(teilnehmer_wiederherstellen(self.conn, sicherung))
         self.assertEqual(len(list_teilnehmer(self.conn)), 1)
 
+    def test_wiederherstellen_uebernimmt_nur_dem_programm_bekannte_spalten(self):
+        """Sicherheitskorrektur D-1: Spaltennamen aus einer gesicherten (womöglich fremden) Datei
+        gehen nie ungeprüft ins SQL; unbekannte Zusatzspalten werden nicht mit zurückgeholt,
+        alle bekannten Felder kommen unverändert zurück. Nur SQLite (Termin-Datei)."""
+        from db import _PostgresConnection
+        if isinstance(self.conn, _PostgresConnection):
+            self.skipTest("nur SQLite: Zusatzspalten gibt es nur in einer fremden Termin-Datei")
+        tid = self._teilnehmer("ED", 1, "Flächensuche", startnummer=5, nachname="Albers")
+        andere = self._teilnehmer("ED", 1, "Flächensuche", startnummer=6, nachname="Brandt")
+        eintragen_ergebnis(self.conn, tid, "Flächensuche", 50, 30)
+        eintragen_ergebnis(self.conn, andere, "Flächensuche", 55, 35)
+        boese = 'x") SELECT 0 -- zusatz'
+        boese_sql = boese.replace('"', '""')
+        for tabelle in ("teilnehmer", "ergebnisse"):
+            self.conn.execute(f'ALTER TABLE {tabelle} ADD COLUMN "{boese_sql}" INTEGER DEFAULT 7')
+        self.conn.commit()
+        sicherung = teilnehmer_sichern(self.conn, tid)
+        self.assertEqual(sicherung["teilnehmer"][boese], 7)
+        self.assertEqual(sicherung["ergebnis"][boese], 7)
+        bekannt_vorher = {k: v for k, v in sicherung["teilnehmer"].items() if k != boese}
+
+        delete_teilnehmer(self.conn, tid)
+        self.assertTrue(teilnehmer_wiederherstellen(self.conn, sicherung))
+
+        zeile = self.conn.execute("SELECT * FROM teilnehmer WHERE id = ?", (tid,)).fetchone()
+        self.assertEqual({k: zeile[k] for k in bekannt_vorher}, bekannt_vorher)
+        e = self.conn.execute("SELECT * FROM ergebnisse WHERE teilnehmer_id = ?", (tid,)).fetchone()
+        self.assertEqual((e["suche_flaechensuche"], e["anzeige_flaechensuche"]), (50, 30))
+        # Die unbekannten Zusatzspalten wurden nicht mit zurückgeholt (Vorgabewert greift), und die
+        # Ergebnisse der anderen Teilnehmer sind unverändert.
+        self.assertEqual(self.conn.execute(
+            f'SELECT "{boese_sql}" FROM teilnehmer WHERE id = ?', (tid,)).fetchone()[0], 7)
+        andere_ergebnis = self.conn.execute(
+            "SELECT suche_flaechensuche, anzeige_flaechensuche FROM ergebnisse WHERE teilnehmer_id = ?",
+            (andere,)).fetchone()
+        self.assertEqual(tuple(andere_ergebnis), (55, 35))
+
+    def test_wiederherstellen_ohne_zusatzspalten_bleibt_unveraendert(self):
+        """D-1: Die Spaltenliste des Programms deckt alle Spalten von teilnehmer und ergebnisse ab
+        (sonst gingen beim Wiederherstellen Felder verloren). Nur SQLite."""
+        import db
+        from db import _PostgresConnection
+        if isinstance(self.conn, _PostgresConnection):
+            self.skipTest("nur SQLite: die Liste stammt aus dem SQLite-Schema")
+        soll = db._soll_spalten()
+        for tabelle in ("teilnehmer", "ergebnisse"):
+            ist = {z[1] for z in self.conn.execute(f'PRAGMA table_info("{tabelle}")')}
+            self.assertEqual(ist, soll[tabelle], tabelle)
+
     def test_teilnehmer_wiederherstellen_mit_vergebener_startnummer(self):
         erster = self._teilnehmer("ED", 1, "Flächensuche", startnummer=5, nachname="Albers")
         sicherung = teilnehmer_sichern(self.conn, erster)
@@ -3454,6 +3503,52 @@ class TestTerminOeffnen(unittest.TestCase):
             self.skipTest("kein Journal entstanden (Cache groß genug)")
         with closing(termin_oeffnen(str(pfad))) as conn:
             self.assertEqual(get_veranstaltung(conn)["verein"], "SGV")
+
+    def test_journal_mit_verweis_wird_auf_keinem_weg_verarbeitet(self):
+        """Sicherheitskorrektur D-2: Ein Journal mit Verweis auf eine weitere Datei wird nicht
+        zurückgespielt, die Termin-Datei nicht geöffnet und die weitere Datei nicht angetastet -
+        unabhängig von der SQLite-Version des Python (das Journal bleibt unverändert liegen)."""
+        import db
+        from db_testhilfen import journal_mit_verweis_schreiben
+        pfad = self._termin()
+        fremd = self.ordner / "fremd.txt"
+        fremd.write_bytes(b"erfundene Daten, keine Termin-Datei\n" * 20)
+        journal = journal_mit_verweis_schreiben(pfad, fremd)
+        journal_vorher = journal.read_bytes()
+
+        with self.assertRaises(TerminNichtOeffenbar) as fehler:
+            termin_oeffnen(str(pfad))
+        self.assertIn("Verweis", str(fehler.exception))
+        with self.assertRaises(db.JournalMitVerweis):
+            init_db(str(pfad))
+        with self.assertRaises(db.JournalMitVerweis):
+            db.oeffne_termin_lesend(pfad)
+        with self.assertRaises(sqlite3.Error):
+            db.termin_lesend_pruefen(pfad)
+        db._journal_zurueckspielen(pfad)
+        eintraege = db.liste_termine(self.ordner)
+        self.assertEqual([(t.dateiname, t.lesbar) for t in eintraege], [("t.sqlite", False)])
+
+        self.assertEqual(journal.read_bytes(), journal_vorher)
+        self.assertEqual(fremd.read_bytes(), b"erfundene Daten, keine Termin-Datei\n" * 20)
+
+    def test_journal_ohne_verweis_bleibt_unveraendert_zulaessig(self):
+        """D-2: Die Prüfung erkennt nur den Verweis am Dateiende, nicht jedes Journal."""
+        import db
+        kennung = bytes.fromhex("d9d505f920a163d7")
+        self.assertFalse(db.journal_daten_haben_verweis(b""))
+        self.assertFalse(db.journal_daten_haben_verweis(kennung))  # zu kurz
+        self.assertFalse(db.journal_daten_haben_verweis(b"\0" * 8 + kennung))  # Namenslänge 0
+        self.assertFalse(db.journal_daten_haben_verweis((5).to_bytes(4, "big") + b"\0" * 4 + b"x" * 8))
+        self.assertTrue(db.journal_daten_haben_verweis(b"abc" + (5).to_bytes(4, "big") + b"\0" * 4 + kennung))
+        pfad = self._termin()
+        journal = pathlib.Path(f"{pfad}-journal")
+        self.assertFalse(db.journal_hat_verweis(journal))  # gibt es nicht
+        journal.write_bytes(b"\0" * 512)
+        self.assertFalse(db.journal_hat_verweis(journal))
+        journal.write_bytes(b"x")
+        self.assertFalse(db.journal_hat_verweis(journal))
+        db.pruefe_journal_ohne_verweis(pfad)
 
     def test_fremde_sortierregeln_und_typen_werden_abgelehnt(self):
         for name, ddl, wert in (

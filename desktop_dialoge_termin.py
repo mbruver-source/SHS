@@ -59,6 +59,7 @@ from db import (
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
     ist_loeschen_kopie,
+    kopie_abweichung,
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
@@ -73,6 +74,42 @@ from desktop_dialoge_basis import (
     _scrollflaeche,
     _speichern_vor_dem_schliessen,
 )
+
+
+def _kopie_abweichung_lesen(pfad, conn) -> str | None:
+    """Hinweis, wenn Verein oder Datum der Kopie `pfad` nicht zum Termin `conn` passen
+    (db_sicherung.kopie_abweichung, Sicherheitskorrektur D-5); None bei Übereinstimmung oder wenn
+    sich die Kopie nicht lesen lässt (das meldet der Dialog an anderer Stelle)."""
+    quelle = None
+    try:
+        quelle = termin_lesend_pruefen(pfad, ohne_fremdobjekte=True)
+        abweichung = kopie_abweichung(quelle, conn)
+        quelle.set_progress_handler(None, 0)
+        return abweichung
+    except (sqlite3.Error, OSError, KeyError, IndexError, TypeError, ValueError):
+        return None
+    finally:
+        if quelle is not None:
+            quelle.close()
+
+
+def _vorauswahl_kopie(anzahlen: list, abweichungen: list) -> int:
+    """Index der vorzuwählenden Kopie: die jüngste mit Treffern, die zum Termin passt; sonst die
+    jüngste, die passt; eine abweichende Kopie nur, wenn keine passt."""
+    for index, (anzahl, abweichung) in enumerate(zip(anzahlen, abweichungen)):
+        if anzahl and abweichung is None:
+            return index
+    return next((index for index, abweichung in enumerate(abweichungen) if abweichung is None), 0)
+
+
+def _abweichungs_label() -> QLabel:
+    """Klartext-Feld für den Hinweis zu einer abweichenden Kopie (der Text enthält Werte aus der
+    Kopie, deshalb nie als Rich Text deuten)."""
+    label = QLabel("")
+    label.setTextFormat(Qt.PlainText)
+    label.setWordWrap(True)
+    label.hide()
+    return label
 
 
 def _gleicher_pfad(pfad_a: str | None, pfad_b: str | None) -> bool:
@@ -249,7 +286,11 @@ class SicherungTeilnehmerDialog(QDialog):
         # Kopie mit Fehlenden ist vorgewählt (Marco 12.11.2026: die neueste Kopie entsteht beim
         # Beenden und enthält den Gelöschten oft nicht mehr).
         anzahlen = [self._fehlende_zaehlen(pfad) for pfad, _zeit in kopien]
-        for (pfad, zeit), anzahl in zip(kopien, anzahlen):
+        # D-5: Passt eine Kopie nicht zum Termin (Verein/Datum), steht es in der Liste, sie wird nie
+        # vorgewählt, und beim Übernehmen kommt eine Rückfrage.
+        self._abweichungen = [_kopie_abweichung_lesen(pfad, conn) for pfad, _zeit in kopien]
+        self._abweichung_label = _abweichungs_label()
+        for (pfad, zeit), anzahl, abweichung in zip(kopien, anzahlen, self._abweichungen):
             text = zeit.strftime("Kopie vom %d.%m.%Y um %H:%M:%S Uhr")
             if ist_loeschen_kopie(pfad):
                 text += " (vor dem Löschen)"
@@ -261,8 +302,10 @@ class SicherungTeilnehmerDialog(QDialog):
                 text += " – 1 Teilnehmer fehlt"
             else:
                 text += f" – {anzahl} Teilnehmer fehlen"
+            if abweichung:
+                text += " – Verein/Datum weichen ab"
             self.kopie_combo.addItem(text)
-        vorauswahl = next((i for i, a in enumerate(anzahlen) if a), 0)
+        vorauswahl = _vorauswahl_kopie(anzahlen, self._abweichungen)
         self.kopie_combo.setCurrentIndex(vorauswahl)
         self.kopie_combo.currentIndexChanged.connect(self._kopie_gewaehlt)
         self.teilnehmer_liste = QListWidget()
@@ -310,6 +353,7 @@ class SicherungTeilnehmerDialog(QDialog):
                     "Angezeigt werden die Kopien vor dem Löschen (Schalter in „Einstellungen“ an)." if loeschkopien
                     else "Angezeigt werden die normalen automatischen Kopien (Schalter „Vor dem Löschen …“ aus)."))
             layout.addWidget(self.kopie_combo)
+            layout.addWidget(self._abweichung_label)
             layout.addWidget(QLabel(
                 "Teilnehmer, die in der Kopie stehen, im Termin aber fehlen (sie kommen mit "
                 "Ergebnis zurück; ist ihre Startnummer inzwischen vergeben, ohne Nummer):"))
@@ -323,7 +367,7 @@ class SicherungTeilnehmerDialog(QDialog):
         """Anzahl der im Termin fehlenden Teilnehmer in dieser Kopie, None wenn nicht lesbar."""
         quelle = None
         try:
-            quelle = termin_lesend_pruefen(pfad)
+            quelle = termin_lesend_pruefen(pfad, ohne_fremdobjekte=True)  # D-6
             termin_unversehrt_pruefen(quelle)
             anzahl = len(fehlende_teilnehmer(quelle, self._conn))
             quelle.set_progress_handler(None, 0)
@@ -340,13 +384,29 @@ class SicherungTeilnehmerDialog(QDialog):
         self.teilnehmer_liste.addItem(hinweis)
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
 
+    def _abweichung_anzeigen(self, index: int) -> None:
+        text = self._abweichungen[index] if 0 <= index < len(self._abweichungen) else None
+        self._abweichung_label.setText(text or "")
+        self._abweichung_label.setVisible(bool(text))
+
+    def accept(self) -> None:
+        """D-5: Eine Kopie, die nicht zum Termin passt, wird nur nach Rückfrage übernommen (gefragt
+        wird nur, wenn etwas angekreuzt ist)."""
+        index = self.kopie_combo.currentIndex()
+        abweichung = self._abweichungen[index] if 0 <= index < len(self._abweichungen) else None
+        if (abweichung and self.ausgewaehlte_ids()
+                and not _ja_nein(self, "Kopie eines anderen Termins?", f"{abweichung}\n\nTrotzdem übernehmen?")):
+            return
+        super().accept()
+
     def _kopie_gewaehlt(self, index: int) -> None:
         self.schliesse_quelle()
         self.teilnehmer_liste.clear()
+        self._abweichung_anzeigen(index)
         if not (0 <= index < len(self._kopien)):
             return
         try:
-            self._quelle_conn = termin_lesend_pruefen(self._kopien[index][0])
+            self._quelle_conn = termin_lesend_pruefen(self._kopien[index][0], ohne_fremdobjekte=True)  # D-6
             termin_unversehrt_pruefen(self._quelle_conn)
             fehlende = fehlende_teilnehmer(self._quelle_conn, self._conn)
             self._quelle_conn.set_progress_handler(None, 0)
@@ -408,7 +468,11 @@ class ErgebnisseSicherungDialog(QDialog):
 
         self.kopie_combo = QComboBox()
         anzahlen = [self._unterschiede_zaehlen(pfad) for pfad, _zeit in kopien]
-        for (pfad, zeit), anzahl in zip(kopien, anzahlen):
+        # D-5: wie im Dialog „Aus Sicherung holen“ - abweichende Kopien markiert, nie vorgewählt,
+        # beim Übernehmen mit Rückfrage.
+        self._abweichungen = [_kopie_abweichung_lesen(pfad, conn) for pfad, _zeit in kopien]
+        self._abweichung_label = _abweichungs_label()
+        for (pfad, zeit), anzahl, abweichung in zip(kopien, anzahlen, self._abweichungen):
             text = zeit.strftime("Kopie vom %d.%m.%Y um %H:%M:%S Uhr")
             if ist_loeschen_kopie(pfad):
                 text += " (vor dem Löschen)"
@@ -418,8 +482,10 @@ class ErgebnisseSicherungDialog(QDialog):
                 text += " – keine Unterschiede"
             else:
                 text += f" – {anzahl} Teilnehmer mit Unterschieden"
+            if abweichung:
+                text += " – Verein/Datum weichen ab"
             self.kopie_combo.addItem(text)
-        vorauswahl = next((i for i, a in enumerate(anzahlen) if a), 0)
+        vorauswahl = _vorauswahl_kopie(anzahlen, self._abweichungen)
         self.kopie_combo.setCurrentIndex(vorauswahl)
         self.kopie_combo.currentIndexChanged.connect(self._kopie_gewaehlt)
 
@@ -462,6 +528,7 @@ class ErgebnisseSicherungDialog(QDialog):
             hinweis.setWordWrap(True)
             layout.addWidget(hinweis)
             layout.addWidget(self.kopie_combo)
+            layout.addWidget(self._abweichung_label)
             layout.addLayout(auswahl_zeile)
             layout.addWidget(self.baum)
         layout.addWidget(self.buttons)
@@ -469,7 +536,7 @@ class ErgebnisseSicherungDialog(QDialog):
             self._kopie_gewaehlt(vorauswahl)
 
     def _unterschiede_lesen(self, pfad) -> tuple[sqlite3.Connection, list[dict]]:
-        quelle = termin_lesend_pruefen(pfad)
+        quelle = termin_lesend_pruefen(pfad, ohne_fremdobjekte=True)  # D-6
         try:
             termin_unversehrt_pruefen(quelle)
             unterschiede = ergebnis_unterschiede(quelle, self._conn)
@@ -493,9 +560,25 @@ class ErgebnisseSicherungDialog(QDialog):
         self.baum.addTopLevelItem(item)
         self.buttons.button(QDialogButtonBox.Ok).setEnabled(False)
 
+    def _abweichung_anzeigen(self, index: int) -> None:
+        text = self._abweichungen[index] if 0 <= index < len(self._abweichungen) else None
+        self._abweichung_label.setText(text or "")
+        self._abweichung_label.setVisible(bool(text))
+
+    def accept(self) -> None:
+        """D-5: Eine Kopie, die nicht zum Termin passt, wird nur nach Rückfrage übernommen (gefragt
+        wird nur, wenn etwas angekreuzt ist)."""
+        index = self.kopie_combo.currentIndex()
+        abweichung = self._abweichungen[index] if 0 <= index < len(self._abweichungen) else None
+        if (abweichung and self.ausgewaehlte_werte()
+                and not _ja_nein(self, "Kopie eines anderen Termins?", f"{abweichung}\n\nTrotzdem übernehmen?")):
+            return
+        super().accept()
+
     def _kopie_gewaehlt(self, index: int) -> None:
         self.schliesse_quelle()
         self.baum.clear()
+        self._abweichung_anzeigen(index)
         if not (0 <= index < len(self._kopien)):
             return
         try:

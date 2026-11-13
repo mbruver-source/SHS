@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pyzipper
 
-from db import oeffne_termin_lesend, termine_ordner
+from db import JOURNAL_VERWEIS_TEXT, journal_hat_verweis, oeffne_termin_lesend, termine_ordner
 
 
 class PasswortFalschError(Exception):
@@ -284,6 +284,34 @@ def auto_sicherungen_zu_termin(termin_pfad: str, ordner: Path | None = None) -> 
     return sorted(ergebnis, key=lambda eintrag: eintrag[1], reverse=True)
 
 
+def _kurz(wert, laenge: int = 40) -> str:
+    """Wert aus einer womöglich fremden Datei für eine Meldung: nur druckbare Zeichen, Umbrüche und
+    Mehrfach-Leerzeichen zu einem Leerzeichen, auf `laenge` Zeichen gekürzt."""
+    text = " ".join(str(wert if wert is not None else "").split())
+    text = "".join(zeichen for zeichen in text if zeichen.isprintable())
+    return text if len(text) <= laenge else text[:laenge - 1] + "…"
+
+
+def _verein_datum(verbindung) -> tuple[str, str]:
+    zeile = verbindung.execute("SELECT verein, datum FROM veranstaltung WHERE id = 1").fetchone()
+    if zeile is None:
+        return "", ""
+    return tuple(" ".join(str(wert if wert is not None else "").split()) for wert in (zeile[0], zeile[1]))
+
+
+def kopie_abweichung(quelle, conn) -> str | None:
+    """Hinweistext (Klartext), wenn Verein oder Datum der Kopie `quelle` nicht zum geöffneten Termin
+    `conn` passen, sonst None (Sicherheitskorrektur D-5). Nur ein Hinweis: Verein und Datum eines
+    Termins können sich nachträglich ändern."""
+    verein_kopie, datum_kopie = _verein_datum(quelle)
+    verein_termin, datum_termin = _verein_datum(conn)
+    if verein_kopie.casefold() == verein_termin.casefold() and datum_kopie == datum_termin:
+        return None
+    return (f"Verein oder Datum dieser Kopie weichen vom geöffneten Termin ab "
+            f"(Kopie: „{_kurz(verein_kopie)}“, {_kurz(datum_kopie)}). Vermutlich gehört sie zu einer "
+            "anderen Datei mit gleichem Namen.")
+
+
 def ist_loeschen_kopie(pfad) -> bool:
     """True für eine Kopie, die vor dem Löschen von Teilnehmern angelegt wurde."""
     return Path(pfad).stem.endswith(AUTO_SICHERUNG_LOESCHEN_ENDUNG)
@@ -352,7 +380,9 @@ def sicherung_erstellen(
                 continue
             zf.write(datei, arcname=name)
             journal = Path(f"{datei}{_JOURNAL_ENDUNG}")
-            if journal.is_file():
+            # D-2: ein Journal mit Verweis auf eine weitere Datei kommt nicht in die Sicherung
+            # (beim Wiederherstellen würde es abgelehnt und die ganze Sicherung unbrauchbar).
+            if journal.is_file() and not journal_hat_verweis(journal):
                 zf.write(journal, arcname=f"{name}{_JOURNAL_ENDUNG}")
             roh.append(name)
 
@@ -602,6 +632,10 @@ def sicherung_wiederherstellen(
                 tmp_journal = None
                 if f"{quelle}{_JOURNAL_ENDUNG}" in vorhandene_eintraege:
                     tmp_journal = vorbereiten(f"{quelle}{_JOURNAL_ENDUNG}", f"{ziel}{_JOURNAL_ENDUNG}")
+                    # D-2: Journal mit Verweis auf eine weitere Datei -> Sicherung abgelehnt,
+                    # bevor ein Termin ersetzt ist (die temporären Dateien räumt finally auf).
+                    if journal_hat_verweis(tmp_journal):
+                        raise ValueError(f"Die Sicherung ist nicht verwendbar ({quelle}): {JOURNAL_VERWEIS_TEXT}")
                 vorbereitet.append((ziel, tmp_termin, tmp_journal))
 
         geschrieben: list[str] = []

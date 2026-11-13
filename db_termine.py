@@ -13,16 +13,15 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
-from shs_core import (
-    ANZEIGE_MAX,
-    SUCHE_MAX,
-)
-
 from db_verbindung import (
-    ALLE_DISZIPLINEN,
-    DISZIPLIN_SPALTEN,
     init_db,
-    SCHEMA,
+    JOURNAL_ENDUNG,
+    journal_hat_verweis,
+    JOURNAL_VERWEIS_TEXT,
+    JournalMitVerweis,
+    pruefe_journal_ohne_verweis,
+    termin_werte_verletzt,
+    _soll_spalten,
 )
 
 
@@ -160,7 +159,11 @@ def oeffne_termin_lesend(pfad: str | Path) -> sqlite3.Connection:
     bisher. Eigene Termin-Dateien laufen mit Rollback-Journal und sind nie betroffen.
     Restrisiko: immutable liest ohne Sperre - öffnet ein fremdes Werkzeug die Datei genau
     während des Lesens und schreibt per Checkpoint in die Hauptdatei, kann ein Mischstand
-    oder SQLITE_CORRUPT entstehen (von Marco am 19.10.2026 akzeptiert, OFFEN.md C34)."""
+    oder SQLITE_CORRUPT entstehen (von Marco am 19.10.2026 akzeptiert, OFFEN.md C34).
+
+    Liegt neben der Datei ein Journal mit Verweis auf eine weitere Datei, wird sie nicht
+    geöffnet (JournalMitVerweis, Sicherheitskorrektur D-2)."""
+    pruefe_journal_ohne_verweis(pfad)
     posix = str(Path(pfad).absolute()).replace("\\", "/")
     if posix.startswith("//"):
         posix = "//" + posix
@@ -202,7 +205,20 @@ def pruefe_termin_aufbau(conn: sqlite3.Connection) -> None:
         if any(zeile[6] in (2, 3) for zeile in conn.execute("SELECT * FROM pragma_table_xinfo(?)", (tabelle,))):
             raise sqlite3.DatabaseError("keine Termin-Datei")
 
-def termin_lesend_pruefen(pfad: str | Path) -> sqlite3.Connection:
+class KopieMitFremdobjekten(sqlite3.DatabaseError):
+    """Die Datei enthält Ansichten oder Trigger, die das Programm nie anlegt (Sicherheitskorrektur
+    D-6); der Text ist für den Nutzer bestimmt."""
+
+def pruefe_ohne_fremdobjekte(conn: sqlite3.Connection) -> None:
+    """Wirft KopieMitFremdobjekten, wenn die Datei Ansichten oder Trigger enthält. Eigene
+    Termin-Dateien haben nie welche (init_db entfernt sie); eine Ansicht kann beim Lesen mehr
+    Daten erzeugen, als die Datei groß ist."""
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type IN ('view', 'trigger') LIMIT 1").fetchone():
+        raise KopieMitFremdobjekten(
+            "Die Kopie enthält Ansichten oder Trigger, die das Programm nie anlegt, und wird deshalb nicht gelesen."
+        )
+
+def termin_lesend_pruefen(pfad: str | Path, ohne_fremdobjekte: bool = False) -> sqlite3.Connection:
     """Öffnet eine fremde Termin-Datei nur lesend und prüft ihren Aufbau - gemeinsame
     Reihenfolge für Terminübersicht und Termin-Import (Abschluss-QS 15.10.2026, A19c;
     termin_oeffnen folgt ihr ebenso, erlaubt aber zusätzlich eine Datei ohne Tabellen):
@@ -210,12 +226,15 @@ def termin_lesend_pruefen(pfad: str | Path) -> sqlite3.Connection:
     gesetzt (aufheben mit conn.set_progress_handler(None, 0)). Ein liegengebliebenes Journal
     spielt der Aufrufer vorher zurück oder nicht; ohne Zurückspielen scheitert das Öffnen.
     Bei einem Fehler wird die Verbindung geschlossen. Eine Datei über
-    TERMIN_GROESSE_GRENZE ergibt TerminZuGross (offene Punkte O2)."""
+    TERMIN_GROESSE_GRENZE ergibt TerminZuGross (offene Punkte O2). `ohne_fremdobjekte`: Dateien mit
+    Ansichten oder Triggern werden abgelehnt (KopieMitFremdobjekten; die Dialoge für Kopien)."""
     _groesse_pruefen(pfad)
     conn = oeffne_termin_lesend(pfad)
     try:
         lesen_begrenzen(conn)
         pruefe_termin_aufbau(conn)
+        if ohne_fremdobjekte:
+            pruefe_ohne_fremdobjekte(conn)
     except BaseException:
         conn.close()
         raise
@@ -280,24 +299,18 @@ def _journal_zurueckspielen(pfad) -> None:
     Speichern), lässt sich die Datei nur lesend nicht öffnen. Ein kurzes Öffnen mit
     Schreibrecht lässt SQLite den angefangenen Vorgang zurückrollen - dabei läuft kein Code
     aus der Datei. Danach sind die zuletzt gespeicherten Daten wieder lesbar
-    (Desktop-Prüfung 14.10.2026)."""
-    if not os.path.exists(f"{pfad}-journal"):
+    (Desktop-Prüfung 14.10.2026).
+
+    Ein Journal mit Verweis auf eine weitere Datei wird nie zurückgespielt (Sicherheitskorrektur
+    D-2); die Datei lässt sich dann nicht lesen und erscheint als nicht lesbar."""
+    journal = f"{pfad}{JOURNAL_ENDUNG}"
+    if not os.path.exists(journal) or journal_hat_verweis(journal):
         return
     try:
         with closing(sqlite3.connect(str(pfad))) as conn:
             conn.execute("PRAGMA schema_version").fetchone()
     except sqlite3.Error:
         pass
-
-def _soll_spalten() -> dict[str, set[str]]:
-    """Spalten, die eine aktuelle Termin-Datei je Tabelle hat (aus SCHEMA + Migrationen)."""
-    with closing(sqlite3.connect(":memory:")) as conn:
-        conn.executescript(SCHEMA)
-        tabellen = [z[0] for z in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
-        return {
-            tabelle: {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
-            for tabelle in tabellen if not tabelle.startswith("sqlite_")
-        }
 
 _UNBEKANNTE_WERTE_TEXT = (
     "Die Termin-Datei enthält Werte, die das Programm nicht kennt (z. B. eine unbekannte "
@@ -315,42 +328,10 @@ def _termin_werte_pruefen(conn: sqlite3.Connection) -> None:
         ist = {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
         if not soll <= ist:
             raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
-    disz = "(" + ", ".join(f"'{d}'" for d in ALLE_DISZIPLINEN) + ")"
-
-    def text_in(spalte: str, liste: str) -> str:
-        return f"(typeof({spalte}) = 'text' AND ({spalte} COLLATE BINARY) IN {liste})"
-
-    def stufe_ok(spalte: str) -> str:
-        return f"(typeof({spalte}) IN ('integer', 'real') AND {spalte} IN (1, 2, 3))"
-
-    def text_oder_null(spalte: str) -> str:
-        return f"(typeof({spalte}) IN ('text', 'null'))"
-
-    gegenstaende = " AND ".join(
-        f"(gegenstand_{i}_disziplin IS NULL OR {text_in(f'gegenstand_{i}_disziplin', disz)})" for i in (1, 2, 3)
-    )
-    punkte = " AND ".join(
-        f"({spalte} IS NULL OR (typeof({spalte}) = 'integer' AND {spalte} BETWEEN 0 AND {maximum}))"
-        for suche, anzeige in DISZIPLIN_SPALTEN.values()
-        for spalte, maximum in ((suche, SUCHE_MAX), (anzeige, ANZEIGE_MAX))
-    )
-    namen = " AND ".join(text_oder_null(s) for s in ("nachname", "vorname", "rufname_hund", "verein"))
-    arten, pause, pruefung = "('ED', 'DK')", "('pause')", "('pruefung')"
-    abfragen = [
-        "SELECT COUNT(*) FROM teilnehmer WHERE NOT ("
-        f"{text_in('art', arten)} AND {stufe_ok('stufe')} "
-        f"AND (disziplin IS NULL OR {text_in('disziplin', disz)}) "
-        f"AND (art COLLATE BINARY <> 'ED' OR disziplin IS NOT NULL) AND {gegenstaende} AND {namen})",
-        f"SELECT COUNT(*) FROM ergebnisse WHERE NOT ({punkte})",
-        "SELECT COUNT(*) FROM zeitplan_eintrag WHERE NOT ("
-        f"(typeof(dauer_minuten) = 'integer' AND dauer_minuten > 0) AND ("
-        f"({text_in('typ', pause)}) OR ({text_in('typ', pruefung)} "
-        f"AND {text_in('art', arten)} AND {stufe_ok('stufe')} AND {text_in('disziplin', disz)})))",
-        f"SELECT COUNT(*) FROM veranstaltung WHERE NOT ({text_oder_null('verein')} AND {text_oder_null('datum')})",
-    ]
-    for abfrage in abfragen:
-        if conn.execute(abfrage).fetchone()[0]:
-            raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
+    # Die Abfragen selbst stehen in db_verbindung.termin_werte_verletzt (seit D-6 gemeinsam mit dem
+    # Zurückholen aus einer Kopie genutzt).
+    if termin_werte_verletzt(conn):
+        raise TerminNichtOeffenbar(_UNBEKANNTE_WERTE_TEXT)
 
 def termin_oeffnen(pfad: str, groesse_bestaetigt: bool = False) -> sqlite3.Connection:
     """Öffnet einen Termin für das Hauptfenster - mit Prüfungen (Desktop-Prüfung 14.10.2026,
@@ -375,6 +356,10 @@ def termin_oeffnen(pfad: str, groesse_bestaetigt: bool = False) -> sqlite3.Conne
         # Abschluss-QS 15.10.2026 (K-3): eine inzwischen gelöschte/verschobene Datei nicht still
         # als leeren Termin neu anlegen - neue Termine legt StartDialog._neuer_termin an.
         raise TerminNichtOeffenbar("Die Termin-Datei wurde nicht gefunden (gelöscht oder verschoben?).")
+    try:
+        pruefe_journal_ohne_verweis(pfad)  # D-2: vor jedem Öffnen mit Schreibrecht
+    except JournalMitVerweis as exc:
+        raise TerminNichtOeffenbar(JOURNAL_VERWEIS_TEXT) from exc
     groesse = os.path.getsize(pfad)
     if groesse > TERMIN_GROESSE_GRENZE and not groesse_bestaetigt:
         raise TerminUngewoehnlichGross(groesse)

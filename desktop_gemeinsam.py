@@ -1517,10 +1517,13 @@ def diagnose_text(version: str, fehler: str | None = None) -> str:
     def _versionen() -> str:
         import platform
 
+        import sqlite3
+
         from PySide6 import __version__ as pyside_version
         from PySide6.QtCore import qVersion
 
-        return f"Python {platform.python_version()}, PySide6 {pyside_version}, Qt {qVersion()}"
+        return (f"Python {platform.python_version()}, PySide6 {pyside_version}, Qt {qVersion()}, "
+                f"SQLite {sqlite3.sqlite_version}")
 
     zeilen = [
         "SHS-Prüfungsprogramm – Diagnose",

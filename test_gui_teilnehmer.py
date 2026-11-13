@@ -2759,6 +2759,152 @@ def test_sicherung_dialog_waehlt_juengste_kopie_mit_fehlenden_vor(qtbot, termin,
         dialog.schliesse_quelle()
 
 
+def _kopien_mit_fremdem_verein(conn, pfad, ordner):
+    """Zwei Kopien mit Brandt: um 9 Uhr die des Termins, um 10 Uhr eine mit anderem Verein; danach
+    haben sich im Termin die Ergebnisse von Brandt geändert."""
+    import datetime
+
+    _db_modul.set_veranstaltung(conn, verein="Eigener Verein", datum="2026-11-20")
+    _teilnehmer_anlegen(conn, nachname="Albers", rufname_hund="Aika", startnummer=1)
+    brandt = _teilnehmer_anlegen(conn, nachname="Brandt", rufname_hund="Bruno", startnummer=2)
+    _db_modul.eintragen_ergebnis(conn, brandt, "Flächensuche", 50, 30)
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 9, 0, 0))
+    _db_modul.set_veranstaltung(conn, verein="Fremdverein\n<b>x</b>", datum="2026-11-20")
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 10, 0, 0))
+    _db_modul.set_veranstaltung(conn, verein="Eigener Verein", datum="2026-11-20")
+    _db_modul.eintragen_ergebnis(conn, brandt, "Flächensuche", 10, 5)
+    return brandt
+
+
+def test_sicherung_dialog_markiert_kopie_mit_anderem_verein(qtbot, termin, tmp_path, monkeypatch):
+    """Sicherheitskorrektur D-5: Eine Kopie mit anderem Verein/Datum wird markiert, nie vorgewählt und
+    nur nach Rückfrage übernommen; der Hinweis ist Klartext."""
+    import desktop_dialoge_termin
+    from desktop_dialoge import SicherungTeilnehmerDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    ordner = tmp_path / "Auto-Sicherung"
+    brandt = _kopien_mit_fremdem_verein(conn, pfad, ordner)
+    _db_modul.delete_teilnehmer(conn, brandt)
+    kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+    assert [z.hour for _p, z in kopien] == [10, 9]
+    dialog = SicherungTeilnehmerDialog(None, conn, kopien)
+    qtbot.addWidget(dialog)
+    try:
+        assert "weichen ab" in dialog.kopie_combo.itemText(0)
+        assert "weichen ab" not in dialog.kopie_combo.itemText(1)
+        assert dialog.kopie_combo.currentIndex() == 1  # beide haben Brandt, vorgewählt ist die passende
+        assert dialog._abweichung_label.isHidden()
+        dialog.kopie_combo.setCurrentIndex(0)
+        assert not dialog._abweichung_label.isHidden()
+        assert dialog._abweichung_label.textFormat() == Qt.PlainText
+        assert "Fremdverein <b>x</b>" in dialog._abweichung_label.text()  # einzeilig, nicht als HTML gedeutet
+        fragen = []
+        monkeypatch.setattr(desktop_dialoge_termin, "_ja_nein", lambda *a, **k: fragen.append(a[2]) or False)
+        dialog.teilnehmer_liste.item(0).setCheckState(Qt.Checked)
+        dialog.accept()
+        assert dialog.result() != QDialog.Accepted and len(fragen) == 1 and "Fremdverein" in fragen[0]
+        monkeypatch.setattr(desktop_dialoge_termin, "_ja_nein", lambda *a, **k: True)
+        dialog.accept()
+        assert dialog.result() == QDialog.Accepted
+        # Ohne Häkchen gibt es nichts zu übernehmen, dann auch keine Rückfrage.
+        dialog2 = SicherungTeilnehmerDialog(None, conn, kopien)
+        qtbot.addWidget(dialog2)
+        try:
+            dialog2.kopie_combo.setCurrentIndex(0)
+            monkeypatch.setattr(desktop_dialoge_termin, "_ja_nein", lambda *a, **k: pytest.fail("keine Frage"))
+            dialog2.accept()
+        finally:
+            dialog2.schliesse_quelle()
+    finally:
+        dialog.schliesse_quelle()
+
+
+def test_sicherung_dialog_ohne_abweichung_fragt_nicht(qtbot, termin, tmp_path, monkeypatch):
+    import datetime
+
+    import desktop_dialoge_termin
+    from desktop_dialoge import SicherungTeilnehmerDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    _db_modul.set_veranstaltung(conn, verein="Eigener Verein", datum="2026-11-20")
+    geloescht = _teilnehmer_anlegen(conn, nachname="Brandt", startnummer=2)
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 9, 0, 0))
+    _db_modul.delete_teilnehmer(conn, geloescht)
+    dialog = SicherungTeilnehmerDialog(None, conn, auto_sicherungen_zu_termin(pfad, ordner=ordner))
+    qtbot.addWidget(dialog)
+    try:
+        monkeypatch.setattr(desktop_dialoge_termin, "_ja_nein", lambda *a, **k: pytest.fail("keine Rückfrage erwartet"))
+        assert dialog._abweichung_label.isHidden() and "weichen ab" not in dialog.kopie_combo.itemText(0)
+        dialog.accept()
+        assert dialog.result() == QDialog.Accepted
+    finally:
+        dialog.schliesse_quelle()
+
+
+def test_ergebnisse_dialog_markiert_kopie_mit_anderem_verein(qtbot, termin, tmp_path, monkeypatch):
+    """D-5, Dialog „Ergebnisse aus automatischer Kopie wiederherstellen“: wie beim Teilnehmer-Dialog."""
+    import desktop_dialoge_termin
+    from desktop_dialoge import ErgebnisseSicherungDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopien_mit_fremdem_verein(conn, pfad, ordner)
+    kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+    dialog = ErgebnisseSicherungDialog(None, conn, kopien)
+    qtbot.addWidget(dialog)
+    try:
+        assert "weichen ab" in dialog.kopie_combo.itemText(0)
+        assert "weichen ab" not in dialog.kopie_combo.itemText(1)
+        assert dialog.kopie_combo.currentIndex() == 1
+        assert dialog._abweichung_label.isHidden()
+        dialog.kopie_combo.setCurrentIndex(0)
+        assert not dialog._abweichung_label.isHidden()
+        fragen = []
+        monkeypatch.setattr(desktop_dialoge_termin, "_ja_nein", lambda *a, **k: fragen.append(a[2]) or False)
+        dialog.baum.topLevelItem(0).child(0).setCheckState(0, Qt.Checked)
+        dialog.accept()
+        assert dialog.result() != QDialog.Accepted and len(fragen) == 1
+        # Ohne Häkchen gibt es nichts zu übernehmen, dann auch keine Rückfrage.
+        dialog.baum.topLevelItem(0).child(0).setCheckState(0, Qt.Unchecked)
+        dialog.accept()
+        assert dialog.result() == QDialog.Accepted and len(fragen) == 1
+    finally:
+        dialog.schliesse_quelle()
+
+
+def test_sicherung_dialoge_lesen_keine_kopie_mit_ansicht(qtbot, termin, tmp_path):
+    """Sicherheitskorrektur D-6: Eine Kopie mit Ansicht oder Trigger gilt in beiden Dialogen als nicht
+    lesbar und lässt sich nicht übernehmen."""
+    import datetime
+    import sqlite3
+    from contextlib import closing
+
+    from desktop_dialoge import ErgebnisseSicherungDialog, SicherungTeilnehmerDialog
+    from db_sicherung import auto_sicherungen_zu_termin
+
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Albers", startnummer=1)
+    ordner = tmp_path / "Auto-Sicherung"
+    _kopie_ablegen(conn, pfad, ordner, datetime.datetime(2026, 11, 12, 9, 0, 0))
+    kopien = auto_sicherungen_zu_termin(pfad, ordner=ordner)
+    with closing(sqlite3.connect(kopien[0][0])) as roh:
+        roh.execute("CREATE VIEW fremd AS SELECT 1 AS x")
+        roh.commit()
+    for klasse in (SicherungTeilnehmerDialog, ErgebnisseSicherungDialog):
+        dialog = klasse(None, conn, kopien)
+        qtbot.addWidget(dialog)
+        try:
+            assert "nicht lesbar" in dialog.kopie_combo.itemText(0)
+            assert not dialog.buttons.button(QDialogButtonBox.Ok).isEnabled()
+        finally:
+            dialog.schliesse_quelle()
+
+
 def test_kopien_vor_dem_loeschen_sind_getrennt_und_werden_nicht_verdraengt(tmp_path):
     import datetime
 
