@@ -1246,6 +1246,25 @@ class TestDatenbank(unittest.TestCase):
                 self.assertIn("zu lang", str(fehler.exception))
         self.assertEqual(len(list_teilnehmer(self.conn)), len(FELD_LAENGEN) - 1)
 
+    def test_set_veranstaltung_begrenzt_textfelder_nur_bei_aenderung(self):
+        """Sicherheitskorrektur I-5 (Veranstaltungsfelder): zu lange Werte werden abgelehnt, ein
+        schon gespeicherter langer Altwert blockiert aber das Speichern anderer Angaben nicht."""
+        from db import VERANSTALTUNG_LAENGEN
+        for feld, (_bezeichnung, hoechstens) in VERANSTALTUNG_LAENGEN.items():
+            with self.subTest(feld=feld):
+                werte = {"verein": "V", "datum": "2026-11-14", feld: "x" * hoechstens}
+                set_veranstaltung(self.conn, **werte)
+                werte[feld] = "x" * (hoechstens + 1)
+                with self.assertRaises(ValueError) as fehler:
+                    set_veranstaltung(self.conn, **werte)
+                self.assertIn("zu lang", str(fehler.exception))
+        set_veranstaltung(self.conn, verein="V", datum="2026-11-14")
+        self.conn.execute("UPDATE veranstaltung SET ort = ?", ("O" * 300,))
+        self.conn.commit()
+        set_veranstaltung(self.conn, verein="V", datum="2026-11-15", ort="O" * 300)  # unverändert: erlaubt
+        with self.assertRaises(ValueError):
+            set_veranstaltung(self.conn, verein="V", datum="2026-11-15", ort="O" * 301)
+
     def test_add_teilnehmer_prueft_schulterhoehe_und_zu_grosse_zahlen(self):
         """Sicherheitskorrektur I-1: Schulterhöhe nur 1 bis 100 cm, riesige Zahlen werden abgelehnt
         statt in der Datenbank zu scheitern."""

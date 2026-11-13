@@ -55,6 +55,7 @@ from db import (
     termin_lesend_pruefen,
     termin_unversehrt_pruefen,
     termine_ordner,
+    VERANSTALTUNG_LAENGEN,
 )
 from db_sicherung import (
     eindeutigen_dateinamen_finden,
@@ -787,7 +788,14 @@ class VeranstaltungsDialog(ResponsiveSchriftMixin, QDialog):
         """Eingabefelder der Veranstaltungsdaten (mit Vorbelegung)."""
 
         def feld(name: str) -> QLineEdit:
-            return QLineEdit(vorbelegung.get(name) or "")
+            text = vorbelegung.get(name) or ""
+            eingabe = QLineEdit(text)
+            # Sicherheitskorrektur I-5: Obergrenze wie beim Speichern (db.VERANSTALTUNG_LAENGEN); ein
+            # schon vorhandener, längerer Altwert bleibt unbegrenzt, damit er nicht still gekürzt wird.
+            hoechstens = VERANSTALTUNG_LAENGEN.get(name, (None, None))[1]
+            if hoechstens and len(text) <= hoechstens:
+                eingabe.setMaxLength(hoechstens)
+            return eingabe
 
         def geld_feld(name: str) -> QLineEdit:
             # Teil 2 Nr. 8a: Standardgebühr nur beim Anlegen - ein bewusst geleertes Feld

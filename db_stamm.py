@@ -23,6 +23,27 @@ from db_verbindung import (
 
 # --- Veranstaltung -----------------------------------------------------
 
+# Sicherheitskorrektur I-5 (Veranstaltungsfelder): wie bei den Teilnehmern ein Höchstmaß je Textfeld,
+# damit ein überlanger Wert keine Ausdrucke verhindert. Feld -> (Anzeigename, höchstens Zeichen).
+VERANSTALTUNG_LAENGEN: dict[str, tuple[str, int]] = {
+    "verein": ("Verein", 200), "ort": ("Ort", 200), "verband": ("Verband", 200),
+    "vereins_nr": ("Vereins-Nr.", 40), "pruefungsnummer": ("Prüfungsnummer", 40),
+    "wertungsrichter_1": ("Wertungsrichter 1", 100), "wertungsrichter_2": ("Wertungsrichter 2", 100),
+    "wertungsrichter_3": ("Wertungsrichter 3", 100), "wertungsrichter_4": ("Wertungsrichter 4", 100),
+    "wertungsrichter_5": ("Wertungsrichter 5", 100), "pruefungsleiter": ("Prüfungsleiter", 100),
+    "meldestelle": ("Meldestelle", 500),
+}
+
+def pruefe_veranstaltung_werte(conn: sqlite3.Connection, werte: dict) -> None:
+    """Wirft ValueError, wenn ein Textfeld aus `werte` länger als in VERANSTALTUNG_LAENGEN erlaubt ist.
+    Geprüft werden nur Felder, deren Wert sich gegenüber dem gespeicherten ändert: ein schon
+    vorhandener langer Altwert blockiert so nie das Speichern anderer Angaben."""
+    aktuell = get_veranstaltung(conn) or {}
+    for feld, (bezeichnung, hoechstens) in VERANSTALTUNG_LAENGEN.items():
+        wert = werte.get(feld)
+        if isinstance(wert, str) and len(wert) > hoechstens and wert != aktuell.get(feld):
+            raise ValueError(f"{bezeichnung} ist zu lang (höchstens {hoechstens} Zeichen, hier {len(wert)})")
+
 
 @_mit_rollback
 def set_veranstaltung(
@@ -53,6 +74,13 @@ def set_veranstaltung(
     checkliste: str | None = None,
     checkliste_eigene: str | None = None,
 ) -> None:
+    pruefe_veranstaltung_werte(conn, {
+        "verein": verein, "ort": ort, "verband": verband, "vereins_nr": vereins_nr,
+        "pruefungsnummer": pruefungsnummer, "wertungsrichter_1": wertungsrichter_1,
+        "wertungsrichter_2": wertungsrichter_2, "wertungsrichter_3": wertungsrichter_3,
+        "wertungsrichter_4": wertungsrichter_4, "wertungsrichter_5": wertungsrichter_5,
+        "pruefungsleiter": pruefungsleiter, "meldestelle": meldestelle,
+    })
     conn.execute(
         """
         INSERT INTO veranstaltung (
