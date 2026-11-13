@@ -1098,7 +1098,7 @@ def exportiere_abrechnung_csv(conn: sqlite3.Connection, pfad: str) -> int:
         schreiber.writerow(ABRECHNUNG_CSV_SPALTEN)
         for z in zeilen:
             schreiber.writerow([
-                datum, _csv_zelle_absichern(z.name), _csv_zelle_absichern(zweck.strip()),
+                _csv_zelle_absichern(datum), _csv_zelle_absichern(z.name), _csv_zelle_absichern(zweck.strip()),
                 zahl_text(z.km, 1).replace(".", ""), zahl_text(z.km_satz, 2).replace(".", ""),
                 zahl_text(z.fahrtkosten, 2).replace(".", ""), zahl_text(z.pauschale, 2).replace(".", ""),
                 zahl_text(z.summe, 2).replace(".", ""), "Ausgabe",

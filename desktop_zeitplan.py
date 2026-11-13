@@ -70,6 +70,7 @@ from desktop_gemeinsam import (
     _ausfuehren,
     _db_fehler_anzeigen,
     _ja_nein,
+    _klartext_tooltip,
     _zeitplan_pdf_exportieren,
     kurzer_hinweis,
     symbol,
@@ -103,13 +104,6 @@ def _pause_bei_allen_hinweis(eingefuegt: list[tuple[str, str | None]], wunsch: s
         return anzahl, ("Die Pause beginnt nicht überall um " + wunsch + ":\n\n" + "\n".join(zeilen)
                         + "\n\nEin laufender Prüfungsblock wird nicht geteilt.")
     return anzahl, ""
-
-
-def _klartext_tooltip(text: str) -> str:
-    """Sicherheitsprüfung 03.10.2026, S-1: Tooltips deutet Qt automatisch als HTML, sobald
-    der Text danach aussieht. Enthält er Namen aus Importen, wird er deshalb maskiert und
-    ausdrücklich als Rich Text ausgezeichnet - so erscheint er immer wörtlich."""
-    return "<qt>" + html.escape(text).replace("\n", "<br>") + "</qt>"
 
 
 def _anzahl_pruefungen(gruppen: list[dict]) -> int:

@@ -89,7 +89,7 @@ class _Ablageort:
         self.pfad = pfad
 
 
-def _dateiname_teil(text: str) -> str:
+def _dateiname_teil(text: str, ersatz: str = "Teilnehmer") -> str:
     """Nutzertext als Teil eines Dateinamens (Desktop-Prüfung 14.10.2026, Teil 1 Nr. 5): ohne
     Zeichen, die Windows im Dateinamen nicht erlaubt bzw. als Ordnertrenner liest - sonst
     machte „Meier/Schulz“ den Vorschlag zu Ordner plus Datei."""
@@ -97,12 +97,15 @@ def _dateiname_teil(text: str) -> str:
 
     # Auf 120 Zeichen begrenzt, bevor der Ausdruck läuft: auf sehr langen Werten mit viel Leerraum
     # wäre er quadratisch langsam (Sicherheitskorrektur I-2).
-    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", (text or "")[:120]).strip(" .-") or "Teilnehmer"
+    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", (text or "")[:120]).strip(" .-") or ersatz
 
 
 def _export_dateiname(conn, praefix: str) -> str:
     veranstaltung = get_veranstaltung(conn)
-    datum = (veranstaltung or {}).get("datum") or ""
+    # Das Datum stammt aus der Termin-Datei: als Teil eines Dateinamens bereinigen (kein Pfad),
+    # Sicherheitskorrektur I-3.
+    roh = (veranstaltung or {}).get("datum")
+    datum = _dateiname_teil(str(roh), ersatz="") if roh else ""
     return f"{praefix}_{datum}.pdf" if datum else f"{praefix}.pdf"
 
 
@@ -168,6 +171,14 @@ def _wartecursor():
         yield
     finally:
         QApplication.restoreOverrideCursor()
+
+
+def _klartext_tooltip(text: str) -> str:
+    """Sicherheitsprüfung 03.10.2026, S-1: Tooltips deutet Qt automatisch als HTML, sobald
+    der Text danach aussieht. Enthält er Namen aus Importen, wird er deshalb maskiert und
+    ausdrücklich als Rich Text ausgezeichnet - so erscheint er immer wörtlich. Gilt für jeden
+    Tooltip mit Werten aus Dateien oder Importen (D-8, A-1)."""
+    return "<qt>" + html.escape(text).replace("\n", "<br>") + "</qt>"
 
 
 def _url_oeffnen(parent, url: QUrl, anzeige: str) -> bool:
@@ -290,7 +301,10 @@ def _speicherort_waehlen(parent, ablageort: _Ablageort, titel: str, vorschlag_da
             os.makedirs(ablageort.pfad, exist_ok=True)
         except OSError:
             pass
-        return _freier_dateipfad(os.path.join(ablageort.pfad, vorschlag_dateiname))
+        # Nur der Dateiname zählt: ohne Nachfrage darf der Ort nie außerhalb des Ablageorts liegen
+        # (Sicherheitskorrektur I-3).
+        dateiname = os.path.basename(vorschlag_dateiname.replace("\\", "/")) or "Datei"
+        return _freier_dateipfad(os.path.join(ablageort.pfad, dateiname))
     try:
         # Der Ausdrucke-Ordner (siehe _ausdrucke_ordner) entsteht erst hier - sonst würde
         # der Dialog bei einem fehlenden Ordner an einer anderen Stelle starten.

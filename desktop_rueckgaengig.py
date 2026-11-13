@@ -12,6 +12,8 @@ from typing import Callable
 
 from PySide6.QtWidgets import QPushButton
 
+from desktop_gemeinsam import _klartext_tooltip
+
 _NICHTS_ZURUECK = "Nichts zum Rückgängigmachen"
 
 
@@ -28,7 +30,8 @@ class RueckgaengigSpeicher:
         """Merkt eine Aktion; `aktion` liefert beim Ausführen den Text für die Statuszeile."""
         self._aktion = (beschreibung, aktion)
         self.knopf.setEnabled(True)
-        self.knopf.setToolTip(f"Macht rückgängig: {beschreibung} (Strg+Z)")
+        # Die Beschreibung kann einen Namen aus importierten Daten enthalten (D-8): als Klartext.
+        self.knopf.setToolTip(_klartext_tooltip(f"Macht rückgängig: {beschreibung} (Strg+Z)"))
 
     def entnehmen(self) -> tuple[str, Callable[[], str]] | None:
         """Gibt (Beschreibung, Aktion) zurück und leert den Speicher (der Knopf wird wieder

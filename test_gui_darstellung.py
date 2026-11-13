@@ -1157,6 +1157,33 @@ def test_absturzprotokoll_ohne_schreibrecht_startet_trotzdem(tmp_path):
     assert desktop_gemeinsam.absturzprotokoll_einrichten("9.9.9", ordner=unmoeglich) is None
 
 
+def test_exportdateiname_und_ablageort_bleiben_im_ablageordner(tmp_path):
+    """Sicherheitskorrektur I-3: Ein Datum aus einer fremden Termin-Datei darf den Dateinamen nicht
+    zum Pfad machen, und ohne Nachfrage landet jede Datei im Ablageort."""
+    import os
+
+    import desktop_gemeinsam
+    from db import init_db, set_veranstaltung
+
+    conn = init_db(str(tmp_path / "t.sqlite"))
+    try:
+        set_veranstaltung(conn, verein="V", datum="x\\..\\..\\..\\AUSSERHALB")
+        name = desktop_gemeinsam._export_dateiname(conn, "Teilnehmerliste")
+        assert "\\" not in name and "/" not in name and name.endswith(".pdf")
+        set_veranstaltung(conn, verein="V", datum="2026-11-14")
+        assert desktop_gemeinsam._export_dateiname(conn, "Zeitplan") == "Zeitplan_2026-11-14.pdf"
+    finally:
+        conn.close()
+    ablage = desktop_gemeinsam._Ablageort(str(tmp_path / "Ausdrucke"))
+    desktop_gemeinsam._ohne_nachfrage_speichern(True)
+    try:
+        for vorschlag in ("Liste_x\\..\\..\\AUSSERHALB.csv", "../../AUSSERHALB.csv", "/etc/AUSSERHALB.csv", ".."):
+            ziel = desktop_gemeinsam._speicherort_waehlen(None, ablage, "Speichern", vorschlag, "CSV (*.csv)")
+            assert os.path.dirname(os.path.abspath(ziel)) == os.path.abspath(ablage.pfad), vorschlag
+    finally:
+        desktop_gemeinsam._ohne_nachfrage_speichern(False)
+
+
 def test_dateiname_teil_ist_begrenzt_und_schnell():
     """Sicherheitskorrektur I-2: Auch ein sehr langer Wert mit viel Leerraum braucht kaum Zeit."""
     import time

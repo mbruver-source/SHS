@@ -61,6 +61,30 @@ def test_verwaltungs_und_kontaktfelder_bleiben_ohne_eingabe_leer(qtbot):
         assert getattr(ergebnis, feld) is None
 
 
+def test_tooltips_mit_namen_aus_der_datei_sind_klartext(qtbot, conn):
+    """Sicherheitskorrektur D-8/A-1: Tooltips mit Namen aus importierten Daten oder einer fremden Datei
+    zeigen sie wörtlich (maskiert), nie als Markup."""
+    from PySide6.QtWidgets import QPushButton
+
+    from desktop_abrechnung import _SP_QUITTUNG, AbrechnungTab
+    from desktop_rueckgaengig import RueckgaengigSpeicher
+
+    markup = '<img src="C:/x/bild.png">'
+    knopf = QPushButton()
+    qtbot.addWidget(knopf)
+    RueckgaengigSpeicher(knopf).merken(f"Löschen von „{markup}“", lambda: "")
+    assert knopf.toolTip().startswith("<qt>") and "<img" not in knopf.toolTip()
+    assert "&lt;img" in knopf.toolTip()
+
+    _abrechnung_termin(conn)
+    conn.execute("UPDATE veranstaltung SET wertungsrichter_1 = ?", (markup,))
+    conn.commit()
+    tab = AbrechnungTab(conn)
+    qtbot.addWidget(tab)
+    tooltip = tab.tabelle.cellWidget(0, _SP_QUITTUNG).toolTip()
+    assert tooltip.startswith("<qt>") and "<img" not in tooltip and "&lt;img" in tooltip
+
+
 def test_abrechnung_tab_zeigt_nur_eingetragene_richter_und_rechnet(qtbot, conn):
     import json
     from desktop_abrechnung import AbrechnungTab

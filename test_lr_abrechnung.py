@@ -246,6 +246,15 @@ class TestCsv(unittest.TestCase):
         self.assertEqual(zeilen[2][3:], ["120,0", "0,35", "42,00", "50,00", "92,00", "Ausgabe"])
         self.assertTrue(zeilen[2][1].startswith("'"), zeilen[2][1])  # Formel entschärft
 
+    def test_datum_aus_der_datei_wird_entschaerft(self):
+        """Sicherheitskorrektur I-4: Ein nicht lesbares Datum aus einer fremden Termin-Datei wird
+        wie die übrigen Zellen gegen Formeln geschützt."""
+        from db_import import exportiere_abrechnung_csv  # noqa: PLC0415
+        db.set_veranstaltung(self.conn, verein="HSV", datum="=1+1", wertungsrichter_1="Anna Alt")
+        pfad = os.path.join(self.ordner.name, "a.csv")
+        self.assertEqual(exportiere_abrechnung_csv(self.conn, pfad), 1)
+        self.assertEqual(self._lesen(pfad)[1][0], "'=1+1")
+
     def test_ohne_richter_nur_kopfzeile(self):
         from db_import import exportiere_abrechnung_csv  # noqa: PLC0415
         db.set_veranstaltung(self.conn, verein="HSV", datum="2026-11-14")

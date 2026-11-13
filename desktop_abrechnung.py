@@ -40,6 +40,7 @@ from desktop_gemeinsam import (
     _db_fehler_anzeigen,
     _dateiname_teil,
     _export_dateiname,
+    _klartext_tooltip,
     _pdf_exportieren,
     kurzer_hinweis,
 )
@@ -207,7 +208,7 @@ class AbrechnungTab(QWidget):
                     self.tabelle.setItem(reihe, spalte, zelle)
                 self._betraege_setzen(reihe, z)
                 knopf = QPushButton("Quittung…")
-                knopf.setToolTip(f"Quittung für {z.name} als PDF speichern")
+                knopf.setToolTip(_klartext_tooltip(f"Quittung für {z.name} als PDF speichern"))  # A-1: Name aus der Datei
                 knopf.clicked.connect(lambda _=False, nummer=z.nummer, name=z.name: self._quittung_exportieren(nummer, name))
                 self.tabelle.setCellWidget(reihe, _SP_QUITTUNG, knopf)
                 self.tabelle.setColumnWidth(_SP_QUITTUNG, max(

@@ -115,7 +115,7 @@ class TestSicherungErstellen(unittest.TestCase):
         def nicht_unterstuetzt(*_a, **_k):
             raise NotImplementedError("That compression method is not supported")
 
-        with patch.object(pyzipper.AESZipFile, "read", nicht_unterstuetzt):
+        with patch.object(pyzipper.AESZipFile, "open", nicht_unterstuetzt):  # seit D-3 wird über open gelesen
             with self.assertRaisesRegex(ValueError, "nicht unterstützt"):
                 sicherung_inhalt(ziel)
 
@@ -303,6 +303,48 @@ class TestSicherungMomentaufnahme(unittest.TestCase):
         self.assertIn("Verweis", str(fehler.exception))
         self.assertEqual(sorted(p.name for p in self.zurueck.iterdir()), ["fremd.txt"])
         self.assertEqual(fremd.read_bytes(), b"erfundene Daten, keine Termin-Datei\n" * 20)
+
+    def test_zip_eintrag_mit_zu_kleiner_groessenangabe_wird_nicht_entpackt(self):
+        """Sicherheitskorrektur D-3: Das Lesen bricht ab, sobald mehr Bytes kommen als im ZIP-Verzeichnis
+        stehen; der Arbeitsspeicher bleibt klein, auch wenn der Datenstrom sehr groß wäre."""
+        import struct
+        import tracemalloc
+
+        echt, angeblich = 60 * 1024 * 1024, 1000
+        for verfahren in (zipfile.ZIP_DEFLATED, zipfile.ZIP_LZMA, zipfile.ZIP_BZIP2):
+            with self.subTest(verfahren=verfahren):
+                with zipfile.ZipFile(self.ziel, "w", verfahren) as zf:
+                    zf.writestr("termin.sqlite", bytes(echt))
+                roh = bytearray(self.ziel.read_bytes())
+                zentral = roh.rfind(b"PK\x01\x02")
+                self.assertEqual(struct.unpack_from("<I", roh, zentral + 24)[0], echt)
+                struct.pack_into("<I", roh, zentral + 24, angeblich)  # Zentralverzeichnis: unkomprimierte Größe
+                lokal = roh.find(b"PK\x03\x04")
+                struct.pack_into("<I", roh, lokal + 22, angeblich)  # lokaler Kopf
+                self.ziel.write_bytes(bytes(roh))
+                tracemalloc.start()
+                try:
+                    with self.assertRaises(ValueError) as fehler:
+                        sicherung_inhalt(str(self.ziel))
+                    spitze = tracemalloc.get_traced_memory()[1]
+                finally:
+                    tracemalloc.stop()
+                # DEFLATE: zipfile kürzt selbst auf die angegebene Größe, die Prüfsumme schlägt an.
+                self.assertRegex(str(fehler.exception), "größer als angegeben|beschädigt")
+                self.assertLess(spitze, 30 * 1024 * 1024)
+
+    def test_gefaehrliche_windows_dateinamen_werden_abgelehnt(self):
+        """Sicherheitskorrektur D-4: Punkt oder Leerzeichen am Ende, hochgestellte Ziffern bei COM/LPT und
+        CONIN$/CONOUT$ gelten als unsicher; normale Namen bleiben erlaubt."""
+        hoch1, hoch2, hoch3 = chr(0xB9), chr(0xB2), chr(0xB3)
+        for name in ("termin.sqlite.", "termin.sqlite ", f"COM{hoch1}.sqlite", f"lpt{hoch2}.sqlite",
+                     f"COM{hoch3}", "CONIN$.sqlite", "conout$.sqlite", "CON.sqlite", "nul.sqlite"):
+            with self.subTest(name=name):
+                self.assertFalse(_ist_sicherer_dateiname(name))
+        for name in ("termin.sqlite", "Termin (2).sqlite", "2026-11-20_Verein-Muster.sqlite", "COM10.sqlite",
+                     "console.sqlite"):
+            with self.subTest(name=name):
+                self.assertTrue(_ist_sicherer_dateiname(name))
 
     def test_journal_mit_verweis_kommt_nicht_in_eine_neue_sicherung(self):
         """D-2: Ein solches Journal neben einer Termin-Datei wird nicht mitgesichert, damit die
@@ -553,7 +595,7 @@ class TestSicherungInhalt(unittest.TestCase):
         """Wie oben, für Fehler des Entpackers (zlib/lzma) statt der Prüfsumme."""
         _termin_anlegen(self.ordner, "a.sqlite")
         sicherung_erstellen(self.zip_pfad, ordner=self.ordner)
-        with patch.object(pyzipper.AESZipFile, "read", side_effect=zlib.error("invalid stored block lengths")):
+        with patch.object(pyzipper.AESZipFile, "open", side_effect=zlib.error("invalid stored block lengths")):
             with self.assertRaisesRegex(ValueError, "beschädigt"):
                 sicherung_inhalt(self.zip_pfad)
 

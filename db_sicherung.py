@@ -12,6 +12,7 @@ zipfile-Modul erzeugt.
 
 from __future__ import annotations
 
+import bz2
 import datetime
 import glob
 import lzma
@@ -59,17 +60,18 @@ _MAX_GESAMTGROESSE = 1024 * 1024 * 1024  # alle Termin-Dateien zusammen
 # S-8: Unter Windows reservierte Gerätenamen - "CON.sqlite" o. Ä. würde nicht als Datei,
 # sondern auf ein Gerät geschrieben.
 _WINDOWS_GERAETENAMEN = frozenset(
-    {"CON", "PRN", "AUX", "NUL"}
+    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
     | {f"COM{i}" for i in range(1, 10)}
     | {f"LPT{i}" for i in range(1, 10)}
 )
+# D-4: hochgestellte Ziffern gelten unter Windows bei COM/LPT ebenfalls als Gerätename.
+_HOCHZIFFERN = str.maketrans({chr(0xB9): "1", chr(0xB2): "2", chr(0xB3): "3"})
 
 
 def _zip_grenzen_pruefen(zf) -> None:
     """S-8: Wirft ValueError, wenn das ZIP zu viele Einträge hat oder eine Termin-Datei
     bzw. alle zusammen ausgepackt die Obergrenzen überschreiten. Maßgeblich ist die im
-    ZIP angegebene Originalgröße; zipfile/pyzipper liefern beim Lesen nie mehr Bytes als
-    dort angegeben."""
+    ZIP angegebene Originalgröße; das Lesen selbst begrenzt _lesen_begrenzt (D-3)."""
     eintraege = zf.infolist()
     if len(eintraege) > _MAX_ZIP_EINTRAEGE:
         raise ValueError(
@@ -89,6 +91,81 @@ def _zip_grenzen_pruefen(zf) -> None:
             f"Die Sicherung ist ausgepackt größer als {_MAX_GESAMTGROESSE // (1024 * 1024 * 1024)} GB "
             "- das ist keine mit diesem Programm erstellte Sicherung."
         )
+
+
+class _BegrenzterEntpacker:
+    """Ersatz für den Entpacker eines LZMA- oder BZIP2-Eintrags (Sicherheitskorrektur D-3): zipfile
+    entpackt diese Verfahren ohne Obergrenze je Aufruf, ein winziger Datenstrom könnte sonst auf
+    einmal Gigabyte erzeugen. Dieser Ersatz entpackt in kleinen Schritten und bricht mit ValueError ab,
+    sobald die Gesamtgröße die Grenze überschreitet."""
+
+    _SCHRITT = 1024 * 1024  # höchstens so viel Ausgabe je Schritt (BZIP2)
+    _EINGABE = 256  # so viele komprimierte Bytes je Schritt (LZMA, dessen Entpacker keine Grenze kennt)
+
+    def __init__(self, entpacker, grenze: int, name: str):
+        self._entpacker = entpacker
+        self._grenze = grenze
+        self._name = name
+        self._gesamt = 0
+
+    @property
+    def eof(self) -> bool:
+        return self._entpacker.eof
+
+    def _melden(self, menge: int) -> None:
+        self._gesamt += menge
+        if self._gesamt > self._grenze:
+            raise ValueError(
+                f"Die Datei „{kurzer_text(self._name, 80)}“ in der Sicherung ist größer als angegeben - "
+                "die Sicherung ist beschädigt oder stammt nicht von diesem Programm."
+            )
+
+    def decompress(self, data: bytes) -> bytes:
+        teile = []
+        if isinstance(self._entpacker, bz2.BZ2Decompressor):
+            rest = data
+            while True:
+                teil = self._entpacker.decompress(rest, max_length=self._SCHRITT)
+                rest = b""
+                if teil:
+                    self._melden(len(teil))
+                    teile.append(teil)
+                if self._entpacker.eof or self._entpacker.needs_input:
+                    break
+        else:
+            for anfang in range(0, len(data), self._EINGABE):
+                teil = self._entpacker.decompress(data[anfang:anfang + self._EINGABE])
+                if teil:
+                    self._melden(len(teil))
+                    teile.append(teil)
+        return b"".join(teile)
+
+
+def _lesen_begrenzt(zf, name: str) -> bytes:
+    """Liest den ZIP-Eintrag `name` blockweise und bricht mit ValueError ab, sobald mehr Bytes
+    kommen, als das ZIP-Verzeichnis angibt (höchstens _MAX_DATEIGROESSE). Ein Eintrag mit zu kleiner
+    Größenangabe wird so nie vollständig entpackt (Sicherheitskorrektur D-3); `zf.read` hätte
+    erst den ganzen Datenstrom entpackt und danach gekürzt. Bei LZMA und BZIP2 begrenzt
+    _BegrenzterEntpacker die Ausgabe je Schritt (zipfile selbst kennt dort keine Grenze)."""
+    info = zf.getinfo(name)
+    grenze = min(info.file_size, _MAX_DATEIGROESSE)
+    teile = []
+    gelesen = 0
+    with zf.open(info) as quelle:
+        if info.compress_type in (zipfile.ZIP_LZMA, zipfile.ZIP_BZIP2) and hasattr(quelle, "_decompressor"):
+            quelle._decompressor = _BegrenzterEntpacker(quelle._decompressor, grenze, name)
+        while True:
+            block = quelle.read(1024 * 1024)
+            if not block:
+                break
+            gelesen += len(block)
+            if gelesen > grenze:
+                raise ValueError(
+                    f"Die Datei „{kurzer_text(name, 80)}“ in der Sicherung ist größer als angegeben - "
+                    "die Sicherung ist beschädigt oder stammt nicht von diesem Programm."
+                )
+            teile.append(block)
+    return b"".join(teile)
 
 
 def _ist_sicherer_dateiname(name: str) -> bool:
@@ -111,8 +188,12 @@ def _ist_sicherer_dateiname(name: str) -> bool:
         return False
     if "\\" in name or ".." in Path(name).parts:
         return False
-    # S-8: Windows-Gerätenamen (auch mit Endung oder Leerzeichen vor dem Punkt).
-    if name.split(".")[0].rstrip(" ").upper() in _WINDOWS_GERAETENAMEN:
+    # Punkt oder Leerzeichen am Ende streicht Windows still weg (Sicherheitskorrektur D-4).
+    if name != name.rstrip(" ."):
+        return False
+    # S-8: Windows-Gerätenamen (auch mit Endung oder Leerzeichen vor dem Punkt; D-4: auch mit
+    # hochgestellten Ziffern bei COM/LPT).
+    if name.split(".")[0].rstrip(" ").upper().translate(_HOCHZIFFERN) in _WINDOWS_GERAETENAMEN:
         return False
     # Desktop-Prüfung 14.10.2026 (Teil 7 Nr. 10): unter Windows ungültige Zeichen und
     # Steuerzeichen ablehnen.
@@ -491,7 +572,7 @@ def sicherung_inhalt(zip_pfad: str, passwort: str | None = None) -> list[str]:
             raise ValueError("Das ZIP enthält keine Termin-Dateien (.sqlite).")
         # Erzwingt die Passwortprüfung sofort (Lesen der ersten Datei), statt erst
         # beim eigentlichen Wiederherstellen mittendrin zu scheitern.
-        zf.read(namen[0])
+        _lesen_begrenzt(zf, namen[0])
     return sorted(namen)
 
 
@@ -611,7 +692,7 @@ def sicherung_wiederherstellen(
             vorhandene_eintraege = set(zf.namelist())
 
             def vorbereiten(quelle: str, ziel: str) -> str:
-                daten = zf.read(quelle)
+                daten = _lesen_begrenzt(zf, quelle)
                 # os.replace() ist nur innerhalb DESSELBEN Dateisystems atomar - die
                 # temporäre Datei muss deshalb im selben Ordner liegen wie das Ziel, nicht
                 # z.B. im System-Temp-Verzeichnis.
