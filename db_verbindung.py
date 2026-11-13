@@ -610,6 +610,7 @@ def _fremde_trigger_und_views_entfernen(conn) -> list[str]:
         conn.commit()
     return [f"{typ} {name}" for typ, name in objekte]
 
+@functools.cache
 def _soll_spalten() -> dict[str, set[str]]:
     """Spalten, die eine aktuelle Termin-Datei je Tabelle hat (aus SCHEMA). Für teilnehmer und
     ergebnisse deckt SCHEMA alle Spalten ab; bei veranstaltung fehlen die später per Migration
@@ -622,6 +623,34 @@ def _soll_spalten() -> dict[str, set[str]]:
             tabelle: {z[1] for z in conn.execute(f'PRAGMA table_info("{tabelle}")')}
             for tabelle in tabellen if not tabelle.startswith("sqlite_")
         }
+
+def _fremdschluessel(conn: sqlite3.Connection) -> frozenset[tuple]:
+    """Alle Fremdschlüssel-Beziehungen der Datei als (Tabelle, Spalte, Zieltabelle, Zielspalte,
+    ON UPDATE, ON DELETE). Die Tabellennamen kommen aus der (womöglich fremden) Datei und gehen
+    deshalb nur als Parameter in die Abfrage."""
+    beziehungen = set()
+    for (tabelle,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        if tabelle.startswith("sqlite_"):
+            continue
+        for zeile in conn.execute("SELECT * FROM pragma_foreign_key_list(?)", (tabelle,)).fetchall():
+            # Spalten: id, seq, table, from, to, on_update, on_delete, match
+            beziehungen.add((tabelle, zeile[3], zeile[2], zeile[4], zeile[5], zeile[6]))
+    return frozenset(beziehungen)
+
+@functools.cache
+def _soll_fremdschluessel() -> frozenset[tuple]:
+    """Die Fremdschlüssel-Beziehungen, die das Programm selbst anlegt (aus SCHEMA); in allen
+    Altversionen unverändert dieselben."""
+    with closing(sqlite3.connect(":memory:")) as conn:
+        conn.executescript(SCHEMA)
+        return _fremdschluessel(conn)
+
+def pruefe_fremdschluessel(conn: sqlite3.Connection) -> None:
+    """Wirft sqlite3.DatabaseError, wenn die Datei Fremdschlüssel hat, die das Programm nicht kennt
+    (Sicherheitskorrektur D-7). Fehlende eigene Fremdschlüssel sind erlaubt, Zusatzspalten und
+    -tabellen ohne Fremdschlüssel ebenso."""
+    if not _fremdschluessel(conn) <= _soll_fremdschluessel():
+        raise sqlite3.DatabaseError("keine Termin-Datei (unbekannte Fremdschlüssel)")
 
 def termin_werte_verletzt(conn: sqlite3.Connection) -> bool:
     """True, wenn in den Tabellen teilnehmer, ergebnisse, zeitplan_eintrag oder veranstaltung Werte

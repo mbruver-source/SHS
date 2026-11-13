@@ -19,6 +19,7 @@ from db_verbindung import (
     journal_hat_verweis,
     JOURNAL_VERWEIS_TEXT,
     JournalMitVerweis,
+    pruefe_fremdschluessel,
     pruefe_journal_ohne_verweis,
     termin_werte_verletzt,
     _soll_spalten,
@@ -194,8 +195,9 @@ def lesen_begrenzen(conn: sqlite3.Connection) -> None:
 
 def pruefe_termin_aufbau(conn: sqlite3.Connection) -> None:
     """Wirft sqlite3.DatabaseError, wenn die Datei nicht wie eine Termin-Datei aufgebaut
-    ist: veranstaltung und teilnehmer müssen gewöhnliche Tabellen sein, und keine Tabelle
-    darf berechnete Spalten haben."""
+    ist: veranstaltung und teilnehmer müssen gewöhnliche Tabellen sein, keine Tabelle darf
+    berechnete Spalten haben, und die Datei darf keine Fremdschlüssel enthalten, die das Programm
+    nicht selbst anlegt (D-7)."""
     tabellen = [zeile[0] for zeile in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
     if not {"veranstaltung", "teilnehmer"} <= set(tabellen):
         raise sqlite3.DatabaseError("keine Termin-Datei")
@@ -204,6 +206,7 @@ def pruefe_termin_aufbau(conn: sqlite3.Connection) -> None:
         # Parameter - er stammt aus der fremden Datei.
         if any(zeile[6] in (2, 3) for zeile in conn.execute("SELECT * FROM pragma_table_xinfo(?)", (tabelle,))):
             raise sqlite3.DatabaseError("keine Termin-Datei")
+    pruefe_fremdschluessel(conn)  # D-7: keine Fremdschlüssel-Aktionen, die das Programm nicht kennt
 
 class KopieMitFremdobjekten(sqlite3.DatabaseError):
     """Die Datei enthält Ansichten oder Trigger, die das Programm nie anlegt (Sicherheitskorrektur

@@ -3533,6 +3533,41 @@ class TestTerminOeffnen(unittest.TestCase):
         with self.assertRaises(TerminNichtOeffenbar):
             termin_oeffnen(str(pfad))
 
+    def test_fremde_fremdschluessel_werden_abgelehnt(self):
+        """Sicherheitskorrektur D-7: Fremdschlüssel, die das Programm nicht anlegt (Zusatzspalte,
+        Zusatztabelle oder eine eigene Beziehung mit anderem Ziel oder anderer Aktion), machen die
+        Datei unlesbar; eigene Dateien und Altdaten bleiben öffenbar."""
+        import db
+        faelle = (
+            ("anderes_ziel", "UMBAU teilnehmer(id) -> teilnehmer(startnummer)"),
+            ("andere_aktion", "UMBAU ON DELETE CASCADE -> ON DELETE CASCADE ON UPDATE CASCADE"),
+            ("zusatzspalte", "ALTER TABLE teilnehmer ADD COLUMN gruppe INTEGER REFERENCES teilnehmer(id) "
+                             "ON DELETE CASCADE"),
+            ("zusatztabelle", "CREATE TABLE fremd (id INTEGER PRIMARY KEY, "
+                              "t INTEGER REFERENCES teilnehmer(id) ON DELETE RESTRICT)"),
+        )
+        eigene = self._termin("eigene.sqlite")
+        with closing(termin_oeffnen(str(eigene))) as conn:
+            self.assertTrue(db._fremdschluessel(conn) <= db._soll_fremdschluessel())
+        for name, sql in faelle:
+            with self.subTest(name=name):
+                pfad = self._termin(f"{name}.sqlite")
+                with closing(sqlite3.connect(str(pfad))) as roh:
+                    if sql.startswith("UMBAU "):  # die Tabelle ergebnisse mit geändertem Verweis neu anlegen
+                        alt, neu = sql[len("UMBAU "):].split(" -> ")
+                        ddl = roh.execute("SELECT sql FROM sqlite_master WHERE name = 'ergebnisse'").fetchone()[0]
+                        self.assertIn(alt, ddl)
+                        roh.execute("DROP TABLE ergebnisse")
+                        roh.execute(ddl.replace(alt, neu))
+                    else:
+                        roh.execute(sql)
+                    roh.commit()
+                with self.assertRaises(TerminNichtOeffenbar):
+                    termin_oeffnen(str(pfad))
+                lesbar = {t.dateiname: t.lesbar for t in db.liste_termine(self.ordner)}
+                self.assertIs(lesbar[f"{name}.sqlite"], False)
+                self.assertIs(lesbar["eigene.sqlite"], True)
+
     def test_unbekannte_werte_werden_abgelehnt(self):
         for spalte, wert in (("art", "XX"), ("stufe", 7), ("disziplin", "Wasser"), ("gegenstand_1_disziplin", "x")):
             with self.subTest(spalte=spalte):
