@@ -939,7 +939,7 @@ class TestZipGrenzen(unittest.TestCase):
     def test_aes_archiv_mit_lzma_oder_bzip2_wird_ebenfalls_begrenzt(self):
         """Nacharbeit zur Sicherheitsprüfung: Auch bei einem verschlüsselten Fremdarchiv (pyzipper/AES)
         greift die Grenze, wenn das Verzeichnis eine zu kleine Größe angibt."""
-        from db_sicherung import _lesen_begrenzt
+        from db_sicherung import _BegrenzterEntpacker, _lesen_begrenzt
         for verfahren in (zipfile.ZIP_LZMA, zipfile.ZIP_BZIP2):
             with self.subTest(verfahren=verfahren):
                 with pyzipper.AESZipFile(self.zip_pfad, "w", compression=verfahren,
@@ -950,9 +950,12 @@ class TestZipGrenzen(unittest.TestCase):
                     zf.setpassword(b"pw")
                     # Die Größenangabe im Verzeichnis wird erst nach dem Öffnen klein gelogen;
                     # die Grenze muss den Entpacker selbst erreichen, nicht nur den Lesepuffer.
-                    with patch("db_sicherung._MAX_DATEIGROESSE", 1000):
+                    with patch("db_sicherung._MAX_DATEIGROESSE", 1000), \
+                            patch("db_sicherung._BegrenzterEntpacker", wraps=_BegrenzterEntpacker) as ersatz:
                         with self.assertRaisesRegex(ValueError, "größer als angegeben"):
                             _lesen_begrenzt(zf, "a.sqlite")
+                    # Ohne den Ersatz würde der Entpacker den ganzen Datenstrom auf einmal auslösen.
+                    ersatz.assert_called_once()
 
     def test_normale_sicherung_liegt_unter_den_grenzen(self):
         _termin_anlegen(self.ordner, "a.sqlite")
