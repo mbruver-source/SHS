@@ -223,15 +223,20 @@ FELD_LAENGEN: dict[str, int] = {feld: hoechstens for feld, _name, hoechstens in 
 SCHULTERHOEHE_MIN = 1
 SCHULTERHOEHE_MAX = 100  # wie die Eingabe im Teilnehmer-Dialog
 
-def pruefe_teilnehmer_werte(t: NeuerTeilnehmer) -> None:
+def pruefe_teilnehmer_werte(t: NeuerTeilnehmer, bisher: dict | None = None) -> None:
     """Wirft ValueError mit einer für den Nutzer verständlichen Begründung, wenn ein Textfeld von `t`
     die Obergrenze aus FELD_LAENGEN überschreitet, die Schulterhöhe außerhalb von 1 bis 100 cm liegt
-    oder eine Zahl nicht in die Datenbank passt (Sicherheitskorrektur I-5/I-1)."""
+    oder eine Zahl nicht in die Datenbank passt (Sicherheitskorrektur I-5/I-1). Mit `bisher` (der
+    vorhandene Datensatz beim Bearbeiten) werden nur geänderte Felder geprüft, damit ein Altwert über
+    der Grenze das Speichern anderer Änderungen nicht blockiert."""
+    bisher = bisher or {}
     for feld, bezeichnung, hoechstens in _FELD_LAENGEN:
         wert = getattr(t, feld)
-        if isinstance(wert, str) and len(wert) > hoechstens:
+        if isinstance(wert, str) and len(wert) > hoechstens and wert != bisher.get(feld):
             raise ValueError(f"{bezeichnung} ist zu lang (höchstens {hoechstens} Zeichen, hier {len(wert)})")
     hoehe = t.schulterhoehe_cm
+    if "schulterhoehe_cm" in bisher and bisher["schulterhoehe_cm"] == hoehe:
+        hoehe = None  # unverändert: nicht erneut prüfen
     if hoehe is not None and (isinstance(hoehe, bool) or not isinstance(hoehe, (int, float))):
         raise ValueError("Schulterhöhe ist keine Zahl")  # z. B. Text oder BLOB aus einer fremden Datei
     if hoehe is not None and not SCHULTERHOEHE_MIN <= hoehe <= SCHULTERHOEHE_MAX:
@@ -468,6 +473,7 @@ def get_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int) -> dict | None:
 
 @_mit_rollback
 def update_teilnehmer(conn: sqlite3.Connection, teilnehmer_id: int, t: NeuerTeilnehmer) -> None:
+    pruefe_teilnehmer_werte(t, get_teilnehmer(conn, teilnehmer_id))  # nur geänderte Felder
     conn.execute(
         """
         UPDATE teilnehmer SET

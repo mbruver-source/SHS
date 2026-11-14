@@ -1348,6 +1348,28 @@ class TestDatenbank(unittest.TestCase):
             add_teilnehmer(self.conn, NeuerTeilnehmer(schulterhoehe_cm=wert, **basis))
         self.assertEqual(len(list_teilnehmer(self.conn)), 3)
 
+    def test_update_teilnehmer_prueft_nur_geaenderte_felder(self):
+        """Beim Bearbeiten gelten die Grenzen für geänderte Felder; ein Altwert über der Grenze
+        blockiert andere Änderungen nicht."""
+        basis = {"nachname": "A", "vorname": "B", "rufname_hund": "H", "art": "DK", "stufe": 1}
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(**basis))
+        neu = NeuerTeilnehmer(**{**basis, "nachname": "N" * 101})
+        with self.assertRaises(ValueError):
+            update_teilnehmer(self.conn, tid, neu)
+        with self.assertRaises(ValueError):
+            update_teilnehmer(self.conn, tid, NeuerTeilnehmer(schulterhoehe_cm=101, **basis))
+        self.assertEqual(get_teilnehmer(self.conn, tid)["nachname"], "A")
+        # Altwert über der Grenze (z. B. aus einer älteren Datei) bleibt änderbar, solange er gleich bleibt
+        self.conn.execute("UPDATE teilnehmer SET nachname = ?, schulterhoehe_cm = 150 WHERE id = ?",
+                          ("N" * 150, tid))
+        self.conn.commit()
+        alt = NeuerTeilnehmer(**{**basis, "nachname": "N" * 150, "vorname": "Neu"}, schulterhoehe_cm=150)
+        update_teilnehmer(self.conn, tid, alt)
+        self.assertEqual(get_teilnehmer(self.conn, tid)["vorname"], "Neu")
+        with self.assertRaises(ValueError):  # ein geänderter, weiterhin zu langer Wert wird abgelehnt
+            update_teilnehmer(self.conn, tid, NeuerTeilnehmer(
+                **{**basis, "nachname": "N" * 151}, schulterhoehe_cm=150))
+
     def test_csv_import_lehnt_ueberlange_werte_und_riesige_schulterhoehe_je_zeile_ab(self):
         """Sicherheitskorrektur I-5/I-1: Eine solche Zeile ist nur ihr eigener Fehler, der Rest wird
         importiert (vorher brach eine riesige Schulterhöhe den ganzen Import ab)."""
