@@ -89,15 +89,17 @@ class _Ablageort:
         self.pfad = pfad
 
 
+_DATEINAME_TEIL_MAX = 120  # Zeichen je Namensbestandteil in einem Dateinamen
+
+
 def _dateiname_teil(text: str, ersatz: str = "Teilnehmer") -> str:
     """Nutzertext als Teil eines Dateinamens (Desktop-Prüfung 14.10.2026, Teil 1 Nr. 5): ohne
     Zeichen, die Windows im Dateinamen nicht erlaubt bzw. als Ordnertrenner liest - sonst
     machte „Meier/Schulz“ den Vorschlag zu Ordner plus Datei."""
     import re
 
-    # Auf 120 Zeichen begrenzt, bevor der Ausdruck läuft: auf sehr langen Werten mit viel Leerraum
-    # wäre er quadratisch langsam (Sicherheitskorrektur I-2).
-    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", (text or "")[:120]).strip(" .-") or ersatz
+    # Vor dem Ausdruck gekürzt: auf sehr langen Werten mit viel Leerraum wäre er quadratisch langsam.
+    return re.sub(r'\s*[\\/:*?"<>|\x00-\x1f]+\s*', "-", (text or "")[:_DATEINAME_TEIL_MAX]).strip(" .-") or ersatz
 
 
 def _export_dateiname(conn, praefix: str) -> str:

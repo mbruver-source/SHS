@@ -126,7 +126,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `desktop_dialoge_termin.py` | `VeranstaltungsDialog`, `TerminImportDialog`, `SicherungTeilnehmerDialog`, `SicherungErstellenDialog` | `test_gui_termin.py` |
 | `desktop_dialoge_planung.py` | Prüfungsblock, Pause, automatisch verteilen, Bewertungsbogen- und Etiketten-Auswahl | `test_gui_zeitplan.py`, `test_gui_auswertung.py` |
 | `desktop_hilfe.py` | `HilfeDialog` mit Suchfeld, Inhaltsverzeichnis und dem Hilfetext | `test_gui_darstellung.py` |
-| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |
+| `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Klartext-Tooltips, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |
 | `desktop_darstellung.py` | Designs, Akzentfarben, Stylesheet | `test_theme.py`, `test_gui_darstellung.py` |
 | `desktop_demo.py` | Geführte Demoprüfung: `DemoTour` (Steuerung, Countdown, Beenden) | `test_gui_demo.py` |
 | `desktop_demo_panel.py` | Erklärfenster `DemoPanel`, Markierung `DemoMarkierung`, `DemoSchritt` | `test_gui_demo.py` |
@@ -137,8 +137,8 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `checkliste.py` | Fachlogik der Checkliste (ohne Qt/DB) | `test_lr_abrechnung.py` |
 | `app_web.py`, `templates/` | Flask-Web-Backend: Login, Ergebniserfassung, Admin | `test_app_web.py` |
 | `db.py` | Fassade der Datenschicht (seit 11.11.2026): reicht alle Namen der sieben Schichtmodule weiter, `from db import …` und `db.<Name>` gelten wie vorher | `test_db_fassade.py` |
-| `db_verbindung.py` | Schicht 0: Verbindung, Schema, Migrationen, `_PostgresConnection`, `_mit_rollback` | `test_db.py`, `test_db_postgres_wrapper.py` |
-| `db_stamm.py` | Schicht 1: Veranstaltung, Teilnehmer, Startnummern-Bereiche, Datumsfelder | `test_db.py` |
+| `db_verbindung.py` | Schicht 0: Verbindung, Schema, Migrationen, Prüfung fremder Termin-Dateien (`pruefe_fremdschluessel`, `pruefe_werte_der_kopie`), `_PostgresConnection`, `_mit_rollback` | `test_db.py`, `test_db_postgres_wrapper.py` |
+| `db_stamm.py` | Schicht 1: Veranstaltung, Teilnehmer, Startnummern-Bereiche, Datumsfelder, Längengrenzen der Textfelder (`FELD_LAENGEN`, `pruefe_teilnehmer_werte`) | `test_db.py` |
 | `db_ergebnisse.py` | Schicht 2: Ergebnisse, Bewertung und Auswertung je Teilnehmer | `test_db.py` |
 | `db_zeitplan.py` | Schicht 2: Zeitplan, Überschneidungen, automatische Verteilung | `test_db.py`, `test_gui_zeitplan.py` |
 | `db_termine.py` | Schicht 2: Terminübersicht, sicheres Öffnen und Lesen von Termin-Dateien | `test_db.py` |
@@ -146,7 +146,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `db_sync.py` | Schicht 4: Austausch SQLite-Termin-Datei ↔ PostgreSQL | `test_db.py` |
 | `db_testhilfen.py` | nur Tests: `patch_db` ersetzt einen Namen in der Fassade und allen Schichtmodulen | – |
 | `db_import.py` | Teilnehmer-Import (CSV, OMA, Formular-PDF) und CSV-Export | `test_db.py` |
-| `db_sicherung.py` | Datensicherung (ZIP) und automatische Kopie | `test_backup.py` |
+| `db_sicherung.py` | Datensicherung (ZIP, begrenztes Entpacken) und automatische Kopie | `test_backup.py` |
 | `shs_core.py` | Reine Fachlogik: Wertnoten, Rangliste, Punktgrenzen | `test_shs_core.py`, `test_bewertung_referenz.py` |
 | `pdf_export.py` | Alle PDFs (Bewertungsbögen, Listen, Etiketten, Zeitplan, Formular) | `test_pdf_export.py` |
 | `sync_termin.py` | Kommandozeile zum Veröffentlichen/Zurückholen eines Termins (Web) | über `test_db.py` |

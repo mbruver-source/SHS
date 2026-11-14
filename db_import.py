@@ -1025,7 +1025,7 @@ def importiere_teilnehmer_stammdaten(
         except ValueError as exc:
             if fehler is None:
                 raise
-            name = " ".join(f"{alt['nachname']}, {alt['vorname']}".split())[:60]
+            name = kurzer_text(f"{alt['nachname']}, {alt['vorname']}")
             fehler.append(f"{name}: {exc}")
             continue
         importiert += 1

@@ -1597,8 +1597,8 @@ def test_meldungsfenster_zeigen_reinen_text(monkeypatch):
 
 
 def test_klartext_tooltip_maskiert_namen():
-    """S-1: Tooltips mit Richternamen zeigen Markup wörtlich statt es auszuführen."""
-    from desktop_zeitplan import _klartext_tooltip
+    """Tooltips mit fremden Texten (Richternamen, Meldungen) zeigen Markup wörtlich statt es auszuführen."""
+    from desktop_gemeinsam import _klartext_tooltip
 
     tooltip = _klartext_tooltip('Gleichzeitig bei <img src="//server/x.png">\nzweite Zeile')
     assert "<img" not in tooltip

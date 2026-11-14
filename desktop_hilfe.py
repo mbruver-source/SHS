@@ -96,6 +96,9 @@ Prüfung).</p>
 Spalten; in Excel ausfüllen, als CSV speichern und mit "Teilnehmerliste einlesen (Excel/CSV)…" einlesen (denselben
 Knopf gibt es auch im Reiter "Teilnehmer"). Komma/Semikolon und die Excel-
 Kodierung werden erkannt.</p>
+<p><b>Grenzen:</b> Listen dürfen höchstens 2 MB, Anmeldeformulare höchstens 5 MB groß sein. Textfelder
+haben Höchstlängen (Namen 100, übrige Texte 200 Zeichen), die Schulterhöhe liegt zwischen 1 und 100 cm.
+Eine Zeile mit einem zu langen Wert wird als Fehler gemeldet, der Rest wird importiert.</p>
 <p>"OMA-Export importieren…" übernimmt den Meldungs-Export der Online-Meldeannahme direkt.</p>
 <p><b>Andere Meldeformulare</b> (Word, Foto/Scan, handschriftlich) mit Hilfe eines KI-Assistenten
 (unten aufklappen): "Prompt kopieren", Prompt und Formulare an den KI-Assistenten geben, die
