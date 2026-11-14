@@ -227,8 +227,9 @@ def _angebot_pruefen(teilnehmer: NeuerTeilnehmer, angebotene: set[str]) -> None:
         raise NichtAngebotenError(_nicht_angeboten_text(bezeichnung))
 
 
-#: Formatzeichen, die in manchen Schriften nötig sind (Nullbreiten-Nichtverbinder und -Verbinder).
-_ERLAUBTE_FORMATZEICHEN = frozenset({chr(0x200C), chr(0x200D)})  # in manchen Schriften nötig, bewusst nicht entfernt
+#: Formatzeichen, die in manchen Schriften nötig sind und bewusst nicht entfernt werden
+#: (Nullbreiten-Nichtverbinder und -Verbinder).
+_ERLAUBTE_FORMATZEICHEN = frozenset({chr(0x200C), chr(0x200D)})
 
 
 def _ohne_unsichtbare_zeichen(text: str) -> str:
@@ -312,11 +313,14 @@ def _csv_zeile_zu_teilnehmer(zeile: dict) -> NeuerTeilnehmer:
     schulterhoehe_text = _csv_wert(zeile, "schulterhoehe_cm")
     schulterhoehe_cm = None
     if schulterhoehe_text is not None:
-        try:
-            # Sehr lange Ziffernfolgen gar nicht erst wandeln (Sicherheitskorrektur I-1).
-            schulterhoehe_cm = int(schulterhoehe_text) if len(schulterhoehe_text) <= 12 else None
-        except ValueError:
-            schulterhoehe_cm = None
+        # Mehr als 12 Zeichen sind nie eine gültige Schulterhöhe (erlaubt sind 1 bis 100); so lange
+        # Ziffernfolgen werden gar nicht erst gewandelt. int() akzeptiert auch Vorzeichen und Ziffern
+        # anderer Schriften, die Bereichsprüfung folgt später in pruefe_teilnehmer_werte.
+        if len(schulterhoehe_text) <= 12:
+            try:
+                schulterhoehe_cm = int(schulterhoehe_text)
+            except ValueError:
+                pass
         if schulterhoehe_cm is None:
             raise ValueError(_csv_feld_fehler("Schulterhöhe", schulterhoehe_text, "eine ganze Zahl in cm, z. B. 45"))
 

@@ -367,11 +367,6 @@ def auto_sicherungen_zu_termin(termin_pfad: str, ordner: Path | None = None) -> 
     return sorted(ergebnis, key=lambda eintrag: eintrag[1], reverse=True)
 
 
-def _kurz(wert, laenge: int = 40) -> str:
-    """Wert aus einer womöglich fremden Datei für eine Meldung (db.kurzer_text, hier 40 Zeichen)."""
-    return kurzer_text(wert, laenge)
-
-
 def _verein_datum(verbindung) -> tuple[str, str]:
     zeile = verbindung.execute("SELECT verein, datum FROM veranstaltung WHERE id = 1").fetchone()
     if zeile is None:
@@ -388,7 +383,7 @@ def kopie_abweichung(quelle, conn) -> str | None:
     if verein_kopie.casefold() == verein_termin.casefold() and datum_kopie == datum_termin:
         return None
     return (f"Verein oder Datum dieser Kopie weichen vom geöffneten Termin ab "
-            f"(Kopie: „{_kurz(verein_kopie)}“, {_kurz(datum_kopie)}). Vermutlich gehört sie zu einer "
+            f"(Kopie: „{kurzer_text(verein_kopie, 40)}“, {kurzer_text(datum_kopie, 40)}). Vermutlich gehört sie zu einer "
             "anderen Datei mit gleichem Namen.")
 
 
