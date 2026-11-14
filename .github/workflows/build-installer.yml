@@ -70,6 +70,12 @@ jobs:
         shell: pwsh
         run: |
           $v = (Get-Content version.txt -Raw).Trim()
+          # Nur das Format X.Y.Z weiterreichen (die Nummer landet später in Befehlen und Dateinamen),
+          # auch beim manuellen Start ohne Tag.
+          if ($v -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Error "version.txt hat nicht das Format X.Y.Z"
+            exit 1
+          }
           echo "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Prüfen, dass der Tag zu version.txt passt (nur bei einem Versions-Tag)
@@ -128,7 +134,10 @@ jobs:
         run: choco install innosetup --version=6.7.1 -y
 
       - name: Installer mit Inno Setup bauen
-        run: ISCC installer.iss /DMyAppVersion=${{ steps.version.outputs.version }}
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}  # nur über die Umgebung, nicht ins Skript eingesetzt
+        run: ISCC installer.iss "/DMyAppVersion=$env:APP_VERSION"
 
       - name: Installer still installieren, installierte .exe testen, deinstallieren
         # T1 (Marco 03.10.2026): prüft auch die Inno-Setup-Paketierung. Installation nur für
