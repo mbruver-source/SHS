@@ -1,29 +1,29 @@
-## Was ist neu in 1.0.61
+## Was ist neu in 1.0.62
 
-**Neu: Gelöschtes und Überschriebenes zurückholen**
-- Das Programm fragt beim **Beenden** noch einmal nach, wenn du vorher Teilnehmer gelöscht hast und
-  „Rückgängig“ das noch zurücknehmen könnte. Ohne Löschen erscheint keine Frage.
-- Neuer Knopf **„Aus Sicherung holen…“** im Reiter „Teilnehmer“: Gelöschte Teilnehmer lassen sich aus
-  den automatischen Kopien des Termins zurückholen, **auch nach dem Beenden des Programms**, samt
-  ihren Ergebnissen. Angezeigt werden nur Teilnehmer, die im Termin fehlen; angekreuzt wird per Haken.
-- Neuer Punkt im Reiter „Datensicherung“: **„Ergebnisse aus automatischer Kopie wiederherstellen…“**.
-  Pro Teilnehmer siehst du, welche Ergebniswerte sich von der Kopie unterscheiden (jetzt und in der
-  Kopie), und setzt einzelne Werte per Haken zurück (eine Disziplin, Disqualifiziert, Abbruch,
-  Stechen-Sieger). Vor dem Überschreiben fragt das Programm nach.
-- Vor jedem **Löschen** legt das Programm jetzt eine eigene Kopie des Termins an (die letzten fünf
-  je Termin). Sie wird vom normalen Starten und Beenden nie verdrängt. Die normalen automatischen
-  Kopien beim Öffnen und Beenden (die letzten zehn) bleiben wie bisher.
+**Sicherer beim Einlesen fremder Dateien**
+- Das Programm prüft Termin-Dateien, Sicherungen, automatische Kopien, Listen (CSV/OMA) und
+  Anmeldeformulare (PDF) jetzt strenger, bevor es etwas daraus übernimmt. Eine Datei, die nicht
+  zu diesem Programm passt, wird mit einer verständlichen Meldung abgelehnt, statt Fehler zu
+  verursachen. Deine eigenen Dateien öffnen und speichern wie bisher.
+- **Grenzen beim Einlesen:** Listen dürfen höchstens 2 MB, Anmeldeformulare höchstens 5 MB groß
+  sein. Textfelder haben Höchstlängen (Namen 100, übrige Texte 200 Zeichen), die Schulterhöhe liegt
+  zwischen 1 und 100 cm. Eine Zeile mit einem zu langen Wert wird mit dem Feldnamen als Fehler
+  gemeldet, der Rest der Liste wird importiert. Das gilt auch im Teilnehmer-Dialog und bei den
+  Veranstaltungsdaten.
+- Beim Import großer Dateien zeigt das Programm einen Wartecursor.
 
-**Neu: Menü „Einstellungen“**
-- Zwei Schalter, beide ab Werk **an**: „Vor dem Löschen von Teilnehmern eine Sicherung anlegen“ und
-  „Dateien ohne Nachfrage im Ablageort speichern“ (derselbe Haken wie im Reiter „Ausdrucke/Export“).
-  Wer die Rückfragen lieber hat, schaltet sie dort aus.
+**Kopien und Sicherungen**
+- Passen Verein oder Datum einer Kopie nicht zum geöffneten Termin, wird sie nicht vorgewählt, und
+  das Programm fragt beim Übernehmen noch einmal nach (auch bei „Aus Sicherung holen…“).
+- In der Terminübersicht steht jetzt ein eigener Grund, wenn sich ein Termin nicht öffnen lässt,
+  weil er mit einer unbekannten Journal-Datei verbunden ist.
+- Beim Zurückholen von Ergebnissen aus einer Kopie wird der Teilnehmer über seinen Namen
+  abgeglichen, nicht nur über die Nummer.
 
-**Geändert**
-- **Auswahlfelder** zeigen jetzt einen Pfeil, damit man erkennt, dass sie sich aufklappen lassen.
-- **Bildschirmleser und Tastatur:** Bedienelemente haben Namen für Vorlese-Programme, alle Reiter sind
-  per Tab erreichbar.
-- Hilfe (F1) und Handbuch sind an die neuen Funktionen angepasst, neue Bilder.
+**Weitere Änderungen**
+- Namen und Texte aus fremden Dateien werden in Meldungen und Tooltips immer als Text angezeigt.
+- Dateinamen beim Speichern von Ausdrucken sind sicherer gebildet und begrenzt.
+- Hilfe (F1) und Handbuch sind an die Änderungen angepasst.
 
 **Für dieses Update** bitte wie gewohnt das Programm vorher schließen und die neue Version
 über die alte installieren. Deine Termine bleiben erhalten.
