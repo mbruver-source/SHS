@@ -82,7 +82,7 @@ def _zip_grenzen_pruefen(zf) -> None:
     for info in eintraege:
         if info.file_size > _MAX_DATEIGROESSE:
             raise ValueError(
-                f"Die Datei „{info.filename}“ in der Sicherung ist ausgepackt größer als "
+                f"Die Datei „{kurzer_text(info.filename, 80)}“ in der Sicherung ist ausgepackt größer als "
                 f"{_MAX_DATEIGROESSE // (1024 * 1024)} MB - das ist keine gültige Termin-Datei."
             )
         gesamt += info.file_size
@@ -134,6 +134,8 @@ class _BegrenzterEntpacker:
                     break
         else:
             for anfang in range(0, len(data), self._EINGABE):
+                if self._entpacker.eof:
+                    break  # Füllbytes hinter dem Datenstrom verwerfen (der Entpacker würde sonst EOFError werfen)
                 teil = self._entpacker.decompress(data[anfang:anfang + self._EINGABE])
                 if teil:
                     self._melden(len(teil))

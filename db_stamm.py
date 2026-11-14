@@ -13,8 +13,10 @@ from dataclasses import dataclass, field
 
 from db_verbindung import (
     ALLE_PRUEFUNGEN,
+    KopieWerteUnzulaessig,
     pruefung_nach_kuerzel,
     pruefe_werte_der_kopie,
+    UNZULAESSIGE_KOPIE_WERTE_TEXT,
     _mit_rollback,
     _PostgresConnection,
     _soll_spalten,
@@ -230,6 +232,8 @@ def pruefe_teilnehmer_werte(t: NeuerTeilnehmer) -> None:
         if isinstance(wert, str) and len(wert) > hoechstens:
             raise ValueError(f"{bezeichnung} ist zu lang (höchstens {hoechstens} Zeichen, hier {len(wert)})")
     hoehe = t.schulterhoehe_cm
+    if hoehe is not None and (isinstance(hoehe, bool) or not isinstance(hoehe, (int, float))):
+        raise ValueError("Schulterhöhe ist keine Zahl")  # z. B. Text oder BLOB aus einer fremden Datei
     if hoehe is not None and not SCHULTERHOEHE_MIN <= hoehe <= SCHULTERHOEHE_MAX:
         raise ValueError(f"Schulterhöhe {hoehe if abs(hoehe) < 10**6 else 'außerhalb des Bereichs'} ist ungültig "
                          f"– bitte eine ganze Zahl von {SCHULTERHOEHE_MIN} bis {SCHULTERHOEHE_MAX} cm angeben")
@@ -526,6 +530,10 @@ def teilnehmer_wiederherstellen(conn: sqlite3.Connection, sicherung: dict) -> bo
             "SELECT 1 FROM teilnehmer WHERE startnummer = ?", (nummer,)).fetchone():
         daten["startnummer"] = None
     postgres = isinstance(conn, _PostgresConnection)
+    for feld, wert in daten.items():  # Längengrenzen wie beim Anlegen (Sicherheitskorrektur I-5)
+        hoechstens = FELD_LAENGEN.get(feld)
+        if hoechstens and isinstance(wert, str) and len(wert) > hoechstens:
+            raise KopieWerteUnzulaessig(UNZULAESSIGE_KOPIE_WERTE_TEXT)
     spalten = _spalten_fuer_einfuegen(postgres, "teilnehmer", daten)
     # PostgreSQL: id ist GENERATED ALWAYS AS IDENTITY, die alte ID braucht OVERRIDING SYSTEM VALUE
     # (die Sequenz liegt ohnehin schon darüber, die ID wurde früher von ihr vergeben).

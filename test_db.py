@@ -2634,6 +2634,20 @@ class TestZeitplan(unittest.TestCase):
         nummern = {t["nachname"]: t["startnummer"] for t in list_teilnehmer(self.conn)}
         self.assertEqual(nummern, {"Albers": None, "Brandt": 5})
 
+    def test_teilnehmer_wiederherstellen_lehnt_ueberlange_werte_ab(self):
+        """Nacharbeit zur Sicherheitsprüfung: Werte aus einer Kopie unterliegen denselben Längengrenzen
+        wie beim Anlegen; abgelehnt wird vollständig, nichts wird geändert."""
+        from db import _PostgresConnection, KopieWerteUnzulaessig
+        if isinstance(self.conn, _PostgresConnection):
+            self.skipTest("nur SQLite: der Wert wird per SQL in die Sicherung geschrieben")
+        tid = self._teilnehmer("ED", 1, "Flächensuche", nachname="Albers")
+        sicherung = teilnehmer_sichern(self.conn, tid)
+        delete_teilnehmer(self.conn, tid)
+        sicherung["teilnehmer"]["nachname"] = "N" * 3000
+        with self.assertRaises(KopieWerteUnzulaessig):
+            teilnehmer_wiederherstellen(self.conn, sicherung)
+        self.assertEqual(list_teilnehmer(self.conn), [])
+
     def test_startnummern_wiederherstellen(self):
         a = self._teilnehmer("DK", 1, startnummer=5, nachname="Bauer")
         b = self._teilnehmer("DK", 1, startnummer=7, nachname="Albrecht")
@@ -4335,6 +4349,21 @@ class TestTerminImportStammdaten(unittest.TestCase):
         self.assertEqual(len(list_teilnehmer(self.ziel)), 2)
         with self.assertRaises(ValueError):
             importiere_teilnehmer_stammdaten(self.quelle, self.ziel, [ids[1]])
+
+    def test_text_oder_blob_als_schulterhoehe_der_quelle_wird_gemeldet(self):
+        """Nacharbeit zur Sicherheitsprüfung: Text oder BLOB in der Schulterhöhe einer fremden Datei
+        ist eine Fehlerzeile (vorher TypeError beim Vergleich)."""
+        ids = [add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname=name, vorname="Anna", rufname_hund="Rex", art="DK", stufe=1))
+            for name in ("Text", "Blob", "Gut")]
+        self.quelle.execute("UPDATE teilnehmer SET schulterhoehe_cm = 'abc' WHERE id = ?", (ids[0],))
+        self.quelle.execute("UPDATE teilnehmer SET schulterhoehe_cm = X'0102' WHERE id = ?", (ids[1],))
+        self.quelle.commit()
+        fehler: list[str] = []
+        self.assertEqual(importiere_teilnehmer_stammdaten(self.quelle, self.ziel, ids, fehler=fehler), 1)
+        self.assertEqual(len(fehler), 2)
+        for zeile in fehler:
+            self.assertIn("Schulterhöhe", zeile)
 
     def test_importiert_nur_ausgewaehlte_teilnehmer_mit_stammdaten(self):
         a = add_teilnehmer(self.quelle, NeuerTeilnehmer(

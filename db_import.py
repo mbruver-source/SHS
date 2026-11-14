@@ -777,7 +777,9 @@ def _kreuz_aus_darstellung_ergaenzen(widget, werte: dict, nfc) -> None:
 
 def _pdf_text(werte: dict, feldname: str) -> str:
     wert = werte.get(feldname)
-    return "" if wert is None else str(wert).strip()
+    # Ein sehr langer Wert wird vor der weiteren Bearbeitung gekappt (die Längenprüfung lehnt ihn danach
+    # ohnehin ab, Sicherheitskorrektur I-5/I-2).
+    return "" if wert is None else str(wert)[:10_000].strip()
 
 
 def _pdf_angekreuzt(werte: dict, feldname: str) -> bool:

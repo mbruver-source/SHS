@@ -924,6 +924,18 @@ class TestZipGrenzen(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ausgepackt größer"):
                 sicherung_inhalt(self.zip_pfad)
 
+    def test_lzma_fuellbytes_hinter_dem_datenstrom_werfen_keinen_eoferror(self):
+        """Nacharbeit zur Sicherheitsprüfung: Hinter dem Ende des LZMA-Datenstroms liegende Bytes werden
+        verworfen statt mit EOFError abzubrechen."""
+        import lzma
+        from db_sicherung import _BegrenzterEntpacker
+        daten = b"A" * 2000
+        entpacker = _BegrenzterEntpacker(lzma.LZMADecompressor(), 10_000, "a.sqlite")
+        ausgabe = entpacker.decompress(lzma.compress(daten) + b"\0" * 600)
+        self.assertEqual(ausgabe, daten)
+        self.assertTrue(entpacker.eof)
+        self.assertEqual(entpacker.decompress(b"\0" * 100), b"")
+
     def test_normale_sicherung_liegt_unter_den_grenzen(self):
         _termin_anlegen(self.ordner, "a.sqlite")
         sicherung_erstellen(self.zip_pfad, ordner=self.ordner)

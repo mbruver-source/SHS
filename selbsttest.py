@@ -37,7 +37,10 @@ def fuehre_selbsttest_aus(protokoll_pfad: str | None = None) -> int:
     elif os.name == "nt":
         protokoll = Path(tempfile.gettempdir()) / "shs_selbsttest.log"  # der Windows-Temp-Ordner gehört dem Benutzer
     else:
-        protokoll = Path.home() / "shs_selbsttest.log"  # /tmp wäre für alle Benutzer beschreibbar (P-1)
+        try:
+            protokoll = Path.home() / "shs_selbsttest.log"  # /tmp wäre für alle Benutzer beschreibbar (P-1)
+        except (RuntimeError, OSError):  # kein Benutzerordner ermittelbar
+            protokoll = Path(tempfile.gettempdir()) / "shs_selbsttest.log"
     zeilen: list[str] = []
     fehler = 0
 
