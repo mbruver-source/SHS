@@ -68,6 +68,39 @@ class TestAltversionen(unittest.TestCase):
             finally:
                 roh.close()
 
+    def test_notizspalten_kommen_in_alten_dateien_nicht_vor_der_einfuehrung_vor(self):
+        """Notizen zum Bewertungsbogen (18.11.2026, noch nicht ausgeliefert): Die Einführungsversion steht
+        erst beim Build fest. Deshalb keine feste Versionsnummer, sondern: Sobald eine Altdatei die Spalten
+        hat, haben sie alle späteren auch (kein Sprung zurück), die älteste hat sie nicht, und die Datei der
+        gerade eingetragenen Programmversion (version.py) hat sie, falls es schon eine gibt."""
+        import sqlite3
+
+        import version
+
+        spalten = ("notiz_truemmerfeld", "notiz_flaechensuche", "notiz_behaeltnis")
+        gesehen = False
+        for ordner in VERSIONEN:
+            roh = sqlite3.connect((ordner / "termin.sqlite").as_uri() + "?mode=ro", uri=True)
+            try:
+                vorhanden = [s in [r[1] for r in roh.execute("PRAGMA table_info(ergebnisse)")] for s in spalten]
+            finally:
+                roh.close()
+            with self.subTest(version=ordner.name):
+                self.assertIn(sum(vorhanden), (0, len(spalten)), "alle drei Notizspalten oder keine")
+                if gesehen:
+                    self.assertTrue(all(vorhanden), "Notizspalten dürfen in späteren Versionen nicht fehlen")
+                if ordner.name == "v1.0.0":
+                    self.assertFalse(any(vorhanden))
+                gesehen = gesehen or all(vorhanden)
+        if gesehen and any(o.name == f"v{version.VERSION}" for o in VERSIONEN):
+            letzte = [o for o in VERSIONEN if o.name == f"v{version.VERSION}"][0]
+            roh = sqlite3.connect((letzte / "termin.sqlite").as_uri() + "?mode=ro", uri=True)
+            try:
+                namen = [r[1] for r in roh.execute("PRAGMA table_info(ergebnisse)")]
+            finally:
+                roh.close()
+            self.assertTrue(all(s in namen for s in spalten))
+
     def _oeffnen(self, version_ordner: Path):
         kopie = self.tmp / f"{version_ordner.name}.sqlite"
         shutil.copy(version_ordner / "termin.sqlite", kopie)
@@ -192,6 +225,23 @@ class TestAltversionen(unittest.TestCase):
                         self.assertEqual(len(db.list_teilnehmer(conn)), 7)
                     finally:
                         conn.close()
+
+    def test_notizen_zum_bewertungsbogen_nach_der_migration(self):
+        """Ältere Dateien bekommen die Notiz-Spalten (leer) und lassen sich beschreiben."""
+        for ordner in VERSIONEN:
+            with self.subTest(version=ordner.name):
+                conn, _kopie = self._oeffnen(ordner)
+                try:
+                    ids = [t["id"] for t in db.list_teilnehmer(conn)]
+                    for tid in ids:
+                        ergebnis = db.get_ergebnis(conn, tid)
+                        for spalte in db.NOTIZ_SPALTEN.values():
+                            self.assertIsNone(ergebnis[spalte])
+                    db.setze_notiz(conn, ids[0], "Trümmerfeld", "  Hund sehr aufmerksam  ")
+                    self.assertEqual(db.get_ergebnis(conn, ids[0])["notiz_truemmerfeld"], "Hund sehr aufmerksam")
+                    self.assertFalse(db.termin_werte_verletzt(conn))
+                finally:
+                    conn.close()
 
     def test_erneutes_oeffnen_ist_unschaedlich(self):
         for ordner in VERSIONEN:

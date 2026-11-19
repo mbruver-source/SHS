@@ -63,21 +63,62 @@ jobs:
           printf '%s\n' 'smoketest-schluessel-nur-fuer-ci-0123456789' > secrets/web_secret_key.txt
           printf '%s\n' 'smoketest-einrichtung' > secrets/admin_setup_code.txt
 
-      - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container)
+      - name: Selbst signiertes Testzertifikat für den HTTPS-Proxy anlegen
+        # Nur für den Smoke-Test (wie die Testwerte oben); das echte Zertifikat erzeugt
+        # tools/zertifikat_erzeugen.ps1 einmalig beim Betreiber.
+        run: |
+          mkdir -p secrets/tls
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 \
+            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            -keyout secrets/tls/schluessel.pem -out secrets/tls/zertifikat.pem
+          chmod 644 secrets/tls/*.pem
+
+      - name: Compose-Stack bauen und starten (PostgreSQL + Web-Container + HTTPS-Proxy)
         run: docker compose -f compose.yaml up --build -d
 
-      - name: Warten, bis die Login-Seite antwortet
+      - name: Warten, bis die Login-Seite über HTTPS antwortet
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:5000/ > /dev/null; then
-              echo "Web-Container antwortet."
+            if curl -sfk https://localhost:5443/ > /dev/null; then
+              echo "Web-Container antwortet über den HTTPS-Proxy."
               exit 0
             fi
             sleep 2
           done
-          echo "Web-Container antwortet nach 60s nicht auf http://localhost:5000/ - Logs:"
+          echo "Web-Container antwortet nach 60s nicht auf https://localhost:5443/ - Logs:"
           docker compose -f compose.yaml logs
           exit 1
+
+      - name: Schnittstelle für das Desktop-Programm und Abschottung prüfen
+        # Seit 18.11.2026: Der Desktop spricht /api/ über den HTTPS-Proxy an. Geprüft wird hier nur, was
+        # ohne Zugangsdaten geht: Die Schnittstelle antwortet (leere Anmeldung = 400 mit JSON), eine
+        # geschützte Route verlangt Anmeldung, und Port 5000 (direkt zum Web-Container) ist von außen
+        # nicht erreichbar (nur über den Proxy).
+        run: |
+          code=$(curl -sk -o /tmp/api.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            -d '{}' https://localhost:5443/api/login)
+          [ "$code" = "400" ] || { echo "::error::/api/login antwortet mit $code statt 400"; exit 1; }
+          grep -q '"fehler"' /tmp/api.json || { echo "::error::/api/login liefert kein JSON mit 'fehler'"; cat /tmp/api.json; exit 1; }
+          code=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:5443/ergebnisse/boegen.pdf)
+          [ "$code" = "302" ] || { echo "::error::/ergebnisse/boegen.pdf ohne Anmeldung antwortet mit $code statt 302"; exit 1; }
+          if curl -sf --max-time 3 http://localhost:5000/ > /dev/null; then
+            echo "::error::Port 5000 ist von außen erreichbar (sollte nur über den Proxy gehen)"; exit 1
+          fi
+          echo "API, Anmeldepflicht und Abschottung in Ordnung."
+
+      - name: Prüfen, dass das Web-Image die PDF-Bausteine enthält (reportlab, Schriften)
+        # Der Sammelausdruck der Bewertungsbögen braucht reportlab und die DejaVu-Schriften im Image.
+        # pdf_export wird in der Web-App erst beim Aufruf importiert; dieser Schritt fängt ein
+        # unvollständiges Image schon im Smoke-Test ab.
+        run: |
+          docker compose -f compose.yaml exec -T web python -c "import pdf_export, reportlab; print('pdf_export und reportlab vorhanden')"
+          docker compose -f compose.yaml exec -T web test -f /app/fonts/DejaVuSansCondensed.ttf
+
+      - name: Alle Container gesund?
+        run: |
+          docker compose -f compose.yaml ps
+          unhealthy=$(docker compose -f compose.yaml ps --format '{{.Name}} {{.Health}}' | grep -v -E ' (healthy)?$' || true)
+          if [ -n "$unhealthy" ]; then echo "::error::Nicht gesund: $unhealthy"; docker compose -f compose.yaml logs; exit 1; fi
 
       - name: Compose-Stack stoppen
         if: always()

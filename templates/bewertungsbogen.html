@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block titel %}Bewertungsbogen {{ disziplin }} – SHS Prüfung{% endblock %}
+{% block stil %}
+<style>
+  /* Online-Bewertungsbogen: Aufbau wie der Papierbogen, reine Formularseite ohne JavaScript
+     (CSP script-src 'none'). Suchleistung und Anzeigeleistung stehen nebeneinander. */
+  .bogen-kopf { display: grid; grid-template-columns: max-content 1fr; gap: 0.2em 1em; margin: 0.6em 0; }
+  .bogen-kopf dt { font-weight: 600; }
+  .bogen-kopf dd { margin: 0; }
+  .bogen-punkte { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em; margin: 0.8em 0; }
+  .bogen-punkte > div { border: 1px solid var(--grau-rand); border-radius: 8px; padding: 0 0.8em 0.8em; }
+  .bogen-punkte input[type=number] { font-size: 1.4em; text-align: center; }
+  .bogen-punkte input[readonly] { background: var(--grau-hell); color: var(--gedaempft); }
+  .bogen-status { display: flex; flex-wrap: wrap; gap: 0.8em 1.5em; align-items: flex-end; margin: 0.8em 0; }
+  .bogen-status label.dq { display: flex; align-items: center; gap: 0.4em; font-weight: 600; }
+  .bogen-status label.dq input { width: 1.5em; height: 1.5em; }
+  .bogen-status select, textarea.notiz { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
+                                         border-radius: 6px; background: #fff; color: var(--text); max-width: 100%; }
+  textarea.notiz { width: 100%; box-sizing: border-box; min-height: 6em; }
+  .bogen-gesamt { border: 2px solid var(--grau-rand); border-radius: 8px; padding: 0.8em 1em; margin: 1em 0; }
+  .bogen-gesamt strong { font-size: 1.3em; }
+  .bogen-knoepfe { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 1em 0 0; }
+  @media (max-width: 480px) { .bogen-punkte { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+{% block inhalt %}
+{% set t = teilnehmer %}
+<div class="karte">
+  <h1>Bewertungsbogen SHS – Spürhundsport</h1>
+  <dl class="bogen-kopf">
+    <dt>Start-Nr.</dt><dd>{% if t.startnummer %}{{ t.startnummer }}{% else %}–{% endif %}</dd>
+    <dt>LK/Art</dt><dd>{{ label }}</dd>
+    <dt>Teilnehmer</dt><dd>{{ t.nachname }}, {{ t.vorname }}</dd>
+    <dt>Hund</dt><dd>{% if t.zwingername %}{{ t.zwingername }}, {% endif %}Rufname: „{{ t.rufname_hund }}“</dd>
+    {% if t.verein %}<dt>Verein</dt><dd>{{ t.verein }}</dd>{% endif %}
+    {% if veranstaltung %}
+      <dt>Austragender Verein</dt><dd>{{ veranstaltung.verein }}</dd>
+      <dt>Datum</dt><dd>{{ veranstaltung.datum | datum }}</dd>
+    {% endif %}
+    <dt>Disziplin</dt><dd><strong>{{ disziplin }}</strong></dd>
+    <dt>Zu suchender Gegenstand</dt><dd>{% if gegenstand %}{{ gegenstand }}{% else %}<small>nicht hinterlegt</small>{% endif %}</dd>
+  </dl>
+</div>
+
+{% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
+{% if zeile.fehler %}<div class="fehler" role="alert">Es wurde nichts gespeichert: {{ zeile.fehler }}</div>{% endif %}
+{% if zeile.konflikt %}<div class="fehler" role="alert" style="background: #fbf0d9; border-color: #6d4c00; color: #6d4c00;">{{ zeile.konflikt | join(' ') }}</div>{% endif %}
+
+<form class="karte" method="post" action="{{ speichern_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {# Versteckte Felder mit dem beim Laden sichtbaren Stand: Grundlage des Lost-Update-Schutzes
+     (siehe app_web.bewertungsbogen) - unveränderte Werte werden beim Speichern nicht angefasst. #}
+  <input type="hidden" name="geladen_{{ zeile.id }}" value="{{ zeile.geladen }}">
+  <input type="hidden" name="geladen_notiz_{{ zeile.id }}" value="{{ notiz_geladen }}">
+
+  <h2 style="margin-top: 0;">Bewertung {{ disziplin }}</h2>
+  <div class="bogen-punkte">
+    <div>
+      <label for="suche">Suchleistung – Punktzahl (0-{{ suche_max }})</label>
+      <input type="number" id="suche" inputmode="numeric" min="0" max="{{ suche_max }}"
+             name="suche_{{ disziplin }}_{{ zeile.id }}" value="{{ punkte.suche }}"{% if zeile.gesperrt %} readonly{% endif %}>
+    </div>
+    <div>
+      <label for="anzeige">Anzeige – Punktzahl (0-{{ anzeige_max }})</label>
+      <input type="number" id="anzeige" inputmode="numeric" min="0" max="{{ anzeige_max }}"
+             name="anzeige_{{ disziplin }}_{{ zeile.id }}" value="{{ punkte.anzeige }}"{% if zeile.gesperrt %} readonly{% endif %}>
+    </div>
+  </div>
+  {% if zeile.gesperrt %}<p><small>Bei „Disqualifiziert“ oder „Abbruch“ ohne Grund werden eingetragene Punkte nicht gewertet und nicht verändert.</small></p>{% endif %}
+
+  <div class="bogen-status">
+    <label class="dq"><input type="checkbox" name="dq_{{ zeile.id }}" value="1"{% if zeile.dq %} checked{% endif %}> Disqualifiziert</label>
+    <div>
+      <label for="abbruch" style="margin-top: 0;">Abbruch</label>
+      <select id="abbruch" name="abbruch_{{ zeile.id }}">
+        <option value="">kein Abbruch</option>
+        {% for code, text in abbruch_gruende %}
+          <option value="{{ code }}"{% if zeile.abbruch == code %} selected{% endif %}>{{ text }}</option>
+        {% endfor %}
+        {% if zeile.abbruch_ohne_grund %}<option value="ohne_grund"{% if zeile.abbruch == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
+      </select>
+    </div>
+  </div>
+  <p><small>Ein Abbruch braucht einen Grund; mit Grund ist eine Teilbewertung möglich. Disqualifiziert und Abbruch gelten für die ganze Prüfung des Teilnehmers, nicht nur für diese Disziplin.</small></p>
+
+  <label for="notiz">Notiz zum Bogen (Position Gegenstand, Besonderheiten)</label>
+  <textarea class="notiz" id="notiz" name="notiz_{{ zeile.id }}" maxlength="{{ notiz_max }}" rows="4">{{ notiz }}</textarea>
+  <small>Höchstens {{ notiz_max }} Zeichen.</small>
+
+  <div class="bogen-knoepfe">
+    <button type="submit" name="weiter" value="tabelle">Speichern und zurück zur Tabelle</button>
+    <button type="submit" name="weiter" value="bogen">Speichern</button>
+    <a class="knopf knopf-sekundaer" href="{{ tabelle_url }}">Abbrechen / Zurück (ohne Speichern)</a>
+  </div>
+</form>
+
+<div class="karte bogen-gesamt" aria-live="polite">
+  <p style="margin: 0;">Gesamtpunktzahl {{ disziplin }}:
+    <strong>{% if zusammenfassung.gesamt is not none %}{{ zusammenfassung.gesamt }}{% else %}–{% endif %}</strong>
+    {% if zusammenfassung.gesamt is none %}<small>(sobald Suche und Anzeige gespeichert sind)</small>{% endif %}</p>
+  <p style="margin: 0.4em 0 0;">Status: <span class="status {% if zusammenfassung.status == 'gespeichert' %}status-fertig{% else %}status-offen{% endif %}">{{ zusammenfassung.status }}</span></p>
+  {% if zusammenfassung.wertnote %}
+    <p style="margin: 0.4em 0 0;">Wertnote {% if teilnehmer.art == 'DK' %}Dreikampf{% else %}{{ disziplin }}{% endif %}:
+      <strong>{{ zusammenfassung.wertnote.notentext }}</strong> ({{ zusammenfassung.wertnote.abkuerzung }}, {{ zusammenfassung.wertnote.punkte }} Punkte)</p>
+  {% elif zusammenfassung.wertnote_hinweis %}
+    <p style="margin: 0.4em 0 0;"><small>{{ zusammenfassung.wertnote_hinweis }}</small></p>
+  {% endif %}
+  <p style="margin: 0.4em 0 0;"><small>Angezeigt ist der gespeicherte Stand.</small></p>
+</div>
+{% endblock %}

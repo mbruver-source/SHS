@@ -24,7 +24,10 @@ bleiben Desktop-Aufgaben vor/nach dem Prüfungstag.
 
 1. **Geheimnisse anlegen** (siehe Abschnitt „Geheimnisse“ unten): drei Dateien im
    Ordner `secrets/` für Datenbank-Passwort, Session-Schlüssel und Einrichtungs-Code.
-2. Optional `.env.example` nach `.env` kopieren, um Benutzer- und Datenbankname oder das
+2. **HTTPS-Zertifikat erzeugen** (siehe Abschnitt „HTTPS und Zertifikat“ unten):
+   `powershell -ExecutionPolicy Bypass -File tools\zertifikat_erzeugen.ps1`, den
+   ausgegebenen Fingerabdruck notieren. Ohne Zertifikat startet der Proxy nicht.
+3. Optional `.env.example` nach `.env` kopieren, um Benutzer- und Datenbankname oder das
    Image zu ändern. Ohne `.env` gelten die Vorgaben (Benutzer und Datenbank `shs`).
    `.env` und `secrets/` **nicht** committen (stehen in `.gitignore`).
 
@@ -92,11 +95,56 @@ podman-compose up -d
 ```
 
 Baut das Web-Image beim allerersten Start automatisch aus dem lokalen Quellcode
-(`Containerfile`) und startet zusätzlich einen PostgreSQL-Container. Danach ist die
-Web-Oberfläche im lokalen Netzwerk unter `http://<IP-des-Rechners>:5000` erreichbar
-(bewusst kein HTTPS – siehe Deployment-Annahme im Modul-Docstring von `app_web.py`:
-läuft nur im lokalen Vereins-Netzwerk am Prüfungstag, nicht öffentlich aus dem
-Internet).
+(`Containerfile`) und startet zusätzlich einen PostgreSQL-Container und den HTTPS-Proxy.
+Danach ist die Web-Oberfläche im lokalen Netzwerk unter `https://<IP-des-Rechners>:5443`
+erreichbar, auf dem Rechner selbst unter `https://localhost:5443`. Der Port 5000 des
+Web-Dienstes ist von außen **nicht** mehr erreichbar (nur im internen Compose-Netz). Die
+Web-Version läuft weiterhin nur im lokalen Vereins-Netzwerk am Prüfungstag, nicht öffentlich
+aus dem Internet.
+
+## HTTPS und Zertifikat
+
+Seit der Desktop-Anbindung (das Desktop-Programm veröffentlicht Termine und holt Ergebnisse
+über die Schnittstelle unter `/api/`, Anmeldung mit dem Web-Administrator-Konto) ist HTTPS
+Pflicht. Davor steht der Proxy Caddy (Dienst `proxy` in `compose.yaml`, Einstellungen in der
+`Caddyfile`). Er nutzt ein **langlebiges, selbst signiertes Zertifikat**, das einmal erzeugt
+wird. Bewusst kein „tls internal“ von Caddy: das stellt kurzlebige Zertifikate aus und
+erneuert sie laufend, der vom Desktop festgehaltene Fingerabdruck (Zertifikats-Pinning)
+würde dann ständig ungültig.
+
+**Ablauf (einmalig):**
+
+1. Zertifikat erzeugen (PowerShell, im Projektordner):
+   ```
+   powershell -ExecutionPolicy Bypass -File tools\zertifikat_erzeugen.ps1
+   ```
+   Das Skript schreibt `secrets/tls/zertifikat.pem` und `secrets/tls/schluessel.pem` (10 Jahre
+   gültig, Namen `localhost`, `127.0.0.1`, `::1` und der Rechnername; weitere Namen oder die
+   IP im Vereinsnetz mit `-Namen 192.168.1.20`). Es braucht `openssl` (das von Git für
+   Windows mitgelieferte wird gefunden), sonst nutzt es einen kurzlebigen Container. Ein
+   vorhandenes Zertifikat überschreibt es nie; neu erzeugen nur mit `-Erneuern`.
+2. Den ausgegebenen **SHA-256-Fingerabdruck notieren** (steht auch in
+   `secrets/tls/fingerabdruck.txt`). Der private Schlüssel bleibt in `secrets/` (steht in
+   `.gitignore`) und wird nicht weitergegeben. Unter Linux wie bei den anderen Geheimnissen
+   `chmod 644 secrets/tls/*.pem` (der Proxy läuft ohne Capabilities).
+3. `podman-compose up -d`, dann im Browser `https://localhost:5443` öffnen. Der Browser
+   warnt **einmalig**, weil das Zertifikat selbst signiert ist; die Ausnahme für diese Seite
+   bestätigen. Es ist kein HSTS gesetzt, die Ausnahme bleibt jederzeit möglich.
+4. Im Desktop-Programm beim ersten Verbinden den angezeigten Fingerabdruck mit dem notierten
+   vergleichen und bestätigen. Er ändert sich nur, wenn ein neues Zertifikat erzeugt wird.
+
+Das Session-Cookie der Web-Oberfläche trägt das Secure-Flag (Umgebungsvariable
+`SHS_WEB_COOKIE_SECURE`, in `compose.yaml` auf `1`). Der lokale Entwicklungsserver
+(`python app_web.py`, ohne Proxy, über http) schaltet es von selbst aus.
+
+**Schnittstelle für das Desktop-Programm:** `POST /api/login` (JSON mit Benutzername und
+Passwort eines Administrator-Kontos) liefert ein 8 Stunden gültiges Token; die weiteren
+Aufrufe tragen es als `Authorization: Bearer <Token>`. Je Benutzername und je Client-IP sind
+10 Fehlversuche in 15 Minuten erlaubt, danach antwortet der Server mit 429. Die genauen
+Routen und Felder stehen in `Architektur.md`, Abschnitt „API für den Desktop“.
+
+Das Image enthält seit 18.11.2026 auch `pdf_export.py`, `lr_abrechnung.py`, die Schriften aus `fonts/`
+und `reportlab` (für „Benutzte Bögen als PDF“ in der Ergebnistabelle); kein Qt, kein PySide6.
 
 Nach einer Code-Änderung an `db.py`/`app_web.py` neu bauen:
 
@@ -123,12 +171,13 @@ nichts unbemerkt ändert:
 - **Web-Image:** `ghcr.io/mbruver-source/shs-web:X.Y.Z` in `compose.yaml`. `bump_version.py`
   zieht die Nummer bei jedem Build mit. Eine andere Version (oder `latest`) lässt sich über
   `SHS_WEB_IMAGE` in `.env` wählen.
-- **Basis-Image** `python:3.11.x-slim` im `Containerfile` und **`postgres:16.x`** in
-  `compose.yaml` sind per Digest (`@sha256:…`) festgelegt. Für Sicherheitsupdates von Zeit
-  zu Zeit nachziehen, z. B. bei einem Build:
+- **Basis-Image** `python:3.11.x-slim` im `Containerfile`, **`postgres:16.x`** und
+  **`caddy:2.x`** (HTTPS-Proxy) in `compose.yaml` sind per Digest (`@sha256:…`) festgelegt.
+  Für Sicherheitsupdates von Zeit zu Zeit nachziehen, z. B. bei einem Build:
   ```
   docker buildx imagetools inspect python:3.11-slim
   docker buildx imagetools inspect postgres:16
+  docker buildx imagetools inspect caddy:2
   ```
   (oder `podman manifest inspect …`). Den angezeigten Index-Digest samt genauer Version
   eintragen. Die Hauptversion von PostgreSQL bleibt 16, ein Wechsel bräuchte ein Upgrade
@@ -136,8 +185,9 @@ nichts unbemerkt ändert:
 - Die Python-Abhängigkeiten (`requirements-web.txt`, `requirements-postgres.txt`) haben
   nur Ober- und Untergrenzen. Fest ist ein Stand über das versionierte Image.
 
-Der web-Dienst läuft zusätzlich gehärtet: Dateisystem nur lesbar (bis auf `/tmp`), keine
-Linux-Capabilities, keine Rechteausweitung.
+Der web-Dienst und der Proxy laufen zusätzlich gehärtet: Dateisystem nur lesbar (beim web
+bis auf `/tmp`, beim Proxy bis auf `/data` und `/config`), keine Linux-Capabilities, keine
+Rechteausweitung.
 
 ## Stoppen
 
@@ -162,7 +212,7 @@ nicht mehr über einen gemeinsamen Zugangscode je Termin - bewusst so umgestellt
 Web-Version am Prüfungstag unabhängig vom "Windows-Team" nutzbar ist. Zwei Rollen (siehe
 db.py, Abschnitt "Benutzerkonten der Web-Version", und app_web.py):
 
-- **Administrator**: richtet sich beim allerersten Aufruf von `http://<Rechner-IP>:5000`
+- **Administrator**: richtet sich beim allerersten Aufruf von `https://<Rechner-IP>:5443`
   selbst mit einem frei gewählten Benutzernamen/Passwort ein ("Ersteinrichtung" -
   erscheint nur, solange noch kein Administrator existiert). Dabei wird zusätzlich der
   Einrichtungs-Code aus `secrets/admin_setup_code.txt` abgefragt, damit nicht jeder im
@@ -287,5 +337,8 @@ kaputtgehen, analog zu `tests.yml` für die eigentliche Testsuite.
 - Der Container läuft am Prüfungstag entweder auf demselben Rechner wie die Desktop-Version
   (z. B. über Podman Desktop) oder auf einem anderen Gerät im selben Netz (Marco 19.10.2026).
   Das Setup ist für beide Fälle gleich, nur der Zielrechner unterscheidet sich.
-- Kein Reverse-Proxy/HTTPS (bewusst, siehe Deployment-Annahme oben) – bleibt so, solange
-  die Web-Version nur im lokalen Vereins-Netzwerk läuft.
+- HTTPS über den vorgeschalteten Caddy-Proxy mit selbst signiertem Zertifikat (siehe
+  „HTTPS und Zertifikat“). Die Web-Version bleibt für das lokale Vereins-Netzwerk gedacht,
+  nicht für den Zugriff aus dem Internet.
+- Die Ratenbegrenzung der API-Anmeldung zählt im Prozessspeicher und beginnt nach einem
+  Neustart des Web-Containers von vorn.

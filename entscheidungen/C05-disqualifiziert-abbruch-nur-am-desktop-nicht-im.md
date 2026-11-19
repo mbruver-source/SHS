@@ -1,6 +1,6 @@
 # C5: Disqualifiziert/Abbruch nur am Desktop, nicht im Web und nicht beim Zurückholen
 
-- **Status:** akzeptiertes Restrisiko / abgelehnt
+- **Status:** überholt am 18.11.2026 (Marco): Die Web-Ergebnistabelle erfasst Disqualifikation und Abbruch, „Ergebnisse aus Web holen“ übernimmt sie (Rest: B17, B18)
 - **Bereich:** C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
 - **Seit:** 21.09.2026
 

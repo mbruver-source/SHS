@@ -158,7 +158,12 @@ CREATE TABLE IF NOT EXISTS ergebnisse (
         ('ungehorsam', 'verletzung_hund', 'krankheit', 'verletzung_hf')),
     -- S1 (Marco 03.10.2026): Sieger eines Stechens bei Gleichstand um Platz 1 (0/1).
     -- Gilt nur, solange der Gleichstand besteht (siehe shs_core.berechne_rangliste).
-    stechen_sieger INTEGER NOT NULL DEFAULT 0 CHECK (stechen_sieger IN (0, 1))
+    stechen_sieger INTEGER NOT NULL DEFAULT 0 CHECK (stechen_sieger IN (0, 1)),
+    -- Notiz zum online ausgefüllten Bewertungsbogen je Disziplin (Marco 18.11.2026): Freitext, NULL =
+    -- keine Notiz. Die Längengrenze (NOTIZ_MAX) prüft setze_notiz(), nicht die Datenbank.
+    notiz_truemmerfeld TEXT,
+    notiz_flaechensuche TEXT,
+    notiz_behaeltnis TEXT
 );
 
 -- Zeitplan: je Termin beliebig viele "Richter"-Spuren (zeitplan_richter), jede
@@ -308,6 +313,15 @@ DISZIPLIN_SPALTEN = {
 }
 
 ALLE_DISZIPLINEN = list(DISZIPLIN_SPALTEN)
+
+# Notizfeld je Disziplin zum Bewertungsbogen (Marco 18.11.2026): Disziplin -> Spalte in ergebnisse.
+NOTIZ_SPALTEN = {
+    "Trümmerfeld": "notiz_truemmerfeld",
+    "Flächensuche": "notiz_flaechensuche",
+    "Behältnisstrecke": "notiz_behaeltnis",
+}
+#: Höchstzahl Zeichen einer Notiz (nach dem Trimmen); geprüft in setze_notiz(), nicht in der Datenbank.
+NOTIZ_MAX = 500
 
 _VERANSTALTUNG_NEUE_SPALTEN = [
     "vereins_nr", "pruefungsnummer", "wertungsrichter_1", "wertungsrichter_2", "pruefungsleiter",
@@ -531,6 +545,10 @@ _ERGEBNISSE_NEUE_SPALTEN = [
     ("abbruch", "INTEGER NOT NULL DEFAULT 0"),
     ("stechen_sieger", "INTEGER NOT NULL DEFAULT 0"),  # S1, 03.10.2026
     ("abbruch_grund", "TEXT"),  # R7, 01.11.2026
+    # Notizen zum Bewertungsbogen je Disziplin (Marco 18.11.2026); NULL = keine Notiz.
+    ("notiz_truemmerfeld", "TEXT"),
+    ("notiz_flaechensuche", "TEXT"),
+    ("notiz_behaeltnis", "TEXT"),
 ]
 
 def _migriere_ergebnisse_spalten(conn) -> None:
@@ -679,13 +697,17 @@ def termin_werte_verletzt(conn: sqlite3.Connection) -> bool:
         for spalte, maximum in ((suche, SUCHE_MAX), (anzeige, ANZEIGE_MAX))
     )
     namen = " AND ".join(text_oder_null(s) for s in ("nachname", "vorname", "rufname_hund", "verein"))
+    # Notizen zum Bewertungsbogen: Text (oder leer) und nicht länger als NOTIZ_MAX
+    notizen = " AND ".join(
+        f"({text_oder_null(s)} AND ({s} IS NULL OR length({s}) <= {NOTIZ_MAX}))" for s in NOTIZ_SPALTEN.values()
+    )
     arten, pause, pruefung = "('ED', 'DK')", "('pause')", "('pruefung')"
     abfragen = [
         "SELECT COUNT(*) FROM teilnehmer WHERE NOT ("
         f"{text_in('art', arten)} AND {stufe_ok('stufe')} "
         f"AND (disziplin IS NULL OR {text_in('disziplin', disz)}) "
         f"AND (art COLLATE BINARY <> 'ED' OR disziplin IS NOT NULL) AND {gegenstaende} AND {namen})",
-        f"SELECT COUNT(*) FROM ergebnisse WHERE NOT ({punkte})",
+        f"SELECT COUNT(*) FROM ergebnisse WHERE NOT ({punkte} AND {notizen})",
         "SELECT COUNT(*) FROM zeitplan_eintrag WHERE NOT ("
         f"(typeof(dauer_minuten) = 'integer' AND dauer_minuten > 0) AND ("
         f"({text_in('typ', pause)}) OR ({text_in('typ', pruefung)} "

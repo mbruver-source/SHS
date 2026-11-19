@@ -9,6 +9,17 @@ from __future__ import annotations
 import datetime
 import os
 import sys
+from pathlib import Path
+
+# Schriften für den Offscreen-Modus (Marco 18.11.2026): Ohne Schriftenordner nimmt Qt dort eine grobe
+# Ersatzschrift, in der Beschriftungen viel breiter sind als im echten Programm (z. B. der Dialog
+# „Web-Verbindung“ bei großer Schrift). Der Gesamtlauf bekam den Ordner bisher nur zufällig durch den
+# Import von tools/screenshots.py beim Sammeln von test_gui_darstellung.py; ein Lauf je Datei (SHS Test
+# Suite) hatte ihn nicht. Muss vor dem ersten QApplication gesetzt sein, deshalb schon beim Import.
+_WINDOWS_SCHRIFTEN = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+if _WINDOWS_SCHRIFTEN.is_dir():
+    os.environ.setdefault("QT_QPA_FONTDIR", str(_WINDOWS_SCHRIFTEN))
+
 import pytest
 from contextlib import closing
 from PySide6.QtCore import Qt
@@ -156,7 +167,7 @@ DESKTOP_MODULE = ("app", "desktop_abrechnung", "desktop_auswertung", "desktop_da
                   "desktop_ergebnis", "desktop_ergebnis_speichern", "desktop_ergebnis_zellen",
                   "desktop_formular", "desktop_gemeinsam",
                   "desktop_import_meldungen", "desktop_programm", "desktop_teilnehmer", "desktop_verwaltung",
-                  "desktop_zeitplan")
+                  "desktop_web", "desktop_zeitplan")
 
 
 #: Die echte Funktion, bevor ein Test sie ersetzt (für die Gegenprobe zum Ordner-Schutz).

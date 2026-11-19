@@ -129,6 +129,10 @@ class TestDrittlizenzen(unittest.TestCase):
         self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", desktop)
         # Marco 01.11.2026: Symbole der Oberfläche (Tabler Icons) samt Lizenztext.
         self.assertIn("  Tabler Icons (Symbole der Oberfläche) - MIT", desktop)
+        # Seit 18.11.2026 liegen die Schriften auch im Web-Image (Sammel-PDF der Bewertungsbögen).
+        with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
+            web = drittlizenzen.erzeugen("web").split(drittlizenzen.TRENNER, 1)[0]
+        self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", web)
         with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
             self.assertIn("Copyright (c) 2020-2026 Paweł Kuna", drittlizenzen.erzeugen("desktop"))
 
@@ -146,7 +150,7 @@ class TestDrittlizenzen(unittest.TestCase):
         namen = {req.name for req in drittlizenzen._wurzeln("desktop")}
         self.assertIn("PySide6", namen)
         namen = {req.name for req in drittlizenzen._wurzeln("web")}
-        self.assertEqual(namen, {"psycopg2-binary", "Flask", "waitress"})
+        self.assertEqual(namen, {"psycopg2-binary", "Flask", "waitress", "reportlab"})
 
 
 if __name__ == "__main__":

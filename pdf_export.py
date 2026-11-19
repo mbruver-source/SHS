@@ -72,6 +72,7 @@ from db import (
     DISZIPLIN_SPALTEN,
     LR_EINHEITEN_JE_ART,
     LR_EINHEITEN_PRO_RICHTER,
+    NOTIZ_SPALTEN,
     berechne_auswertung,
     behaeltnis_bedarf_zeilentexte,
     berechne_behaeltnis_bedarf,
@@ -422,13 +423,107 @@ def _skizze_behaeltnisse(anzahl: int) -> Drawing:
     return zeichnung
 
 
+# Notiz zum Bewertungsbogen (Marco 18.11.2026, Online-Bogen im Web; die Notiz kommt über
+# „Ergebnisse aus Web holen“ in die Datei): erscheint nur, wenn eine Notiz da ist, klein gesetzt in
+# der rechten Spalte der Positionszeile (unter „Zu suchender Gegenstand“/Gesamtpunktzahl, neben
+# der Skizze). Nur dort ist Platz, ohne dass die feste 2-Seiten-Aufteilung des Dreikampf-Bogens
+# kippt: DK-Seite 2 hat kaum Reserve (ein zusätzlicher Kasten in voller Breite schob sie im
+# ungünstigsten Fall auf eine 3. Seite). Es werden höchstens _NOTIZ_MAX_ZEILEN Zeilen gesetzt und nie
+# mehr, als die Spalte unter dem übrigen Inhalt frei hat (mindestens 1); längere Notizen enden auf
+# „…“, dazu steht - sobald Platz für eine zweite Zeile ist - der Hinweis auf die volle Notiz im Web.
+_NOTIZ_MAX_ZEILEN = 4
+_NOTIZ_SCHRIFTGROESSE = 7
+_NOTIZ_ABSTAND = 1.5 * mm
+_NOTIZ_BREITE = 60 * mm  # Spalte 70 mm abzüglich Polster, Spielraum für den fetten „Notiz:“
+_NOTIZ_STIL = ParagraphStyle("SHSNotiz", parent=_STYLES["Normal"], fontSize=_NOTIZ_SCHRIFTGROESSE, leading=8.5)
+
+
+def _notiz_bereinigen(notiz: str | None) -> str:
+    """Notiz für den Druck: einheitliche Zeilenenden, Tabulator als Leerzeichen, übrige
+    Steuerzeichen entfallen; nur Leerraum -> ""."""
+    if not isinstance(notiz, str):
+        return ""
+    text = notiz.replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
+    return "".join(z for z in text if z == "\n" or (z.isprintable() or z == " ")).strip()
+
+
+def _notiz_zeilen(text: str, schrift: str, groesse: float, breite: float, max_zeilen: int) -> tuple[list[str], bool]:
+    """Bricht `text` selbst um (Wörter, zu lange Wörter zeichenweise; Leerzeilen entfallen) und
+    liefert höchstens `max_zeilen` Zeilen; die letzte endet bei Kürzung auf „…“. Zweiter Wert:
+    wurde gekürzt. Selbst umbrechen statt dem Paragraph zu überlassen, damit die Zeilenzahl
+    sicher feststeht (auch bei einem 500 Zeichen langen Wort ohne Leerzeichen)."""
+    zeilen: list[str] = []
+    for absatz in text.split("\n"):
+        aktuell = ""
+        for wort in absatz.split():
+            while stringWidth(wort, schrift, groesse) > breite:
+                # Wort länger als eine Zeile: so viele Zeichen, wie passen (mindestens eins).
+                n = len(wort)
+                while n > 1 and stringWidth(wort[:n], schrift, groesse) > breite:
+                    n -= 1
+                if aktuell:
+                    zeilen.append(aktuell)
+                    aktuell = ""
+                zeilen.append(wort[:n])
+                wort = wort[n:]
+            kandidat = f"{aktuell} {wort}" if aktuell else wort
+            if aktuell and stringWidth(kandidat, schrift, groesse) > breite:
+                zeilen.append(aktuell)
+                aktuell = wort
+            else:
+                aktuell = kandidat
+        if aktuell:
+            zeilen.append(aktuell)
+    gekuerzt = len(zeilen) > max_zeilen
+    if gekuerzt:
+        zeilen = zeilen[:max_zeilen]
+        letzte = zeilen[-1]
+        while letzte and stringWidth(letzte + "…", schrift, groesse) > breite:
+            letzte = letzte[:-1]
+        zeilen[-1] = letzte.rstrip() + "…"
+    return zeilen, gekuerzt
+
+
+def _notiz_block(notiz: str | None, freie_hoehe: float) -> list:
+    """Die Notiz als Flowables für die rechte Spalte der Positionszeile (siehe oben); leere Liste,
+    wenn keine Notiz da ist. `freie_hoehe` (pt) ist der Platz unter dem übrigen Inhalt der Spalte
+    bis zur Unterkante der (höheren) Skizzen-Spalte: so viele Zeilen (mindestens 1, höchstens
+    _NOTIZ_MAX_ZEILEN) werden gesetzt, die Zeile ändert ihre Höhe nicht."""
+    text = _notiz_bereinigen(notiz)
+    if not text:
+        return []
+    platz = int((freie_hoehe - _NOTIZ_ABSTAND) // _NOTIZ_STIL.leading)
+    max_zeilen = max(1, min(_NOTIZ_MAX_ZEILEN, platz))
+    # „Notiz: “ gehört zur ersten Zeile (fett gesetzt, deshalb der Spielraum in _NOTIZ_BREITE).
+    gesamt = "Notiz: " + text
+    zeilen, gekuerzt = _notiz_zeilen(gesamt, _SCHRIFT, _NOTIZ_SCHRIFTGROESSE, _NOTIZ_BREITE, max_zeilen)
+    if gekuerzt and max_zeilen >= 2:
+        # Letzte Zeile für den Hinweis freihalten.
+        zeilen, _ = _notiz_zeilen(gesamt, _SCHRIFT, _NOTIZ_SCHRIFTGROESSE, _NOTIZ_BREITE, max_zeilen - 1)
+        if not zeilen[-1].endswith("…"):
+            zeilen[-1] += "…"
+    html = [_xml_escape(z) for z in zeilen]  # erst kürzen, dann maskieren (nie mitten in „&amp;“ trennen)
+    if html[0].startswith("Notiz:"):
+        html[0] = "<b>Notiz:</b>" + html[0][len("Notiz:"):]
+    inhalt = "<br/>".join(html)
+    if gekuerzt and max_zeilen >= 2:
+        inhalt += "<br/><i>(gekürzt, vollständig im Web)</i>"
+    return [Spacer(1, _NOTIZ_ABSTAND), Paragraph(inhalt, _NOTIZ_STIL)]
+
+
+def _spaltenhoehe(elemente: list, breite: float) -> float:
+    """Gesamthöhe der Flowables einer Tabellenspalte bei der gegebenen Inhaltsbreite."""
+    return sum(e.wrap(breite, 10000 * mm)[1] for e in elemente)
+
+
 def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige: int | None, gegenstand: str | None,
-                         mit_wertungsnoten: bool = True) -> list:
+                         mit_wertungsnoten: bool = True, notiz: str | None = None) -> list:
     """Baut den kompletten "Bewertung <Disziplin>"-Block: Überschrift, ggf. Verleitungs-
     Hinweis, die beiden Bewertungsfelder (Suche/Anzeige) und die Positions-/Gesamtpunktzahl-
     Zeile mit der Positions-Skizze der Disziplin. `mit_wertungsnoten=False` lässt die
     Punkte-Band-Tabelle am Ende weg (DK-Seite 2: nur einmal unter der Behältnisstrecke,
-    wie in der Vorlage)."""
+    wie in der Vorlage). `notiz` (nur wenn vorhanden): kleiner Text „Notiz:“ in der rechten Spalte
+    der Positionszeile, siehe _notiz_block; ohne Notiz bleibt der Abschnitt unverändert."""
     elemente: list = [Paragraph(f"Bewertung {_p_wert(disziplin)}", _ABSCHNITT)]
     hinweis = _VERLEITUNGEN[(disziplin, stufe)]
     if hinweis:
@@ -494,7 +589,7 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
     )
     gesamt_feld.setStyle(TableStyle([("GRID", (1, 0), (1, 0), 0.8, colors.black), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
     if disziplin == "Behältnisstrecke":
-        rechts = gesamt_feld
+        rechts = [gesamt_feld]
     else:
         # "Zu suchender Gegenstand" rechts neben der Skizze (wie in der Vorlage): dort ist
         # neben der hohen Skizze Platz frei, ein langer, umbrechender Gegenstand macht den
@@ -506,6 +601,12 @@ def _bewertungsabschnitt(disziplin: str, stufe: int, suche: int | None, anzeige:
             gesamt_feld,
         ]
 
+    # Notiz (nur wenn vorhanden) in der rechten Spalte: nur der Platz bis zur Unterkante der linken
+    # Spalte (Skizze) ist frei, die Höhe der Zeile bleibt so unverändert. Zellenbreiten: Spalte minus
+    # je 6 pt Standard-Polster der Tabelle.
+    if _notiz_bereinigen(notiz):
+        frei = _spaltenhoehe(links, 100 * mm - 12) - _spaltenhoehe(rechts, 70 * mm - 12)
+        rechts = rechts + _notiz_block(notiz, frei)
     fuss = Table([[links, rechts]], colWidths=[100 * mm, 70 * mm])
     fuss.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 3 * mm)]))
     elemente.append(fuss)
@@ -603,8 +704,11 @@ def _bewertungsbogen_story(t: dict, ergebnis: dict | None, veranstaltung: dict |
         # Zu dieser Disziplin gehört nur der Gegenstand, der ihr auch tatsächlich
         # zugeordnet ist (siehe gegenstand_fuer_disziplin) - gilt einheitlich für ED und DK.
         suche, anzeige = einzelpunkte[disziplin]
+        # Notiz der Disziplin (Web-Bogen); .get, weil ältere Dateien/Aufrufer die Spalte nicht kennen.
+        notiz = ergebnis.get(NOTIZ_SPALTEN[disziplin]) if ergebnis else None
         return KeepTogether(_bewertungsabschnitt(
             disziplin, t["stufe"], suche, anzeige, gegenstand_fuer_disziplin(t, disziplin), mit_wertungsnoten,
+            notiz=notiz,
         ))
 
     verein = veranstaltung["verein"] if veranstaltung else ""
@@ -722,8 +826,8 @@ def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, p
 
 
 def erstelle_alle_bewertungsboegen_pdf(
-    conn: sqlite3.Connection, pfad: str, erlaubte_labels: set[str] | None = None,
-    je_disziplin: bool = False,
+    conn: sqlite3.Connection, pfad, erlaubte_labels: set[str] | None = None,
+    je_disziplin: bool = False, teilnehmer_ids: set[int] | None = None,
 ) -> int:
     """Erzeugt EINE Sammel-PDF mit dem Bewertungsbogen jedes Teilnehmers (sortiert nach
     Startnummer, wie die Teilnehmerliste) - praktisch zum Ausdrucken für alle Richter auf
@@ -742,10 +846,18 @@ def erstelle_alle_bewertungsboegen_pdf(
     Bogens drei Blätter (Trümmerfeld, Flächensuche, Behältnisstrecke), nach Disziplin
     sortiert - erst alle Trümmer-Blätter nach Startnummer, dann alle Fläche, dann alle
     Behältnis -, damit jeder Richter seinen Stapel bekommt. Einzeldisziplinen (ED) bleiben
-    unverändert und stehen vorweg. Die Rückgabe zählt die Teilnehmer, nicht die Blätter."""
+    unverändert und stehen vorweg. Die Rückgabe zählt die Teilnehmer, nicht die Blätter.
+
+    `teilnehmer_ids` (Web, 18.11.2026: „Benutzte Bögen als PDF“): schränkt zusätzlich auf diese
+    Teilnehmer-IDs ein; die Reihenfolge bleibt die der Teilnehmerliste. None = alle, ein leeres
+    Set = keiner (dann steht nur der Hinweis „Keine Teilnehmer erfasst.“ im PDF).
+
+    `pfad` darf auch ein Datei-Objekt (z. B. io.BytesIO) sein, wie bei reportlab üblich."""
     teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     if erlaubte_labels is not None:
         teilnehmer = [t for t in teilnehmer if leistungsklasse_label(t) in erlaubte_labels]
+    if teilnehmer_ids is not None:
+        teilnehmer = [t for t in teilnehmer if t["id"] in teilnehmer_ids]
     veranstaltung = get_veranstaltung(conn)
     ergebnis_rows = {r["teilnehmer_id"]: dict(r) for r in conn.execute("SELECT * FROM ergebnisse").fetchall()}
 

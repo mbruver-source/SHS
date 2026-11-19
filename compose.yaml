@@ -53,6 +53,7 @@ services:
     restart: unless-stopped
     # Härtung (H-2): Dateisystem nur lesbar (Uploads/Downloads nutzen /tmp), keine
     # Linux-Capabilities (Port 5000 braucht keine), keine Rechteausweitung.
+    # Von außen nur über den Dienst "proxy" (HTTPS, Port 5443) erreichbar.
     read_only: true
     tmpfs:
       - /tmp
@@ -72,14 +73,59 @@ services:
       # Einrichtungs-Code für das Anlegen des ersten Administrators (Codeprüfung 22.09.,
       # G1) - ohne ihn verweigert app_web.py die Ersteinrichtung, siehe README_CONTAINER.md.
       SHS_ADMIN_SETUP_CODE_FILE: /run/secrets/shs_admin_setup_code
+      # Session-Cookie nur über HTTPS (der Proxy unten stellt es sicher); nur ohne Proxy
+      # über http auf "0" setzen.
+      SHS_WEB_COOKIE_SECURE: "1"
     secrets:
       - shs_db_passwort
       - shs_web_secret_key
       - shs_admin_setup_code
-    ports:
-      - "5000:5000"
+    # Port 5000 wird NICHT nach außen veröffentlicht: erreichbar nur im internen
+    # Compose-Netz, von außen ausschließlich über den HTTPS-Proxy unten.
+    expose:
+      - "5000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  proxy:
+    # HTTPS-Proxy (Caddy) vor dem web-Dienst - die Desktop-Anbindung (API unter /api/)
+    # verlangt HTTPS. Feste Version mit Digest wie die übrigen Images; nachziehen:
+    # "docker buildx imagetools inspect caddy:2" (siehe README_CONTAINER.md, "Versionen").
+    # Das Zertifikat kommt als Secret-Datei (langlebig, selbst signiert, einmal erzeugt mit
+    # tools/zertifikat_erzeugen.ps1) - Konfiguration und Begründung in der Caddyfile.
+    image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
+    restart: unless-stopped
+    # Gleiche Härtung wie web: nur lesbares Dateisystem (Caddy schreibt nach /data und
+    # /config, beides tmpfs), keine Capabilities (der Container lauscht auf 8443, nicht
+    # auf einem Port unter 1024), keine Rechteausweitung.
+    read_only: true
+    tmpfs:
+      - /data
+      - /config
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    secrets:
+      - tls_zertifikat
+      - tls_schluessel
+    ports:
+      # Von außen https://<Rechner>:5443 (im Container 8443). Wie früher Port 5000 im
+      # ganzen Vereinsnetz erreichbar.
+      - "5443:8443"
+    healthcheck:
+      # Prüft die ganze Kette (TLS + Weiterleitung an web); das selbst signierte
+      # Zertifikat wird hier bewusst nicht geprüft, es geht nur um "antwortet".
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:8443/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -95,6 +141,12 @@ secrets:
     file: ./secrets/web_secret_key.txt
   shs_admin_setup_code:
     file: ./secrets/admin_setup_code.txt
+  # TLS-Zertifikat und privater Schlüssel des Proxys (einmal erzeugt mit
+  # tools/zertifikat_erzeugen.ps1, nie im Repo).
+  tls_zertifikat:
+    file: ./secrets/tls/zertifikat.pem
+  tls_schluessel:
+    file: ./secrets/tls/schluessel.pem
 
 volumes:
   # Bleibt über Neustarts/"compose down" hinweg erhalten (nur "compose down -v" löscht

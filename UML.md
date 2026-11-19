@@ -15,7 +15,7 @@ Inhalt:
 7. [Zeitplan](#7-zeitplan)
 8. [Ergebnisse erfassen und speichern (Desktop)](#8-ergebnisse-erfassen-und-speichern-desktop)
 9. [Auswertung, Stechen und Ausdrucke](#9-auswertung-stechen-und-ausdrucke)
-10. [Web-Erfassung am Prüfungstag](#10-web-erfassung-am-prüfungstag)
+10. [Web-Erfassung am Prüfungstag](#10-web-erfassung-am-prüfungstag) (10a: Veröffentlichen und Zurückholen aus dem Desktop per HTTPS, 10b: Ergebnistabelle, Online-Bewertungsbogen und Sammel-PDF, Stand 19.11.2026)
 11. [Datensicherung und Wiederherstellung](#11-datensicherung-und-wiederherstellung)
 12. [Update-Prüfung und Sitzungsende](#12-update-prüfung-und-sitzungsende)
 13. [Demoprüfung](#13-demoprüfung)
@@ -70,6 +70,7 @@ flowchart LR
     reiter & pdf & imp --> fach
     app --> db
     web --> db & tpl
+    web -.Sammel-PDF der Bögen, erst beim Aufruf.-> pdf
     pdf --> db
     db --> core
     db --> sqlite
@@ -195,7 +196,38 @@ classDiagram
         +struktur()
         +erledigte()
     }
-    class DatensicherungTab
+    class DatensicherungTab {
+        +web_veroeffentlichen_btn
+        +web_holen_btn
+        +web_verbindung_btn
+        +ergebnisse_aus_web_uebernommen Signal
+    }
+    class desktop_web {
+        <<Modul>>
+        +termin_veroeffentlichen()
+        +ergebnisse_aus_web_holen()
+        +verbindung_einrichten()
+        +mit_web_anmeldung()
+        +im_hintergrund()
+    }
+    class WebVerbindungsDialog {
+        +fingerabdruck_holen()
+        +testen()
+    }
+    class WebBerichtDialog
+    class web_sync {
+        <<Modul ohne Qt>>
+        +hole_fingerabdruck()
+        +WebClient
+        +adresse_pruefen()
+        +teilnehmer_aus_antwort()
+    }
+    class web_tresor {
+        <<Modul, nur Windows>>
+        +passwort_speichern()
+        +passwort_lesen()
+        +passwort_loeschen()
+    }
     class VersionDialog
     class LizenzDialog
     class SitzungsendeFilter
@@ -257,6 +289,12 @@ classDiagram
     StartDialog ..> VeranstaltungsDialog : neuer Termin
     DatensicherungTab ..> SicherungErstellenDialog
     DatensicherungTab ..> ErgebnisseSicherungDialog : Ergebnisse aus Kopie
+    DatensicherungTab ..> desktop_web : Web-Knöpfe
+    HauptFenster ..> DatensicherungTab : Signal ergebnisse_aus_web_uebernommen → Reiter neu laden
+    desktop_web ..> WebVerbindungsDialog
+    desktop_web ..> WebBerichtDialog
+    desktop_web ..> web_sync : HTTPS mit Pinning
+    desktop_web ..> web_tresor : Passwort
     TeilnehmerTab ..> SicherungTeilnehmerDialog : Aus Sicherung holen
     HauptFenster ..> HilfeDialog
 
@@ -601,6 +639,121 @@ sequenceDiagram
 
 Ohne Browser geht dasselbe über `sync_termin.py` auf der Kommandozeile.
 
+### 10a. Veröffentlichen und Zurückholen aus dem Desktop (HTTPS, `/api/`)
+
+Zweiter Weg neben dem Browser: der Desktop spricht direkt mit dem Web-Server (Reiter
+„Datensicherung“, Gruppe „Web-Version“). Nur HTTPS; das selbstsignierte Serverzertifikat wird über
+seinen SHA-256-Fingerabdruck geprüft (Pinning), bevor etwas gesendet wird.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor PL as Prüfungsleitung
+    participant DW as desktop_web
+    participant WS as web_sync
+    participant TR as web_tresor (Windows-Tresor)
+    participant S as Web-Server (Proxy + /api/)
+    participant DB as db (Termin-Datei)
+
+    Note over PL,S: Einmalig: Web-Verbindung einrichten (Trust on first use)
+    PL->>DW: Web-Verbindung…
+    DW->>WS: hole_fingerabdruck (TLS-Handshake, nichts gesendet)
+    WS->>S: TLS verbinden
+    S-->>WS: Zertifikat
+    WS-->>DW: SHA-256-Fingerabdruck
+    DW-->>PL: Fingerabdruck in Zweierblöcken
+    PL->>DW: bestätigt (Abgleich mit dem Betreiber)
+    DW->>DW: Adresse, Benutzer, Fingerabdruck in QSettings
+
+    Note over PL,S: Ins Web veröffentlichen
+    PL->>DW: Ins Web veröffentlichen…
+    DW->>DW: ungespeicherte Eingaben klären, Bestätigung
+    DW->>DB: konsistente Kopie (sqlite backup) in Temp-Datei
+    DW->>TR: passwort_lesen
+    TR-->>DW: Passwort oder nichts (dann Abfrage)
+    DW->>WS: WebClient.anmelden (im Hintergrund-Thread)
+    WS->>S: TLS verbinden, Fingerabdruck prüfen
+    alt Fingerabdruck weicht ab
+        WS-->>DW: ZertifikatFehler, nichts gesendet
+        DW-->>PL: Warnung
+    else stimmt
+        WS->>S: POST /api/login
+        S-->>WS: Token
+        WS->>S: POST /api/termine (multipart sqlite_datei)
+        S-->>WS: 201 Termin (schema_name) + dublette_hinweis
+        WS-->>DW: Ergebnis
+        DW->>DW: Zuordnung Datei ↔ schema_name merken
+        DW-->>PL: veröffentlicht (mit Hinweis bei Dublette)
+    end
+
+    Note over PL,S: Ergebnisse aus Web holen
+    PL->>DW: Ergebnisse aus Web holen…
+    DW->>WS: anmelden, GET /api/termine/schema/ergebnisse
+    S-->>WS: Teilnehmer mit Ergebnis (JSON)
+    WS-->>DW: teilnehmer_aus_antwort
+    DW-->>PL: Bestätigung (Web-Termin, Web-Stand ersetzt Disqualifikation/Abbruch der Datei)
+    DW->>DB: auto_sicherung_erstellen (Mindestabstand 0)
+    DW->>DB: importiere_ergebnisse_aus_liste (Zuordnung per Startnummer)
+    DB-->>DW: ImportBericht
+    DW-->>PL: Bericht, Reiter werden neu geladen
+```
+
+### 10b. Ergebnistabelle, Online-Bewertungsbogen und Sammel-PDF im Web
+
+Seit 18.11.2026 neben der Erfassung je Teilnehmer: eine Tabelle wie der Desktop-Reiter
+„Ergebniserfassung“ (`/ergebnisse`), je Disziplin ein Bewertungsbogen mit Notiz
+(`/bewertungsbogen/id/disziplin`) und ein Sammel-PDF aller benutzten Bögen. Alles ohne JavaScript
+(Sicherheitsrichtlinie `script-src 'none'`), geprüft wird auf dem Server.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor R as Richter oder Admin
+    participant W as app_web (Flask)
+    participant D as db
+    participant P as pdf_export (reportlab)
+
+    R->>W: GET /ergebnisse (Filter Art/LK, Startnummer, Name)
+    W->>D: Teilnehmer und Ergebnisse lesen
+    W-->>R: Tabelle, je Zeile versteckter Stand beim Laden
+
+    R->>W: POST /ergebnisse (Alle speichern)
+    W->>W: Phase 1: alle Zeilen prüfen
+    alt eine Zeile fehlerhaft
+        W-->>R: nichts gespeichert, Eingaben und Fehler je Zeile
+    else alles gültig
+        W->>D: Stand je Einheit mit dem Stand beim Laden vergleichen
+        alt andere Person war schneller
+            W-->>R: Konfliktzeile gelb, nichts überschrieben
+        else
+            W->>D: eintragen_ergebnis, setze_ergebnis_status
+            Note over W,D: ab 200 Zeilen eine Transaktion
+            W-->>R: Redirect, N Zeilen gespeichert
+        end
+    end
+
+    R->>W: Knopf Bogen: GET /bewertungsbogen/id/disziplin
+    W->>D: Teilnehmer, Gegenstand, Ergebnis, Notiz lesen
+    W-->>R: Bogen mit Punkten, Status, Notiz
+    R->>W: POST Bogen (Speichern)
+    W->>D: gleiche Prüf- und Schreibwege wie die Tabelle
+    W->>D: setze_notiz (höchstens 500 Zeichen)
+    W-->>R: Bogen mit Gesamtpunktzahl und Wertnote, oder zurück zur Tabelle
+
+    R->>W: GET /ergebnisse/boegen.pdf (gleiche Filter)
+    W->>D: benutzte Teilnehmer wählen (Punkte, Status oder Notiz)
+    alt keine benutzten Bögen oder Fehler
+        W-->>R: Redirect zur Tabelle mit festem Hinweis
+    else
+        W->>P: erstelle_alle_bewertungsboegen_pdf (teilnehmer_ids, im Speicher)
+        P-->>W: PDF (Dreikampf 2 Seiten, Einzeldisziplin 1 Blatt)
+        W-->>R: Download Bewertungsboegen_Verein_Datum.pdf
+    end
+```
+
+Die Notizen gehen beim Veröffentlichen mit ins Web und kommen mit „Ergebnisse aus Web holen“ (10a)
+in die Termin-Datei zurück; der Web-Stand führt.
+
 ---
 
 ## 11. Datensicherung und Wiederherstellung
@@ -618,7 +771,7 @@ sequenceDiagram
 
     rect rgba(127,127,127,0.08)
     N->>HF: Termin öffnen / Termin wechseln / Programm beenden
-    HF->>S: auto_sicherung_erstellen(conn, pfad)<br/>(Beenden: ohne Mindestabstand;<br/>vor dem Löschen: vor_loeschen=True)
+    HF->>S: auto_sicherung_erstellen(conn, pfad)<br/>(Beenden: ohne Mindestabstand,<br/>vor dem Löschen: vor_loeschen=True)
     alt Demo, Test oder PostgreSQL
         S-->>HF: nichts (kein SQLite-backup)
     else letzte Kopie der gleichen Art jünger als 10 Minuten

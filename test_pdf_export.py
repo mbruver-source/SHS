@@ -24,6 +24,7 @@ from db import (
     ANMELDEFORMULAR_UNTERSCHRIFT_DATUM,
     ANMELDEFORMULAR_VOLLJAEHRIG_JA,
     ANMELDEFORMULAR_VOLLJAEHRIG_NEIN,
+    NOTIZ_SPALTEN,
     NeuerTeilnehmer,
     add_teilnehmer,
     add_zeitplan_pause,
@@ -172,6 +173,54 @@ def test_etikett_masse_entsprechen_der_physischen_etikettengroesse():
 
     assert math.isclose(sum(pdf_export._ETIKETT_SPALTEN), pdf_export.ETIKETT_BREITE_MM * mm)
     assert math.isclose(sum(pdf_export._ETIKETT_ZEILEN), pdf_export.ETIKETT_HOEHE_MM * mm)
+
+
+class TestImportImWebImage(unittest.TestCase):
+    """Das Web-Image (Containerfile) enthält nur die dort per COPY genannten Dateien, kein Qt, kein pypdf,
+    kein pyzipper. pdf_export muss sich damit importieren und einen Bogen erzeugen lassen (Sammel-PDF
+    der Ergebnistabelle, 18.11.2026) - sonst fällt das erst im Container auf."""
+
+    def test_pdf_export_laeuft_mit_den_dateien_des_web_images(self):
+        import re
+        import shutil
+        import subprocess
+        import sys
+
+        projekt = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(projekt, "Containerfile"), encoding="utf-8") as f:
+            copy_zeilen = [z.split()[1:-1] for z in f.read().splitlines() if z.startswith("COPY ") and "--from" not in z]
+        dateien = {d for liste in copy_zeilen for d in liste if d.endswith(".py") and "/" not in d}
+        self.assertIn("pdf_export.py", dateien)
+        self.assertIn("lr_abrechnung.py", dateien)
+        with open(os.path.join(projekt, ".containerignore"), encoding="utf-8") as f:
+            ignoriert = {z.strip() for z in f if z.strip() and not z.startswith("#")}
+        self.assertFalse({"pdf_export.py", "lr_abrechnung.py", "fonts/", "fonts"} & ignoriert,
+                         "Dateien des Web-Images stehen in .containerignore")
+        with tempfile.TemporaryDirectory() as ziel:
+            for datei in dateien:
+                shutil.copy(os.path.join(projekt, datei), ziel)
+            shutil.copytree(os.path.join(projekt, "fonts"), os.path.join(ziel, "fonts"))
+            skript = (
+                "import sys\n"
+                "sys.path.insert(0, '.')  # -I: das Arbeitsverzeichnis (= nur die Image-Dateien) selbst eintragen\n"
+                "for name in ('PySide6', 'pypdf', 'pyzipper', 'checkliste', 'app', 'db_import', 'db_sicherung'):\n"
+                "    sys.modules[name] = None  # Import dieser Module schlägt fehl\n"
+                "import db, io, pdf_export\n"
+                "assert pdf_export._SCHRIFT == 'DejaVuSans', pdf_export._SCHRIFT\n"
+                "conn = db.init_db(':memory:')\n"
+                "db.set_veranstaltung(conn, verein='V', datum='2026-11-18')\n"
+                "tid = db.add_teilnehmer(conn, db.NeuerTeilnehmer(nachname='A', vorname='B', rufname_hund='C',\n"
+                "                        art='DK', stufe=1, startnummer=1))\n"
+                "db.setze_notiz(conn, tid, 'Flächensuche', 'Notiz')\n"
+                "puffer = io.BytesIO()\n"
+                "assert pdf_export.erstelle_alle_bewertungsboegen_pdf(conn, puffer, teilnehmer_ids={tid}) == 1\n"
+                "assert puffer.getvalue().startswith(b'%PDF')\n"
+            )
+            ergebnis = subprocess.run([sys.executable, "-I", "-c", skript], cwd=ziel, capture_output=True, timeout=180)
+            meldung = ergebnis.stderr.decode(errors="replace")
+            if "reportlab" in meldung and "No module named" in meldung:
+                self.skipTest("reportlab nicht installiert")
+            self.assertEqual(ergebnis.returncode, 0, meldung)
 
 
 class TestPositionsSkizzen(unittest.TestCase):
@@ -924,6 +973,200 @@ class TestPdfExport(unittest.TestCase):
         anzahl = pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, pfad)
         self.assertEqual(anzahl, 0)
         self.assertTrue(os.path.exists(pfad))
+
+    # --- Notiz zum Bogen und Teilnehmerauswahl (Marco 18.11.2026, Sammel-PDF im Web) ----------
+
+    def _notiz_ed(self, notiz="Gegenstand hinten links", nr=1, stufe=1, disziplin="Flächensuche", **extra):
+        felder = dict(nachname=f"Muster{nr}", vorname="Anna", rufname_hund="Rex", art="ED", stufe=stufe,
+                      disziplin=disziplin, startnummer=nr)
+        felder.update(extra)
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(**felder))
+        eintragen_ergebnis(self.conn, tid, disziplin, 50, 30)
+        if notiz is not None:
+            self.conn.execute(
+                f"UPDATE ergebnisse SET {NOTIZ_SPALTEN[disziplin]} = ? WHERE teilnehmer_id = ?", (notiz, tid))
+            self.conn.commit()
+        return tid
+
+    def test_notiz_erscheint_nur_wenn_vorhanden_und_sonst_bleibt_der_bogen_gleich(self):
+        # Ohne Notiz (fehlend, None, leer, nur Leerraum/Steuerzeichen) ist der Abschnitt derselbe: die
+        # rechte Spalte der Positionszeile enthält exakt dieselben Flowables wie ohne Notiz.
+        def rechte_spalte(notiz):
+            abschnitt = pdf_export._bewertungsabschnitt("Flächensuche", 1, 50, 30, "Ball", notiz=notiz)
+            return [type(e).__name__ for e in next(e for e in abschnitt if hasattr(e, "_cellvalues")
+                                                   and len(e._cellvalues[0]) == 2
+                                                   and isinstance(e._cellvalues[0][1], list))._cellvalues[0][1]]
+        ohne = rechte_spalte(None)
+        for notiz in ("", "   ", "\n\t \r\n", "\x00\x07"):
+            with self.subTest(notiz=notiz):
+                self.assertEqual(rechte_spalte(notiz), ohne)
+        self.assertGreater(len(rechte_spalte("x")), len(ohne))
+        # Im fertigen Bogen: nur Leerraum in der Datenbank = Text wie ohne Notiz.
+        leer = self._notiz_ed(notiz="  ", nr=1)
+        ohne_notiz = self._notiz_ed(notiz=None, nr=2)
+        ziel = self._pfad("notiz_leer.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, leer, ziel)
+        text = _text(ziel)
+        self.assertNotIn("Notiz", text)
+        self.assertEqual(len(PdfReader(ziel).pages), 1)
+        ziel2 = self._pfad("notiz_keine.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, ohne_notiz, ziel2)
+        self.assertEqual(_text(ziel2).replace("Muster2", "Muster1").replace("Nr.\n2\n", "Nr.\n1\n"), text)
+
+    def test_notiz_erscheint_im_bogen_je_disziplin_und_nur_dort(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Dk", vorname="X", rufname_hund="H", art="DK", stufe=2, startnummer=1))
+        for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+            eintragen_ergebnis(self.conn, tid, disziplin, 50, 30)
+        self.conn.execute("UPDATE ergebnisse SET notiz_flaechensuche = ? WHERE teilnehmer_id = ?",
+                          ("Gegenstand am Zaun gefunden", tid))
+        self.conn.commit()
+        ziel = self._pfad("notiz_dk.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, ziel)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 2)
+        self.assertNotIn("Notiz", seiten[0])
+        self.assertIn("Notiz:", seiten[1])
+        self.assertIn("Gegenstand am Zaun gefunden", seiten[1])
+        # je Disziplin: nur das Flächensuche-Blatt trägt die Notiz
+        ziel = self._pfad("notiz_dk_je_disziplin.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, ziel, je_disziplin=True)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual([("Gegenstand am Zaun" in s) for s in seiten], [False, True, False])
+
+    def test_notiz_mit_markup_zeichen_wird_woertlich_gedruckt(self):
+        tid = self._notiz_ed(notiz="<b>fett</b> & <i>kursiv</i> &amp; <para>x</unknown> [a] 100% {x}")
+        ziel = self._pfad("notiz_markup.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, ziel)
+        text = _text(ziel)
+        for stueck in ("<b>fett</b>", "& <i>kursiv</i>", "&amp;", "<para>x</unknown>"):
+            self.assertIn(stueck, text)
+
+    def test_notiz_zeilen_kuerzen_und_brechen_auch_lange_woerter(self):
+        from reportlab.lib.units import mm
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        schrift, groesse, breite = pdf_export._SCHRIFT, 7.5, 100 * mm
+        for text, erwartet_gekuerzt in (("wort " * 200, True), ("x" * 500, True), ("\n" * 300 + "a\n\n\nb", False),
+                                        ("A&B<>" * 100, True), ("Kurz", False)):
+            with self.subTest(text=text[:12]):
+                zeilen, gekuerzt = pdf_export._notiz_zeilen(text, schrift, groesse, breite, 4)
+                self.assertLessEqual(len(zeilen), 4)
+                self.assertTrue(all(stringWidth(z, schrift, groesse) <= breite for z in zeilen))
+                self.assertEqual(gekuerzt, erwartet_gekuerzt)
+        zeilen, gekuerzt = pdf_export._notiz_zeilen("\n" * 300 + "a\n\n\nb", schrift, groesse, breite, 4)
+        self.assertEqual((zeilen, gekuerzt), (["a", "b"], False))
+        zeilen, gekuerzt = pdf_export._notiz_zeilen("wort " * 200, schrift, groesse, breite, 4)
+        self.assertTrue(gekuerzt)
+        self.assertTrue(zeilen[-1].endswith("…"))
+
+    def test_lange_notiz_wird_im_pdf_gekuerzt_mit_hinweis(self):
+        # Die Datenbank erlaubt höchstens 500 Zeichen; viele kurze Zeilen sprengen 4 Zeilen Platz.
+        tid = self._notiz_ed(notiz="Anfang\n" + "".join(f"Zeile {n}\n" for n in range(2, 50)) + "ENDE")
+        ziel = self._pfad("notiz_lang.pdf")
+        pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, ziel)
+        text = _text(ziel)
+        self.assertIn("Anfang", text)
+        self.assertIn("…", text)
+        self.assertIn("vollständig im Web", text)
+        self.assertNotIn("ENDE", text)
+
+    def test_hoechste_notizen_sprengen_die_festen_seitenzahlen_nicht(self):
+        """„DK-Seite 2 darf nicht überlaufen“: längste Notizen in allen drei Disziplinen, dazu lange
+        Namen und Gegenstände sowie ein Abbruch mit Grund (mehrzeilige GESAMT-Zelle)."""
+        lang = "Gegenstand im hohen Gras hinter dem linken Baum, Hund zeigte spät an.\n" * 8
+        for stufe in (1, 2, 3):
+            with self.subTest(art="DK", stufe=stufe):
+                tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+                    **self._LANGE_NAMEN, art="DK", stufe=stufe, startnummer=stufe,
+                    gegenstand_1="Schlüsselbund", gegenstand_1_disziplin="Trümmerfeld",
+                    gegenstand_2="Futterbeutel mit Reißverschluss, blau gestreift",
+                    gegenstand_2_disziplin="Flächensuche",
+                    gegenstand_3="Dose", gegenstand_3_disziplin="Behältnisstrecke"))
+                for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+                    eintragen_ergebnis(self.conn, tid, disziplin, suche=55, anzeige=36)
+                self.conn.execute(
+                    "UPDATE ergebnisse SET notiz_truemmerfeld = ?, notiz_flaechensuche = ?, notiz_behaeltnis = ? "
+                    "WHERE teilnehmer_id = ?", (lang[:500], lang[:500], "x" * 500, tid))
+                self.conn.commit()
+                setze_ergebnis_status(self.conn, tid, False, True, abbruch_grund="krankheit")
+                pfad = self._pfad(f"notiz_dk_{stufe}.pdf")
+                pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+                seiten = [s.extract_text() for s in PdfReader(pfad).pages]
+                self.assertEqual(len(seiten), 2)
+                self.assertEqual("".join(seiten).count("Notiz:"), 3)
+                self.assertIn("Bewertung Behältnisstrecke", seiten[1])
+                self.assertIn("von 300 P", seiten[1])
+                pfad = self._pfad(f"notiz_dk_blaetter_{stufe}.pdf")
+                pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad, je_disziplin=True)
+                self.assertEqual(len(PdfReader(pfad).pages), 3)
+        nr = 10
+        for stufe in (1, 2, 3):
+            for disziplin in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+                with self.subTest(art="ED", stufe=stufe, disziplin=disziplin):
+                    nr += 1
+                    tid = self._notiz_ed(notiz=lang[:500], nr=nr, stufe=stufe, disziplin=disziplin, **{
+                        k: v for k, v in self._LANGE_NAMEN.items() if k != "nachname"})
+                    setze_ergebnis_status(self.conn, tid, True, False)
+                    pfad = self._pfad(f"notiz_ed_{nr}.pdf")
+                    pdf_export.erstelle_bewertungsbogen_pdf(self.conn, tid, pfad)
+                    self.assertEqual(len(PdfReader(pfad).pages), 1)
+
+    def test_sammel_pdf_teilnehmer_ids_waehlen_aus_und_behalten_die_reihenfolge(self):
+        ids = {}
+        for nr, name in ((1, "Alpha"), (2, "Beta"), (3, "Gamma")):
+            ids[name] = add_teilnehmer(self.conn, NeuerTeilnehmer(
+                nachname=name, vorname="X", rufname_hund="H", art="ED", stufe=1,
+                disziplin="Trümmerfeld", startnummer=nr))
+        ziel = self._pfad("ids.pdf")
+        # Reihenfolge der Teilnehmerliste (Startnummer), nicht die der übergebenen Menge
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(
+            self.conn, ziel, teilnehmer_ids={ids["Gamma"], ids["Alpha"]}), 2)
+        text = _text(ziel)
+        self.assertIn("Alpha", text)
+        self.assertIn("Gamma", text)
+        self.assertNotIn("Beta", text)
+        self.assertLess(text.index("Alpha"), text.index("Gamma"))
+        self.assertEqual(len(PdfReader(ziel).pages), 2)
+        # leeres Set = keiner, None = alle; unbekannte IDs schaden nicht; kombinierbar mit Labels
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, teilnehmer_ids=set()), 0)
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, teilnehmer_ids=None), 3)
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(self.conn, ziel, teilnehmer_ids={9999}), 0)
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(
+            self.conn, ziel, teilnehmer_ids={ids["Alpha"]}, erlaubte_labels={"DK LK 1"}), 0)
+
+    def test_sammel_pdf_in_den_speicher_und_mit_verbindung_ohne_rowcount(self):
+        """Wie im Web: PDF in einen BytesIO, über einen Verbindungs-Ersatz mit dem eingeschränkten
+        Cursor des PostgreSQL-Wrappers (nur fetchone/fetchall/lastrowid, Zeilen als dict)."""
+        import io
+
+        class _Cursor:
+            def __init__(self, cur):
+                self._cur = cur
+                self.lastrowid = getattr(cur, "lastrowid", None)
+
+            def fetchone(self):
+                zeile = self._cur.fetchone()
+                return None if zeile is None else dict(zeile)
+
+            def fetchall(self):
+                return [dict(z) for z in self._cur.fetchall()]
+
+        class _Verbindung:
+            def __init__(self, conn):
+                self._conn = conn
+
+            def execute(self, sql, params=()):
+                return _Cursor(self._conn.execute(sql, params))
+
+        tid = self._notiz_ed(notiz="Position <hinten>")
+        puffer = io.BytesIO()
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(
+            _Verbindung(self.conn), puffer, teilnehmer_ids={tid}), 1)
+        self.assertTrue(puffer.getvalue().startswith(b"%PDF"))
+        reader = PdfReader(io.BytesIO(puffer.getvalue()))
+        self.assertEqual(len(reader.pages), 1)
+        self.assertIn("Position <hinten>", reader.pages[0].extract_text())
 
     def test_ergebnisliste_zeigt_nb_ohne_platzzahl(self):
         a = add_teilnehmer(self.conn, NeuerTeilnehmer(

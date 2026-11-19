@@ -328,7 +328,7 @@ Ein Klick auf eine Spaltenüberschrift sortiert. Die Filter **„Filter Art/LK�
 | **„Alle Startnummern zurücksetzen…“** | Entfernt nach einer Rückfrage die Startnummern **aller** Teilnehmer bzw. bei gesetztem „Filter Art/LK“ nur die dieser Prüfung, z. B. um sie nach geänderten Bereichen neu zu vergeben (siehe unten). Die Rückfrage nennt, wie viele davon schon Ergebnisse haben; die Ergebnisse bleiben erhalten. |
 | **„Aus anderem Termin importieren…“** | Übernimmt Teilnehmer aus einem früheren Termin (siehe unten). |
 | **„Teilnehmerliste einlesen (Excel/CSV)…“** | Liest eine Excel-Liste (als CSV gespeichert) ein, siehe [Kapitel 5](#5-formular-import). |
-| **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. Beim Dreikampf fragt das Programm, ob der Bogen zwei Seiten oder drei Blätter (eins je Disziplin) haben soll. |
+| **„Bewertungsbogen (PDF)…“** | Erzeugt sofort den Bewertungsbogen nur für den markierten Teilnehmer. Beim Dreikampf fragt das Programm, ob der Bogen zwei Seiten oder drei Blätter (eins je Disziplin) haben soll. Steht zu einer Disziplin eine Notiz in der Datei (sie kommt über „Ergebnisse aus Web holen“ aus dem Online-Bewertungsbogen), druckt der Bogen sie klein neben der Skizze mit; längere Notizen sind gekürzt, ohne Notiz bleibt der Bogen wie gewohnt. |
 
 ### Startnummern vergeben
 
@@ -903,7 +903,7 @@ anzuhängen. **„Ablageort öffnen“** zeigt den Ordner jederzeit im Dateimana
 | **Checkliste (PDF)…** | Die Checkliste aus dem Reiter „Verwaltung“ mit dem aktuellen Stand der Haken („[x]“ erledigt, „[ ]“ offen), eigene Kategorien und Punkte eingeschlossen |
 | **Richter-Bedarf (PDF)…** | Berechnete Zahl benötigter Richter, darunter die Behältnisse je LK (wie im Reiter „Übersicht“) |
 | **Zeitplan (PDF)…** | Eine Seite je Richter |
-| **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. Mit dem Häkchen **„Dreikampf: ein Blatt je Disziplin“** bekommt jeder Dreikampf-Teilnehmer drei Blätter (Trümmerfeld, Flächensuche, Behältnisstrecke) statt des 2-Seiten-Bogens, sortiert nach Disziplin: erst alle Trümmerfeld-Blätter, dann Fläche, dann Behältnis – jeder Richter bekommt seinen Stapel. Ohne Gesamtzeile, mit der Wertungsnoten-Tabelle unten auf jedem Blatt; Einzeldisziplinen bleiben unverändert und stehen vorweg. Die Startnummer steht auf jedem Blatt, beim 2-Seiten-Bogen auch auf Seite 2. |
+| **Bewertungsbögen – alle Teilnehmer (PDF)…** | Sammel-PDF aller Bewertungsbögen; vorher Auswahl der Leistungsklassen/Disziplinen. Vorhandene Ergebnisse sind vorausgefüllt. Mit dem Häkchen **„Dreikampf: ein Blatt je Disziplin“** bekommt jeder Dreikampf-Teilnehmer drei Blätter (Trümmerfeld, Flächensuche, Behältnisstrecke) statt des 2-Seiten-Bogens, sortiert nach Disziplin: erst alle Trümmerfeld-Blätter, dann Fläche, dann Behältnis – jeder Richter bekommt seinen Stapel. Ohne Gesamtzeile, mit der Wertungsnoten-Tabelle unten auf jedem Blatt; Einzeldisziplinen bleiben unverändert und stehen vorweg. Die Startnummer steht auf jedem Blatt, beim 2-Seiten-Bogen auch auf Seite 2. Eine in der Datei gespeicherte Notiz zu einer Disziplin (aus dem Online-Bewertungsbogen) erscheint klein neben der Skizze, längere sind gekürzt; ohne Notiz bleibt der Bogen unverändert. |
 | **Teilnehmerliste speichern (CSV, für Excel)…** | Alle Teilnehmer mit allen Stammdaten, Startnummer, Bezahlt und „Keine Teilnahme“ – öffnet sich per Doppelklick bzw. über **„In Excel öffnen“** in Excel und lässt sich auch wieder einlesen. Excel kürzt beim Speichern aber lange Nummern (Chip-Nr.) und entfernt führende Nullen; wer die Liste in Excel bearbeiten will, lädt sie über Daten → Aus Text/CSV und legt diese Spalten als Text fest. Telefonnummern wie „+43-1-5551234“ stehen mit vorangestelltem „'“ in der Datei, damit Excel sie nicht ausrechnet. |
 
 Den Bewertungsbogen eines **einzelnen** Teilnehmers erzeugst du schneller im Reiter
@@ -1010,8 +1010,104 @@ bekommst du von der Prüfungsleitung.
 
 - Beim Dreikampf können mehrere Richter **gleichzeitig** denselben Hund bearbeiten – gespeichert
   wird nur die Disziplin, die du tatsächlich geändert hast.
-- **Disqualifikation und Abbruch** lassen sich im Browser nicht eintragen. Gib sie der
-  Prüfungsleitung weiter; sie trägt sie im Desktop-Programm ein.
+- **Disqualifikation und Abbruch** trägst du in der Ergebnistabelle ein (siehe unten), nicht auf
+  der Seite je Teilnehmer.
+
+### Ergebnisse als Tabelle eintragen
+
+![Web-Ergebnistabelle mit Punkten, Disqualifikation, Abbruch und Status](bilder/handbuch_web_ergebnistabelle.png)
+
+Bei vielen Teilnehmern ist die Tabelle schneller: Auf der Teilnehmerliste **„Ergebnisse als Tabelle
+erfassen“** antippen (oder oben in der Leiste **„Ergebnistabelle“**). Sie sieht aus wie der Reiter
+„Ergebniserfassung“ im Desktop-Programm: eine Zeile je Teilnehmer mit **Start-Nr., Name, Hund**,
+**Art/LK**, je Disziplin **„Suche (0-60)“** und **„Anzeige (0-40)“**, **Disqualifiziert**,
+**Abbruch** und **Status**. Beim Einzelstarter gibt es nur Felder für seine Disziplin, die übrigen
+zeigen „–“. Am Tablet oder Handy lässt sich die Tabelle seitlich wischen, die erste Spalte mit
+Nummer und Namen bleibt dabei stehen.
+
+1. **Filtern (optional):** Art/LK wählen, eine Start-Nr. oder einen Namen bzw. Hund eingeben und
+   **„Filtern“** tippen. Zum Zurücksetzen **„Alle anzeigen“**. Der Filter lädt die Seite neu – nicht
+   gespeicherte Eingaben gehen dabei verloren, deshalb erst speichern, dann filtern.
+2. **Eintragen:** Suche und Anzeige je Disziplin eingeben. Beide Felder einer Disziplin leeren
+   löscht das Ergebnis. **Disqualifiziert** hakst du an; beim **Abbruch** wählst du den Grund
+   aus der Liste (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF). Ein Abbruch braucht immer
+   einen Grund.
+3. **„Alle speichern“** tippen (oben oder unten). Gespeichert werden die Zeilen, die in der Tabelle
+   stehen; Zeilen, die du nicht angefasst hast, bleiben unverändert. Danach meldet die Seite, wie
+   viele Zeilen gespeichert wurden.
+
+Der **Status** zeigt den gespeicherten Stand: „noch kein Ergebnis“, „gespeichert“,
+„disqualifiziert“ oder „Abbruch: <Grund>“.
+
+**Was die Tabelle für dich entscheidet:**
+
+- **Disqualifiziert** oder ein Abbruch ohne Grund sperren die Punkte der Zeile: Eingetragene Punkte
+  werden nicht gewertet, bereits gespeicherte Punkte bleiben aber erhalten (Häkchen wieder
+  entfernen, und sie gelten wieder). Ein **Abbruch mit Grund** lässt eine Teilbewertung zu; die
+  Punkte darfst du eintragen.
+- **Bei einem Fehler wird nichts gespeichert.** Steht in irgendeiner Zeile ein Fehler (z. B. nur
+  die Suche ausgefüllt, ein Wert über dem Höchstwert, ein Abbruch ohne Grund), erscheint oben
+  „Es wurde nichts gespeichert“, die betroffene Zeile ist rot markiert und nennt den Grund.
+  Alle deine Eingaben bleiben stehen; korrigiere die Zeile und speichere erneut.
+- **Zwei Richter, dasselbe Feld:** Hat jemand anderes eine Disziplin oder Disqualifiziert/Abbruch
+  geändert, seit du die Seite geladen hast, wird dieser Wert **nicht überschrieben**. Die Zeile ist
+  gelb markiert mit „inzwischen von jemand anderem geändert“, deiner Eingabe und dem aktuell
+  gespeicherten Wert; die Tabelle zeigt danach den aktuellen Stand. Prüfe den Wert und trage ihn
+  bei Bedarf erneut ein. Alles andere wurde gespeichert.
+
+### Alle benutzten Bewertungsbögen als PDF
+
+Über der Tabelle steht der Knopf **„Benutzte Bögen als PDF“**. Er lädt **alle Bewertungsbögen mit
+Eintragungen** als eine PDF herunter, zum Speichern oder Ausdrucken. Aufbau wie der Papierbogen im
+Desktop-Programm, mit den eingetragenen **Punkten**, dem **Status** (disqualifiziert, Abbruch) und den
+**Notizen**. Ein Bogen zählt als benutzt, sobald für den Teilnehmer ein Punktwert, „Disqualifiziert“,
+ein Abbruch oder eine Notiz gespeichert ist; Teilnehmer ohne Eintragung fehlen. Die Reihenfolge ist
+die der Startnummern, ein Dreikampf-Bogen hat zwei Seiten, ein Einzelstarter-Bogen eine.
+
+- **Filter:** Ist ein Filter (Art/LK, Start-Nr., Name oder Hund) gesetzt, enthält die PDF nur die
+  gefilterten Teilnehmer.
+- **Erst speichern:** Die PDF zeigt den **gespeicherten** Stand. Nicht gespeicherte Eingaben der
+  Tabelle sind nicht enthalten – erst **„Alle speichern“**, dann den Knopf tippen.
+- Ist noch nichts eingetragen, erscheint über der Tabelle ein Hinweis statt einer PDF.
+- Eine lange Notiz wird auf dem Papierbogen gekürzt (mit „…“ und dem Hinweis „vollständig im Web“);
+  die ganze Notiz steht im Online-Bewertungsbogen.
+
+### Online-Bewertungsbogen je Disziplin
+
+![Online-Bewertungsbogen: Punkte, Disqualifikation, Abbruch, Notiz und Gesamtpunktzahl](bilder/handbuch_web_bewertungsbogen.png)
+
+Wer lieber wie auf dem Papierbogen arbeitet, öffnet in der Ergebnistabelle den **Online-Bewertungsbogen**:
+In jeder Zeile steht hinter **Suche** und **Anzeige** einer Disziplin der Knopf **„Bogen“**. Beim
+Dreikampf gibt es drei Knöpfe je Zeile, damit jeder Richter sein Blatt für seine Disziplin ausfüllt;
+beim Einzelstarter gibt es nur den Knopf seiner Disziplin. Der Bogen öffnet sich im selben Tab.
+**Nicht gespeicherte Eingaben in der Tabelle gehen dabei verloren** – erst **„Alle speichern“**, dann
+den Bogen öffnen.
+
+Oben stehen **Start-Nr., Art/LK, Teilnehmer, Hund, Verein und Datum, Disziplin** und der **zu suchende
+Gegenstand** dieser Disziplin. Darunter:
+
+1. **Suchleistung – Punktzahl (0-60)** und **Anzeige – Punktzahl (0-40)** eintragen. Die Punkte landen
+   direkt in den Ergebnisspalten – dieselben Werte, die auch die Tabelle zeigt. Beide Felder leeren
+   löscht das Ergebnis der Disziplin; die anderen Disziplinen des Hundes bleiben unverändert.
+2. Bei Bedarf **Disqualifiziert** anhaken oder einen **Abbruch** mit Grund wählen. Es gelten dieselben
+   Regeln wie in der Tabelle (Sperre der Punkte bei Disqualifiziert oder Abbruch ohne Grund,
+   Teilbewertung bei Abbruch mit Grund, ein Abbruch braucht einen Grund). Beides gilt für die ganze
+   Prüfung des Teilnehmers, nicht nur für diese Disziplin.
+3. Im Feld **„Notiz zum Bogen (Position Gegenstand, Besonderheiten)“** kannst du bis zu 500 Zeichen
+   festhalten.
+4. **„Speichern“** bleibt auf dem Bogen. Darunter erscheinen die **Gesamtpunktzahl** der Disziplin
+   (Suche plus Anzeige, sobald beides gespeichert ist), der **Status** und die **Wertnote**: beim
+   Einzelstarter die der Disziplin, beim Dreikampf erst, wenn alle drei Disziplinen vollständig
+   eingetragen sind. **„Speichern und zurück zur Tabelle“** führt zur Zeile des Teilnehmers zurück,
+   **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern.
+
+Bei einem Fehler (z. B. nur die Suche ausgefüllt, ein Wert über dem Höchstwert, eine zu lange Notiz)
+wird nichts gespeichert, deine Eingaben bleiben stehen. Hat in der Zwischenzeit ein anderer Richter
+dieselben Punkte, Disqualifiziert/Abbruch oder die Notiz geändert, wird dieser Wert nicht überschrieben:
+Der Bogen zeigt den aktuellen Stand mit einem Hinweis.
+
+**Notizen und Desktop:** Die Notizen werden im Web gespeichert und mit **„Ergebnisse aus Web holen…“**
+in die Termin-Datei übernommen. Im Desktop-Programm werden sie noch nicht angezeigt.
 
 ## 12. Für die Prüfungsleitung: Termin im Web veröffentlichen
 
@@ -1020,6 +1116,70 @@ Die Web-Version ist optional und braucht einen eigenen Server. Die Einrichtung b
 Desktop-Programm; im Web werden nur Ergebnisse eingetragen.
 
 ![Admin-Seite „Termine“ der Web-Version](bilder/handbuch_web_admin_termine.png)
+
+### Direkt aus dem Desktop-Programm (Reiter „Datensicherung“, Gruppe „Web-Version“)
+
+Das Desktop-Programm kann den Termin selbst auf den Web-Server laden und die Ergebnisse
+zurückholen – ohne Umweg über den Browser und ohne Datei hin- und herzukopieren. Die drei Knöpfe
+heißen **„Ins Web veröffentlichen…“**, **„Ergebnisse aus Web holen…“** und **„Web-Verbindung…“**.
+Sie gelten nur für Termine als Datei und sind in der Demoprüfung gesperrt.
+
+![Dialog „Web-Verbindung“ mit Adresse, Benutzername, Passwort und bestätigtem Fingerabdruck](bilder/handbuch_web_verbindung.png)
+
+**Einmalig: Web-Verbindung einrichten**
+
+1. **„Web-Verbindung…“** öffnen und die **Adresse** des Servers eintragen, z. B.
+   `https://localhost:5443` (auf dem Rechner, auf dem der Server läuft) oder
+   `https://<Rechnername>:5443`. Es sind nur Adressen mit `https://` erlaubt.
+2. **Benutzername** und **Passwort** eines Administrator-Kontos der Web-Version eintragen.
+3. **„Fingerabdruck vom Server holen…“**: Der Server hat ein eigenes Zertifikat. Das Programm
+   zeigt dessen Fingerabdruck in Zweierblöcken (`AB:CD:…`). **Vergleiche ihn mit dem
+   Fingerabdruck, den dir der Betreiber des Servers nennt**, und bestätige nur, wenn beide
+   übereinstimmen. Ab dann prüft das Programm bei jeder Verbindung, ob es noch derselbe Server
+   ist, bevor es etwas sendet. Weicht der Fingerabdruck später ab, bricht es mit einer deutlichen
+   Warnung ab: Dann wurde das Zertifikat erneuert, oder jemand hört mit. Frage in dem Fall beim
+   Betreiber nach, bevor du den neuen Fingerabdruck bestätigst.
+4. Mit **„Verbindung testen“** prüfst du die Zugangsdaten, mit **„OK“** speicherst du.
+
+**Passwort im Windows-Tresor:** Mit dem Haken **„Passwort merken“** (Standard) legt das Programm
+das Passwort im Windows-Tresor (Anmeldeinformationsverwaltung) deines Benutzerkontos ab, nicht in
+den Einstellungen. **„Gespeichertes Passwort vergessen“** entfernt es wieder. Wird ein
+gespeichertes Passwort vom Server abgelehnt, vergisst das Programm es und fragt neu. Auf Systemen
+ohne Windows-Tresor wird das Passwort jedes Mal abgefragt.
+
+**Vor der Prüfung: „Ins Web veröffentlichen…“**
+
+1. Alle Teilnehmer haben eine **Startnummer**; ungespeicherte Eingaben in der Ergebniserfassung
+   werden vorher geklärt.
+2. Das Programm zeigt, welcher Termin mit wie vielen **teilnehmenden** Teilnehmern übertragen
+   wird (als „keine Teilnahme“ markierte werden nicht übernommen). Nach deiner Bestätigung lädt es
+   eine Kopie der Termin-Datei hoch; deine Datei bleibt unverändert.
+3. Das Programm merkt sich, welcher Servertermin zu dieser Datei gehört. Meldet der Server einen
+   möglichen **Doppeleintrag** (gleicher Termin schon veröffentlicht), steht der Hinweis im
+   Meldungsfenster.
+
+**Nach der Prüfung: „Ergebnisse aus Web holen…“**
+
+1. Ist der Datei noch kein Servertermin zugeordnet, bietet das Programm die Terminliste des
+   Servers zur Auswahl an (der passende Termin ist vorgewählt).
+2. Nach der Bestätigung legt das Programm **zuerst automatisch eine Kopie** deiner Termin-Datei an
+   (Ordner „Auto-Sicherung“) und arbeitet dann die Web-Ergebnisse über die **Startnummer** ein.
+   Konnte die Kopie nicht angelegt werden, fragt es nach, ob du trotzdem fortfahren willst.
+3. Ein Bericht nennt, bei wie vielen Teilnehmern sich in der Datei etwas geändert hat (unveränderte
+   zählen nicht mit) und welche übersprungen, nicht
+   gefunden oder **nicht übernommen** wurden (anderer Name oder Hund unter derselben Startnummer),
+   und welche Disziplinen im Web leer waren (der Wert der Datei bleibt dann erhalten).
+
+   ![Bericht nach „Ergebnisse aus Web holen“](bilder/handbuch_web_bericht.png)
+
+4. **Disqualifikation und Abbruch (mit Abbruchgrund) werden übernommen.** Der Web-Stand ersetzt
+   dabei die Werte der Datei, auch ein in der Datei gesetzter Status wird zurückgenommen, wenn er
+   im Web nicht gesetzt ist. Der Bericht nennt die Teilnehmer, deren Status sich geändert hat.
+
+### Bisheriger Weg: Veröffentlichen und Zurückholen im Browser
+
+Dieser Weg funktioniert weiterhin und ist die Alternative, wenn das Desktop-Programm den Server
+nicht erreicht.
 
 Als Administrator erreichst du oben die Seiten **„Termine“** und **„Benutzer“**.
 
@@ -1030,7 +1190,10 @@ Als Administrator erreichst du oben die Seiten **„Termine“** und **„Benutz
 
 1. Alle Teilnehmer haben eine **Startnummer** (der Abgleich läuft darüber).
 2. Unter „Termine“ bei **„Termin-Datei“** die `.sqlite`-Datei des Termins aus dem Termine-Ordner
-   wählen und **„Veröffentlichen“** klicken.
+   wählen und **„Veröffentlichen“** klicken. Der Browser merkt sich seinen eigenen letzten
+   Ordner; den Termine-Ordner der Desktop-Version (`%USERPROFILE%\SHS-Pruefungsprogramm\Termine`)
+   erreichst du, indem du diesen Pfad im Dateidialog in die Adressleiste einfügst. Er steht auch
+   als Hinweis unter dem Feld.
 
 **Nach der Prüfung – Ergebnisse zurückholen:**
 
@@ -1048,8 +1211,9 @@ Als Administrator erreichst du oben die Seiten **„Termine“** und **„Benutz
 
 Regeln beim Zurückholen: Ergebnisse werden über die **Startnummer** zugeordnet; passen Name oder
 Hund nicht zusammen, wird nichts übernommen. Web-Werte überschreiben die Werte in der Datei,
-im Web leere Disziplinen behalten den Wert aus der Datei. **Disqualifikation und Abbruch werden
-nicht übertragen** und müssen im Desktop-Programm gesetzt werden.
+im Web leere Disziplinen behalten den Wert aus der Datei. **Disqualifikation und Abbruch (mit
+Grund) werden übernommen**; hier gilt der Web-Stand und ersetzt den Status der Datei. Beim
+Veröffentlichen wird ein bereits gesetzter Status ins Web mitgenommen.
 
 ## 13. Häufige Fragen und Probleme
 

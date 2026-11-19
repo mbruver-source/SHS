@@ -6,8 +6,10 @@
 # (compose.yaml, Versionsnummer, Prüfungstag) und Fortschritt.md für den Architektur-
 # Hintergrund (Weg B: ein PostgreSQL-Schema je Termin). Enthält bewusst NICHT die
 # SQLite-Desktop-Version (PySide6 aus requirements.txt wird hier nicht installiert,
-# app.py/pdf_export.py werden nicht mit hineinkopiert) - die beiden Varianten bleiben
-# unabhängig baubar, siehe Kommentar in requirements-postgres.txt.
+# app.py nicht mit hineinkopiert) - die beiden Varianten bleiben unabhängig baubar,
+# siehe Kommentar in requirements-postgres.txt. Ausnahme seit 18.11.2026: pdf_export.py
+# (mit lr_abrechnung.py und den DejaVu-Schriften) liegt im Image, weil die Ergebnistabelle
+# die benutzten Bewertungsbögen als Sammel-PDF liefert; es braucht nur reportlab, kein Qt.
 
 # Feste Basis per Digest (Sicherheitshinweis H-2, Marco 05.10.2026): entspricht
 # python:3.11.17-slim, Stand 05.10.2026. Nachziehen: siehe README_CONTAINER.md, "Versionen".
@@ -25,6 +27,9 @@ RUN pip install --no-cache-dir -r requirements-postgres.txt -r requirements-web.
 # Dazu die Lizenz der Tabler Icons (Haken in der Teilnehmerliste, siehe tools/drittlizenzen.py).
 COPY tools/drittlizenzen.py ./tools/
 COPY symbole/LICENSE-Tabler.txt ./symbole/
+# fonts/ (DejaVu-Schriften der PDF-Ausgabe, siehe unten) bleibt im Image; die Lizenz muss hier
+# schon liegen, weil drittlizenzen.py sie in THIRD_PARTY_LICENSES.txt aufnimmt.
+COPY fonts/ ./fonts/
 RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools symbole
 
 # version.py (nicht version.txt/version_info.txt - die dienen nur dem PyInstaller-Build
@@ -34,6 +39,10 @@ RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools sy
 # damit db_import.py/db_sicherung.py - Desktop, brauchen pypdf/pyzipper - nicht mitkommen).
 COPY db.py db_verbindung.py db_stamm.py db_ergebnisse.py db_zeitplan.py db_termine.py db_web.py db_sync.py ./
 COPY shs_core.py app_web.py version.py ./
+# Sammel-PDF der Bewertungsbögen (app_web.ergebnis_boegen_pdf, Import erst beim Aufruf): pdf_export.py
+# importiert nur reportlab, db, lr_abrechnung (nur Standardbibliothek) und shs_core; die Schriften
+# liegen in fonts/ (oben kopiert, gefunden über den Ordner neben pdf_export.py).
+COPY pdf_export.py lr_abrechnung.py ./
 COPY templates/ ./templates/
 # Bilder der Web-Oberfläche (Beagle im Kopf, templates/base.html), ausgeliefert von Flask
 # unter /static (Marco 01.11.2026, Erscheinungsbild „Beagle“).
@@ -55,4 +64,11 @@ EXPOSE 5000
 # waitress statt des eingebauten Flask-Entwicklungsservers (app.run() in app_web.py ist
 # ausdrücklich nur für lokale Tests gedacht, siehe dortiger Kommentar) - "app_web:app"
 # verweist auf das fertige Flask-Objekt "app" im Modul app_web.py.
-CMD ["waitress-serve", "--host=0.0.0.0", "--port=5000", "app_web:app"]
+#
+# HTTPS-Proxy (Desktop-Anbindung): vor diesem Dienst steht der Caddy-Proxy aus compose.yaml,
+# der Port 5000 ist nur im internen Compose-Netz erreichbar. --trusted-proxy=* lässt
+# waitress deshalb die vom Proxy gesetzte X-Forwarded-For-Kopfzeile übernehmen (letzter
+# Eintrag, ein Proxy) - nötig, damit die Ratenbegrenzung der API die echte Client-IP sieht.
+# Wird der Container ohne Proxy mit veröffentlichtem Port betrieben, wäre die Kopfzeile
+# fälschbar (nur die IP-Zählung der Ratenbegrenzung wäre davon betroffen).
+CMD ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--trusted-proxy=*", "--trusted-proxy-count=1", "--trusted-proxy-headers=x-forwarded-for", "app_web:app"]

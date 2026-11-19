@@ -33,6 +33,8 @@ from db_verbindung import (
     ALLE_DISZIPLINEN,
     ALLE_PRUEFUNGEN,
     DISZIPLIN_SPALTEN,
+    NOTIZ_MAX,
+    NOTIZ_SPALTEN,
     pruefe_werte_der_kopie,
     pruefung_nach_kuerzel,
     sortierschluessel_text,
@@ -220,6 +222,43 @@ def eintragen_ergebnis(
         f"UPDATE ergebnisse SET {spalte_suche} = ?, {spalte_anzeige} = ? WHERE teilnehmer_id = ?",
         (suche, anzeige, teilnehmer_id),
     )
+    if commit:
+        conn.commit()
+
+def pruefe_notiz(text) -> str | None:
+    """Normalisiert eine Notiz zum Bewertungsbogen: None oder ein Text, der getrimmt wird; leer
+    ergibt None. Wirft ValueError (deutsche Meldung) bei einem anderen Typ oder mehr als NOTIZ_MAX
+    Zeichen. Gemeinsam genutzt von setze_notiz() und dem Zurückholen aus dem Web."""
+    if text is None:
+        return None
+    if not isinstance(text, str):
+        raise ValueError("Die Notiz muss ein Text sein.")
+    text = text.strip()
+    if len(text) > NOTIZ_MAX:
+        raise ValueError(f"Die Notiz ist zu lang (höchstens {NOTIZ_MAX} Zeichen, eingegeben {len(text)}).")
+    return text or None
+
+@_mit_rollback
+def setze_notiz(
+    conn: sqlite3.Connection, teilnehmer_id: int, disziplin: str, text: str | None, *, commit: bool = True,
+) -> None:
+    """Speichert die Notiz zum Bewertungsbogen einer Disziplin (Marco 18.11.2026) und schreibt nur
+    diese eine Spalte. Der Text wird getrimmt, leer ergibt NULL (Notiz gelöscht). Unbekannte
+    Disziplin, ein Text über NOTIZ_MAX Zeichen oder ein unbekannter Teilnehmer ergeben ValueError.
+    Fehlt die Ergebniszeile (add_teilnehmer legt sie sonst immer an), wird sie angelegt.
+    commit=False wie bei eintragen_ergebnis()."""
+    if disziplin not in NOTIZ_SPALTEN:
+        raise ValueError(f"Unbekannte Disziplin: {disziplin!r}")
+    wert = pruefe_notiz(text)
+    spalte = NOTIZ_SPALTEN[disziplin]
+    # Kein cursor.rowcount: der PostgreSQL-Wrapper (_PostgresCursor) kennt es nicht (der Bogen im
+    # Container lief deshalb auf einen 500er, obwohl die SQLite-Tests grün waren).
+    if not conn.execute("SELECT 1 FROM teilnehmer WHERE id = ?", (teilnehmer_id,)).fetchone():
+        raise ValueError(f"Unbekannter Teilnehmer: {teilnehmer_id!r}")
+    if conn.execute("SELECT 1 FROM ergebnisse WHERE teilnehmer_id = ?", (teilnehmer_id,)).fetchone():
+        conn.execute(f"UPDATE ergebnisse SET {spalte} = ? WHERE teilnehmer_id = ?", (wert, teilnehmer_id))
+    else:
+        conn.execute(f"INSERT INTO ergebnisse (teilnehmer_id, {spalte}) VALUES (?, ?)", (teilnehmer_id, wert))
     if commit:
         conn.commit()
 

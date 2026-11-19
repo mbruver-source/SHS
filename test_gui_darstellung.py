@@ -1640,6 +1640,35 @@ def test_screenshot_skript_erzeugt_alle_bilder(tmp_path, monkeypatch):
         assert (bild.width(), bild.height()) == (breite, hoehe), name
 
 
+@pytest.mark.langsam
+def test_web_screenshot_skript_erzeugt_alle_web_bilder(tmp_path):
+    """Marco 18.11.2026: tools/web_screenshots.py nimmt die Web-Bilder fürs Handbuch auf (Edge headless,
+    Web-Oberfläche im Prozess mit SQLite-Ersatz). Ohne Edge (z. B. unter Linux) wird übersprungen."""
+    import subprocess
+    from pathlib import Path
+
+    from PySide6.QtGui import QImage
+
+    repo = Path(__file__).resolve().parent
+    sys.path.insert(0, str(repo / "tools"))
+    try:
+        import web_screenshots
+    finally:
+        sys.path.remove(str(repo / "tools"))
+    if not any(Path(p).exists() for p in web_screenshots.EDGE_PFADE):
+        pytest.skip("Microsoft Edge nicht vorhanden")
+    lauf = subprocess.run(
+        [sys.executable, str(repo / "tools" / "web_screenshots.py"), "--ziel", str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, timeout=300,
+    )
+    assert lauf.returncode == 0, lauf.stderr[-3000:]
+    for name, (_pfad, breite, hoehe, _rolle) in web_screenshots.BILDER.items():
+        bild = QImage(str(tmp_path / f"{name}.png"))
+        assert not bild.isNull(), f"{name}.png fehlt"
+        assert (bild.width(), bild.height()) == (breite, hoehe), name
+
+
 # --- Erscheinungsbild „Beagle“: Kopfbalken, Symbole, kurze Hinweise (Marco 01.11.2026) ------
 
 

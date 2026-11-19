@@ -118,6 +118,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `desktop_auswertung.py` | Reiter Auswertung, Teilnehmerübersicht und Export | `test_gui_auswertung.py` |
 | `desktop_zeitplan.py` | Reiter Zeitplan (Spuren, Blöcke, Pausen, Verteilung) | `test_gui_zeitplan.py`, `test_db.py` |
 | `desktop_verwaltung.py` | Reiter Verwaltung (Veranstaltung, Checkliste) und Datensicherung | `test_gui_verwaltung.py`, `test_backup.py` |
+| `desktop_web.py`, `web_sync.py`, `web_tresor.py` | Web-Anbindung des Desktops (Reiter Datensicherung, Gruppe „Web-Version“): Termin ins Web veröffentlichen, Ergebnisse holen. `web_sync.py` = HTTPS-Client ohne Qt mit Zertifikat-Pinning (SHA-256-Fingerabdruck, Erstverbindung per Bestätigung), `web_tresor.py` = Passwort im Windows-Tresor (ctypes, sonst kein Speichern), `desktop_web.py` = Einstellungen (QSettings „web/…“), Dialoge, Abläufe; Import über `db_sync.importiere_ergebnisse_aus_liste` | `test_web_sync.py`, `test_gui_web.py`, `test_db.py` |
 | `desktop_abrechnung.py` | Reiter Abrechnung Leistungsrichter | `test_gui_verwaltung.py`, `test_lr_abrechnung.py` |
 | `desktop_programm.py` | Versionsfenster, Update-Prüfung, Sitzungsende, Zweitstart | `test_gui_darstellung.py`, `test_gui_termin.py` |
 | `desktop_dialoge.py` | Fassade der Dialoge (seit 11.11.2026): reicht alle Namen der fünf Module darunter weiter, `from desktop_dialoge import …` gilt wie vorher | `test_gui_*.py` |
@@ -154,7 +155,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `gui_hilfen.py` | Gemeinsame Fixtures und Hilfen der GUI-Tests | – |
 | `bump_version.py` | Versionsnummer für Releases hochzählen | `test_bump_version.py` |
 | `tools/` | Screenshots, Handbuch-PDF, Altdaten, Lizenzliste, Programmsymbol, Linux-Pakete | `test_gui_darstellung.py`, `test_altversionen.py`, `test_drittlizenzen.py` |
-| `Containerfile`, `compose.yaml` | Container und Compose-Setup der Web-Version | `build-container.yml` |
+| `Containerfile`, `compose.yaml`, `Caddyfile`, `tools/zertifikat_erzeugen.ps1` | Container und Compose-Setup der Web-Version samt HTTPS-Proxy und Zertifikat-Skript | `build-container.yml` |
 | `installer.iss`, `build.spec` | Windows-Installer und PyInstaller-Bündelung | `build-installer.yml` |
 | `symbole/`, `symbol/`, `fonts/`, `static/`, `lizenzen/` | Icons, Programmsymbol, Schrift, Web-Dateien, Lizenztexte | Selbsttest |
 
@@ -184,6 +185,77 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
   beim Start und beim Terminwechsel darauf hin.
 - **Web-Umfang bewusst eng gehalten**: nur Ergebniserfassung + Admin (Benutzer/Termine).
   Termin anlegen, Teilnehmerverwaltung, Zeitplan, PDF-Export bleiben Desktop-Aufgaben.
+- **Ergebnistabelle im Web (`/ergebnisse`, `ergebnistabelle` in `app_web.py`, Template
+  `ergebnis_tabelle.html`, 18.11.2026)**: zusätzlich zur Erfassung je Teilnehmer
+  (`/teilnehmer/<id>`) eine Tabelle wie im Desktop-Reiter „Ergebniserfassung“ (Start-Nr./Name/Hund,
+  Art/LK, je Disziplin Suche und Anzeige, Disqualifiziert, Abbruch mit Grund aus
+  `ABBRUCH_GRUENDE`, Status). Beide Rollen dürfen sie nutzen, Termin über `_termin_erforderlich`.
+  Reine Formulartabelle ohne JavaScript (CSP `script-src 'none'`): Filter (Art/LK, Start-Nr.,
+  Name/Hund) als GET-Formular, die Filterwerte hängen an der Adresse des Speicher-Formulars; die
+  erste Spalte bleibt per `position: sticky` stehen. Gespeichert wird mit „Alle speichern“ in zwei
+  Phasen: (1) alle abgeschickten Zeilen prüfen - mit denselben Regeln wie die Einzelseite
+  (`_pruefe_und_parse_formular` über die Feldsicht `_ZeilenFormular`) -, **bei einem Fehler in
+  irgendeiner Zeile wird nichts gespeichert** und die Seite aus den abgeschickten Werten neu
+  aufgebaut; (2) je Zeile und Einheit (Punkte einer Disziplin, Status DQ/Abbruch) Konfliktprüfung
+  gegen den DB-Stand mit dem versteckten Feld `geladen_<id>` (der beim Laden sichtbare Stand):
+  unveränderte Einheiten werden nicht geschrieben, eine inzwischen von einem anderen Richter
+  geänderte Einheit wird nicht überschrieben (Zeile mit Hinweis und aktuellem Wert), der Rest ist
+  gespeichert. Disqualifiziert oder Abbruch ohne Grund sperren die Punkte der Zeile (Server
+  ignoriert sie, gespeicherte Punkte bleiben); ein Abbruch braucht einen Grund („ohne Grund“ gibt
+  es nur als Altdatum). Ab 200 Zeilen wird in einer Transaktion geschrieben (wie im Desktop), sonst
+  mit einem Commit je Wert. Kein Stechen, keine Summe/Platz/Note (wie im Desktop-Reiter).
+  `request.max_form_parts` wird für diese Route in `_csrf_pruefen` angehoben (Standard 1000 Felder).
+- **Online-Bewertungsbogen im Web (`GET/POST /bewertungsbogen/<id>/<Disziplin>`, `bewertungsbogen` in
+  `app_web.py`, Template `bewertungsbogen.html`, 18.11.2026)**: je Zeile und aktiver Disziplin der
+  Ergebnistabelle ein Knopf „Bogen“ (Dreikampf drei, ED einer; Zeilenanker `#zeile-<id>`), der im
+  selben Tab den ausfüllbaren Bogen einer Disziplin öffnet - ein Blatt je Richter. Aufbau wie der
+  Papierbogen (`pdf_export._bewertungsabschnitt`): Kopf mit Start-Nr., Art/LK, Teilnehmer, Hund,
+  Verein/Datum, Disziplin und zu suchendem Gegenstand (`db.gegenstand_fuer_disziplin`, kein
+  `pdf_export`-/reportlab-Import), Suchleistung (0-60) und Anzeige (0-40) nebeneinander,
+  Disqualifiziert, Abbruch, Notiz. Reine Formularseite ohne JavaScript; 404 für unbekannte oder nicht
+  teilnehmende Teilnehmer und eine Disziplin, die nicht zur Prüfung gehört. **Datenfluss:** der Bogen
+  verwendet die Tabellen-Hilfen unverändert (`_tabelle_pruefen`, `_tabelle_schreiben`,
+  `_tabellenzeile`) - der Teilnehmer erscheint ihnen dafür über `_bogen_sicht` als
+  Einzeldisziplin-Teilnehmer der einen Disziplin, die Felder heißen wie in der Tabelle
+  (`suche_<D>_<id>`, `dq_<id>`, `abbruch_<id>`, `geladen_<id>`). Dadurch gelten dieselben Regeln
+  (Wertebereiche, Suche UND Anzeige, Sperre bei Disqualifiziert/Abbruch ohne Grund, Teilbewertung bei
+  Abbruch mit Grund, Abbruch ohne Grund abgelehnt, Lost-Update-Schutz je Einheit) und die Punkte landen
+  in denselben Ergebnisspalten; die anderen Disziplinen eines Dreikampf-Teilnehmers bleiben
+  unangetastet. Neu ist nur die **Notiz** (`ergebnisse.notiz_truemmerfeld/_flaechensuche/_behaeltnis`,
+  `db.NOTIZ_SPALTEN`, höchstens `db.NOTIZ_MAX` = 500 Zeichen, `db.setze_notiz`) mit eigenem Lost-Update-
+  Schutz über `geladen_notiz_<id>` (`_bogen_notiz_schreiben`, gleiche Entscheidung wie
+  `_einheit_entscheiden`; Zeilenenden vor dem Vergleich vereinheitlicht). Validierungsfehler (auch eine zu
+  lange Notiz): nichts gespeichert, Eingaben bleiben. Konflikt: nichts Fremdes überschrieben, die Seite zeigt
+  den aktuellen Stand mit Hinweis. „Speichern“ bleibt auf dem Bogen und zeigt unter dem Formular den
+  gespeicherten Stand (`_bogen_zusammenfassung`): Gesamtpunktzahl der Disziplin (nur mit Suche und
+  Anzeige), Status und die Wertnote nach `shs_core` (ED: `berechne_wertnote_ed`; DK: `berechne_wertnote_dk`
+  erst, wenn alle drei Disziplinen vollständig sind; bei Disqualifiziert/Abbruch keine). „Speichern und
+  zurück zur Tabelle“ leitet auf `/ergebnisse#zeile-<id>`; der Tabellenfilter (`lk`, `nr`, `q`) hängt an
+  allen Adressen. Die Notizen werden im Web gespeichert und mit „Ergebnisse aus Web holen“ in die
+  Termin-Datei übernommen; die Desktop-Oberfläche zeigt sie noch nicht an, der PDF-Bewertungsbogen
+  (Desktop und Web) druckt sie, wenn eine Notiz vorhanden ist.
+- **Sammel-PDF der benutzten Bewertungsbögen (`GET /ergebnisse/boegen.pdf`, `ergebnis_boegen_pdf` in
+  `app_web.py`, 18.11.2026)**: Knopf „Benutzte Bögen als PDF“ in der Ergebnistabelle (Link ohne
+  JavaScript, trägt den Filter `lk`/`nr`/`q` mit). Beide Rollen, `@_termin_erforderlich`, nur GET.
+  „Benutzt“ (`_bogen_benutzt`): teilnehmender Teilnehmer, der den Filter erfüllt (`_tabellen_teilnehmer`
+  wie die Tabelle, unbekannte Art/LK zählt wie „Alle“) und mindestens einen Punktwert, Disqualifiziert,
+  Abbruch oder eine Notiz hat (nur Leerraum zählt nicht). Gedruckt wird der gespeicherte Stand, nicht
+  die ungespeicherten Eingaben der Tabelle. Die PDF entsteht mit `pdf_export.erstelle_alle_bewertungsboegen_pdf(
+  conn, BytesIO, teilnehmer_ids=...)` - dieselbe Seitenlogik wie am Desktop (Reihenfolge nach Teilnehmerliste/
+  Startnummer, Dreikampf immer 2 Seiten, ED 1 Blatt), im Speicher, ohne Temp-Datei. Antwort: `application/pdf`
+  als Anhang `Bewertungsboegen_<Verein>_<Datum>.pdf` (`secure_filename`), `Cache-Control: no-store` (nach
+  `send_file` ausdrücklich gesetzt, da dessen Standard sonst den globalen Header verdrängt). Ohne benutzte
+  Bögen oder bei jedem Fehler beim Erzeugen (auch fehlendes reportlab; nur ins Protokoll, nichts Internes
+  in die Antwort) Redirect auf `/ergebnisse?boegen=keine|fehler` mit festem Hinweistext. `pdf_export`
+  wird erst beim Aufruf importiert (kein reportlab-Import beim Start). **Web-Image:** enthält dafür
+  `pdf_export.py`, `lr_abrechnung.py` (nur Standardbibliothek), `fonts/` (DejaVu, Lizenz in
+  `THIRD_PARTY_LICENSES.txt`) und `reportlab` (bringt Pillow mit); weiterhin kein Qt, pypdf, pyzipper
+  (Test `TestImportImWebImage`: `pdf_export` läuft mit genau den im `Containerfile` kopierten Dateien).
+  **Notiz auf dem PDF-Bogen (`pdf_export._notiz_block`)**: nur wenn die Disziplin eine Notiz hat, klein
+  (7 pt) in der rechten Spalte der Positionszeile neben der Skizze; höchstens 4 Zeilen und nie mehr, als
+  die Spalte bis zur Unterkante der Skizze frei hat (mindestens 1), längere Notizen enden auf „…“ mit
+  Hinweis „(gekürzt, vollständig im Web)“. Text wird erst gekürzt, dann für reportlab-Markup maskiert.
+  Ohne Notiz bleibt der Bogen unverändert, die feste 2-Seiten-Aufteilung des Dreikampfs bleibt erhalten.
 - **Ergebniserfassung bei großen Prüfungen (Lasttest 16.10.2026, Umbau O8 19.10.2026)**: Die
   Tabelle besteht aus Zellen (`QTableWidgetItem`) mit Delegates (`_PunkteDelegate`,
   `_HakenDelegate` für „Disqualifiziert“, `_AbbruchDelegate` mit der Auswahlliste
@@ -244,6 +316,53 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
     offen hält und der Restart Manager deshalb gar nicht schließt.
   - CI: Schreibrechte nur in den Veröffentlichungs-Jobs, Actions auf Commit-Hashes, feste
     Werkzeugversionen.
+
+### API für den Desktop (`/api/`, `app_web.py`, Blueprint `api`)
+
+Das Desktop-Programm veröffentlicht Termine und holt Web-Ergebnisse über eine JSON-Schnittstelle
+des Web-Backends, angemeldet mit dem Web-Administrator-Konto. Sie liegt nur hinter HTTPS: vor
+`web` steht der Caddy-Proxy aus `compose.yaml` (extern `https://<Rechner>:5443`, im Container
+8443) mit einem langlebigen, selbst signierten Zertifikat aus `secrets/tls/` (erzeugt von
+`tools/zertifikat_erzeugen.ps1`; der Desktop prüft dessen SHA-256-Fingerabdruck). Der Port 5000
+des Web-Dienstes ist nicht mehr veröffentlicht; das Session-Cookie ist `Secure`.
+
+Anmeldung: `POST /api/login` liefert ein signiertes Token (itsdangerous, Schlüssel `secret_key`,
+eigenes Salz, 8 Stunden). Alle weiteren Routen verlangen `Authorization: Bearer <Token>` und
+prüfen bei jeder Anfrage gegen die Datenbank, dass das Konto noch existiert (Konto-Kennung) und
+Administrator ist. Cookie-Sitzungen zählen unter `/api/` nie; nur darauf beruht die CSRF-Ausnahme
+in `_csrf_pruefen`. Ratenbegrenzung nur für den Login: 10 Fehlversuche je
+Client-IP in 15 Minuten (nicht je Benutzername, damit niemand den Admin-Namen sperren kann), dann 429 mit `Retry-After` (Zähler im Prozessspeicher; die Client-IP
+kommt über `X-Forwarded-For` des Proxys und waitress `--trusted-proxy`). Fehler sind immer
+`{"fehler": "<deutscher Text>"}` mit passendem Status. Datumswerte sind ISO-Text.
+
+| Route | Anfrage | Antwort (Erfolg) | Fehler |
+|---|---|---|---|
+| `POST /api/login` | JSON `{"benutzername", "passwort"}` | 200 `{"token": str, "gueltig_sekunden": int}` | 400 kein gültiges JSON, 401 falsch, 403 kein Admin, 429 gesperrt |
+| `GET /api/termine` | - | 200 `{"termine": [{"schema_name", "verein", "ort", "datum", "anzahl_teilnehmer"}]}` | 401, 403 |
+| `POST /api/termine` | multipart, Feld `sqlite_datei` (Endung `.sqlite`, höchstens 100 MB) | 201 `{"termin": {"schema_name", "verein", "ort", "datum", "anzahl_teilnehmer"}, "dublette_hinweis": str oder null}` | 400 Datei fehlt, falsche Endung oder keine gültige Termin-Datei, 401, 403, 413 zu groß, 500 |
+| `GET /api/termine/<schema_name>/ergebnisse` | - | 200 `{"teilnehmer": [...]}` (Schlüssel unten) | 401, 403, 404 Schema ungültig oder unbekannt |
+
+`teilnehmer` enthält alle Teilnehmer des Termins nach Startnummer sortiert (auch ohne
+Startnummer, wie `importiere_ergebnisse_nach_startnummer` sie als „ohne Startnummer“ meldet),
+mit genau den Feldern, die `db_sync._teilnehmer_merkmale` und `importiere_ergebnisse_nach_startnummer`
+aus der Quelle lesen. Der Desktop fährt diese Logik damit ohne zweite Datenbankverbindung.
+
+| Schlüssel je Teilnehmer | Typ | Verwendung im Rückimport |
+|---|---|---|
+| `startnummer` | Zahl oder `null` | Zuordnung zum Teilnehmer der Termin-Datei |
+| `nachname`, `vorname` | Text | Plausibilitätsprüfung (Nachname) und Meldungstexte |
+| `rufname_hund` | Text | Plausibilitätsprüfung |
+| `art` | `"ED"` oder `"DK"` | Plausibilitätsprüfung |
+| `stufe` | 1, 2 oder 3 | Plausibilitätsprüfung |
+| `disziplin` | `"Trümmerfeld"`, `"Flächensuche"`, `"Behältnisstrecke"` oder `null` | Plausibilitätsprüfung (nur bei ED) |
+| `ergebnis` | Objekt oder `null` | Zeile der Tabelle `ergebnisse` (`get_ergebnis`), Schlüssel unten |
+
+`ergebnis`: `teilnehmer_id` (Web-seitige ID, für den Desktop ohne Bedeutung),
+`suche_truemmerfeld`, `anzeige_truemmerfeld`, `suche_flaechensuche`, `anzeige_flaechensuche`,
+`suche_behaeltnis`, `anzeige_behaeltnis` (je Zahl oder `null`; sie überträgt der Rückimport über
+`DISZIPLIN_SPALTEN`), dazu `disqualifiziert`, `abbruch` (0/1), `abbruch_grund` (Text oder `null`)
+`stechen_sieger` (0/1) und die Bogen-Notizen `notiz_truemmerfeld`, `notiz_flaechensuche`,
+`notiz_behaeltnis` (Text oder `null`, Online-Bewertungsbogen). Kontaktdaten der Teilnehmer gehören bewusst nicht zur Antwort.
 
 ## 4. Test-Suite-Struktur
 

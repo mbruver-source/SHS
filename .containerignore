@@ -13,8 +13,9 @@ venv/
 
 # Desktop-Version (PySide6, GUI) - gehört nicht ins Web-Backend-Image
 app.py
-pdf_export.py
 gui_vorschau.html
+# pdf_export.py (und lr_abrechnung.py, fonts/) gehören seit 18.11.2026 ins Image: Sammel-PDF der
+# Bewertungsbögen in der Ergebnistabelle (Containerfile). Nur reportlab, kein Qt.
 
 # Desktop-Installer-Build (PyInstaller/Inno Setup) - siehe README_INSTALLER.md
 build/

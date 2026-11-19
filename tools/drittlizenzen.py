@@ -47,7 +47,10 @@ EIGENE_DATEIEN = {
                 # Marco 01.11.2026, Erscheinungsbild „Beagle“ (symbole/README.md).
                 ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
     # Haken-Symbol in templates/teilnehmerliste.html (Marco 01.11.2026, Erscheinungsbild „Beagle“).
-    "web": [("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
+    # Seit 18.11.2026 liegen auch die DejaVu-Schriften im Web-Image (Sammel-PDF der Bewertungsbögen).
+    "web": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt",
+             "Bitstream Vera / Arev Fonts License"),
+            ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
 }
 # Alle Teilpakete von PySide6 (Essentials, Addons, Pdf, WebEngine ...) und Shiboken6. Ihre Wheels
 # enthalten nur den Text der kommerziellen Qt-Lizenz, die hier nicht gilt; der wird weggelassen.

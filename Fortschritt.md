@@ -2,6 +2,202 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: Abgespeckter UX-Test der Web-Entwicklungen (Marco)
+
+Vier erfundene Personas (Heinz und Julia als Admins am Desktop, Ruth am Tablet mit dem Online-Bewertungsbogen, Dennis am
+Handy nur mit Punkten) testeten Container-Einrichtung nach README, Konten im Web, Veröffentlichen aus dem Desktop, Erfassen
+im Web, Zurückholen und das Sammel-PDF; Bericht `berichte/UX-Test-2026-11-Web/Bericht.md`, Einzelberichte in `personas/`,
+Aufgabenliste `aufgaben.md`. Echter Container-Stack auf Port 6443 (getrennt von Marcos Stack, der unverändert blieb), Desktop
+über ein neues Steuerwerkzeug (Qt offscreen, abgeschottet), nur im Arbeitsordner `Claude\UX-Test-Web\`, nicht im Repo.
+Ergebnis: Alle haben ihre Aufgaben im Kern geschafft, Noten 2,0 bis 2,6. Schwach: Wege und Rückmeldungen (Bogen schwer zu
+finden, Startseite zeigt Anmeldung trotz Angemeldet-Sein [im Code bestätigt], „bewertet“ statt „disqualifiziert“), Tabelle am
+Handy/Tablet zu breit, Disqualifikation nur in der Tabelle, Desktop-Texte und Bericht (Notizen nicht sichtbar, „gemerkter Termin
+[termin_1]“). Alle Funde sind Beobachtungen; die Besprechung mit Marco steht aus (Vorschlag in Bericht Abschnitt 5). Beim Bau
+des Steuerwerkzeugs legte ein früher Lauf einmal einen Registry-Schlüssel an (sofort entfernt, danach alles unverändert).
+Der Test-Stack `shsux` läuft noch (Port 6443); Aufräumbefehle in `Claude\UX-Test-Web\stack-notizen.md`.
+
+## 19.11.2026: Ende-zu-Ende-Test Desktop ↔ Web (Marco)
+
+Neu: `test_ende_zu_ende_web.py` (9 Tests, ca. 8 s, ohne Qt, freier Port): Der echte `web_sync.WebClient` spricht
+über HTTPS mit Fingerabdruck-Prüfung mit der echten Flask-App `app_web.app` (werkzeug-Server im Thread,
+selbstsigniertes Zertifikat zur Laufzeit). Ersetzt ist nur die PostgreSQL-Klebeschicht (jedes Schema ist eine
+SQLite-Datei); Export, `kopiere_termin_daten`, alle `/api/`-Routen, Ergebnisserialisierung und Import laufen echt.
+Strecke: Fingerabdruck holen (sendet nichts, falscher Fingerabdruck bricht ohne Anfrage ab), Anmeldung (401/403),
+Veröffentlichen (Punkte, Disqualifikation, Abbruch mit Grund, Notiz), im Web erfassen (Tabelle und Online-Bogen),
+Zurückholen in die ursprüngliche Datei (Bericht, Abweichung bei umbenanntem Teilnehmer), Sammel-PDF, Absicherungen
+(Cookie allein 401, Token gelöschter Konten, `http://` abgelehnt). Kein Fehler im Produktivcode gefunden. Nicht
+abgedeckt: echtes PostgreSQL (nur CI), Qt-Dialoge, Windows-Tresor, Caddy. Läuft in der CI über `pytest -v`
+automatisch mit. Umgesetzt (Marco): `test_web_sync` und `test_ende_zu_ende_web` stehen in der Testbefehlsliste in
+`CLAUDE.md` (`AGENTS.md` per `python test_agents_spiegel.py --schreiben` nachgezogen) und mit Beschreibung in der SHS
+Test Suite (`run_tests.py`, eigenes Repo; vier Einträge: die beiden Dateien, `test_gui_web.py` und erweitert
+`test_app_web.py`). `UML.md` hat den neuen Ablauf 10b (Ergebnistabelle, Online-Bewertungsbogen, Sammel-PDF) und
+die Verbindung Web → pdf_export im Komponentenbild; alle 15 Mermaid-Diagramme rendern (mmdc).
+
+Nachtrag (Marco): Im Bericht beim Zurückholen zählt „aktualisiert“ jetzt nur Teilnehmer, bei denen sich in der
+Datei wirklich etwas geändert hat (Punkte, Status oder Notiz); gleiche Punkte werden nicht mehr geschrieben
+(`db_sync._ergebnisse_einarbeiten`). Ein zweites Zurückholen ohne Web-Änderung meldet 0. Ende-zu-Ende-Test und
+Handbuch angepasst; 545 Tests der betroffenen Module grün.
+
+## 19.11.2026: Smoke-Test der Container-CI erweitert (Marco)
+
+`.github/workflows/build-container.yml` prüft nach dem Start zusätzlich: `/api/login` antwortet mit leerer
+Anmeldung 400 mit JSON (`fehler`), `/ergebnisse/boegen.pdf` verlangt Anmeldung (302), Port 5000 ist von außen
+nicht erreichbar (nur über den Proxy), das Web-Image enthält `pdf_export`, `reportlab` und die DejaVu-Schrift,
+und alle Container sind gesund. Die Befehle liefen lokal gegen den Podman-Stack wie erwartet (400, 302, 5000
+nicht erreichbar, Import und Schrift vorhanden); der Workflow selbst lief nur als YAML-Prüfung, die erste
+echte Ausführung ist die CI auf GitHub. Image-Größe jetzt 202 MB (vorher 169 MB, mit reportlab und Schriften).
+
+## 18.11.2026: GUI-Tests je Datei: Schriftenordner im Offscreen-Modus (Marco)
+
+Die SHS Test Suite startet jede Testdatei in einem eigenen Prozess. Dort fehlte der Schriftenordner für den
+Offscreen-Modus (im Gesamtlauf kam er zufällig durch den Import von `tools/screenshots.py` beim Sammeln von
+`test_gui_darstellung.py`), Qt nahm eine grobe Ersatzschrift, und vier Breitentests des Dialogs
+„Web-Verbindung“ (`test_gui_web.py`) schlugen fehl (754/892/1122 gegen 722 Pixel). Der Dialog war in Ordnung,
+nur die Testumgebung unterschied sich. `gui_hilfen.py` setzt `QT_QPA_FONTDIR` jetzt für alle GUI-Tests auf
+den Windows-Schriftenordner, falls vorhanden (unter Linux ohne Wirkung). Test Suite danach: 1545 bestanden,
+0 fehlgeschlagen.
+
+## 18.11.2026: Web-Screenshots reproduzierbar (Marco)
+
+Die fünf älteren Web-Bilder waren von Hand entstanden und zeigten die alte Navigation. Neu:
+`tools/web_screenshots.py` nimmt alle sieben Web-Bilder (`handbuch_web_login`, `…_teilnehmerliste`,
+`…_ergebnis_dk`, `…_ergebnis_fehler`, `…_admin_termine`, `…_ergebnistabelle`, `…_bewertungsbogen`) mit einem
+Befehl auf (Edge headless, Web-Oberfläche im Prozess, SQLite statt PostgreSQL, erfundene Demo-Daten); Test
+`test_web_screenshot_skript_erzeugt_alle_web_bilder` (übersprungen ohne Edge). Alle Bilder neu erzeugt, auch
+der Knopf „Benutzte Bögen als PDF“ ist zu sehen. Beim Build (Skill `shs-build`) nach dem Versionsbump wiederholen.
+
+## 18.11.2026: Online-Bewertungsbogen im Web mit Notizfeld (Marco)
+
+Marcos Wunsch: In der Web-Ergebnistabelle je Zeile einen Knopf, der den ausfüllbaren Bewertungsbogen
+öffnet, mit Übernahme der Punkte in die Ergebnisspalten. Entschieden: ein Bogen je Disziplin (bei
+Dreikampf drei Knöpfe je Zeile), dazu ein Notizfeld je Teilnehmer und Disziplin. Umsetzung (nichts
+committet, nicht gebaut):
+- Web: Route `/bewertungsbogen/<id>/<disziplin>` (`app_web.py`, `templates/bewertungsbogen.html`),
+  Spalte „Bogen“ je Disziplin in `ergebnis_tabelle.html`. Der Bogen nutzt die Prüf- und
+  Schreibhilfen der Tabelle (dieselben Regeln für Punkte, Disqualifikation und Abbruch, Konflikte),
+  zeigt Gesamtpunktzahl, Status und Wertnote aus `shs_core`, kein JavaScript. 33 neue Tests.
+- Daten: neue Spalten `notiz_truemmerfeld`, `notiz_flaechensuche`, `notiz_behaeltnis` (max. 500 Zeichen),
+  Migration für Termin-Dateien und PostgreSQL, `db.setze_notiz`; Veröffentlichen kopiert die Notizen,
+  Zurückholen übernimmt sie (Web-Stand führt; fehlt der Schlüssel, bleibt die Notiz der Datei). Im
+  Desktop und auf dem PDF-Bogen werden Notizen noch nicht angezeigt (später: `desktop_ergebnis.py`,
+  `pdf_export.py`). Altdaten-Test: `test_altversionen.py` hängt die Notizspalten nicht an eine feste
+  Versionsnummer (die steht erst beim Build fest), sondern prüft: alle drei Spalten oder keine, ab der
+  ersten Altdatei mit den Spalten haben sie alle späteren, die älteste (v1.0.0) hat sie nicht. Nach dem Build
+  erzeugt `tools/altdaten_erzeugen.py --aktuell` (Skill `shs-build`, Schritt 6) den Stand der neuen Version mit
+  den Spalten; es ist nichts von Hand anzupassen.
+- Doku: Handbuch (Web-Kapitel), Architektur, Modulreferenz; Screenshots `handbuch_web_bewertungsbogen.png`
+  und neu `handbuch_web_ergebnistabelle.png` (mit Spalte „Bogen“).
+- Fehler beim Test im Container (Marco): Das Speichern einer Notiz im Bogen gab „Internal Server Error“.
+  Ursache: `setze_notiz` nutzte `cursor.rowcount`, das der PostgreSQL-Wrapper (`_PostgresCursor`) nicht
+  kennt; die SQLite-Tests hatten es nicht bemerkt. Behoben (SELECT statt `rowcount`), neuer Test mit
+  Cursor-Ersatz ohne `rowcount` in `test_db.py`; gegen den echten PostgreSQL im Container geprüft
+  (speichern und zurücksetzen).
+- Sammel-PDF „Benutzte Bögen als PDF“ (`/ergebnisse/boegen.pdf`, Verifikation ohne Befund, im Container
+  gegen PostgreSQL geprüft): „keine benutzten Bögen“ erscheint jetzt als neutraler Hinweis statt als
+  roter Fehler; die Laufzeit ohne Obergrenze steht als B22 in `OFFEN.md`.
+- Offen: Skizzen und Verleitungs-Hinweis des Papierbogens gibt es online nicht; Layout am Handy nur
+  per Test/Augenschein der Tabelle geprüft.
+- Nachtrag (Marco, 18.11.2026): Knopf „Benutzte Bögen als PDF“ in der Web-Ergebnistabelle
+  (`GET /ergebnisse/boegen.pdf`, Filter `lk`/`nr`/`q`, Sammel-PDF aller Bögen mit Punkten, Status oder Notiz,
+  Dreikampf 2 Seiten, ED 1 Blatt, im Speicher erzeugt, Download `Bewertungsboegen_<Verein>_<Datum>.pdf`; ohne
+  benutzte Bögen oder bei einem Fehler Hinweis in der Tabelle statt 500). `erstelle_alle_bewertungsboegen_pdf`
+  bekam `teilnehmer_ids` und akzeptiert ein Datei-Objekt. Die Notiz je Disziplin steht jetzt auf dem PDF-Bogen
+  (Desktop und Web), nur wenn vorhanden, klein in der rechten Spalte der Positionszeile (ein Kasten in voller
+  Breite schob DK-Seite 2 im ungünstigsten Fall auf eine 3. Seite); höchstens 4 Zeilen, nie mehr als der freie
+  Platz neben der Skizze, sonst „…“ und Hinweis „vollständig im Web“. Web-Image: `pdf_export.py`,
+  `lr_abrechnung.py`, `fonts/` und `reportlab` (bringt Pillow mit, kein Qt) kommen hinein, `.containerignore`
+  und Dritt-Lizenzliste (DejaVu) angepasst; `pdf_export` wird in der Route erst beim Aufruf importiert. Tests:
+  `test_app_web.TestBoegenPdf`, neue Fälle in `test_pdf_export.py` (u. a. Seitenzahl im ungünstigsten Fall,
+  Wrapper-Ersatz ohne `rowcount`, Import mit den Dateien des Images). Doku: Architektur, Modulreferenz, Handbuch,
+  B20/OFFEN. Nichts committet, nicht gebaut, keine neuen Screenshots (Knopf „Benutzte Bögen als PDF“ fehlt noch
+  auf `handbuch_web_ergebnistabelle.png`).
+
+## 18.11.2026: Web-Ergebnistabelle und Rückimport von Disqualifikation/Abbruch (Marco)
+
+Marcos Wunsch: Die Web-Oberfläche bekommt die Ergebniserfassung als Tabelle analog zum Desktop;
+Disqualifikation und Abbruch sollen im Web erfassbar sein und zurückgeholt werden. Befund vorab:
+Der Desktop-Reiter „Ergebniserfassung“ hat keine Summe, keinen Platz und kein Stechen (das liegt im
+Reiter „Auswertung“); das Web macht es ebenso, ohne JavaScript (CSP `script-src 'none'` bleibt).
+Umsetzung (nichts committet, nicht gebaut):
+- Web: Route `/ergebnisse` (`app_web.py`, `templates/ergebnis_tabelle.html`, Navigation in
+  `base.html`, Knopf in `teilnehmerliste.html`): Zeile je teilnehmendem Teilnehmer, Punkte je
+  Disziplin, Disqualifiziert, Abbruch mit Grund, Status; Filter per GET; „Alle speichern“; beide
+  Rollen dürfen erfassen; Lost-Update-Schutz je Feld; bei Fehler wird nichts gespeichert; Konflikte
+  werden nicht überschrieben und markiert; ab 200 Zeilen eine Transaktion. 30 neue Tests.
+- Daten: Der Export beim Veröffentlichen kopiert jetzt auch Disqualifikation/Abbruch/Grund (vorher
+  gingen sie im Web verloren). „Ergebnisse aus Web holen“ übernimmt den Status (Web-Stand führt,
+  setzen und zurücknehmen); fehlen die Statusfelder in der Server-Antwort, bleibt der Status der
+  Datei unberührt. `ImportBericht.status_geaendert`; Hinweistexte in `desktop_web.py`, Handbuch,
+  README, UML angepasst; 11 neue Tests in `test_db.py`.
+- Nicht Teil: Stechen im Web (eigene Aufgabe, braucht Rangliste), Disqualifikation/Abbruch auf der
+  Einzelseite `/teilnehmer/<id>`.
+- Screenshots aufgenommen: `handbuch_web_ergebnistabelle.png` (lokaler Demo-Server mit SQLite-Ersatz,
+  Edge headless), `handbuch_web_bericht.png` neu mit der Statuszeile; im Handbuch eingebunden.
+  Beim Test am Handy (375 px) fiel auf: Die Navigation im Seitenkopf überlappte den Titel (zwei neue
+  Links); behoben in `templates/base.html` (`flex-wrap`, Navigation rutscht unter den Titel).
+- Formularlimits für `/ergebnisse` gelten nur für angemeldete Nutzer (Verifikationsbefund, mit Marco
+  entschieden); `OFFEN.md` um B17 bis B19 ergänzt, C4/C5/C7 vermerkt.
+- Handy (bis 700 px Breite, Marco): Art/LK steht unter dem Namen statt in einer eigenen Spalte, damit
+  die Eingabefelder ohne langes Scrollen im Bild liegen (`ergebnis_tabelle.html`, nur CSS); am Desktop
+  bleibt die Spalte. Im Browser bei 375 px geprüft.
+- Offen: echtes PostgreSQL nur in der CI.
+
+## 18.11.2026: Desktop-Web-Sync per HTTPS (Marco)
+
+Marcos Wunsch: Termine direkt aus dem Desktop ins Web veröffentlichen und Web-Ergebnisse in die
+geöffnete Termin-Datei zurückholen, Anmeldung mit dem Web-Admin-Konto (Passwort im
+Windows-Tresor), Verbindung nur per HTTPS mit Zertifikats-Fingerabdruck (Trust on first use).
+Die Web-Formulare zum Veröffentlichen/Zurückholen sollen erst nach Bewährung entfallen.
+Stand (nichts committet, nicht gebaut):
+- Web-Teil: `/api/`-Schnittstelle, Caddy-Proxy mit Zertifikat-Skript, Doku in `Architektur.md`
+  (Abschnitt „API für den Desktop“) und `README_CONTAINER.md`.
+- Desktop-Teil fertig: `web_sync.py` (HTTPS-Client mit Fingerabdruck-Prüfung vor dem ersten
+  gesendeten Byte), `web_tresor.py` (Windows-Tresor), `desktop_web.py` (Einstellungen, Dialoge,
+  Abläufe); Knöpfe „Ins Web veröffentlichen…“, „Ergebnisse aus Web holen…“, „Web-Verbindung…“ im
+  Reiter „Datensicherung“ (Gruppe „Web-Version“; in der Demo und bei Postgres gesperrt). Import über
+  `db_sync.importiere_ergebnisse_aus_liste` (gemeinsame Kernlogik mit
+  `importiere_ergebnisse_nach_startnummer`, Fassade `db.py` ergänzt). Vor dem Überschreiben legt das
+  Programm eine automatische Kopie an (bei Misserfolg Rückfrage). Die Rückfrage zu ungespeicherten
+  Eingaben nennt für diese Vorgänge nun den richtigen Vorgang (`ohne_speichern`), der Text beim
+  Terminwechsel blieb unverändert.
+- Tests: `test_web_sync.py` (lokaler TLS-Server, Pinning stimmt/weicht ab, Fehlerklassen, Multipart),
+  `test_gui_web.py` (Knöpfe, Dialoge, Abläufe mit Ersatz-Client und Ersatz-Tresor, Großschrift),
+  `TestErgebnisseAusListe` in `test_db.py`. Unabhängige Verifikation: fand den Großschrift-Test des
+  Verbindungsdialogs rot (Dialog bei 1,6-facher Schrift zu schmal, feste Mindestbreite); behoben:
+  Inhalt in Scrollfläche, Startgröße nach Platzbedarf (`_groesse_auf_bildschirm_begrenzen`), Test
+  über die Schriftstufen des Projekts und mehrere Skalierungen.
+- UML.md (Klassen, neuer Ablauf 10a), `docs/HANDBUCH.md` (Abschnitt 12), `README.md`, `Architektur.md`,
+  `Modulreferenz.md` nachgezogen; alle Mermaid-Diagramme mit mmdc geprüft (ein altes Semikolon im
+  Ablauf 11/12 behoben).
+- Offen: (1) Container-Kette (Caddy, Healthcheck) nie gestartet, erste echte Prüfung ist die CI.
+  (2) Screenshots aufgenommen (`tools/screenshots.py`, neues Bild `handbuch_web_dialoge`):
+  `handbuch_datensicherung.png` neu mit Gruppe „Web-Version“, `handbuch_web_verbindung.png`,
+  `handbuch_web_bericht.png`; im Handbuch eingebunden. Die Bestätigung „Ins Web veröffentlichen“ ist
+  ein Meldungsfenster und hat kein Bild. Nach dem Versionsbump alle Bilder noch einmal aufnehmen. (3) Web-Formulare zum Veröffentlichen/
+  Zurückholen entfallen erst nach Bewährung. (4) Vorschlag, nicht umgesetzt: `test_web_sync` in die
+  Testliste in `CLAUDE.md` (dann `AGENTS.md` per `python test_agents_spiegel.py --schreiben`) und in
+  die SHS Test Suite aufnehmen. (5) Hochgeladen wird die ganze Termin-Datei, übernommen werden nur
+  teilnehmende Teilnehmer; Datensparsamkeit vor dem Upload ggf. später. (6) Test unter hoher
+  Rechnerlast sporadisch rot beobachtet, in ruhigen Läufen nie; in der CI beobachten.
+- Demoprüfung (Marco): Schritt „16. Richter am Tablet“ in `desktop_demo_schritte.py` nennt jetzt die
+  Gruppe „Web-Version“ im Reiter „Datensicherung“ (in der Demo gesperrt); `test_gui_demo.py` grün.
+- Nach der Verifikation mit Marco entschieden: Ratenbegrenzung von `/api/login` zählt nur noch je
+  Client-IP (nicht je Benutzername); Flask-Untergrenze 3.1; Ausweich-Image des Zertifikat-Skripts
+  auf Tag und Digest festgelegt; Skript nennt das Ablaufdatum des Zertifikats (10 Jahre). Als
+  Restrisiko vermerkt: der TLS-Schlüssel ist wie die übrigen Secrets für lokale Benutzer des Hosts
+  lesbar (`chmod 644`, nötig, weil der Proxy ohne Capabilities läuft).
+
+## 18.11.2026: Web: Termine-Ordner der Desktop-Version beim Veröffentlichen nennen (Marco)
+
+Rückmeldung: Die Auswahl der Termin-Datei beim Veröffentlichen im Web öffnet nicht den
+Standardordner der Desktop-Version. Ursache: Der Browser bestimmt den Startordner des
+Dateidialogs selbst, eine Webseite kann ihn nicht setzen. Skripte sind per CSP
+(`script-src 'none'`) verboten, daher auch kein „Pfad kopieren“-Knopf. Umsetzung (mit Marco
+abgestimmt): Hinweis unter dem Feld „Termin-Datei“ in `templates/admin_termine.html` mit
+`%USERPROFILE%\SHS-Pruefungsprogramm\Termine` und dem Tipp, ihn in die Adressleiste des
+Dateidialogs einzufügen. Test `test_termin_veroeffentlichen_formular_nennt_desktop_termine_ordner`,
+Satz im Handbuch (Abschnitt Veröffentlichen). Kein Commit, kein Build.
+
 ## 01.11.2026: Lizenzen im Versionsfenster und Lizenzseite im Installer (Marco)
 
 Marcos Rückmeldung: (1) Im Versionsfenster fehlt eine Übersicht über die Lizenzen (war als

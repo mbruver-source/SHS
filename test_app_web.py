@@ -30,10 +30,13 @@ import io
 import os
 import re
 import secrets
+import sqlite3
 import tempfile
 import time
 import unittest
+from html.parser import HTMLParser
 from unittest.mock import patch
+from urllib.parse import quote
 from db_testhilfen import patch_db
 
 from flask.testing import FlaskClient
@@ -1073,6 +1076,12 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIn("Testverein".encode(), antwort.data)
         self.assertEqual(len(self.export_aufrufe), 1)
 
+    def test_termin_veroeffentlichen_formular_nennt_desktop_termine_ordner(self):
+        self._anmelden()
+        antwort = self.client.get("/admin/termine")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(r"SHS-Pruefungsprogramm\Termine".encode(), antwort.data)
+
     def test_termin_veroeffentlichen_ohne_datei_zeigt_fehler(self):
         self._anmelden()
         antwort = self.client.post(
@@ -1311,6 +1320,1239 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertTrue(antwort.headers["Location"].endswith("/"))
 
 
+class _FormularLeser(HTMLParser):
+    """Liest aus der Ergebnistabelle, was ein Browser beim Absenden mitschickte: Eingabefelder
+    (auch versteckte), angehakte Kontrollkästchen und die gewählten Einträge der Auswahllisten."""
+
+    def __init__(self):
+        super().__init__()
+        self.daten: dict[str, str] = {}
+        self._select: str | None = None
+        self._erste_option: str | None = None
+        self._gewaehlt = False
+        self._textarea: str | None = None
+
+    def handle_data(self, data):
+        if self._textarea is not None:
+            self.daten[self._textarea] += data
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "textarea" and a.get("name"):
+            self._textarea = a["name"]
+            self.daten[self._textarea] = ""
+        elif tag == "input" and a.get("name"):
+            if a.get("type") == "checkbox":
+                if "checked" in a:
+                    self.daten[a["name"]] = a.get("value", "on")
+            else:
+                self.daten[a["name"]] = a.get("value") or ""
+        elif tag == "select":
+            self._select, self._erste_option, self._gewaehlt = a.get("name"), None, False
+        elif tag == "option" and self._select:
+            wert = a.get("value", "")
+            if self._erste_option is None:
+                self._erste_option = wert
+            if "selected" in a:
+                self.daten[self._select] = wert
+                self._gewaehlt = True
+
+    def handle_endtag(self, tag):
+        if tag == "textarea":
+            self._textarea = None
+        if tag == "select" and self._select:
+            if not self._gewaehlt:
+                self.daten[self._select] = self._erste_option or ""
+            self._select = None
+
+
+class TestErgebnistabelle(_AppWebTestBasis):
+    """Ergebnistabelle /ergebnisse (Marco 18.11.2026): Anzeige, Filter, Speichern, Validierung,
+    Lost-Update-Schutz, Sperrregel für Disqualifiziert/Abbruch, Rechte und Sicherheit."""
+
+    T, F, B = db.ALLE_DISZIPLINEN  # Trümmerfeld, Flächensuche, Behältnisstrecke
+
+    def setUp(self):
+        super().setUp()
+        self.ed = self._teilnehmer("Muster", "Anna", "Rex", "ED", 1, 1, "Flächensuche")
+        self.dk = self._teilnehmer("Beispiel", "Bernd", "Bello", "DK", 2, 2)
+        self.ed2 = self._teilnehmer("Probe", "Cora", "Luna", "ED", 3, 3, "Trümmerfeld")
+
+    def _teilnehmer(self, nachname, vorname, hund, art, stufe, nr, disziplin=None):
+        return db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname=nachname, vorname=vorname, rufname_hund=hund, art=art, stufe=stufe,
+            disziplin=disziplin, startnummer=nr,
+        ))
+
+    def _seite(self, pfad="/ergebnisse", client=None) -> dict:
+        antwort = (client or self.client).get(pfad)
+        self.assertEqual(antwort.status_code, 200)
+        leser = _FormularLeser()
+        leser.feed(antwort.data.decode())
+        return leser.daten
+
+    def _speichern(self, daten, pfad="/ergebnisse", client=None, **kw):
+        return (client or self.client).post(pfad, data=daten, **kw)
+
+    # --- Anzeige und Filter -------------------------------------------------------
+
+    def test_zeigt_eine_zeile_je_teilnehmenden_teilnehmer_mit_status(self):
+        keine = self._teilnehmer("Fehlt", "Dora", "Nix", "ED", 1, 4, "Trümmerfeld")
+        db.setze_keine_teilnahme(self.conn, keine, True)
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        db.setze_ergebnis_status(self.conn, self.ed2, True, False)
+        self._anmelden()
+        antwort = self.client.get("/ergebnisse")
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        daten = self._seite()
+        for t in (self.ed, self.dk, self.ed2):
+            self.assertIn(f"geladen_{t}", daten)
+        self.assertNotIn(f"geladen_{keine}", daten)
+        self.assertIn("Muster, Anna", html)
+        self.assertNotIn("Fehlt, Dora", html)
+        self.assertEqual(daten[f"suche_{self.F}_{self.ed}"], "40")
+        self.assertEqual(daten[f"anzeige_{self.F}_{self.ed}"], "30")
+        # ED: nur die eigene Disziplin hat Eingabefelder, DK alle drei
+        self.assertNotIn(f"suche_{self.T}_{self.ed}", daten)
+        for d in db.ALLE_DISZIPLINEN:
+            self.assertIn(f"suche_{d}_{self.dk}", daten)
+        self.assertIn(">gespeichert</span>", html)
+        self.assertIn(">disqualifiziert</span>", html)
+        self.assertIn(">noch kein Ergebnis</span>", html)
+        self.assertEqual(daten[f"dq_{self.ed2}"], "1")
+        self.assertIn("Suche (0-60)", html)
+        self.assertIn("Anzeige (0-40)", html)
+        self.assertIn('inputmode="numeric"', html)
+
+    def test_abbruch_status_nennt_den_grund(self):
+        db.setze_ergebnis_status(self.conn, self.dk, False, True, abbruch_grund="krankheit")
+        self._anmelden()
+        daten = self._seite()
+        self.assertEqual(daten[f"abbruch_{self.dk}"], "krankheit")
+        self.assertIn("Abbruch: Krankheit", self.client.get("/ergebnisse").data.decode())
+
+    def test_filter_nach_art_startnummer_und_name(self):
+        self._anmelden()
+        lk_dk = db.leistungsklasse_label(db.get_teilnehmer(self.conn, self.dk))
+        daten = self._seite("/ergebnisse?lk=" + lk_dk.replace(" ", "+"))
+        self.assertEqual([k for k in daten if k.startswith("geladen_")], [f"geladen_{self.dk}"])
+        daten = self._seite("/ergebnisse?nr=3")
+        self.assertEqual([k for k in daten if k.startswith("geladen_")], [f"geladen_{self.ed2}"])
+        daten = self._seite("/ergebnisse?q=rex")
+        self.assertEqual([k for k in daten if k.startswith("geladen_")], [f"geladen_{self.ed}"])
+        daten = self._seite("/ergebnisse?q=muster+anna")
+        self.assertEqual([k for k in daten if k.startswith("geladen_")], [f"geladen_{self.ed}"])
+        # unbekannte Art/LK wird wie „Alle“ behandelt
+        daten = self._seite("/ergebnisse?lk=gibt-es-nicht")
+        self.assertEqual(len([k for k in daten if k.startswith("geladen_")]), 3)
+
+    def test_sortierung_nach_pruefung_und_startnummer(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        # Reihenfolge des Anmeldeformulars: DK, Trümmerfeld, Behältnisse, Fläche
+        positionen = [html.index(name) for name in ("Beispiel, Bernd", "Probe, Cora", "Muster, Anna")]
+        self.assertEqual(positionen, sorted(positionen))
+
+    def test_speichern_behaelt_den_filter(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse?q=rex").data.decode()
+        self.assertIn('action="/ergebnisse?q=rex"', html)
+        daten = self._seite("/ergebnisse?q=rex")
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "50", "35"
+        antwort = self._speichern(daten, "/ergebnisse?q=rex")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("q=rex", antwort.headers["Location"])
+        # die nicht angezeigten Teilnehmer bleiben unangetastet
+        self.assertIsNone(db.get_ergebnis(self.conn, self.dk)["suche_truemmerfeld"])
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 50)
+
+    # --- Speichern ----------------------------------------------------------------
+
+    def test_speichern_ok_fuer_ed_und_dk(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        for d, (s, a) in zip(db.ALLE_DISZIPLINEN, [("50", "30"), ("41", "22"), ("55", "38")]):
+            daten[f"suche_{d}_{self.dk}"], daten[f"anzeige_{d}_{self.dk}"] = s, a
+        antwort = self._speichern(daten, follow_redirects=True)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("2 Zeile(n) gespeichert", antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["anzeige_flaechensuche"], 25)
+        dk = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((dk["suche_truemmerfeld"], dk["anzeige_behaeltnis"]), (50, 38))
+        self.assertEqual(dk["suche_flaechensuche"], 41)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed2)["suche_truemmerfeld"])
+
+    def test_unveraenderte_zeilen_werden_nicht_geschrieben(self):
+        self._anmelden()
+        daten = self._seite()
+        with patch.object(db, "eintragen_ergebnis") as eintragen, patch.object(db, "setze_ergebnis_status") as status:
+            antwort = self._speichern(daten, follow_redirects=True)
+        self.assertIn("Keine Änderungen zu speichern", antwort.data.decode())
+        eintragen.assert_not_called()
+        status.assert_not_called()
+
+    def test_leeren_beider_felder_loescht_das_ergebnis(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"] = daten[f"anzeige_{self.F}_{self.ed}"] = ""
+        self._speichern(daten)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+        self.assertIsNone(ergebnis["anzeige_flaechensuche"])
+
+    def test_maximalwerte_sind_erlaubt_und_ein_mehr_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "60", "40"
+        self._speichern(daten)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 60)
+        for suche, anzeige, text in (("61", "10", "von 0 bis 60"), ("10", "41", "von 0 bis 40"), ("-1", "10", "von 0 bis 60")):
+            daten = self._seite()
+            daten[f"suche_{self.T}_{self.ed2}"], daten[f"anzeige_{self.T}_{self.ed2}"] = suche, anzeige
+            antwort = self._speichern(daten)
+            self.assertEqual(antwort.status_code, 200)
+            self.assertIn(text, antwort.data.decode())
+            self.assertIsNone(db.get_ergebnis(self.conn, self.ed2)["suche_truemmerfeld"])
+
+    def test_validierungsfehler_speichert_nichts_und_behaelt_alle_eingaben(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"  # gültig
+        daten[f"suche_{self.T}_{self.ed2}"], daten[f"anzeige_{self.T}_{self.ed2}"] = "30", ""  # unvollständig
+        antwort = self._speichern(daten)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Es wurde nichts gespeichert", html)
+        self.assertIn("Bitte Suche UND Anzeige eintragen", html)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed2)["suche_truemmerfeld"])
+        neu = _FormularLeser()
+        neu.feed(html)
+        self.assertEqual(neu.daten[f"suche_{self.F}_{self.ed}"], "45")  # gültige Eingabe bleibt stehen
+        self.assertEqual(neu.daten[f"anzeige_{self.F}_{self.ed}"], "25")
+        self.assertEqual(neu.daten[f"suche_{self.T}_{self.ed2}"], "30")
+        # der geladene Stand bleibt der ursprüngliche (leere), nicht die Eingabe
+        self.assertEqual(neu.daten[f"geladen_{self.ed}"], daten[f"geladen_{self.ed}"])
+        # ... und ein zweiter Versuch mit korrigiertem Wert speichert beide Zeilen
+        neu.daten[f"anzeige_{self.T}_{self.ed2}"] = "20"
+        self._speichern(neu.daten)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 45)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed2)["anzeige_truemmerfeld"], 20)
+
+    def test_nicht_numerische_eingabe_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "abc", "10"
+        antwort = self._speichern(daten)
+        self.assertIn("nur Zahlen", antwort.data.decode())
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["anzeige_flaechensuche"])
+
+    # --- Lost Update ---------------------------------------------------------------
+
+    def test_lost_update_zweiter_richter_ueberschreibt_nicht(self):
+        self._anmelden()
+        richter_a = self._seite()
+        richter_b = self._seite()
+        richter_a[f"suche_{self.T}_{self.dk}"], richter_a[f"anzeige_{self.T}_{self.dk}"] = "50", "30"
+        self._speichern(richter_a)
+        # B hat die alte (leere) Seite geladen und ändert dieselbe Disziplin sowie eine andere
+        richter_b[f"suche_{self.T}_{self.dk}"], richter_b[f"anzeige_{self.T}_{self.dk}"] = "10", "10"
+        richter_b[f"suche_{self.F}_{self.dk}"], richter_b[f"anzeige_{self.F}_{self.dk}"] = "44", "22"
+        antwort = self._speichern(richter_b)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("inzwischen von jemand anderem geändert", html)
+        dk = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((dk["suche_truemmerfeld"], dk["anzeige_truemmerfeld"]), (50, 30))  # A bleibt
+        self.assertEqual((dk["suche_flaechensuche"], dk["anzeige_flaechensuche"]), (44, 22))  # B's andere Disziplin
+        neu = _FormularLeser()
+        neu.feed(html)
+        self.assertEqual(neu.daten[f"suche_{self.T}_{self.dk}"], "50")  # aktueller Wert wird gezeigt
+        self.assertIn("aktuell Suche/Anzeige: 50/30", html)
+        self.assertIn("Ihre Eingabe 10/10", html)
+
+    def test_lost_update_bei_status(self):
+        self._anmelden()
+        seite_b = self._seite()
+        db.setze_ergebnis_status(self.conn, self.ed, False, True, abbruch_grund="krankheit")  # Richter A
+        seite_b[f"dq_{self.ed}"] = "1"
+        antwort = self._speichern(seite_b)
+        self.assertIn("inzwischen von jemand anderem geändert", antwort.data.decode())
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["abbruch"]), (0, 1))
+
+    def test_punkte_nach_fremder_disqualifikation_werden_nicht_geschrieben(self):
+        self._anmelden()
+        seite_b = self._seite()
+        db.setze_ergebnis_status(self.conn, self.ed, True, False)  # Richter A
+        seite_b[f"suche_{self.F}_{self.ed}"], seite_b[f"anzeige_{self.F}_{self.ed}"] = "40", "20"
+        antwort = self._speichern(seite_b)
+        self.assertIn("inzwischen von jemand anderem geändert", antwort.data.decode())
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    def test_unveraenderte_felder_ueberschreiben_fremde_aenderungen_nicht(self):
+        self._anmelden()
+        seite_b = self._seite()
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 33, 11)  # Richter A
+        antwort = self._speichern(seite_b)  # B ändert nichts
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 33)
+
+    # --- Disqualifiziert / Abbruch ---------------------------------------------------
+
+    def test_disqualifiziert_wird_gesetzt_und_ignoriert_punkte_der_zeile(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 20)
+        self._anmelden()
+        daten = self._seite()
+        daten[f"dq_{self.ed}"] = "1"
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "5", ""  # würde sonst abgelehnt
+        antwort = self._speichern(daten)
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual(ergebnis["disqualifiziert"], 1)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (40, 20))
+        # gesperrte Zeile: Felder nur lesbar, Punkte bleiben sichtbar
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertRegex(html, rf'name="suche_{self.F}_{self.ed}"[^>]*readonly')
+        # Häkchen wieder weg: Punkte sind weiter da
+        daten = self._seite()
+        del daten[f"dq_{self.ed}"]
+        self._speichern(daten)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["suche_flaechensuche"]), (0, 40))
+
+    def test_abbruch_mit_grund_laesst_teilbewertung_zu(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"abbruch_{self.dk}"] = "verletzung_hund"
+        daten[f"suche_{self.T}_{self.dk}"], daten[f"anzeige_{self.T}_{self.dk}"] = "30", "20"
+        self._speichern(daten)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((ergebnis["abbruch"], ergebnis["abbruch_grund"]), (1, "verletzung_hund"))
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 30)
+        # Abbruch zurücknehmen
+        daten = self._seite()
+        daten[f"abbruch_{self.dk}"] = ""
+        self._speichern(daten)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((ergebnis["abbruch"], ergebnis["abbruch_grund"]), (0, None))
+
+    def test_abbruch_ohne_grund_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"abbruch_{self.ed}"] = "ohne_grund"
+        antwort = self._speichern(daten)
+        self.assertIn("Abbruch braucht einen Grund", antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["abbruch"], 0)
+
+    def test_unbekannter_abbruchgrund_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"abbruch_{self.ed}"] = "Quatsch"
+        antwort = self._speichern(daten)
+        self.assertIn("Unbekannter Abbruchgrund", antwort.data.decode())
+
+    def test_alter_abbruch_ohne_grund_bleibt_erhalten_und_sperrt_punkte(self):
+        self.conn.execute("UPDATE ergebnisse SET abbruch = 1, abbruch_grund = NULL WHERE teilnehmer_id = ?", (self.ed,))
+        self.conn.commit()
+        self._anmelden()
+        daten = self._seite()
+        self.assertEqual(daten[f"abbruch_{self.ed}"], "ohne_grund")
+        self.assertIn("Abbruch (ohne Grund, Altdaten)", self.client.get("/ergebnisse").data.decode())
+        self.assertEqual(self._speichern(daten).status_code, 302)  # unverändert: kein Fehler
+        daten[f"dq_{self.ed}"] = "1"
+        self._speichern(daten)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["abbruch"], ergebnis["abbruch_grund"]), (1, 1, None))
+
+    # --- Rechte und Sicherheit -------------------------------------------------------
+
+    def test_nicht_angemeldet_wird_zum_login_geleitet(self):
+        antwort = self.client.get("/ergebnisse")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(antwort.headers["Location"].endswith("/"))
+        antwort = self.client.post("/ergebnisse", data={f"geladen_{self.ed}": "x"})
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    def test_ohne_gewaehlten_termin_geht_es_zur_terminauswahl(self):
+        self.termine = [_termin_info(_TEST_SCHEMA), _termin_info("termin_zwei", id=2)]
+        self._anmelden()
+        antwort = self.client.get("/ergebnisse")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/termin-waehlen", antwort.headers["Location"])
+
+    def test_post_ohne_csrf_token_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        daten.pop("csrf_token")
+        # FlaskClient.post direkt: umgeht das automatische Token des _CsrfTestClient
+        antwort = FlaskClient.post(self.client, "/ergebnisse", data=daten)
+        self.assertEqual(antwort.status_code, 403)
+        antwort = FlaskClient.post(self.client, "/ergebnisse", data={**daten, "csrf_token": "falsch"})
+        self.assertEqual(antwort.status_code, 403)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    def test_viele_formularfelder_nur_fuer_angemeldete(self):
+        felder = {f"feld_{n}": "1" for n in range(1500)}  # über Werkzeugs Standardgrenze (1000)
+        # Nicht angemeldet: es gelten die Standardgrenzen, die Anfrage wird abgelehnt, bevor das
+        # CSRF-Token zählt (413 statt 403).
+        # (Die Feldgrenze gilt nur für multipart-Formulare, wie sie die Tabelle sendet.)
+        antwort = FlaskClient.post(
+            app_web.app.test_client(), "/ergebnisse", data=felder, content_type="multipart/form-data")
+        self.assertEqual(antwort.status_code, 413)
+        # Angemeldet: die höhere Grenze gilt, die Anfrage kommt bis zur normalen Prüfung.
+        self._anmelden()
+        antwort = FlaskClient.post(self.client, "/ergebnisse", data=felder, content_type="multipart/form-data")
+        self.assertEqual(antwort.status_code, 403)  # CSRF-Token fehlt, aber nicht 413
+
+    def test_rolle_eintragen_darf_die_tabelle_nutzen(self):
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True)
+        with self.client.session_transaction() as sitzung:
+            self.assertEqual(sitzung.get("benutzername"), "helfer")
+            self.assertFalse(sitzung.get("ist_admin"))
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        daten[f"abbruch_{self.dk}"] = "ungehorsam"
+        self.assertEqual(self._speichern(daten).status_code, 302)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 45)
+        self.assertEqual(db.get_ergebnis(self.conn, self.dk)["abbruch_grund"], "ungehorsam")
+
+    def test_fremde_oder_nicht_teilnehmende_ids_werden_ignoriert(self):
+        keine = self._teilnehmer("Fehlt", "Dora", "Nix", "ED", 1, 4, "Trümmerfeld")
+        db.setze_keine_teilnahme(self.conn, keine, True)
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        for fremd in (999999, keine):
+            daten[f"geladen_{fremd}"] = ",|0|"
+            daten[f"suche_{self.T}_{fremd}"], daten[f"anzeige_{self.T}_{fremd}"] = "10", "10"
+            daten[f"dq_{fremd}"] = "1"
+        daten["geladen_abc"] = "x"
+        daten["geladen_-5"] = "x"
+        antwort = self._speichern(daten)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("1 Zeile(n) gespeichert", html)
+        self.assertIn("2 Zeile(n) gehören nicht (mehr) zu diesem Termin", html)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 45)
+        ergebnis = db.get_ergebnis(self.conn, keine)
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["suche_truemmerfeld"]), (0, None))
+        self.assertIsNone(db.get_ergebnis(self.conn, 999999))
+
+    def test_manipulierte_geladen_felder_fuehren_nicht_zum_absturz(self):
+        self._anmelden()
+        daten = self._seite()
+        for kaputt in ("", "quatsch", "1,2|3,4|5,6|1|x", "|||"):
+            daten[f"geladen_{self.dk}"] = kaputt
+            daten[f"suche_{self.T}_{self.dk}"], daten[f"anzeige_{self.T}_{self.dk}"] = "11", "12"
+            self.assertEqual(self._speichern(daten).status_code, 302)
+            self.assertEqual(db.get_ergebnis(self.conn, self.dk)["suche_truemmerfeld"], 11)
+
+    def test_tabelle_laesst_sich_ohne_javascript_und_mit_festem_kopf_ausliefern(self):
+        self._anmelden()
+        antwort = self.client.get("/ergebnisse")
+        html = antwort.data.decode()
+        self.assertNotIn("<script", html)
+        self.assertIn("position: sticky", html)
+        self.assertIn("overflow-x: auto", html)
+        self.assertIn("script-src 'none'", antwort.headers["Content-Security-Policy"])
+
+    def test_navigation_und_links_zwischen_liste_und_tabelle(self):
+        self._anmelden()
+        liste = self.client.get("/teilnehmer").data.decode()
+        self.assertIn('href="/ergebnisse"', liste)
+        tabelle = self.client.get("/ergebnisse").data.decode()
+        self.assertIn('href="/teilnehmer"', tabelle)
+
+    # --- Große Zahl Zeilen -----------------------------------------------------------
+
+    def test_viele_zeilen_werden_in_einer_transaktion_gespeichert(self):
+        for i in range(250):
+            self._teilnehmer(f"Viel{i:03d}", "X", f"Hund{i}", "DK", 1, 100 + i)
+        self._anmelden()
+        daten = self._seite()
+        ids = [int(k[len("geladen_"):]) for k in daten if k.startswith("geladen_")]
+        self.assertEqual(len(ids), 253)
+        self.assertGreater(len(daten), 1000)  # mehr als Werkzeugs Standardgrenze für Formularfelder
+        for tid in ids:
+            daten[f"suche_{self.T}_{tid}"], daten[f"anzeige_{self.T}_{tid}"] = "20", "10"
+        antwort = self._speichern(daten, follow_redirects=True)
+        self.assertEqual(antwort.status_code, 200)
+        # alle außer self.ed (ED Flächensuche: das Feld für Trümmerfeld gibt es dort nicht)
+        self.assertIn("252 Zeile(n) gespeichert", antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, max(ids))["suche_truemmerfeld"], 20)
+
+    def test_sammelspeichern_rollt_bei_einem_fehler_alles_zurueck(self):
+        for i in range(210):
+            self._teilnehmer(f"Viel{i:03d}", "X", f"Hund{i}", "ED", 1, 100 + i, "Trümmerfeld")
+        self._anmelden()
+        daten = self._seite()
+        ids = [int(k[len("geladen_"):]) for k in daten if k.startswith("geladen_")]
+        for tid in ids:
+            daten[f"suche_{self.T}_{tid}"], daten[f"anzeige_{self.T}_{tid}"] = "20", "10"
+        echt = db.eintragen_ergebnis
+        zaehler = {"n": 0}
+
+        def fehlerhaft(*args, **kwargs):
+            zaehler["n"] += 1
+            if zaehler["n"] == 100:  # CHECK-Verletzung mitten im Sammelspeichern
+                return echt(args[0], args[1], args[2], 999, 999, **kwargs)
+            return echt(*args, **kwargs)
+
+        with patch.object(db, "eintragen_ergebnis", fehlerhaft), self.assertRaises(sqlite3.IntegrityError):
+            self._speichern(daten)
+        gespeichert = [r for r in db.ergebnisse_je_teilnehmer(self.conn).values() if r["suche_truemmerfeld"] is not None]
+        self.assertEqual(gespeichert, [])
+
+
+class TestBewertungsbogen(_AppWebTestBasis):
+    """Online-Bewertungsbogen /bewertungsbogen/<id>/<Disziplin> (Marco 18.11.2026): Anzeige, Speichern
+    in die Ergebnisspalten, Validierung, Lost-Update-Schutz, Notiz, Rechte und die Knöpfe in der
+    Ergebnistabelle."""
+
+    T, F, B = db.ALLE_DISZIPLINEN  # Trümmerfeld, Flächensuche, Behältnisstrecke
+
+    def setUp(self):
+        super().setUp()
+        self.ed = self._teilnehmer("Muster", "Anna", "Rex", "ED", 1, 1, "Flächensuche")
+        self.dk = self._teilnehmer("Beispiel", "Bernd", "Bello", "DK", 2, 2)
+        self.ed2 = self._teilnehmer("Probe", "Cora", "Luna", "ED", 3, 3, "Trümmerfeld")
+        self.conn.execute(
+            "UPDATE teilnehmer SET gegenstand_1 = ?, gegenstand_1_disziplin = ? WHERE id = ?",
+            ("Metallröhrchen", self.F, self.ed))
+        self.conn.execute(
+            "UPDATE teilnehmer SET gegenstand_1 = ?, gegenstand_1_disziplin = ?, gegenstand_2 = ?, gegenstand_2_disziplin = ? WHERE id = ?",
+            ("Holzwürfel", self.T, "Stoffball", self.B, self.dk))
+        self.conn.commit()
+
+    def _teilnehmer(self, nachname, vorname, hund, art, stufe, nr, disziplin=None):
+        return db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname=nachname, vorname=vorname, rufname_hund=hund, art=art, stufe=stufe,
+            disziplin=disziplin, startnummer=nr,
+        ))
+
+    @staticmethod
+    def _pfad(tid, disziplin, filter_=""):
+        return f"/bewertungsbogen/{tid}/{quote(disziplin)}{filter_}"
+
+    def _bogen(self, tid, disziplin, client=None) -> dict:
+        antwort = (client or self.client).get(self._pfad(tid, disziplin))
+        self.assertEqual(antwort.status_code, 200)
+        leser = _FormularLeser()
+        leser.feed(antwort.data.decode())
+        return leser.daten
+
+    def _senden(self, daten, tid, disziplin, **kw):
+        return self.client.post(self._pfad(tid, disziplin), data=daten, **kw)
+
+    def _punkte(self, daten, tid, disziplin, suche, anzeige):
+        daten[f"suche_{disziplin}_{tid}"], daten[f"anzeige_{disziplin}_{tid}"] = suche, anzeige
+
+    # --- Anzeige ---------------------------------------------------------------------
+
+    def test_zeigt_den_bogen_einer_ed_disziplin(self):
+        self._anmelden()
+        antwort = self.client.get(self._pfad(self.ed, self.F))
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Bewertungsbogen SHS – Spürhundsport", html)
+        for text in ("Muster, Anna", "Rex", "Flächensuche", "Metallröhrchen", "Suchleistung – Punktzahl (0-60)",
+                     "Anzeige – Punktzahl (0-40)", "Disqualifiziert", "Notiz zum Bogen (Position Gegenstand, Besonderheiten)",
+                     "Speichern und zurück zur Tabelle"):
+            self.assertIn(text, html)
+        self.assertIn("Gesamtpunktzahl Flächensuche", html)
+        daten = self._bogen(self.ed, self.F)
+        for name in (f"suche_{self.F}_{self.ed}", f"anzeige_{self.F}_{self.ed}", f"geladen_{self.ed}",
+                     f"geladen_notiz_{self.ed}", f"notiz_{self.ed}", f"abbruch_{self.ed}", "csrf_token"):
+            self.assertIn(name, daten)
+
+    def test_zeigt_bei_dk_nur_die_gewaehlte_disziplin_mit_ihrem_gegenstand(self):
+        self._anmelden()
+        html = self.client.get(self._pfad(self.dk, self.T)).data.decode()
+        self.assertIn("Holzwürfel", html)
+        self.assertNotIn("Stoffball", html)
+        daten = self._bogen(self.dk, self.T)
+        self.assertIn(f"suche_{self.T}_{self.dk}", daten)
+        self.assertNotIn(f"suche_{self.F}_{self.dk}", daten)
+        self.assertNotIn(f"suche_{self.B}_{self.dk}", daten)
+        self.assertIn("Stoffball", self.client.get(self._pfad(self.dk, self.B)).data.decode())
+        # ohne zugeordneten Gegenstand
+        self.assertIn("nicht hinterlegt", self.client.get(self._pfad(self.dk, self.F)).data.decode())
+
+    def test_zeigt_gespeicherte_werte_und_notiz(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        db.setze_notiz(self.conn, self.ed, self.F, "Ecke links hinten")
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self.assertEqual((daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"]), ("40", "30"))
+        self.assertEqual(daten[f"notiz_{self.ed}"], "Ecke links hinten")
+        self.assertEqual(daten[f"geladen_notiz_{self.ed}"], "Ecke links hinten")
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertRegex(html, r"Gesamtpunktzahl Flächensuche:\s*<strong>70</strong>")
+
+    def test_ist_ohne_javascript_und_mit_notizfeld_grenze(self):
+        self._anmelden()
+        antwort = self.client.get(self._pfad(self.ed, self.F))
+        html = antwort.data.decode()
+        self.assertNotIn("<script", html)
+        self.assertIn("script-src 'none'", antwort.headers["Content-Security-Policy"])
+        self.assertIn(f'maxlength="{db.NOTIZ_MAX}"', html)
+
+    def test_falsche_disziplin_fremde_id_und_nicht_teilnehmende_sind_404(self):
+        keine = self._teilnehmer("Fehlt", "Dora", "Nix", "ED", 1, 4, "Trümmerfeld")
+        db.setze_keine_teilnahme(self.conn, keine, True)
+        self._anmelden()
+        for tid, disziplin in ((self.ed, self.T), (self.ed, self.B), (self.ed2, self.F), (self.dk, "Quatsch"),
+                               (999999, self.T), (keine, self.T)):
+            self.assertEqual(self.client.get(self._pfad(tid, disziplin)).status_code, 404, (tid, disziplin))
+            self.assertEqual(self.client.post(self._pfad(tid, disziplin), data={}).status_code, 404, (tid, disziplin))
+
+    # --- Speichern -------------------------------------------------------------------
+
+    def test_speichern_schreibt_punkte_in_die_ergebnisspalten_und_zeigt_gesamt_und_wertnote(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "55", "35")
+        antwort = self._senden(daten, self.ed, self.F)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn(self._pfad(self.ed, self.F), antwort.headers["Location"])
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (55, 35))
+        html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn("Gespeichert.", html)
+        self.assertRegex(html, r"Gesamtpunktzahl Flächensuche:\s*<strong>90</strong>")
+        self.assertIn("Wertnote Flächensuche", html)
+        self.assertIn("gespeichert", html)
+        # dieselben Werte stehen in der Ergebnistabelle
+        tabelle = _FormularLeser()
+        tabelle.feed(self.client.get("/ergebnisse").data.decode())
+        self.assertEqual((tabelle.daten[f"suche_{self.F}_{self.ed}"], tabelle.daten[f"anzeige_{self.F}_{self.ed}"]), ("55", "35"))
+
+    def test_speichern_und_zurueck_leitet_zur_zeile_in_der_tabelle(self):
+        self._anmelden()
+        daten = self._bogen(self.ed2, self.T)
+        self._punkte(daten, self.ed2, self.T, "40", "20")
+        antwort = self._senden({**daten, "weiter": "tabelle"}, self.ed2, self.T)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(antwort.headers["Location"].endswith(f"#zeile-{self.ed2}"), antwort.headers["Location"])
+        self.assertIn("/ergebnisse", antwort.headers["Location"])
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed2)["suche_truemmerfeld"], 40)
+
+    def test_filter_der_tabelle_bleibt_erhalten(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        antwort = self._senden({**daten, "weiter": "tabelle"}, self.ed, self.F)  # ohne Filter
+        self.assertNotIn("q=", antwort.headers["Location"])
+        html = self.client.get(self._pfad(self.ed, self.F, "?q=rex")).data.decode()
+        self.assertIn(f'action="{self._pfad(self.ed, self.F, "?q=rex")}"', html)
+        self.assertIn('href="/ergebnisse?q=rex#zeile-', html)
+        antwort = self.client.post(self._pfad(self.ed, self.F, "?q=rex"), data={**daten, "weiter": "tabelle"})
+        self.assertIn("q=rex", antwort.headers["Location"])
+
+    def test_dk_speichern_veraendert_nur_diese_disziplin(self):
+        db.eintragen_ergebnis(self.conn, self.dk, self.F, 44, 22)
+        db.eintragen_ergebnis(self.conn, self.dk, self.B, 50, 30)
+        self._anmelden()
+        daten = self._bogen(self.dk, self.T)
+        self._punkte(daten, self.dk, self.T, "60", "40")
+        self._senden(daten, self.dk, self.T)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((ergebnis["suche_truemmerfeld"], ergebnis["anzeige_truemmerfeld"]), (60, 40))
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (44, 22))
+        self.assertEqual((ergebnis["suche_behaeltnis"], ergebnis["anzeige_behaeltnis"]), (50, 30))
+
+    def test_dk_wertnote_erst_wenn_alle_drei_disziplinen_vollstaendig_sind(self):
+        self._anmelden()
+        for d, (s, a) in ((self.T, ("50", "30")), (self.F, ("45", "30"))):
+            daten = self._bogen(self.dk, d)
+            self._punkte(daten, self.dk, d, s, a)
+            self._senden(daten, self.dk, d)
+        html = self.client.get(self._pfad(self.dk, self.F)).data.decode()
+        self.assertRegex(html, r"Gesamtpunktzahl Flächensuche:\s*<strong>75</strong>")
+        self.assertNotIn("Wertnote Dreikampf", html)
+        self.assertIn("sobald für alle drei Disziplinen", html)
+        daten = self._bogen(self.dk, self.B)
+        self._punkte(daten, self.dk, self.B, "50", "30")
+        self._senden(daten, self.dk, self.B)
+        html = self.client.get(self._pfad(self.dk, self.B)).data.decode()
+        self.assertIn("Wertnote Dreikampf", html)
+        self.assertNotIn("sobald für alle drei Disziplinen", html)
+
+    def test_leeren_beider_felder_loescht_die_punkte(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "", "")
+        self._senden(daten, self.ed, self.F)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (None, None))
+
+    def test_unveraendert_speichern_schreibt_nichts(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        with patch.object(db, "eintragen_ergebnis") as eintragen, patch.object(db, "setze_ergebnis_status") as status, \
+                patch.object(db, "setze_notiz") as notiz:
+            antwort = self._senden(daten, self.ed, self.F, follow_redirects=True)
+        self.assertIn("Keine Änderungen zu speichern", antwort.data.decode())
+        eintragen.assert_not_called()
+        status.assert_not_called()
+        notiz.assert_not_called()
+
+    # --- Validierung -----------------------------------------------------------------
+
+    def test_maximalwerte_gehen_und_ein_mehr_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "60", "40")
+        self._senden(daten, self.ed, self.F)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 60)
+        for suche, anzeige, text in (("61", "10", "von 0 bis 60"), ("10", "41", "von 0 bis 40"), ("-1", "10", "von 0 bis 60"),
+                                     ("abc", "10", "nur Zahlen")):
+            daten = self._bogen(self.ed2, self.T)
+            self._punkte(daten, self.ed2, self.T, suche, anzeige)
+            antwort = self._senden(daten, self.ed2, self.T)
+            self.assertEqual(antwort.status_code, 200)
+            self.assertIn(text, antwort.data.decode())
+            self.assertIsNone(db.get_ergebnis(self.conn, self.ed2)["suche_truemmerfeld"])
+
+    def test_nur_eines_von_beiden_wird_abgelehnt_und_die_eingaben_bleiben(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "30", "")
+        daten[f"notiz_{self.ed}"] = "bleibt stehen"
+        antwort = self._senden(daten, self.ed, self.F)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Es wurde nichts gespeichert", html)
+        self.assertIn("Bitte Suche UND Anzeige eintragen", html)
+        neu = _FormularLeser()
+        neu.feed(html)
+        self.assertEqual(neu.daten[f"suche_{self.F}_{self.ed}"], "30")
+        self.assertEqual(neu.daten[f"notiz_{self.ed}"], "bleibt stehen")
+        self.assertEqual(neu.daten[f"geladen_{self.ed}"], daten[f"geladen_{self.ed}"])
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+        self.assertIsNone(ergebnis[db.NOTIZ_SPALTEN[self.F]])  # auch die Notiz wurde nicht gespeichert
+        # zweiter Versuch mit korrigiertem Wert
+        neu.daten[f"anzeige_{self.F}_{self.ed}"] = "20"
+        self._senden(neu.daten, self.ed, self.F)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (30, 20))
+        self.assertEqual(ergebnis[db.NOTIZ_SPALTEN[self.F]], "bleibt stehen")
+
+    # --- Lost Update -----------------------------------------------------------------
+
+    def test_lost_update_bei_den_punkten_ueberschreibt_nichts(self):
+        self._anmelden()
+        richter_b = self._bogen(self.dk, self.T)
+        db.eintragen_ergebnis(self.conn, self.dk, self.T, 50, 30)  # Richter A war schneller
+        self._punkte(richter_b, self.dk, self.T, "10", "10")
+        antwort = self._senden(richter_b, self.dk, self.T)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("inzwischen von jemand anderem geändert", html)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((ergebnis["suche_truemmerfeld"], ergebnis["anzeige_truemmerfeld"]), (50, 30))
+        neu = _FormularLeser()
+        neu.feed(html)
+        self.assertEqual(neu.daten[f"suche_{self.T}_{self.dk}"], "50")  # aktueller Stand wird gezeigt
+
+    def test_lost_update_bei_der_notiz(self):
+        self._anmelden()
+        richter_a = self._bogen(self.ed, self.F)
+        richter_b = self._bogen(self.ed, self.F)
+        richter_a[f"notiz_{self.ed}"] = "Notiz von A"
+        self._senden(richter_a, self.ed, self.F)
+        richter_b[f"notiz_{self.ed}"] = "Notiz von B"
+        antwort = self._senden(richter_b, self.ed, self.F)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Die Notiz wurde inzwischen von jemand anderem geändert", html)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], "Notiz von A")
+        neu = _FormularLeser()
+        neu.feed(html)
+        self.assertEqual(neu.daten[f"notiz_{self.ed}"], "Notiz von A")
+
+    def test_unveraenderte_notiz_ueberschreibt_fremde_aenderung_nicht(self):
+        self._anmelden()
+        richter_b = self._bogen(self.ed, self.F)
+        db.setze_notiz(self.conn, self.ed, self.F, "Notiz von A")
+        self._punkte(richter_b, self.ed, self.F, "40", "20")  # B ändert nur Punkte
+        self.assertEqual(self._senden(richter_b, self.ed, self.F).status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual(ergebnis[db.NOTIZ_SPALTEN[self.F]], "Notiz von A")
+        self.assertEqual(ergebnis["suche_flaechensuche"], 40)
+
+    def test_punkte_nach_fremder_disqualifikation_werden_nicht_geschrieben(self):
+        self._anmelden()
+        richter_b = self._bogen(self.ed, self.F)
+        db.setze_ergebnis_status(self.conn, self.ed, True, False)
+        self._punkte(richter_b, self.ed, self.F, "40", "20")
+        antwort = self._senden(richter_b, self.ed, self.F)
+        self.assertIn("inzwischen von jemand anderem geändert", antwort.data.decode())
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    # --- Disqualifiziert / Abbruch ---------------------------------------------------
+
+    def test_disqualifiziert_sperrt_die_punkte(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 20)
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        daten[f"dq_{self.ed}"] = "1"
+        self._punkte(daten, self.ed, self.F, "5", "")  # würde sonst abgelehnt, ist aber gesperrt
+        self.assertEqual(self._senden(daten, self.ed, self.F).status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["suche_flaechensuche"]), (1, 40))
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertRegex(html, rf'name="suche_{self.F}_{self.ed}"[^>]*readonly')
+        self.assertIn("disqualifiziert", html)
+        self.assertNotIn("Wertnote", html)
+
+    def test_abbruch_mit_grund_laesst_teilbewertung_zu_ohne_grund_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._bogen(self.dk, self.T)
+        daten[f"abbruch_{self.dk}"] = "ohne_grund"
+        antwort = self._senden(daten, self.dk, self.T)
+        self.assertIn("Abbruch braucht einen Grund", antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, self.dk)["abbruch"], 0)
+        daten[f"abbruch_{self.dk}"] = "verletzung_hund"
+        self._punkte(daten, self.dk, self.T, "30", "20")
+        self.assertEqual(self._senden(daten, self.dk, self.T).status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual((ergebnis["abbruch"], ergebnis["abbruch_grund"], ergebnis["suche_truemmerfeld"]),
+                         (1, "verletzung_hund", 30))
+        self.assertIn("Abbruch: Verletzung", self.client.get(self._pfad(self.dk, self.T)).data.decode())
+        daten = self._bogen(self.dk, self.T)
+        daten[f"abbruch_{self.dk}"] = "Quatsch"
+        self.assertIn("Unbekannter Abbruchgrund", self._senden(daten, self.dk, self.T).data.decode())
+
+    # --- Notiz -----------------------------------------------------------------------
+
+    def test_notiz_wird_je_disziplin_gespeichert_getrimmt_und_geleert(self):
+        self._anmelden()
+        daten = self._bogen(self.dk, self.T)
+        daten[f"notiz_{self.dk}"] = "  Zeile 1\r\nZeile 2  "
+        self._senden(daten, self.dk, self.T)
+        ergebnis = db.get_ergebnis(self.conn, self.dk)
+        self.assertEqual(ergebnis[db.NOTIZ_SPALTEN[self.T]], "Zeile 1\nZeile 2")
+        self.assertIsNone(ergebnis[db.NOTIZ_SPALTEN[self.F]])
+        # der Bogen zeigt sie wieder, ein erneutes Speichern ohne Änderung schreibt nichts
+        daten = self._bogen(self.dk, self.T)
+        self.assertEqual(daten[f"notiz_{self.dk}"], "Zeile 1\nZeile 2")
+        with patch.object(db, "setze_notiz") as notiz:
+            daten[f"notiz_{self.dk}"] = "Zeile 1\r\nZeile 2"  # so schickt ein Browser sie zurück
+            self._senden(daten, self.dk, self.T)
+        notiz.assert_not_called()
+        daten[f"notiz_{self.dk}"] = "   "
+        self._senden(daten, self.dk, self.T)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.dk)[db.NOTIZ_SPALTEN[self.T]])
+
+    def test_zu_lange_notiz_wird_abgelehnt_und_genau_die_grenze_geht(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "40", "20")
+        daten[f"notiz_{self.ed}"] = "x" * (db.NOTIZ_MAX + 1)
+        antwort = self._senden(daten, self.ed, self.F)
+        html = antwort.data.decode()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Die Notiz ist zu lang", html)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertIsNone(ergebnis[db.NOTIZ_SPALTEN[self.F]])
+        self.assertIsNone(ergebnis["suche_flaechensuche"])  # auch die Punkte wurden nicht gespeichert
+        daten[f"notiz_{self.ed}"] = "x" * db.NOTIZ_MAX
+        self.assertEqual(self._senden(daten, self.ed, self.F).status_code, 302)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], "x" * db.NOTIZ_MAX)
+
+    def test_notiz_wird_html_maskiert(self):
+        db.setze_notiz(self.conn, self.ed, self.F, '<b>"fett"</b> & mehr')
+        self._anmelden()
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertNotIn("<b>", html)
+        self.assertEqual(self._bogen(self.ed, self.F)[f"notiz_{self.ed}"], '<b>"fett"</b> & mehr')
+
+    def test_notiz_mit_skript_und_textarea_ende_kann_den_bogen_nicht_aufbrechen(self):
+        boese = '</textarea><script>alert(1)</script><img src=x onerror=alert(2)>'
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        daten[f"notiz_{self.ed}"] = boese
+        self.assertEqual(self._senden(daten, self.ed, self.F).status_code, 302)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], boese)
+        for pfad in (self._pfad(self.ed, self.F), "/ergebnisse"):
+            html = self.client.get(pfad).data.decode()
+            self.assertNotIn("<script>alert(1)", html, pfad)
+            self.assertNotIn("<img src=x", html, pfad)
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertIn("&lt;/textarea&gt;&lt;script&gt;", html)
+        # Der Bogen liefert den Text unverändert zurück (der Browser setzt ihn wieder ein).
+        self.assertEqual(self._bogen(self.ed, self.F)[f"notiz_{self.ed}"], boese)
+
+    def test_notiz_mit_unicode_und_umbruechen_bleibt_erhalten(self):
+        text = "Größe ✓ – Straße, Zeile 2: 犬\nZeile 3"
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        daten[f"notiz_{self.ed}"] = text.replace("\n", "\r\n")  # so sendet ein Browser Zeilenumbrüche
+        self._senden(daten, self.ed, self.F)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], text)
+        self.assertEqual(self._bogen(self.ed, self.F)[f"notiz_{self.ed}"], text)
+
+    def test_notiz_ohne_geladen_feld_wird_ohne_konfliktpruefung_geschrieben(self):
+        # Bekannter Randfall (B19): fehlt `geladen_notiz_<id>` (veraltete Seite, gebauter POST), gibt es
+        # keine Konfliktprüfung für die Notiz; das Verhalten ist so gewollt und hier festgehalten.
+        db.setze_notiz(self.conn, self.ed, self.F, "von jemand anderem")
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        daten.pop(f"geladen_notiz_{self.ed}")
+        daten[f"notiz_{self.ed}"] = "meine Notiz"
+        self.assertEqual(self._senden(daten, self.ed, self.F).status_code, 302)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], "meine Notiz")
+
+    # --- Rechte und Sicherheit -------------------------------------------------------
+
+    def test_nicht_angemeldet_wird_zum_login_geleitet(self):
+        antwort = self.client.get(self._pfad(self.ed, self.F))
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(antwort.headers["Location"].endswith("/"))
+        antwort = self.client.post(self._pfad(self.ed, self.F), data={f"suche_{self.F}_{self.ed}": "40"})
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    def test_post_ohne_csrf_token_wird_abgelehnt(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "45", "25")
+        daten.pop("csrf_token")
+        antwort = FlaskClient.post(self.client, self._pfad(self.ed, self.F), data=daten)
+        self.assertEqual(antwort.status_code, 403)
+        antwort = FlaskClient.post(self.client, self._pfad(self.ed, self.F), data={**daten, "csrf_token": "falsch"})
+        self.assertEqual(antwort.status_code, 403)
+        self.assertIsNone(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"])
+
+    def test_rolle_eintragen_darf_den_bogen_nutzen(self):
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True)
+        with self.client.session_transaction() as sitzung:
+            self.assertFalse(sitzung.get("ist_admin"))
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "45", "25")
+        daten[f"notiz_{self.ed}"] = "von Helfer"
+        self.assertEqual(self._senden(daten, self.ed, self.F).status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, self.ed)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis[db.NOTIZ_SPALTEN[self.F]]), (45, "von Helfer"))
+
+    def test_manipulierte_geladen_felder_fuehren_nicht_zum_absturz(self):
+        self._anmelden()
+        daten = self._bogen(self.dk, self.T)
+        self._punkte(daten, self.dk, self.T, "11", "12")
+        for kaputt in ("", "quatsch", "1,2|3,4|5,6|1|x"):
+            daten[f"geladen_{self.dk}"] = kaputt
+            self.assertEqual(self._senden(daten, self.dk, self.T).status_code, 302)
+            self.assertEqual(db.get_ergebnis(self.conn, self.dk)["suche_truemmerfeld"], 11)
+
+    # --- Knöpfe in der Ergebnistabelle -----------------------------------------------
+
+    def test_tabelle_hat_je_aktiver_disziplin_einen_bogen_knopf(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertEqual(html.count(">Bogen</a>"), 1 + 3 + 1)  # ED, DK, ED
+        self.assertIn(f'href="{self._pfad(self.ed, self.F)}"', html)
+        self.assertNotIn(f'href="{self._pfad(self.ed, self.T)}"', html)  # ED: nur die eigene Disziplin
+        for d in db.ALLE_DISZIPLINEN:
+            self.assertIn(f'href="{self._pfad(self.dk, d)}"', html)
+        self.assertIn(f'aria-label="Bewertungsbogen {self.T} öffnen: Beispiel, Bello"', html)
+        self.assertIn("Bewertungsbogen", html)
+        self.assertIn("gehen dabei verloren", html)
+
+    def test_tabelle_hat_zeilenanker_und_gibt_den_filter_an_die_knoepfe_weiter(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        for tid in (self.ed, self.dk, self.ed2):
+            self.assertIn(f'id="zeile-{tid}"', html)
+        html = self.client.get("/ergebnisse?q=rex").data.decode()
+        self.assertEqual(html.count(">Bogen</a>"), 1)
+        self.assertIn(f'href="{self._pfad(self.ed, self.F, "?q=rex")}"', html)
+
+    def test_tabelle_mit_den_knoepfen_bleibt_ohne_javascript(self):
+        self._anmelden()
+        self.assertNotIn("<script", self.client.get("/ergebnisse").data.decode())
+
+    def test_nicht_teilnehmende_haben_keinen_knopf(self):
+        keine = self._teilnehmer("Fehlt", "Dora", "Nix", "ED", 1, 4, "Trümmerfeld")
+        db.setze_keine_teilnahme(self.conn, keine, True)
+        self._anmelden()
+        self.assertNotIn(f"/bewertungsbogen/{keine}/", self.client.get("/ergebnisse").data.decode())
+
+
+try:
+    import reportlab  # noqa: F401 - nur zur Prüfung, ob die PDF-Tests laufen können
+except ImportError:  # pragma: no cover
+    reportlab = None
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover
+    PdfReader = None
+
+
+class TestBoegenPdf(_AppWebTestBasis):
+    """Sammel-PDF der benutzten Bewertungsbögen /ergebnisse/boegen.pdf (Marco 18.11.2026): Rechte,
+    Filter, was als „benutzt“ zählt, Download-Antwort, Fehlerfälle und der Knopf in der Tabelle."""
+
+    T, F, B = db.ALLE_DISZIPLINEN
+    URL = "/ergebnisse/boegen.pdf"
+
+    def setUp(self):
+        super().setUp()
+        db.set_veranstaltung(self.conn, verein="Hundefreunde Köln/Süd", datum="2026-11-18", ort="Köln")
+        self.ed = self._teilnehmer("Muster", "Anna", "Rex", "ED", 1, 1, "Flächensuche")
+        self.dk = self._teilnehmer("Beispiel", "Bernd", "Bello", "DK", 2, 2)
+        self.ed2 = self._teilnehmer("Probe", "Cora", "Luna", "ED", 3, 3, "Trümmerfeld")
+        self.leer = self._teilnehmer("Unbenutzt", "Dora", "Nix", "ED", 1, 4, "Trümmerfeld")
+
+    def _teilnehmer(self, nachname, vorname, hund, art, stufe, nr, disziplin=None):
+        return db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname=nachname, vorname=vorname, rufname_hund=hund, art=art, stufe=stufe,
+            disziplin=disziplin, startnummer=nr,
+        ))
+
+    def _seiten(self, antwort) -> list[str]:
+        return [s.extract_text() for s in PdfReader(io.BytesIO(antwort.data)).pages]
+
+    # --- Rechte -----------------------------------------------------------------------
+
+    def test_ohne_anmeldung_geht_es_zum_login(self):
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertNotIn("pdf", antwort.headers.get("Content-Type", ""))
+
+    def test_ohne_gewaehlten_termin_geht_es_zur_terminauswahl(self):
+        self.termine = [_termin_info(_TEST_SCHEMA), _termin_info("termin_zwei", id=2)]
+        self._anmelden()
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/termin-waehlen", antwort.headers["Location"])
+
+    def test_beide_rollen_duerfen_die_pdf_holen(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True)
+        with self.client.session_transaction() as sitzung:
+            self.assertFalse(sitzung.get("ist_admin"))
+        antwort = self.client.get(self.URL)
+        self.assertNotEqual(antwort.status_code, 403)
+        self.assertNotEqual(antwort.status_code, 500)
+
+    def test_nur_get_ist_erlaubt(self):
+        self._anmelden()
+        self.assertEqual(self.client.post(self.URL).status_code, 405)
+
+    # --- Keine passenden Teilnehmer / Fehler (ohne reportlab pruefbar) ----------------------
+
+    def test_ohne_eintragungen_geht_es_mit_hinweis_zur_tabelle(self):
+        self._anmelden()
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/ergebnisse?boegen=keine", antwort.headers["Location"])
+        html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn("Keine benutzten Bewertungsbögen", html)
+        # nur ein neutraler Hinweis, kein roter Fehler
+        self.assertIn('<div class="karte" role="status">Keine benutzten Bewertungsbögen', html)
+        self.assertNotIn('<div class="fehler" role="alert">Keine benutzten', html)
+
+    def test_filter_ohne_benutzte_boegen_gibt_hinweis_und_behaelt_den_filter(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        antwort = self.client.get(self.URL + "?q=Probe")
+        self.assertEqual(antwort.status_code, 302)
+        ort = antwort.headers["Location"]
+        self.assertIn("boegen=keine", ort)
+        self.assertIn("q=Probe", ort)
+
+    def test_nur_leerraum_notiz_und_nicht_teilnehmende_zaehlen_nicht(self):
+        self.conn.execute("UPDATE ergebnisse SET notiz_flaechensuche = ? WHERE teilnehmer_id = ?", ("  \n ", self.ed))
+        keine = self._teilnehmer("Fehlt", "Eva", "Weg", "ED", 1, 5, "Trümmerfeld")
+        db.eintragen_ergebnis(self.conn, keine, self.T, 40, 30)
+        db.setze_keine_teilnahme(self.conn, keine, True)
+        self.conn.commit()
+        self._anmelden()
+        self.assertIn("boegen=keine", self.client.get(self.URL).headers["Location"])
+
+    def test_fehler_beim_erzeugen_ergibt_hinweis_statt_500(self):
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        import pdf_export  # in diesem Zweig nötig: der Test patcht die Funktion
+        with patch.object(pdf_export, "erstelle_alle_bewertungsboegen_pdf",
+                          side_effect=RuntimeError("geheim: /app/intern.py Zeile 5")), \
+                self.assertLogs(app_web.app.logger, level="ERROR"):  # der Fehler wird nur protokolliert
+            antwort = self.client.get(self.URL)
+            self.assertEqual(antwort.status_code, 302)
+            self.assertIn("boegen=fehler", antwort.headers["Location"])
+            html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn("Die PDF konnte nicht erstellt werden", html)
+        self.assertNotIn("geheim", html)
+        self.assertNotIn("intern.py", html)
+
+    def test_ohne_pdf_modul_startet_die_app_und_meldet_den_fehler(self):
+        """pdf_export wird erst beim Aufruf importiert; fehlt reportlab, gibt es den Hinweis."""
+        import sys
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        with patch.dict(sys.modules, {"pdf_export": None}), \
+                self.assertLogs(app_web.app.logger, level="ERROR"):  # import pdf_export -> ImportError
+            antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("boegen=fehler", antwort.headers["Location"])
+
+    def test_hinweiscodes_in_der_adresse_zeigen_nur_feste_texte(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse?boegen=%3Cscript%3Ealert(1)%3C/script%3E").data.decode()
+        self.assertNotIn("alert(1)", html)
+        self.assertNotIn("Keine benutzten Bewertungsbögen", html)
+
+    def test_app_importiert_pdf_export_nicht_beim_start(self):
+        import subprocess
+        import sys
+        ergebnis = subprocess.run(
+            [sys.executable, "-I", "-c", "import sys; sys.path.insert(0, '.'); import app_web; "
+             "raise SystemExit(1 if 'pdf_export' in sys.modules or 'reportlab' in sys.modules else 0)"],
+            cwd=os.path.dirname(os.path.abspath(__file__)) or ".", capture_output=True, timeout=120)
+        self.assertEqual(ergebnis.returncode, 0, ergebnis.stderr.decode(errors="replace"))
+
+    # --- Die PDF ----------------------------------------------------------------------------
+
+    def test_antwort_ist_ein_pdf_als_anhang_mit_sicherem_dateinamen(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertTrue(antwort.data.startswith(b"%PDF"))
+        self.assertEqual(antwort.mimetype, "application/pdf")
+        disposition = antwort.headers["Content-Disposition"]
+        self.assertTrue(disposition.startswith("attachment"))
+        # secure_filename: ASCII, ohne Leerzeichen, Umlaute und "/" des Vereinsnamens
+        self.assertIn("filename=Bewertungsboegen_Hundefreunde_Koln_Sud_2026-11-18.pdf", disposition)
+        self.assertTrue(disposition.isascii())
+        self.assertEqual(antwort.headers["Cache-Control"], "no-store")
+        self.assertEqual(antwort.headers["X-Content-Type-Options"], "nosniff")
+
+    def test_dateiname_ohne_vereinsangaben_bleibt_gueltig(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.set_veranstaltung(self.conn, verein="äöü /", datum="2026-11-18")
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        self._anmelden()
+        disposition = self.client.get(self.URL).headers["Content-Disposition"]
+        self.assertRegex(disposition, r'filename="?Bewertungsboegen[A-Za-z0-9_.-]*\.pdf"?')
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_nur_benutzte_boegen_dk_zwei_seiten_ed_eine_in_startnummernfolge(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        db.eintragen_ergebnis(self.conn, self.dk, self.T, 55, 35)
+        db.setze_ergebnis_status(self.conn, self.ed2, True, False)  # nur disqualifiziert
+        # self.leer bleibt ohne Eintragung
+        self._anmelden()
+        antwort = self.client.get(self.URL)
+        seiten = self._seiten(antwort)
+        self.assertEqual(len(seiten), 4)  # ED 1 + DK 2 + ED 1
+        text = "\n".join(seiten)
+        for name in ("Muster, Anna", "Beispiel, Bernd", "Probe, Cora"):
+            self.assertIn(name, text)
+        self.assertNotIn("Unbenutzt", text)
+        self.assertLess(text.index("Muster, Anna"), text.index("Beispiel, Bernd"))
+        self.assertLess(text.index("Beispiel, Bernd"), text.index("Probe, Cora"))
+        self.assertIn("Punktzahl: 40", seiten[0])
+        self.assertIn("Punktzahl: 30", seiten[0])
+        self.assertIn("disqualifiziert", text.lower())
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_filter_wirkt_auf_die_pdf(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        db.eintragen_ergebnis(self.conn, self.ed2, self.T, 50, 20)
+        self._anmelden()
+        text = "\n".join(self._seiten(self.client.get(self.URL + "?nr=3")))
+        self.assertIn("Probe, Cora", text)
+        self.assertNotIn("Muster, Anna", text)
+        text = "\n".join(self._seiten(self.client.get(self.URL + "?q=rex")))
+        self.assertIn("Muster, Anna", text)
+        self.assertNotIn("Probe, Cora", text)
+        # unbekannte Art/LK wie in der Tabelle: wie „Alle“
+        text = "\n".join(self._seiten(self.client.get(self.URL + "?lk=gibt-es-nicht")))
+        self.assertIn("Muster, Anna", text)
+        self.assertIn("Probe, Cora", text)
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_notiz_allein_macht_einen_bogen_benutzt_und_erscheint_im_pdf(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.setze_notiz(self.conn, self.ed2, self.T, "Gegenstand hinter dem Reifen")
+        self._anmelden()
+        seiten = self._seiten(self.client.get(self.URL))
+        self.assertEqual(len(seiten), 1)
+        self.assertIn("Probe, Cora", seiten[0])
+        self.assertIn("Notiz:", seiten[0])
+        self.assertIn("Gegenstand hinter dem Reifen", seiten[0])
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_notiz_mit_markup_und_sehr_lange_notiz_brechen_die_pdf_nicht(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.setze_notiz(self.conn, self.ed, self.F, "<b>fett</b> & <i>x</unknown> &amp; <para>")
+        lang = "".join(f"Zeile {n}\n" for n in range(1, 80))[:db.NOTIZ_MAX]
+        db.setze_notiz(self.conn, self.dk, self.T, lang)
+        db.setze_notiz(self.conn, self.dk, self.F, "x" * db.NOTIZ_MAX)  # ein Wort ohne Leerzeichen
+        db.setze_notiz(self.conn, self.dk, self.B, "Ende")
+        self._anmelden()
+        antwort = self.client.get(self.URL)
+        self.assertEqual(antwort.status_code, 200)
+        seiten = self._seiten(antwort)
+        self.assertEqual(len(seiten), 3)  # ED 1 + DK genau 2: auch mit langen Notizen
+        for stueck in ("<b>fett</b> & <i>x</unknown>", "&amp;", "<para>"):  # wörtlich, nicht als Markup gedeutet
+            self.assertIn(stueck, seiten[0])
+        text = "\n".join(seiten)
+        self.assertIn("…", text)
+        self.assertNotIn("Zeile 79", text)  # sehr lange Notiz ist gekürzt
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_dreikampf_hat_auch_mit_abbruch_und_notizen_genau_zwei_seiten(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        for d in db.ALLE_DISZIPLINEN:
+            db.eintragen_ergebnis(self.conn, self.dk, d, 40, 30)
+            db.setze_notiz(self.conn, self.dk, d, "Hund zeigte spät an, Wind von links. " * 12)
+        db.setze_ergebnis_status(self.conn, self.dk, False, True, abbruch_grund="krankheit")
+        self._anmelden()
+        self.assertEqual(len(self._seiten(self.client.get(self.URL + "?nr=2"))), 2)
+
+    # --- Knopf in der Tabelle -----------------------------------------------------------------
+
+    def test_tabelle_hat_den_knopf_mit_filter_und_ohne_javascript(self):
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertIn("Benutzte Bögen als PDF", html)
+        self.assertIn('href="/ergebnisse/boegen.pdf"', html)
+        self.assertIn("Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten", html)
+        self.assertNotIn("<script", html)
+        html = self.client.get("/ergebnisse?q=rex&nr=1").data.decode()
+        self.assertIn('href="/ergebnisse/boegen.pdf?nr=1&amp;q=rex"', html)
+        self.assertIn("für die gefilterten Teilnehmer", html)
+
+
 class TestLizenzseite(_AppWebTestBasis):
     """Öffentliche Seite /lizenzen mit der MIT-Lizenz und den Lizenzen der Fremdkomponenten,
     verlinkt in der Fußzeile jeder Seite (Marco 01.11.2026)."""
@@ -1513,12 +2755,366 @@ class TestCsrfSchutz(_AppWebTestBasis):
         self.assertEqual(self.client.get("/").status_code, 200)
 
 
+class TestApiDesktop(_AppWebTestBasis):
+    """API für den Desktop (/api/, siehe app_web, Abschnitt "API für den Desktop"):
+    Token-Anmeldung, Ratenbegrenzung, Termine veröffentlichen/auflisten, Ergebnisse holen.
+    Läuft mit dem UNVERÄNDERTEN Flask-Test-Client (kein automatisches CSRF-Token) - die
+    API darf gerade keines brauchen."""
+
+    _API_ADMIN = "apiadmin"
+    _API_PASSWORT = "api_passwort_123"
+
+    def setUp(self):
+        super().setUp()
+        app_web.app.test_client_class = FlaskClient
+        self.client = app_web.app.test_client()
+        app_web._login_fehlversuche.clear()
+        db.admin_einrichten(self.conn, self._API_ADMIN, self._API_PASSWORT)
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+
+    def tearDown(self):
+        app_web._login_fehlversuche.clear()
+        super().tearDown()
+
+    def _login(self, benutzername=None, passwort=None, client=None):
+        return (client or self.client).post(
+            "/api/login",
+            json={
+                "benutzername": benutzername or self._API_ADMIN,
+                "passwort": passwort or self._API_PASSWORT,
+            },
+        )
+
+    def _kopf(self, token=None):
+        if token is None:
+            token = self._login().get_json()["token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    # --- Anmeldung --------------------------------------------------------------
+
+    def test_login_liefert_token_und_gueltigkeit(self):
+        antwort = self._login()
+        self.assertEqual(antwort.status_code, 200)
+        daten = antwort.get_json()
+        self.assertIsInstance(daten["token"], str)
+        self.assertEqual(daten["gueltig_sekunden"], 8 * 60 * 60)
+        self.assertEqual(antwort.headers["Cache-Control"], "no-store")
+        # Das Token öffnet die geschützten Routen.
+        self.assertEqual(self.client.get("/api/termine", headers=self._kopf(daten["token"])).status_code, 200)
+
+    def test_login_ohne_csrf_token_und_ohne_cookie_moeglich(self):
+        antwort = self._login()
+        self.assertEqual(antwort.status_code, 200)
+        self.assertNotIn("Set-Cookie", antwort.headers)
+
+    def test_login_mit_falschem_passwort_ergibt_401(self):
+        antwort = self._login(passwort="falsch")
+        self.assertEqual(antwort.status_code, 401)
+        self.assertIn("fehler", antwort.get_json())
+
+    def test_login_mit_unbekanntem_konto_ergibt_401(self):
+        self.assertEqual(self._login(benutzername="gibtsnicht").status_code, 401)
+
+    def test_login_eines_nicht_admins_ergibt_403(self):
+        antwort = self._login(benutzername="helfer", passwort="helferpasswort")
+        self.assertEqual(antwort.status_code, 403)
+        self.assertIn("fehler", antwort.get_json())
+
+    def test_login_ohne_json_ergibt_400(self):
+        self.assertEqual(self.client.post("/api/login", data={"benutzername": "x"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/login", json=["x"]).status_code, 400)
+        self.assertEqual(self.client.post("/api/login", json={"benutzername": "x"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/login", json={"benutzername": 1, "passwort": 2}).status_code, 400)
+
+    def test_ratenbegrenzung_sperrt_die_client_ip(self):
+        for _ in range(app_web._LOGIN_MAX_FEHLVERSUCHE):
+            self.assertEqual(self._login(passwort="falsch").status_code, 401)
+        gesperrt = self._login(passwort="falsch")
+        self.assertEqual(gesperrt.status_code, 429)
+        self.assertGreater(int(gesperrt.headers["Retry-After"]), 0)
+        self.assertIn("fehler", gesperrt.get_json())
+        # Auch das richtige Passwort kommt während der Sperre nicht durch.
+        self.assertEqual(self._login().status_code, 429)
+
+    def test_ratenbegrenzung_zaehlt_nicht_je_benutzername(self):
+        # Fehlversuche einer fremden IP mit dem Admin-Namen sperren den Admin nicht aus.
+        fremd = app_web.app.test_client()
+        for _ in range(app_web._LOGIN_MAX_FEHLVERSUCHE + 2):
+            antwort = fremd.post(
+                "/api/login",
+                json={"benutzername": self._API_ADMIN, "passwort": "falsch"},
+                environ_overrides={"REMOTE_ADDR": "203.0.113.9"},
+            )
+        self.assertEqual(antwort.status_code, 429)
+        self.assertEqual(self._login().status_code, 200)
+
+    def test_ratenbegrenzung_je_client_ip_mit_wechselnden_namen(self):
+        for nummer in range(app_web._LOGIN_MAX_FEHLVERSUCHE):
+            self.assertEqual(self._login(benutzername=f"unbekannt{nummer}", passwort="x").status_code, 401)
+        # Ein weiterer Benutzername von derselben IP ist ebenfalls gesperrt.
+        self.assertEqual(self._login().status_code, 429)
+
+    def test_ratenbegrenzung_laeuft_nach_dem_zeitfenster_ab(self):
+        jetzt = [1000.0]
+        with patch.object(app_web, "_api_zeit", lambda: jetzt[0]):
+            for _ in range(app_web._LOGIN_MAX_FEHLVERSUCHE):
+                self._login(passwort="falsch")
+            self.assertEqual(self._login().status_code, 429)
+            jetzt[0] += app_web._LOGIN_FENSTER_SEKUNDEN + 1
+            self.assertEqual(self._login().status_code, 200)
+
+    def test_erfolgreicher_login_setzt_den_benutzerzaehler_zurueck(self):
+        for _ in range(app_web._LOGIN_MAX_FEHLVERSUCHE - 1):
+            self._login(passwort="falsch")
+        self.assertEqual(self._login().status_code, 200)
+        self.assertEqual(self._login(passwort="falsch").status_code, 401)
+
+    def test_web_login_bleibt_ohne_ratenbegrenzung(self):
+        # Bewusst akzeptiert (CLAUDE.md) - die Begrenzung gilt nur für /api/login.
+        for _ in range(app_web._LOGIN_MAX_FEHLVERSUCHE + 3):
+            antwort = self.client.post("/", data={"benutzername": "x", "passwort": "y"})
+            self.assertNotEqual(antwort.status_code, 429)
+
+    # --- Token-Prüfung ----------------------------------------------------------
+
+    def test_ohne_token_ergibt_401(self):
+        antwort = self.client.get("/api/termine")
+        self.assertEqual(antwort.status_code, 401)
+        self.assertEqual(antwort.headers["WWW-Authenticate"], "Bearer")
+        self.assertIn("fehler", antwort.get_json())
+
+    def test_ungueltiges_token_ergibt_401(self):
+        for kopf in ("Bearer abc", "Bearer ", "Basic abc", "abc", "Bearer " + "x" * 200):
+            antwort = self.client.get("/api/termine", headers={"Authorization": kopf})
+            self.assertEqual(antwort.status_code, 401, kopf)
+
+    def test_token_mit_anderem_salz_ergibt_401(self):
+        from itsdangerous import URLSafeTimedSerializer
+        konto = db.benutzer_stand(self.conn, self._API_ADMIN)
+        fremd = URLSafeTimedSerializer(app_web.app.secret_key, salt="anderes-salz").dumps(
+            {"b": konto["benutzername"], "k": konto["kennung"]}
+        )
+        self.assertEqual(self.client.get("/api/termine", headers=self._kopf(fremd)).status_code, 401)
+
+    def test_abgelaufenes_token_ergibt_401(self):
+        kopf = self._kopf()
+        with patch.object(app_web, "_API_TOKEN_GUELTIGKEIT_SEKUNDEN", -1):
+            self.assertEqual(self.client.get("/api/termine", headers=kopf).status_code, 401)
+
+    def test_token_eines_geloeschten_kontos_ergibt_401(self):
+        db.benutzer_anlegen(self.conn, "zweiter", "zweiterpasswort", ist_admin=True)
+        kopf = self._kopf(self._login("zweiter", "zweiterpasswort").get_json()["token"])
+        self.assertEqual(self.client.get("/api/termine", headers=kopf).status_code, 200)
+        db.benutzer_loeschen(self.conn, "zweiter")
+        self.assertEqual(self.client.get("/api/termine", headers=kopf).status_code, 401)
+
+    def test_token_eines_neu_angelegten_kontos_gleichen_namens_ergibt_401(self):
+        db.benutzer_anlegen(self.conn, "zweiter", "zweiterpasswort", ist_admin=True)
+        kopf = self._kopf(self._login("zweiter", "zweiterpasswort").get_json()["token"])
+        db.benutzer_loeschen(self.conn, "zweiter")
+        db.benutzer_anlegen(self.conn, "zweiter", "zweiterpasswort", ist_admin=True)
+        self.assertEqual(self.client.get("/api/termine", headers=kopf).status_code, 401)
+
+    def test_token_eines_herabgestuften_admins_ergibt_403(self):
+        db.benutzer_anlegen(self.conn, "zweiter", "zweiterpasswort", ist_admin=True)
+        kopf = self._kopf(self._login("zweiter", "zweiterpasswort").get_json()["token"])
+        self.conn.execute("UPDATE web_benutzer SET ist_admin = 0 WHERE benutzername = ?", ("zweiter",))
+        self.conn.commit()
+        self.assertEqual(self.client.get("/api/termine", headers=kopf).status_code, 403)
+
+    def test_cookie_sitzung_allein_zaehlt_auf_api_nie(self):
+        # Browser-Anmeldung als Administrator (Cookie), danach /api/ OHNE Bearer-Token.
+        seite = self.client.get("/")
+        treffer = re.search(r'name="csrf_token" value="([^"]+)"', seite.data.decode())
+        anmeldung = self.client.post(
+            "/", data={
+                "benutzername": self._API_ADMIN, "passwort": self._API_PASSWORT, "csrf_token": treffer.group(1),
+            },
+        )
+        self.assertEqual(anmeldung.status_code, 302)
+        self.assertEqual(self.client.get("/admin/termine").status_code, 200)  # Cookie gilt im Web
+        self.assertEqual(self.client.get("/api/termine").status_code, 401)
+        self.assertEqual(self.client.get(f"/api/termine/{_TEST_SCHEMA}/ergebnisse").status_code, 401)
+        # POST: die CSRF-Ausnahme darf keinen Zugriff öffnen - 401, nicht 403 oder 201.
+        antwort = self.client.post(
+            "/api/termine", data={"sqlite_datei": (io.BytesIO(b""), "t.sqlite")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(antwort.status_code, 401)
+        self.assertEqual(self.export_aufrufe, [])
+
+    def test_unbekannte_api_pfade_und_methoden_liefern_json_fehler(self):
+        self.assertEqual(self.client.get("/api/gibtsnicht").get_json()["fehler"], "Nicht gefunden.")
+        antwort = self.client.delete("/api/termine", headers=self._kopf())
+        self.assertEqual(antwort.status_code, 405)
+        self.assertIn("fehler", antwort.get_json())
+
+    # --- Termine ------------------------------------------------------------------
+
+    def test_termine_liste(self):
+        self.termine = [
+            _termin_info("termin_1", verein="Verein A", ort="Ort A", datum="2026-09-19", anzahl_teilnehmer=4),
+            _termin_info("termin_2"),
+        ]
+        antwort = self.client.get("/api/termine", headers=self._kopf())
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort.get_json(), {"termine": [
+            {"schema_name": "termin_1", "verein": "Verein A", "ort": "Ort A", "datum": "2026-09-19",
+             "anzahl_teilnehmer": 4},
+            {"schema_name": "termin_2", "verein": None, "ort": None, "datum": None, "anzahl_teilnehmer": 0},
+        ]})
+
+    def test_nicht_admin_token_gibt_es_nicht(self):
+        # Ein Helfer bekommt gar kein Token (403 beim Login) - siehe oben; hier zusätzlich:
+        # ein von Hand gebautes Helfer-Token wird mit 403 abgewiesen.
+        from itsdangerous import URLSafeTimedSerializer
+        konto = db.benutzer_stand(self.conn, "helfer")
+        token = URLSafeTimedSerializer(app_web.app.secret_key, salt=app_web._API_TOKEN_SALZ).dumps(
+            {"b": konto["benutzername"], "k": konto["kennung"]}
+        )
+        self.assertEqual(self.client.get("/api/termine", headers=self._kopf(token)).status_code, 403)
+
+    def _veroeffentlichen(self, datei, **zusatz):
+        return self.client.post(
+            "/api/termine", headers=self._kopf(), data={"sqlite_datei": datei},
+            content_type="multipart/form-data", **zusatz,
+        )
+
+    def test_veroeffentlichen_ok(self):
+        self.termine = []
+        antwort = self._veroeffentlichen(TestAppWeb._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19"))
+        self.assertEqual(antwort.status_code, 201)
+        daten = antwort.get_json()
+        self.assertEqual(daten["termin"], {
+            "schema_name": _TEST_SCHEMA, "verein": "Testverein", "ort": None, "datum": None,
+            "anzahl_teilnehmer": 3,
+        })
+        self.assertIsNone(daten["dublette_hinweis"])
+        self.assertEqual(len(self.export_aufrufe), 1)
+
+    def test_veroeffentlichen_meldet_dublette_ohne_zu_blockieren(self):
+        self.termine = [_termin_info("termin_9", verein="Testverein", datum="2026-09-19")]
+        antwort = self._veroeffentlichen(TestAppWeb._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19"))
+        self.assertEqual(antwort.status_code, 201)
+        self.assertIn("bereits einen veröffentlichten Termin", antwort.get_json()["dublette_hinweis"])
+        self.assertEqual(len(self.export_aufrufe), 1)
+
+    def test_veroeffentlichen_loescht_die_temp_datei(self):
+        temp_dateien = []
+        original = app_web._hochgeladene_termin_datei_speichern
+
+        def merken(datei):
+            pfad = original(datei)
+            temp_dateien.append(pfad)
+            return pfad
+
+        with patch.object(app_web, "_hochgeladene_termin_datei_speichern", merken):
+            self._veroeffentlichen(TestAppWeb._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19"))
+            self._veroeffentlichen(TestAppWeb._kaputte_sqlite_datei())
+        self.assertEqual(len(temp_dateien), 2)
+        for pfad in temp_dateien:
+            self.assertFalse(os.path.exists(pfad), pfad)
+
+    def test_veroeffentlichen_mit_falscher_endung_ergibt_400(self):
+        antwort = self._veroeffentlichen((io.BytesIO(b""), "termin.txt"))
+        self.assertEqual(antwort.status_code, 400)
+        self.assertIn("keine .sqlite-Termin-Datei", antwort.get_json()["fehler"])
+        self.assertEqual(self.export_aufrufe, [])
+
+    def test_veroeffentlichen_ohne_datei_ergibt_400(self):
+        antwort = self.client.post(
+            "/api/termine", headers=self._kopf(), data={}, content_type="multipart/form-data",
+        )
+        self.assertEqual(antwort.status_code, 400)
+        self.assertIn("fehler", antwort.get_json())
+        self.assertEqual(self.export_aufrufe, [])
+
+    def test_veroeffentlichen_mit_kaputter_datei_ergibt_400(self):
+        antwort = self._veroeffentlichen(TestAppWeb._kaputte_sqlite_datei())
+        self.assertEqual(antwort.status_code, 400)
+        self.assertIn("keine gültige SHS-Termin-Datei", antwort.get_json()["fehler"])
+
+    def test_veroeffentlichen_zu_gross_ergibt_413(self):
+        with patch.object(app_web, "_API_MAX_UPLOAD_BYTES", 2000):
+            antwort = self._veroeffentlichen((io.BytesIO(b"\0" * 5000), "gross.sqlite"))
+        self.assertEqual(antwort.status_code, 413)
+        self.assertIn("zu groß", antwort.get_json()["fehler"])
+        self.assertEqual(self.export_aufrufe, [])
+
+    def test_veroeffentlichen_limit_gilt_nur_fuer_diese_route(self):
+        self.assertIsNone(app_web.app.config.get("MAX_CONTENT_LENGTH"))
+
+    def test_veroeffentlichen_serverfehler_ergibt_500_json_und_loescht_temp(self):
+        def kaputt(sqlite_conn, postgres_conn):
+            raise RuntimeError("interner Fehler mit Details")
+
+        with patch_db("exportiere_termin_nach_postgres", kaputt), self.assertLogs(app_web.app.logger, "ERROR"):
+            antwort = self._veroeffentlichen(TestAppWeb._echte_sqlite_datei_mit_veranstaltung("Testverein", "2026-09-19"))
+        self.assertEqual(antwort.status_code, 500)
+        self.assertNotIn("Details", antwort.get_json()["fehler"])
+
+    # --- Ergebnisse -----------------------------------------------------------------
+
+    def test_ergebnisse_liefert_teilnehmer_mit_ergebnis(self):
+        self.termine = [_termin_info("termin_7")]
+        mit_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Beispiel", vorname="Anna", rufname_hund="Rex", art="ED", stufe=2,
+            disziplin="Trümmerfeld", startnummer=5,
+        ))
+        db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="Max", rufname_hund="Bello", art="DK", stufe=1,
+        ))
+        db.eintragen_ergebnis(self.conn, mit_id, "Trümmerfeld", 50, 30)
+        antwort = self.client.get("/api/termine/termin_7/ergebnisse", headers=self._kopf())
+        self.assertEqual(antwort.status_code, 200)
+        teilnehmer = {t["nachname"]: t for t in antwort.get_json()["teilnehmer"]}
+        self.assertEqual(set(teilnehmer), {"Beispiel", "Muster"})
+        anna = teilnehmer["Beispiel"]
+        for schluessel, erwartet in (
+            ("startnummer", 5), ("vorname", "Anna"), ("rufname_hund", "Rex"), ("art", "ED"),
+            ("stufe", 2), ("disziplin", "Trümmerfeld"),
+        ):
+            self.assertEqual(anna[schluessel], erwartet, schluessel)
+        self.assertEqual(set(anna), {
+            "startnummer", "nachname", "vorname", "rufname_hund", "art", "stufe", "disziplin", "ergebnis",
+        })
+        self.assertEqual(anna["ergebnis"]["suche_truemmerfeld"], 50)
+        self.assertEqual(anna["ergebnis"]["anzeige_truemmerfeld"], 30)
+        self.assertIsNone(anna["ergebnis"]["suche_flaechensuche"])
+        self.assertEqual(
+            set(anna["ergebnis"]),
+            {"teilnehmer_id", "suche_truemmerfeld", "anzeige_truemmerfeld", "suche_flaechensuche",
+             "anzeige_flaechensuche", "suche_behaeltnis", "anzeige_behaeltnis", "disqualifiziert",
+             "abbruch", "abbruch_grund", "stechen_sieger",
+             "notiz_truemmerfeld", "notiz_flaechensuche", "notiz_behaeltnis"},
+        )
+        self.assertIsNone(teilnehmer["Muster"]["startnummer"])
+        # Keine Kontaktdaten o. Ä. in der Antwort.
+        self.assertNotIn("email", anna)
+
+    def test_ergebnisse_fuer_unbekanntes_schema_ergibt_404(self):
+        self.termine = [_termin_info("termin_7")]
+        kopf = self._kopf()
+        for schema in ("termin_8", "gibtsnicht", "termin_7; DROP SCHEMA public", "public"):
+            antwort = self.client.get(f"/api/termine/{schema}/ergebnisse", headers=kopf)
+            self.assertEqual(antwort.status_code, 404, schema)
+            self.assertIn("fehler", antwort.get_json())
+
+    def test_secure_cookie_standard_ist_an(self):
+        self.assertTrue(app_web._umgebung_ein("SHS_GIBT_ES_NICHT", True))
+        with patch.dict(os.environ, {"SHS_WEB_COOKIE_SECURE": "0"}):
+            self.assertFalse(app_web._umgebung_ein("SHS_WEB_COOKIE_SECURE", True))
+        with patch.dict(os.environ, {"SHS_WEB_COOKIE_SECURE": "1"}):
+            self.assertTrue(app_web._umgebung_ein("SHS_WEB_COOKIE_SECURE", True))
+        self.assertTrue(app_web.app.config["SESSION_COOKIE_SECURE"])
+
+
 try:
     import psycopg2
 except ImportError:
     psycopg2 = None
 
-_POSTGRES_TEST_DSN = os.environ.get("SHS_TEST_POSTGRES_DSN")
+_POSTGRES_TEST_DSN =os.environ.get("SHS_TEST_POSTGRES_DSN")
 
 
 class TestAppWebPostgres(unittest.TestCase):

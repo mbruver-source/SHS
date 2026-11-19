@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
+    QGroupBox,
     QInputDialog,
     QCheckBox,
     QHBoxLayout,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 import checkliste
+import desktop_web
 import pdf_export
 from db import ergebnis_werte_wiederherstellen, get_veranstaltung, termine_ordner
 from db_sicherung import (
@@ -375,10 +377,14 @@ class DatensicherungTab(QWidget):
     der übrigen Tabs. Deckt den bisher fehlenden Datensicherungsweg ab: bislang ließ sich
     der Termine-Ordner nur manuell (Datei-Explorer) sichern."""
 
-    def __init__(self, parent=None, aktueller_pfad: str | None = None, conn=None):
+    # Nach „Ergebnisse aus Web holen…“: das Hauptfenster lädt die Ergebnis-/Auswertungsreiter neu.
+    ergebnisse_aus_web_uebernommen = Signal()
+
+    def __init__(self, parent=None, aktueller_pfad: str | None = None, conn=None, demo: bool = False):
         super().__init__(parent)
         # Nur für den Dateinamen-Vorschlag (K10): Prüfungsdatum und Verein des geöffneten Termins.
         self.conn = conn
+        self.demo = demo
         # Nur zur Erkennung eines Namenskonflikts mit dem GERADE GEÖFFNETEN Termin beim
         # Wiederherstellen (siehe _sicherung_wiederherstellen/_konflikt_abfragen) - ein
         # Überschreiben dieser Datei würde mit der noch offenen sqlite3.Connection des
@@ -421,14 +427,50 @@ class DatensicherungTab(QWidget):
         self.status_label.setTextFormat(Qt.PlainText)  # S-1: enthält Pfade/Namen
         self.status_label.setWordWrap(True)
 
+        # Web-Version (Marco 18.11.2026): Termin veröffentlichen, Ergebnisse zurückholen (desktop_web.py).
+        web_gruppe = QGroupBox("Web-Version")
+        web_hinweis = QLabel(
+            "Eine Kopie des geöffneten Termins auf den SHS-Web-Server laden, damit mehrere Richter dort "
+            "Ergebnisse erfassen, und den Stand danach zurückholen (zugeordnet über die Startnummer, "
+            "vorher entsteht eine automatische Kopie). Die Verbindung ist immer verschlüsselt.")
+        web_hinweis.setWordWrap(True)
+        web_hinweis.setTextFormat(Qt.PlainText)
+        self.web_veroeffentlichen_btn = QPushButton("Ins Web veröffentlichen…")
+        self.web_veroeffentlichen_btn.clicked.connect(lambda: desktop_web.termin_veroeffentlichen(self))
+        self.web_holen_btn = QPushButton("Ergebnisse aus Web holen…")
+        self.web_holen_btn.clicked.connect(lambda: desktop_web.ergebnisse_aus_web_holen(self))
+        self.web_verbindung_btn = QPushButton("Web-Verbindung…")
+        self.web_verbindung_btn.setToolTip("Adresse, Benutzername, Passwort und Zertifikat-Fingerabdruck des Web-Servers")
+        self.web_verbindung_btn.clicked.connect(lambda: desktop_web.verbindung_einrichten(self))
+        if demo:
+            grund = "In der Demoprüfung gesperrt."
+        elif conn is None or not hasattr(conn, "backup") or not aktueller_pfad:
+            grund = "Nur für Termine als Datei (SQLite)."
+        else:
+            grund = None
+        if grund:
+            for knopf in (self.web_veroeffentlichen_btn, self.web_holen_btn):
+                knopf.setEnabled(False)
+                knopf.setToolTip(grund)
+        web_layout = QVBoxLayout(web_gruppe)
+        web_layout.addWidget(web_hinweis)
+        web_layout.addWidget(self.web_veroeffentlichen_btn)
+        web_layout.addWidget(self.web_holen_btn)
+        web_layout.addWidget(self.web_verbindung_btn)
+
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Datensicherung"))
         layout.addWidget(hinweis)
         layout.addWidget(erstellen_btn)
         layout.addWidget(wiederherstellen_btn)
         layout.addWidget(self.ergebnisse_aus_kopie_btn)
+        layout.addWidget(web_gruppe)
         layout.addStretch()
         layout.addWidget(self.status_label)
+
+    @property
+    def aktueller_pfad(self) -> str | None:
+        return self._aktueller_pfad
 
     def aktualisieren(self) -> None:
         pass  # kein Zwischenspeicher - liest bei jeder Aktion frisch den Termine-Ordner

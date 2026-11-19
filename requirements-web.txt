@@ -19,7 +19,12 @@
 # Obergrenzen (Codeprüfung 22.09., G12): jeweils "<" die nächste Major-Version NACH der
 # aktuell (Stand 22.09.2026) neuesten (Flask 3.1.x, waitress 3.0.x), damit
 # ein Major-Sprung nicht unbemerkt ins Container-Image gelangt - Untergrenzen unverändert.
-Flask>=3.0,<4
+Flask>=3.1,<4
+
+# reportlab (seit 18.11.2026): Sammel-PDF der benutzten Bewertungsbögen in der Ergebnistabelle
+# (pdf_export.py, im Image zusammen mit den DejaVu-Schriften aus fonts/). Dieselbe Spanne wie in
+# requirements.txt; bringt Pillow mit, aber kein Qt. app_web importiert es erst beim Aufruf.
+reportlab>=4.0,<6
 
 # WSGI-Server für den echten Einsatz im Podman-Container (siehe Containerfile) - ersetzt
 # dort den Flask-Entwicklungsserver. Reine Python-Abhängigkeit (kein C-Compiler im Image

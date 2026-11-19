@@ -247,6 +247,13 @@ class _DemoSchritteMixin:
                 "veröffentlichen, die Richter tragen ihre Punkte dann am Tablet oder Handy "
                 "im Browser ein, und die Ergebnisse werden anschließend in den Termin "
                 "übernommen.\n\n"
+                "Im Web gibt es dafür eine Ergebnistabelle wie hier im Reiter „Ergebniserfassung“, "
+                "auch mit Disqualifikation und Abbruch; beides kommt beim Zurückholen mit.\n\n"
+                "Veröffentlichen und Zurückholen gehen direkt aus dem Programm: Im Reiter "
+                "„Datensicherung“ liegt die Gruppe „Web-Version“ mit „Ins Web "
+                "veröffentlichen…“, „Ergebnisse aus Web holen…“ und „Web-Verbindung…“ "
+                "(verschlüsselt, mit dem Administrator-Konto der Web-Version). In der Demo "
+                "sind diese Knöpfe gesperrt.\n\n"
                 "Wie das geht, steht im Handbuch in den Kapiteln „Für Richter: Ergebnisse im "
                 "Browser eintragen“ und „Für die Prüfungsleitung: Termin im Web "
                 "veröffentlichen“.",

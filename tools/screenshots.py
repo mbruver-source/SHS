@@ -378,6 +378,38 @@ def _bild_sicherung_dialoge(termine: _Termine, ziel: Path) -> list[Path]:
     return pfade
 
 
+def _bild_web_dialoge(termine: _Termine, ziel: Path) -> list[Path]:
+    """Dialoge der Web-Anbindung (Datensicherung, Gruppe „Web-Version“): „Web-Verbindung“ mit
+    bestätigtem Fingerabdruck und der Bericht nach „Ergebnisse aus Web holen“. Ohne Netzwerk und
+    ohne den echten Windows-Tresor; die Einstellungen des Rechners werden weder gelesen noch
+    geschrieben (die Dialoge bekommen ihre Werte übergeben)."""
+    import desktop_web
+    import web_tresor
+    from db import ImportBericht
+    from desktop_web import WebBerichtDialog, WebEinstellungen, WebVerbindungsDialog
+
+    web_tresor.verfuegbar = lambda: True
+    web_tresor.passwort_lesen = lambda adresse: "gespeichert"
+    pfade = []
+    # Frei erfundener Fingerabdruck (SHA-256, 64 Hexzeichen).
+    fingerabdruck = "3A7F9C21D84E05B6A1C93F7E2D0B48A5C6E1F3079B2D4A8E5C7016F9AB3D2E41"
+    dialog = WebVerbindungsDialog(None, WebEinstellungen("https://localhost:5443", "admin", fingerabdruck))
+    dialog.resize(760, 560)
+    dialog.show()
+    pfade.append(_speichern(dialog, ziel, "handbuch_web_verbindung", (760, 560)))
+    dialog.close()
+    bericht = ImportBericht(
+        aktualisiert=18, ohne_startnummer_uebersprungen=[], nicht_gefunden=["99"],
+        fehler=[], abweichungen=[], im_web_leer=["Nr. 4 Testuser4 – Flächensuche: leer"],
+        status_geaendert=["Nr. 51 Testuser8: kein Status → disqualifiziert"])
+    dialog = WebBerichtDialog(None, bericht, "Musterverein")
+    dialog.resize(760, 420)
+    dialog.show()
+    pfade.append(_speichern(dialog, ziel, "handbuch_web_bericht", (760, 420)))
+    dialog.close()
+    return pfade
+
+
 def _bild_einstellungen_menue(termine: _Termine, ziel: Path) -> list[Path]:
     """Das aufgeklappte Menü „Einstellungen“ auf einer festen Fläche (die Menübreite hängt von der
     Schrift ab)."""
@@ -583,6 +615,7 @@ BILDER = {
     "handbuch_export": _bild_einfacher_reiter("export_tab", "handbuch_export"),
     "handbuch_datensicherung": _bild_einfacher_reiter("datensicherung_tab", "handbuch_datensicherung"),
     "handbuch_sicherung_dialoge": _bild_sicherung_dialoge,
+    "handbuch_web_dialoge": _bild_web_dialoge,
     "handbuch_einstellungen_menue": _bild_einstellungen_menue,
     "handbuch_demo": _bild_demo,
 }
@@ -607,6 +640,8 @@ BILD_DATEIEN = {
     "handbuch_datensicherung": HAUPTFENSTER,
     "handbuch_aus_sicherung_holen": (900, 420),
     "handbuch_ergebnisse_aus_kopie": (900, 520),
+    "handbuch_web_verbindung": (760, 560),
+    "handbuch_web_bericht": (760, 420),
     "handbuch_einstellungen_menue": (400, 80),
     "handbuch_demo": HAUPTFENSTER,
 }

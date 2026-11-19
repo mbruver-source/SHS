@@ -19,7 +19,9 @@ Edit/Write ändern, nicht mit Skript-Ersetzungen.
    Das Handbuch-PDF wird erst beim Build erzeugt (`shs-build`, Schritt 3), hier nicht.
 4. **Screenshots:** betroffene Bilder mit `PY tools/screenshots.py --nur name1,name2` neu
    aufnehmen und ansehen (`git status docs/bilder`). Neue Oberflächen im Skript ergänzen.
-   Nach dem Versionsbump beim Build noch einmal aufnehmen, damit sie die neue Version zeigen.
+   Web-Bilder: `PY tools/web_screenshots.py [--nur name1,name2]` (Edge headless, Web-Oberfläche
+   im Prozess mit SQLite-Ersatz). Nach dem Versionsbump beim Build noch einmal aufnehmen, damit
+   sie die neue Version zeigen.
 5. **Website (`docs/`):** Seiten zu diesem Bereich im Arbeitsstand anpassen, aber nicht
    separat pushen: Änderungen zu neuen Funktionen gehen erst mit dem Release online.
 6. **`Fortschritt.md`:** Eintrag zur Funktion mit den geänderten Dateien.

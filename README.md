@@ -67,6 +67,7 @@ Programm danach gefahrlos selbst testen – Anleitung im Handbuch unter
 | **Checkliste** | Im Reiter „Verwaltung“: der Ablauf eines Prüfungstermins zum Abhaken, in aufklappbaren Abschnitten, mit eigenen Abschnitten und Punkten. |
 | **Druck / PDF** | Bewertungsbögen (alle 12 Varianten ED/DK × LK 1–3), Ergebnisliste (auch leer zum Ausfüllen), Etiketten, Statistik, Übersicht für die Prüfungsleitung, Richter-Bedarf, Zeitplan. Teilnehmerliste als CSV für Excel. |
 | **Datensicherung** | Alle Termine in einer Sicherungsdatei (ZIP) sichern und wiederherstellen, auf Wunsch mit Passwort verschlüsselt (AES-256). |
+| **Web-Version aus dem Desktop** | Im Reiter „Datensicherung“: Termin per Knopfdruck auf den Web-Server veröffentlichen und die Ergebnisse nach der Prüfung zurückholen („Ins Web veröffentlichen…“, „Ergebnisse aus Web holen…“). Nur verschlüsselt (HTTPS) mit Prüfung des Server-Fingerabdrucks, Passwort im Windows-Tresor. Disqualifikation und Abbruch (mit Grund) werden mit übertragen; der Web-Stand ersetzt beim Zurückholen die Werte der Datei. |
 | **Demoprüfung** | Führt einen ganzen Prüfungstag mit erfundenen Daten vor – vom Termin bis zur Ergebnisliste. Das Programm klickt selbst, ein Fenster erklärt jeden Schritt. Der Demo-Termin wird danach gelöscht. |
 
 <table>
@@ -89,7 +90,8 @@ Reiter steht im Programm unter **„Hilfe“**.
 Für größere Prüfungen gibt es zusätzlich eine Web-Version: Mehrere Richter tragen am
 Prüfungstag gleichzeitig Ergebnisse über den Browser ein (Tablet, Handy, Laptop), jeder mit
 eigenem Benutzerkonto. Termin, Teilnehmer, Zeitplan und Druck bleiben in der Desktop-App,
-die Ergebnisse werden anschließend zurückgeholt.
+die Ergebnisse werden anschließend zurückgeholt - wahlweise im Browser (Admin-Seite) oder
+direkt aus der Desktop-App (Reiter „Datensicherung“, Gruppe „Web-Version“).
 
 Die Web-Version läuft als Container und braucht etwas technische Einrichtung.
 Für die meisten Vereine reicht die Desktop-App allein. Details: [README_CONTAINER.md](README_CONTAINER.md)

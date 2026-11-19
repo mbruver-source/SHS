@@ -27,6 +27,7 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 - `docs/HANDBUCH.md`: neue oder geänderte Funktionen und Bedienung.
 - `docs/bilder/`: Desktop-Screenshots mit `PY tools/screenshots.py` neu erzeugen (alle 17
   Bilder, feste Testdaten; einzelne mit `--nur name1,name2`, Namen siehe `BILDER` im Skript).
+  Die Web-Bilder (`handbuch_web_*.png`, 7 Stück) mit `PY tools/web_screenshots.py` (braucht Edge).
   Danach jedes geänderte Bild ansehen (`git status docs/bilder`). Neue Oberflächen im Skript
   ergänzen statt Ad-hoc-Code zu schreiben. Von Hand bleiben: Web-Bilder,
   `handbuch_anmeldeformular`, `bewertungsbogen`, `handbuch_edge_download_1`/`_2`,
@@ -53,7 +54,8 @@ Lege für die Schritte eine Aufgabenliste an und hake sie einzeln ab.
 
 1. `PY bump_version.py` (zieht `version.txt`, `version_info.txt`, `version.py`,
    „Stand: Version …“ im Handbuch und den Image-Tag in `compose.yaml` nach).
-2. `PY tools/screenshots.py` noch einmal, damit die Bilder die neue Versionsnummer zeigen.
+2. `PY tools/screenshots.py` und `PY tools/web_screenshots.py` noch einmal, damit die Bilder die
+   neue Versionsnummer zeigen.
 3. `PY tools/handbuch_pdf.py` erzeugt `docs/HANDBUCH.pdf` neu. `PY tools/handbuch_pdf.py --kurzanleitung` erzeugt
    `docs/INSTALLATION_KURZ.pdf` (Kurzanleitung Installation, seit UX-Test 2026-11 T13) neu.
 

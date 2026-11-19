@@ -15,6 +15,9 @@
 pytest>=8.0,<10
 pytest-qt>=4.4,<5
 pypdf>=6.10,<7
+# cryptography: erzeugt in test_web_sync.py das Testzertifikat für den lokalen HTTPS-Server (sonst
+# die openssl-Kommandozeile; ohne beides entfallen die Pinning-Tests mit Server).
+cryptography>=42
 # hypothesis: Eigenschaftstests der Bewertung in test_bewertung_referenz.py (T2, Marco 03.10.2026);
 # ohne hypothesis werden nur diese Tests übersprungen.
 hypothesis>=6.100,<7

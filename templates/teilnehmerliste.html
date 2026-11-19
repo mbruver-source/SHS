@@ -4,6 +4,7 @@
 <div class="karte">
   <h1>Teilnehmer</h1>
   {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum | datum }}</p>{% endif %}
+  <p><a class="knopf knopf-sekundaer" href="{{ url_for('ergebnistabelle') }}">Ergebnisse als Tabelle erfassen</a></p>
 </div>
 
 <form class="karte" method="get" action="{{ url_for('teilnehmerliste') }}" role="search">

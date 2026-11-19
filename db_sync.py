@@ -14,7 +14,11 @@ from db_ergebnisse import (
     eintragen_ergebnis,
     get_ergebnis,
     leistungsklasse_label,
+    pruefe_notiz,
+    setze_ergebnis_status,
+    setze_notiz,
 )
+from shs_core import ABBRUCH_GRUENDE
 from db_stamm import (
     add_teilnehmer,
     get_veranstaltung,
@@ -24,6 +28,7 @@ from db_stamm import (
 )
 from db_verbindung import (
     DISZIPLIN_SPALTEN,
+    NOTIZ_SPALTEN,
 )
 from db_web import (
     erstelle_termin_postgres,
@@ -132,6 +137,17 @@ def kopiere_termin_daten(quelle_conn, ziel_conn) -> dict[int, int]:
                 suche, anzeige = alte_ergebnisse[spalte_suche], alte_ergebnisse[spalte_anzeige]
                 if suche is not None or anzeige is not None:
                     eintragen_ergebnis(ziel_conn, neue_id, disziplin, suche, anzeige)
+            # Disqualifikation/Abbruch (inkl. Grund) mitnehmen (Marco 18.11.2026): nach dem Export ist das
+            # Web der führende Stand, ein hier fehlender Status würde sonst beim Zurückholen zurückgenommen.
+            if alte_ergebnisse.get("disqualifiziert") or alte_ergebnisse.get("abbruch"):
+                setze_ergebnis_status(
+                    ziel_conn, neue_id, bool(alte_ergebnisse.get("disqualifiziert")),
+                    bool(alte_ergebnisse.get("abbruch")), abbruch_grund=alte_ergebnisse.get("abbruch_grund"),
+                )
+            # Notizen zum Bewertungsbogen mitnehmen (Marco 18.11.2026), aus demselben Grund wie der Status.
+            for disziplin, spalte in NOTIZ_SPALTEN.items():
+                if alte_ergebnisse.get(spalte):
+                    setze_notiz(ziel_conn, neue_id, disziplin, alte_ergebnisse[spalte])
 
     return id_zuordnung
 
@@ -219,6 +235,42 @@ class ImportBericht:
     # beibehalten, aber sichtbar melden, damit ein im Web versehentlich nicht erfasstes
     # oder bewusst gelöschtes Ergebnis nicht unbemerkt bleibt).
     im_web_leer: list[str] = field(default_factory=list)
+    # Teilnehmer, bei denen sich Disqualifikation/Abbruch (inkl. Grund) durch den Web-Stand geändert
+    # hat (gesetzt oder zurückgenommen), je "Nr. N Nachname, Vorname: alt -> neu" (Marco 18.11.2026).
+    status_geaendert: list[str] = field(default_factory=list)
+
+def _status_text(disqualifiziert: bool, abbruch: bool, grund) -> str:
+    teile = []
+    if disqualifiziert:
+        teile.append("disqualifiziert")
+    if abbruch:
+        teile.append("Abbruch" + (f" ({ABBRUCH_GRUENDE[grund][0]})" if grund in ABBRUCH_GRUENDE else ""))
+    return " und ".join(teile) or "ohne Status"
+
+def _status_aus_ergebnis(ergebnis: dict):
+    """Liest (disqualifiziert, abbruch, abbruch_grund) aus einem Ergebnis-dict. Fehlen die Schlüssel
+    (ältere Server, kein Ergebnis), ist das Ergebnis None: der Status wird dann nicht angefasst.
+    Ungültige Werte (Netzdaten) lösen ValueError aus."""
+    if "disqualifiziert" not in ergebnis or "abbruch" not in ergebnis:
+        return None
+    werte = []
+    for schluessel in ("disqualifiziert", "abbruch"):
+        wert = ergebnis[schluessel]
+        if wert is None:
+            wert = 0
+        if not isinstance(wert, (bool, int)) or wert not in (0, 1):
+            raise ValueError(f"Ungültiger Wert für {schluessel}")
+        werte.append(bool(wert))
+    grund = ergebnis.get("abbruch_grund")
+    if grund is not None and (not isinstance(grund, str) or grund not in ABBRUCH_GRUENDE or not werte[1]):
+        raise ValueError("Ungültiger Abbruchgrund")
+    return werte[0], werte[1], grund
+
+def _notizen_aus_ergebnis(ergebnis: dict) -> dict[str, str | None]:
+    """Liest die Notizen (Disziplin -> geprüfter Text oder None) aus einem Ergebnis-dict. Nur Disziplinen,
+    deren Schlüssel im dict steht, kommen vor (fehlt er - älterer Server - bleibt die Notiz der Datei
+    unberührt). Ungültige Werte (Netzdaten: kein Text, zu lang) lösen ValueError aus."""
+    return {d: pruefe_notiz(ergebnis[s]) for d, s in NOTIZ_SPALTEN.items() if s in ergebnis}
 
 def _teilnehmer_merkmale(t: dict) -> tuple:
     """Vergleichsschlüssel für importiere_ergebnisse_nach_startnummer(): Nachname, Rufname
@@ -260,7 +312,19 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
 
     Ausnahme vom vollständigen Überschreiben: eine in der Quelle komplett leere Disziplin
     (Suche UND Anzeige None) wird nicht übertragen, ein Wert im Ziel bleibt also erhalten -
-    solche Fälle landen seit Codeprüfung 22.09., G2 im `im_web_leer`-Feld."""
+    solche Fälle landen seit Codeprüfung 22.09., G2 im `im_web_leer`-Feld.
+
+    Disqualifikation und Abbruch (mit Grund) werden ebenfalls übernommen und ersetzen den Stand der
+    Termin-Datei (setzen und zurücknehmen); Änderungen stehen im `status_geaendert`-Feld."""
+    return _ergebnisse_einarbeiten(
+        ((t, None) for t in list_teilnehmer(quelle_conn)), ziel_conn, quelle_conn=quelle_conn,
+    )
+
+def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> ImportBericht:
+    """Gemeinsame Kernlogik von importiere_ergebnisse_nach_startnummer (Quelle = Datenbank) und
+    importiere_ergebnisse_aus_liste (Quelle = vom Web-Server gelieferte Liste, Marco 18.11.2026).
+    `quelle_paare` liefert (Teilnehmer-dict, Ergebnis-dict oder None); ist das Ergebnis None und
+    `quelle_conn` gesetzt, wird es erst hier (je Teilnehmer, wie bisher) aus der Quelle gelesen."""
     ziel_nach_startnummer = {
         t["startnummer"]: t for t in list_teilnehmer(ziel_conn) if t.get("startnummer") is not None
     }
@@ -270,7 +334,8 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
     fehler: list[str] = []
     abweichungen: list[str] = []
     im_web_leer: list[str] = []
-    for quelle_teilnehmer in list_teilnehmer(quelle_conn):
+    status_geaendert: list[str] = []
+    for quelle_teilnehmer, quelle_ergebnis in quelle_paare:
         startnummer = quelle_teilnehmer.get("startnummer")
         name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
         if startnummer is None:
@@ -287,20 +352,30 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
             )
             continue
         ziel_id = ziel_teilnehmer["id"]
-        ergebnis = get_ergebnis(quelle_conn, quelle_teilnehmer["id"]) or {}
+        if quelle_ergebnis is None and quelle_conn is not None:
+            quelle_ergebnis = get_ergebnis(quelle_conn, quelle_teilnehmer["id"])
+        ergebnis = quelle_ergebnis or {}
         # Codeprüfung 22.09., G2: Stand der Termin-Datei VOR dem Übertragen, um Disziplinen
         # zu melden, die im Web leer sind, im Ziel aber einen (beibehaltenen) Wert haben.
         ziel_ergebnis = get_ergebnis(ziel_conn, ziel_id) or {}
         hat_wert = False
         try:
+            status = _status_aus_ergebnis(ergebnis)  # vor dem Schreiben: ungültige Netzdaten ändern nichts
+            notizen = _notizen_aus_ergebnis(ergebnis)
+        except ValueError:
+            fehler.append(name)
+            continue
+        try:
             for disziplin, (spalte_suche, spalte_anzeige) in DISZIPLIN_SPALTEN.items():
                 suche, anzeige = ergebnis.get(spalte_suche), ergebnis.get(spalte_anzeige)
+                ziel_suche = ziel_ergebnis.get(spalte_suche)
+                ziel_anzeige = ziel_ergebnis.get(spalte_anzeige)
                 if suche is not None or anzeige is not None:
-                    eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
-                    hat_wert = True
+                    # Nur bei einer Änderung schreiben und zählen („aktualisiert“ = wirklich geändert).
+                    if (suche, anzeige) != (ziel_suche, ziel_anzeige):
+                        eintragen_ergebnis(ziel_conn, ziel_id, disziplin, suche, anzeige)
+                        hat_wert = True
                 else:
-                    ziel_suche = ziel_ergebnis.get(spalte_suche)
-                    ziel_anzeige = ziel_ergebnis.get(spalte_anzeige)
                     if ziel_suche is not None or ziel_anzeige is not None:
                         im_web_leer.append(
                             f"Nr. {startnummer} {name} – {disziplin}: in der Web-Erfassung "
@@ -308,6 +383,25 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
                             f"{'-' if ziel_suche is None else ziel_suche}/"
                             f"{'-' if ziel_anzeige is None else ziel_anzeige} (beibehalten)"
                         )
+            # Disqualifikation/Abbruch: der Web-Stand ersetzt den der Datei (setzen UND zurücknehmen),
+            # nur bei einer Änderung wird geschrieben und gemeldet (Marco 18.11.2026).
+            if status is not None:
+                neu_dq, neu_abbruch, neu_grund = status
+                neu_grund = neu_grund if neu_abbruch else None
+                alt_dq, alt_abbruch = bool(ziel_ergebnis.get("disqualifiziert")), bool(ziel_ergebnis.get("abbruch"))
+                alt_grund = ziel_ergebnis.get("abbruch_grund") if alt_abbruch else None
+                if (alt_dq, alt_abbruch, alt_grund) != (neu_dq, neu_abbruch, neu_grund):
+                    setze_ergebnis_status(ziel_conn, ziel_id, neu_dq, neu_abbruch, abbruch_grund=neu_grund)
+                    status_geaendert.append(
+                        f"Nr. {startnummer} {name}: {_status_text(alt_dq, alt_abbruch, alt_grund)} → "
+                        f"{_status_text(neu_dq, neu_abbruch, neu_grund)}")
+                    hat_wert = True
+            # Notizen zum Bewertungsbogen: der Web-Stand führt (auch leer = gelöscht); nur Änderungen
+            # werden geschrieben und zählen in `aktualisiert` mit, eigens gezählt werden sie nicht.
+            for disziplin, neu_notiz in notizen.items():
+                if neu_notiz != (ziel_ergebnis.get(NOTIZ_SPALTEN[disziplin]) or None):
+                    setze_notiz(ziel_conn, ziel_id, disziplin, neu_notiz)
+                    hat_wert = True
         except Exception:
             fehler.append(name)
             continue
@@ -320,7 +414,35 @@ def importiere_ergebnisse_nach_startnummer(quelle_conn, ziel_conn) -> ImportBeri
         fehler=fehler,
         abweichungen=abweichungen,
         im_web_leer=im_web_leer,
+        status_geaendert=status_geaendert,
     )
+
+_TEILNEHMER_PFLICHTFELDER = ("nachname", "vorname", "art", "stufe", "disziplin")
+
+
+def importiere_ergebnisse_aus_liste(ziel_conn, teilnehmer_liste) -> ImportBericht:
+    """Arbeitet eine vom Web-Server gelieferte Teilnehmerliste (je Eintrag die Teilnehmerfelder wie
+    list_teilnehmer plus „ergebnis“ wie get_ergebnis, oder None) per Startnummer in ziel_conn ein -
+    dieselbe Logik und dieselben Schutzprüfungen wie importiere_ergebnisse_nach_startnummer
+    (Startnummer-Zuordnung, Plausibilität, leere Web-Disziplinen bleiben unverändert).
+
+    Die Liste kommt aus dem Netz und wird deshalb geprüft: ein Eintrag, der kein dict ist oder dem
+    Pflichtfelder fehlen, wird als Fehler gemeldet, statt den Import abzubrechen."""
+    if not isinstance(teilnehmer_liste, (list, tuple)):
+        raise ValueError("Die Ergebnisliste hat ein unerwartetes Format.")
+    ungueltig: list[str] = []
+    paare = []
+    for nummer, eintrag in enumerate(teilnehmer_liste, start=1):
+        if (not isinstance(eintrag, dict) or any(f not in eintrag for f in _TEILNEHMER_PFLICHTFELDER)
+                or not isinstance(eintrag.get("ergebnis"), (dict, type(None)))
+                or isinstance(eintrag.get("startnummer"), bool)
+                or not isinstance(eintrag.get("startnummer"), (int, type(None)))):
+            ungueltig.append(f"Eintrag {nummer} der Web-Liste")
+            continue
+        paare.append((eintrag, eintrag.get("ergebnis") or {}))
+    bericht = _ergebnisse_einarbeiten(paare, ziel_conn)
+    bericht.fehler.extend(ungueltig)
+    return bericht
 
 def importiere_ergebnisse_aus_postgres(postgres_conn, schema_name: str, sqlite_conn: sqlite3.Connection) -> ImportBericht:
     """Holt nach der Prüfung die über die Web-Oberfläche eingetragenen Ergebnisse aus dem

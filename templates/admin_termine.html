@@ -21,6 +21,9 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="sqlite_datei_veroeffentlichen">Termin-Datei</label>
     <input type="file" id="sqlite_datei_veroeffentlichen" name="sqlite_datei" accept=".sqlite" required>
+    <p class="termine-ordner-hinweis"><small>Die Termine der Desktop-Version liegen im Ordner
+      <code>%USERPROFILE%\SHS-Pruefungsprogramm\Termine</code>. Den Pfad im Dateidialog in die
+      Adressleiste einfügen, dann öffnet sich der Ordner.</small></p>
     <p><button type="submit">Veröffentlichen</button></p>
   </form>
 </div>

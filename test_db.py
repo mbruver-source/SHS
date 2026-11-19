@@ -18,6 +18,9 @@ from db import (
     ANMELDEFORMULAR_PRUEFUNG_PRAEFIX,
     ANMELDEFORMULAR_RUEDE,
     ANMELDEFORMULAR_TEXTFELDER,
+    DISZIPLIN_SPALTEN,
+    NOTIZ_MAX,
+    NOTIZ_SPALTEN,
     NeuerTeilnehmer,
     anmeldeformular_gegenstand_feld,
     angebotene_pruefungen,
@@ -52,6 +55,7 @@ from db import (
     get_veranstaltung,
     gibt_es_admin,
     hat_erfasste_ergebnisse,
+    importiere_ergebnisse_aus_liste,
     importiere_ergebnisse_aus_postgres,
     importiere_ergebnisse_nach_startnummer,
     init_db,
@@ -83,6 +87,7 @@ from db import (
     setze_bezahlt,
     setze_ergebnis_status,
     setze_keine_teilnahme,
+    setze_notiz,
     tausche_startnummern,
     teilnehmer_fehlende_pflichtangaben,
     teilnehmer_gegenstand_hinweis,
@@ -250,6 +255,149 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(fertig[0].wertnote.abkuerzung, "V")
         setze_ergebnis_status(conn, tid, disqualifiziert=True, abbruch=False)
         self.assertEqual(get_ergebnis(conn, tid)["disqualifiziert"], 1)
+
+    def test_migration_ergaenzt_notizspalten_in_alter_ergebnisse_tabelle(self):
+        # Notizen zum Bewertungsbogen (18.11.2026): eine ältere Datei ohne die drei Spalten wird beim
+        # Öffnen ergänzt, bestehende Werte bleiben, die Notizen sind leer und lassen sich setzen.
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Alt", vorname="Vorname", rufname_hund="Hund", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1,
+        ))
+        self._lege_alte_ergebnisse_tabelle_an()
+        self.conn.execute(
+            "INSERT INTO ergebnisse (teilnehmer_id, suche_truemmerfeld, anzeige_truemmerfeld) VALUES (?, ?, ?)",
+            (tid, 58, 38),
+        )
+        self.conn.commit()
+
+        conn = self._neu_verbinden()
+        ergebnis = get_ergebnis(conn, tid)
+        self.assertEqual(ergebnis["suche_truemmerfeld"], 58)
+        for spalte in NOTIZ_SPALTEN.values():
+            self.assertIn(spalte, ergebnis)
+            self.assertIsNone(ergebnis[spalte])
+        setze_notiz(conn, tid, "Flächensuche", "Wind von links")
+        self.assertEqual(get_ergebnis(conn, tid)["notiz_flaechensuche"], "Wind von links")
+        self.assertEqual(get_ergebnis(conn, tid)["suche_truemmerfeld"], 58)
+
+    def test_notiz_spalten_und_grenze(self):
+        self.assertEqual(NOTIZ_SPALTEN, {"Trümmerfeld": "notiz_truemmerfeld", "Flächensuche": "notiz_flaechensuche",
+                                         "Behältnisstrecke": "notiz_behaeltnis"})
+        self.assertEqual(NOTIZ_MAX, 500)
+        self.assertEqual(set(NOTIZ_SPALTEN), set(DISZIPLIN_SPALTEN))
+
+    def test_setze_notiz_trimmt_schreibt_nur_ihre_spalte_und_leer_ist_null(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1))
+        eintragen_ergebnis(self.conn, tid, "Trümmerfeld", 50, 30)
+        setze_ergebnis_status(self.conn, tid, False, True, abbruch_grund="krankheit")
+        vorher = get_ergebnis(self.conn, tid)
+
+        setze_notiz(self.conn, tid, "Trümmerfeld", "  Hund ging gut mit\nzweite Zeile  ")
+        ergebnis = get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["notiz_truemmerfeld"], "Hund ging gut mit\nzweite Zeile")
+        for spalte in vorher:
+            if spalte != "notiz_truemmerfeld":
+                self.assertEqual(ergebnis[spalte], vorher[spalte], spalte)
+
+        setze_notiz(self.conn, tid, "Trümmerfeld", "   ")
+        self.assertIsNone(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"])
+        setze_notiz(self.conn, tid, "Behältnisstrecke", "Ä" * NOTIZ_MAX)  # genau an der Grenze
+        self.assertEqual(len(get_ergebnis(self.conn, tid)["notiz_behaeltnis"]), NOTIZ_MAX)
+        setze_notiz(self.conn, tid, "Behältnisstrecke", None)
+        self.assertIsNone(get_ergebnis(self.conn, tid)["notiz_behaeltnis"])
+
+    def test_setze_notiz_fehler_aendern_nichts(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        setze_notiz(self.conn, tid, "Trümmerfeld", "bleibt")
+        for disziplin, text in (("Trümmerfeld", "x" * (NOTIZ_MAX + 1)), ("Gibt es nicht", "text"),
+                                ("Trümmerfeld", 5), ("Trümmerfeld", b"bytes")):
+            with self.subTest(disziplin=disziplin, text=repr(text)[:20]):
+                with self.assertRaises(ValueError):
+                    setze_notiz(self.conn, tid, disziplin, text)
+                self.assertEqual(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"], "bleibt")
+        # Die Länge zählt nach dem Trimmen: Leerraum am Rand darf über die Grenze hinausragen.
+        setze_notiz(self.conn, tid, "Trümmerfeld", " " + "x" * NOTIZ_MAX + " ")
+        with self.assertRaisesRegex(ValueError, "Notiz"):
+            setze_notiz(self.conn, tid, "Flächensuche", "x" * (NOTIZ_MAX + 1))
+        with self.assertRaises(ValueError):
+            setze_notiz(self.conn, 99999, "Trümmerfeld", "unbekannter Teilnehmer")
+
+    def test_setze_notiz_commit_false_und_fehler_rollt_alles_zurueck(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        setze_notiz(self.conn, tid, "Trümmerfeld", "eins", commit=False)
+        with self.assertRaises(ValueError):
+            setze_notiz(self.conn, tid, "Flächensuche", "x" * (NOTIZ_MAX + 1), commit=False)
+        self.assertIsNone(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"])  # offene Transaktion zurückgerollt
+        setze_notiz(self.conn, tid, "Trümmerfeld", "zwei", commit=False)
+        self.conn.commit()
+        self.assertEqual(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"], "zwei")
+
+    def test_setze_notiz_braucht_kein_rowcount_des_cursors(self):
+        """Der PostgreSQL-Wrapper (_PostgresCursor) hat kein `rowcount`: setze_notiz darf es nicht
+        nutzen (im Container gab es sonst einen 500er beim Speichern einer Notiz, 18.11.2026)."""
+        class _CursorOhneRowcount:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def fetchone(self):
+                return self._cursor.fetchone()
+
+            def fetchall(self):
+                return self._cursor.fetchall()
+
+        class _VerbindungOhneRowcount:
+            def __init__(self, conn):
+                self._conn = conn
+
+            def execute(self, *args):
+                return _CursorOhneRowcount(self._conn.execute(*args))
+
+            def commit(self):
+                self._conn.commit()
+
+            def rollback(self):
+                self._conn.rollback()
+
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        wrapper = _VerbindungOhneRowcount(self.conn)
+        setze_notiz(wrapper, tid, "Trümmerfeld", "über den Wrapper")  # UPDATE-Pfad
+        self.assertEqual(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"], "über den Wrapper")
+        self.conn.execute("DELETE FROM ergebnisse WHERE teilnehmer_id = ?", (tid,))
+        self.conn.commit()
+        setze_notiz(wrapper, tid, "Trümmerfeld", "neu angelegt")  # INSERT-Pfad
+        self.assertEqual(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"], "neu angelegt")
+        with self.assertRaises(ValueError):
+            setze_notiz(wrapper, 999999, "Trümmerfeld", "x")
+
+    def test_setze_notiz_legt_fehlende_ergebniszeile_an(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        self.conn.execute("DELETE FROM ergebnisse WHERE teilnehmer_id = ?", (tid,))
+        self.conn.commit()
+        self.assertIsNone(get_ergebnis(self.conn, tid))
+        setze_notiz(self.conn, tid, "Flächensuche", "Notiz ohne Zeile")
+        ergebnis = get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["notiz_flaechensuche"], "Notiz ohne Zeile")
+        self.assertEqual((ergebnis["disqualifiziert"], ergebnis["abbruch"]), (0, 0))
+        self.assertIsNone(ergebnis["suche_truemmerfeld"])
+
+    def test_notizen_ueberleben_loeschen_und_wiederherstellen_eines_teilnehmers(self):
+        tid = add_teilnehmer(self.conn, NeuerTeilnehmer(
+            nachname="Muster", vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=1))
+        setze_notiz(self.conn, tid, "Trümmerfeld", "Rückgängig-Notiz")
+        sicherung = teilnehmer_sichern(self.conn, tid)
+        delete_teilnehmer(self.conn, tid)
+        self.assertTrue(teilnehmer_wiederherstellen(self.conn, sicherung))
+        self.assertEqual(get_ergebnis(self.conn, tid)["notiz_truemmerfeld"], "Rückgängig-Notiz")
 
     def test_veranstaltung_anlegen_und_lesen(self):
         self.assertIsNone(get_veranstaltung(self.conn))
@@ -4002,6 +4150,25 @@ class TestTerminSync(unittest.TestCase):
         self.assertEqual(ergebnis["suche_truemmerfeld"], 45)
         self.assertEqual(ergebnis["anzeige_truemmerfeld"], 25)
 
+    def test_kopiert_disqualifikation_und_abbruch_mit_grund_mit(self):
+        # Marco 18.11.2026: ein im Desktop gesetzter Status darf im Web nicht verschwinden.
+        dq = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Dq", vorname="A", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=1))
+        abbruch = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Abbruch", vorname="B", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=2))
+        normal = add_teilnehmer(self.quelle, NeuerTeilnehmer(
+            nachname="Normal", vorname="C", rufname_hund="H", art="ED", stufe=1, disziplin="Trümmerfeld", startnummer=3))
+        setze_ergebnis_status(self.quelle, dq, True, False)
+        setze_ergebnis_status(self.quelle, abbruch, False, True, abbruch_grund="krankheit")
+
+        zuordnung = kopiere_termin_daten(self.quelle, self.ziel)
+
+        e_dq, e_abbruch, e_normal = (get_ergebnis(self.ziel, zuordnung[i]) for i in (dq, abbruch, normal))
+        self.assertEqual((e_dq["disqualifiziert"], e_dq["abbruch"], e_dq["abbruch_grund"]), (1, 0, None))
+        self.assertEqual((e_abbruch["disqualifiziert"], e_abbruch["abbruch"], e_abbruch["abbruch_grund"]),
+                         (0, 1, "krankheit"))
+        self.assertEqual((e_normal["disqualifiziert"], e_normal["abbruch"]), (0, 0))
+
     def test_id_zuordnung_liefert_alte_und_neue_id(self):
         alte_id = add_teilnehmer(self.quelle, NeuerTeilnehmer(
             nachname="Muster", vorname="Anna", rufname_hund="Rex", art="DK", stufe=1, startnummer=1,
@@ -4236,6 +4403,356 @@ class TestTerminSync(unittest.TestCase):
 
         self.assertEqual(len(bericht.abweichungen), 1)
         self.assertEqual(bericht.im_web_leer, [])
+
+
+class TestErgebnisseAusListe(unittest.TestCase):
+    """importiere_ergebnisse_aus_liste (Ergebnisse vom Web-Server, 18.11.2026): dieselbe Kernlogik wie
+    importiere_ergebnisse_nach_startnummer, aber mit einer Teilnehmerliste (JSON) statt einer
+    Quell-Datenbank. `quelle` spielt hier den Web-Server, `ziel` die Termin-Datei."""
+
+    def setUp(self):
+        self.quelle_pfad = TestTerminSync._neue_temp_datei()
+        self.ziel_pfad = TestTerminSync._neue_temp_datei()
+        self.quelle = init_db(self.quelle_pfad)
+        self.ziel = init_db(self.ziel_pfad)
+
+    def tearDown(self):
+        self.quelle.close()
+        self.ziel.close()
+        for pfad in (self.quelle_pfad, self.ziel_pfad):
+            if os.path.exists(pfad):
+                os.remove(pfad)
+
+    _neue_temp_datei = staticmethod(TestTerminSync._neue_temp_datei)
+
+    def _web_liste(self):
+        """Die Quelle als JSON-Liste, wie der Server sie liefert (Teilnehmerfelder plus „ergebnis“)."""
+        import json
+
+        liste = [dict(t, ergebnis=get_ergebnis(self.quelle, t["id"])) for t in list_teilnehmer(self.quelle)]
+        return json.loads(json.dumps(liste))
+
+    def _teilnehmer(self, verbindung, startnummer=1, nachname="Muster", **felder):
+        daten = dict(nachname=nachname, vorname="Anna", rufname_hund="Rex", art="ED", stufe=1,
+                     disziplin="Trümmerfeld", startnummer=startnummer)
+        daten.update(felder)
+        return add_teilnehmer(verbindung, NeuerTeilnehmer(**daten))
+
+    def test_liefert_dasselbe_wie_der_datenbankweg(self):
+        quelle_id = self._teilnehmer(self.quelle)
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        self._teilnehmer(self.quelle, startnummer=99, nachname="Weg")
+        ziel_id = self._teilnehmer(self.ziel)
+        zweites_ziel = init_db(self._neue_temp_datei())
+        self.addCleanup(zweites_ziel.close)
+        self._teilnehmer(zweites_ziel)
+
+        aus_liste = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+        aus_db = importiere_ergebnisse_nach_startnummer(self.quelle, zweites_ziel)
+
+        self.assertEqual(aus_liste, aus_db)
+        self.assertEqual(aus_liste.aktualisiert, 1)
+        self.assertEqual(aus_liste.nicht_gefunden, ["99"])
+        ergebnis = get_ergebnis(self.ziel, ziel_id)
+        self.assertEqual((ergebnis["suche_truemmerfeld"], ergebnis["anzeige_truemmerfeld"]), (50, 30))
+
+    def test_ergebnis_null_und_leere_disziplin_bleibt_im_ziel(self):
+        self._teilnehmer(self.quelle)  # ohne Ergebnis im Web
+        ziel_id = self._teilnehmer(self.ziel)
+        eintragen_ergebnis(self.ziel, ziel_id, "Trümmerfeld", 44, 22)
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(len(bericht.im_web_leer), 1)
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 44)
+
+    def test_abweichender_teilnehmer_wird_nicht_uebernommen(self):
+        quelle_id = self._teilnehmer(self.quelle, nachname="Anders")
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        ziel_id = self._teilnehmer(self.ziel, nachname="Muster")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(len(bericht.abweichungen), 1)
+        self.assertIsNone((get_ergebnis(self.ziel, ziel_id) or {}).get("suche_truemmerfeld"))
+
+    def test_ungueltige_eintraege_werden_als_fehler_gemeldet(self):
+        quelle_id = self._teilnehmer(self.quelle)
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        ziel_id = self._teilnehmer(self.ziel)
+        liste = self._web_liste() + ["kein dict", {"nachname": "ohne Rest"}, dict(self._web_liste()[0], startnummer=True),
+                                     dict(self._web_liste()[0], ergebnis="falsch")]
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, liste)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(len(bericht.fehler), 4)
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 50)
+
+    def test_ergebniswert_ausserhalb_des_bereichs_ist_ein_einzelfehler(self):
+        quelle_id = self._teilnehmer(self.quelle)
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        zweiter = self._teilnehmer(self.quelle, startnummer=2, nachname="Zwei")
+        eintragen_ergebnis(self.quelle, zweiter, "Trümmerfeld", 50, 30)
+        self._teilnehmer(self.ziel)
+        ziel_zwei = self._teilnehmer(self.ziel, startnummer=2, nachname="Zwei")
+        liste = self._web_liste()
+        liste[0]["ergebnis"]["suche_truemmerfeld"] = "kein Wert"
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, liste)
+
+        self.assertEqual(bericht.fehler, ["Muster, Anna"])
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(get_ergebnis(self.ziel, ziel_zwei)["suche_truemmerfeld"], 50)
+
+    def _paar(self, **quelle_status):
+        """Teilnehmer in Quelle und Ziel (Startnummer 1); Status nur in der Quelle (= Web) gesetzt."""
+        quelle_id = self._teilnehmer(self.quelle)
+        ziel_id = self._teilnehmer(self.ziel)
+        if quelle_status:
+            setze_ergebnis_status(self.quelle, quelle_id, quelle_status.get("dq", False),
+                                  quelle_status.get("abbruch", False), abbruch_grund=quelle_status.get("grund"))
+        return quelle_id, ziel_id
+
+    def _status(self, ziel_id):
+        e = get_ergebnis(self.ziel, ziel_id)
+        return bool(e["disqualifiziert"]), bool(e["abbruch"]), e["abbruch_grund"]
+
+    def test_disqualifikation_wird_gesetzt_und_gemeldet(self):
+        _, ziel_id = self._paar(dq=True)
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._status(ziel_id), (True, False, None))
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual(bericht.status_geaendert, ["Nr. 1 Muster, Anna: ohne Status → disqualifiziert"])
+
+    def test_status_aus_dem_web_wird_in_der_datei_zurueckgenommen(self):
+        _, ziel_id = self._paar()  # im Web kein Status
+        setze_ergebnis_status(self.ziel, ziel_id, True, True, abbruch_grund="krankheit")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._status(ziel_id), (False, False, None))
+        self.assertEqual(len(bericht.status_geaendert), 1)
+        self.assertIn("ohne Status", bericht.status_geaendert[0])
+
+    def test_abbruch_mit_grund_wird_uebernommen_und_grundwechsel_gemeldet(self):
+        _, ziel_id = self._paar(abbruch=True, grund="ungehorsam")
+        setze_ergebnis_status(self.ziel, ziel_id, False, True, abbruch_grund="krankheit")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._status(ziel_id), (False, True, "ungehorsam"))
+        self.assertEqual(len(bericht.status_geaendert), 1)
+
+    def test_unveraenderter_status_wird_nicht_gemeldet(self):
+        _, ziel_id = self._paar(dq=True)
+        setze_ergebnis_status(self.ziel, ziel_id, True, False)
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(bericht.status_geaendert, [])
+        self.assertEqual(bericht.aktualisiert, 0)
+        self.assertEqual(self._status(ziel_id), (True, False, None))
+
+    def test_status_und_punkte_gemeinsam(self):
+        quelle_id, ziel_id = self._paar(abbruch=True, grund="krankheit")
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 40, 20)
+
+        importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._status(ziel_id), (False, True, "krankheit"))
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 40)
+
+    def test_ungueltiger_status_ist_ein_fehler_und_aendert_nichts(self):
+        _, ziel_id = self._paar()
+        basis = self._web_liste()[0]
+        for ergebnis_aenderung in ({"abbruch": 1, "abbruch_grund": "gibt_es_nicht"},
+                                   {"abbruch": 0, "abbruch_grund": "krankheit"},
+                                   {"disqualifiziert": 2}, {"disqualifiziert": "ja"}, {"abbruch": 1.5},
+                                   {"abbruch": 1, "abbruch_grund": 5}):
+            with self.subTest(aenderung=ergebnis_aenderung):
+                eintrag = dict(basis, ergebnis=dict(basis["ergebnis"], suche_truemmerfeld=50, anzeige_truemmerfeld=30,
+                                                    **ergebnis_aenderung))
+                bericht = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+                self.assertEqual(bericht.fehler, ["Muster, Anna"])
+                self.assertEqual(bericht.status_geaendert, [])
+                self.assertEqual(self._status(ziel_id), (False, False, None))
+                self.assertIsNone(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"])
+
+    def test_abbruch_ohne_grund_ist_ein_altfall(self):
+        _, ziel_id = self._paar(abbruch=True)
+
+        importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._status(ziel_id), (False, True, None))
+
+    def test_fehlende_statusschluessel_lassen_den_status_der_datei(self):
+        _, ziel_id = self._paar()
+        setze_ergebnis_status(self.ziel, ziel_id, True, False)
+        eintrag = dict(self._web_liste()[0])
+        eintrag["ergebnis"] = {"suche_truemmerfeld": 50, "anzeige_truemmerfeld": 30}
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+
+        self.assertEqual(bericht.status_geaendert, [])
+        self.assertEqual(self._status(ziel_id), (True, False, None))
+        self.assertEqual(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"], 50)
+
+    def test_status_bei_abweichendem_teilnehmer_wird_nicht_uebernommen(self):
+        quelle_id = self._teilnehmer(self.quelle, nachname="Anders")
+        setze_ergebnis_status(self.quelle, quelle_id, True, False)
+        ziel_id = self._teilnehmer(self.ziel, nachname="Muster")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(len(bericht.abweichungen), 1)
+        self.assertEqual(bericht.status_geaendert, [])
+        self.assertEqual(self._status(ziel_id), (False, False, None))
+
+    def test_datenbankweg_uebernimmt_den_status_ebenfalls(self):
+        _, ziel_id = self._paar(dq=True)
+
+        bericht = importiere_ergebnisse_nach_startnummer(self.quelle, self.ziel)
+
+        self.assertEqual(self._status(ziel_id), (True, False, None))
+        self.assertEqual(len(bericht.status_geaendert), 1)
+
+    def test_keine_liste_ist_ein_fehler(self):
+        for falsch in (None, "text", {"teilnehmer": []}, 5):
+            with self.subTest(falsch=falsch), self.assertRaises(ValueError):
+                importiere_ergebnisse_aus_liste(self.ziel, falsch)
+
+    def test_leere_liste(self):
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, [])
+        self.assertEqual((bericht.aktualisiert, bericht.fehler, bericht.nicht_gefunden), (0, [], []))
+
+
+    # --- Notizen zum Bewertungsbogen (18.11.2026) beim Veröffentlichen und beim Zurückholen ---
+
+    def _notiz(self, ziel_id, disziplin="Trümmerfeld"):
+        return get_ergebnis(self.ziel, ziel_id)[NOTIZ_SPALTEN[disziplin]]
+
+    def test_zurueckholen_uebernimmt_notizen_und_zaehlt_sie_in_aktualisiert(self):
+        quelle_id, ziel_id = self._paar()
+        setze_notiz(self.quelle, quelle_id, "Trümmerfeld", "Im Web notiert")
+        setze_notiz(self.quelle, quelle_id, "Flächensuche", "Zweite")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+
+        self.assertEqual(self._notiz(ziel_id), "Im Web notiert")
+        self.assertEqual(self._notiz(ziel_id, "Flächensuche"), "Zweite")
+        self.assertIsNone(self._notiz(ziel_id, "Behältnisstrecke"))
+        self.assertEqual(bericht.aktualisiert, 1)
+        self.assertEqual((bericht.fehler, bericht.status_geaendert), ([], []))
+        # Datenbankweg liefert dasselbe
+        zweites = init_db(self._neue_temp_datei())
+        self.addCleanup(zweites.close)
+        zid = self._teilnehmer(zweites)
+        self.assertEqual(importiere_ergebnisse_nach_startnummer(self.quelle, zweites), bericht)
+        self.assertEqual(get_ergebnis(zweites, zid)["notiz_truemmerfeld"], "Im Web notiert")
+
+    def test_web_stand_fuehrt_auch_beim_loeschen_und_unveraenderte_zaehlen_nicht(self):
+        _quelle_id, ziel_id = self._paar()
+        setze_notiz(self.ziel, ziel_id, "Trümmerfeld", "alte Notiz der Datei")
+        setze_notiz(self.ziel, ziel_id, "Flächensuche", "bleibt gleich")
+        eintrag = dict(self._web_liste()[0])
+        eintrag["ergebnis"] = dict(eintrag["ergebnis"], notiz_truemmerfeld=None, notiz_flaechensuche="  bleibt gleich ")
+
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+
+        self.assertIsNone(self._notiz(ziel_id))  # im Web leer = gelöscht
+        self.assertEqual(self._notiz(ziel_id, "Flächensuche"), "bleibt gleich")
+        self.assertEqual(bericht.aktualisiert, 1)
+        again = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+        self.assertEqual(again.aktualisiert, 0)
+
+    def test_fehlende_notizschluessel_lassen_die_notiz_der_datei(self):
+        _quelle_id, ziel_id = self._paar()
+        setze_notiz(self.ziel, ziel_id, "Trümmerfeld", "Datei-Notiz")
+        eintrag = dict(self._web_liste()[0])
+        eintrag["ergebnis"] = {"suche_truemmerfeld": 50, "anzeige_truemmerfeld": 30,
+                               "disqualifiziert": 0, "abbruch": 0, "abbruch_grund": None}  # älterer Server
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+        self.assertEqual(self._notiz(ziel_id), "Datei-Notiz")
+        self.assertEqual(bericht.aktualisiert, 1)  # wegen der Punkte
+        eintrag["ergebnis"] = {}
+        importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+        self.assertEqual(self._notiz(ziel_id), "Datei-Notiz")
+
+    def test_ungueltige_notizen_sind_ein_fehler_und_aendern_fuer_den_teilnehmer_nichts(self):
+        _quelle_id, ziel_id = self._paar()
+        setze_notiz(self.ziel, ziel_id, "Flächensuche", "unberuehrt")
+        basis = self._web_liste()[0]
+        for falsch in ({"notiz_truemmerfeld": "x" * (NOTIZ_MAX + 1)}, {"notiz_truemmerfeld": 5},
+                       {"notiz_behaeltnis": ["liste"]}, {"notiz_flaechensuche": {"a": 1}}):
+            with self.subTest(falsch=repr(falsch)[:30]):
+                ergebnis = dict(basis["ergebnis"], suche_truemmerfeld=50, anzeige_truemmerfeld=30,
+                                notiz_flaechensuche="neu")
+                ergebnis.update(falsch)
+                eintrag = dict(basis, ergebnis=ergebnis)
+                bericht = importiere_ergebnisse_aus_liste(self.ziel, [eintrag])
+                self.assertEqual(bericht.fehler, ["Muster, Anna"])
+                self.assertEqual(bericht.aktualisiert, 0)
+                self.assertIsNone(get_ergebnis(self.ziel, ziel_id)["suche_truemmerfeld"])
+                self.assertEqual(self._notiz(ziel_id, "Flächensuche"), "unberuehrt")
+
+    def test_notiz_bei_abweichendem_teilnehmer_wird_nicht_uebernommen(self):
+        quelle_id = self._teilnehmer(self.quelle, nachname="Anders")
+        setze_notiz(self.quelle, quelle_id, "Trümmerfeld", "falscher Hund")
+        ziel_id = self._teilnehmer(self.ziel, nachname="Muster")
+        bericht = importiere_ergebnisse_aus_liste(self.ziel, self._web_liste())
+        self.assertEqual(len(bericht.abweichungen), 1)
+        self.assertIsNone(self._notiz(ziel_id))
+
+    def test_veroeffentlichen_kopiert_notizen_mit(self):
+        quelle_id = self._teilnehmer(self.quelle)
+        eintragen_ergebnis(self.quelle, quelle_id, "Trümmerfeld", 50, 30)
+        setze_notiz(self.quelle, quelle_id, "Trümmerfeld", "Hund unruhig")
+        setze_notiz(self.quelle, quelle_id, "Behältnisstrecke", "Ä" * NOTIZ_MAX)
+        ohne = self._teilnehmer(self.quelle, startnummer=2, nachname="Ohne")  # keine Notiz, kein Ergebnis
+
+        zuordnung = kopiere_termin_daten(self.quelle, self.ziel)
+
+        neu = get_ergebnis(self.ziel, zuordnung[quelle_id])
+        self.assertEqual(neu["notiz_truemmerfeld"], "Hund unruhig")
+        self.assertEqual(len(neu["notiz_behaeltnis"]), NOTIZ_MAX)
+        self.assertIsNone(neu["notiz_flaechensuche"])
+        self.assertEqual(neu["suche_truemmerfeld"], 50)
+        self.assertTrue(all(v is None for k, v in get_ergebnis(self.ziel, zuordnung[ohne]).items() if k.startswith("notiz_")))
+
+    def test_rundreise_veroeffentlichen_aendern_zurueckholen(self):
+        quelle_id = self._teilnehmer(self.quelle)
+        setze_notiz(self.quelle, quelle_id, "Trümmerfeld", "vorher")
+        web = init_db(self._neue_temp_datei())  # spielt den Web-Server
+        self.addCleanup(web.close)
+        zuordnung = kopiere_termin_daten(self.quelle, web)
+        setze_notiz(web, zuordnung[quelle_id], "Trümmerfeld", "im Web geändert")
+        setze_notiz(web, zuordnung[quelle_id], "Flächensuche", "neu im Web")
+
+        bericht = importiere_ergebnisse_nach_startnummer(web, self.quelle)
+
+        self.assertEqual(bericht.aktualisiert, 1)
+        ergebnis = get_ergebnis(self.quelle, quelle_id)
+        self.assertEqual((ergebnis["notiz_truemmerfeld"], ergebnis["notiz_flaechensuche"]),
+                         ("im Web geändert", "neu im Web"))
+
+    def test_notiz_spalten_werden_beim_oeffnen_auf_typ_und_laenge_geprueft(self):
+        from db import termin_werte_verletzt
+
+        tid = self._teilnehmer(self.ziel)
+        self.assertFalse(termin_werte_verletzt(self.ziel))
+        setze_notiz(self.ziel, tid, "Trümmerfeld", "x" * NOTIZ_MAX)
+        self.assertFalse(termin_werte_verletzt(self.ziel))
+        for roh in ("x" * (NOTIZ_MAX + 1), b"blob"):  # (eine Zahl wandelt SQLite wegen der TEXT-Spalte in Text)
+            with self.subTest(roh=repr(roh)[:15]):
+                self.ziel.execute("UPDATE ergebnisse SET notiz_behaeltnis = ? WHERE teilnehmer_id = ?", (roh, tid))
+                self.assertTrue(termin_werte_verletzt(self.ziel))
+        self.ziel.execute("UPDATE ergebnisse SET notiz_behaeltnis = NULL WHERE teilnehmer_id = ?", (tid,))
+        self.assertFalse(termin_werte_verletzt(self.ziel))
 
 
 class TestExportiereTerminNachPostgresFehlerpfad(unittest.TestCase):

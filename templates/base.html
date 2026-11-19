@@ -38,6 +38,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;  /* am Handy rutscht die Navigation unter den Titel statt ihn zu überlappen */
     gap: 0.8em;
   }
   header .marke { display: flex; align-items: center; gap: 0.6em; min-width: 0; }
@@ -45,7 +46,7 @@
   header .titel { font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
   header .unterzeile { display: block; font-weight: 400; font-size: 0.78em; color: var(--kopf-text2);
                        white-space: nowrap; }
-  header nav { font-size: 0.85em; display: flex; flex-wrap: wrap; justify-content: flex-end;
+  header nav { font-size: 0.85em; display: flex; flex: 1 1 14em; flex-wrap: wrap; justify-content: flex-end;
                align-items: baseline; column-gap: 1em; row-gap: 0.2em; }
   header a { color: var(--kopf-text); text-decoration: none; }
   header a:hover, header a:focus { text-decoration: underline; }
@@ -148,7 +149,10 @@
     border-radius: 6px;
     padding: 0.8em;
   }
+  /* Breite Seiten (Ergebnistabelle): die Spalte der übrigen Seiten wird aufgehoben. */
+  main.breit { max-width: none; }
 </style>
+{% block stil %}{% endblock %}
 </head>
 <body>
 <header>
@@ -166,6 +170,8 @@
     <nav>
       {# Abstand per CSS statt „·“ - beim Umbruch am Tablet blieb sonst ein Punkt allein am
          Zeilenende stehen (Erscheinungsbild „Beagle“, Marco 01.11.2026). #}
+      {% if session.get('schema_name') %}<a href="{{ url_for('teilnehmerliste') }}">Teilnehmer</a>{% endif %}
+      {% if session.get('schema_name') %}<a href="{{ url_for('ergebnistabelle') }}">Ergebnistabelle</a>{% endif %}
       {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a>{% endif %}
       {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a>{% endif %}
       {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a>{% endif %}
@@ -176,7 +182,7 @@
     </nav>
   {% endif %}
 </header>
-<main>
+<main{% block main_attr %}{% endblock %}>
 {% block inhalt %}{% endblock %}
 </main>
 <footer>SHS-Prüfungsprogramm{% if version %} · Version {{ version }}{% endif %} · <a href="{{ url_for('lizenzen') }}">Lizenzen</a></footer>

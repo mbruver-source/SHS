@@ -102,7 +102,7 @@ Diese zwei Punkte sind vom Nutzer als akzeptables Restrisiko eingestuft (Entsche
 ## Tests lokal ausführen (ohne PySide6/psycopg2/pytest)
 
 ```
-python3 -m unittest test_db test_db_fassade test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel
+python3 -m unittest test_db test_db_fassade test_db_postgres_wrapper test_backup test_pdf_export test_app_web test_bump_version test_shs_core test_bewertung_referenz test_altversionen test_drittlizenzen test_agents_spiegel test_web_sync test_ende_zu_ende_web
 ```
 
 Lokal unter Windows immer den Anaconda-Python nehmen: `C:\Users\mbruv\anaconda3\python.exe`

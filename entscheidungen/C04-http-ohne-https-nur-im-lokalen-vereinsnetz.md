@@ -1,6 +1,6 @@
 # C4: HTTP ohne HTTPS, nur im lokalen Vereinsnetz
 
-- **Status:** akzeptiertes Restrisiko / abgelehnt
+- **Status:** akzeptiertes Restrisiko / abgelehnt; teilweise überholt am 18.11.2026: Der Container liefert die Web-Version über einen HTTPS-Proxy (selbstsigniertes Zertifikat), die Desktop-Schnittstelle verlangt HTTPS mit Fingerabdruck-Prüfung
 - **Bereich:** C. Akzeptierte Restrisiken und abgelehnte Punkte: nicht erneut melden
 - **Seit:** 03.10.2026
 

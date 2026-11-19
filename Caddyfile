@@ -1,0 +1,31 @@
+# HTTPS-Proxy vor der Web-Version (siehe compose.yaml, Dienst "proxy", und
+# README_CONTAINER.md, Abschnitt "HTTPS und Zertifikat").
+#
+# Das Zertifikat ist ein langlebiges, selbst signiertes Zertifikat, das EINMAL mit
+# tools/zertifikat_erzeugen.ps1 erzeugt wird (secrets/tls/). Bewusst KEIN "tls internal":
+# Caddys interne CA stellt kurzlebige Zertifikate aus und erneuert sie laufend - der
+# Fingerabdruck, den das Desktop-Programm festhält (Zertifikats-Pinning), änderte sich
+# dann ständig. Aus demselben Grund keine automatische Zertifikatsverwaltung.
+{
+	auto_https off
+	admin off
+}
+
+# Im Container auf 8443 (kein Port unter 1024 nötig, daher keine Linux-Capability);
+# compose.yaml veröffentlicht ihn als 5443.
+https://:8443 {
+	tls /run/secrets/tls_zertifikat /run/secrets/tls_schluessel
+
+	# Termin-Dateien sind sonst deutlich kleiner als 1 MB; die API begrenzt selbst auf
+	# 100 MB (app_web._API_MAX_UPLOAD_BYTES) - hier eine etwas höhere äußere Grenze.
+	request_body {
+		max_size 110MB
+	}
+
+	reverse_proxy web:5000 {
+		# Kopfzeilen des Clients überschreiben statt anhängen: waitress übernimmt
+		# X-Forwarded-For für die Ratenbegrenzung der API (siehe Containerfile).
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto https
+	}
+}

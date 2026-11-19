@@ -34,8 +34,11 @@ veröffentlichten Termin er arbeiten möchte (siehe termin_waehlen() unten - wir
 Deployment-Annahme (ebenfalls abgestimmt): läuft weiterhin NUR im lokalen Vereins-Netzwerk
 am Prüfungstag, nicht öffentlich aus dem Internet erreichbar - deshalb bewusst kein
 externes CSS/JS/Font-CDN in den Templates (könnte am Veranstaltungsort ohne Internetzugang
-gar nicht geladen werden) und kein eigenes HTTPS/TLS in diesem Modul (ein Reverse-Proxy
-davor wäre bei Bedarf Aufgabe des Deployments, nicht dieses Prototyps).
+gar nicht geladen werden) und kein eigenes HTTPS/TLS in diesem Modul. Seit der
+Desktop-Anbindung (API unter /api/, siehe Abschnitt "API für den Desktop" unten) ist HTTPS
+aber Pflicht: compose.yaml schaltet einen Caddy-Proxy mit langlebigem, selbst signiertem
+Zertifikat davor (siehe README_CONTAINER.md); das Session-Cookie trägt deshalb das
+Secure-Flag (SHS_WEB_COOKIE_SECURE, Standard an).
 
 Jede Anfrage bekommt ihre eigene, kurzlebige PostgreSQL-Verbindung (siehe
 _postgres_verbindung()/_verbindung_schliessen() unten) statt einer global geteilten -
@@ -53,10 +56,13 @@ import secrets
 import sqlite3
 import tempfile
 import time
-from datetime import timedelta
+import threading
+from datetime import date, datetime, timedelta
 from functools import wraps
 
-from flask import Flask, abort, g, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, Flask, abort, g, jsonify, redirect, render_template, request, send_file, session, url_for
+from itsdangerous import BadSignature, URLSafeTimedSerializer
+from werkzeug.exceptions import HTTPException
 from werkzeug.utils import secure_filename
 
 import db
@@ -129,6 +135,21 @@ def _csrf_pruefen():
     POST-Route versehentlich ungeprüft bleiben."""
     if request.method != "POST":
         return None
+    # API für den Desktop (siehe Abschnitt "API für den Desktop" unten): dort zählt NIE ein
+    # Cookie, sondern nur der Header "Authorization: Bearer <Token>" - ein Browser schickt
+    # den nicht von selbst mit, ein CSRF-Angriff über eine fremde Seite ist dort also nicht
+    # möglich. Die Ausnahme ist nur deshalb sicher, weil keine /api/-Route die Session
+    # liest (Test: Cookie-Anmeldung allein ergibt dort 401).
+    if request.path.startswith("/api/"):
+        return None
+    if request.path == "/ergebnisse" and session.get("benutzername"):
+        # Die Ergebnistabelle schickt je Zeile mehrere Felder (siehe ergebnistabelle): ab etwa
+        # 100 Teilnehmern überschritte sie Werkzeugs Standardgrenze von 1000 Formularfeldern.
+        # Nur für angemeldete Nutzer: Eine nicht angemeldete Anfrage soll nicht mehr Daten
+        # parsen lassen als die Standardgrenzen erlauben (das CSRF-Token wird erst danach geprüft).
+        # Muss VOR dem ersten Zugriff auf request.form stehen (der Zugriff darunter parst).
+        request.max_form_parts = _TABELLE_MAX_FORMULARFELDER
+        request.max_form_memory_size = _TABELLE_MAX_FORMULARBYTES
     erwartet = session.get("csrf_token")
     erhalten = request.form.get("csrf_token", "")
     # Auf Bytes vergleichen (Codeprüfung 22.09.): compare_digest wirft bei str mit
@@ -252,11 +273,25 @@ del _web_schluessel
 # Seite AUSGELÖSTEN Anfrage (z. B. einem automatisch abgeschickten Formular oder einem
 # eingebetteten Bild/iframe) - zusätzlich zum CSRF-Token oben eine zweite, unabhängige
 # Absicherungsebene, die auch dann noch greift, falls irgendeine künftige Route das
-# Token einmal vergisst zu prüfen. Bewusst NICHT SESSION_COOKIE_SECURE=True gesetzt: die
-# Web-Version läuft laut Modul-Docstring oben ohne eigenes HTTPS/TLS im lokalen
-# Vereinsnetz - mit Secure=True würde der Browser das Cookie über die dann übliche
-# HTTP-Verbindung gar nicht erst mitschicken und niemand könnte sich mehr anmelden.
+# Token einmal vergisst zu prüfen.
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+
+def _umgebung_ein(name: str, standard: bool) -> bool:
+    """Liest einen Ein/Aus-Schalter aus der Umgebung ("0", "false", "nein", "aus" = aus)."""
+    wert = os.environ.get(name, "").strip().lower()
+    if not wert:
+        return standard
+    return wert not in ("0", "false", "nein", "aus", "no", "off")
+
+
+# Secure-Flag des Session-Cookies (Desktop-Anbindung): die Web-Version läuft jetzt hinter
+# dem HTTPS-Proxy aus compose.yaml, der Browser schickt das Cookie also nur noch über
+# HTTPS. Standard an; SHS_WEB_COOKIE_SECURE=0 nur für einen Start OHNE Proxy über http
+# (siehe __main__ unten - dort gilt für den Entwicklungsserver "aus"). HSTS wird bewusst
+# NICHT gesetzt (selbst signiertes Zertifikat: ein HSTS-Eintrag ließe sich im Browser
+# nicht mehr per Warnseite umgehen).
+app.config["SESSION_COOKIE_SECURE"] = _umgebung_ein("SHS_WEB_COOKIE_SECURE", True)
 
 # Codeprüfung 22.09., G8: maximale Gültigkeit eines Session-Cookies 12 Stunden statt des
 # Flask-Standards von 31 Tagen. Hintergrund: das Session-Cookie ist rein clientseitig
@@ -672,7 +707,16 @@ def _hochgeladene_termin_datei_speichern(datei) -> str:
     _ausstehende_downloads vorgemerkt."""
     fd, temp_pfad = tempfile.mkstemp(suffix=".sqlite")
     os.close(fd)
-    datei.save(temp_pfad)
+    try:
+        datei.save(temp_pfad)
+    except BaseException:
+        # Schlägt das Speichern fehl (z. B. Platte voll), bleibt sonst eine leere
+        # Temp-Datei liegen - der Aufrufer bekommt den Pfad ja nie zu sehen.
+        try:
+            os.remove(temp_pfad)
+        except OSError:
+            pass
+        raise
     return temp_pfad
 
 
@@ -835,6 +879,16 @@ def admin_termin_loeschen(schema_name):
     return redirect(url_for("admin_termine"))
 
 
+def _name_passt_zur_suche(teilnehmer: dict, suche: str) -> bool:
+    """Suche nach Name oder Hund (Teilnehmerliste und Ergebnistabelle): jedes durch Leerzeichen
+    getrennte Wort muss in Nachname, Vorname oder Hund vorkommen (Groß-/Kleinschreibung egal)."""
+    woerter = suche.casefold().split()
+    text = " ".join(
+        str(teilnehmer[feld] or "") for feld in ("nachname", "vorname", "rufname_hund")
+    ).casefold()
+    return all(w in text for w in woerter)
+
+
 @app.route("/teilnehmer")
 @_termin_erforderlich
 def teilnehmerliste(conn):
@@ -856,14 +910,8 @@ def teilnehmerliste(conn):
     # JavaScript (die Sicherheitsrichtlinie erlaubt keine Skripte), deshalb als GET-Formular:
     # jedes Wort muss in Nachname, Vorname oder Hund vorkommen (Groß-/Kleinschreibung egal).
     suche = (request.args.get("q") or "").strip()[:80]
-    woerter = suche.casefold().split()
-    if woerter:
-        zeilen = [
-            z for z in zeilen
-            if all(w in " ".join(
-                str(z["teilnehmer"][feld] or "") for feld in ("nachname", "vorname", "rufname_hund")
-            ).casefold() for w in woerter)
-        ]
+    if suche:
+        zeilen = [z for z in zeilen if _name_passt_zur_suche(z["teilnehmer"], suche)]
     return render_template("teilnehmerliste.html", veranstaltung=veranstaltung, zeilen=zeilen,
                            suche=suche, gesamt=len(alle_teilnehmer))
 
@@ -1064,8 +1112,920 @@ def ergebnis_erfassen(conn, teilnehmer_id):
     )
 
 
+# --- Ergebnistabelle (/ergebnisse) -----------------------------------------------------
+#
+# Marco 18.11.2026: die Ergebniserfassung als Tabelle wie im Desktop-Reiter „Ergebniserfassung“
+# (desktop_ergebnis.py), zusätzlich zur Erfassung je Teilnehmer (/teilnehmer/<id>). Eine Zeile je
+# teilnehmenden Teilnehmer, je Disziplin Suche und Anzeige, dazu „Disqualifiziert“, „Abbruch“
+# (Grund aus db.ABBRUCH_GRUENDE) und der Status. Reine Formulartabelle ohne JavaScript (CSP
+# script-src 'none'): alles prüft der Server.
+#
+# Speichern (POST, ein Formular, „Alle speichern“):
+#   - Es werden nur die Zeilen gespeichert, die im Formular stehen (also die sichtbaren: der
+#     Filter ist ein GET-Formular, die Filterwerte hängen an der Adresse des Speicher-Formulars).
+#   - Gemeinsame Regeln mit der Einzelseite: _pruefe_und_parse_formular (Zahlen, 0-60/0-40,
+#     Suche UND Anzeige), über _ZeilenFormular für die Feldnamen einer Zeile.
+#   - Validierungsfehler in IRGENDEINER Zeile: es wird NICHTS gespeichert, die Seite wird aus den
+#     abgeschickten Werten neu aufgebaut (alle Eingaben bleiben), die Fehler stehen an der Zeile.
+#   - Lost-Update-Schutz je Zeile und Einheit (Punkte einer Disziplin, Status Disqualifiziert/
+#     Abbruch): jede Zeile trägt ein verstecktes Feld geladen_<id> mit dem beim Laden sichtbaren
+#     Stand. Unveränderte Einheiten werden nicht geschrieben. Eine geänderte Einheit, deren DB-
+#     Stand inzwischen vom geladenen abweicht (anderer Richter), wird NICHT überschrieben: die
+#     Zeile erscheint mit dem Hinweis „inzwischen von jemand anderem geändert“ und dem aktuellen
+#     Wert; die übrigen Einheiten und Zeilen sind gespeichert (die Meldung nennt beides).
+#   - Disqualifiziert oder Abbruch ohne Grund sperren die Punkte der Zeile: der Server ignoriert
+#     sie (die gespeicherten Punkte bleiben unangetastet). Ein Abbruch braucht einen Grund.
+
+_TABELLE_MAX_FORMULARFELDER = 10000
+_TABELLE_MAX_FORMULARBYTES = 4 * 1024 * 1024
+_TABELLE_SAMMELSPEICHERN_UEBER = 200  # wie _SAMMELSPEICHERN_UEBER_TEILNEHMER im Desktop
+_ABBRUCH_OHNE_GRUND = "ohne_grund"  # wie desktop_ergebnis_zellen._ABBRUCH_OHNE_GRUND (Altdaten)
+
+
+def _disziplinen_von(teilnehmer: dict) -> list[str]:
+    return [teilnehmer["disziplin"]] if teilnehmer["art"] == "ED" else list(db.ALLE_DISZIPLINEN)
+
+
+def _abbruch_code(ergebnis: dict) -> str:
+    """"" (kein Abbruch), Code aus db.ABBRUCH_GRUENDE oder _ABBRUCH_OHNE_GRUND (Altdaten)."""
+    if not ergebnis.get("abbruch"):
+        return ""
+    grund = ergebnis.get("abbruch_grund")
+    return grund if grund in db.ABBRUCH_GRUENDE else _ABBRUCH_OHNE_GRUND
+
+
+def _tabellen_status_text(ergebnis: dict) -> str:
+    """Status wie im Desktop (_gespeicherter_status_text)."""
+    code = _abbruch_code(ergebnis)
+    if ergebnis.get("disqualifiziert"):
+        return "disqualifiziert"
+    if code == _ABBRUCH_OHNE_GRUND:
+        return "Abbruch"
+    if code:
+        return f"Abbruch: {db.ABBRUCH_GRUENDE[code][0]}"
+    if any(ergebnis.get(spalte) is not None for spalten in db.DISZIPLIN_SPALTEN.values() for spalte in spalten):
+        return "gespeichert"
+    return "noch kein Ergebnis"
+
+
+def _ergebnis_zustand(teilnehmer: dict, ergebnis: dict) -> dict:
+    """Der in der Tabelle sichtbare Stand einer Zeile aus der Datenbank: Punkte je Disziplin als
+    Text, Disqualifiziert, Abbruchcode."""
+    punkte = {}
+    for disziplin in _disziplinen_von(teilnehmer):
+        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+        punkte[disziplin] = (_wert_zu_text(ergebnis.get(spalte_suche)), _wert_zu_text(ergebnis.get(spalte_anzeige)))
+    return {"punkte": punkte, "dq": bool(ergebnis.get("disqualifiziert")), "abbruch": _abbruch_code(ergebnis)}
+
+
+def _geladen_text(teilnehmer: dict, zustand: dict) -> str:
+    """Inhalt des versteckten Feldes geladen_<id>: "S,A" je Disziplin (Reihenfolge von
+    _disziplinen_von), dann Disqualifiziert (0/1) und Abbruchcode, getrennt durch "|"."""
+    teile = [f"{s},{a}" for s, a in (zustand["punkte"][d] for d in _disziplinen_von(teilnehmer))]
+    return "|".join(teile + ["1" if zustand["dq"] else "0", zustand["abbruch"]])
+
+
+def _geladen_lesen(teilnehmer: dict, roh: str | None) -> dict | None:
+    """Gegenstück zu _geladen_text. None, wenn das Feld fehlt oder kaputt ist: dann gibt es keine
+    Information über den geladenen Stand, und die Zeile gilt als verändert (wie _feld_roh)."""
+    if roh is None:
+        return None
+    teile = roh.split("|")
+    disziplinen = _disziplinen_von(teilnehmer)
+    if len(teile) != len(disziplinen) + 2:
+        return None
+    punkte = {}
+    for disziplin, teil in zip(disziplinen, teile):
+        suche, trenner, anzeige = teil.partition(",")
+        if not trenner:
+            return None
+        punkte[disziplin] = (suche.strip(), anzeige.strip())
+    dq, abbruch = teile[-2], teile[-1]
+    if dq not in ("0", "1") or (abbruch and abbruch != _ABBRUCH_OHNE_GRUND and abbruch not in db.ABBRUCH_GRUENDE):
+        return None
+    return {"punkte": punkte, "dq": dq == "1", "abbruch": abbruch}
+
+
+class _ZeilenFormular:
+    """Sicht auf die Felder EINER Tabellenzeile mit den Feldnamen der Einzelseite
+    (suche_<Disziplin>, geladen_suche_<Disziplin> ...), damit _pruefe_und_parse_formular und die
+    Lost-Update-Hilfen unverändert wiederverwendet werden: Eingabefelder heißen in der Tabelle
+    <name>_<Teilnehmer-ID>, der geladene Stand kommt aus dem einen Feld geladen_<id>."""
+
+    def __init__(self, formular, teilnehmer_id: int, geladen: dict | None):
+        self._formular = formular
+        self._id = teilnehmer_id
+        self._geladen = geladen
+
+    def get(self, name: str, default=None):
+        if name.startswith(("geladen_suche_", "geladen_anzeige_")):
+            art, _, disziplin = name[len("geladen_"):].partition("_")
+            if self._geladen is None or disziplin not in self._geladen["punkte"]:
+                return default
+            return self._geladen["punkte"][disziplin][0 if art == "suche" else 1]
+        return self._formular.get(f"{name}_{self._id}", default)
+
+
+def _tabellen_filter() -> dict:
+    """Filter aus der Adresse (GET und, über die Adresse des Speicher-Formulars, auch POST)."""
+    return {
+        "lk": (request.args.get("lk") or "").strip()[:80],
+        "nr": (request.args.get("nr") or "").strip()[:10],
+        "q": (request.args.get("q") or "").strip()[:80],
+    }
+
+
+def _tabellen_teilnehmer(conn, filter_: dict) -> list[dict]:
+    """Teilnehmende Teilnehmer, die zum Filter passen, in der Reihenfolge der Tabelle
+    (Prüfung in der Reihenfolge des Anmeldeformulars, dann Startnummer)."""
+    gefunden = []
+    for t in db.list_teilnehmer(conn, nur_teilnehmende=True):
+        if filter_["lk"] and db.leistungsklasse_label(t) != filter_["lk"]:
+            continue
+        if filter_["nr"] and str(t["startnummer"] or "") != filter_["nr"]:
+            continue
+        if filter_["q"] and not _name_passt_zur_suche(t, filter_["q"]):
+            continue
+        gefunden.append(t)
+    gefunden.sort(key=lambda t: (
+        db.pruefung_sortierschluessel(db.leistungsklasse_label(t)),
+        t["startnummer"] is None, t["startnummer"] or 0, db.sortierschluessel_text(t["nachname"]),
+    ))
+    return gefunden
+
+
+def _zeilen_ids_aus_formular(formular) -> list[int]:
+    """Teilnehmer-IDs der abgeschickten Zeilen (aus den Feldern geladen_<id>), ohne Doppelte."""
+    ids: list[int] = []
+    for name in formular.keys():
+        nummer = name[len("geladen_"):]
+        if name.startswith("geladen_") and nummer.isascii() and nummer.isdigit() and len(nummer) <= 12:
+            if int(nummer) not in ids:
+                ids.append(int(nummer))
+    return ids
+
+
+def _tabelle_pruefen(formular, ids: list[int], teilnehmer_je_id: dict) -> tuple[dict, dict]:
+    """Phase 1 des Speicherns: liest und prüft alle Zeilen. Liefert ({id: Plan}, {id: Fehlertext});
+    gespeichert wird nur, wenn es keinen Fehler gibt."""
+    plaene: dict[int, dict] = {}
+    fehler: dict[int, str] = {}
+    for tid in ids:
+        t = teilnehmer_je_id[tid]
+        disziplinen = _disziplinen_von(t)
+        geladen = _geladen_lesen(t, _feld_roh(formular, f"geladen_{tid}"))
+        zeile = _ZeilenFormular(formular, tid, geladen)
+        dq = _feld_zu_text(formular, f"dq_{tid}") == "1"
+        abbruch = _feld_zu_text(formular, f"abbruch_{tid}")
+        if abbruch and abbruch != _ABBRUCH_OHNE_GRUND and abbruch not in db.ABBRUCH_GRUENDE:
+            fehler[tid] = "Unbekannter Abbruchgrund."
+            continue
+        if abbruch == _ABBRUCH_OHNE_GRUND and not (geladen and geladen["abbruch"] == _ABBRUCH_OHNE_GRUND):
+            fehler[tid] = "Ein Abbruch braucht einen Grund - bitte einen Grund wählen."
+            continue
+        werte = None
+        geladene_werte = _geladene_werte_aus_formular(zeile, disziplinen)
+        if not (dq or abbruch == _ABBRUCH_OHNE_GRUND):  # sonst sind die Punkte gesperrt (ignoriert)
+            werte, text = _pruefe_und_parse_formular(zeile, disziplinen, geladene_werte)
+            if text is not None:
+                fehler[tid] = text
+                continue
+        plaene[tid] = {"zeile": zeile, "geladen": geladen, "geladene_werte": geladene_werte,
+                       "dq": dq, "abbruch": abbruch, "werte": werte}
+    return plaene, fehler
+
+
+def _einheit_entscheiden(unveraendert: bool, schon_gleich: bool, geladen_bekannt: bool, aktuell_wie_geladen: bool) -> str:
+    """"skip", "schreiben" oder "konflikt" für eine Einheit (Punkte einer Disziplin bzw. Status)."""
+    if unveraendert or schon_gleich:
+        return "skip"
+    if geladen_bekannt and not aktuell_wie_geladen:
+        return "konflikt"
+    return "schreiben"
+
+
+def _tabelle_schreiben(conn, plaene: dict, teilnehmer_je_id: dict, ergebnis_je_id: dict) -> tuple[set, dict]:
+    """Phase 2: Konfliktprüfung gegen den aktuellen DB-Stand und Schreiben. Liefert (IDs der
+    Zeilen mit geschriebenen Werten, {id: [Konflikttexte]}). Ab _TABELLE_SAMMELSPEICHERN_UEBER
+    Zeilen in EINER Transaktion (ganz oder gar nicht), sonst mit einem Commit je Wert."""
+    gesammelt = len(plaene) > _TABELLE_SAMMELSPEICHERN_UEBER
+    gespeichert: set[int] = set()
+    konflikte: dict[int, list[str]] = {}
+    for tid, plan in plaene.items():
+        t = teilnehmer_je_id[tid]
+        aktuell_ergebnis = ergebnis_je_id.get(tid) or {}
+        aktuell = _ergebnis_zustand(t, aktuell_ergebnis)
+        geladen = plan["geladen"]
+        meldungen = konflikte.setdefault(tid, [])
+
+        status_neu = (plan["dq"], plan["abbruch"])
+        status_aktuell = (aktuell["dq"], aktuell["abbruch"])
+        entscheidung = _einheit_entscheiden(
+            unveraendert=geladen is not None and status_neu == (geladen["dq"], geladen["abbruch"]),
+            schon_gleich=status_neu == status_aktuell,
+            geladen_bekannt=geladen is not None,
+            aktuell_wie_geladen=geladen is not None and status_aktuell == (geladen["dq"], geladen["abbruch"]),
+        )
+        if entscheidung == "schreiben":
+            db.setze_ergebnis_status(
+                conn, tid, plan["dq"], bool(plan["abbruch"]),
+                abbruch_grund=plan["abbruch"] if plan["abbruch"] in db.ABBRUCH_GRUENDE else None,
+                commit=not gesammelt,
+            )
+            gespeichert.add(tid)
+        elif entscheidung == "konflikt":
+            meldungen.append("Disqualifiziert/Abbruch wurde inzwischen von jemand anderem geändert "
+                             f"(aktuell: {_tabellen_status_text(aktuell_ergebnis)}) - Ihre Änderung wurde nicht gespeichert.")
+
+        if plan["werte"] is None:
+            continue  # Punkte gesperrt: ignoriert, die gespeicherten Punkte bleiben
+        # Hat jemand anderes die Zeile inzwischen gesperrt (Disqualifiziert/Abbruch ohne Grund),
+        # sind Punkte aus dem alten Stand hinfällig (wie im Desktop: Eingaben verworfen).
+        extern_gesperrt = (
+            geladen is not None
+            and (aktuell["dq"] or aktuell["abbruch"] == _ABBRUCH_OHNE_GRUND)
+            and not (geladen["dq"] or geladen["abbruch"] == _ABBRUCH_OHNE_GRUND)
+        )
+        for disziplin, (suche, anzeige) in plan["werte"].items():
+            aktuelle_texte = aktuell["punkte"][disziplin]
+            spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+            entscheidung = _einheit_entscheiden(
+                unveraendert=_disziplin_unveraendert(plan["zeile"], disziplin, plan["geladene_werte"]),
+                schon_gleich=(suche, anzeige) == (aktuell_ergebnis.get(spalte_suche), aktuell_ergebnis.get(spalte_anzeige)),
+                geladen_bekannt=geladen is not None,
+                aktuell_wie_geladen=geladen is not None and aktuelle_texte == geladen["punkte"].get(disziplin),
+            )
+            if entscheidung == "schreiben" and extern_gesperrt:
+                entscheidung = "konflikt"
+            if entscheidung == "schreiben":
+                db.eintragen_ergebnis(conn, tid, disziplin, suche, anzeige, commit=not gesammelt)
+                gespeichert.add(tid)
+            elif entscheidung == "konflikt":
+                ihre = f"{_wert_zu_text(suche) or '–'}/{_wert_zu_text(anzeige) or '–'}"
+                jetzt = f"{aktuelle_texte[0] or '–'}/{aktuelle_texte[1] or '–'}"
+                meldungen.append(
+                    f"{disziplin} wurde inzwischen von jemand anderem geändert (aktuell Suche/Anzeige: {jetzt}) - "
+                    f"Ihre Eingabe {ihre} wurde nicht gespeichert."
+                )
+    if gesammelt:
+        conn.commit()
+    return gespeichert, {tid: m for tid, m in konflikte.items() if m}
+
+
+def _tabellenzeile(t: dict, ergebnis: dict, formular=None, fehler: str | None = None, konflikt: list[str] | None = None) -> dict:
+    """Eine Tabellenzeile fürs Template. Mit `formular` (Neuaufbau nach einem Validierungsfehler)
+    stammen Eingaben, Häkchen und Auswahl aus den abgeschickten Werten, das versteckte Feld
+    geladen_<id> UNVERÄNDERT aus dem Formular (der ursprünglich geladene Stand, siehe
+    _zeilen_aus_formular); sonst alles aus der Datenbank. Status und Abbruch-Optionen zeigen
+    immer den gespeicherten Stand."""
+    zustand = _ergebnis_zustand(t, ergebnis)
+    geladen = _geladen_text(t, zustand)
+    dq, abbruch = zustand["dq"], zustand["abbruch"]
+    punkte = dict(zustand["punkte"])
+    if formular is not None:
+        zeile = _ZeilenFormular(formular, t["id"], None)
+        geladen = _feld_roh(formular, f"geladen_{t['id']}") or ""
+        dq = _feld_zu_text(formular, f"dq_{t['id']}") == "1"
+        abbruch = _feld_zu_text(formular, f"abbruch_{t['id']}")
+        for disziplin in punkte:
+            punkte[disziplin] = _disziplin_text_werte(zeile, disziplin)
+    gesperrt = dq or abbruch == _ABBRUCH_OHNE_GRUND
+    return {
+        "id": t["id"],
+        "teilnehmer": t,
+        "label": db.leistungsklasse_label(t),
+        "geladen": geladen,
+        "punkte": [
+            {"disziplin": d, "aktiv": d in punkte,
+             "suche": punkte[d][0] if d in punkte else "", "anzeige": punkte[d][1] if d in punkte else ""}
+            for d in db.ALLE_DISZIPLINEN
+        ],
+        "dq": dq,
+        "abbruch": abbruch,
+        "gesperrt": gesperrt,
+        # „ohne Grund“ gibt es nur als Altdatum und wird nur dann angeboten (wie im Desktop).
+        "abbruch_ohne_grund": abbruch == _ABBRUCH_OHNE_GRUND or zustand["abbruch"] == _ABBRUCH_OHNE_GRUND,
+        "status": _tabellen_status_text(ergebnis),
+        "fehler": fehler,
+        "konflikt": konflikt,
+    }
+
+
+@app.route("/ergebnisse", methods=["GET", "POST"])
+@_termin_erforderlich
+def ergebnistabelle(conn):
+    """GET zeigt die Ergebnistabelle (Filter per Adresse: lk, nr, q), POST speichert sie (siehe
+    Abschnittskommentar oben für die Regeln)."""
+    filter_ = _tabellen_filter()
+    alle_lk = db.alle_leistungsklassen(conn)
+    if filter_["lk"] not in alle_lk:
+        filter_["lk"] = ""
+    meldung = None
+    hinweis = None
+    fehlermeldung = None
+    fehler_je_id: dict[int, str] = {}
+    konflikte: dict[int, list[str]] = {}
+    formular = None
+
+    if request.method == "POST":
+        # Maßgeblich sind alle teilnehmenden Teilnehmer dieses Termins, nicht nur die sichtbaren:
+        # eine abgeschickte ID, die es hier nicht (mehr) gibt, wird ignoriert.
+        teilnehmer_je_id = {t["id"]: t for t in db.list_teilnehmer(conn, nur_teilnehmende=True)}
+        abgeschickt = _zeilen_ids_aus_formular(request.form)
+        ids = [tid for tid in abgeschickt if tid in teilnehmer_je_id]
+        ignoriert = len(abgeschickt) - len(ids)
+        plaene, fehler_je_id = _tabelle_pruefen(request.form, ids, teilnehmer_je_id)
+        if fehler_je_id:
+            fehlermeldung = (f"Es wurde nichts gespeichert: {len(fehler_je_id)} Zeile(n) enthalten Fehler "
+                             "(rot markiert). Alle Eingaben stehen noch in der Tabelle.")
+            formular = request.form
+        else:
+            gespeichert, konflikte = _tabelle_schreiben(conn, plaene, teilnehmer_je_id, db.ergebnisse_je_teilnehmer(conn))
+            if not konflikte and not ignoriert:
+                return redirect(url_for("ergebnistabelle", gespeichert=len(gespeichert), **{
+                    k: v for k, v in filter_.items() if v}))
+            teile = [f"{len(gespeichert)} Zeile(n) gespeichert."]
+            if konflikte:
+                fehlermeldung = (f"{len(konflikte)} Zeile(n) wurden inzwischen von jemand anderem geändert; "
+                                 "die betroffenen Werte wurden NICHT überschrieben (gelb markiert, "
+                                 "die Tabelle zeigt den aktuellen Stand).")
+            if ignoriert:
+                teile.append(f"{ignoriert} Zeile(n) gehören nicht (mehr) zu diesem Termin und wurden ignoriert.")
+            meldung = " ".join(teile)
+    else:
+        try:
+            anzahl = int(request.args.get("gespeichert", ""))
+        except ValueError:
+            anzahl = None
+        if anzahl is not None and 0 <= anzahl <= 100000:
+            meldung = f"{anzahl} Zeile(n) gespeichert." if anzahl else "Keine Änderungen zu speichern."
+        # Rückmeldung von /ergebnisse/boegen.pdf: nur feste Texte zu festen Codes, nie Text aus der Adresse.
+        boegen_hinweis = _BOEGEN_PDF_HINWEISE.get(request.args.get("boegen", ""))
+        if boegen_hinweis is not None:
+            # „keine benutzten Bögen“ ist nur ein Hinweis (neutral), nur ein echter Fehler wird rot gezeigt.
+            if request.args.get("boegen") == "keine":
+                hinweis = boegen_hinweis
+            else:
+                fehlermeldung = boegen_hinweis
+
+    ergebnis_je_id = db.ergebnisse_je_teilnehmer(conn)
+    sichtbare = _tabellen_teilnehmer(conn, filter_)
+    zeilen = []
+    for t in sichtbare:
+        eigenes_formular = formular if formular is not None and f"geladen_{t['id']}" in formular else None
+        zeilen.append(_tabellenzeile(
+            t, ergebnis_je_id.get(t["id"]) or {}, eigenes_formular,
+            fehler=fehler_je_id.get(t["id"]), konflikt=konflikte.get(t["id"]),
+        ))
+        # Knopf „Bogen“ je aktiver Disziplin (Online-Bewertungsbogen, siehe unten); der Filter
+        # hängt an der Adresse, damit „Zurück“ dieselbe Tabelle zeigt.
+        for p in zeilen[-1]["punkte"]:
+            if p["aktiv"]:
+                p["bogen_url"] = url_for("bewertungsbogen", teilnehmer_id=t["id"], disziplin=p["disziplin"],
+                                         **{k: v for k, v in filter_.items() if v})
+
+    return render_template(
+        "ergebnis_tabelle.html",
+        veranstaltung=db.get_veranstaltung(conn),
+        zeilen=zeilen,
+        disziplinen=list(db.ALLE_DISZIPLINEN),
+        filter=filter_,
+        alle_lk=alle_lk,
+        abbruch_gruende=[(code, text[0]) for code, text in db.ABBRUCH_GRUENDE.items()],
+        suche_max=db.SUCHE_MAX,
+        anzeige_max=db.ANZEIGE_MAX,
+        meldung=meldung,
+        hinweis=hinweis,
+        fehlermeldung=fehlermeldung,
+        speichern_url=url_for("ergebnistabelle", **{k: v for k, v in filter_.items() if v}),
+        boegen_pdf_url=url_for("ergebnis_boegen_pdf", **{k: v for k, v in filter_.items() if v}),
+    )
+
+
+# --- Benutzte Bewertungsbögen als Sammel-PDF (/ergebnisse/boegen.pdf) --------------------
+#
+# Marco 18.11.2026: ein Knopf in der Ergebnistabelle lädt alle BENUTZTEN Bewertungsbögen (Papierlayout
+# wie am Desktop, mit eingetragenen Punkten, Status und Notizen) als eine PDF. Benutzt heißt: der
+# Teilnehmer hat mindestens einen Punktwert, Disqualifiziert/Abbruch oder eine Notiz. Der Filter der
+# Tabelle (lk, nr, q) gilt unverändert; gedruckt wird der GESPEICHERTE Stand (nicht gespeicherte
+# Eingaben der Tabelle fehlen). Reihenfolge und Seitenaufteilung wie der Desktop-Sammelausdruck
+# (pdf_export.erstelle_alle_bewertungsboegen_pdf: nach Startnummer, Dreikampf 2 Seiten, ED 1 Blatt).
+# pdf_export (reportlab) wird erst beim Aufruf importiert, damit die Web-App auch ohne reportlab startet.
+
+_BOEGEN_PDF_HINWEISE = {
+    "keine": "Keine benutzten Bewertungsbögen: Für die gewählten Teilnehmer ist noch nichts eingetragen "
+             "(weder Punkte noch Disqualifikation, Abbruch oder Notiz).",
+    "fehler": "Die PDF konnte nicht erstellt werden. Bitte später noch einmal versuchen; "
+              "bleibt der Fehler, bitte den Administrator informieren.",
+}
+
+
+def _bogen_benutzt(ergebnis: dict | None) -> bool:
+    """Hat dieser Teilnehmer einen Eintrag, der einen Bogen lohnt: Punktwert, Disqualifiziert,
+    Abbruch oder eine Notiz (Leerraum zählt nicht)?"""
+    if not ergebnis:
+        return False
+    if ergebnis.get("disqualifiziert") or ergebnis.get("abbruch"):
+        return True
+    if any(ergebnis.get(spalte) is not None for spalten in db.DISZIPLIN_SPALTEN.values() for spalte in spalten):
+        return True
+    return any(_notiz_text(ergebnis.get(spalte)) for spalte in db.NOTIZ_SPALTEN.values())
+
+
+@app.route("/ergebnisse/boegen.pdf")
+@_termin_erforderlich
+def ergebnis_boegen_pdf(conn):
+    """Sammel-PDF der benutzten Bewertungsbögen (siehe Abschnittskommentar oben). Ohne passende
+    Teilnehmer und bei einem Fehler beim Erzeugen geht es mit einem festen Hinweis zurück zur
+    Tabelle (kein 500, nichts Internes)."""
+    filter_ = _tabellen_filter()
+    if filter_["lk"] not in db.alle_leistungsklassen(conn):
+        filter_["lk"] = ""  # wie die Tabelle: ein unbekannter Filterwert zeigt dort (und hier) alle
+    zurueck = {k: v for k, v in filter_.items() if v}
+    ergebnis_je_id = db.ergebnisse_je_teilnehmer(conn)
+    ids = {t["id"] for t in _tabellen_teilnehmer(conn, filter_) if _bogen_benutzt(ergebnis_je_id.get(t["id"]))}
+    if not ids:
+        return redirect(url_for("ergebnistabelle", boegen="keine", **zurueck))
+    try:
+        import pdf_export  # erst hier: braucht reportlab (siehe oben)
+        puffer = io.BytesIO()
+        pdf_export.erstelle_alle_bewertungsboegen_pdf(conn, puffer, teilnehmer_ids=ids)
+        daten = puffer.getvalue()
+        veranstaltung = db.get_veranstaltung(conn) or {}
+    except Exception:  # noqa: BLE001 - jeder Fehler (auch fehlendes reportlab) -> feste Meldung
+        app.logger.exception("Sammel-PDF der Bewertungsbögen konnte nicht erstellt werden")
+        return redirect(url_for("ergebnistabelle", boegen="fehler", **zurueck))
+    name = secure_filename(f"Bewertungsboegen_{veranstaltung.get('verein') or ''}_{veranstaltung.get('datum') or ''}")
+    name = (name.strip("._") or "Bewertungsboegen") + ".pdf"
+    antwort = send_file(io.BytesIO(daten), mimetype="application/pdf", as_attachment=True, download_name=name)
+    # send_file setzt selbst Cache-Control (no-cache); der globale Header greift nur per setdefault.
+    antwort.headers["Cache-Control"] = "no-store"
+    return antwort
+
+
+# --- Online-Bewertungsbogen (/bewertungsbogen/<id>/<Disziplin>) -------------------------
+#
+# Marco 18.11.2026: ein ausfüllbarer Bogen je Disziplin, geöffnet über den Knopf „Bogen“ in der
+# Ergebnistabelle (bei Dreikampf je Richter sein Blatt für seine Disziplin, bei ED nur die eigene).
+# Layout wie der Papierbogen (pdf_export._bewertungsabschnitt), aber eine reine Formularseite
+# ohne JavaScript (CSP script-src 'none'). Die Punkte landen in denselben Ergebnisspalten wie in
+# der Tabelle; die Notiz zum Bogen (Position des Gegenstands, Besonderheiten) liegt je Disziplin
+# in ergebnisse.notiz_* (db.NOTIZ_SPALTEN).
+#
+# Alle Regeln der Tabelle gelten unverändert, weil der Bogen sie wiederverwendet: der Teilnehmer
+# erscheint dafür als Einzeldisziplin-Teilnehmer der einen Disziplin (_bogen_sicht), und die Felder
+# heißen wie in der Tabelle (suche_<Disziplin>_<id>, dq_<id>, abbruch_<id>, geladen_<id>) - so
+# prüfen und schreiben _tabelle_pruefen/_tabelle_schreiben ausschließlich diese Disziplin, die
+# anderen Disziplinen eines Dreikampf-Teilnehmers bleiben unangetastet. Neu ist nur die Notiz
+# (Lost-Update-Schutz über geladen_notiz_<id>, bei Konflikt wird nichts überschrieben).
+
+_BOGEN_NOTIZ_FELD = "notiz_{}"
+_BOGEN_NOTIZ_GELADEN = "geladen_notiz_{}"
+
+
+def _bogen_sicht(teilnehmer: dict, disziplin: str) -> dict:
+    """Der Teilnehmer, wie ihn die Tabellen-Hilfen für den Bogen sehen sollen: als Einzeldisziplin
+    der einen Disziplin (so gibt _disziplinen_von nur sie zurück)."""
+    return dict(teilnehmer, art="ED", disziplin=disziplin)
+
+
+def _notiz_text(text: str | None) -> str:
+    """Notiz in der Form, in der sie gespeichert und verglichen wird: einheitliche Zeilenenden
+    (Browser schicken beim Absenden CRLF) und ohne Leerraum am Rand (wie db.setze_notiz)."""
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _bogen_zusammenfassung(teilnehmer: dict, ergebnis: dict, disziplin: str) -> dict:
+    """Gespeicherter Stand für die Anzeige unter dem Bogen: Gesamtpunktzahl der Disziplin (nur,
+    wenn Suche UND Anzeige da sind), Status und die Wertnote nach shs_core. Bei ED ist das die
+    Wertnote der Prüfung, bei DK braucht sie alle drei Disziplinen. Bei Disqualifiziert/Abbruch
+    gibt es keine Wertnote aus den Punkten (wie in db.berechne_auswertung)."""
+    def punkte(d: str) -> int | None:
+        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[d]
+        suche, anzeige = ergebnis.get(spalte_suche), ergebnis.get(spalte_anzeige)
+        return None if suche is None or anzeige is None else suche + anzeige
+
+    gesamt = punkte(disziplin)
+    wertnote = None
+    hinweis = None
+    if not (ergebnis.get("disqualifiziert") or ergebnis.get("abbruch")):
+        if teilnehmer["art"] == "ED":
+            if gesamt is not None:
+                wertnote = db.berechne_wertnote_ed(gesamt)
+        else:
+            je_disziplin = [punkte(d) for d in db.ALLE_DISZIPLINEN]
+            if None in je_disziplin:
+                hinweis = ("Die Wertnote des Dreikampfs steht fest, sobald für alle drei Disziplinen "
+                           "Suche und Anzeige eingetragen sind.")
+            else:
+                wertnote = db.berechne_wertnote_dk(*je_disziplin)
+    return {"gesamt": gesamt, "status": _tabellen_status_text(ergebnis), "wertnote": wertnote,
+            "wertnote_hinweis": hinweis}
+
+
+def _bogen_notiz_schreiben(conn, teilnehmer_id: int, disziplin: str, neu: str, geladen_roh: str | None,
+                           ergebnis: dict) -> tuple[bool, str | None]:
+    """Speichert die Notiz, wenn sie verändert wurde und niemand sie inzwischen anders geändert
+    hat (gleiche Regel wie _einheit_entscheiden). Liefert (geschrieben, Konflikttext)."""
+    aktuell = _notiz_text(ergebnis.get(db.NOTIZ_SPALTEN[disziplin]))
+    geladen = None if geladen_roh is None else _notiz_text(geladen_roh)
+    entscheidung = _einheit_entscheiden(
+        unveraendert=geladen is not None and neu == geladen,
+        schon_gleich=neu == aktuell,
+        geladen_bekannt=geladen is not None,
+        aktuell_wie_geladen=geladen is not None and aktuell == geladen,
+    )
+    if entscheidung == "schreiben":
+        try:
+            db.setze_notiz(conn, teilnehmer_id, disziplin, neu)
+        except ValueError as fehler:
+            return False, f"Die Notiz wurde nicht gespeichert: {fehler}"
+        return True, None
+    if entscheidung == "konflikt":
+        return False, ("Die Notiz wurde inzwischen von jemand anderem geändert - Ihre Änderung wurde nicht "
+                       "gespeichert (die Seite zeigt die aktuelle Notiz).")
+    return False, None
+
+
+@app.route("/bewertungsbogen/<int:teilnehmer_id>/<disziplin>", methods=["GET", "POST"])
+@_termin_erforderlich
+def bewertungsbogen(conn, teilnehmer_id, disziplin):
+    """GET zeigt den Bogen einer Disziplin (vorbelegt mit dem gespeicherten Stand), POST speichert
+    (siehe Abschnittskommentar oben). 404 für unbekannte oder nicht teilnehmende Teilnehmer und
+    für eine Disziplin, die nicht zur Prüfung des Teilnehmers gehört. „Speichern“ bleibt auf dem
+    Bogen (und zeigt Gesamtpunktzahl und Wertnote), „Speichern und zurück zur Tabelle“ geht zur
+    Zeile in der Tabelle. Der Filter der Tabelle (lk, nr, q) hängt an der Adresse."""
+    teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
+    if teilnehmer is None or teilnehmer.get("keine_teilnahme") or disziplin not in _disziplinen_von(teilnehmer):
+        abort(404)
+    sicht = _bogen_sicht(teilnehmer, disziplin)
+    filter_ = {k: v for k, v in _tabellen_filter().items() if v}
+    notiz_feld = _BOGEN_NOTIZ_FELD.format(teilnehmer_id)
+    notiz_geladen_feld = _BOGEN_NOTIZ_GELADEN.format(teilnehmer_id)
+
+    fehler = None
+    konflikt = None
+    formular = None
+    meldung = None
+    if request.method == "POST":
+        form = request.form
+        plaene, fehler_je_id = _tabelle_pruefen(form, [teilnehmer_id], {teilnehmer_id: sicht})
+        fehler = fehler_je_id.get(teilnehmer_id)
+        notiz_neu = _notiz_text(form.get(notiz_feld)) if notiz_feld in form else None
+        if fehler is None and notiz_neu is not None and len(notiz_neu) > db.NOTIZ_MAX:
+            fehler = f"Die Notiz ist zu lang: höchstens {db.NOTIZ_MAX} Zeichen sind möglich."
+        if fehler is not None:
+            formular = form  # nichts gespeichert, alle Eingaben bleiben stehen
+        else:
+            gespeichert, konflikte = _tabelle_schreiben(
+                conn, plaene, {teilnehmer_id: sicht}, {teilnehmer_id: db.get_ergebnis(conn, teilnehmer_id) or {}})
+            konflikt_texte = list(konflikte.get(teilnehmer_id, []))
+            geschrieben = teilnehmer_id in gespeichert
+            if notiz_neu is not None:
+                notiz_geschrieben, notiz_konflikt = _bogen_notiz_schreiben(
+                    conn, teilnehmer_id, disziplin, notiz_neu, form.get(notiz_geladen_feld),
+                    db.get_ergebnis(conn, teilnehmer_id) or {})
+                geschrieben = geschrieben or notiz_geschrieben
+                if notiz_konflikt:
+                    konflikt_texte.append(notiz_konflikt)
+            if not konflikt_texte:
+                if form.get("weiter") == "tabelle":
+                    return redirect(url_for("ergebnistabelle", gespeichert=int(geschrieben),
+                                            _anchor=f"zeile-{teilnehmer_id}", **filter_))
+                return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin,
+                                        gespeichert=int(geschrieben), **filter_))
+            konflikt = konflikt_texte
+            if geschrieben:
+                meldung = "Die übrigen Eingaben wurden gespeichert."
+    else:
+        gespeichert_arg = request.args.get("gespeichert")
+        if gespeichert_arg in ("0", "1"):
+            meldung = "Gespeichert." if gespeichert_arg == "1" else "Keine Änderungen zu speichern."
+
+    ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
+    zeile = _tabellenzeile(sicht, ergebnis, formular, fehler=fehler, konflikt=konflikt)
+    gespeicherte_notiz = _notiz_text(ergebnis.get(db.NOTIZ_SPALTEN[disziplin]))
+    if formular is not None:
+        notiz = (formular.get(notiz_feld) or "")
+        notiz_geladen = _feld_roh(formular, notiz_geladen_feld) or ""
+    else:
+        notiz = notiz_geladen = gespeicherte_notiz
+
+    return render_template(
+        "bewertungsbogen.html",
+        veranstaltung=db.get_veranstaltung(conn),
+        teilnehmer=teilnehmer,
+        label=db.leistungsklasse_label(teilnehmer),
+        disziplin=disziplin,
+        gegenstand=db.gegenstand_fuer_disziplin(teilnehmer, disziplin),
+        zeile=zeile,
+        punkte=next(p for p in zeile["punkte"] if p["disziplin"] == disziplin),
+        notiz=notiz,
+        notiz_geladen=notiz_geladen,
+        notiz_max=db.NOTIZ_MAX,
+        zusammenfassung=_bogen_zusammenfassung(teilnehmer, ergebnis, disziplin),
+        abbruch_gruende=[(code, text[0]) for code, text in db.ABBRUCH_GRUENDE.items()],
+        suche_max=db.SUCHE_MAX,
+        anzeige_max=db.ANZEIGE_MAX,
+        meldung=meldung,
+        speichern_url=url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin, **filter_),
+        tabelle_url=url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **filter_),
+    )
+
+
+# --- API für den Desktop (/api/, nur Administratoren) -----------------------------------
+#
+# Das Desktop-Programm meldet sich mit dem Web-Administrator-Konto an, veröffentlicht
+# Termine und holt die Web-Ergebnisse zurück - ohne Browser, ohne DSN auf dem eigenen
+# Rechner. Der Vertrag (Schlüssel, Statuscodes) steht in den Docstrings der Routen und in
+# Architektur.md, Abschnitt "API für den Desktop".
+#
+# Anmeldung: POST /api/login liefert ein signiertes Token (itsdangerous, Schlüssel =
+# app.secret_key, eigenes Salz, 8 Stunden). Jede weitere Anfrage trägt es im Header
+# "Authorization: Bearer <Token>"; es wird bei JEDER Anfrage gegen die Datenbank geprüft
+# (Konto vorhanden, Konto-Kennung unverändert, noch Administrator) - ein gelöschtes oder
+# herabgestuftes Konto verliert den Zugriff also sofort. Cookie-Sitzungen zählen hier nie
+# (keine /api/-Route liest die Session) - darauf beruht die CSRF-Ausnahme oben.
+
+api = Blueprint("api", __name__, url_prefix="/api")
+
+_API_TOKEN_SALZ = "shs-api-token-v1"
+_API_TOKEN_GUELTIGKEIT_SEKUNDEN = 8 * 60 * 60
+# Nur für das Veröffentlichen über die API (Termin-Dateien sind sonst deutlich kleiner als
+# 1 MB, siehe db_termine.TERMIN_GROESSE_GRENZE); gilt nicht für die übrigen Routen.
+_API_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+# Ratenbegrenzung NUR für POST /api/login (der Web-Login bleibt bewusst ohne Schutz,
+# siehe CLAUDE.md "bewusst akzeptierte Funde"): je Client-IP höchstens
+# _LOGIN_MAX_FEHLVERSUCHE Fehlversuche in _LOGIN_FENSTER_SEKUNDEN, danach 429 mit
+# Retry-After. Zähler nur im Prozessspeicher (geht mit einem Neustart verloren, gilt je
+# Prozess - der Container läuft mit einem Prozess). Hinter dem Proxy kommt die Client-IP
+# über waitress (--trusted-proxy, siehe Containerfile) in request.remote_addr an.
+_LOGIN_MAX_FEHLVERSUCHE = 10
+_LOGIN_FENSTER_SEKUNDEN = 15 * 60
+_LOGIN_MAX_EINTRAEGE = 10000
+_login_fehlversuche: dict[str, list[float]] = {}
+_login_sperre = threading.Lock()
+_api_zeit = time.monotonic  # Modulvariable, damit Tests die Uhr umlenken können
+
+
+def _api_fehler(text: str, status: int, **kopfzeilen):
+    antwort = jsonify({"fehler": text})
+    antwort.status_code = status
+    for name, wert in kopfzeilen.items():
+        antwort.headers[name.replace("_", "-")] = wert
+    return antwort
+
+
+@app.errorhandler(HTTPException)
+def _http_fehler(fehler):
+    """Unter /api/ immer JSON {"fehler": ...} statt der HTML-Fehlerseite; für alle übrigen
+    Pfade bleibt das Verhalten unverändert (die Ausnahme selbst ist die Antwort)."""
+    if not request.path.startswith("/api/"):
+        return fehler
+    texte = {
+        400: "Ungültige Anfrage.",
+        401: "Anmeldung erforderlich.",
+        403: "Keine Berechtigung.",
+        404: "Nicht gefunden.",
+        405: "Methode nicht erlaubt.",
+        413: "Die Datei ist zu groß.",
+    }
+    antwort = _api_fehler(texte.get(fehler.code, "Anfrage fehlgeschlagen."), fehler.code or 500)
+    erlaubt = fehler.get_response().headers.get("Allow")
+    if erlaubt:
+        antwort.headers["Allow"] = erlaubt
+    return antwort
+
+
+def _json_wert(wert):
+    """Datum/Zeit als ISO-Text (Flask würde sie sonst im HTTP-Datumsformat ausgeben)."""
+    if isinstance(wert, (datetime, date)):
+        return wert.isoformat()
+    return wert
+
+
+def _termin_json(termin) -> dict:
+    return {
+        "schema_name": termin.schema_name,
+        "verein": termin.verein,
+        "ort": termin.ort,
+        "datum": _json_wert(termin.datum),
+        "anzahl_teilnehmer": termin.anzahl_teilnehmer,
+    }
+
+
+def _api_token_erzeugen(konto: dict) -> str:
+    return URLSafeTimedSerializer(app.secret_key, salt=_API_TOKEN_SALZ).dumps(
+        {"b": konto["benutzername"], "k": konto["kennung"]}
+    )
+
+
+def _api_admin_erforderlich(view):
+    """Decorator für alle /api/-Routen außer dem Login: prüft Header, Token-Signatur und
+    -Alter und re-validiert das Konto gegen die Datenbank (wie
+    _aktueller_benutzer_oder_redirect, aber mit JSON-Fehlern statt Weiterleitung).
+    401 = nicht angemeldet/Token ungültig, abgelaufen oder Konto weg; 403 = kein
+    Administrator."""
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        teile = request.headers.get("Authorization", "").split(None, 1)
+        if len(teile) != 2 or teile[0].lower() != "bearer":
+            return _api_fehler("Anmeldung erforderlich.", 401, WWW_Authenticate="Bearer")
+        try:
+            daten = URLSafeTimedSerializer(app.secret_key, salt=_API_TOKEN_SALZ).loads(
+                teile[1].strip(), max_age=_API_TOKEN_GUELTIGKEIT_SEKUNDEN
+            )
+        except BadSignature:  # schließt SignatureExpired ein
+            return _api_fehler("Token ungültig oder abgelaufen - bitte neu anmelden.", 401, WWW_Authenticate="Bearer")
+        if not isinstance(daten, dict) or not isinstance(daten.get("b"), str) or not isinstance(daten.get("k"), str):
+            return _api_fehler("Token ungültig oder abgelaufen - bitte neu anmelden.", 401, WWW_Authenticate="Bearer")
+        konto = db.benutzer_stand(_postgres_verbindung(), daten["b"])
+        if konto is None or konto["kennung"] != daten["k"]:
+            return _api_fehler("Das Konto existiert nicht mehr - bitte neu anmelden.", 401, WWW_Authenticate="Bearer")
+        if not konto["ist_admin"]:
+            return _api_fehler("Nur Administratoren dürfen diese Schnittstelle nutzen.", 403)
+        return view(*args, **kwargs)
+    return wrapper
+
+
+def _login_schluessel(benutzername: str) -> list[str]:
+    # Nur die Client-IP wird gezählt, nicht der Benutzername: sonst könnte ein Fremder, der den
+    # Admin-Namen kennt, die Desktop-Anmeldung des Admins mit Fehlversuchen sperren.
+    return ["i:" + (request.remote_addr or "?")]
+
+
+def _login_wartezeit(schluessel: list[str]) -> int:
+    """Sekunden bis zum nächsten erlaubten Versuch (0 = frei). Räumt dabei abgelaufene
+    Zeitstempel ab."""
+    jetzt = _api_zeit()
+    wartezeit = 0
+    with _login_sperre:
+        if len(_login_fehlversuche) > _LOGIN_MAX_EINTRAEGE:
+            for name in list(_login_fehlversuche):
+                if all(jetzt - z >= _LOGIN_FENSTER_SEKUNDEN for z in _login_fehlversuche[name]):
+                    del _login_fehlversuche[name]
+        for name in schluessel:
+            zeiten = [z for z in _login_fehlversuche.get(name, []) if jetzt - z < _LOGIN_FENSTER_SEKUNDEN]
+            if zeiten:
+                _login_fehlversuche[name] = zeiten
+            else:
+                _login_fehlversuche.pop(name, None)
+            if len(zeiten) >= _LOGIN_MAX_FEHLVERSUCHE:
+                frei_ab = zeiten[len(zeiten) - _LOGIN_MAX_FEHLVERSUCHE] + _LOGIN_FENSTER_SEKUNDEN
+                wartezeit = max(wartezeit, int(frei_ab - jetzt) + 1)
+    return wartezeit
+
+
+def _login_fehlversuch_merken(schluessel: list[str]) -> None:
+    jetzt = _api_zeit()
+    with _login_sperre:
+        for name in schluessel:
+            _login_fehlversuche.setdefault(name, []).append(jetzt)
+
+
+@api.post("/login")
+def api_login():
+    """POST /api/login - Anmeldung mit dem Web-Administrator-Konto.
+
+    Anfrage: JSON {"benutzername": str, "passwort": str}.
+    Antwort 200: {"token": str, "gueltig_sekunden": int}.
+    Fehler: 400 (kein/ungültiges JSON), 401 (Benutzername oder Passwort falsch),
+    403 (Konto ist kein Administrator), 429 (zu viele Fehlversuche, Header Retry-After in
+    Sekunden). Jede Fehlerantwort: {"fehler": "<deutscher Text>"}."""
+    daten = request.get_json(silent=True)
+    if not isinstance(daten, dict):
+        return _api_fehler("Erwartet wird JSON mit benutzername und passwort.", 400)
+    benutzername, passwort = daten.get("benutzername"), daten.get("passwort")
+    if not isinstance(benutzername, str) or not isinstance(passwort, str) or not benutzername.strip():
+        return _api_fehler("Erwartet wird JSON mit benutzername und passwort.", 400)
+
+    schluessel = _login_schluessel(benutzername)
+    wartezeit = _login_wartezeit(schluessel)
+    if wartezeit:
+        return _api_fehler(
+            "Zu viele fehlgeschlagene Anmeldungen - bitte später erneut versuchen.", 429,
+            Retry_After=str(wartezeit),
+        )
+    konto = db.pruefe_login(_postgres_verbindung(), benutzername, passwort)
+    if not konto:
+        _login_fehlversuch_merken(schluessel)
+        return _api_fehler("Benutzername oder Passwort falsch.", 401)
+    if not konto["ist_admin"]:
+        return _api_fehler("Nur Administratoren dürfen diese Schnittstelle nutzen.", 403)
+    with _login_sperre:
+        _login_fehlversuche.pop(schluessel[0], None)
+    return jsonify({"token": _api_token_erzeugen(konto), "gueltig_sekunden": _API_TOKEN_GUELTIGKEIT_SEKUNDEN})
+
+
+@api.get("/termine")
+@_api_admin_erforderlich
+def api_termine():
+    """GET /api/termine - alle veröffentlichten Termine.
+
+    Antwort 200: {"termine": [{"schema_name": str, "verein": str|null, "ort": str|null,
+    "datum": "JJJJ-MM-TT"|null, "anzahl_teilnehmer": int}, ...]}."""
+    termine = db.liste_termine_postgres(_postgres_verbindung())
+    return jsonify({"termine": [_termin_json(t) for t in termine]})
+
+
+@api.post("/termine")
+@_api_admin_erforderlich
+def api_termin_veroeffentlichen():
+    """POST /api/termine - veröffentlicht eine Termin-Datei (gleiche Logik wie
+    admin_termin_veroeffentlichen).
+
+    Anfrage: multipart/form-data mit dem Feld "sqlite_datei" (Dateiname endet auf .sqlite,
+    höchstens _API_MAX_UPLOAD_BYTES = 100 MB).
+    Antwort 201: {"termin": {"schema_name", "verein", "ort", "datum", "anzahl_teilnehmer"},
+    "dublette_hinweis": str|null} - der Hinweis (gleicher Verein und Datum bereits
+    veröffentlicht) blockiert nicht.
+    Fehler: 400 (Datei fehlt, falsche Endung, keine gültige SHS-Termin-Datei),
+    413 (zu groß), 500 (Serverfehler beim Veröffentlichen)."""
+    request.max_content_length = _API_MAX_UPLOAD_BYTES
+    if request.content_length is not None and request.content_length > _API_MAX_UPLOAD_BYTES:
+        abort(413)
+    datei = request.files.get("sqlite_datei")  # wirft 413, wenn der Upload das Limit sprengt
+    if not datei or not datei.filename:
+        return _api_fehler("Bitte eine .sqlite-Termin-Datei im Feld sqlite_datei senden.", 400)
+    if not datei.filename.lower().endswith(".sqlite"):
+        return _api_fehler("Das ist keine .sqlite-Termin-Datei.", 400)
+
+    conn = _postgres_verbindung()
+    temp_pfad = _hochgeladene_termin_datei_speichern(datei)
+    try:
+        try:
+            sqlite_conn = db.init_db(temp_pfad)
+        except sqlite3.Error:
+            return _api_fehler("Diese Datei ist keine gültige SHS-Termin-Datei.", 400)
+        try:
+            dublette_hinweis = _dublette_hinweis_pruefen(conn, db.get_veranstaltung(sqlite_conn))
+            termin = db.exportiere_termin_nach_postgres(sqlite_conn, conn)
+        except Exception:
+            app.logger.exception("Veröffentlichen über die API fehlgeschlagen")
+            return _api_fehler("Das Veröffentlichen ist auf dem Server fehlgeschlagen.", 500)
+        finally:
+            sqlite_conn.close()
+    finally:
+        try:
+            os.remove(temp_pfad)
+        except FileNotFoundError:
+            pass
+    antwort = jsonify({"termin": _termin_json(termin), "dublette_hinweis": dublette_hinweis})
+    antwort.status_code = 201
+    return antwort
+
+
+@api.get("/termine/<schema_name>/ergebnisse")
+@_api_admin_erforderlich
+def api_termin_ergebnisse(schema_name):
+    """GET /api/termine/<schema_name>/ergebnisse - Teilnehmer und Web-Ergebnisse eines
+    Termins, so dass der Desktop importiere_ergebnisse_nach_startnummer (db_sync.py) ohne
+    zweite Datenbankverbindung ausführen kann.
+
+    Antwort 200: {"teilnehmer": [ {"startnummer": int|null, "nachname": str,
+    "vorname": str, "rufname_hund": str, "art": "ED"|"DK", "stufe": 1|2|3,
+    "disziplin": "Trümmerfeld"|"Flächensuche"|"Behältnisstrecke"|null,
+    "ergebnis": {...}|null}, ... ]}, sortiert nach Startnummer.
+    "ergebnis" enthält alle Spalten der Tabelle ergebnisse: teilnehmer_id (Web-seitige ID,
+    für den Desktop ohne Bedeutung), suche_truemmerfeld, anzeige_truemmerfeld,
+    suche_flaechensuche, anzeige_flaechensuche, suche_behaeltnis, anzeige_behaeltnis
+    (je int|null), disqualifiziert, abbruch (0/1), abbruch_grund (str|null),
+    stechen_sieger (0/1); null, falls zum Teilnehmer keine Ergebniszeile existiert.
+    Fehler: 404 (Schema-Name ungültig oder kein veröffentlichter Termin)."""
+    conn = _postgres_verbindung()
+    try:
+        db._pruefe_schema_name(schema_name)
+    except ValueError:
+        return _api_fehler("Termin nicht gefunden.", 404)
+    if schema_name not in {t.schema_name for t in db.liste_termine_postgres(conn)}:
+        return _api_fehler("Termin nicht gefunden.", 404)
+    db.oeffne_termin_postgres(conn, schema_name)
+    teilnehmer = []
+    for t in db.list_teilnehmer(conn):
+        ergebnis = db.get_ergebnis(conn, t["id"])
+        teilnehmer.append({
+            "startnummer": t.get("startnummer"),
+            "nachname": t.get("nachname"),
+            "vorname": t.get("vorname"),
+            "rufname_hund": t.get("rufname_hund"),
+            "art": t.get("art"),
+            "stufe": t.get("stufe"),
+            "disziplin": t.get("disziplin"),
+            "ergebnis": None if ergebnis is None else {k: _json_wert(v) for k, v in ergebnis.items()},
+        })
+    return jsonify({"teilnehmer": teilnehmer})
+
+
+app.register_blueprint(api)
+
+
 if __name__ == "__main__":
     # Nur für lokale Tests/Entwicklung - der echte Einsatz am Prüfungstag läuft über
     # einen WSGI-Server (z.B. waitress/gunicorn) innerhalb des geplanten Podman-Containers,
-    # nicht über den eingebauten Flask-Entwicklungsserver.
+    # nicht über den eingebauten Flask-Entwicklungsserver. Ohne HTTPS-Proxy davor wäre ein
+    # Secure-Cookie nie anmeldbar: der Entwicklungsserver setzt es deshalb auf "aus", außer
+    # SHS_WEB_COOKIE_SECURE ist ausdrücklich gesetzt.
+    if "SHS_WEB_COOKIE_SECURE" not in os.environ:
+        app.config["SESSION_COOKIE_SECURE"] = False
     app.run(host="0.0.0.0", port=5000, debug=False)

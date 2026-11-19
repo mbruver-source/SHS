@@ -651,7 +651,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             # neu aufgebaut, damit sie sich wie die anderen Tabs beim Terminwechsel verhält.
             # aktueller_pfad wird nur mitgegeben, damit ein Wiederherstellen den gerade
             # geöffneten Termin nicht versehentlich überschreibt (siehe DatensicherungTab).
-            ("datensicherung_tab", "Datensicherung", lambda: DatensicherungTab(aktueller_pfad=pfad, conn=conn)),
+            ("datensicherung_tab", "Datensicherung", lambda: DatensicherungTab(aktueller_pfad=pfad, conn=conn, demo=demo)),
         ]
         neue: list[tuple[str, str, QWidget]] = []
         try:
@@ -692,6 +692,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         finally:
             self._tabs.blockSignals(False)
         self.verwaltung_tab.veranstaltung_geaendert.connect(self._titel_aktualisieren)
+        self.datensicherung_tab.ergebnisse_aus_web_uebernommen.connect(self._ergebnisse_aus_web_uebernommen)
         self.teilnehmer_tab.teilnehmer_geaendert.connect(self._kopf_aktualisieren)
         self.export_tab.ohne_nachfrage_check.toggled.connect(self._ohne_nachfrage_vom_reiter)
         self._ohne_nachfrage_action.setChecked(self.export_tab.ohne_nachfrage_check.isChecked())
@@ -758,6 +759,14 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
                 auto_sicherung_erstellen(self.conn, self.pfad)
         except Exception as exc:  # noqa: BLE001 - eine Sicherung darf die Arbeit nie stören
             fehler_protokollieren(exc)
+
+    def _ergebnisse_aus_web_uebernommen(self) -> None:
+        """Nach „Ergebnisse aus Web holen…“ (Datensicherung): die Reiter mit Ergebnissen neu aus der
+        Datenbank laden. Ungespeicherte Eingaben der Ergebniserfassung wurden vorher geklärt."""
+        self.ergebnis_tab.aktualisieren()
+        for tab in (self.auswertung_tab, self.teilnehmer_uebersicht_tab):
+            tab.aktualisieren()
+        self._kopf_aktualisieren()
 
     def _termin_wechseln(self) -> None:
         """Öffnet den Startdialog erneut, damit ohne Neustart der Anwendung zu einem
@@ -827,13 +836,21 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             )
         QMessageBox.information(self, "Neuer Termin entfernt" if entfernt else "Neuer Termin bleibt", text)
 
-    def _rueckfrage_ungespeichert(self, verwerfen: bool) -> str:
+    def _rueckfrage_ungespeichert(self, verwerfen: bool, ohne_speichern: str | None = None) -> str:
         """Gemeinsame Rückfrage bei ungespeicherten Ergebnissen (Desktop-Prüfung 14.10.2026,
         Teil 8 Nr. 2): "speichern", "weiter" (ohne Speichern) oder "abbrechen". Esc und das
         Fenster-X bedeuten Abbrechen. `verwerfen`: ob "ohne Speichern" die Eingaben verliert
         (Termin-/Demowechsel) oder sie nur ungespeichert stehen bleiben (Reiterwechsel) - das
         steht ausdrücklich im Text, weil derselbe Knopf sonst Verschiedenes bedeutet."""
-        if verwerfen:
+        if verwerfen and ohne_speichern:
+            # Andere Vorgänge als der Terminwechsel (Web-Veröffentlichen/-Holen, desktop_web.py).
+            text = (
+                "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\n"
+                f"„Speichern“ speichert sie jetzt. „Verwerfen“ {ohne_speichern} ohne sie zu speichern – "
+                "die Änderungen gehen dann verloren. „Abbrechen“ bricht den Vorgang ab."
+            )
+            knoepfe = QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+        elif verwerfen:
             text = (
                 "In der Ergebniserfassung gibt es noch nicht gespeicherte Änderungen.\n\n"
                 "„Speichern“ speichert sie jetzt. „Verwerfen“ wechselt ohne Speichern – die "
@@ -855,11 +872,13 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             return "weiter"
         return "abbrechen"
 
-    def _ungespeicherte_ergebnisse_klaeren(self, verwerfen_frage: str) -> bool:
+    def _ungespeicherte_ergebnisse_klaeren(self, verwerfen_frage: str, ohne_speichern: str | None = None) -> bool:
         """Vor dem Verlassen des Termins (Terminwechsel, Demoprüfung): bei ungespeicherten
-        Ergebnissen nachfragen und ggf. speichern. False = Vorgang abbrechen."""
+        Ergebnissen nachfragen und ggf. speichern. False = Vorgang abbrechen. `ohne_speichern`
+        beschreibt für andere Vorgänge als den Terminwechsel, was „Verwerfen“ tut (z. B. „lädt hoch“)."""
         if self.ergebnis_tab.hat_ungespeicherte_aenderungen():
-            antwort = self._rueckfrage_ungespeichert(verwerfen=True)
+            antwort = (self._rueckfrage_ungespeichert(verwerfen=True, ohne_speichern=ohne_speichern)
+                       if ohne_speichern else self._rueckfrage_ungespeichert(verwerfen=True))
             if antwort == "abbrechen":
                 return False
             if antwort == "speichern":

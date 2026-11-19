@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block titel %}Ergebnistabelle – SHS Prüfung{% endblock %}
+{% block main_attr %} class="breit"{% endblock %}
+{% block stil %}
+<style>
+  /* Ergebnistabelle: horizontal scrollbarer Container, die erste Spalte (Start-Nr., Name, Hund)
+     bleibt beim Scrollen stehen - reines CSS, ohne JavaScript (CSP script-src 'none'). */
+  .tabellenrahmen { overflow-x: auto; background: var(--karte); border: 1px solid var(--grau-rand);
+                    border-radius: 10px; -webkit-overflow-scrolling: touch; }
+  table.ergebnisse { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+  table.ergebnisse th, table.ergebnisse td { padding: 0.45em 0.5em; border-bottom: 1px solid var(--grau-rand);
+                                             vertical-align: middle; background: var(--karte); }
+  table.ergebnisse thead th { background: var(--grau-hell); text-align: center; font-size: 0.85em; white-space: nowrap; }
+  table.ergebnisse th.erste { position: sticky; left: 0; z-index: 2; min-width: 11em; max-width: 11em;
+                              text-align: left; border-right: 2px solid var(--grau-rand); font-weight: 400; }
+  table.ergebnisse thead th.erste { z-index: 3; background: var(--grau-hell); font-weight: 700; }
+  table.ergebnisse input.punkt { width: 4.6em; padding: 0.5em 0.3em; font-size: 1.15em; text-align: center; }
+  table.ergebnisse input[readonly] { background: var(--grau-hell); color: var(--gedaempft); }
+  table.ergebnisse select { font: inherit; padding: 0.5em 0.3em; max-width: 11em; border: 1px solid var(--grau-rand);
+                            border-radius: 6px; background: #fff; color: var(--text); }
+  table.ergebnisse .leer { text-align: center; color: var(--gedaempft); }
+  table.ergebnisse label.dq { display: flex; align-items: center; gap: 0.35em; margin: 0; font-weight: 400; white-space: nowrap; }
+  table.ergebnisse label.dq input { width: 1.4em; height: 1.4em; }
+  tr.zeile-fehler th.erste, tr.zeile-fehler td { background: #fbeceb; }
+  tr.zeile-konflikt th.erste, tr.zeile-konflikt td { background: #fbf0d9; }
+  tr.meldung td { padding: 0; }
+  tr.meldung div { position: sticky; left: 0; box-sizing: border-box; width: min(100vw - 3em, 40em);
+                   padding: 0.4em 0.6em; font-size: 0.9em; }
+  tr.meldung.fehler-zeile td { background: #fbeceb; color: var(--rot); }
+  tr.meldung.konflikt-zeile td { background: #fbf0d9; color: #6d4c00; }
+  .filter { display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: flex-end; }
+  .filter > div { min-width: 0; }
+  .filter select, .filter input[type=text] { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
+                                             border-radius: 6px; background: #fff; color: var(--text); }
+  /* Am Handy steht Art/LK unter dem Namen statt in einer eigenen Spalte: so liegen die Eingabefelder
+     ohne langes seitliches Scrollen im Bild. */
+  table.ergebnisse .knopf-klein { font-size: 0.9em; padding: 0.45em 0.7em; white-space: nowrap; }
+  .lk-klein { display: none; }
+  @media (max-width: 700px) {
+    table.ergebnisse .lk-spalte { display: none; }
+    .lk-klein { display: inline; }
+  }
+  .speichern-leiste { display: flex; flex-wrap: wrap; gap: 0.6em; align-items: center; margin: 0.8em 0; }
+</style>
+{% endblock %}
+{% block inhalt %}
+<div class="karte">
+  <h1>Ergebnistabelle</h1>
+  {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum | datum }}</p>{% endif %}
+  <p><a class="knopf knopf-sekundaer" href="{{ url_for('teilnehmerliste') }}">&larr; Zur Teilnehmerliste</a></p>
+</div>
+
+{# Der Filter ist ein eigenes GET-Formular: ohne JavaScript lässt sich eine Tabelle nur über die
+   Adresse eingrenzen. Noch nicht gespeicherte Eingaben gehen beim Filtern verloren - deshalb
+   erst speichern, dann filtern. #}
+<form class="karte filter" method="get" action="{{ url_for('ergebnistabelle') }}" role="search">
+  <div>
+    <label for="lk">Art/LK</label>
+    <select id="lk" name="lk">
+      <option value="">Alle</option>
+      {% for lk in alle_lk %}<option value="{{ lk }}"{% if lk == filter.lk %} selected{% endif %}>{{ lk }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="nr">Start-Nr.</label>
+    <input type="text" id="nr" name="nr" value="{{ filter.nr }}" inputmode="numeric" maxlength="10" size="5" autocomplete="off">
+  </div>
+  <div>
+    <label for="q">Name oder Hund</label>
+    <input type="text" id="q" name="q" value="{{ filter.q }}" maxlength="80" size="14" autocomplete="off">
+  </div>
+  <div>
+    <button type="submit">Filtern</button>
+    {% if filter.lk or filter.nr or filter.q %}<a class="knopf knopf-sekundaer" href="{{ url_for('ergebnistabelle') }}">Alle anzeigen</a>{% endif %}
+  </div>
+  <p style="flex-basis: 100%; margin: 0;"><small>Erst speichern, dann filtern oder einen Bewertungsbogen („Bogen“) öffnen: nicht gespeicherte Eingaben in der Tabelle gehen dabei verloren.</small></p>
+</form>
+
+{% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
+{% if hinweis %}<div class="karte" role="status">{{ hinweis }}</div>{% endif %}
+{% if fehlermeldung %}<div class="fehler" role="alert">{{ fehlermeldung }}</div>{% endif %}
+
+{# Sammel-PDF der benutzten Bewertungsbögen: ein normaler Link (GET) im Knopf-Stil, ohne JavaScript;
+   der Filter der Tabelle hängt an der Adresse. Es zählt der gespeicherte Stand. #}
+<div class="karte" style="display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: center;">
+  <a class="knopf" href="{{ boegen_pdf_url }}" aria-describedby="boegen-pdf-hinweis">Benutzte Bögen als PDF</a>
+  <small id="boegen-pdf-hinweis" style="flex: 1 1 18em;">Lädt alle Bewertungsbögen mit Eintragungen (Punkte, Disqualifikation, Abbruch oder Notiz){% if filter.lk or filter.nr or filter.q %} für die gefilterten Teilnehmer{% endif %} zum Speichern oder Ausdrucken herunter. Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten: erst „Alle speichern“.</small>
+</div>
+
+<form id="ergebnisform" method="post" action="{{ speichern_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="speichern-leiste">
+    <button type="submit">Alle speichern</button>
+    <small>{{ zeilen | length }} Teilnehmer in der Tabelle. Bei „Disqualifiziert“ oder „Abbruch“ ohne Grund werden eingetragene Punkte nicht gewertet und nicht verändert. Ein Abbruch mit Grund lässt eine Teilbewertung zu. „Bogen“ öffnet den ausfüllbaren Bewertungsbogen der Disziplin im selben Tab - erst „Alle speichern“, sonst gehen nicht gespeicherte Eingaben dieser Tabelle verloren.</small>
+  </div>
+
+  <div class="tabellenrahmen">
+    <table class="ergebnisse">
+      <thead>
+        <tr>
+          <th class="erste" rowspan="2" scope="col">Start-Nr. / Name / Hund</th>
+          <th rowspan="2" scope="col" class="lk-spalte">Art/LK</th>
+          {% for d in disziplinen %}
+            <th colspan="3" scope="colgroup">{{ d }}</th>
+          {% endfor %}
+          <th rowspan="2" scope="col">Disqualifiziert</th>
+          <th rowspan="2" scope="col">Abbruch</th>
+          <th rowspan="2" scope="col">Status</th>
+        </tr>
+        <tr>
+          {% for d in disziplinen %}
+            <th scope="col">Suche (0-{{ suche_max }})</th>
+            <th scope="col">Anzeige (0-{{ anzeige_max }})</th>
+            <th scope="col">Bogen</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in zeilen %}
+          {% set t = z.teilnehmer %}
+          <tr id="zeile-{{ z.id }}" class="{% if z.fehler %}zeile-fehler{% elif z.konflikt %}zeile-konflikt{% endif %}">
+            <th class="erste" scope="row">
+              <input type="hidden" name="geladen_{{ z.id }}" value="{{ z.geladen }}">
+              <span class="startnummer">{% if t.startnummer %}#{{ t.startnummer }}{% else %}–{% endif %}</span>{{ t.nachname }}, {{ t.vorname }}<br>
+              <small>{{ t.rufname_hund }}<span class="lk-klein"> · {{ z.label }}</span></small>
+            </th>
+            <td class="lk-spalte">{{ z.label }}</td>
+            {% for p in z.punkte %}
+              {% if p.aktiv %}
+                <td><input class="punkt" type="number" inputmode="numeric" min="0" max="{{ suche_max }}"
+                           name="suche_{{ p.disziplin }}_{{ z.id }}" value="{{ p.suche }}"{% if z.gesperrt %} readonly{% endif %}
+                           aria-label="Suche {{ p.disziplin }}, {{ t.nachname }}, {{ t.rufname_hund }}"></td>
+                <td><input class="punkt" type="number" inputmode="numeric" min="0" max="{{ anzeige_max }}"
+                           name="anzeige_{{ p.disziplin }}_{{ z.id }}" value="{{ p.anzeige }}"{% if z.gesperrt %} readonly{% endif %}
+                           aria-label="Anzeige {{ p.disziplin }}, {{ t.nachname }}, {{ t.rufname_hund }}"></td>
+                <td><a class="knopf knopf-sekundaer knopf-klein" href="{{ p.bogen_url }}"
+                       aria-label="Bewertungsbogen {{ p.disziplin }} öffnen: {{ t.nachname }}, {{ t.rufname_hund }}">Bogen</a></td>
+              {% else %}
+                <td class="leer" colspan="3">–</td>
+              {% endif %}
+            {% endfor %}
+            <td>
+              <label class="dq"><input type="checkbox" name="dq_{{ z.id }}" value="1"{% if z.dq %} checked{% endif %}
+                     aria-label="Disqualifiziert: {{ t.nachname }}, {{ t.rufname_hund }}"> ja</label>
+            </td>
+            <td>
+              <select name="abbruch_{{ z.id }}" aria-label="Abbruch: {{ t.nachname }}, {{ t.rufname_hund }}">
+                <option value="">kein Abbruch</option>
+                {% for code, text in abbruch_gruende %}
+                  <option value="{{ code }}"{% if z.abbruch == code %} selected{% endif %}>{{ text }}</option>
+                {% endfor %}
+                {% if z.abbruch_ohne_grund %}<option value="ohne_grund"{% if z.abbruch == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
+              </select>
+            </td>
+            <td><span class="status {% if z.status == 'gespeichert' %}status-fertig{% else %}status-offen{% endif %}">{{ z.status }}</span></td>
+          </tr>
+          {% if z.fehler %}
+            <tr class="meldung fehler-zeile"><td colspan="14"><div role="alert">{{ t.nachname }}: {{ z.fehler }}</div></td></tr>
+          {% endif %}
+          {% if z.konflikt %}
+            <tr class="meldung konflikt-zeile"><td colspan="14"><div role="alert">{{ t.nachname }}: {{ z.konflikt | join(' ') }}</div></td></tr>
+          {% endif %}
+        {% else %}
+          <tr><td colspan="14" style="padding: 1em;">Kein Teilnehmer passt zum Filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="speichern-leiste">
+    <button type="submit">Alle speichern</button>
+  </div>
+</form>
+{% endblock %}

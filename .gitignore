@@ -42,6 +42,10 @@ Thumbs.db
 .env
 # Geheimnisse der Web-Version als Secret-Dateien (H-3, siehe compose.yaml)
 secrets/
+# TLS-Zertifikat und privater Schlüssel des HTTPS-Proxys (liegen in secrets/tls/, siehe
+# tools/zertifikat_erzeugen.ps1) - zur Sicherheit auch außerhalb von secrets/ ausgeschlossen
+*.pem
+*.key
 # Lokale Formular-PDFs (z. B. Bewertungsbögen zum Vergleichen) - nicht Teil des Repos
 pdf/
 # Datensicherungen der Desktop-Version (ZIP, enthalten alle Termine mit Personendaten) -
