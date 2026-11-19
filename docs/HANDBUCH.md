@@ -985,10 +985,14 @@ bekommst du von der Prüfungsleitung.
 2. **Termin wählen:** Gibt es mehrere veröffentlichte Termine, den richtigen antippen. Bei nur
    einem Termin entfällt dieser Schritt.
 3. **Teilnehmerliste:** Jeder Teilnehmer ist mit **„offen“** (gelb) oder **„bewertet“** (grün)
-   markiert. Teilnehmer antippen.
+   markiert. Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
+   **„Bewertungsbogen:“** direkt zum Online-Bewertungsbogen der jeweiligen Disziplin (siehe unten).
 4. **Ergebnis eintragen:** Je Disziplin **„Suchleistung (0–60)“** und
    **„Anzeigeleistung (0–40)“** eingeben und **„Speichern“** tippen. Danach geht es zurück zur
-   Liste. Beide Felder einer Disziplin leeren und speichern löscht das Ergebnis.
+   Liste; oben steht **„Gespeichert: <Name>.“** (oder „Keine Änderungen zu speichern“, wenn du
+   nichts geändert hast). Beide Felder einer Disziplin leeren und speichern löscht das Ergebnis.
+   Unter „Speichern“ öffnet **„Bewertungsbogen … öffnen“** den Online-Bewertungsbogen einer
+   Disziplin; der Knopf speichert vorher deine Eingaben auf dieser Seite.
 5. **Abmelden** über den Link oben rechts. Nach 12 Stunden ohne Aktivität wirst du automatisch
    abgemeldet.
 
@@ -1010,8 +1014,8 @@ bekommst du von der Prüfungsleitung.
 
 - Beim Dreikampf können mehrere Richter **gleichzeitig** denselben Hund bearbeiten – gespeichert
   wird nur die Disziplin, die du tatsächlich geändert hast.
-- **Disqualifikation und Abbruch** trägst du in der Ergebnistabelle ein (siehe unten), nicht auf
-  der Seite je Teilnehmer.
+- **Disqualifikation, Abbruch und Notizen** trägst du im Online-Bewertungsbogen oder in der
+  Ergebnistabelle ein (siehe unten), nicht auf der Seite je Teilnehmer.
 
 ### Ergebnisse als Tabelle eintragen
 
@@ -1076,9 +1080,10 @@ die der Startnummern, ein Dreikampf-Bogen hat zwei Seiten, ein Einzelstarter-Bog
 
 ![Online-Bewertungsbogen: Punkte, Disqualifikation, Abbruch, Notiz und Gesamtpunktzahl](bilder/handbuch_web_bewertungsbogen.png)
 
-Wer lieber wie auf dem Papierbogen arbeitet, öffnet in der Ergebnistabelle den **Online-Bewertungsbogen**:
-In jeder Zeile steht hinter **Suche** und **Anzeige** einer Disziplin der Knopf **„Bogen“**. Beim
-Dreikampf gibt es drei Knöpfe je Zeile, damit jeder Richter sein Blatt für seine Disziplin ausfüllt;
+Wer lieber wie auf dem Papierbogen arbeitet, öffnet den **Online-Bewertungsbogen** auf einem von
+drei Wegen: in der Teilnehmerliste über die Links hinter **„Bewertungsbogen:“**, auf der Seite je
+Teilnehmer über **„Bewertungsbogen … öffnen“** oder in der Ergebnistabelle. In der Tabelle steht in
+jeder Zeile hinter **Suche** und **Anzeige** einer Disziplin der Knopf **„Bogen“**. Beim Dreikampf gibt es drei Knöpfe je Zeile, damit jeder Richter sein Blatt für seine Disziplin ausfüllt;
 beim Einzelstarter gibt es nur den Knopf seiner Disziplin. Der Bogen öffnet sich im selben Tab.
 **Nicht gespeicherte Eingaben in der Tabelle gehen dabei verloren** – erst **„Alle speichern“**, dann
 den Bogen öffnen.

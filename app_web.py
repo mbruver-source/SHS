@@ -903,9 +903,12 @@ def teilnehmerliste(conn):
             "teilnehmer": t,
             "label": db.leistungsklasse_label(t),
             "vollstaendig": t["id"] not in offene_ids,
+            # UX-Test Web 19.11.2026 (A1): Links zum Online-Bewertungsbogen je Disziplin.
+            "disziplinen": _disziplinen_von(t),
         }
         for t in alle_teilnehmer
     ]
+    meldung = _meldung_nach_einzelseite(conn)
     # Marco 10.11.2026 (UI-Abgleich, wie im Desktop-Programm): Suche nach Name oder Hund. Ohne
     # JavaScript (die Sicherheitsrichtlinie erlaubt keine Skripte), deshalb als GET-Formular:
     # jedes Wort muss in Nachname, Vorname oder Hund vorkommen (Groß-/Kleinschreibung egal).
@@ -913,7 +916,23 @@ def teilnehmerliste(conn):
     if suche:
         zeilen = [z for z in zeilen if _name_passt_zur_suche(z["teilnehmer"], suche)]
     return render_template("teilnehmerliste.html", veranstaltung=veranstaltung, zeilen=zeilen,
-                           suche=suche, gesamt=len(alle_teilnehmer))
+                           suche=suche, gesamt=len(alle_teilnehmer), meldung=meldung)
+
+
+def _meldung_nach_einzelseite(conn) -> str | None:
+    """Bestätigung in der Teilnehmerliste nach dem Speichern auf der Einzelseite (UX-Test Web
+    19.11.2026, B2: vorher kam man ohne jede Rückmeldung zurück zur Liste). Die Einzelseite leitet
+    mit ?gespeichert=<id>&aenderung=0|1 hierher; unbekannte oder ungültige Werte zeigen nichts."""
+    wert = request.args.get("gespeichert", "")
+    if not (wert.isascii() and wert.isdigit()) or len(wert) > 9:  # riesige Zahlen: OverflowError in SQLite
+        return None
+    teilnehmer = db.get_teilnehmer(conn, int(wert))
+    if teilnehmer is None or teilnehmer.get("keine_teilnahme"):
+        return None
+    name = f"{teilnehmer['nachname']}, {teilnehmer['vorname']}"
+    if request.args.get("aenderung") == "0":
+        return f"Keine Änderungen zu speichern ({name})."
+    return f"Gespeichert: {name}."
 
 
 def _feld_zu_text(formular, name: str) -> str:
@@ -1085,13 +1104,20 @@ def ergebnis_erfassen(conn, teilnehmer_id):
         geladene_werte = _geladene_werte_aus_formular(request.form, disziplinen)
         werte, fehler = _pruefe_und_parse_formular(request.form, disziplinen, geladene_werte)
         if fehler is None:
+            geschrieben = False
             for disziplin, (suche, anzeige) in werte.items():
                 if _disziplin_unveraendert(request.form, disziplin, geladene_werte):
                     # Diese Disziplin wurde vom aktuellen Richter nicht verändert - siehe
                     # Funktionsdocstring (Lost-Update-Schutz).
                     continue
                 db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
-            return redirect(url_for("teilnehmerliste"))
+                geschrieben = True
+            # UX-Test Web 19.11.2026 (A1): „Bewertungsbogen … öffnen“ speichert zuerst die Eingaben
+            # dieser Seite (sonst gingen sie verloren) und öffnet dann den Bogen der Disziplin.
+            bogen = request.form.get("bogen")
+            if bogen in disziplinen:
+                return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=bogen))
+            return redirect(url_for("teilnehmerliste", gespeichert=teilnehmer_id, aenderung=int(geschrieben)))
         # Fehlerfall: Seite mit den gerade abgeschickten (nicht den gespeicherten) Werten
         # neu aufbauen, siehe _zeilen_aus_formular.
         zeilen = _zeilen_aus_formular(request.form, disziplinen)

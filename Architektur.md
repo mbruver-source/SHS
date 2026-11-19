@@ -208,7 +208,9 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 - **Online-Bewertungsbogen im Web (`GET/POST /bewertungsbogen/<id>/<Disziplin>`, `bewertungsbogen` in
   `app_web.py`, Template `bewertungsbogen.html`, 18.11.2026)**: je Zeile und aktiver Disziplin der
   Ergebnistabelle ein Knopf „Bogen“ (Dreikampf drei, ED einer; Zeilenanker `#zeile-<id>`), der im
-  selben Tab den ausfüllbaren Bogen einer Disziplin öffnet - ein Blatt je Richter. Aufbau wie der
+  selben Tab den ausfüllbaren Bogen einer Disziplin öffnet - ein Blatt je Richter. Seit 19.11.2026
+  (UX-Test Web, A1) auch über Links je Disziplin in der Teilnehmerliste und über „Bewertungsbogen …
+  öffnen“ auf der Seite je Teilnehmer (speichert vorher deren Eingaben). Aufbau wie der
   Papierbogen (`pdf_export._bewertungsabschnitt`): Kopf mit Start-Nr., Art/LK, Teilnehmer, Hund,
   Verein/Datum, Disziplin und zu suchendem Gegenstand (`db.gegenstand_fuer_disziplin`, kein
   `pdf_export`-/reportlab-Import), Suchleistung (0-60) und Anzeige (0-40) nebeneinander,

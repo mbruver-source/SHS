@@ -40,7 +40,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 
 | Nr | Aufgabe (Funde) | Größe | Status | Commit | Limit | Bemerkung |
 |---|---|---|---|---|---|---|
-| U1 | Einzelseite: Bogen-Knopf je Disziplin, Bestätigung nach Speichern (A1, B2-Teil) | M | offen | | unbekannt | |
+| U1 | Einzelseite: Bogen-Knopf je Disziplin, Bestätigung nach Speichern (A1, B2-Teil) | M | erledigt (19.11.) | siehe git log | unbekannt | Bogen-Links in der Liste, Knopf speichert vorher; Rückweg aus dem Bogen → U7 |
 | U2 | Einzelseite: Disqualifikation und Abbruch mit Grund (D1, B18 überholt) | M | offen | | unbekannt | |
 | U3 | Teilnehmerliste: Status in vier Stufen (B2) | M | offen | | unbekannt | |
 | U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | offen | | unbekannt | |
@@ -138,6 +138,9 @@ abweichen, nicht im Umfang.
 - D3: Abbruch-Auswahl per Klick/Touch im eingebauten Browser (Tablet-Größe) prüfen.
 - Nach Entscheidung: beheben oder als Werkzeug-Eigenheit vermerken (Ergebnis in die Bemerkung).
 - D4 Bogenkopf-Text, „Verletzung HF“ ausschreiben, Erklärtext lesbarer; A4 Kopfleiste sticky.
+- Aus U1: Wird der Bogen aus der Teilnehmerliste oder von der Einzelseite geöffnet, führen „Speichern und zurück
+  zur Tabelle“ und „Zurück“ in die Ergebnistabelle. Herkunft mitgeben (z. B. `?von=liste`) und dorthin
+  zurückführen (Knopftext passend), Tabellen-Weg unverändert.
 
 ### U8 [S] Desktop Web-Verbindung (E4, E5, E6, Heinz F5) – L
 - `desktop_web.py`, `web_sync.py`, `web_tresor.py`: Passwort-Zwischenspeicher nur im Speicher (siehe Entscheidung
@@ -186,6 +189,9 @@ abweichen, nicht im Umfang.
 
 (Jede Aufgabe trägt hier ein, welche Bilder in `docs/bilder/` neu aufgenommen werden müssen.)
 
+- U1: `handbuch_web_teilnehmerliste.png` (Bogen-Links), `handbuch_web_ergebnis_dk.png` (Bogen-Knöpfe unter
+  „Speichern“; Fensterhöhe in `tools/web_screenshots.py` prüfen), `handbuch_web_ergebnis_fehler.png`.
+
 ## Rückfragen an Marco
 
 (leer)
@@ -194,6 +200,8 @@ abweichen, nicht im Umfang.
 
 - 19.11.2026: Liste angelegt, Entscheidungen abgestimmt, Basis-Commit `cfe6a8a`. SHS Test Suite auf der Basis
   grün (1555 bestanden, 0 fehlgeschlagen, 211 übersprungen, 251 s). Noch keine Aufgabe begonnen.
+- 19.11.2026: U1 erledigt und committet. Hinweis: Bearbeitete Templates öffnen sich per Hook im Browser-Pane als
+  neue Tabs; diese Tabs danach schließen, den Tab `seed` nie. Nächste: U2.
 
 ## Abschlussbericht
 

@@ -626,7 +626,11 @@ sequenceDiagram
     else in Ordnung
         W->>D: eintragen_ergebnis nur für Disziplinen, die dieser Richter geändert hat
         Note over W,D: Schutz vor verlorenen Änderungen: unveränderte Disziplinen<br/>überschreiben keine Eingabe eines anderen Richters
-        W-->>R: zurück zur Teilnehmerliste
+        alt Knopf „Bewertungsbogen … öffnen“
+            W-->>R: weiter zum Online-Bewertungsbogen der Disziplin (10b)
+        else „Speichern“
+            W-->>R: zurück zur Teilnehmerliste mit „Gespeichert: Name.“
+        end
     end
 
     PL->>W: Termin zurückholen (eigene SQLite-Datei hochladen)
@@ -702,7 +706,8 @@ sequenceDiagram
 
 Seit 18.11.2026 neben der Erfassung je Teilnehmer: eine Tabelle wie der Desktop-Reiter
 „Ergebniserfassung“ (`/ergebnisse`), je Disziplin ein Bewertungsbogen mit Notiz
-(`/bewertungsbogen/id/disziplin`) und ein Sammel-PDF aller benutzten Bögen. Alles ohne JavaScript
+(`/bewertungsbogen/id/disziplin`, erreichbar aus der Tabelle, aus der Teilnehmerliste und von der
+Seite je Teilnehmer, seit 19.11.2026) und ein Sammel-PDF aller benutzten Bögen. Alles ohne JavaScript
 (Sicherheitsrichtlinie `script-src 'none'`), geprüft wird auf dem Server.
 
 ```mermaid

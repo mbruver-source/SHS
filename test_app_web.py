@@ -814,6 +814,118 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertEqual(ergebnis["suche_flaechensuche"], 45)
         self.assertEqual(ergebnis["anzeige_flaechensuche"], 25)
 
+    def test_einzelseite_bestaetigt_speichern_in_der_liste(self):
+        # UX-Test Web 19.11.2026 (B2): nach dem Speichern eine sichtbare Bestätigung in der Liste.
+        teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        self._anmelden()
+        antwort = self.client.post(
+            f"/teilnehmer/{teilnehmer_id}",
+            data={"suche_Flächensuche": "45", "anzeige_Flächensuche": "25"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn(f"gespeichert={teilnehmer_id}", antwort.headers["Location"])
+        self.assertIn("aenderung=1", antwort.headers["Location"])
+        html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn('role="status">Gespeichert: Muster, A.', html)
+
+        # Zweites Absenden ohne Änderung (gleiche Werte als „geladen“): keine Änderung gemeldet.
+        antwort = self.client.post(f"/teilnehmer/{teilnehmer_id}", data={
+            "suche_Flächensuche": "45", "anzeige_Flächensuche": "25",
+            "geladen_suche_Flächensuche": "45", "geladen_anzeige_Flächensuche": "25",
+        })
+        self.assertIn("aenderung=0", antwort.headers["Location"])
+        html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn("Keine Änderungen zu speichern (Muster, A).", html)
+
+    def test_liste_ohne_oder_mit_ungueltiger_bestaetigung_zeigt_keine_meldung(self):
+        db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        self._anmelden()
+        for adresse in ("/teilnehmer", "/teilnehmer?gespeichert=abc", "/teilnehmer?gespeichert=999999",
+                        "/teilnehmer?gespeichert=99999999999999999999999", "/teilnehmer?gespeichert=-1"):
+            antwort = self.client.get(adresse)
+            self.assertEqual(antwort.status_code, 200, adresse)
+            self.assertNotIn('karte-erfolg" role="status"', antwort.data.decode(), adresse)
+
+    def test_liste_und_einzelseite_fuehren_zum_bewertungsbogen(self):
+        # UX-Test Web 19.11.2026 (A1): der Bogen war nur über die Ergebnistabelle erreichbar.
+        ed = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        dk = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="B", rufname_hund="Bello", art="DK", stufe=2, startnummer=2,
+        ))
+        self._anmelden()
+        liste = self.client.get("/teilnehmer").data.decode()
+        self.assertIn(f'href="/bewertungsbogen/{ed}/Fl%C3%A4chensuche"', liste)
+        self.assertEqual(liste.count(f"/bewertungsbogen/{dk}/"), len(db.ALLE_DISZIPLINEN))
+        self.assertEqual(liste.count(f"/bewertungsbogen/{ed}/"), 1)
+
+        seite = self.client.get(f"/teilnehmer/{dk}").data.decode()
+        for disziplin in db.ALLE_DISZIPLINEN:
+            self.assertIn(f'name="bogen" value="{disziplin}"', seite)
+        # „Speichern“ steht vor den Bogen-Knöpfen (die Eingabetaste löst den ersten Absendeknopf aus).
+        self.assertLess(seite.index(">Speichern</button>"), seite.index('name="bogen"'))
+
+    def test_bogen_knopf_speichert_zuerst_und_oeffnet_den_bogen(self):
+        dk = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="B", rufname_hund="Bello", art="DK", stufe=2, startnummer=2,
+        ))
+        self._anmelden()
+        disziplin = db.ALLE_DISZIPLINEN[1]
+        antwort = self.client.post(f"/teilnehmer/{dk}", data={
+            f"suche_{disziplin}": "40", f"anzeige_{disziplin}": "30", "bogen": disziplin,
+        })
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn(f"/bewertungsbogen/{dk}/", antwort.headers["Location"])
+        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+        ergebnis = db.get_ergebnis(self.conn, dk)
+        self.assertEqual((ergebnis[spalte_suche], ergebnis[spalte_anzeige]), (40, 30))
+        self.assertEqual(self.client.get(antwort.headers["Location"]).status_code, 200)
+
+    def test_bogen_knopf_mit_fremder_disziplin_fuehrt_zur_liste(self):
+        ed = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        self._anmelden()
+        for fremd in ("Gebäudesuche", "//evil.example"):
+            antwort = self.client.post(f"/teilnehmer/{ed}", data={"bogen": fremd})
+            self.assertEqual(antwort.status_code, 302)
+            self.assertTrue(antwort.headers["Location"].startswith("/teilnehmer?gespeichert="),
+                            antwort.headers["Location"])
+
+    def test_bogen_links_der_liste_gelten_fuer_rolle_eintragen(self):
+        ed = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")  # Rolle „eintragen“ (kein Admin)
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True)
+        liste = self.client.get("/teilnehmer").data.decode()
+        self.assertIn(f"/bewertungsbogen/{ed}/", liste)
+        self.assertEqual(self.client.get(f"/bewertungsbogen/{ed}/Fl%C3%A4chensuche").status_code, 200)
+
+    def test_bogen_knopf_bei_fehler_bleibt_auf_der_seite(self):
+        ed = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+        self._anmelden()
+        antwort = self.client.post(f"/teilnehmer/{ed}", data={
+            "suche_Flächensuche": "84", "anzeige_Flächensuche": "25", "bogen": "Flächensuche",
+        })
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIsNone((db.get_ergebnis(self.conn, ed) or {}).get("suche_flaechensuche"))
+
     def test_ergebnis_dk_zeigt_alle_drei_disziplinen(self):
         teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
             nachname="Muster", vorname="B", rufname_hund="Bello", art="DK", stufe=2, startnummer=2,

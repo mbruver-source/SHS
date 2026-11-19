@@ -2,6 +2,17 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U1 – Weg zum Online-Bewertungsbogen, Bestätigung nach dem Speichern
+
+Funde A1 und B2 (Teil) aus `berichte/UX-Test-2026-11-Web/aufgaben-umsetzung.md`. Die Teilnehmerliste zeigt unter
+jedem Teilnehmer Links „Bewertungsbogen: <Disziplin>“, die Seite je Teilnehmer unter „Speichern“ je Disziplin den
+Knopf „Bewertungsbogen … öffnen“ (speichert vorher die Eingaben der Seite, nur Disziplinen des Teilnehmers; die
+Eingabetaste löst weiter „Speichern“ aus). Nach „Speichern“ meldet die Liste „Gespeichert: Name.“ bzw. „Keine
+Änderungen zu speichern (Name).“ (`app_web._meldung_nach_einzelseite`, Parameter `gespeichert`/`aenderung`). 8 neue
+Tests in `test_app_web.py`, Gegenprobe ok; Handbuch, `UML.md` (Ablauf 10) und `Architektur.md` nachgezogen.
+Verifikation ohne Fehler; nachgebessert: riesige Zahlen in `?gespeichert=` (sonst 500 unter SQLite), schärfere
+Tests. Offen für U7: Aus der Liste oder Einzelseite geöffnet, führt der Bogen mit „zurück“ in die Tabelle.
+
 ## 19.11.2026: Funde des UX-Tests Web besprochen, Abarbeitung im Loop vorbereitet (Marco)
 
 Alle Funde A1–G1 aus `berichte/UX-Test-2026-11-Web/Bericht.md` mit Marco durchgegangen, dazu E6 („Passwort

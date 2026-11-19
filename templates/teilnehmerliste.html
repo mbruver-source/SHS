@@ -15,16 +15,19 @@
   <p><small>{{ zeilen | length }} von {{ gesamt }} Teilnehmern</small></p>{% endif %}
 </form>
 
+{% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
+
 <div class="karte" style="padding: 0;">
   {% for zeile in zeilen %}
+    <div class="teilnehmer-eintrag"{% if not loop.last %} style="border-bottom: 1px solid var(--grau-rand);"{% endif %}>
     <a class="teilnehmer-zeile" href="{{ url_for('ergebnis_erfassen', teilnehmer_id=zeile.teilnehmer.id) }}">
       <table style="margin: 0;"><tr>
-        <td style="border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+        <td style="border-bottom: none;">
           <span class="startnummer">{% if zeile.teilnehmer.startnummer %}#{{ zeile.teilnehmer.startnummer }}{% else %}–{% endif %}</span>
           {{ zeile.teilnehmer.nachname }}, {{ zeile.teilnehmer.vorname }} ({{ zeile.teilnehmer.rufname_hund }})<br>
           <small>{{ zeile.label }}</small>
         </td>
-        <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
+        <td style="text-align: right; border-bottom: none;">
           {% if zeile.vollstaendig %}
             {# Haken aus Tabler Icons (MIT, symbole/LICENSE-Tabler.txt), inline statt als Datei,
                damit er die Farbe der Pille übernimmt (Marco 01.11.2026, Erscheinungsbild „Beagle“). #}
@@ -35,6 +38,11 @@
         </td>
       </tr></table>
     </a>
+    {# UX-Test Web 19.11.2026 (A1): direkter Weg zum Online-Bewertungsbogen je Disziplin (außerhalb
+       des Zeilen-Links, Links dürfen nicht verschachtelt sein). #}
+    <p class="bogen-links"><small>Bewertungsbogen:
+      {% for disziplin in zeile.disziplinen %}<a href="{{ url_for('bewertungsbogen', teilnehmer_id=zeile.teilnehmer.id, disziplin=disziplin) }}">{{ disziplin }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</small></p>
+    </div>
   {% else %}
     <p style="padding: 1em;">{% if suche %}Kein Teilnehmer passt zu „{{ suche }}“.{% else %}Für diesen Termin sind noch keine Teilnehmer hinterlegt.{% endif %}</p>
   {% endfor %}

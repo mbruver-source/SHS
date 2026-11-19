@@ -121,6 +121,11 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.6em 0.4em; border-bottom: 1px solid var(--grau-rand); }
   .teilnehmer-zeile { text-decoration: none; color: var(--text); display: block; }
+  /* Links zum Online-Bewertungsbogen unter jeder Zeile der Teilnehmerliste und Knöpfe auf der
+     Einzelseite (UX-Test Web 19.11.2026, A1): groß genug zum Antippen. */
+  .bogen-links { margin: -0.3em 0.4em 0.5em; }
+  .bogen-links a { display: inline-block; padding: 0.35em 0.2em; }
+  .bogen-knoepfe button { margin: 0 0.4em 0.5em 0; }
   .status {
     display: inline-flex; align-items: center; gap: 0.25em;
     padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; white-space: nowrap;

@@ -33,6 +33,16 @@
              value="{{ zeile.anzeige }}">
     {% endfor %}
     <p><button type="submit">Speichern</button></p>
+    {# UX-Test Web 19.11.2026 (A1): Weg zum vollständigen Online-Bewertungsbogen. Die Knöpfe stehen
+       bewusst NACH „Speichern“: die Eingabetaste löst den ersten Absendeknopf aus. #}
+    <h2 style="margin-top: 1.2em;">Bewertungsbogen</h2>
+    <p><small>Notiz, Abbruch und Disqualifikation trägt man im Bewertungsbogen ein. Der Knopf speichert
+      vorher die Eingaben dieser Seite.</small></p>
+    <p class="bogen-knoepfe">
+      {% for zeile in zeilen %}
+        <button type="submit" class="knopf-sekundaer" name="bogen" value="{{ zeile.disziplin }}">Bewertungsbogen {{ zeile.disziplin }} öffnen</button>
+      {% endfor %}
+    </p>
   </form>
 </div>
 {% endblock %}
