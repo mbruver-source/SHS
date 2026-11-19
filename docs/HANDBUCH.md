@@ -1128,7 +1128,7 @@ Die Web-Version ist optional und braucht einen eigenen Server. Die Einrichtung b
 [README_CONTAINER.md](../README_CONTAINER.md). Termin, Teilnehmer, Zeitplan und Druck bleiben im
 Desktop-Programm; im Web werden nur Ergebnisse eingetragen.
 
-![Admin-Seite „Termine“ der Web-Version](bilder/handbuch_web_admin_termine.png)
+![Admin-Seite „Termine verwalten“ der Web-Version](bilder/handbuch_web_admin_termine.png)
 
 ### Direkt aus dem Desktop-Programm (Reiter „Datensicherung“, Gruppe „Web-Version“)
 
@@ -1194,15 +1194,19 @@ ohne Windows-Tresor wird das Passwort jedes Mal abgefragt.
 Dieser Weg funktioniert weiterhin und ist die Alternative, wenn das Desktop-Programm den Server
 nicht erreicht.
 
-Als Administrator erreichst du oben die Seiten **„Termine“** und **„Benutzer“**.
+Als Administrator erreichst du oben die Seiten **„Termine verwalten“** (Termine veröffentlichen,
+zurückholen, löschen) und **„Benutzer“**. **„Termin wechseln“** wählt dagegen nur aus, mit welchem
+veröffentlichten Termin du gerade arbeitest. Bist du schon angemeldet, führt die Startadresse direkt
+zur Teilnehmerliste (bzw. zur Terminauswahl).
 
 **Benutzer anlegen:** Unter „Benutzer“ je Richter ein Konto mit der Rolle
-**„Nur Eintragen (Ergebnisse erfassen)“** anlegen (Passwort mindestens 8 Zeichen).
+**„Nur Eintragen (Ergebnisse erfassen)“** anlegen (Passwort mindestens 8 Zeichen). Danach bestätigt
+die Seite oben „Benutzer „…“ wurde angelegt.“
 
 **Vor der Prüfung – veröffentlichen:**
 
 1. Alle Teilnehmer haben eine **Startnummer** (der Abgleich läuft darüber).
-2. Unter „Termine“ bei **„Termin-Datei“** die `.sqlite`-Datei des Termins aus dem Termine-Ordner
+2. Unter „Termine verwalten“ bei **„Termin-Datei“** die `.sqlite`-Datei des Termins aus dem Termine-Ordner
    wählen und **„Veröffentlichen“** klicken. Der Browser merkt sich seinen eigenen letzten
    Ordner; den Termine-Ordner der Desktop-Version (`%USERPROFILE%\SHS-Pruefungsprogramm\Termine`)
    erreichst du, indem du diesen Pfad im Dateidialog in die Adressleiste einfügst. Er steht auch

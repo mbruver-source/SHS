@@ -43,7 +43,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U1 | Einzelseite: Bogen-Knopf je Disziplin, Bestätigung nach Speichern (A1, B2-Teil) | M | erledigt (19.11.) | siehe git log | unbekannt | Bogen-Links in der Liste, Knopf speichert vorher; Rückweg aus dem Bogen → U7 |
 | U2 | Einzelseite: Disqualifikation und Abbruch mit Grund (D1, B18 überholt) | M | erledigt (19.11.) | siehe git log | unbekannt | gemeinsame Status-Hilfen für Tabelle, Bogen und Einzelseite |
 | U3 | Teilnehmerliste: Status in vier Stufen (B2) | M | erledigt (19.11.) | siehe git log | unbekannt | Vollständigkeitsregel steht doppelt (`_listen_status` und `db_ergebnisse._wertnote`), Hinweis für U13 |
-| U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | offen | | unbekannt | |
+| U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | erledigt (19.11.), F3 teilweise | siehe git log | unbekannt | Passwort-Schalter braucht JavaScript → Rückfrage an Marco |
 | U5 | Ergebnistabelle mobil: feste Spalten, Sortierung, Bogen-Knopf, Scrollen (C1, C2, C4) | M | offen | | unbekannt | |
 | U6 | Ergebnistabelle: Texte und Meldungen (B3, C3, D2) | S | offen | | unbekannt | |
 | U7 | Bogen: nachstellen B4 und D3, Bogenkopf-Text, Kopfleiste (B4, D3, D4, A4) | M | offen | | unbekannt | |
@@ -195,10 +195,16 @@ abweichen, nicht im Umfang.
   Abbruch“ auf der Einzelseite; Fensterhöhe prüfen).
 - U3: `handbuch_web_teilnehmerliste.png` (neue Status-Pillen; die Demo-Daten in `tools/web_screenshots.py` sollten
   möglichst alle Stufen zeigen).
+- U4: alle Web-Screenshots mit Kopfleiste als Admin (Navigation „Termine verwalten“), v. a.
+  `handbuch_web_admin_termine.png`; Ersteinrichtung, falls es davon ein Bild gibt.
 
 ## Rückfragen an Marco
 
-(leer)
+- **F3 Anzeigen-Schalter an Passwortfeldern (aus U4):** Ein Schalter „Passwort anzeigen“ braucht JavaScript; die
+  Web-Version erlaubt per Sicherheitsrichtlinie gar keine Skripte (`script-src 'none'`). Umgesetzt ist nur der
+  sichtbare Einrichtungs-Code (Textfeld statt Passwortfeld). Möglichkeiten für die Passwörter: (a) so lassen – beim
+  Anlegen schützt „Passwort wiederholen“ vor Tippfehlern; (b) ein kleines eingebettetes Skript per Hash in der
+  Sicherheitsrichtlinie freigeben (Sicherheitsänderung, eigene Prüfung). Der Loop hat nichts davon umgesetzt.
 
 ## Fortsetzungsnotiz
 
@@ -209,6 +215,9 @@ abweichen, nicht im Umfang.
 - 19.11.2026: U2 erledigt und committet. Nächste: U3 (Status in der Teilnehmerliste; „disqualifiziert“/„Abbruch“
   über `_tabellen_status_text` bzw. die Status-Hilfen in `app_web.py` ableiten).
 - 19.11.2026: U3 erledigt und committet. Nächste: U4 (Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter).
+- 19.11.2026: U4 erledigt und committet (F3 teilweise, Rückfrage). Nächste: U5 (Ergebnistabelle mobil). Hinweis:
+  Die Web-Seiten haben keine Skripte (CSP `script-src 'none'`) – Sticky-Spalten, Scrollen zur Trefferzeile (C4) usw.
+  nur mit CSS bzw. Adress-Anker (`#zeile-<id>`) lösen.
 
 ## Abschlussbericht
 

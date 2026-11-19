@@ -487,6 +487,15 @@ def login():
                 return redirect(url_for("login"))
         return render_template("ersteinrichtung.html", fehler=fehler, code_nicht_konfiguriert=False)
 
+    # UX-Test Web 19.11.2026 (A2): Wer schon angemeldet ist, bekommt auf „/“ nicht wieder das
+    # Anmeldeformular, sondern landet dort, wohin auch die Anmeldung führt (mit gewähltem Termin
+    # die Teilnehmerliste, sonst „Termin wählen“). Eine veraltete Sitzung (Konto gelöscht) wird
+    # dabei geleert, dann erscheint wie gewohnt das Formular.
+    if request.method == "GET" and session.get("benutzername"):
+        angemeldet, _ = _aktueller_benutzer_oder_redirect()
+        if angemeldet:
+            return redirect(url_for("teilnehmerliste" if session.get("schema_name") else "termin_waehlen"))
+
     if request.method == "POST":
         benutzername = request.form.get("benutzername", "")
         passwort = request.form.get("passwort", "")
@@ -620,8 +629,16 @@ def admin_benutzer():
                 conn.rollback()
                 fehler = f"Der Benutzername '{benutzername}' ist bereits vergeben."
             else:
-                return redirect(url_for("admin_benutzer"))
-    return render_template("admin_benutzer.html", benutzer=db.liste_benutzer(conn), fehler=fehler)
+                return redirect(url_for("admin_benutzer", angelegt=benutzername))
+    benutzer = db.liste_benutzer(conn)
+    # UX-Test Web 19.11.2026 (B1): Bestätigung nach „Benutzer anlegen“. Nur für einen Namen, den
+    # es wirklich gibt (keine beliebigen Texte über die Adresse).
+    meldung = None
+    angelegt = request.args.get("angelegt", "") if request.method == "GET" else ""
+    gespeichert = {b["benutzername"].lower(): b["benutzername"] for b in benutzer}
+    if angelegt and angelegt.lower() in gespeichert:
+        meldung = f"Benutzer „{gespeichert[angelegt.lower()]}“ wurde angelegt."
+    return render_template("admin_benutzer.html", benutzer=benutzer, fehler=fehler, meldung=meldung)
 
 
 @app.route("/admin/benutzer/<benutzername>/loeschen", methods=["POST"])

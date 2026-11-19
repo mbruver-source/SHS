@@ -20,10 +20,13 @@
     </form>
   {% else %}
     <p style="padding: 1em;">
-      Aktuell ist kein Termin veröffentlicht. Ein Administrator veröffentlicht den
-      Termin vor der Prüfung in der Web-Oberfläche unter „Termine“ (alternativ per
-      <code>sync_termin.py export</code>, siehe README_CONTAINER.md).
+      Aktuell ist kein Termin veröffentlicht. Die Prüfungsleitung veröffentlicht den Termin vor der
+      Prüfung im Desktop-Programm (Reiter „Datensicherung“, „Ins Web veröffentlichen…“) oder hier unter
+      „Termine verwalten“ (alternativ per <code>sync_termin.py export</code>, siehe README_CONTAINER.md).
     </p>
+    {% if session.get('ist_admin') %}
+      <p style="padding: 0 1em 1em;"><a class="knopf" href="{{ url_for('admin_termine') }}">Termine verwalten</a></p>
+    {% endif %}
   {% endfor %}
 </div>
 {% endblock %}

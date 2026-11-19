@@ -188,7 +188,8 @@
       {% if session.get('schema_name') %}<a href="{{ url_for('teilnehmerliste') }}">Teilnehmer</a>{% endif %}
       {% if session.get('schema_name') %}<a href="{{ url_for('ergebnistabelle') }}">Ergebnistabelle</a>{% endif %}
       {% if session.get('schema_name') %}<a href="{{ url_for('termin_waehlen') }}">Termin wechseln</a>{% endif %}
-      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine</a>{% endif %}
+      {# UX-Test Web 19.11.2026 (A3): „Termine“ war mit „Termin wechseln“ verwechselbar. #}
+      {% if session.get('ist_admin') %}<a href="{{ url_for('admin_termine') }}">Termine verwalten</a>{% endif %}
       {% if session.get('ist_admin') %}<a href="{{ url_for('admin_benutzer') }}">Benutzer</a>{% endif %}
       <form class="abmelden" method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

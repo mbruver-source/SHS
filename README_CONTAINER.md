@@ -280,13 +280,13 @@ direkt über die Web-Oberfläche veröffentlichen und zurückholen – bequemer,
 rufen intern dieselben Funktionen auf und können gemischt genutzt werden (z. B. per
 Kommandozeile veröffentlichen, über die Web-Oberfläche zurückholen).
 
-1. Als Administrator anmelden, oben in der Kopfzeile auf „Termine“ klicken.
+1. Als Administrator anmelden, oben in der Kopfzeile auf „Termine verwalten“ klicken.
 2. **Veröffentlichen:** unter „Termin veröffentlichen“ die Termin-Datei (`.sqlite`) aus
    der Desktop-Version hochladen. Der Termin erscheint danach sofort in der
    Termin-Auswahl – kein Schema-Name/DSN nötig.
 3. Richter melden sich mit ihrem Benutzernamen/Passwort an und tragen während der Prüfung
    über die Web-Oberfläche Ergebnisse ein (wie oben).
-4. **Nach der Prüfung zurückholen:** auf der „Termine“-Seite bei dem betreffenden Termin
+4. **Nach der Prüfung zurückholen:** auf der Seite „Termine verwalten“ bei dem betreffenden Termin
    dieselbe Termin-Datei erneut hochladen und auf „Ergebnisse zurückholen“ klicken. Die
    Seite zeigt eine Zusammenfassung (Anzahl aktualisierter Teilnehmer, übersprungene/nicht
    zugeordnete Startnummern) und bietet die aktualisierte Termin-Datei zum Download an –

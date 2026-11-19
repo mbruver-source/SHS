@@ -2,6 +2,17 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U4 – Startseite, Navigation, Meldung „angelegt“, Einrichtungs-Code sichtbar
+
+Funde A2, A3, B1, F3. Die Startseite `/` leitet Angemeldete weiter (mit gewähltem Termin zur Teilnehmerliste, sonst
+„Termin wählen“), eine veraltete Sitzung wird geleert und zeigt das Formular. Navigation „Termine“ heißt jetzt
+„Termine verwalten“ (Verwechslung mit „Termin wechseln“); „Termin wählen“ ohne veröffentlichten Termin nennt den Weg
+über den Desktop und zeigt Admins den Knopf „Termine verwalten“. Nach „Benutzer anlegen“ erscheint „Benutzer „…“
+wurde angelegt.“ (`?angelegt=`, nur für existierende Konten). F3 nur teilweise: Der Einrichtungs-Code ist ein
+sichtbares Textfeld; ein Anzeigen-Schalter für Passwörter bräuchte JavaScript, das die Sicherheitsrichtlinie nicht
+erlaubt – Rückfrage an Marco in der Aufgabenliste. 8 neue Tests (inkl. Kette mit gelöschtem Termin ohne Schleife),
+ein bestehender angepasst, Gegenprobe ok, Verifikation ohne Fehler; Handbuch und README_CONTAINER nachgezogen.
+
 ## 19.11.2026: UX-Test Web U3 – Teilnehmerliste mit vier Status-Stufen
 
 Fund B2 (Marco: vier Stufen). Die Web-Teilnehmerliste zeigt „offen“, „teilweise (n von m)“ (nur Dreikampf),

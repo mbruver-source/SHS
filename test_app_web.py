@@ -360,6 +360,98 @@ class TestAppWeb(_AppWebTestBasis):
         antwort = self.client.get("/teilnehmer")
         self.assertEqual(antwort.status_code, 302)
 
+    # --- UX-Test Web 19.11.2026: U4 (A2, A3, B1, F3) -----------------------------------
+
+    def test_startseite_leitet_angemeldete_weiter(self):
+        self._anmelden()  # genau ein Termin: der ist gewählt
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(antwort.headers["Location"].endswith("/teilnehmer"), antwort.headers["Location"])
+        with self.client.session_transaction() as sitzung:
+            sitzung.pop("schema_name", None)
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/termin-waehlen", antwort.headers["Location"])
+
+    def test_startseite_zeigt_formular_bei_veralteter_sitzung(self):
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"})
+        db.benutzer_loeschen(self.conn, "helfer")
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('name="passwort"', antwort.data.decode())
+        with self.client.session_transaction() as sitzung:
+            self.assertNotIn("benutzername", sitzung)
+
+    def test_startseite_mit_geloeschtem_termin_endet_bei_terminauswahl(self):
+        self._anmelden()
+        with self.client.session_transaction() as sitzung:
+            sitzung["schema_name"] = "termin_gibt_es_nicht"
+        original = app_web.db.oeffne_termin_postgres
+
+        def oeffnen(conn, schema_name):
+            if schema_name == "termin_gibt_es_nicht":
+                raise RuntimeError("Schema fehlt")
+            return original(conn, schema_name)
+
+        # Kette: / -> /teilnehmer (veraltetes Schema wird entfernt) -> /termin-waehlen -> /teilnehmer
+        # mit dem einzigen echten Termin; endet nach wenigen Schritten (keine Schleife).
+        pfade = []
+        with patch.object(app_web.db, "oeffne_termin_postgres", side_effect=oeffnen):
+            adresse = "/"
+            for _ in range(6):
+                antwort = self.client.get(adresse)
+                pfade.append(adresse)
+                if antwort.status_code != 302:
+                    break
+                adresse = antwort.headers["Location"]
+        self.assertEqual(antwort.status_code, 200, pfade)
+        self.assertEqual(pfade, ["/", "/teilnehmer", "/termin-waehlen", "/teilnehmer"])
+
+    def test_terminauswahl_ohne_termin_knopf_nur_fuer_admins(self):
+        self.termine = []
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        self.client.post("/logout")
+        antwort = self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"},
+                                   follow_redirects=True)
+        html = antwort.data.decode()
+        self.assertIn("kein Termin veröffentlicht", html)
+        self.assertNotIn('<a class="knopf" href="/admin/termine">', html)
+
+    def test_startseite_ohne_anmeldung_zeigt_formular(self):
+        self._anmelden()
+        self.client.post("/logout")
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('name="passwort"', antwort.data.decode())
+
+    def test_navigation_termine_verwalten_eindeutig(self):
+        self._anmelden()
+        html = self.client.get("/teilnehmer").data.decode()
+        self.assertIn(">Termine verwalten</a>", html)
+        self.assertIn(">Termin wechseln</a>", html)
+        self.assertNotIn(">Termine</a>", html)
+
+    def test_meldung_nach_benutzer_anlegen(self):
+        self._anmelden()
+        antwort = self.client.post("/admin/benutzer", data={
+            "benutzername": "helfer", "passwort": "helferpasswort",
+            "passwort_wiederholung": "helferpasswort", "rolle": "eintragen"})
+        self.assertEqual(antwort.status_code, 302)
+        html = self.client.get(antwort.headers["Location"]).data.decode()
+        self.assertIn("Benutzer „helfer“ wurde angelegt.", html)
+        # Kein beliebiger Text über die Adresse: nur existierende Konten werden gemeldet.
+        html = self.client.get("/admin/benutzer?angelegt=gibtsnicht").data.decode()
+        self.assertNotIn("wurde angelegt", html)
+
+    def test_einrichtungs_code_ist_sichtbar(self):
+        html = self.client.get("/").data.decode()
+        self.assertRegex(html, r'<input type="text" id="einrichtungs_code"')
+        self.assertIn('<input type="password" id="passwort"', html)
+
     def test_logout_per_get_meldet_nicht_ab(self):
         """S-6: Abmelden nur per POST mit CSRF-Token - ein GET (z. B. über ein Bild auf
         einer fremden Seite) beendet die Sitzung nicht."""
@@ -443,8 +535,11 @@ class TestAppWeb(_AppWebTestBasis):
         self.termine = []
         antwort = self._anmelden()
         self.assertIn("kein Termin veröffentlicht".encode(), antwort.data)
-        # Der Hinweis verweist auf die Web-Oberfläche, nicht nur auf das Kommandozeilenskript.
-        self.assertIn("Web-Oberfläche".encode(), antwort.data)
+        # Der Hinweis verweist auf Desktop und Web-Oberfläche, nicht nur auf das Kommandozeilenskript
+        # (UX-Test Web 19.11.2026, A3: Admin bekommt zusätzlich den Knopf „Termine verwalten“).
+        html = antwort.data.decode()
+        self.assertIn("„Ins Web veröffentlichen…“", html)
+        self.assertIn('<a class="knopf" href="/admin/termine">Termine verwalten</a>', html)
 
     def test_passwortfeld_hat_dieselbe_gestaltung_wie_textfelder(self):
         """Das Passwortfeld der Anmeldung war schmal und ungestaltet (offener Punkt 23.09.)."""

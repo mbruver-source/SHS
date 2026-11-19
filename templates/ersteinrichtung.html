@@ -26,8 +26,12 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="einrichtungs_code">Einrichtungs-Code</label>
-    <input type="password" id="einrichtungs_code" name="einrichtungs_code" autocomplete="off" required
-           autocapitalize="none" autocorrect="off" spellcheck="false" autofocus>
+    {# UX-Test Web 19.11.2026 (F3): Der lange Einrichtungs-Code wird abgeschrieben, nicht gemerkt -
+       deshalb sichtbar (Vertippen erkennbar). Ein Anzeigen-Schalter bräuchte JavaScript, das die
+       Sicherheitsrichtlinie (script-src 'none') nicht erlaubt. #}
+    <input type="text" id="einrichtungs_code" name="einrichtungs_code" autocomplete="off" required
+           autocapitalize="none" autocorrect="off" spellcheck="false" autofocus
+           style="font-family: ui-monospace, Consolas, monospace;">
     <label for="benutzername">Benutzername</label>
     <input type="text" id="benutzername" name="benutzername" autocomplete="username" required
            autocapitalize="none" autocorrect="off" spellcheck="false">

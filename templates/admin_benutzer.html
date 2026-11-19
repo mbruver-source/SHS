@@ -3,7 +3,8 @@
 {% block inhalt %}
 <div class="karte">
   <h1>Benutzer verwalten</h1>
-  {% if fehler %}<div class="fehler">{{ fehler }}</div>{% endif %}
+  {% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
+  {% if fehler %}<div class="fehler" role="alert">{{ fehler }}</div>{% endif %}
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="benutzername">Benutzername</label>
