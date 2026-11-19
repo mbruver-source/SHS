@@ -1954,7 +1954,9 @@ class TestErgebnistabelle(_AppWebTestBasis):
     def test_speichern_behaelt_den_filter(self):
         self._anmelden()
         html = self.client.get("/ergebnisse?q=rex").data.decode()
-        self.assertIn('action="/ergebnisse?q=rex"', html)
+        # (B3) Anker #meldung: der Browser springt nach dem Speichern zur Meldung.
+        self.assertIn('action="/ergebnisse?q=rex#meldung"', html)
+        self.assertIn('<div id="meldung"', html)
         daten = self._seite("/ergebnisse?q=rex")
         daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "50", "35"
         antwort = self._speichern(daten, "/ergebnisse?q=rex")
@@ -1974,7 +1976,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
             daten[f"suche_{d}_{self.dk}"], daten[f"anzeige_{d}_{self.dk}"] = s, a
         antwort = self._speichern(daten, follow_redirects=True)
         self.assertEqual(antwort.status_code, 200)
-        self.assertIn("2 Zeile(n) gespeichert", antwort.data.decode())
+        self.assertIn("Gespeichert: 2 Teilnehmer.", antwort.data.decode())
         self.assertEqual(db.get_ergebnis(self.conn, self.ed)["anzeige_flaechensuche"], 25)
         dk = db.get_ergebnis(self.conn, self.dk)
         self.assertEqual((dk["suche_truemmerfeld"], dk["anzeige_behaeltnis"]), (50, 38))
@@ -2237,8 +2239,8 @@ class TestErgebnistabelle(_AppWebTestBasis):
         antwort = self._speichern(daten)
         html = antwort.data.decode()
         self.assertEqual(antwort.status_code, 200)
-        self.assertIn("1 Zeile(n) gespeichert", html)
-        self.assertIn("2 Zeile(n) gehören nicht (mehr) zu diesem Termin", html)
+        self.assertIn("Gespeichert: 1 Teilnehmer.", html)
+        self.assertIn("2 Zeilen gehören nicht (mehr) zu diesem Termin", html)
         self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 45)
         ergebnis = db.get_ergebnis(self.conn, keine)
         self.assertEqual((ergebnis["disqualifiziert"], ergebnis["suche_truemmerfeld"]), (0, None))
@@ -2284,7 +2286,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
         antwort = self._speichern(daten, follow_redirects=True)
         self.assertEqual(antwort.status_code, 200)
         # alle außer self.ed (ED Flächensuche: das Feld für Trümmerfeld gibt es dort nicht)
-        self.assertIn("252 Zeile(n) gespeichert", antwort.data.decode())
+        self.assertIn("Gespeichert: 252 Teilnehmer.", antwort.data.decode())
         self.assertEqual(db.get_ergebnis(self.conn, max(ids))["suche_truemmerfeld"], 20)
 
     def test_sammelspeichern_rollt_bei_einem_fehler_alles_zurueck(self):
@@ -2339,6 +2341,8 @@ class TestBewertungsbogen(_AppWebTestBasis):
     @staticmethod
     def _pfad(tid, disziplin, filter_=""):
         return f"/bewertungsbogen/{tid}/{quote(disziplin)}{filter_}"
+
+    _seite = TestErgebnistabelle._seite  # Formular der Ergebnistabelle lesen (Knopf „Bogen“)
 
     def _bogen(self, tid, disziplin, client=None) -> dict:
         antwort = (client or self.client).get(self._pfad(tid, disziplin))
@@ -2760,14 +2764,17 @@ class TestBewertungsbogen(_AppWebTestBasis):
     def test_tabelle_hat_je_aktiver_disziplin_einen_bogen_knopf(self):
         self._anmelden()
         html = self.client.get("/ergebnisse").data.decode()
-        self.assertEqual(html.count(">Bogen</a>"), 1 + 3 + 1)  # ED, DK, ED
-        self.assertIn(f'href="{self._pfad(self.ed, self.F)}"', html)
-        self.assertNotIn(f'href="{self._pfad(self.ed, self.T)}"', html)  # ED: nur die eigene Disziplin
+        # Seit UX-Test Web 19.11.2026 (C3) ist „Bogen“ ein Absendeknopf: erst speichern, dann öffnen.
+        self.assertEqual(html.count(">Bogen</button>"), 1 + 3 + 1)  # ED, DK, ED
+        self.assertIn(f'name="bogen" value="{self.ed}:{self.F}"', html)
+        self.assertNotIn(f'name="bogen" value="{self.ed}:{self.T}"', html)  # ED: nur die eigene Disziplin
         for d in db.ALLE_DISZIPLINEN:
-            self.assertIn(f'href="{self._pfad(self.dk, d)}"', html)
-        self.assertIn(f'aria-label="Bewertungsbogen {self.T} öffnen: Beispiel, Bello"', html)
-        self.assertIn("Bewertungsbogen", html)
-        self.assertIn("gehen dabei verloren", html)
+            self.assertIn(f'name="bogen" value="{self.dk}:{d}"', html)
+        self.assertIn(f'aria-label="Speichern und Bewertungsbogen {self.T} öffnen: Beispiel, Bello"', html)
+        self.assertIn("„Bogen“ speichert zuerst alle Eingaben", html)
+        # „Alle speichern“ ist der erste Absendeknopf (die Eingabetaste löst ihn aus, nicht „Bogen“).
+        formular = html[html.index('id="ergebnisform"'):]
+        self.assertLess(formular.index(">Alle speichern</button>"), formular.index('name="bogen"'))
 
     def test_tabelle_hat_zeilenanker_und_gibt_den_filter_an_die_knoepfe_weiter(self):
         self._anmelden()
@@ -2775,8 +2782,54 @@ class TestBewertungsbogen(_AppWebTestBasis):
         for tid in (self.ed, self.dk, self.ed2):
             self.assertIn(f'id="zeile-{tid}"', html)
         html = self.client.get("/ergebnisse?q=rex").data.decode()
-        self.assertEqual(html.count(">Bogen</a>"), 1)
-        self.assertIn(f'href="{self._pfad(self.ed, self.F, "?q=rex")}"', html)
+        self.assertEqual(html.count(">Bogen</button>"), 1)
+        # Der Filter steht in der Adresse des Speicher-Formulars und geht an den Bogen weiter.
+        daten = self._seite("/ergebnisse?q=rex")
+        daten["bogen"] = f"{self.ed}:{self.F}"
+        antwort = self.client.post("/ergebnisse?q=rex", data=daten)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], self._pfad(self.ed, self.F, "?q=rex"))
+
+    def test_bogen_knopf_speichert_zuerst_die_tabelle(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "44", "33"
+        daten["bogen"] = f"{self.dk}:{self.T}"
+        antwort = self.client.post("/ergebnisse", data=daten)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], self._pfad(self.dk, self.T))
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 44)
+
+    def test_bogen_knopf_bei_fehler_bleibt_in_der_tabelle(self):
+        self._anmelden()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"] = "84"  # über dem Höchstwert, Anzeige fehlt
+        daten["bogen"] = f"{self.ed}:{self.F}"
+        antwort = self.client.post("/ergebnisse", data=daten)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Es wurde nichts gespeichert", antwort.data.decode())
+
+    def test_bogen_knopf_bei_konflikt_bleibt_in_der_tabelle_mit_hinweis(self):
+        self._anmelden()
+        daten = self._seite()
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 50, 30)  # anderer Richter, nach dem Laden
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "44", "33"
+        daten["bogen"] = f"{self.ed}:{self.F}"
+        antwort = self.client.post("/ergebnisse", data=daten)
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.data.decode()
+        self.assertIn("Bei 1 Teilnehmer wurde inzwischen", html)
+        self.assertIn("Der Bewertungsbogen wurde deshalb nicht geöffnet", html)
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 50)
+
+    def test_bogen_knopf_mit_fremdem_wert_fuehrt_zur_tabelle(self):
+        self._anmelden()
+        for wert in (f"{self.ed}:{self.T}", "999999:Trümmerfeld", "abc", "//evil.example:x", f"{self.ed}"):
+            daten = self._seite()
+            daten["bogen"] = wert
+            antwort = self.client.post("/ergebnisse", data=daten)
+            self.assertEqual(antwort.status_code, 302, wert)
+            self.assertTrue(antwort.headers["Location"].startswith("/ergebnisse?gespeichert="), wert)
 
     def test_tabelle_mit_den_knoepfen_bleibt_ohne_javascript(self):
         self._anmelden()

@@ -93,12 +93,16 @@
     <button type="submit">Filtern</button>
     {% if filter.lk or filter.nr or filter.q %}<a class="knopf knopf-sekundaer" href="{{ url_for('ergebnistabelle') }}">Alle anzeigen</a>{% endif %}
   </div>
-  <p style="flex-basis: 100%; margin: 0;"><small>Erst speichern, dann filtern oder einen Bewertungsbogen („Bogen“) öffnen: nicht gespeicherte Eingaben in der Tabelle gehen dabei verloren.</small></p>
+  <p style="flex-basis: 100%; margin: 0;"><small>Vor dem Filtern „Alle speichern“ tippen: Filtern lädt die Tabelle neu, nicht gespeicherte Eingaben werden dabei nicht übernommen.</small></p>
 </form>
 
+{# UX-Test Web 19.11.2026 (B3): Das Speicher-Formular hat den Anker #meldung in der Adresse, damit der
+   Browser nach dem Speichern hierher springt (auch nach der Weiterleitung) statt an den Seitenanfang. #}
+<div id="meldung" class="meldungen">
 {% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
 {% if hinweis %}<div class="karte" role="status">{{ hinweis }}</div>{% endif %}
 {% if fehlermeldung %}<div class="fehler" role="alert">{{ fehlermeldung }}</div>{% endif %}
+</div>
 
 {# Sammel-PDF der benutzten Bewertungsbögen: ein normaler Link (GET) im Knopf-Stil, ohne JavaScript;
    der Filter der Tabelle hängt an der Adresse. Es zählt der gespeicherte Stand. #}
@@ -107,11 +111,12 @@
   <small id="boegen-pdf-hinweis" style="flex: 1 1 18em;">Lädt alle Bewertungsbögen mit Eintragungen (Punkte, Disqualifikation, Abbruch oder Notiz){% if filter.lk or filter.nr or filter.q %} für die gefilterten Teilnehmer{% endif %} zum Speichern oder Ausdrucken herunter. Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten: erst „Alle speichern“.</small>
 </div>
 
-<form id="ergebnisform" method="post" action="{{ speichern_url }}">
+<form id="ergebnisform" method="post" action="{{ speichern_url }}#meldung">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="speichern-leiste">
     <button type="submit">Alle speichern</button>
-    <small>{{ zeilen | length }} Teilnehmer in der Tabelle. Bei „Disqualifiziert“ oder „Abbruch“ ohne Grund werden eingetragene Punkte nicht gewertet und nicht verändert. Ein Abbruch mit Grund lässt eine Teilbewertung zu. „Bogen“ öffnet den ausfüllbaren Bewertungsbogen der Disziplin im selben Tab - erst „Alle speichern“, sonst gehen nicht gespeicherte Eingaben dieser Tabelle verloren.</small>
+    {# UX-Test Web 19.11.2026 (D2): „Grund“ gehört nur zum Abbruch; (C3) „Bogen“ speichert vorher. #}
+    <small>{{ zeilen | length }} Teilnehmer in der Tabelle. „Disqualifiziert“: eingetragene Punkte werden nicht gewertet und nicht verändert. „Abbruch“: Grund aus der Liste wählen; mit Grund ist eine Teilbewertung möglich. „Bogen“ speichert zuerst alle Eingaben der Tabelle und öffnet dann den ausfüllbaren Bewertungsbogen der Disziplin.</small>
   </div>
 
   <div class="tabellenrahmen" id="tabelle">
@@ -153,8 +158,8 @@
                 <td><input class="punkt" type="number" inputmode="numeric" min="0" max="{{ anzeige_max }}"
                            name="anzeige_{{ p.disziplin }}_{{ z.id }}" value="{{ p.anzeige }}"{% if z.gesperrt %} readonly{% endif %}
                            aria-label="Anzeige {{ p.disziplin }}, {{ t.nachname }}, {{ t.rufname_hund }}"></td>
-                <td><a class="knopf knopf-sekundaer knopf-klein" href="{{ p.bogen_url }}"
-                       aria-label="Bewertungsbogen {{ p.disziplin }} öffnen: {{ t.nachname }}, {{ t.rufname_hund }}">Bogen</a></td>
+                <td><button type="submit" class="knopf-sekundaer knopf-klein" name="bogen" value="{{ z.id }}:{{ p.disziplin }}"
+                       aria-label="Speichern und Bewertungsbogen {{ p.disziplin }} öffnen: {{ t.nachname }}, {{ t.rufname_hund }}">Bogen</button></td>
               {% else %}
                 <td class="leer" colspan="3">–</td>
               {% endif %}

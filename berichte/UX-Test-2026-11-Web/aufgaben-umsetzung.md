@@ -45,7 +45,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U3 | Teilnehmerliste: Status in vier Stufen (B2) | M | erledigt (19.11.) | siehe git log | unbekannt | Vollständigkeitsregel steht doppelt (`_listen_status` und `db_ergebnisse._wertnote`), Hinweis für U13 |
 | U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | erledigt (19.11.), F3 teilweise | siehe git log | unbekannt | Passwort-Schalter braucht JavaScript → Rückfrage an Marco |
 | U5 | Ergebnistabelle mobil: feste Spalten, Sortierung, Bogen-Knopf, Scrollen (C1, C2, C4) | M | erledigt (19.11.) | siehe git log | unbekannt | C4 springt zur Tabelle statt zur ersten Trefferzeile (ohne Skript nicht anders); Safari/iOS ungeprüft |
-| U6 | Ergebnistabelle: Texte und Meldungen (B3, C3, D2) | S | offen | | unbekannt | |
+| U6 | Ergebnistabelle: Texte und Meldungen (B3, C3, D2) | S | erledigt (19.11.), C3 anders | siehe git log | unbekannt | C3: statt Rückfrage (braucht JavaScript) speichert „Bogen“ vorher → Rückfrage an Marco |
 | U7 | Bogen: nachstellen B4 und D3, Bogenkopf-Text, Kopfleiste (B4, D3, D4, A4) | M | offen | | unbekannt | |
 | U8 | [S] Desktop Web-Verbindung: Passwort bis Programmende im Speicher, Hinweise im Dialog, E5 nachstellen (E4, E5, E6, Heinz F5) | L | offen | | unbekannt | mit `qs-sicherheit` |
 | U9 | Desktop-Texte: Rückhol-Bericht und Fragen (E1, E2, E3, A5) | S | offen | | unbekannt | |
@@ -199,6 +199,8 @@ abweichen, nicht im Umfang.
   `handbuch_web_admin_termine.png`; Ersteinrichtung, falls es davon ein Bild gibt.
 - U5: `handbuch_web_ergebnistabelle.png` (Rahmen mit 80vh-Höhe und neue Reihenfolge; bei 1980 x 1180 prüfen, ob
   der Ausschnitt noch passt).
+- U6: `handbuch_web_ergebnistabelle.png` (neue Hinweistexte unter dem Filter und in der Speicherleiste, Knopf
+  „Bogen“ als Absendeknopf).
 
 ## Rückfragen an Marco
 
@@ -207,6 +209,12 @@ abweichen, nicht im Umfang.
   sichtbare Einrichtungs-Code (Textfeld statt Passwortfeld). Möglichkeiten für die Passwörter: (a) so lassen – beim
   Anlegen schützt „Passwort wiederholen“ vor Tippfehlern; (b) ein kleines eingebettetes Skript per Hash in der
   Sicherheitsrichtlinie freigeben (Sicherheitsänderung, eigene Prüfung). Der Loop hat nichts davon umgesetzt.
+- **C3 Rückfrage vor dem Verlassen der Tabelle (aus U6):** Beschlossen war „nur bei ungespeicherten Änderungen
+  vor dem Verlassen fragen“. Das braucht ebenfalls JavaScript. Umgesetzt ist stattdessen: „Bogen“ speichert zuerst
+  alle Eingaben der Tabelle und öffnet dann den Bogen (keine Eingaben gehen mehr verloren). Ohne Nachfrage verwerfen
+  ungespeicherte Eingaben weiterhin: „Filtern“, „Alle anzeigen“, „Zur Teilnehmerliste“ und die Navigation oben (der
+  Hinweis unter dem Filter nennt das). Passt das so, oder soll die Rückfrage mit einem freigegebenen Skript kommen
+  (siehe F3, gleiche Frage)?
 
 ## Fortsetzungsnotiz
 
@@ -223,6 +231,8 @@ abweichen, nicht im Umfang.
 - 19.11.2026: U5 erledigt und committet. Nächste: U6 (Texte der Ergebnistabelle). Sichtprüfung im Browser geht
   mit `scratchpad\web_live.py` (lokaler Demo-Server auf 127.0.0.1:5097, admin/demo-passwort-1 aus
   `tools/web_screenshots.py`), im neuen Tab, danach Tab schließen und Server mit TaskStop beenden.
+- 19.11.2026: U6 erledigt und committet (C3 anders gelöst, Rückfrage). Nächste: U7 (Bogen: B4, D3 nachstellen –
+  das alte Verhalten im Test-Stack `shsux` im Tab `seed`, das neue mit `web_live.py`; D4, A4, Rückweg aus dem Bogen).
 
 ## Abschlussbericht
 

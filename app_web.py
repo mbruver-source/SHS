@@ -1602,6 +1602,27 @@ def _tabellenzeile(t: dict, ergebnis: dict, formular=None, fehler: str | None = 
     }
 
 
+def _anzahl_zeilen(anzahl: int) -> str:
+    return "1 Zeile" if anzahl == 1 else f"{anzahl} Zeilen"
+
+
+def _gespeichert_text(anzahl: int) -> str:
+    """UX-Test Web 19.11.2026 (B3): verständlich statt „n Zeile(n) gespeichert.“"""
+    return f"Gespeichert: {anzahl} Teilnehmer."
+
+
+def _bogen_ziel(wert: str | None, teilnehmer_je_id: dict) -> tuple[int, str] | None:
+    """Wert des Knopfs „Bogen“ der Tabelle („<Teilnehmer-ID>:<Disziplin>“) -> (ID, Disziplin), nur
+    für einen teilnehmenden Teilnehmer dieses Termins und eine seiner Disziplinen, sonst None."""
+    tid_text, trenner, disziplin = (wert or "").partition(":")
+    if not trenner or not (tid_text.isascii() and tid_text.isdigit()) or len(tid_text) > 12:
+        return None
+    t = teilnehmer_je_id.get(int(tid_text))
+    if t is None or disziplin not in _disziplinen_von(t):
+        return None
+    return t["id"], disziplin
+
+
 @app.route("/ergebnisse", methods=["GET", "POST"])
 @_termin_erforderlich
 def ergebnistabelle(conn):
@@ -1627,21 +1648,30 @@ def ergebnistabelle(conn):
         ignoriert = len(abgeschickt) - len(ids)
         plaene, fehler_je_id = _tabelle_pruefen(request.form, ids, teilnehmer_je_id)
         if fehler_je_id:
-            fehlermeldung = (f"Es wurde nichts gespeichert: {len(fehler_je_id)} Zeile(n) enthalten Fehler "
+            fehlermeldung = (f"Es wurde nichts gespeichert: {_anzahl_zeilen(len(fehler_je_id))} mit Fehlern "
                              "(rot markiert). Alle Eingaben stehen noch in der Tabelle.")
             formular = request.form
         else:
             gespeichert, konflikte = _tabelle_schreiben(conn, plaene, teilnehmer_je_id, db.ergebnisse_je_teilnehmer(conn))
             if not konflikte and not ignoriert:
+                # UX-Test Web 19.11.2026 (C3): „Bogen“ ist ein Absendeknopf dieses Formulars - erst
+                # speichern, dann den Bogen öffnen (vorher gingen nicht gespeicherte Eingaben verloren).
+                bogen = _bogen_ziel(request.form.get("bogen"), teilnehmer_je_id)
+                if bogen is not None:
+                    return redirect(url_for("bewertungsbogen", teilnehmer_id=bogen[0], disziplin=bogen[1],
+                                            **{k: v for k, v in filter_.items() if v}))
                 return redirect(url_for("ergebnistabelle", gespeichert=len(gespeichert), **{
                     k: v for k, v in filter_.items() if v}))
-            teile = [f"{len(gespeichert)} Zeile(n) gespeichert."]
+            teile = [_gespeichert_text(len(gespeichert))]
             if konflikte:
-                fehlermeldung = (f"{len(konflikte)} Zeile(n) wurden inzwischen von jemand anderem geändert; "
-                                 "die betroffenen Werte wurden NICHT überschrieben (gelb markiert, "
-                                 "die Tabelle zeigt den aktuellen Stand).")
+                bei = "1 Teilnehmer" if len(konflikte) == 1 else f"{len(konflikte)} Teilnehmern"
+                fehlermeldung = (f"Bei {bei} wurde inzwischen von jemand anderem etwas "
+                                 "geändert; diese Werte wurden NICHT überschrieben (gelb markiert, die Tabelle "
+                                 "zeigt den aktuellen Stand).")
+                if request.form.get("bogen"):
+                    fehlermeldung += " Der Bewertungsbogen wurde deshalb nicht geöffnet - bitte erst prüfen."
             if ignoriert:
-                teile.append(f"{ignoriert} Zeile(n) gehören nicht (mehr) zu diesem Termin und wurden ignoriert.")
+                teile.append(f"{_anzahl_zeilen(ignoriert)} gehören nicht (mehr) zu diesem Termin und wurden ignoriert.")
             meldung = " ".join(teile)
     else:
         try:
@@ -1649,7 +1679,7 @@ def ergebnistabelle(conn):
         except ValueError:
             anzahl = None
         if anzahl is not None and 0 <= anzahl <= 100000:
-            meldung = f"{anzahl} Zeile(n) gespeichert." if anzahl else "Keine Änderungen zu speichern."
+            meldung = _gespeichert_text(anzahl) if anzahl else "Keine Änderungen zu speichern."
         # Rückmeldung von /ergebnisse/boegen.pdf: nur feste Texte zu festen Codes, nie Text aus der Adresse.
         boegen_hinweis = _BOEGEN_PDF_HINWEISE.get(request.args.get("boegen", ""))
         if boegen_hinweis is not None:
@@ -1668,12 +1698,8 @@ def ergebnistabelle(conn):
             t, ergebnis_je_id.get(t["id"]) or {}, eigenes_formular,
             fehler=fehler_je_id.get(t["id"]), konflikt=konflikte.get(t["id"]),
         ))
-        # Knopf „Bogen“ je aktiver Disziplin (Online-Bewertungsbogen, siehe unten); der Filter
-        # hängt an der Adresse, damit „Zurück“ dieselbe Tabelle zeigt.
-        for p in zeilen[-1]["punkte"]:
-            if p["aktiv"]:
-                p["bogen_url"] = url_for("bewertungsbogen", teilnehmer_id=t["id"], disziplin=p["disziplin"],
-                                         **{k: v for k, v in filter_.items() if v})
+        # Der Knopf „Bogen“ je aktiver Disziplin ist seit UX-Test Web 19.11.2026 (C3) ein Absendeknopf
+        # (siehe _bogen_ziel); der Filter hängt an der Adresse des Speicher-Formulars.
 
     return render_template(
         "ergebnis_tabelle.html",

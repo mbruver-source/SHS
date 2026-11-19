@@ -2,6 +2,18 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U6 – Meldungen und Hinweise der Ergebnistabelle, „Bogen“ speichert vorher
+
+Funde B3, C3, D2. Nach dem Speichern meldet die Tabelle „Gespeichert: n Teilnehmer.“ (statt „n Zeile(n)
+gespeichert.“), und das Speicher-Formular trägt den Anker `#meldung`, sodass der Browser zur Meldung springt (auch
+nach der Weiterleitung). C3 anders als beschlossen: Eine Rückfrage vor dem Verlassen bräuchte JavaScript; stattdessen
+ist „Bogen“ jetzt ein Absendeknopf des Tabellenformulars, der zuerst alles speichert und dann den Bogen öffnet (wie
+auf der Einzelseite, U1). Damit gehen keine Eingaben mehr verloren; bei Fehlern oder Konflikten bleibt die Tabelle
+stehen (bei Konflikt mit dem Zusatz, dass der Bogen deshalb nicht geöffnet wurde). Der Hinweistext trennt jetzt
+„Disqualifiziert“ und „Abbruch: Grund aus der Liste“ (D2). 4 neue Tests, 6 angepasst, Gegenprobe ok, Verifikation
+ohne Fehler; Handbuch und `UML.md` (Ablauf 10b) nachgezogen. Rückfrage an Marco (Aufgabenliste): Filtern und
+Navigation verwerfen ungespeicherte Eingaben weiterhin ohne Nachfrage.
+
 ## 19.11.2026: UX-Test Web U5 – Ergebnistabelle am Handy und Tablet, Sortierung nach Start-Nr.
 
 Funde C1, C2, C4. Die Web-Ergebnistabelle scrollt in ihrem Rahmen in beide Richtungen (höchstens 80 % der

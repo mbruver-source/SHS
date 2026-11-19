@@ -1048,8 +1048,8 @@ antippen) meist bequemer.
    aus der Liste (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF). Ein Abbruch braucht immer
    einen Grund.
 3. **„Alle speichern“** tippen (oben oder unten). Gespeichert werden die Zeilen, die in der Tabelle
-   stehen; Zeilen, die du nicht angefasst hast, bleiben unverändert. Danach meldet die Seite, wie
-   viele Zeilen gespeichert wurden.
+   stehen; Zeilen, die du nicht angefasst hast, bleiben unverändert. Danach springt die Seite zur
+   Meldung, z. B. **„Gespeichert: 3 Teilnehmer.“**
 
 Der **Status** zeigt den gespeicherten Stand: „noch kein Ergebnis“, „gespeichert“,
 „disqualifiziert“ oder „Abbruch: <Grund>“.
@@ -1094,10 +1094,13 @@ die der Startnummern, ein Dreikampf-Bogen hat zwei Seiten, ein Einzelstarter-Bog
 Wer lieber wie auf dem Papierbogen arbeitet, öffnet den **Online-Bewertungsbogen** auf einem von
 drei Wegen: in der Teilnehmerliste über die Links hinter **„Bewertungsbogen:“**, auf der Seite je
 Teilnehmer über **„Bewertungsbogen … öffnen“** oder in der Ergebnistabelle. In der Tabelle steht in
-jeder Zeile hinter **Suche** und **Anzeige** einer Disziplin der Knopf **„Bogen“**. Beim Dreikampf gibt es drei Knöpfe je Zeile, damit jeder Richter sein Blatt für seine Disziplin ausfüllt;
-beim Einzelstarter gibt es nur den Knopf seiner Disziplin. Der Bogen öffnet sich im selben Tab.
-**Nicht gespeicherte Eingaben in der Tabelle gehen dabei verloren** – erst **„Alle speichern“**, dann
-den Bogen öffnen.
+jeder Zeile hinter **Suche** und **Anzeige** einer Disziplin der Knopf **„Bogen“**. Beim Dreikampf
+gibt es drei Knöpfe je Zeile, damit jeder Richter sein Blatt für seine Disziplin ausfüllt; beim
+Einzelstarter gibt es nur den Knopf seiner Disziplin. **„Bogen“ speichert zuerst alle Eingaben der
+Tabelle** und öffnet dann den Bogen im selben Tab. Hat eine Zeile einen Fehler, wird wie bei „Alle
+speichern“ nichts gespeichert und die Tabelle bleibt mit der markierten Zeile stehen. Hat jemand
+anderes inzwischen einen Wert geändert (gelb markiert), ist alles andere gespeichert, der Bogen öffnet
+sich aber erst beim nächsten Tippen auf „Bogen“, damit du den Konflikt zuerst siehst.
 
 Oben stehen **Start-Nr., Art/LK, Teilnehmer, Hund, Verein und Datum, Disziplin** und der **zu suchende
 Gegenstand** dieser Disziplin. Darunter:

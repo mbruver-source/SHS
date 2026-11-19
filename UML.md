@@ -733,11 +733,11 @@ sequenceDiagram
         else
             W->>D: eintragen_ergebnis, setze_ergebnis_status
             Note over W,D: ab 200 Zeilen eine Transaktion
-            W-->>R: Redirect, N Zeilen gespeichert
+            W-->>R: Redirect, „Gespeichert: N Teilnehmer“ (mit Knopf Bogen: weiter zum Bogen)
         end
     end
 
-    R->>W: Knopf Bogen: GET /bewertungsbogen/id/disziplin
+    R->>W: Knopf Bogen: POST /ergebnisse (speichert die Tabelle; bei Fehler/Konflikt bleibt die Tabelle), dann GET /bewertungsbogen/id/disziplin
     W->>D: Teilnehmer, Gegenstand, Ergebnis, Notiz lesen
     W-->>R: Bogen mit Punkten, Status, Notiz
     R->>W: POST Bogen (Speichern)
