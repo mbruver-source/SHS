@@ -461,6 +461,25 @@ class TestEndeZuEndeWeb(unittest.TestCase):
         self.assertEqual((zweiter.status_geaendert, zweiter.fehler), ([], []))
         self.assertEqual(zweiter.aktualisiert, 0)  # nichts geändert -> nichts „aktualisiert“
 
+    def test_status_von_der_einzelseite_kommt_beim_zurueckholen_an(self):
+        # UX-Test Web 19.11.2026 (D1): Disqualifiziert und Abbruch auch auf der Seite je Teilnehmer.
+        termin, _hinweis = self._veroeffentlichen()
+        schema = termin["schema_name"]
+        ids = self._web_ids(schema)
+        self._browser_anmelden()
+        seite = self._formular(f"/teilnehmer/{ids[1]}")
+        seite["abbruch"] = "krankheit"
+        self._senden(f"/teilnehmer/{ids[1]}", seite)
+        seite = self._formular(f"/teilnehmer/{ids[5]}")
+        seite["dq"] = "1"
+        self._senden(f"/teilnehmer/{ids[5]}", seite)
+
+        self._anmelden()
+        db.importiere_ergebnisse_aus_liste(self.desktop, self.client.ergebnisse(schema))
+        e1 = self._ergebnis(self.desktop, 1, self.d)
+        self.assertEqual((bool(e1["abbruch"]), e1["abbruch_grund"]), (True, "krankheit"))
+        self.assertTrue(self._ergebnis(self.desktop, 5, self.d)["disqualifiziert"])
+
     # -- 6. Sammel-PDF
     @unittest.skipUnless(importlib.util.find_spec("reportlab"), "reportlab nicht installiert")
     def test_sammel_pdf_der_bewertungsboegen(self):

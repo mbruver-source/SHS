@@ -926,6 +926,229 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertEqual(antwort.status_code, 200)
         self.assertIsNone((db.get_ergebnis(self.conn, ed) or {}).get("suche_flaechensuche"))
 
+    # --- Disqualifiziert/Abbruch auf der Einzelseite (UX-Test Web 19.11.2026, D1) ---------
+
+    def _ed_teilnehmer(self):
+        return db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1,
+        ))
+
+    def test_einzelseite_zeigt_disqualifikation_und_abbruch(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        seite = self.client.get(f"/teilnehmer/{tid}").data.decode()
+        self.assertIn('name="dq" value="1"', seite)
+        self.assertIn('<select id="abbruch" name="abbruch">', seite)
+        self.assertIn('name="geladen_status" value="0|"', seite)
+        for code in db.ABBRUCH_GRUENDE:
+            self.assertIn(f'<option value="{code}"', seite)
+        self.assertNotIn('value="ohne_grund"', seite)  # nur als Altdatum
+        self.assertLess(seite.index('name="dq"'), seite.index(">Speichern</button>"))
+
+    def test_einzelseite_disqualifiziert_speichern(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "", "anzeige_Flächensuche": "",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|", "dq": "1",
+        })
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("aenderung=1", antwort.headers["Location"])
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["disqualifiziert"])
+        self.assertIn('name="geladen_status" value="1|"', self.client.get(f"/teilnehmer/{tid}").data.decode())
+
+    def test_einzelseite_abbruch_mit_grund_und_teilbewertung(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        grund = next(iter(db.ABBRUCH_GRUENDE))
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|", "abbruch": grund,
+        })
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["abbruch"])
+        self.assertEqual(ergebnis["abbruch_grund"], grund)
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (30, 20))
+
+    def test_einzelseite_abbruch_ohne_grund_und_unbekannter_grund_abgelehnt(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        for abbruch, text in (("ohne_grund", "Ein Abbruch braucht einen Grund"),
+                              ("gibtsnicht", "Unbekannter Abbruchgrund")):
+            antwort = self.client.post(f"/teilnehmer/{tid}", data={
+                "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+                "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+                "geladen_status": "0|", "abbruch": abbruch,
+            })
+            self.assertEqual(antwort.status_code, 200, abbruch)
+            html = antwort.data.decode()
+            self.assertIn(text, html)
+            self.assertIn('value="30"', html)  # Eingaben bleiben stehen
+            ergebnis = db.get_ergebnis(self.conn, tid) or {}  # nichts gespeichert
+            self.assertIsNone(ergebnis.get("suche_flaechensuche"), abbruch)
+            self.assertFalse(ergebnis.get("abbruch"), abbruch)
+
+    def test_einzelseite_disqualifiziert_sperrt_punkte(self):
+        tid = self._ed_teilnehmer()
+        db.eintragen_ergebnis(self.conn, tid, "Flächensuche", 40, 30)
+        self._anmelden()
+        # Auch ein Wert über dem Höchstwert führt nicht zum Fehler: die Punkte sind gesperrt.
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "84", "anzeige_Flächensuche": "30",
+            "geladen_suche_Flächensuche": "40", "geladen_anzeige_Flächensuche": "30",
+            "geladen_status": "0|", "dq": "1",
+        })
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["disqualifiziert"])
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (40, 30))
+
+    def test_einzelseite_status_konflikt_ueberschreibt_nicht(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        # Ein anderer Richter disqualifiziert, nachdem diese Seite mit „0|“ geladen wurde.
+        db.setze_ergebnis_status(self.conn, tid, True, False)
+        grund = next(iter(db.ABBRUCH_GRUENDE))
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|", "abbruch": grund,
+        })
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.data.decode()
+        self.assertIn("Disqualifiziert/Abbruch wurde inzwischen von jemand anderem geändert", html)
+        # Die Zeile ist inzwischen gesperrt: auch die Punkte aus dem alten Stand werden (wie in
+        # der Tabelle) nicht geschrieben.
+        self.assertIn("Flächensuche wurde inzwischen von jemand anderem geändert", html)
+        self.assertNotIn("Die übrigen Eingaben wurden gespeichert.", html)
+        self.assertIn('name="geladen_status" value="1|"', html)  # Seite zeigt den aktuellen Stand
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["disqualifiziert"])
+        self.assertFalse(ergebnis["abbruch"])
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+
+    def test_einzelseite_status_konflikt_speichert_punkte_einer_ungesperrten_zeile(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        grund_fremd, grund_eigen = list(db.ABBRUCH_GRUENDE)[:2]
+        db.setze_ergebnis_status(self.conn, tid, False, True, abbruch_grund=grund_fremd)  # anderer Richter
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|", "abbruch": grund_eigen, "bogen": "Flächensuche",
+        })
+        self.assertEqual(antwort.status_code, 200)  # Konflikt: kein Weiterleiten zum Bogen
+        html = antwort.data.decode()
+        self.assertIn("Disqualifiziert/Abbruch wurde inzwischen", html)
+        self.assertIn("Die übrigen Eingaben wurden gespeichert.", html)
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertEqual(ergebnis["abbruch_grund"], grund_fremd)  # nicht überschrieben
+        # Abbruch mit Grund sperrt nicht: die Punkte sind eine eigene Einheit und gespeichert.
+        self.assertEqual((ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]), (30, 20))
+
+    def test_einzelseite_fremd_gesperrt_ohne_meldung_wenn_wert_schon_gleich(self):
+        tid = self._ed_teilnehmer()
+        db.eintragen_ergebnis(self.conn, tid, "Flächensuche", 30, 20)
+        db.setze_ergebnis_status(self.conn, tid, True, False)  # anderer Richter, nach dem Laden
+        self._anmelden()
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|",
+        })
+        self.assertEqual(antwort.status_code, 302)
+
+    def test_einzelseite_unveraenderter_status_ueberschreibt_fremde_aenderung_nicht(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        db.setze_ergebnis_status(self.conn, tid, True, False)  # anderer Richter
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|",  # Status nicht angefasst
+        })
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Flächensuche wurde inzwischen von jemand anderem geändert", antwort.data.decode())
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["disqualifiziert"])
+        self.assertIsNone(ergebnis["suche_flaechensuche"])
+
+    def test_einzelseite_dk_status_gilt_fuer_alle_disziplinen(self):
+        dk = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="B", rufname_hund="Bello", art="DK", stufe=2, startnummer=2,
+        ))
+        self._anmelden()
+        daten = {"geladen_status": "0|", "dq": "1"}
+        for disziplin in db.ALLE_DISZIPLINEN:
+            daten.update({f"suche_{disziplin}": "", f"anzeige_{disziplin}": "",
+                          f"geladen_suche_{disziplin}": "", f"geladen_anzeige_{disziplin}": ""})
+        self.assertEqual(self.client.post(f"/teilnehmer/{dk}", data=daten).status_code, 302)
+        self.assertTrue(db.get_ergebnis(self.conn, dk)["disqualifiziert"])
+        seite = self.client.get(f"/teilnehmer/{dk}").data.decode()
+        self.assertEqual(seite.count('name="dq"'), 1)
+        self.assertIn("Aktuell gespeichert: disqualifiziert", seite)
+
+    def test_einzelseite_kaputtes_statusfeld_gilt_als_veraendert(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "", "anzeige_Flächensuche": "",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "kaputt", "dq": "1",
+        })
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(db.get_ergebnis(self.conn, tid)["disqualifiziert"])
+
+    def test_einzelseite_fehler_behaelt_haken_und_auswahl(self):
+        tid = self._ed_teilnehmer()
+        self._anmelden()
+        grund = next(iter(db.ABBRUCH_GRUENDE))
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "",  # unvollständig
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|", "abbruch": grund,
+        })
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.data.decode()
+        self.assertIn(f'<option value="{grund}" selected>', html)
+        self.assertIn('name="geladen_status" value="0|"', html)
+        self.assertFalse(db.get_ergebnis(self.conn, tid)["abbruch"])
+
+    def test_einzelseite_ohne_statusfeld_laesst_status_unberuehrt(self):
+        # Ältere Formulare/Skripte ohne geladen_status ändern Disqualifiziert/Abbruch nicht.
+        tid = self._ed_teilnehmer()
+        db.setze_ergebnis_status(self.conn, tid, True, False)
+        self._anmelden()
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "30", "anzeige_Flächensuche": "20"})
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["disqualifiziert"])
+        self.assertEqual(ergebnis["suche_flaechensuche"], 30)
+
+    def test_einzelseite_bietet_ohne_grund_nur_bei_altdaten(self):
+        tid = self._ed_teilnehmer()
+        db.setze_ergebnis_status(self.conn, tid, False, True)  # Abbruch ohne Grund (Altdaten)
+        self._anmelden()
+        seite = self.client.get(f"/teilnehmer/{tid}").data.decode()
+        self.assertIn('<option value="ohne_grund" selected>', seite)
+        self.assertIn('name="geladen_status" value="0|ohne_grund"', seite)
+        # Unverändert speichern ist erlaubt (kein „braucht einen Grund“).
+        antwort = self.client.post(f"/teilnehmer/{tid}", data={
+            "suche_Flächensuche": "", "anzeige_Flächensuche": "",
+            "geladen_suche_Flächensuche": "", "geladen_anzeige_Flächensuche": "",
+            "geladen_status": "0|ohne_grund", "abbruch": "ohne_grund",
+        })
+        self.assertEqual(antwort.status_code, 302)
+        ergebnis = db.get_ergebnis(self.conn, tid)
+        self.assertTrue(ergebnis["abbruch"])
+        self.assertIsNone(ergebnis["abbruch_grund"])
+
     def test_ergebnis_dk_zeigt_alle_drei_disziplinen(self):
         teilnehmer_id = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
             nachname="Muster", vorname="B", rufname_hund="Bello", art="DK", stufe=2, startnummer=2,

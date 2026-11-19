@@ -2,6 +2,21 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U2 – Disqualifikation und Abbruch auf der Seite je Teilnehmer (B18 überholt)
+
+Fund D1 (Marco: B18 überholt). Die Seite `/teilnehmer/<id>` hat unter den Punkten „Disqualifiziert“ und die
+Abbruch-Auswahl mit Grund, dazu „Aktuell gespeichert: …“. Gleiche Regeln wie die Ergebnistabelle über jetzt
+gemeinsame Hilfen in `app_web.py` (`_abbruch_fehler`, `_punkte_gesperrt`, `_status_einheit_schreiben`,
+`_extern_gesperrt`, `_punkte_konflikt_text`; Tabelle und Online-Bogen nutzen sie ebenfalls statt eigener Kopien):
+Abbruch braucht einen Grund („ohne Grund“ nur als Altdatum), Disqualifiziert/Abbruch ohne Grund sperren die Punkte,
+der Status ist eine eigene Einheit mit Konfliktprüfung (verstecktes Feld `geladen_status`), und Punkte werden nicht in
+eine seit dem Laden fremd gesperrte Zeile geschrieben. Bei Konflikt zeigt die Seite Hinweis und aktuellen Stand (kein
+Weiterleiten, auch nicht zum Bogen). Formulare ohne `geladen_status` lassen den Status unberührt. 14 neue Tests in
+`test_app_web.py`, ein Ende-zu-Ende-Test (Status von der Einzelseite kommt beim Zurückholen an); Gegenproben ok.
+Verifikation: Nacharbeit (gemeinsame Hilfen statt Kopie, Ende-zu-Ende-Test, Angleichung „fremd gesperrt“, Tests)
+umgesetzt. B18 und `OFFEN.md` (B18, C5) nachgezogen, Handbuch angepasst. Nebenbei: CSS-Klasse der Bogen-Knöpfe aus
+U1 umbenannt (`einzelseite-bogen`), weil `bewertungsbogen.html` schon `bogen-knoepfe` nutzt.
+
 ## 19.11.2026: UX-Test Web U1 – Weg zum Online-Bewertungsbogen, Bestätigung nach dem Speichern
 
 Funde A1 und B2 (Teil) aus `berichte/UX-Test-2026-11-Web/aufgaben-umsetzung.md`. Die Teilnehmerliste zeigt unter

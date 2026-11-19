@@ -125,7 +125,13 @@
      Einzelseite (UX-Test Web 19.11.2026, A1): groß genug zum Antippen. */
   .bogen-links { margin: -0.3em 0.4em 0.5em; }
   .bogen-links a { display: inline-block; padding: 0.35em 0.2em; }
-  .bogen-knoepfe button { margin: 0 0.4em 0.5em 0; }
+  .einzelseite-bogen button { margin: 0 0.4em 0.5em 0; }
+  /* Disqualifiziert/Abbruch auf der Seite je Teilnehmer (UX-Test Web 19.11.2026, D1). */
+  .einzelseite-status { display: flex; flex-wrap: wrap; gap: 0.8em 1.5em; align-items: flex-end; margin: 0.8em 0; }
+  .einzelseite-status label.dq { display: flex; align-items: center; gap: 0.4em; margin: 0; }
+  .einzelseite-status label.dq input { width: 1.5em; height: 1.5em; }
+  .einzelseite-status select { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
+                               border-radius: 6px; background: #fff; color: var(--text); max-width: 100%; }
   .status {
     display: inline-flex; align-items: center; gap: 0.25em;
     padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; white-space: nowrap;

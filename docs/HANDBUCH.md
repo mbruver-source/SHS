@@ -1014,8 +1014,14 @@ bekommst du von der Prüfungsleitung.
 
 - Beim Dreikampf können mehrere Richter **gleichzeitig** denselben Hund bearbeiten – gespeichert
   wird nur die Disziplin, die du tatsächlich geändert hast.
-- **Disqualifikation, Abbruch und Notizen** trägst du im Online-Bewertungsbogen oder in der
-  Ergebnistabelle ein (siehe unten), nicht auf der Seite je Teilnehmer.
+- **Disqualifikation und Abbruch** stehen unter den Punkten: **„Disqualifiziert“** anhaken oder
+  beim **„Abbruch“** den Grund wählen (ein Abbruch braucht immer einen Grund; mit Grund darfst du
+  Punkte für eine Teilbewertung eintragen). Bei „Disqualifiziert“ werden die Punkte nicht gewertet
+  und beim Speichern nicht verändert. Hat jemand anderes Disqualifiziert/Abbruch geändert, seit du
+  die Seite geöffnet hast, wird deine Änderung daran nicht gespeichert; hat er den Teilnehmer
+  inzwischen disqualifiziert, werden auch deine Punkte nicht gespeichert. Die Seite nennt dann den
+  aktuellen Stand, prüfe ihn und trage bei Bedarf neu ein.
+- **Notizen** trägst du im Online-Bewertungsbogen ein (siehe unten).
 
 ### Ergebnisse als Tabelle eintragen
 
