@@ -1034,12 +1034,15 @@ erfassen“** antippen (oder oben in der Leiste **„Ergebnistabelle“**). Sie 
 „Ergebniserfassung“ im Desktop-Programm: eine Zeile je Teilnehmer mit **Start-Nr., Name, Hund**,
 **Art/LK**, je Disziplin **„Suche (0-60)“** und **„Anzeige (0-40)“**, **Disqualifiziert**,
 **Abbruch** und **Status**. Beim Einzelstarter gibt es nur Felder für seine Disziplin, die übrigen
-zeigen „–“. Am Tablet oder Handy lässt sich die Tabelle seitlich wischen, die erste Spalte mit
-Nummer und Namen bleibt dabei stehen.
+zeigen „–“. Die Zeilen stehen nach **Start-Nr.** sortiert. Die Tabelle lässt sich in ihrem Rahmen
+seitlich und nach unten wischen; die erste Spalte mit Nummer und Namen und die Kopfzeile mit den
+Disziplinen bleiben dabei stehen. Am Handy ist die Seite je Teilnehmer (Teilnehmerliste, Namen
+antippen) meist bequemer.
 
 1. **Filtern (optional):** Art/LK wählen, eine Start-Nr. oder einen Namen bzw. Hund eingeben und
-   **„Filtern“** tippen. Zum Zurücksetzen **„Alle anzeigen“**. Der Filter lädt die Seite neu – nicht
-   gespeicherte Eingaben gehen dabei verloren, deshalb erst speichern, dann filtern.
+   **„Filtern“** tippen; die Seite springt danach direkt zur Tabelle mit den Treffern. Zum
+   Zurücksetzen **„Alle anzeigen“**. Der Filter lädt die Seite neu – nicht gespeicherte Eingaben
+   gehen dabei verloren, deshalb erst speichern, dann filtern.
 2. **Eintragen:** Suche und Anzeige je Disziplin eingeben. Beide Felder einer Disziplin leeren
    löscht das Ergebnis. **Disqualifiziert** hakst du an; beim **Abbruch** wählst du den Grund
    aus der Liste (Ungehorsam, Verletzung Hund, Krankheit, Verletzung HF). Ein Abbruch braucht immer

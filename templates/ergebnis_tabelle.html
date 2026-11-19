@@ -3,11 +3,20 @@
 {% block main_attr %} class="breit"{% endblock %}
 {% block stil %}
 <style>
-  /* Ergebnistabelle: horizontal scrollbarer Container, die erste Spalte (Start-Nr., Name, Hund)
-     bleibt beim Scrollen stehen - reines CSS, ohne JavaScript (CSP script-src 'none'). */
-  .tabellenrahmen { overflow-x: auto; background: var(--karte); border: 1px solid var(--grau-rand);
-                    border-radius: 10px; -webkit-overflow-scrolling: touch; }
+  /* Ergebnistabelle: reines CSS, ohne JavaScript (CSP script-src 'none'). Die Tabelle scrollt in ihrem
+     Rahmen in beide Richtungen; die erste Spalte (Start-Nr., Name, Hund) bleibt beim seitlichen Wischen
+     stehen und seit UX-Test Web 19.11.2026 (C1) auch die Kopfzeile (Disziplin, Suche/Anzeige) beim
+     Blättern nach unten - eine Kopfzeile mit position: sticky klebt nur am Rand ihres eigenen
+     Scrollbereichs, deshalb die Höhengrenze (dvh: sichtbare Höhe am Handy, vh als Rückfall). */
+  .tabellenrahmen { overflow: auto; max-height: 80vh; max-height: 80dvh; background: var(--karte);
+                    border: 1px solid var(--grau-rand); border-radius: 10px; -webkit-overflow-scrolling: touch;
+                    scroll-margin-top: 0.5em; scroll-padding-top: 5.5em; }
   table.ergebnisse { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+  table.ergebnisse thead { position: sticky; top: 0; z-index: 4; }
+  /* Sprung zu einer Zeile (#zeile-<id>, z. B. nach „Speichern und zurück zur Tabelle“) und Tab-Fokus
+     nach oben: nicht unter der festen Kopfzeile verstecken (scroll-padding-top am Rahmen, Schätzwert
+     für die zweizeilige Kopfzeile). */
+  table.ergebnisse tbody tr { scroll-margin-top: 5.5em; }
   table.ergebnisse th, table.ergebnisse td { padding: 0.45em 0.5em; border-bottom: 1px solid var(--grau-rand);
                                              vertical-align: middle; background: var(--karte); }
   table.ergebnisse thead th { background: var(--grau-hell); text-align: center; font-size: 0.85em; white-space: nowrap; }
@@ -32,13 +41,20 @@
   .filter > div { min-width: 0; }
   .filter select, .filter input[type=text] { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
                                              border-radius: 6px; background: #fff; color: var(--text); }
+  /* Bogen-Knopf groß genug zum Antippen (UX-Test Web 19.11.2026, C1: mindestens 44 px hoch). */
+  table.ergebnisse .knopf-klein { font-size: 0.95em; padding: 0.7em 0.9em; min-height: 44px; white-space: nowrap; }
+  .lk-klein { display: none; }
+  .nur-handy { display: none; }
   /* Am Handy steht Art/LK unter dem Namen statt in einer eigenen Spalte: so liegen die Eingabefelder
      ohne langes seitliches Scrollen im Bild. */
-  table.ergebnisse .knopf-klein { font-size: 0.9em; padding: 0.45em 0.7em; white-space: nowrap; }
-  .lk-klein { display: none; }
   @media (max-width: 700px) {
     table.ergebnisse .lk-spalte { display: none; }
     .lk-klein { display: inline; }
+    .nur-handy { display: block; }
+    /* Am Handy schmalere erste Spalte, damit neben ihr Eingabefelder sichtbar bleiben (der Kopftext
+       darf dafür umbrechen, sonst bestimmt er die Spaltenbreite). */
+    table.ergebnisse th.erste { min-width: 8.5em; max-width: 8.5em; }
+    table.ergebnisse thead th.erste { white-space: normal; }
   }
   .speichern-leiste { display: flex; flex-wrap: wrap; gap: 0.6em; align-items: center; margin: 0.8em 0; }
 </style>
@@ -48,12 +64,16 @@
   <h1>Ergebnistabelle</h1>
   {% if veranstaltung %}<p>{{ veranstaltung.verein }}{% if veranstaltung.ort %}, {{ veranstaltung.ort }}{% endif %} – {{ veranstaltung.datum | datum }}</p>{% endif %}
   <p><a class="knopf knopf-sekundaer" href="{{ url_for('teilnehmerliste') }}">&larr; Zur Teilnehmerliste</a></p>
+  {# UX-Test Web 19.11.2026 (C1): am Handy ist die Seite je Teilnehmer bequemer als die breite Tabelle. #}
+  <p class="nur-handy"><small>Am Handy geht es bequemer über die <a href="{{ url_for('teilnehmerliste') }}">Teilnehmerliste</a>:
+    Namen antippen, dann Punkte eintragen.</small></p>
 </div>
 
 {# Der Filter ist ein eigenes GET-Formular: ohne JavaScript lässt sich eine Tabelle nur über die
    Adresse eingrenzen. Noch nicht gespeicherte Eingaben gehen beim Filtern verloren - deshalb
-   erst speichern, dann filtern. #}
-<form class="karte filter" method="get" action="{{ url_for('ergebnistabelle') }}" role="search">
+   erst speichern, dann filtern. Der Anker #tabelle in der Adresse springt nach dem Filtern zur
+   Tabelle mit den Treffern (UX-Test Web 19.11.2026, C4: sonst lag die Zeile unter dem Falz). #}
+<form class="karte filter" method="get" action="{{ url_for('ergebnistabelle') }}#tabelle" role="search">
   <div>
     <label for="lk">Art/LK</label>
     <select id="lk" name="lk">
@@ -94,7 +114,7 @@
     <small>{{ zeilen | length }} Teilnehmer in der Tabelle. Bei „Disqualifiziert“ oder „Abbruch“ ohne Grund werden eingetragene Punkte nicht gewertet und nicht verändert. Ein Abbruch mit Grund lässt eine Teilbewertung zu. „Bogen“ öffnet den ausfüllbaren Bewertungsbogen der Disziplin im selben Tab - erst „Alle speichern“, sonst gehen nicht gespeicherte Eingaben dieser Tabelle verloren.</small>
   </div>
 
-  <div class="tabellenrahmen">
+  <div class="tabellenrahmen" id="tabelle">
     <table class="ergebnisse">
       <thead>
         <tr>

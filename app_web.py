@@ -1449,8 +1449,10 @@ def _tabellen_filter() -> dict:
 
 
 def _tabellen_teilnehmer(conn, filter_: dict) -> list[dict]:
-    """Teilnehmende Teilnehmer, die zum Filter passen, in der Reihenfolge der Tabelle
-    (Prüfung in der Reihenfolge des Anmeldeformulars, dann Startnummer)."""
+    """Teilnehmende Teilnehmer, die zum Filter passen, in der Reihenfolge der Tabelle: nach
+    Startnummer aufsteigend (UX-Test Web 19.11.2026, C2, Marco; vorher nach Prüfung, dann
+    Startnummer), ohne Startnummer am Ende und diese nach Prüfung und Name (Startnummern sind
+    eindeutig)."""
     gefunden = []
     for t in db.list_teilnehmer(conn, nur_teilnehmende=True):
         if filter_["lk"] and db.leistungsklasse_label(t) != filter_["lk"]:
@@ -1461,8 +1463,8 @@ def _tabellen_teilnehmer(conn, filter_: dict) -> list[dict]:
             continue
         gefunden.append(t)
     gefunden.sort(key=lambda t: (
-        db.pruefung_sortierschluessel(db.leistungsklasse_label(t)),
-        t["startnummer"] is None, t["startnummer"] or 0, db.sortierschluessel_text(t["nachname"]),
+        t["startnummer"] is None, t["startnummer"] or 0,
+        db.pruefung_sortierschluessel(db.leistungsklasse_label(t)), db.sortierschluessel_text(t["nachname"]),
     ))
     return gefunden
 

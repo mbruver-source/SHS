@@ -1929,12 +1929,27 @@ class TestErgebnistabelle(_AppWebTestBasis):
         daten = self._seite("/ergebnisse?lk=gibt-es-nicht")
         self.assertEqual(len([k for k in daten if k.startswith("geladen_")]), 3)
 
-    def test_sortierung_nach_pruefung_und_startnummer(self):
+    def test_sortierung_nach_startnummer(self):
+        # UX-Test Web 19.11.2026 (C2, Marco): nach Start-Nr. statt nach Prüfung (vorher DK, Trümmerfeld,
+        # Behältnisse, Fläche). Nr. 10 nach Nr. 9 (Zahl, nicht Text), ohne Nummer am Ende.
+        self._teilnehmer("Zehn", "Zora", "Zack", "ED", 1, 10, "Flächensuche")
+        self._teilnehmer("Neun", "Nina", "Nemo", "DK", 2, 9)
+        self._teilnehmer("Ohne", "Olga", "Odin", "ED", 1, None, "Trümmerfeld")
         self._anmelden()
         html = self.client.get("/ergebnisse").data.decode()
-        # Reihenfolge des Anmeldeformulars: DK, Trümmerfeld, Behältnisse, Fläche
-        positionen = [html.index(name) for name in ("Beispiel, Bernd", "Probe, Cora", "Muster, Anna")]
+        namen = ("Muster, Anna", "Beispiel, Bernd", "Probe, Cora", "Neun, Nina", "Zehn, Zora", "Ohne, Olga")
+        positionen = [html.index(name) for name in namen]
         self.assertEqual(positionen, sorted(positionen))
+
+    def test_tabelle_mobil_kopfzeile_fest_und_filter_springt_zur_tabelle(self):
+        # UX-Test Web 19.11.2026 (C1, C4)
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertIn("table.ergebnisse thead { position: sticky; top: 0;", html)
+        self.assertIn('<div class="tabellenrahmen" id="tabelle">', html)
+        self.assertIn('action="/ergebnisse#tabelle" role="search"', html)
+        self.assertIn('class="nur-handy"', html)
+        self.assertIn("min-height: 44px", html)
 
     def test_speichern_behaelt_den_filter(self):
         self._anmelden()
@@ -2244,7 +2259,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
         html = antwort.data.decode()
         self.assertNotIn("<script", html)
         self.assertIn("position: sticky", html)
-        self.assertIn("overflow-x: auto", html)
+        self.assertIn(".tabellenrahmen { overflow: auto;", html)  # seit U5 in beide Richtungen
         self.assertIn("script-src 'none'", antwort.headers["Content-Security-Policy"])
 
     def test_navigation_und_links_zwischen_liste_und_tabelle(self):

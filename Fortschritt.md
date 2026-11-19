@@ -2,6 +2,18 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U5 – Ergebnistabelle am Handy und Tablet, Sortierung nach Start-Nr.
+
+Funde C1, C2, C4. Die Web-Ergebnistabelle scrollt in ihrem Rahmen in beide Richtungen (höchstens 80 % der
+Fensterhöhe); Kopfzeile und erste Spalte bleiben stehen (reines CSS, keine Skripte). Bogen-Knopf mindestens 44 px
+hoch, am Handy schmalere erste Spalte und Hinweis auf die Seite je Teilnehmer. Sortierung nach Start-Nr.
+aufsteigend (numerisch, ohne Nummer am Ende), Art/LK bleibt Filter. Das Filterformular springt über den Anker
+`#tabelle` zur Tabelle – Abweichung von C4 („zur ersten Trefferzeile“): ohne Skripte kennt das Filterformular die
+erste Treffer-ID nicht; die erste Trefferzeile steht so direkt unter der Kopfzeile. Sichtprüfung im eingebauten
+Browser bei 375 px mit Demo-Daten (lokaler Server, nicht der Test-Stack); Safari/iOS und die Anker-Sprünge nicht
+im Browser geprüft. 2 Tests neu bzw. ersetzt, einer angepasst, Gegenprobe ok, Verifikation ohne Fehler (Hinweise
+umgesetzt: `dvh`-Höhe, `scroll-padding-top`, umbrechender Kopf der ersten Spalte am Handy); Handbuch angepasst.
+
 ## 19.11.2026: UX-Test Web U4 – Startseite, Navigation, Meldung „angelegt“, Einrichtungs-Code sichtbar
 
 Funde A2, A3, B1, F3. Die Startseite `/` leitet Angemeldete weiter (mit gewähltem Termin zur Teilnehmerliste, sonst
