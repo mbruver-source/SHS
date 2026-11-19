@@ -2,6 +2,20 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U7 – Bogen: Hinweis bei zu hohen Punkten, Gegenstand, feste Kopfleiste, Rückweg
+
+Funde B4, D3, D4, A4 und der Rückweg aus U1. **B4 nachgestellt** (eingebauter Browser, 768 px, lokaler
+Demo-Server): Bei 84 statt höchstens 60 hält der Browser das Absenden an und zeigt nur kurz eine Blase am Feld –
+also ein echter Fund. Behoben ohne Skript: Ungültige Zahlenfelder werden rot, ein Hinweis „Bitte eine ganze Zahl
+von 0 bis 60 eintragen.“ steht dahinter (CSS `:invalid`, Bogen und Seite je Teilnehmer). **D3 nicht nachstellbar**:
+Die Abbruch-Auswahl öffnet als Browser-Popup, das das Testwerkzeug weder zeigt noch per Klick bedient (Tastatur
+geht) – Werkzeug-Eigenheit, geschlossen; „Verletzung HF“ wird jetzt erklärt, der Erklärtext ist größer. D4: Ohne
+Gegenstand entfällt die Zeile statt „nicht hinterlegt“. A4: Kopfleiste ab 701 px fest (am Handy bewusst nicht,
+dort zweizeilig). Rückweg: Bogen-Links der Teilnehmerliste tragen `?von=liste`, der Bogen-Knopf der Einzelseite
+`?von=teilnehmer`; „Speichern und zurück …“ und „Abbrechen“ führen dorthin. 5 neue Tests, 3 angepasst, Gegenprobe
+ok, Verifikation ohne Funktionsfehler (Nacharbeit umgesetzt: Docstring, `Architektur.md`, `UML.md`, Feldhinweise
+per `aria-describedby` verbunden, feste Kopfleiste nicht am Handy im Querformat); Handbuch angepasst.
+
 ## 19.11.2026: UX-Test Web U6 – Meldungen und Hinweise der Ergebnistabelle, „Bogen“ speichert vorher
 
 Funde B3, C3, D2. Nach dem Speichern meldet die Tabelle „Gespeichert: n Teilnehmer.“ (statt „n Zeile(n)

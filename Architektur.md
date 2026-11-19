@@ -232,8 +232,9 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
   gespeicherten Stand (`_bogen_zusammenfassung`): Gesamtpunktzahl der Disziplin (nur mit Suche und
   Anzeige), Status und die Wertnote nach `shs_core` (ED: `berechne_wertnote_ed`; DK: `berechne_wertnote_dk`
   erst, wenn alle drei Disziplinen vollständig sind; bei Disqualifiziert/Abbruch keine). „Speichern und
-  zurück zur Tabelle“ leitet auf `/ergebnisse#zeile-<id>`; der Tabellenfilter (`lk`, `nr`, `q`) hängt an
-  allen Adressen. Die Notizen werden im Web gespeichert und mit „Ergebnisse aus Web holen“ in die
+  zurück …“ leitet dorthin, woher der Bogen kam (seit 19.11.2026): `?von=liste` zur Teilnehmerliste (mit
+  Bestätigung), `?von=teilnehmer` zur Seite je Teilnehmer, sonst `/ergebnisse#zeile-<id>`; nur auf dem
+  Tabellenweg hängt der Tabellenfilter (`lk`, `nr`, `q`) an den Adressen. Die Notizen werden im Web gespeichert und mit „Ergebnisse aus Web holen“ in die
   Termin-Datei übernommen; die Desktop-Oberfläche zeigt sie noch nicht an, der PDF-Bewertungsbogen
   (Desktop und Web) druckt sie, wenn eine Notiz vorhanden ist.
 - **Sammel-PDF der benutzten Bewertungsbögen (`GET /ergebnisse/boegen.pdf`, `ergebnis_boegen_pdf` in

@@ -1010,7 +1010,7 @@ class TestAppWeb(_AppWebTestBasis):
         ))
         self._anmelden()
         liste = self.client.get("/teilnehmer").data.decode()
-        self.assertIn(f'href="/bewertungsbogen/{ed}/Fl%C3%A4chensuche"', liste)
+        self.assertIn(f'href="/bewertungsbogen/{ed}/Fl%C3%A4chensuche?von=liste"', liste)
         self.assertEqual(liste.count(f"/bewertungsbogen/{dk}/"), len(db.ALLE_DISZIPLINEN))
         self.assertEqual(liste.count(f"/bewertungsbogen/{ed}/"), 1)
 
@@ -1030,7 +1030,8 @@ class TestAppWeb(_AppWebTestBasis):
             f"suche_{disziplin}": "40", f"anzeige_{disziplin}": "30", "bogen": disziplin,
         })
         self.assertEqual(antwort.status_code, 302)
-        self.assertIn(f"/bewertungsbogen/{dk}/", antwort.headers["Location"])
+        self.assertTrue(antwort.headers["Location"].startswith(f"/bewertungsbogen/{dk}/"))
+        self.assertTrue(antwort.headers["Location"].endswith("?von=teilnehmer"), antwort.headers["Location"])
         spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
         ergebnis = db.get_ergebnis(self.conn, dk)
         self.assertEqual((ergebnis[spalte_suche], ergebnis[spalte_anzeige]), (40, 30))
@@ -2385,8 +2386,69 @@ class TestBewertungsbogen(_AppWebTestBasis):
         self.assertNotIn(f"suche_{self.F}_{self.dk}", daten)
         self.assertNotIn(f"suche_{self.B}_{self.dk}", daten)
         self.assertIn("Stoffball", self.client.get(self._pfad(self.dk, self.B)).data.decode())
-        # ohne zugeordneten Gegenstand
-        self.assertIn("nicht hinterlegt", self.client.get(self._pfad(self.dk, self.F)).data.decode())
+        # ohne zugeordneten Gegenstand entfällt die Zeile (UX-Test Web 19.11.2026, D4: „nicht hinterlegt“ war unklar)
+        html = self.client.get(self._pfad(self.dk, self.F)).data.decode()
+        self.assertNotIn("nicht hinterlegt", html)
+        self.assertNotIn("Zu suchender Gegenstand", html)
+
+    def test_bogen_zeigt_hinweis_bei_ungueltigen_punkten_und_erklaert_hf(self):
+        # UX-Test Web 19.11.2026 (B4, D3): Hinweis direkt am Feld (per CSS bei :invalid sichtbar).
+        self._anmelden()
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertIn('<p class="feld-hinweis" id="hinweis-suche">Bitte eine ganze Zahl von 0 bis 60 eintragen.</p>', html)
+        self.assertIn('<p class="feld-hinweis" id="hinweis-anzeige">Bitte eine ganze Zahl von 0 bis 40 eintragen.</p>', html)
+        self.assertIn('aria-describedby="hinweis-suche"', html)
+        self.assertIn("input:invalid + .feld-hinweis { display: block; }", html)
+        self.assertIn("Verletzung des Hundeführers", html)
+        # A4: feste Kopfleiste ab Tablet-Breite
+        self.assertIn("header { position: sticky; top: 0; z-index: 20; }", html)
+
+    def test_bogen_aus_der_liste_fuehrt_zur_liste_zurueck(self):
+        self._anmelden()
+        pfad = self._pfad(self.ed, self.F, "?von=liste")
+        html = self.client.get(pfad).data.decode()
+        self.assertIn("Speichern und zurück zur Teilnehmerliste", html)
+        self.assertIn('href="/teilnehmer">Abbrechen', html)
+        daten = self._bogen(self.ed, self.F)
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "40", "30"
+        daten["weiter"] = "tabelle"
+        antwort = self.client.post(pfad, data=daten)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], f"/teilnehmer?gespeichert={self.ed}&aenderung=1")
+
+    def test_bogen_von_der_einzelseite_fuehrt_dorthin_zurueck(self):
+        self._anmelden()
+        pfad = self._pfad(self.ed, self.F, "?von=teilnehmer")
+        html = self.client.get(pfad).data.decode()
+        self.assertIn("Speichern und zurück zur Seite des Teilnehmers", html)
+        self.assertIn(f'href="/teilnehmer/{self.ed}">Abbrechen', html)
+        daten = self._bogen(self.ed, self.F)
+        daten["weiter"] = "tabelle"
+        antwort = self.client.post(pfad, data=daten)
+        self.assertEqual(antwort.headers["Location"], f"/teilnehmer/{self.ed}")
+
+    def test_bogen_speichern_behaelt_die_herkunft_und_verwirft_tabellenfilter(self):
+        self._anmelden()
+        pfad = self._pfad(self.ed, self.F, "?von=liste&q=rex&lk=x")
+        html = self.client.get(pfad).data.decode()
+        self.assertIn(f'action="{self._pfad(self.ed, self.F, "?von=liste")}"', html)
+        daten = self._bogen(self.ed, self.F)
+        daten["weiter"] = "bogen"
+        antwort = self.client.post(self._pfad(self.ed, self.F, "?von=liste"), data=daten)
+        ziel = antwort.headers["Location"]
+        self.assertTrue(ziel.startswith(self._pfad(self.ed, self.F, "?")), ziel)
+        self.assertEqual(sorted(ziel.split("?", 1)[1].split("&")), ["gespeichert=0", "von=liste"])
+        # Fehlerfall: Seite bleibt, Formular sendet weiter mit ?von=liste
+        daten[f"suche_{self.F}_{self.ed}"] = "84"
+        html = self.client.post(self._pfad(self.ed, self.F, "?von=liste"), data=daten).data.decode()
+        self.assertIn("Es wurde nichts gespeichert", html)
+        self.assertIn(f'action="{self._pfad(self.ed, self.F, "?von=liste")}"', html)
+
+    def test_bogen_unbekannte_herkunft_fuehrt_zur_tabelle(self):
+        self._anmelden()
+        html = self.client.get(self._pfad(self.ed, self.F, "?von=//evil.example")).data.decode()
+        self.assertIn("Speichern und zurück zur Tabelle", html)
+        self.assertNotIn("evil", html)
 
     def test_zeigt_gespeicherte_werte_und_notiz(self):
         db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)

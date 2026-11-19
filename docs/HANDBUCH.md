@@ -992,7 +992,8 @@ bekommst du von der Prüfungsleitung.
 4. **Ergebnis eintragen:** Je Disziplin **„Suchleistung (0–60)“** und
    **„Anzeigeleistung (0–40)“** eingeben und **„Speichern“** tippen. Danach geht es zurück zur
    Liste; oben steht **„Gespeichert: <Name>.“** (oder „Keine Änderungen zu speichern“, wenn du
-   nichts geändert hast). Beide Felder einer Disziplin leeren und speichern löscht das Ergebnis.
+   nichts geändert hast). Beide Felder einer Disziplin leeren und speichern löscht das Ergebnis. Ein
+   Wert über dem Höchstwert färbt das Feld rot, darunter steht, welche Zahlen möglich sind.
    Unter „Speichern“ öffnet **„Bewertungsbogen … öffnen“** den Online-Bewertungsbogen einer
    Disziplin; der Knopf speichert vorher deine Eingaben auf dieser Seite.
 5. **Abmelden** über den Link oben rechts. Nach 12 Stunden ohne Aktivität wirst du automatisch
@@ -1103,11 +1104,13 @@ anderes inzwischen einen Wert geändert (gelb markiert), ist alles andere gespei
 sich aber erst beim nächsten Tippen auf „Bogen“, damit du den Konflikt zuerst siehst.
 
 Oben stehen **Start-Nr., Art/LK, Teilnehmer, Hund, Verein und Datum, Disziplin** und der **zu suchende
-Gegenstand** dieser Disziplin. Darunter:
+Gegenstand** dieser Disziplin (die Zeile fehlt, wenn im Termin kein Gegenstand eingetragen ist). Darunter:
 
 1. **Suchleistung – Punktzahl (0-60)** und **Anzeige – Punktzahl (0-40)** eintragen. Die Punkte landen
    direkt in den Ergebnisspalten – dieselben Werte, die auch die Tabelle zeigt. Beide Felder leeren
-   löscht das Ergebnis der Disziplin; die anderen Disziplinen des Hundes bleiben unverändert.
+   löscht das Ergebnis der Disziplin; die anderen Disziplinen des Hundes bleiben unverändert. Ein
+   Wert über dem Höchstwert (z. B. 84 bei Suche) färbt das Feld rot, darunter steht „Bitte eine ganze
+   Zahl von 0 bis 60 eintragen.“; gespeichert wird erst nach der Korrektur.
 2. Bei Bedarf **Disqualifiziert** anhaken oder einen **Abbruch** mit Grund wählen. Es gelten dieselben
    Regeln wie in der Tabelle (Sperre der Punkte bei Disqualifiziert oder Abbruch ohne Grund,
    Teilbewertung bei Abbruch mit Grund, ein Abbruch braucht einen Grund). Beides gilt für die ganze
@@ -1117,8 +1120,9 @@ Gegenstand** dieser Disziplin. Darunter:
 4. **„Speichern“** bleibt auf dem Bogen. Darunter erscheinen die **Gesamtpunktzahl** der Disziplin
    (Suche plus Anzeige, sobald beides gespeichert ist), der **Status** und die **Wertnote**: beim
    Einzelstarter die der Disziplin, beim Dreikampf erst, wenn alle drei Disziplinen vollständig
-   eingetragen sind. **„Speichern und zurück zur Tabelle“** führt zur Zeile des Teilnehmers zurück,
-   **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern.
+   eingetragen sind. **„Speichern und zurück …“** führt dorthin zurück, wo du den Bogen geöffnet
+   hast: zur Zeile in der Tabelle, zur Teilnehmerliste (mit „Gespeichert: <Name>.“) oder zur Seite
+   des Teilnehmers. **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern auf demselben Weg.
 
 Bei einem Fehler (z. B. nur die Suche ausgefüllt, ein Wert über dem Höchstwert, eine zu lange Notiz)
 wird nichts gespeichert, deine Eingaben bleiben stehen. Hat in der Zwischenzeit ein anderer Richter

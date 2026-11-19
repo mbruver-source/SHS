@@ -43,7 +43,7 @@
     {# UX-Test Web 19.11.2026 (A1): direkter Weg zum Online-Bewertungsbogen je Disziplin (außerhalb
        des Zeilen-Links, Links dürfen nicht verschachtelt sein). #}
     <p class="bogen-links"><small>Bewertungsbogen:
-      {% for disziplin in zeile.disziplinen %}<a href="{{ url_for('bewertungsbogen', teilnehmer_id=zeile.teilnehmer.id, disziplin=disziplin) }}">{{ disziplin }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</small></p>
+      {% for disziplin in zeile.disziplinen %}<a href="{{ url_for('bewertungsbogen', teilnehmer_id=zeile.teilnehmer.id, disziplin=disziplin, von='liste') }}">{{ disziplin }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</small></p>
     </div>
   {% else %}
     <p style="padding: 1em;">{% if suche %}Kein Teilnehmer passt zu „{{ suche }}“.{% else %}Für diesen Termin sind noch keine Teilnehmer hinterlegt.{% endif %}</p>

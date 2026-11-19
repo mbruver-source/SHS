@@ -41,6 +41,14 @@
     flex-wrap: wrap;  /* am Handy rutscht die Navigation unter den Titel statt ihn zu überlappen */
     gap: 0.8em;
   }
+  /* UX-Test Web 19.11.2026 (A4): Ab Tablet-Breite bleibt die Kopfleiste beim Scrollen oben. Am Handy
+     nicht: dort ist sie zweizeilig und würde zu viel vom Bildschirm belegen. scroll-padding-top hält
+     Sprungziele (#zeile-…, #meldung, #tabelle) unter der festen Kopfleiste sichtbar. Die Mindesthöhe
+     schließt Handys im Querformat aus (breit, aber niedrig). */
+  @media (min-width: 701px) and (min-height: 560px) {
+    header { position: sticky; top: 0; z-index: 20; }
+    html { scroll-padding-top: 4.5em; }
+  }
   header .marke { display: flex; align-items: center; gap: 0.6em; min-width: 0; }
   header .marke img { width: 42px; height: 42px; border-radius: 50%; flex: none; }
   header .titel { font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
@@ -95,6 +103,12 @@
     background: #fff;
     color: var(--text);
   }
+  /* UX-Test Web 19.11.2026 (B4): Ein Wert über dem Höchstwert (z. B. 84 bei höchstens 60) hält der Browser
+     schon vor dem Absenden auf und zeigt nur kurz eine Blase am Feld. Ohne Skript (CSP) deshalb mit
+     CSS: das Feld wird rot, ein Hinweis direkt dahinter (.feld-hinweis) bleibt stehen. */
+  input[type=number]:invalid { border-color: var(--rot); background: #fbeceb; }
+  .feld-hinweis { display: none; color: var(--rot); font-size: 0.95em; margin: 0.3em 0 0; }
+  input:invalid + .feld-hinweis { display: block; }
   input:focus-visible, button:focus-visible, .knopf:focus-visible, main a:focus-visible {
     outline: 2px solid var(--gruen); outline-offset: 1px;
   }

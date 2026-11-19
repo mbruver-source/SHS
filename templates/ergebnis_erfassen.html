@@ -30,12 +30,14 @@
       <input type="hidden" name="geladen_anzeige_{{ zeile.disziplin }}" value="{{ zeile.geladen_anzeige }}">
       <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–{{ suche_max }})</label>
       <input type="number" id="suche_{{ zeile.disziplin }}" name="suche_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="{{ suche_max }}"
+             inputmode="numeric" min="0" max="{{ suche_max }}" aria-describedby="hinweis-suche-{{ loop.index }}"
              value="{{ zeile.suche }}">
+      <p class="feld-hinweis" id="hinweis-suche-{{ loop.index }}">Bitte eine ganze Zahl von 0 bis {{ suche_max }} eintragen.</p>
       <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–{{ anzeige_max }})</label>
       <input type="number" id="anzeige_{{ zeile.disziplin }}" name="anzeige_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="{{ anzeige_max }}"
+             inputmode="numeric" min="0" max="{{ anzeige_max }}" aria-describedby="hinweis-anzeige-{{ loop.index }}"
              value="{{ zeile.anzeige }}">
+      <p class="feld-hinweis" id="hinweis-anzeige-{{ loop.index }}">Bitte eine ganze Zahl von 0 bis {{ anzeige_max }} eintragen.</p>
     {% endfor %}
 
     {# UX-Test Web 19.11.2026 (D1): Disqualifikation und Abbruch auch hier, nicht nur in der Tabelle. #}
@@ -54,7 +56,7 @@
         </select>
       </div>
     </div>
-    <p><small>Ein Abbruch braucht einen Grund; mit Grund ist eine Teilbewertung möglich. Bei „Disqualifiziert“
+    <p><small>Ein Abbruch braucht einen Grund („Verletzung HF“ = Verletzung des Hundeführers bzw. der Hundeführerin); mit Grund ist eine Teilbewertung möglich. Bei „Disqualifiziert“
       werden eingetragene Punkte nicht gewertet und nicht verändert. Beides gilt für die ganze Prüfung des
       Teilnehmers.</small></p>
     {% if gesperrt %}<p><small>Die Punkte oben werden zurzeit nicht gewertet und beim Speichern nicht verändert.</small></p>{% endif %}

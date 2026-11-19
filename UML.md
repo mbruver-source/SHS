@@ -743,7 +743,7 @@ sequenceDiagram
     R->>W: POST Bogen (Speichern)
     W->>D: gleiche Prüf- und Schreibwege wie die Tabelle
     W->>D: setze_notiz (höchstens 500 Zeichen)
-    W-->>R: Bogen mit Gesamtpunktzahl und Wertnote, oder zurück zur Tabelle
+    W-->>R: Bogen mit Gesamtpunktzahl und Wertnote, oder zurück zur Tabelle, Teilnehmerliste bzw. Seite des Teilnehmers (je nach Herkunft)
 
     R->>W: GET /ergebnisse/boegen.pdf (gleiche Filter)
     W->>D: benutzte Teilnehmer wählen (Punkte, Status oder Notiz)

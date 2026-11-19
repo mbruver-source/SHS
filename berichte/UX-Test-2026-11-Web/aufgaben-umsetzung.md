@@ -46,7 +46,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | erledigt (19.11.), F3 teilweise | siehe git log | unbekannt | Passwort-Schalter braucht JavaScript → Rückfrage an Marco |
 | U5 | Ergebnistabelle mobil: feste Spalten, Sortierung, Bogen-Knopf, Scrollen (C1, C2, C4) | M | erledigt (19.11.) | siehe git log | unbekannt | C4 springt zur Tabelle statt zur ersten Trefferzeile (ohne Skript nicht anders); Safari/iOS ungeprüft |
 | U6 | Ergebnistabelle: Texte und Meldungen (B3, C3, D2) | S | erledigt (19.11.), C3 anders | siehe git log | unbekannt | C3: statt Rückfrage (braucht JavaScript) speichert „Bogen“ vorher → Rückfrage an Marco |
-| U7 | Bogen: nachstellen B4 und D3, Bogenkopf-Text, Kopfleiste (B4, D3, D4, A4) | M | offen | | unbekannt | |
+| U7 | Bogen: nachstellen B4 und D3, Bogenkopf-Text, Kopfleiste (B4, D3, D4, A4) | M | erledigt (19.11.) | siehe git log | unbekannt | B4 nachgestellt und behoben (CSS-Hinweis am Feld); D3 nicht nachstellbar (Popup der Auswahlliste, Werkzeug) → geschlossen; Kopfleiste fest ab 701 × 560 px; Rückweg per ?von |
 | U8 | [S] Desktop Web-Verbindung: Passwort bis Programmende im Speicher, Hinweise im Dialog, E5 nachstellen (E4, E5, E6, Heinz F5) | L | offen | | unbekannt | mit `qs-sicherheit` |
 | U9 | Desktop-Texte: Rückhol-Bericht und Fragen (E1, E2, E3, A5) | S | offen | | unbekannt | |
 | U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | offen | | unbekannt | |
@@ -201,6 +201,8 @@ abweichen, nicht im Umfang.
   der Ausschnitt noch passt).
 - U6: `handbuch_web_ergebnistabelle.png` (neue Hinweistexte unter dem Filter und in der Speicherleiste, Knopf
   „Bogen“ als Absendeknopf).
+- U7: `handbuch_web_bewertungsbogen.png` (Erklärtext, Gegenstand-Zeile, Knopf „Speichern und zurück …“; der
+  Screenshot-Bogen hat einen Gegenstand), alle Admin-Bilder ≥ 701 px Breite (feste Kopfleiste, optisch gleich).
 
 ## Rückfragen an Marco
 
@@ -233,6 +235,9 @@ abweichen, nicht im Umfang.
   `tools/web_screenshots.py`), im neuen Tab, danach Tab schließen und Server mit TaskStop beenden.
 - 19.11.2026: U6 erledigt und committet (C3 anders gelöst, Rückfrage). Nächste: U7 (Bogen: B4, D3 nachstellen –
   das alte Verhalten im Test-Stack `shsux` im Tab `seed`, das neue mit `web_live.py`; D4, A4, Rückweg aus dem Bogen).
+- 19.11.2026: U7 erledigt und committet. Für U13 vormerken: im Browser bei 768 px als Admin prüfen, ob die
+  Navigation umbricht (dann ist die feste Kopfleiste höher als `scroll-padding-top: 4.5em`), und ob nach
+  „Speichern und zurück zur Tabelle“ die Tabellenkopfzeile sichtbar bleibt. Nächste: U8 [S] Desktop Web-Verbindung.
 
 ## Abschlussbericht
 

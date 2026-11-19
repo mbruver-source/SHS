@@ -1196,7 +1196,8 @@ def ergebnis_erfassen(conn, teilnehmer_id):
                 # Eingaben dieser Seite (sonst gingen sie verloren) und öffnet dann den Bogen.
                 bogen = form.get("bogen")
                 if bogen in disziplinen:
-                    return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=bogen))
+                    return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=bogen,
+                                            von="teilnehmer"))
                 return redirect(url_for("teilnehmerliste", gespeichert=teilnehmer_id, aenderung=int(geschrieben)))
             # Konflikt: Seite mit dem aktuellen Stand und dem Hinweis zeigen.
             konflikt = konflikt_texte
@@ -1870,13 +1871,20 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
     """GET zeigt den Bogen einer Disziplin (vorbelegt mit dem gespeicherten Stand), POST speichert
     (siehe Abschnittskommentar oben). 404 für unbekannte oder nicht teilnehmende Teilnehmer und
     für eine Disziplin, die nicht zur Prüfung des Teilnehmers gehört. „Speichern“ bleibt auf dem
-    Bogen (und zeigt Gesamtpunktzahl und Wertnote), „Speichern und zurück zur Tabelle“ geht zur
-    Zeile in der Tabelle. Der Filter der Tabelle (lk, nr, q) hängt an der Adresse."""
+    Bogen (und zeigt Gesamtpunktzahl und Wertnote), „Speichern und zurück …“ geht dorthin, woher der
+    Bogen geöffnet wurde: mit ?von=liste zur Teilnehmerliste, mit ?von=teilnehmer zur Seite je
+    Teilnehmer, sonst zur Zeile in der Tabelle; dann hängt der Filter der Tabelle (lk, nr, q) an der
+    Adresse (auf den beiden anderen Wegen nicht)."""
     teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
     if teilnehmer is None or teilnehmer.get("keine_teilnahme") or disziplin not in _disziplinen_von(teilnehmer):
         abort(404)
     sicht = _bogen_sicht(teilnehmer, disziplin)
     filter_ = {k: v for k, v in _tabellen_filter().items() if v}
+    # UX-Test Web 19.11.2026 (aus U1): Herkunft des Bogens (?von=liste bzw. ?von=teilnehmer), damit
+    # „zurück“ dorthin führt statt immer in die Tabelle. Nur feste Werte, sonst die Tabelle.
+    von = request.args.get("von") if request.args.get("von") in ("liste", "teilnehmer") else None
+    if von:
+        filter_ = {"von": von}  # die Tabellenfilter gelten auf diesen Wegen nicht
     notiz_feld = _BOGEN_NOTIZ_FELD.format(teilnehmer_id)
     notiz_geladen_feld = _BOGEN_NOTIZ_GELADEN.format(teilnehmer_id)
 
@@ -1906,7 +1914,12 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
                 if notiz_konflikt:
                     konflikt_texte.append(notiz_konflikt)
             if not konflikt_texte:
-                if form.get("weiter") == "tabelle":
+                if form.get("weiter") == "tabelle":  # „Speichern und zurück …“
+                    if von == "liste":
+                        return redirect(url_for("teilnehmerliste", gespeichert=teilnehmer_id,
+                                                aenderung=int(geschrieben)))
+                    if von == "teilnehmer":
+                        return redirect(url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id))
                     return redirect(url_for("ergebnistabelle", gespeichert=int(geschrieben),
                                             _anchor=f"zeile-{teilnehmer_id}", **filter_))
                 return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin,
@@ -1946,7 +1959,10 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
         anzeige_max=db.ANZEIGE_MAX,
         meldung=meldung,
         speichern_url=url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin, **filter_),
-        tabelle_url=url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **filter_),
+        tabelle_url=(url_for("teilnehmerliste") if von == "liste"
+                     else url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id) if von == "teilnehmer"
+                     else url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **filter_)),
+        zurueck_ziel={"liste": "zur Teilnehmerliste", "teilnehmer": "zur Seite des Teilnehmers"}.get(von, "zur Tabelle"),
     )
 
 
