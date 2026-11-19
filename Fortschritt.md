@@ -2,6 +2,15 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U3 – Teilnehmerliste mit vier Status-Stufen
+
+Fund B2 (Marco: vier Stufen). Die Web-Teilnehmerliste zeigt „offen“, „teilweise (n von m)“ (nur Dreikampf),
+„bewertet“, „disqualifiziert“ bzw. „Abbruch“, jeweils als Text mit eigener Farbe (Kontrast 5,7:1 bis 8:1). Vorher
+stand „bewertet“ auch bei Disqualifikation/Abbruch und „offen“ trotz gespeicherter Disziplin. `app_web._listen_status`
+leitet den Stand aus dem gespeicherten Ergebnis ab (eine Abfrage `db.ergebnisse_je_teilnehmer` statt
+`db.berechne_auswertung`). 3 neue Tests (inkl. Vorrang Disqualifiziert vor Abbruch vor „teilweise“), Gegenprobe
+ok, Verifikation ohne Fehler; Handbuch angepasst.
+
 ## 19.11.2026: UX-Test Web U2 – Disqualifikation und Abbruch auf der Seite je Teilnehmer (B18 überholt)
 
 Fund D1 (Marco: B18 überholt). Die Seite `/teilnehmer/<id>` hat unter den Punkten „Disqualifiziert“ und die

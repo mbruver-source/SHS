@@ -977,15 +977,17 @@ bekommst du von der Prüfungsleitung.
 <table>
 <tr>
 <td width="50%"><img src="bilder/handbuch_web_login.png" alt="Anmeldeseite der Web-Version"></td>
-<td width="50%"><img src="bilder/handbuch_web_teilnehmerliste.png" alt="Teilnehmerliste mit Status offen/bewertet"></td>
+<td width="50%"><img src="bilder/handbuch_web_teilnehmerliste.png" alt="Teilnehmerliste mit Status je Teilnehmer"></td>
 </tr>
 </table>
 
 1. **Anmelden** mit Benutzername und Passwort (Groß-/Kleinschreibung beim Benutzernamen egal).
 2. **Termin wählen:** Gibt es mehrere veröffentlichte Termine, den richtigen antippen. Bei nur
    einem Termin entfällt dieser Schritt.
-3. **Teilnehmerliste:** Jeder Teilnehmer ist mit **„offen“** (gelb) oder **„bewertet“** (grün)
-   markiert. Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
+3. **Teilnehmerliste:** Rechts steht der Stand jedes Teilnehmers: **„offen“** (gelb, noch nichts
+   eingetragen), **„teilweise (1 von 3)“** (blau, beim Dreikampf erst ein Teil der Disziplinen),
+   **„bewertet“** (grün, alle Disziplinen eingetragen), **„disqualifiziert“** (rot) oder
+   **„Abbruch“** (lila). Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
    **„Bewertungsbogen:“** direkt zum Online-Bewertungsbogen der jeweiligen Disziplin (siehe unten).
 4. **Ergebnis eintragen:** Je Disziplin **„Suchleistung (0–60)“** und
    **„Anzeigeleistung (0–40)“** eingeben und **„Speichern“** tippen. Danach geht es zurück zur

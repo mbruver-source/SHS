@@ -896,13 +896,12 @@ def teilnehmerliste(conn):
     # "keine Teilnahme"-Teilnehmer (Nutzerwunsch 02.10.2026) werden schon beim
     # Veröffentlichen nicht übertragen - der Filter hier ist nur die Absicherung dafür.
     alle_teilnehmer = db.list_teilnehmer(conn, nur_teilnehmende=True)
-    _, ausstehend = db.berechne_auswertung(conn)
-    offene_ids = {t["id"] for t in ausstehend}
+    ergebnis_je_id = db.ergebnisse_je_teilnehmer(conn)
     zeilen = [
         {
             "teilnehmer": t,
             "label": db.leistungsklasse_label(t),
-            "vollstaendig": t["id"] not in offene_ids,
+            "status": _listen_status(t, ergebnis_je_id.get(t["id"]) or {}),
             # UX-Test Web 19.11.2026 (A1): Links zum Online-Bewertungsbogen je Disziplin.
             "disziplinen": _disziplinen_von(t),
         }
@@ -917,6 +916,30 @@ def teilnehmerliste(conn):
         zeilen = [z for z in zeilen if _name_passt_zur_suche(z["teilnehmer"], suche)]
     return render_template("teilnehmerliste.html", veranstaltung=veranstaltung, zeilen=zeilen,
                            suche=suche, gesamt=len(alle_teilnehmer), meldung=meldung)
+
+
+def _listen_status(teilnehmer: dict, ergebnis: dict) -> dict:
+    """Status eines Teilnehmers in der Teilnehmerliste (UX-Test Web 19.11.2026, B2, Marco: vier
+    Stufen; vorher nur „offen“/„bewertet“, auch bei Disqualifikation und Abbruch). Liefert Text
+    und Art (Name der CSS-Klasse status-<art>):
+      - „disqualifiziert“ (dq) bzw. „Abbruch“ (abbruch) haben Vorrang,
+      - „bewertet“ (fertig): alle Disziplinen mit Suche UND Anzeige,
+      - „teilweise (n von m)“ (teilweise): ein Teil der Disziplinen (nur Dreikampf),
+      - „offen“ (offen): noch keine Disziplin vollständig."""
+    if ergebnis.get("disqualifiziert"):
+        return {"text": "disqualifiziert", "art": "dq"}
+    if ergebnis.get("abbruch"):
+        return {"text": "Abbruch", "art": "abbruch"}
+    disziplinen = _disziplinen_von(teilnehmer)
+    fertig = sum(
+        1 for d in disziplinen
+        if all(ergebnis.get(spalte) is not None for spalte in db.DISZIPLIN_SPALTEN[d])
+    )
+    if fertig == len(disziplinen):
+        return {"text": "bewertet", "art": "fertig"}
+    if fertig:
+        return {"text": f"teilweise ({fertig} von {len(disziplinen)})", "art": "teilweise"}
+    return {"text": "offen", "art": "offen"}
 
 
 def _meldung_nach_einzelseite(conn) -> str | None:

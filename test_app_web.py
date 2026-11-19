@@ -749,6 +749,58 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertIn("status-offen", text)
         self.assertIn("status-fertig", text)
 
+    def test_teilnehmerliste_status_in_vier_stufen(self):
+        # UX-Test Web 19.11.2026 (B2): vorher „bewertet“ auch bei Disqualifikation/Abbruch und
+        # „offen“ trotz gespeicherter Disziplin beim Dreikampf.
+        def dk(name, nummer):
+            return db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+                nachname=name, vorname="X", rufname_hund="Hund", art="DK", stufe=2, startnummer=nummer))
+        offen = dk("Offen", 1)
+        teilweise = dk("Teilweise", 2)
+        db.eintragen_ergebnis(self.conn, teilweise, db.ALLE_DISZIPLINEN[0], 40, 30)
+        fertig = dk("Fertig", 3)
+        for disziplin in db.ALLE_DISZIPLINEN:
+            db.eintragen_ergebnis(self.conn, fertig, disziplin, 40, 30)
+        dq = dk("Dq", 4)
+        for disziplin in db.ALLE_DISZIPLINEN:
+            db.eintragen_ergebnis(self.conn, dq, disziplin, 40, 30)
+        db.setze_ergebnis_status(self.conn, dq, True, False)
+        abbruch = dk("Abbruch", 5)
+        db.setze_ergebnis_status(self.conn, abbruch, False, True, abbruch_grund=next(iter(db.ABBRUCH_GRUENDE)))
+        self._anmelden()
+        html = self.client.get("/teilnehmer").data.decode()
+
+        def status_von(tid):
+            start = html.index(f'href="/teilnehmer/{tid}"')
+            return re.search(r'<span class="status (status-\w+)">(?:<svg.*?</svg>)?([^<]*)</span>',
+                             html[start:]).groups()
+
+        self.assertEqual(status_von(offen), ("status-offen", "offen"))
+        self.assertEqual(status_von(teilweise), ("status-teilweise", f"teilweise (1 von {len(db.ALLE_DISZIPLINEN)})"))
+        self.assertEqual(status_von(fertig), ("status-fertig", "bewertet"))
+        self.assertEqual(status_von(dq), ("status-dq", "disqualifiziert"))
+        self.assertEqual(status_von(abbruch), ("status-abbruch", "Abbruch"))
+
+    def test_listen_status_vorrang_und_fehlende_ergebniszeile(self):
+        dk = {"art": "DK", "disziplin": None}
+        self.assertEqual(app_web._listen_status(dk, {})["art"], "offen")
+        spalten = db.DISZIPLIN_SPALTEN[db.ALLE_DISZIPLINEN[0]]
+        teilpunkte = {spalten[0]: 40, spalten[1]: 30}
+        # Abbruch geht vor „teilweise“, Disqualifiziert vor Abbruch.
+        self.assertEqual(app_web._listen_status(dk, {**teilpunkte, "abbruch": 1})["art"], "abbruch")
+        self.assertEqual(app_web._listen_status(dk, {**teilpunkte, "abbruch": 1, "disqualifiziert": 1})["art"], "dq")
+        self.assertEqual(app_web._listen_status(dk, teilpunkte)["art"], "teilweise")
+
+    def test_teilnehmerliste_ed_kennt_kein_teilweise(self):
+        tid = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
+            disziplin="Flächensuche", startnummer=1))
+        db.eintragen_ergebnis(self.conn, tid, "Flächensuche", 40, 30)
+        self._anmelden()
+        html = self.client.get("/teilnehmer").data.decode()
+        self.assertNotIn('class="status status-teilweise"', html)
+        self.assertIn("bewertet</span>", html)
+
     def test_keine_teilnahme_fehlt_in_liste_und_erfassung_liefert_404(self):
         # Nutzerwunsch 02.10.2026: "keine Teilnahme" wird beim Veröffentlichen gar nicht
         # erst übertragen. Wer NACH dem Veröffentlichen markiert, muss neu veröffentlichen

@@ -42,7 +42,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 |---|---|---|---|---|---|---|
 | U1 | Einzelseite: Bogen-Knopf je Disziplin, Bestätigung nach Speichern (A1, B2-Teil) | M | erledigt (19.11.) | siehe git log | unbekannt | Bogen-Links in der Liste, Knopf speichert vorher; Rückweg aus dem Bogen → U7 |
 | U2 | Einzelseite: Disqualifikation und Abbruch mit Grund (D1, B18 überholt) | M | erledigt (19.11.) | siehe git log | unbekannt | gemeinsame Status-Hilfen für Tabelle, Bogen und Einzelseite |
-| U3 | Teilnehmerliste: Status in vier Stufen (B2) | M | offen | | unbekannt | |
+| U3 | Teilnehmerliste: Status in vier Stufen (B2) | M | erledigt (19.11.) | siehe git log | unbekannt | Vollständigkeitsregel steht doppelt (`_listen_status` und `db_ergebnisse._wertnote`), Hinweis für U13 |
 | U4 | Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter (A2, A3, B1, F3) | M | offen | | unbekannt | |
 | U5 | Ergebnistabelle mobil: feste Spalten, Sortierung, Bogen-Knopf, Scrollen (C1, C2, C4) | M | offen | | unbekannt | |
 | U6 | Ergebnistabelle: Texte und Meldungen (B3, C3, D2) | S | offen | | unbekannt | |
@@ -193,6 +193,8 @@ abweichen, nicht im Umfang.
   „Speichern“; Fensterhöhe in `tools/web_screenshots.py` prüfen), `handbuch_web_ergebnis_fehler.png`.
 - U2: `handbuch_web_ergebnis_dk.png` und `handbuch_web_ergebnis_fehler.png` (neuer Abschnitt „Disqualifikation oder
   Abbruch“ auf der Einzelseite; Fensterhöhe prüfen).
+- U3: `handbuch_web_teilnehmerliste.png` (neue Status-Pillen; die Demo-Daten in `tools/web_screenshots.py` sollten
+  möglichst alle Stufen zeigen).
 
 ## Rückfragen an Marco
 
@@ -206,6 +208,7 @@ abweichen, nicht im Umfang.
   neue Tabs; diese Tabs danach schließen, den Tab `seed` nie. Nächste: U2.
 - 19.11.2026: U2 erledigt und committet. Nächste: U3 (Status in der Teilnehmerliste; „disqualifiziert“/„Abbruch“
   über `_tabellen_status_text` bzw. die Status-Hilfen in `app_web.py` ableiten).
+- 19.11.2026: U3 erledigt und committet. Nächste: U4 (Startseite, Navigation, Meldung „angelegt“, Anzeigen-Schalter).
 
 ## Abschlussbericht
 

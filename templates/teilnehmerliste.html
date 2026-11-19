@@ -28,12 +28,14 @@
           <small>{{ zeile.label }}</small>
         </td>
         <td style="text-align: right; border-bottom: none;">
-          {% if zeile.vollstaendig %}
+          {# Vier Stufen (UX-Test Web 19.11.2026, B2): offen, teilweise, bewertet, disqualifiziert
+             bzw. Abbruch - immer als Text, die Farbe ist nur Zusatz (app_web._listen_status). #}
+          {% if zeile.status.art == 'fertig' %}
             {# Haken aus Tabler Icons (MIT, symbole/LICENSE-Tabler.txt), inline statt als Datei,
                damit er die Farbe der Pille übernimmt (Marco 01.11.2026, Erscheinungsbild „Beagle“). #}
             <span class="status status-fertig"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5l10 -10"/></svg>bewertet</span>
           {% else %}
-            <span class="status status-offen">offen</span>
+            <span class="status status-{{ zeile.status.art }}">{{ zeile.status.text }}</span>
           {% endif %}
         </td>
       </tr></table>
