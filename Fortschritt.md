@@ -2,6 +2,24 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: Funde des UX-Tests Web besprochen, Abarbeitung im Loop vorbereitet (Marco)
+
+Alle Funde A1–G1 aus `berichte/UX-Test-2026-11-Web/Bericht.md` mit Marco durchgegangen, dazu E6 („Passwort
+merken“ ausgegraut ohne Erklärung, Julia F5, fehlte in der Zusammenfassung). Die gewichtigen Punkte hat Marco
+einzeln entschieden, die kleinen Text- und Doku-Punkte als Vorschlag der Sitzung pauschal freigegeben (Aufteilung in
+der Aufgabenliste). Ergebnis: **alle Punkte werden umgesetzt**, keiner verworfen. Wichtigste Entscheidungen: Einzelseite bekommt Bogen-Knopf je Disziplin (A1) sowie
+Disqualifikation und Abbruch mit Grund (D1, **B18 überholt**); Teilnehmerliste mit vier Status-Stufen (B2); Startseite
+leitet Angemeldete wie nach dem Login weiter (A2); Ergebnistabelle mit festen Spalten und Sortierung nach Start-Nr.
+(C1, C2, keine Karten-Ansicht); Rückhol-Bericht nennt übernommene Notizen, sonst bleibt B20 (E1); Desktop hält das
+Web-Passwort ohne „Passwort merken“ nur im Arbeitsspeicher bis Programmende (E4, mit Sicherheitsprüfung); leere Bögen
+fallen aus dem Sammel-PDF (G1); beim PDF-Klick nur ein Hinweistext, der `.tmp`-Name gilt als Eigenheit des
+Test-Browsers (B5); Admin sieht je Teilnehmer und Disziplin, wer wann eingetragen hat (B6, nur in der
+Web-Datenbank, nicht in der Termin-Datei); B4, D3, E5 werden
+nachgestellt und nur behoben, wenn sie nachstellbar sind. Lokaler Basis-Commit des Web-Ausbaus (`cfe6a8a`, nicht
+gepusht, SHS Test Suite darauf grün), damit der Loop je Aufgabe sauber committen kann. Aufgabenliste U1–U13 mit allen Entscheidungen:
+`berichte/UX-Test-2026-11-Web/aufgaben-umsetzung.md`. Limit nicht lesbar (Statuszeile liefert nichts), daher je
+Runde eine Aufgabe. Test-Stack `shsux` bleibt bis U13 laufen.
+
 ## 19.11.2026: Abgespeckter UX-Test der Web-Entwicklungen (Marco)
 
 Vier erfundene Personas (Heinz und Julia als Admins am Desktop, Ruth am Tablet mit dem Online-Bewertungsbogen, Dennis am
