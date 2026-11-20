@@ -691,6 +691,10 @@ dann nach. Beheben lässt sich das durch Verschieben der Blöcke, eine Pause ode
 
 ![Reiter „Ergebniserfassung“ mit einer ungespeicherten, gelben Zeile](bilder/handbuch_ergebniserfassung.png)
 
+> **Ergebnisse im Web erfassen lassen?** Die Knöpfe dafür stehen im Reiter **„Datensicherung“**,
+> Gruppe **„Web-Version“** (siehe [Kapitel 12](#12-für-die-prüfungsleitung-termin-im-web-veröffentlichen));
+> darauf weist auch der Hinweis über der Tabelle hin.
+
 Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Die Filter **„Art/LK“**, **„Start-Nr.“** und **„Suche“** (Name oder Hund) blenden Zeilen nur aus; **„Bewertungsbogen (PDF)…“** (auch im Rechtsklickmenü) erzeugt den Bogen der aktuellen Zeile. Je Disziplin trägst du
 **Suche (0-60)** und **Anzeige (0-40)** ein. Bei ED sind die anderen Disziplinen mit „–“
 gesperrt.
@@ -1130,7 +1134,8 @@ dieselben Punkte, Disqualifiziert/Abbruch oder die Notiz geändert, wird dieser 
 Der Bogen zeigt den aktuellen Stand mit einem Hinweis.
 
 **Notizen und Desktop:** Die Notizen werden im Web gespeichert und mit **„Ergebnisse aus Web holen…“**
-in die Termin-Datei übernommen. Im Desktop-Programm werden sie noch nicht angezeigt.
+in die Termin-Datei übernommen; der Bericht nennt, wie viele es waren. Sie stehen auf dem
+PDF-Bewertungsbogen, in der Oberfläche des Desktop-Programms werden sie noch nicht angezeigt.
 
 ## 12. Für die Prüfungsleitung: Termin im Web veröffentlichen
 
@@ -1181,8 +1186,8 @@ Das Programm fragt dann beim ersten Veröffentlichen oder Zurückholen danach.
 
 1. Alle Teilnehmer haben eine **Startnummer**; ungespeicherte Eingaben in der Ergebniserfassung
    werden vorher geklärt.
-2. Das Programm zeigt, welcher Termin mit wie vielen **teilnehmenden** Teilnehmern übertragen
-   wird (als „keine Teilnahme“ markierte werden nicht übernommen). Nach deiner Bestätigung lädt es
+2. Das Programm zeigt, welcher Termin mit wie vielen Teilnehmern übertragen wird (als „keine
+   Teilnahme“ markierte werden nicht übernommen). Nach deiner Bestätigung lädt es
    eine Kopie der Termin-Datei hoch; deine Datei bleibt unverändert.
 3. Das Programm merkt sich, welcher Servertermin zu dieser Datei gehört. Meldet der Server einen
    möglichen **Doppeleintrag** (gleicher Termin schon veröffentlicht), steht der Hinweis im
@@ -1195,10 +1200,14 @@ Das Programm fragt dann beim ersten Veröffentlichen oder Zurückholen danach.
 2. Nach der Bestätigung legt das Programm **zuerst automatisch eine Kopie** deiner Termin-Datei an
    (Ordner „Auto-Sicherung“) und arbeitet dann die Web-Ergebnisse über die **Startnummer** ein.
    Konnte die Kopie nicht angelegt werden, fragt es nach, ob du trotzdem fortfahren willst.
-3. Ein Bericht nennt, bei wie vielen Teilnehmern sich in der Datei etwas geändert hat (unveränderte
-   zählen nicht mit) und welche übersprungen, nicht
-   gefunden oder **nicht übernommen** wurden (anderer Name oder Hund unter derselben Startnummer),
-   und welche Disziplinen im Web leer waren (der Wert der Datei bleibt dann erhalten).
+3. Ein Bericht nennt, bei wie vielen Teilnehmern sich in der Datei etwas geändert hat und wie viele
+   **unverändert** blieben (z. B. „9 Teilnehmer geändert, 3 unverändert“ – die Frage davor nennt
+   alle Teilnehmer aus dem Web), wie viele **Notizen** zum Bewertungsbogen übernommen wurden (sie
+   stehen auf dem PDF-Bewertungsbogen, im Programm selbst werden sie nicht angezeigt) und nur dann,
+   wenn es vorkam: welche Teilnehmer übersprungen, nicht gefunden oder **nicht übernommen** wurden
+   (anderer Name oder Hund unter derselben Startnummer) und welche Disziplinen im Web leer, in der
+   Datei aber gefüllt waren (der Wert der Datei bleibt dann erhalten). In der Rückfrage steht der
+   Servertermin mit Verein, Ort und Datum.
 
    ![Bericht nach „Ergebnisse aus Web holen“](bilder/handbuch_web_bericht.png)
 

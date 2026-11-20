@@ -696,7 +696,11 @@ sequenceDiagram
     DW->>WS: anmelden, GET /api/termine/schema/ergebnisse
     S-->>WS: Teilnehmer mit Ergebnis (JSON)
     WS-->>DW: teilnehmer_aus_antwort
-    DW-->>PL: Bestätigung (Web-Termin, Web-Stand ersetzt Disqualifikation/Abbruch der Datei)
+    opt gemerkter Termin: Name für die Rückfrage (gleiche Anmeldung)
+        WS->>S: GET /api/termine
+        S-->>WS: Terminliste (Verein, Ort, Datum)
+    end
+    DW-->>PL: Bestätigung (Web-Termin mit Verein, Ort, Datum; Web-Stand ersetzt Disqualifikation/Abbruch der Datei)
     DW->>DB: auto_sicherung_erstellen (Mindestabstand 0)
     DW->>DB: importiere_ergebnisse_aus_liste (Zuordnung per Startnummer)
     DB-->>DW: ImportBericht

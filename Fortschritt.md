@@ -2,6 +2,22 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U9 – Desktop-Texte beim Zurückholen, Hinweis auf die Web-Version
+
+Funde E1, E2, E3, A5. Der Rückhol-Bericht nennt jetzt „n Teilnehmer geändert, m unverändert“ (neue Felder
+`ImportBericht.unveraendert` und `notizen_uebernommen` in `db_sync`), die Zahl übernommener Notizen mit „sichtbar im
+PDF-Bewertungsbogen“ (E1; B20 ergänzt, sonst unverändert) und nur die Sonderfälle, die vorkamen; „im Web leer“ heißt
+jetzt „im Web leer, in dieser Datei gefüllt“ (E2: „0 Disziplin(en) im Web leer“ widersprach sichtbar leeren
+Dreikampf-Disziplinen). Die Rückfrage nennt den Servertermin mit Verein, Ort und Datum statt „gemerkter Termin
+[termin_1]“ (Terminliste in derselben Anmeldung, bei Fehlern ein Ersatztext), der Satz zur Statusübernahme ist kürzer,
+„teilnehmende Teilnehmer“ ist korrigiert (E3). Über der Tabelle der Ergebniserfassung steht, wo die Web-Version zu
+finden ist (A5). Verifikation ohne Fehler im neuen Code; dabei behoben: Seit „aktualisiert“ nur Geändertes zählt
+(19.11.), vergaß ein zweites Zurückholen ohne neue Web-Änderung die Zuordnung zum Servertermin und meldete „es
+passte kein Teilnehmer“, sobald ein Teilnehmer abwich – jetzt zählen unverändert passende Teilnehmer mit; die
+Statuszeile sagt ebenfalls „geändert / unverändert“. Tests: GUI angepasst und neu (u. a. zweites Zurückholen,
+Ersatztext ohne Terminliste), Ende-zu-Ende-Test prüft die Zähler; Gegenprobe ok. Handbuch (Kap. 7, 12),
+`entscheidungen/B20`, `OFFEN.md`, `UML.md` (Ablauf 10a) nachgezogen.
+
 ## 19.11.2026: UX-Test Web U8 – Desktop: Web-Passwort bis Programmende im Arbeitsspeicher, Hinweise im Dialog
 
 Funde E4 (Marco: umsetzen, sicherheitsrelevant), E5, E6 und Heinz F5. Ohne „Passwort merken“ bzw. ohne Windows-Tresor

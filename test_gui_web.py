@@ -155,6 +155,14 @@ def test_demo_ablauf_meldet_und_ruft_nichts_auf(qtbot, termin, meldungen, web):
     assert meldungen.information and web.erzeugt == []
 
 
+def test_ergebniserfassung_nennt_den_weg_zur_web_version(qtbot, termin):
+    # UX-Test Web 19.11.2026 (A5): die Web-Knöpfe wurden in der Ergebniserfassung gesucht.
+    from desktop_ergebnis import ErgebnisTab
+    tab = ErgebnisTab(termin[0])
+    qtbot.addWidget(tab)
+    assert "Reiter „Datensicherung“, Gruppe „Web-Version“" in tab.erklaerung_label.text()
+
+
 def test_hauptfenster_laedt_nach_dem_holen_neu(qtbot, termin, monkeypatch):
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
@@ -362,7 +370,8 @@ def test_veroeffentlichen_laedt_kopie_hoch_und_merkt_zuordnung(qtbot, termin, we
     name, kopie_pfad, namen = web.hochgeladen[0]
     assert name == "termin.sqlite" and namen == ["Muster", "Zweiter"]
     assert not os.path.exists(kopie_pfad), "Die temporäre Kopie muss danach gelöscht sein"
-    assert "2 teilnehmende" in meldungen.fragen[0][1] and ADRESSE in meldungen.fragen[0][1]
+    assert "2 Teilnehmer samt" in meldungen.fragen[0][1] and ADRESSE in meldungen.fragen[0][1]
+    assert "teilnehmende Teilnehmer" not in meldungen.fragen[0][1]  # UX-Test Web 19.11.2026, E3
     assert desktop_web.zuordnung_lesen(ADRESSE, pfad) == "termin_9"
     titel, text = meldungen.warning[0]
     assert "selben Datum" in text and "bitte beachten" in titel
@@ -378,7 +387,7 @@ def test_veroeffentlichen_nennt_nicht_teilnehmende(qtbot, termin, web, meldungen
     _eingerichtet()
     meldungen.antworten.append(False)
     desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
-    assert "1 teilnehmende" in meldungen.fragen[0][1] and "(1)" in meldungen.fragen[0][1]
+    assert "1 Teilnehmer samt" in meldungen.fragen[0][1] and "(1)" in meldungen.fragen[0][1]
     assert web.erzeugt == []  # „Nein“: nichts gesendet
 
 
@@ -678,9 +687,57 @@ def test_holen_mit_zuordnung_sichert_vorher_und_arbeitet_ein(qtbot, termin, web,
     ergebnis = get_ergebnis(conn, teilnehmer_id)
     assert (ergebnis["suche_flaechensuche"], ergebnis["anzeige_flaechensuche"]) == (50, 30)
     assert signale == [1]
-    assert len(berichte) == 1 and "1 Teilnehmer aktualisiert" in berichte[0].findChildren(QLabel)[0].text()
-    assert "Disqualifikation und Abbruch werden übernommen" in meldungen.fragen[0][1]
-    assert "ersetzt die Werte der Datei" in meldungen.fragen[0][1]
+    assert len(berichte) == 1 and "1 Teilnehmer geändert, 0 unverändert" in berichte[0].findChildren(QLabel)[0].text()
+    assert "Das gilt auch für Disqualifikation und Abbruch" in meldungen.fragen[0][1]
+    assert "überschrieben" in meldungen.fragen[0][1]
+    # E3: keine interne Kennung in der Rückfrage; ohne Terminliste ein verständlicher Ersatz
+    assert "termin_9" not in meldungen.fragen[0][1]
+    assert "zuletzt veröffentlichter Termin dieser Datei" in meldungen.fragen[0][1]
+
+
+def test_zweites_holen_ohne_aenderung_behaelt_die_zuordnung(qtbot, termin, web, meldungen, sicherungen, berichte, tresor):
+    # Verifikation U9: Ohne neue Web-Änderung ist „aktualisiert“ 0; weicht dabei ein Teilnehmer ab, darf
+    # das nicht als „es passte kein Teilnehmer“ gelten (die übrigen passen, nur unverändert).
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, nachname="Muster", startnummer=1)
+    _teilnehmer_anlegen(conn, nachname="Zweiter", startnummer=2)
+    _eingerichtet()
+    tresor[ADRESSE] = "pw"
+    desktop_web.zuordnung_speichern(ADRESSE, pfad, "termin_9")
+    passend, abweichend = list_teilnehmer(conn)
+    web.ergebnisse = [dict(passend, ergebnis={}), dict(abweichend, nachname="Ganz anders", ergebnis={})]
+    tab = _tab(qtbot, termin)
+    assert desktop_web.ergebnisse_aus_web_holen(tab) is True
+    assert desktop_web.zuordnung_lesen(ADRESSE, pfad) == "termin_9"
+    assert tab.status_label.text() == "Ergebnisse aus dem Web übernommen: 0 Teilnehmer geändert, 1 unverändert."
+
+
+def test_holen_ersatztext_wenn_die_terminliste_scheitert(qtbot, termin, web, meldungen, sicherungen, berichte, tresor, monkeypatch):
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, startnummer=1)
+    _eingerichtet()
+    tresor[ADRESSE] = "pw"
+    desktop_web.zuordnung_speichern(ADRESSE, pfad, "termin_9")
+    web.ergebnisse = [_web_eintrag(conn, {"suche_flaechensuche": 50, "anzeige_flaechensuche": 30})]
+    monkeypatch.setattr(web_sync.WebClient, "termine",
+                        lambda self: (_ for _ in ()).throw(web_sync.ServerFehler("kaputt", 500)))
+    assert desktop_web.ergebnisse_aus_web_holen(_tab(qtbot, termin)) is True
+    assert "„zuletzt veröffentlichter Termin dieser Datei“" in meldungen.fragen[0][1]
+
+
+def test_holen_nennt_den_gemerkten_termin_mit_namen(qtbot, termin, web, meldungen, sicherungen, berichte, tresor):
+    # UX-Test Web 19.11.2026 (E3): statt „gemerkter Termin [termin_9]“ Verein, Ort und Datum.
+    conn, pfad = termin
+    _teilnehmer_anlegen(conn, startnummer=1)
+    _eingerichtet()
+    tresor[ADRESSE] = "pw"
+    desktop_web.zuordnung_speichern(ADRESSE, pfad, "termin_9")
+    web.termine = [{"schema_name": "termin_9", "verein": "Musterverein", "ort": "Musterstadt",
+                    "datum": "2026-11-14", "anzahl_teilnehmer": 1}]
+    web.ergebnisse = [_web_eintrag(conn, {"suche_flaechensuche": 50, "anzeige_flaechensuche": 30})]
+    assert desktop_web.ergebnisse_aus_web_holen(_tab(qtbot, termin)) is True
+    assert "„Musterverein, Musterstadt, 14.11.2026“" in meldungen.fragen[0][1]
+    assert len(web.anmeldungen) == 1  # Ergebnisse und Terminliste in einer Anmeldung
 
 
 def test_holen_ohne_zuordnung_bietet_terminliste_an(qtbot, termin, web, meldungen, sicherungen, berichte, tresor, monkeypatch):
@@ -814,7 +871,8 @@ def test_falscher_servertermin_wird_nicht_gemerkt(qtbot, termin, web, meldungen,
     monkeypatch.setattr(desktop_web.QInputDialog, "getItem", lambda parent, t, x, items, c, e: (items[0], True))
     tab = _tab(qtbot, termin)
     assert desktop_web.ergebnisse_aus_web_holen(tab) is True
-    assert "termin_1" in meldungen.fragen[0][1]  # der Web-Termin wird im Bestätigungstext genannt
+    # der Web-Termin wird im Bestätigungstext genannt - mit Namen, ohne interne Kennung (E3)
+    assert "„V, O, d“" in meldungen.fragen[0][1] and "termin_1" not in meldungen.fragen[0][1]
     assert desktop_web.zuordnung_lesen(ADRESSE, pfad) is None
     assert "nicht gemerkt" in tab.status_label.text()
 
@@ -858,12 +916,18 @@ def test_bericht_text_nennt_alle_gruppen():
         aktualisiert=3, ohne_startnummer_uebersprungen=["Ohne, Nummer"], nicht_gefunden=["99"],
         fehler=["Fehler, Name"], abweichungen=["Nr. 5: Web A ≠ Termin-Datei B"], im_web_leer=["Nr. 1 X – Trümmerfeld: leer"])
     zusammenfassung, einzelheiten = desktop_web.bericht_text(bericht)
-    assert zusammenfassung.startswith("3 Teilnehmer aktualisiert")
+    assert zusammenfassung.startswith("3 Teilnehmer geändert, 0 unverändert.")
+    assert "1 Disziplin(en) im Web leer, in dieser Datei gefüllt" in zusammenfassung
     for erwartet in ("Ohne, Nummer", "99", "Fehler, Name", "Nr. 5", "Trümmerfeld", "Disqualifikation und Abbruch"):
         assert erwartet in einzelheiten
-    leer = desktop_web.bericht_text(ImportBericht(0, [], [], [], [], []))[1]
-    assert leer.startswith("Hinweis: Disqualifikation")
-    assert "werden aus dem Web übernommen" in leer
+    leer, leer_einzeln = desktop_web.bericht_text(ImportBericht(0, [], [], [], [], [], unveraendert=12))
+    # UX-Test Web 19.11.2026 (E2): nur vorkommende Sonderfälle, keine „0 … leer“-Aufzählung
+    assert leer == "0 Teilnehmer geändert, 12 unverändert."
+    assert leer_einzeln.startswith("Hinweis: Disqualifikation")
+    assert "werden aus dem Web übernommen" in leer_einzeln
+    mit_notizen = desktop_web.bericht_text(ImportBericht(2, [], [], unveraendert=1, notizen_uebernommen=3))
+    assert "3 Notiz(en) zum Bewertungsbogen übernommen (sichtbar im PDF-Bewertungsbogen)." in mit_notizen[0]
+    assert "im Desktop-Programm werden sie nicht angezeigt" in mit_notizen[1]
     mit_status = ImportBericht(1, [], [], status_geaendert=["Nr. 2 Muster, Anna: ohne Status → disqualifiziert"])
     zusammenfassung, einzelheiten = desktop_web.bericht_text(mit_status)
     assert "1 Status (Disqualifikation/Abbruch) geändert" in zusammenfassung

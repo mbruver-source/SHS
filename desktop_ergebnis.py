@@ -284,11 +284,15 @@ class ErgebnisTab(_ErgebnisSpeichernMixin, QWidget):
         filter_zeile.addWidget(self.filter_name)
         filter_zeile.addStretch()
 
+        # UX-Test Web 19.11.2026 (A5): Wer die Richter im Web erfassen lassen will, suchte die Web-Knöpfe
+        # hier; sie stehen im Reiter „Datensicherung“ (Gruppe „Web-Version“).
         hinweis = QLabel(
             "Gelb hervorgehobene Zeilen enthalten noch nicht gespeicherte Änderungen. "
-            "Der Filter blendet Zeilen nur aus, ungespeicherte Werte bleiben dabei erhalten."
+            "Der Filter blendet Zeilen nur aus, ungespeicherte Werte bleiben dabei erhalten. "
+            "Erfassung im Web (Richter am Tablet oder Handy): Reiter „Datensicherung“, Gruppe „Web-Version“."
         )
         hinweis.setWordWrap(True)
+        self.erklaerung_label = hinweis
 
         button_zeile = QHBoxLayout()
         button_zeile.addWidget(self.speichern_btn)

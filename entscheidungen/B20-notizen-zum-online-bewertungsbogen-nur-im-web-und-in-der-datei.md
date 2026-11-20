@@ -17,6 +17,11 @@ Desktop-Bogen wie für das Sammel-PDF „Benutzte Bögen als PDF“ im Web. In d
 einzeln zurück (`ERGEBNIS_WERTE` kennt sie nicht); beim Wiederherstellen eines gelöschten Teilnehmers
 bleiben sie erhalten.
 
+**Ergänzt 20.11.2026 (Marco, UX-Test Web E1):** Zwei Personas vermissten die Notizen nach dem Zurückholen.
+Entschieden: Der Rückhol-Bericht nennt die Zahl der übernommenen Notizen mit dem Hinweis „sichtbar im
+PDF-Bewertungsbogen“ (`ImportBericht.notizen_uebernommen`). Eine Anzeige in der Desktop-Oberfläche bleibt
+zurückgestellt.
+
 ## Grund
 
 Das Notizfeld ersetzt online die Freitext-Angaben des Papierbogens. Die Anzeige in der Desktop-Oberfläche ist

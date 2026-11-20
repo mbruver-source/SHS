@@ -665,15 +665,28 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
 # --- Bericht -------------------------------------------------------------------------------------
 
 def bericht_text(bericht: ImportBericht) -> tuple[str, str]:
-    """(Zusammenfassung, Einzelheiten) des Ergebnis-Imports aus dem Web, als reiner Text."""
-    zusammenfassung = (
-        f"{bericht.aktualisiert} Teilnehmer aktualisiert. "
-        f"{len(bericht.abweichungen)} nicht übernommen (anderer Teilnehmer unter derselben Startnummer), "
-        f"{len(bericht.nicht_gefunden)} Startnummer(n) in dieser Datei nicht gefunden, "
-        f"{len(bericht.ohne_startnummer_uebersprungen)} ohne Startnummer übersprungen, "
-        f"{len(bericht.status_geaendert)} Status (Disqualifikation/Abbruch) geändert, "
-        f"{len(bericht.im_web_leer)} Disziplin(en) im Web leer (Wert dieser Datei blieb), "
-        f"{len(bericht.fehler)} Fehler.")
+    """(Zusammenfassung, Einzelheiten) des Ergebnis-Imports aus dem Web, als reiner Text.
+
+    UX-Test Web 19.11.2026 (E1, E2): Die Zusammenfassung nennt „geändert / unverändert“ (gezählt werden nur
+    Teilnehmer, bei denen sich in der Datei etwas geändert hat - die Frage davor nennt alle aus dem Web),
+    die übernommenen Notizen und nur die Sonderfälle, die tatsächlich vorkamen; „im Web leer“ heißt: im
+    Web leer, in der Datei aber gefüllt (sonst widersprach „0 … leer“ den sichtbar leeren Disziplinen)."""
+    saetze = [f"{bericht.aktualisiert} Teilnehmer geändert, {bericht.unveraendert} unverändert."]
+    if bericht.notizen_uebernommen:
+        saetze.append(f"{bericht.notizen_uebernommen} Notiz(en) zum Bewertungsbogen übernommen "
+                      "(sichtbar im PDF-Bewertungsbogen).")
+    sonderfaelle = [
+        (len(bericht.status_geaendert), "Status (Disqualifikation/Abbruch) geändert"),
+        (len(bericht.abweichungen), "nicht übernommen (anderer Teilnehmer unter derselben Startnummer)"),
+        (len(bericht.nicht_gefunden), "Startnummer(n) in dieser Datei nicht gefunden"),
+        (len(bericht.ohne_startnummer_uebersprungen), "ohne Startnummer übersprungen"),
+        (len(bericht.im_web_leer), "Disziplin(en) im Web leer, in dieser Datei gefüllt (Wert der Datei blieb)"),
+        (len(bericht.fehler), "Fehler"),
+    ]
+    vorhanden = [f"{anzahl} {text}" for anzahl, text in sonderfaelle if anzahl]
+    if vorhanden:
+        saetze.append("Außerdem: " + ", ".join(vorhanden) + ".")
+    zusammenfassung = " ".join(saetze)
     teile = []
 
     def abschnitt(titel: str, eintraege) -> None:
@@ -682,13 +695,16 @@ def bericht_text(bericht: ImportBericht) -> tuple[str, str]:
 
     abschnitt("Nicht übernommen - anderer Teilnehmer unter dieser Startnummer:", bericht.abweichungen)
     abschnitt("Disqualifikation/Abbruch aus dem Web übernommen (Stand der Datei ersetzt):", bericht.status_geaendert)
-    abschnitt("Im Web leer, Wert der Termin-Datei beibehalten:", bericht.im_web_leer)
+    abschnitt("Im Web leer, in der Termin-Datei gefüllt (Wert der Datei beibehalten):", bericht.im_web_leer)
     abschnitt("Startnummern, die es in dieser Termin-Datei nicht gibt:", bericht.nicht_gefunden)
     abschnitt("Ohne Startnummer übersprungen:", bericht.ohne_startnummer_uebersprungen)
     abschnitt("Fehler:", bericht.fehler)
     teile.append(
         "Hinweis: Disqualifikation und Abbruch (mit Grund) werden aus dem Web übernommen; der Web-Stand "
         "ersetzt die Werte der Datei.")
+    if bericht.notizen_uebernommen:
+        teile.append("Die Notizen der Richter stehen auf dem Bewertungsbogen (PDF), im Desktop-Programm werden "
+                     "sie nicht angezeigt.")
     return zusammenfassung, "\n\n".join(teile)
 
 
@@ -753,7 +769,7 @@ def termin_veroeffentlichen(tab) -> None:
     teilnehmende = [t for t in alle if not t.get("keine_teilnahme")]
     text = (
         f"Termin „{_termin_titel(tab.conn)}“ auf {e.adresse} veröffentlichen?\n\n"
-        f"Übertragen werden die Veranstaltungsdaten und {len(teilnehmende)} teilnehmende Teilnehmer samt "
+        f"Übertragen werden die Veranstaltungsdaten und {len(teilnehmende)} Teilnehmer samt "
         "bereits eingetragener Ergebnisse. Als „keine Teilnahme“ markierte Teilnehmer "
         f"({len(alle) - len(teilnehmende)}) werden nicht übernommen.\n\n"
         "Auf dem Server entsteht ein eigener Termin; diese Termin-Datei bleibt unverändert. Die Ergebnisse "
@@ -806,9 +822,8 @@ def _termin_waehlen(tab, termine: list[dict]) -> tuple[str, str] | None:
     v = get_veranstaltung(tab.conn) or {}
     namen, vorbelegt = [], 0
     for i, t in enumerate(termine):
-        namen.append(
-            f"{t.get('verein') or '?'}, {t.get('ort') or '-'}, {t.get('datum') or '-'} "
-            f"({t.get('anzahl_teilnehmer', '?')} Teilnehmer) [{t['schema_name']}]")
+        # Die Kennung in [] unterscheidet gleichnamige Termine; der Name ohne sie steht in der Rückfrage.
+        namen.append(f"{_servertermin_name(t)} ({t.get('anzahl_teilnehmer', '?')} Teilnehmer) [{t['schema_name']}]")
         if (str(t.get("datum") or "") == str(v.get("datum") or "")
                 and str(t.get("verein") or "").casefold() == str(v.get("verein") or "").casefold()):
             vorbelegt = i
@@ -818,7 +833,18 @@ def _termin_waehlen(tab, termine: list[dict]) -> tuple[str, str] | None:
         namen, vorbelegt, False)
     if not ok:
         return None
-    return termine[namen.index(auswahl)]["schema_name"], auswahl
+    gewaehlt = termine[namen.index(auswahl)]
+    return gewaehlt["schema_name"], _servertermin_name(gewaehlt)
+
+
+def _servertermin_name(t: dict) -> str:
+    """„Verein, Ort, TT.MM.JJJJ“ eines Termins auf dem Server (UX-Test Web 19.11.2026, E3: statt der
+    internen Kennung „termin_1“)."""
+    datum = str(t.get("datum") or "")
+    teile = datum.split("-")
+    if len(teile) == 3 and all(teil.isdigit() for teil in teile):
+        datum = f"{teile[2]}.{teile[1]}.{teile[0]}"
+    return f"{t.get('verein') or '?'}, {t.get('ort') or '-'}, {datum or '-'}"
 
 
 def ergebnisse_aus_web_holen(tab) -> bool:
@@ -832,7 +858,7 @@ def ergebnisse_aus_web_holen(tab) -> bool:
         return False
     sitzung = _Sitzung()
     schema = zuordnung_lesen(e.adresse, tab.aktueller_pfad)
-    bezeichnung = f"gemerkter Termin [{schema}]"
+    bezeichnung = None  # Name des Servertermins (E3), beim gemerkten Termin aus der Terminliste
     if schema is None:
         ok, termine = mit_web_anmeldung(tab, lambda client: client.termine(), "Die Terminliste wird geladen…", sitzung)
         if not ok:
@@ -841,17 +867,27 @@ def ergebnisse_aus_web_holen(tab) -> bool:
         if wahl is None:
             return False
         schema, bezeichnung = wahl
-    def laden(client, s=schema):
+    def laden(client, s=schema, name_holen=bezeichnung is None):
         try:
-            return client.ergebnisse(s)
+            liste = client.ergebnisse(s)
         except web_sync.ServerFehler as fehler:
             if fehler.status == 404:
-                return None  # der Termin ist auf dem Server nicht (mehr) vorhanden
+                return None, None  # der Termin ist auf dem Server nicht (mehr) vorhanden
             raise
+        name = None
+        if name_holen:
+            try:
+                name = next((_servertermin_name(t) for t in client.termine() if t.get("schema_name") == s), None)
+            except web_sync.WebFehler:
+                name = None  # nur für den Text der Rückfrage - ohne Namen geht es auch
+        return liste, name
 
-    ok, liste = mit_web_anmeldung(tab, laden, "Die Ergebnisse werden geladen…", sitzung)
+    ok, antwort = mit_web_anmeldung(tab, laden, "Die Ergebnisse werden geladen…", sitzung)
     if not ok:
         return False
+    liste, name = antwort
+    if bezeichnung is None:
+        bezeichnung = name or "zuletzt veröffentlichter Termin dieser Datei"
     if liste is None:
         zuordnung_vergessen(e.adresse, tab.aktueller_pfad)
         QMessageBox.information(
@@ -864,9 +900,7 @@ def ergebnisse_aus_web_holen(tab) -> bool:
         f"Ergebnisse von {len(liste)} Teilnehmern aus dem Web-Termin „{bezeichnung}“ in "
         f"„{_termin_titel(tab.conn)}“ übernehmen?\n\n"
         "Die Ergebnisse in dieser Termin-Datei werden mit dem Stand aus dem Web überschrieben "
-        "(zugeordnet über die Startnummer). Disqualifikation und Abbruch werden übernommen: Der Web-Stand "
-        "ersetzt die Werte der Datei, auch ein hier gesetzter Status wird dabei zurückgenommen, wenn er im "
-        "Web nicht gesetzt ist. "
+        "(zugeordnet über die Startnummer). Das gilt auch für Disqualifikation und Abbruch. "
         "Vorher legt das Programm eine automatische Kopie an.")
     if not _ja_nein(tab, "Ergebnisse aus Web holen", text):
         return False
@@ -887,7 +921,10 @@ def ergebnisse_aus_web_holen(tab) -> bool:
         _db_fehler_anzeigen(tab, exc, "Die Ergebnisse konnten nicht (vollständig) übernommen werden.")
         tab.ergebnisse_aus_web_uebernommen.emit()
         return False
-    if bericht.aktualisiert == 0 and (bericht.abweichungen or bericht.nicht_gefunden):
+    # „Es passte kein Teilnehmer“ nur, wenn keiner zugeordnet werden konnte - seit „aktualisiert“ nur
+    # wirklich Geändertes zählt, zählen unverändert passende Teilnehmer ausdrücklich mit (sonst vergaß
+    # ein zweites Zurückholen ohne neue Web-Änderung die Zuordnung, sobald ein Teilnehmer abwich).
+    if bericht.aktualisiert == 0 and bericht.unveraendert == 0 and (bericht.abweichungen or bericht.nicht_gefunden):
         # Vermutlich der falsche Servertermin: nicht merken, beim nächsten Mal neu wählen lassen.
         zuordnung_vergessen(e.adresse, tab.aktueller_pfad)
         tab.status_label.setText(
@@ -895,7 +932,9 @@ def ergebnisse_aus_web_holen(tab) -> bool:
             "beim nächsten Mal kann ein anderer gewählt werden.")
     else:
         zuordnung_speichern(e.adresse, tab.aktueller_pfad, schema)
-        tab.status_label.setText(f"Ergebnisse aus dem Web übernommen: {bericht.aktualisiert} Teilnehmer aktualisiert.")
+        tab.status_label.setText(
+            f"Ergebnisse aus dem Web übernommen: {bericht.aktualisiert} Teilnehmer geändert, "
+            f"{bericht.unveraendert} unverändert.")
     tab.ergebnisse_aus_web_uebernommen.emit()
     _ausfuehren(WebBerichtDialog(tab, bericht))
     return True

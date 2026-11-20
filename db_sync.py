@@ -238,6 +238,10 @@ class ImportBericht:
     # Teilnehmer, bei denen sich Disqualifikation/Abbruch (inkl. Grund) durch den Web-Stand geändert
     # hat (gesetzt oder zurückgenommen), je "Nr. N Nachname, Vorname: alt -> neu" (Marco 18.11.2026).
     status_geaendert: list[str] = field(default_factory=list)
+    # UX-Test Web 19.11.2026 (E1, E2): zugeordnete Teilnehmer ohne jede Änderung (der Bericht nennt
+    # „n geändert, m unverändert“) und Anzahl übernommener (geänderter) Notizen.
+    unveraendert: int = 0
+    notizen_uebernommen: int = 0
 
 def _status_text(disqualifiziert: bool, abbruch: bool, grund) -> str:
     teile = []
@@ -335,6 +339,8 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
     abweichungen: list[str] = []
     im_web_leer: list[str] = []
     status_geaendert: list[str] = []
+    unveraendert = 0
+    notizen_uebernommen = 0
     for quelle_teilnehmer, quelle_ergebnis in quelle_paare:
         startnummer = quelle_teilnehmer.get("startnummer")
         name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
@@ -397,16 +403,22 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
                         f"{_status_text(neu_dq, neu_abbruch, neu_grund)}")
                     hat_wert = True
             # Notizen zum Bewertungsbogen: der Web-Stand führt (auch leer = gelöscht); nur Änderungen
-            # werden geschrieben und zählen in `aktualisiert` mit, eigens gezählt werden sie nicht.
+            # werden geschrieben, zählen in `aktualisiert` mit und (UX-Test Web 19.11.2026, E1) in
+            # `notizen_uebernommen`, damit der Bericht sie nennt.
+            notizen_hier = 0
             for disziplin, neu_notiz in notizen.items():
                 if neu_notiz != (ziel_ergebnis.get(NOTIZ_SPALTEN[disziplin]) or None):
                     setze_notiz(ziel_conn, ziel_id, disziplin, neu_notiz)
                     hat_wert = True
+                    notizen_hier += 1
         except Exception:
             fehler.append(name)
             continue
+        notizen_uebernommen += notizen_hier
         if hat_wert:
             aktualisiert += 1
+        else:
+            unveraendert += 1
     return ImportBericht(
         aktualisiert=aktualisiert,
         ohne_startnummer_uebersprungen=ohne_startnummer,
@@ -415,6 +427,8 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
         abweichungen=abweichungen,
         im_web_leer=im_web_leer,
         status_geaendert=status_geaendert,
+        unveraendert=unveraendert,
+        notizen_uebernommen=notizen_uebernommen,
     )
 
 _TEILNEHMER_PFLICHTFELDER = ("nachname", "vorname", "art", "stufe", "disziplin")

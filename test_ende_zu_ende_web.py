@@ -426,6 +426,9 @@ class TestEndeZuEndeWeb(unittest.TestCase):
         # aktualisiert: nur Teilnehmer, bei denen sich in der Datei wirklich etwas geändert hat: Punkte
         # (1, 2), Status (3, 4, 7, 8). Nr. 5 ist im Web unverändert und zählt nicht mit.
         self.assertEqual(bericht.aktualisiert, 6)
+        # UX-Test Web 19.11.2026 (E1, E2): Notiz von Nr. 2 übernommen; zugeordnet und ohne Änderung bleibt Nr. 5
+        self.assertEqual(bericht.notizen_uebernommen, 1)
+        self.assertEqual(bericht.unveraendert, 1)
         self.assertEqual(len(bericht.status_geaendert), 4)
         text = "\n".join(bericht.status_geaendert)
         self.assertIn("Nr. 3", text)
@@ -460,6 +463,8 @@ class TestEndeZuEndeWeb(unittest.TestCase):
         zweiter = db.importiere_ergebnisse_aus_liste(self.desktop, self.client.ergebnisse(schema))
         self.assertEqual((zweiter.status_geaendert, zweiter.fehler), ([], []))
         self.assertEqual(zweiter.aktualisiert, 0)  # nichts geändert -> nichts „aktualisiert“
+        self.assertEqual(zweiter.unveraendert, 7)  # alle zugeordneten (Nr. 6 weicht ab und zählt nicht)
+        self.assertEqual(zweiter.notizen_uebernommen, 0)
 
     def test_status_von_der_einzelseite_kommt_beim_zurueckholen_an(self):
         # UX-Test Web 19.11.2026 (D1): Disqualifiziert und Abbruch auch auf der Seite je Teilnehmer.
