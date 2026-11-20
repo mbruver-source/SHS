@@ -239,9 +239,11 @@ class ImportBericht:
     # hat (gesetzt oder zurückgenommen), je "Nr. N Nachname, Vorname: alt -> neu" (Marco 18.11.2026).
     status_geaendert: list[str] = field(default_factory=list)
     # UX-Test Web 19.11.2026 (E1, E2): zugeordnete Teilnehmer ohne jede Änderung (der Bericht nennt
-    # „n geändert, m unverändert“) und Anzahl übernommener (geänderter) Notizen.
+    # „n geändert, m unverändert“) und Anzahl übernommener (neuer oder geänderter) Notizen; im Web
+    # gelöschte Notizen zählen getrennt (QS U13), sonst hieße es „übernommen (sichtbar im PDF)“.
     unveraendert: int = 0
     notizen_uebernommen: int = 0
+    notizen_geloescht: int = 0
 
 def _status_text(disqualifiziert: bool, abbruch: bool, grund) -> str:
     teile = []
@@ -341,6 +343,7 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
     status_geaendert: list[str] = []
     unveraendert = 0
     notizen_uebernommen = 0
+    notizen_geloescht = 0
     for quelle_teilnehmer, quelle_ergebnis in quelle_paare:
         startnummer = quelle_teilnehmer.get("startnummer")
         name = f"{quelle_teilnehmer['nachname']}, {quelle_teilnehmer['vorname']}"
@@ -404,17 +407,21 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
                     hat_wert = True
             # Notizen zum Bewertungsbogen: der Web-Stand führt (auch leer = gelöscht); nur Änderungen
             # werden geschrieben, zählen in `aktualisiert` mit und (UX-Test Web 19.11.2026, E1) in
-            # `notizen_uebernommen`, damit der Bericht sie nennt.
-            notizen_hier = 0
+            # `notizen_uebernommen` bzw. (im Web gelöscht, QS U13) `notizen_geloescht`, damit der Bericht sie nennt.
+            notizen_hier = geloescht_hier = 0
             for disziplin, neu_notiz in notizen.items():
                 if neu_notiz != (ziel_ergebnis.get(NOTIZ_SPALTEN[disziplin]) or None):
                     setze_notiz(ziel_conn, ziel_id, disziplin, neu_notiz)
                     hat_wert = True
-                    notizen_hier += 1
+                    if neu_notiz:
+                        notizen_hier += 1
+                    else:
+                        geloescht_hier += 1
         except Exception:
             fehler.append(name)
             continue
         notizen_uebernommen += notizen_hier
+        notizen_geloescht += geloescht_hier
         if hat_wert:
             aktualisiert += 1
         else:
@@ -429,6 +436,7 @@ def _ergebnisse_einarbeiten(quelle_paare, ziel_conn, quelle_conn=None) -> Import
         status_geaendert=status_geaendert,
         unveraendert=unveraendert,
         notizen_uebernommen=notizen_uebernommen,
+        notizen_geloescht=notizen_geloescht,
     )
 
 _TEILNEHMER_PFLICHTFELDER = ("nachname", "vorname", "art", "stufe", "disziplin")

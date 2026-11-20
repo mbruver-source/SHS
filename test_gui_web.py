@@ -585,6 +585,32 @@ def test_tresor_passwort_wird_nicht_zusaetzlich_im_speicher_gehalten(qtbot, term
     assert tresor == {ADRESSE: "neu-im-tresor"} and desktop_web._passwort_speicher is None
 
 
+def test_sitzung_behaelt_die_herkunft_des_passworts(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    # QS U13 (Nachbesserung zu U8, siehe Fortschritt.md)
+    _eingerichtet()
+    tresor[ADRESSE] = "aus-dem-tresor"
+    parent = _tab(qtbot, termin)
+    sitzung = desktop_web._Sitzung()
+    for _ in range(2):
+        ok, _erg = desktop_web.mit_web_anmeldung(parent, lambda client: None, "Test", sitzung)
+        assert ok
+        assert desktop_web._passwort_speicher is None
+    assert web.anmeldungen == [("admin", "aus-dem-tresor")] * 2
+    # eben im Dialog eingegeben und in den Tresor gelegt
+    del tresor[ADRESSE]
+    _passwort_abfrage_zaehlen(monkeypatch, passwort="neu-im-tresor", merken=True)
+    sitzung = desktop_web._Sitzung()
+    for _ in range(2):
+        assert desktop_web.mit_web_anmeldung(parent, lambda client: None, "Test", sitzung)[0]
+        assert desktop_web._passwort_speicher is None
+    assert tresor == {ADRESSE: "neu-im-tresor"}
+    # abgelehnt im zweiten Aufruf: der Tresor-Eintrag wird verworfen
+    web.anmelde_fehler.append(web_sync.AnmeldeFehler("Benutzername oder Passwort falsch", 401))
+    _passwort_abfrage_zaehlen(monkeypatch, passwort="danach-eingegeben", merken=False)
+    assert desktop_web.mit_web_anmeldung(parent, lambda client: None, "Test", sitzung)[0]
+    assert ADRESSE not in tresor
+
+
 def test_verbindungstest_401_verwirft_das_tresor_passwort(qtbot, meldungen, web, tresor):
     # Sicherheitsprüfung U8, H-1: das abgelehnte Passwort wird dort verworfen, woher es kam.
     tresor[ADRESSE] = "falsch-im-tresor"
@@ -928,6 +954,8 @@ def test_bericht_text_nennt_alle_gruppen():
     mit_notizen = desktop_web.bericht_text(ImportBericht(2, [], [], unveraendert=1, notizen_uebernommen=3))
     assert "3 Notiz(en) zum Bewertungsbogen übernommen (sichtbar im PDF-Bewertungsbogen)." in mit_notizen[0]
     assert "im Desktop-Programm werden sie nicht angezeigt" in mit_notizen[1]
+    geloescht = desktop_web.bericht_text(ImportBericht(1, [], [], notizen_geloescht=1))[0]
+    assert "1 Notiz(en) im Web gelöscht und in der Datei entfernt." in geloescht and "übernommen" not in geloescht
     mit_status = ImportBericht(1, [], [], status_geaendert=["Nr. 2 Muster, Anna: ohne Status → disqualifiziert"])
     zusammenfassung, einzelheiten = desktop_web.bericht_text(mit_status)
     assert "1 Status (Disqualifikation/Abbruch) geändert" in zusammenfassung

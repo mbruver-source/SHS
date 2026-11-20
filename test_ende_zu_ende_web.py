@@ -468,6 +468,15 @@ class TestEndeZuEndeWeb(unittest.TestCase):
         self.assertEqual(zweiter.unveraendert, 7)  # alle zugeordneten (Nr. 6 weicht ab und zählt nicht)
         self.assertEqual(zweiter.notizen_uebernommen, 0)
 
+        # QS U13: eine im Web gelöschte Notiz zählt als gelöscht, nicht als „übernommen“
+        liste = self.client.ergebnisse(schema)
+        for eintrag in liste:
+            if eintrag["startnummer"] == 2:
+                eintrag["ergebnis"][db.NOTIZ_SPALTEN[B]] = None
+        dritter = db.importiere_ergebnisse_aus_liste(self.desktop, liste)
+        self.assertEqual((dritter.notizen_uebernommen, dritter.notizen_geloescht, dritter.aktualisiert), (0, 1, 1))
+        self.assertIsNone(self._ergebnis(self.desktop, 2, self.d)[db.NOTIZ_SPALTEN[B]])
+
     def test_status_von_der_einzelseite_kommt_beim_zurueckholen_an(self):
         # UX-Test Web 19.11.2026 (D1): Disqualifiziert und Abbruch auch auf der Seite je Teilnehmer.
         termin, _hinweis = self._veroeffentlichen()

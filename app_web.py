@@ -259,7 +259,10 @@ def pruefe_web_geheimnisse(schluessel: str, einrichtungscode: str) -> None:
             'Erzeugen mit: python -c "import secrets; print(secrets.token_urlsafe(16))"'
         )
     if fehler:
-        raise RuntimeError("Web-Version nicht gestartet (siehe secrets/ bzw. README_CONTAINER.md, Abschnitt Geheimnisse):\n- " + "\n- ".join(fehler))
+        raise RuntimeError(
+            "Web-Version nicht gestartet (siehe secrets/ bzw. README_CONTAINER.md, Abschnitt Geheimnisse; "
+            "unter Windows ohne Python mit der PowerShell-Funktion New-ShsGeheimnis von dort):\n- "
+            + "\n- ".join(fehler))
 
 
 _web_schluessel = geheimnis_lesen("SHS_WEB_SECRET_KEY")
@@ -1179,15 +1182,18 @@ def ergebnis_erfassen(conn, teilnehmer_id):
                     # Diese Disziplin wurde vom aktuellen Richter nicht verändert - siehe
                     # Funktionsdocstring (Lost-Update-Schutz).
                     continue
+                spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+                vorher = db.get_ergebnis(conn, teilnehmer_id) or {}
+                vorher_werte = (vorher.get(spalte_suche), vorher.get(spalte_anzeige))
+                if (suche, anzeige) == vorher_werte:
+                    # Steht schon so da (z. B. von jemand anderem eingetragen): nichts schreiben, nicht
+                    # diesem Konto zuschreiben, keine Meldung (wie `schon_gleich` der Tabelle, QS U13).
+                    continue
                 if extern_gesperrt:
                     # Wie in der Tabelle: jemand anderes hat inzwischen gesperrt, die Punkte aus dem
-                    # alten Stand werden nicht geschrieben (steht der Wert schon so da: keine Meldung).
-                    aktuell_jetzt = db.get_ergebnis(conn, teilnehmer_id) or {}
-                    spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
-                    if (suche, anzeige) != (aktuell_jetzt.get(spalte_suche), aktuell_jetzt.get(spalte_anzeige)):
-                        aktuell = _ergebnis_zustand(teilnehmer, aktuell_jetzt)
-                        konflikt_texte.append(
-                            _punkte_konflikt_text(disziplin, suche, anzeige, aktuell["punkte"][disziplin]))
+                    # alten Stand werden nicht geschrieben.
+                    konflikt_texte.append(_punkte_konflikt_text(
+                        disziplin, suche, anzeige, tuple(_wert_zu_text(w) for w in vorher_werte)))
                     continue
                 db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
                 _aenderung_merken(conn, teilnehmer_id, disziplin)
@@ -1591,7 +1597,7 @@ def _tabellenzeile(t: dict, ergebnis: dict, formular=None, fehler: str | None = 
         abbruch = _feld_zu_text(formular, f"abbruch_{t['id']}")
         for disziplin in punkte:
             punkte[disziplin] = _disziplin_text_werte(zeile, disziplin)
-    gesperrt = dq or abbruch == _ABBRUCH_OHNE_GRUND
+    gesperrt = _punkte_gesperrt(dq, abbruch)
     return {
         "id": t["id"],
         "teilnehmer": t,

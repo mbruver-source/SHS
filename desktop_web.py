@@ -541,6 +541,7 @@ class _Sitzung:
 
     def __init__(self):
         self.passwort: str | None = None
+        self.aus_tresor = False  # liegt das Passwort im Windows-Tresor (siehe mit_web_anmeldung)
 
 
 # --- Passwort im Arbeitsspeicher (UX-Test Web 19.11.2026, E4, Marco) -----------------------------
@@ -608,7 +609,7 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
         return False, None
     sitzung = sitzung or _Sitzung()
     passwort = sitzung.passwort
-    aus_tresor = False
+    aus_tresor = sitzung.aus_tresor if passwort is not None else False
     if passwort is None:
         passwort = web_tresor.passwort_lesen(e.adresse)
         aus_tresor = passwort is not None
@@ -639,6 +640,7 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
         if fehler is None:
             sitzung.passwort = passwort
             im_tresor = aus_tresor or (merken_neu and web_tresor.passwort_speichern(e.adresse, e.benutzer, passwort))
+            sitzung.aus_tresor = bool(im_tresor)
             # E4: nur behalten, was NICHT im Tresor liegt - keine zweite, langlebige Kopie eines
             # Tresor-Passworts im Arbeitsspeicher (Sicherheitsprüfung U8).
             _passwort_merken(e, "" if im_tresor else passwort)
@@ -654,6 +656,7 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
                 hinweis = "Das Passwort wurde nicht angenommen."
             passwort = None
             sitzung.passwort = None
+            sitzung.aus_tresor = False
             passwort_vergessen()
             continue
         _fehler_melden(parent, fehler)
@@ -669,12 +672,14 @@ def bericht_text(bericht: ImportBericht) -> tuple[str, str]:
 
     UX-Test Web 19.11.2026 (E1, E2): Die Zusammenfassung nennt „geändert / unverändert“ (gezählt werden nur
     Teilnehmer, bei denen sich in der Datei etwas geändert hat - die Frage davor nennt alle aus dem Web),
-    die übernommenen Notizen und nur die Sonderfälle, die tatsächlich vorkamen; „im Web leer“ heißt: im
+    die übernommenen und die im Web gelöschten Notizen und nur die Sonderfälle, die tatsächlich vorkamen; „im Web leer“ heißt: im
     Web leer, in der Datei aber gefüllt (sonst widersprach „0 … leer“ den sichtbar leeren Disziplinen)."""
     saetze = [f"{bericht.aktualisiert} Teilnehmer geändert, {bericht.unveraendert} unverändert."]
     if bericht.notizen_uebernommen:
         saetze.append(f"{bericht.notizen_uebernommen} Notiz(en) zum Bewertungsbogen übernommen "
                       "(sichtbar im PDF-Bewertungsbogen).")
+    if bericht.notizen_geloescht:
+        saetze.append(f"{bericht.notizen_geloescht} Notiz(en) im Web gelöscht und in der Datei entfernt.")
     sonderfaelle = [
         (len(bericht.status_geaendert), "Status (Disqualifikation/Abbruch) geändert"),
         (len(bericht.abweichungen), "nicht übernommen (anderer Teilnehmer unter derselben Startnummer)"),

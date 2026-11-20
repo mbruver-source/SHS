@@ -1218,7 +1218,8 @@ Das Programm fragt dann beim ersten Veröffentlichen oder Zurückholen danach.
 3. Ein Bericht nennt, bei wie vielen Teilnehmern sich in der Datei etwas geändert hat und wie viele
    **unverändert** blieben (z. B. „9 Teilnehmer geändert, 3 unverändert“ – die Frage davor nennt
    alle Teilnehmer aus dem Web), wie viele **Notizen** zum Bewertungsbogen übernommen wurden (sie
-   stehen auf dem PDF-Bewertungsbogen, im Programm selbst werden sie nicht angezeigt) und nur dann,
+   stehen auf dem PDF-Bewertungsbogen, im Programm selbst werden sie nicht angezeigt) bzw. im Web
+   gelöscht und deshalb auch in der Datei entfernt wurden, und nur dann,
    wenn es vorkam: welche Teilnehmer übersprungen, nicht gefunden oder **nicht übernommen** wurden
    (anderer Name oder Hund unter derselben Startnummer) und welche Disziplinen im Web leer, in der
    Datei aber gefüllt waren (der Wert der Datei bleibt dann erhalten). In der Rückfrage steht der

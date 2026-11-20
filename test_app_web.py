@@ -1994,6 +1994,18 @@ class TestErgebnistabelle(_AppWebTestBasis):
             "geladen_status": "0|", "dq": "1"})
         self.assertEqual(set(db.aenderungen_lesen(self.conn)[self.ed]), {db._BEREICH_STATUS})
 
+    def test_einzelseite_schreibt_gleichen_fremden_wert_nicht_dem_konto_zu(self):
+        # QS U13: wie `schon_gleich` der Tabelle - steht der Wert schon so da, wird nichts geschrieben.
+        self._anmelden()
+        self._als_helfer()
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
+        db.aenderung_merken(self.conn, self.ed, self.F, "fremd")
+        antwort = self.client.post(f"/teilnehmer/{self.ed}", data={
+            f"suche_{self.F}": "40", f"anzeige_{self.F}": "30",
+            f"geladen_suche_{self.F}": "", f"geladen_anzeige_{self.F}": "", "geladen_status": "0|"})
+        self.assertIn("aenderung=0", antwort.headers["Location"])
+        self.assertEqual(db.aenderungen_lesen(self.conn)[self.ed][self.F][0], "fremd")
+
     def test_vor_wann(self):
         from datetime import datetime, timezone
         jetzt = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)

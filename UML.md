@@ -700,7 +700,7 @@ sequenceDiagram
         WS->>S: GET /api/termine
         S-->>WS: Terminliste (Verein, Ort, Datum)
     end
-    DW-->>PL: Bestätigung (Web-Termin mit Verein, Ort, Datum; Web-Stand ersetzt Disqualifikation/Abbruch der Datei)
+    DW-->>PL: Bestätigung (Web-Termin mit Verein, Ort, Datum, Web-Stand ersetzt Disqualifikation/Abbruch der Datei)
     DW->>DB: auto_sicherung_erstellen (Mindestabstand 0)
     DW->>DB: importiere_ergebnisse_aus_liste (Zuordnung per Startnummer)
     DB-->>DW: ImportBericht
@@ -736,13 +736,13 @@ sequenceDiagram
         alt andere Person war schneller
             W-->>R: Konfliktzeile gelb, nichts überschrieben
         else
-            W->>D: eintragen_ergebnis, setze_ergebnis_status, aenderung_merken (Konto, Zeit; nur Web)
+            W->>D: eintragen_ergebnis, setze_ergebnis_status, aenderung_merken (Konto und Zeit, nur Web)
             Note over W,D: ab 200 Zeilen eine Transaktion (Merkzeilen eingeschlossen)
             W-->>R: Redirect, „Gespeichert: N Teilnehmer“ (mit Knopf Bogen: weiter zum Bogen)
         end
     end
 
-    R->>W: Knopf Bogen: POST /ergebnisse (speichert die Tabelle; bei Fehler/Konflikt bleibt die Tabelle), dann GET /bewertungsbogen/id/disziplin
+    R->>W: Knopf Bogen: POST /ergebnisse (speichert die Tabelle, bei Fehler/Konflikt bleibt die Tabelle), dann GET /bewertungsbogen/id/disziplin
     W->>D: Teilnehmer, Gegenstand, Ergebnis, Notiz lesen
     W-->>R: Bogen mit Punkten, Status, Notiz
     R->>W: POST Bogen (Speichern)
@@ -756,7 +756,7 @@ sequenceDiagram
         W-->>R: Redirect zur Tabelle mit festem Hinweis
     else
         W->>P: erstelle_alle_bewertungsboegen_pdf (teilnehmer_ids, nur_benutzte_disziplinen, im Speicher)
-        P-->>W: PDF (Einzeldisziplin 1 Blatt, Dreikampf 2 Seiten; teilweise ohne Status: je benutzte Disziplin 1 Blatt)
+        P-->>W: PDF (Einzeldisziplin 1 Blatt, Dreikampf 2 Seiten, teilweise ohne Status: je benutzte Disziplin 1 Blatt)
         W-->>R: Download Bewertungsboegen_Verein_Datum.pdf
     end
 ```

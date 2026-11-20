@@ -20,7 +20,8 @@ bleiben sie erhalten.
 **Ergänzt 20.11.2026 (Marco, UX-Test Web E1):** Zwei Personas vermissten die Notizen nach dem Zurückholen.
 Entschieden: Der Rückhol-Bericht nennt die Zahl der übernommenen Notizen mit dem Hinweis „sichtbar im
 PDF-Bewertungsbogen“ (`ImportBericht.notizen_uebernommen`). Eine Anzeige in der Desktop-Oberfläche bleibt
-zurückgestellt.
+zurückgestellt. Im Web gelöschte Notizen nennt der Bericht seit der QS in U13 getrennt
+(`ImportBericht.notizen_geloescht`, „im Web gelöscht und in der Datei entfernt“).
 
 ## Grund
 

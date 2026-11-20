@@ -2,6 +2,26 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U13 – Abschluss: QS in drei Rollen, Doku-Abgleich
+
+QS über alle Loop-Commits (`git diff c2e90f7..HEAD`) nacheinander mit `qs-sicherheit`, `qs-korrektheit`,
+`qs-wartbarkeit`. **Sicherheit:** kein Befund; ein Hinweis (Kontoname bleibt nach Löschen eines Web-Kontos in der
+Admin-Zeile „zuletzt …“) als Rückfrage. **Korrektheit:** drei Fehler (niedrig) behoben, je mit Test, der ohne Fix
+fehlschlägt: K1 Sicherheitskorrektur zur Web-Verbindung des Desktops (Nachbesserung zu U8, Details folgen nach dem
+Release); K2 im Web gelöschte Notizen nennt der Rückhol-Bericht jetzt „gelöscht“ statt „übernommen“
+(`ImportBericht.notizen_geloescht`); K3 die Einzelseite schreibt einen Wert, der schon so dasteht, nicht erneut und
+schreibt ihn nicht dem Konto zu (wie die Tabelle). Drei Hinweise (halb gefüllte Disziplin = „offen“, UTC-Datum in
+„zuletzt“, keine Bestätigung beim Rückweg Bogen → Einzelseite) als Rückfragen. **Wartbarkeit:** zwei kleine
+Doppelungen entfernt; Aufräumpaket (Vollständigkeitsregel einmal, Makros in Templates, Kapselung Passwortspeicher
+u. a.) als Rückfrage. Startfehlermeldung der Web-Version nennt zusätzlich den Weg ohne Python (`New-ShsGeheimnis`).
+Doku: `OFFEN.md`/B16 als durch den Web-Ausbau überholt vermerkt (offen bleiben die Web-Testarten aus B10),
+`Modulreferenz.md` ergänzt (`web_aenderungen`, `nur_benutzte_disziplinen`), drei Pfeiltexte in `UML.md` mit
+Semikolon brachen das Rendern (mit mmdc geprüft, alle 16 Diagramme rendern). Im Browser geprüft: Kopfleiste als
+Admin bei 768 und 701 px zweizeilig, 66 px hoch, passt unter `scroll-padding-top` (72 px); nach dem Sprung zu
+`#tabelle` bleibt die Tabellenkopfzeile sichtbar. SHS Test Suite gesamt grün (vor den Nachbesserungen: 1633
+bestanden, 0 fehlgeschlagen, 212 übersprungen). Abschlussbericht in
+`berichte/UX-Test-2026-11-Web/aufgaben-umsetzung.md`.
+
 ## 20.11.2026: UX-Test Web U12 – Admin sieht, wer wann eingetragen hat
 
 Fund B6 (Marco: je Teilnehmer und Disziplin, nur Web-Datenbank, nur Admins). Neue Tabelle `web_aenderungen`

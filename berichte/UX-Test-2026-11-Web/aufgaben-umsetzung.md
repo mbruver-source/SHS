@@ -52,7 +52,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | erledigt (20.11.) | siehe git log | unbekannt | Einzelblätter nur für teilweise bewerteten DK ohne Status; Status/GESAMT bleiben |
 | U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | erledigt (20.11.) | siehe git log | unbekannt | Skript jetzt UTF-8 mit BOM; Browser-Texte vor dem Build einmal live ansehen; Startfehlermeldungen nennen nur Python → U13 |
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | erledigt (20.11.) | siehe git log | unbekannt | eigene Tabelle `web_aenderungen` nur im Web-Schema; PostgreSQL-Test nur in der CI |
-| U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | offen | | unbekannt | |
+| U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
 
 ## Entscheidungen (Marco, 19.11.2026)
 
@@ -227,6 +227,36 @@ abweichen, nicht im Umfang.
 - **Sicherheitshinweis aus der Prüfung von U8:** ein Punkt im älteren Code der Web-Verbindung (nicht durch U8
   entstanden), Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (H-3). Bitte
   entscheiden: umsetzen oder zurückstellen.
+- **Kontoname nach dem Löschen eines Web-Kontos (Hinweis aus der QS-Sicherheitsprüfung in U13, kein Fehler):** Die
+  Zeile „zuletzt <Konto>, …“ (U12) bleibt in `web_aenderungen` stehen, wenn das Konto gelöscht wird; sie
+  verschwindet erst mit dem Termin auf dem Server. Nur Admins sehen sie, sie geht nicht in die Termin-Datei.
+  Möglichkeiten: (a) so lassen und in `OFFEN.md` als akzeptiert notieren; (b) beim Löschen des Kontos die Einträge
+  aller Termine entfernen oder durch „gelöschtes Konto“ ersetzen.
+- **Hinweise aus der QS-Korrektheitsprüfung in U13 (keine Fehler, nicht geändert):**
+  - *Halb gefüllte Disziplin in der Teilnehmerliste:* Eine Disziplin zählt erst als bewertet, wenn Suche **und**
+    Anzeige eingetragen sind (gleiche Regel wie die Auswertung). Ein Einzelstart mit „Suche 40, Anzeige leer“ zeigt
+    deshalb „offen“, ein Dreikampf mit drei halb gefüllten Disziplinen ebenso. Soll so etwas als „teilweise“
+    erscheinen?
+  - *„zuletzt … am TT.MM.“ (U12):* Ab 24 Stunden steht das Datum ohne Jahr, gerechnet in UTC (der Container läuft in
+    UTC). Zwischen 0 und 1 Uhr (Winterzeit) bzw. 0 und 2 Uhr (Sommerzeit) erscheint deshalb der Vortag. Für einen
+    Prüfungstag unerheblich; mit Zeitzone Europe/Berlin wäre es genau.
+  - *Rückweg aus dem Bogen zur Einzelseite:* „Speichern und zurück zur Seite des Teilnehmers“ zeigt dort keine
+    Bestätigung „Gespeichert“ (der Rückweg zur Liste und zur Tabelle tut es). Nachrüsten?
+- **Aufräumpaket aus der QS-Wartbarkeitsprüfung in U13 (kein Fehler, Umbau ohne Verhaltensänderung):** In U13 nur
+  zwei Kleinigkeiten umgesetzt (Einzelseite: eine Prüfung statt zwei Kopien, `_tabellenzeile` nutzt
+  `_punkte_gesperrt`). Vorgeschlagen, aber als eigener Umbau mit Marco abzustimmen:
+  - Vollständigkeitsregel einmal in `db_ergebnisse` (öffentliche `disziplin_punkte`), genutzt von
+    `_listen_status` und `_bogen_zusammenfassung` statt eigener Kopien (auch der vorgemerkte U3-Punkt).
+  - `ergebnis_erfassen` (~125 Zeilen) in View und `_einzelseite_speichern` teilen; `_einheit_entscheiden` mit
+    kurzer Variante für Status/Notiz, in den Block „Gemeinsame Regeln“, Rückgabe als Konstanten; `_status_paar`.
+  - Passwortspeicher in `desktop_web.py` kapseln (`passwort_im_speicher()` statt direkter Zugriffe aus Dialog und
+    Tests); `_eingegebene_verbindung()` statt drei gleicher Konstruktionen.
+  - Templates: Jinja-Makros für Abbruch-Auswahl, Erklärtext und Zahlenfeld mit Hinweis (heute drei bzw. vier
+    Kopien), Konfliktbox als CSS-Klasse statt Inline-Farben, eine allgemeine `select`-Regel, CSS-Variable für die
+    Kopfleistenhöhe.
+  - Tests weniger an CSS-Zeichenketten koppeln; `db._BEREICH_STATUS` öffentlich benennen; `sync_termin.py` gibt
+    „unverändert“ mit aus.
+  - Langfristig die reinen Regel-Funktionen aus `app_web.py` (2300 Zeilen) in ein Modul `web_regeln.py`.
 
 ## Fortsetzungsnotiz
 
@@ -260,7 +290,51 @@ abweichen, nicht im Umfang.
   Gesamtlauf SHS Test Suite, Doku-Abgleich inkl. Mermaid-Prüfung, OFFEN.md/B16, Abschlussbericht, Test-Stack
   `shsux` abbauen). Vorgemerkte Punkte für U13: Startfehlermeldungen der Web-Version nennen nur Python (U11);
   Vollständigkeitsregel doppelt (U3); Kopfleiste bei 768 px als Admin ansehen (U7); Browser-Texte live (U11).
+- 20.11.2026: U13 erledigt und committet. Loop beendet. Offen ist nur, was unter „Rückfragen an Marco“ und
+  „Vor dem Build noch offen“ (Abschlussbericht) steht.
 
 ## Abschlussbericht
 
-(folgt mit U13)
+Stand 20.11.2026, nach U13. Alle 13 Aufgaben erledigt; alle Commits nur lokal auf `main` (Basis `cfe6a8a`, nicht
+gepusht, kein Tag, kein Versionsbump, kein Build).
+
+**Commits (ältester zuerst):**
+
+| Aufgabe | Commit | Inhalt |
+|---|---|---|
+| Liste | `c2e90f7` | Funde besprochen, Aufgabenliste für den Loop |
+| U1 | `6aee9a5` | Weg zum Bewertungsbogen aus Liste und Einzelseite, Bestätigung nach dem Speichern |
+| U2 | `c4fb381` | Disqualifikation und Abbruch auf der Einzelseite (B18 überholt) |
+| U3 | `448cdd9` | Teilnehmerliste: offen, teilweise, bewertet, disqualifiziert, Abbruch |
+| U4 | `f5c0163` | Startseite leitet Angemeldete weiter, „Termine verwalten“, Meldung nach Benutzer anlegen |
+| U5 | `e9fe823` | Ergebnistabelle am Handy mit fester Kopfzeile, Sortierung nach Start-Nr. |
+| U6 | `029f915` | „Gespeichert: n Teilnehmer“, „Bogen“ speichert vorher |
+| U7 | `72801f4` | Bogen: Hinweis bei zu hohen Punkten, feste Kopfleiste, Rückweg zur Herkunft |
+| U8 | `3459c21` | Desktop: Web-Passwort ohne Tresor bis Programmende im Arbeitsspeicher, Hinweise im Dialog |
+| U9 | `138a5f3` | Desktop: Rückhol-Bericht mit geändert/unverändert und Notizen, Termin mit Namen |
+| U10 | `f93aa13` | Sammel-PDF ohne leere Dreikampf-Seiten, Hinweis zum Download |
+| U11 | `8d97f2b` | Container-README: Geheimnisse ohne Python, Port, Zertifikatswarnung; Skript mit Umlauten |
+| U12 | `431d022` | Admin sieht, wer wann eingetragen hat |
+| U13 | (dieser Commit) | QS-Nachbesserungen K1–K3, Doku-Abgleich, Abschlussbericht |
+
+**Nachstellungen:** B4 (zu hohe Punkte im Bogen ohne Hinweis) im alten Test-Stack nachgestellt und behoben
+(Hinweis am Feld per CSS). D3 (Auswahlliste im Bogen) und E5 (Passwortfeld) nicht nachstellbar – Eigenheiten der
+Testwerkzeuge, geschlossen.
+
+**QS in drei Rollen (U13):** Sicherheit ohne Befund; Korrektheit drei Fehler (niedrig, alle im Loop-Code) behoben;
+Wartbarkeit zwei Kleinigkeiten behoben, Aufräumpaket als Rückfrage. Alle Rückfragen stehen oben unter „Rückfragen an
+Marco“: F3 (Passwort anzeigen), C3 (Rückfrage vor dem Verlassen), Sicherheitshinweis H-3 (lokal), Kontoname nach
+Kontolöschung, drei Hinweise aus der Korrektheitsprüfung, Aufräumpaket.
+
+**Tests:** SHS Test Suite gesamt grün (1633 bestanden, 0 fehlgeschlagen, 212 übersprungen; Basis vorher 1555);
+nach den Nachbesserungen die betroffenen Testdateien erneut grün. PostgreSQL-Tests laufen nur in der CI.
+
+**Doku:** `docs/HANDBUCH.md`, `README_CONTAINER.md`, `Architektur.md`, `UML.md` (mit mmdc geprüft),
+`Modulreferenz.md`, `OFFEN.md` (B16, B18 überholt; B20, C5 ergänzt) und die Entscheidungsdokumente sind nachgezogen.
+
+**Vor dem Build noch offen:** Screenshots laut Liste „Screenshots vor dem Build“ neu aufnehmen; die
+Zertifikatswarnungs-Texte in `README_CONTAINER.md` einmal live im Browser ansehen; Safari/iOS für die feste
+Tabellenkopfzeile ungeprüft; die Rückfragen klären.
+
+**Aufgeräumt:** Test-Stack `shsux` samt Volume, Netz, Image `localhost/shsux-web:ux` und Ordner entfernt; Marcos
+Stacks unverändert (gestoppt wie vorher, Volumes vorhanden).
