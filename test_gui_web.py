@@ -614,6 +614,9 @@ def test_uebernehmen_behaelt_gemerktes_bei_gleicher_verbindung(qtbot, monkeypatc
     assert "bis zum Beenden gemerkt" in dialog.passwort_feld.placeholderText()
     dialog._uebernehmen()
     assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) == "gemerkt-1"
+    assert desktop_web.passwort_im_speicher()
+    desktop_web.passwort_vergessen()
+    assert not desktop_web.passwort_im_speicher()
 
 
 def test_uebernehmen_verwirft_gemerktes_bei_anderem_benutzer(qtbot, monkeypatch):
@@ -625,7 +628,7 @@ def test_uebernehmen_verwirft_gemerktes_bei_anderem_benutzer(qtbot, monkeypatch)
     e = desktop_web.einstellungen_lesen()
     assert e.benutzer == "jemand-anders"
     assert desktop_web._passwort_aus_speicher(e) is None
-    assert desktop_web._passwort_speicher is None
+    assert not desktop_web.passwort_im_speicher()
 
 
 def test_verbindungstest_mit_abgelehntem_gemerkten_passwort_vergisst_es(qtbot, monkeypatch, meldungen, web):
@@ -633,7 +636,7 @@ def test_verbindungstest_mit_abgelehntem_gemerkten_passwort_vergisst_es(qtbot, m
     web.anmelde_fehler.append(web_sync.AnmeldeFehler("Benutzername oder Passwort falsch", 401))
     dialog.test_btn.click()
     assert web.anmeldungen == [("admin", "gemerkt-1")]
-    assert desktop_web._passwort_speicher is None
+    assert not desktop_web.passwort_im_speicher()
     assert dialog.passwort_feld.placeholderText() == ""
 
 
@@ -666,11 +669,11 @@ def test_tresor_passwort_wird_nicht_zusaetzlich_im_speicher_gehalten(qtbot, term
     tresor[ADRESSE] = "aus-dem-tresor"
     desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
     assert web.anmeldungen == [("admin", "aus-dem-tresor")]
-    assert desktop_web._passwort_speicher is None
+    assert not desktop_web.passwort_im_speicher()
     del tresor[ADRESSE]
     _passwort_abfrage_zaehlen(monkeypatch, passwort="neu-im-tresor", merken=True)
     desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
-    assert tresor == {ADRESSE: "neu-im-tresor"} and desktop_web._passwort_speicher is None
+    assert tresor == {ADRESSE: "neu-im-tresor"} and not desktop_web.passwort_im_speicher()
 
 
 def test_sitzung_behaelt_die_herkunft_des_passworts(qtbot, termin, web, meldungen, tresor, monkeypatch):
@@ -682,7 +685,7 @@ def test_sitzung_behaelt_die_herkunft_des_passworts(qtbot, termin, web, meldunge
     for _ in range(2):
         ok, _erg = desktop_web.mit_web_anmeldung(parent, lambda client: None, "Test", sitzung)
         assert ok
-        assert desktop_web._passwort_speicher is None
+        assert not desktop_web.passwort_im_speicher()
     assert web.anmeldungen == [("admin", "aus-dem-tresor")] * 2
     # eben im Dialog eingegeben und in den Tresor gelegt
     del tresor[ADRESSE]
@@ -690,7 +693,7 @@ def test_sitzung_behaelt_die_herkunft_des_passworts(qtbot, termin, web, meldunge
     sitzung = desktop_web._Sitzung()
     for _ in range(2):
         assert desktop_web.mit_web_anmeldung(parent, lambda client: None, "Test", sitzung)[0]
-        assert desktop_web._passwort_speicher is None
+        assert not desktop_web.passwort_im_speicher()
     assert tresor == {ADRESSE: "neu-im-tresor"}
     # abgelehnt im zweiten Aufruf: der Tresor-Eintrag wird verworfen
     web.anmelde_fehler.append(web_sync.AnmeldeFehler("Benutzername oder Passwort falsch", 401))

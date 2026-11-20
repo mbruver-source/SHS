@@ -248,6 +248,10 @@ def _fingerabdruck_text(hexwert: str) -> str:
     return web_sync.fingerabdruck_anzeige(hexwert)
 
 
+# Woher das Passwort für „Verbindung testen“ kam (WebVerbindungsDialog._passwort_fuer_test).
+_QUELLE_EINGABE, _QUELLE_TRESOR, _QUELLE_SPEICHER = "eingabe", "tresor", "speicher"
+
+
 class WebVerbindungsDialog(QDialog):
     """„Web-Verbindung…“: Adresse, Benutzername, Passwort und Fingerabdruck des Serverzertifikats. Der
     Server nutzt ein selbstsigniertes Zertifikat: beim ersten Verbinden wird sein Fingerabdruck angezeigt
@@ -361,8 +365,7 @@ class WebVerbindungsDialog(QDialog):
         gilt ein gemerktes Passwort nicht mehr (siehe _uebernehmen)."""
         adresse = self._adresse_normal()
         gespeichert = bool(adresse) and self._im_tresor(adresse)
-        im_speicher = bool(adresse) and _passwort_aus_speicher(
-            WebEinstellungen(adresse, self.benutzer_feld.text().strip(), self._fingerabdruck or "")) is not None
+        im_speicher = bool(adresse) and _passwort_aus_speicher(self._eingegebene_verbindung(adresse)) is not None
         if gespeichert:
             self.passwort_feld.setPlaceholderText("gespeichert – leer lassen, um es zu behalten")
         elif im_speicher:
@@ -394,17 +397,21 @@ class WebVerbindungsDialog(QDialog):
             self.status_label.setText("Die Adresse wurde geändert: der Fingerabdruck muss neu geholt und bestätigt werden.")
         # Platzhalter/Hinweis erst nach abgeschlossener Eingabe (editingFinished), siehe __init__.
 
+    def _eingegebene_verbindung(self, adresse: str) -> WebEinstellungen:
+        """Die gerade im Dialog eingetragene Verbindung (Adresse wie angegeben, Benutzer, bestätigter
+        Fingerabdruck) - Schlüssel für das Passwort im Arbeitsspeicher."""
+        return WebEinstellungen(adresse, self.benutzer_feld.text().strip(), self._fingerabdruck or "")
+
     def _passwort_fuer_test(self, adresse: str) -> tuple[str | None, str]:
-        """(Passwort, Quelle) mit Quelle „eingabe“, „tresor“ oder „speicher“ - damit ein abgelehntes
-        Passwort genau dort verworfen wird, woher es kam (Sicherheitsprüfung U8)."""
+        """(Passwort, Quelle) mit Quelle _QUELLE_EINGABE, _QUELLE_TRESOR oder _QUELLE_SPEICHER - damit ein
+        abgelehntes Passwort genau dort verworfen wird, woher es kam (Sicherheitsprüfung U8)."""
         eingabe = self.passwort_feld.text()
         if eingabe:
-            return eingabe, "eingabe"
+            return eingabe, _QUELLE_EINGABE
         gespeichert = web_tresor.passwort_lesen(adresse) if web_tresor.verfuegbar() else None
         if gespeichert is not None:
-            return gespeichert, "tresor"
-        e = WebEinstellungen(adresse, self.benutzer_feld.text().strip(), self._fingerabdruck or "")
-        return _passwort_aus_speicher(e), "speicher"
+            return gespeichert, _QUELLE_TRESOR
+        return _passwort_aus_speicher(self._eingegebene_verbindung(adresse)), _QUELLE_SPEICHER
 
     # -- Aktionen
     def _fingerabdruck_holen(self) -> None:
@@ -503,9 +510,9 @@ class WebVerbindungsDialog(QDialog):
             # Nur ein 401 der ANMELDUNG heißt „Passwort falsch“ (wie in mit_web_anmeldung). Ein abgelehntes
             # gemerktes Passwort wird dort verworfen, woher es kam (E4, Sicherheitsprüfung U8).
             if isinstance(fehler, web_sync.AnmeldeFehler) and fehler.status == 401 and not angemeldet:
-                if quelle == "speicher":
+                if quelle == _QUELLE_SPEICHER:
                     passwort_vergessen()
-                elif quelle == "tresor":
+                elif quelle == _QUELLE_TRESOR:
                     web_tresor.passwort_loeschen(adresse)
                     self._tresor_stand.pop(adresse, None)
                 self._passwort_stand_aktualisieren()
@@ -515,7 +522,7 @@ class WebVerbindungsDialog(QDialog):
 
     def _vergessen(self) -> None:
         adresse = self._adresse_normal() or self._alte_adresse
-        im_speicher = _passwort_speicher is not None
+        im_speicher = passwort_im_speicher()
         passwort_vergessen()  # E4: auch das im Arbeitsspeicher gehaltene Passwort
         self._tresor_stand.clear()
         self._passwort_bekannt = False
@@ -586,7 +593,8 @@ class _Sitzung:
 # Protokollen oder Meldungen. Es gilt nur für genau die Verbindung (Adresse, Benutzer, Fingerabdruck),
 # mit der es eingegeben wurde, und wird verworfen bei: Terminwechsel (passwort_vergessen() aus
 # app._termin_setzen), geänderten Verbindungsdaten, „Gespeichertes Passwort vergessen“ und wenn der
-# Server die Anmeldung ablehnt (401).
+# Server die Anmeldung ablehnt (401). Zugriff nur über die Funktionen unten (lesen, merken, vergessen,
+# passwort_im_speicher); nur der GUI-Thread benutzt sie.
 
 _passwort_speicher: tuple[tuple[str, str, str], str] | None = None
 
@@ -610,6 +618,11 @@ def passwort_vergessen() -> None:
     """Verwirft das im Arbeitsspeicher gehaltene Passwort (z. B. beim Terminwechsel)."""
     global _passwort_speicher
     _passwort_speicher = None
+
+
+def passwort_im_speicher() -> bool:
+    """Hält das Programm gerade ein Passwort im Arbeitsspeicher (für irgendeine Verbindung)?"""
+    return _passwort_speicher is not None
 
 
 def verbindung_einrichten(parent) -> WebEinstellungen | None:

@@ -2,6 +2,15 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U18 – Desktop: Passwortspeicher gekapselt
+
+Aufräumpaket aus der Wartbarkeitsprüfung, Teil Desktop (`desktop_web.py`), ohne Verhaltensänderung: öffentliche
+Abfrage `passwort_im_speicher()` statt direkter Zugriffe auf `_passwort_speicher` aus dem Dialog und den Tests;
+`WebVerbindungsDialog._eingegebene_verbindung()` für Platzhalter-Stand und Verbindungstest; die Quellen von
+„Verbindung testen“ als Konstanten `_QUELLE_*`. `_uebernehmen` baut die Verbindung bewusst weiter selbst (dort ist
+der Benutzername schon geprüft und wird weiterverwendet). Verifikation: keine Entscheidung geändert (Schlüssel,
+Verwerfen bei 401 aus der richtigen Quelle); GUI-Tests Web/Termin grün.
+
 ## 20.11.2026: UX-Test Web U17 – Templates und CSS aufgeräumt
 
 Aufräumpaket aus der Wartbarkeitsprüfung, Teil Templates. Neue Datei `templates/_bausteine.html` mit Jinja-Makros

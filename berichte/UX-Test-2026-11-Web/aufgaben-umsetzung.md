@@ -57,7 +57,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
 | U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | erledigt (20.11.) | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | erledigt (20.11.) | | unbekannt | |
-| U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
+| U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | erledigt (20.11.) | | unbekannt | |
 | U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
 
 ## Entscheidungen (Marco, 19.11.2026)
@@ -394,6 +394,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   Tests; Sichtprüfung mit `scratchpad\web_live.py <repo>`).
 - 20.11.2026: U17 erledigt und committet (Hinweis: `web_live.py` cacht Templates – nach Template-Änderungen den
   Server neu starten). Nächste: U18 (Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe).
+- 20.11.2026: U18 erledigt und committet. Nächste: U19 Abschluss 2 (OFFEN.md/Entscheidungen für F3, C3, Kontoname,
+  `web_regeln.py`; QS in drei Rollen über `git diff f758046..HEAD`; Gesamtlauf; Doku-Abgleich; Bericht; Loop beenden).
 
 ## Abschlussbericht
 
