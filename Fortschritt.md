@@ -2,6 +2,20 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U16 – Web-Logik aufgeräumt (Verhalten unverändert)
+
+Aufräumpaket aus der Wartbarkeitsprüfung (Marco: jetzt, ohne eigenes Modul `web_regeln.py`), in zwei Teilen wegen
+eines gezielten Stopps vor dem Nutzungslimit. Eine Vollständigkeitsregel: `db.disziplin_punkte` und
+`db.wertnote_aus_punkten` (vorher privat `_disziplin_punkte`/`_wertnote`) sind öffentlich und werden von der
+Web-Teilnehmerliste und dem Bogen genutzt statt eigener Kopien (der vorgemerkte U3-Punkt). `db.BEREICH_STATUS`
+öffentlich. In `app_web.py`: `_einheit_entscheiden` mit Konstanten im Block „Gemeinsame Regeln“, `_wert_entscheiden`
+für Status und Notiz, `_status_paar`; `ergebnis_erfassen` in View und `_einzelseite_speichern` geteilt;
+`_bogen_ruecksprung` für die Rückwege aus dem Bogen; `_anzahl` für Zählwörter; Docstrings und Kommentare
+nachgezogen. Sichtbar geändert nur der Text nach dem Zurückholen in `sync_termin.py` und der Web-Verwaltung: „n
+Teilnehmer geändert, m unverändert.“ wie im Desktop (Handbuch, README_CONTAINER angepasst). Verifikation: Verhalten
+unverändert (u. a. alle Rückweg-Adressen per Skript alt/neu verglichen); ein Test für `disziplin_punkte({})`
+ergänzt.
+
 ## 20.11.2026: UX-Test Web U15 – „teilweise“, Bestätigung auf der Einzelseite, deutsche Zeit
 
 Drei Punkte aus der QS in U13 (Marco). Teilnehmerliste: Sobald irgendein Wert eingetragen ist (auch nur Suche oder

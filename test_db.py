@@ -738,6 +738,15 @@ class TestDatenbank(unittest.TestCase):
         self.assertEqual(by_id[str(c)].platzierung, 1)
         self.assertEqual(by_id[str(c)].von_startern, 1)
 
+    def test_disziplin_punkte_ist_die_eine_vollstaendigkeitsregel(self):
+        # U16: öffentlich für app_web; fehlende Ergebniszeile ({}) heißt „noch nicht erfasst“.
+        import db
+        d = db.ALLE_DISZIPLINEN[0]
+        suche, anzeige = db.DISZIPLIN_SPALTEN[d]
+        self.assertIsNone(db.disziplin_punkte({}, d))
+        self.assertIsNone(db.disziplin_punkte({suche: 40, anzeige: None}, d))
+        self.assertEqual(db.disziplin_punkte({suche: 40, anzeige: 0}, d), 40)
+
     def test_disqualifiziert_bekommt_keine_aus_punkten_berechnete_wertnote(self):
         # Nutzerwunsch (21.09.): ein disqualifizierter Teilnehmer bekommt unabhängig von
         # ggf. doch vorhandenen Punktwerten KEINE aus Punkten berechnete Wertnote -

@@ -1265,7 +1265,8 @@ die Seite oben „Benutzer „…“ wurde angelegt.“
    den Web-Ergebnissen – was du danach noch im Desktop-Programm änderst, ginge beim Ersetzen
    verloren.
 2. Beim Termin dieselbe `.sqlite`-Datei wählen und **„Ergebnisse zurückholen“** klicken.
-3. Der Bericht zeigt, wie viele Teilnehmer aktualisiert wurden und welche Startnummern
+3. Der Bericht zeigt, wie viele Teilnehmer sich geändert haben und wie viele unverändert blieben
+   (z. B. „9 Teilnehmer geändert, 3 unverändert.“) und welche Startnummern
    übersprungen oder nicht gefunden wurden.
 4. Die angebotene Datei **herunterladen** – der Link funktioniert nur einmal – und damit die
    ursprüngliche Termin-Datei im Termine-Ordner ersetzen. Achte auf den Dateinamen: Der Browser

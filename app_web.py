@@ -1263,6 +1263,7 @@ def ergebnis_erfassen(conn, teilnehmer_id):
 # sichtbare Stand steht im versteckten Feld geladen_status („0|“, „1|krankheit“ ...).
 
 def _einzelseite_status_text(dq: bool, abbruch: str) -> str:
+    """Inhalt des versteckten Feldes geladen_status: „<0|1>|<Abbruchcode>“."""
     return f"{'1' if dq else '0'}|{abbruch}"
 
 
@@ -1699,8 +1700,9 @@ def _zuletzt_texte(aenderungen: dict[str, tuple[str, str]] | None) -> tuple[str 
     return kurz, einzeln
 
 
-def _anzahl_zeilen(anzahl: int) -> str:
-    return "1 Zeile" if anzahl == 1 else f"{anzahl} Zeilen"
+def _anzahl(anzahl: int, einzahl: str, mehrzahl: str) -> str:
+    """„1 Zeile“ / „3 Zeilen“ - Zählwort passend zur Anzahl."""
+    return f"{anzahl} {einzahl if anzahl == 1 else mehrzahl}"
 
 
 def _gespeichert_text(anzahl: int) -> str:
@@ -1745,7 +1747,7 @@ def ergebnistabelle(conn):
         ignoriert = len(abgeschickt) - len(ids)
         plaene, fehler_je_id = _tabelle_pruefen(request.form, ids, teilnehmer_je_id)
         if fehler_je_id:
-            fehlermeldung = (f"Es wurde nichts gespeichert: {_anzahl_zeilen(len(fehler_je_id))} mit Fehlern "
+            fehlermeldung = (f"Es wurde nichts gespeichert: {_anzahl(len(fehler_je_id), 'Zeile', 'Zeilen')} mit Fehlern "
                              "(rot markiert). Alle Eingaben stehen noch in der Tabelle.")
             formular = request.form
         else:
@@ -1761,14 +1763,14 @@ def ergebnistabelle(conn):
                     k: v for k, v in filter_.items() if v}))
             teile = [_gespeichert_text(len(gespeichert))]
             if konflikte:
-                bei = "1 Teilnehmer" if len(konflikte) == 1 else f"{len(konflikte)} Teilnehmern"
+                bei = _anzahl(len(konflikte), "Teilnehmer", "Teilnehmern")
                 fehlermeldung = (f"Bei {bei} wurde inzwischen von jemand anderem etwas "
                                  "geändert; diese Werte wurden NICHT überschrieben (gelb markiert, die Tabelle "
                                  "zeigt den aktuellen Stand).")
                 if request.form.get("bogen"):
                     fehlermeldung += " Der Bewertungsbogen wurde deshalb nicht geöffnet - bitte erst prüfen."
             if ignoriert:
-                teile.append(f"{_anzahl_zeilen(ignoriert)} gehören nicht (mehr) zu diesem Termin und wurden ignoriert.")
+                teile.append(f"{_anzahl(ignoriert, 'Zeile', 'Zeilen')} gehören nicht (mehr) zu diesem Termin und wurden ignoriert.")
             meldung = " ".join(teile)
     else:
         try:
@@ -1891,12 +1893,13 @@ def ergebnis_boegen_pdf(conn):
 # der Tabelle; die Notiz zum Bogen (Position des Gegenstands, Besonderheiten) liegt je Disziplin
 # in ergebnisse.notiz_* (db.NOTIZ_SPALTEN).
 #
-# Alle Regeln der Tabelle gelten unverändert, weil der Bogen sie wiederverwendet: der Teilnehmer
+# Die Regeln der Tabelle gelten auch hier, weil der Bogen sie wiederverwendet: der Teilnehmer
 # erscheint dafür als Einzeldisziplin-Teilnehmer der einen Disziplin (_bogen_sicht), und die Felder
 # heißen wie in der Tabelle (suche_<Disziplin>_<id>, dq_<id>, abbruch_<id>, geladen_<id>) - so
 # prüfen und schreiben _tabelle_pruefen/_tabelle_schreiben ausschließlich diese Disziplin, die
-# anderen Disziplinen eines Dreikampf-Teilnehmers bleiben unangetastet. Neu ist nur die Notiz
-# (Lost-Update-Schutz über geladen_notiz_<id>, bei Konflikt wird nichts überschrieben).
+# anderen Disziplinen eines Dreikampf-Teilnehmers bleiben unangetastet. Dazu kommen die Notiz
+# (Lost-Update-Schutz über geladen_notiz_<id>, bei Konflikt wird nichts überschrieben) und seit
+# 19.11.2026 die Herkunft (?von=liste|teilnehmer, Rückweg über _bogen_ruecksprung).
 
 _BOGEN_NOTIZ_FELD = "notiz_{}"
 _BOGEN_NOTIZ_GELADEN = "geladen_notiz_{}"
@@ -1952,6 +1955,24 @@ def _bogen_notiz_schreiben(conn, teilnehmer_id: int, disziplin: str, neu: str, g
     return False, None
 
 
+_BOGEN_HERKUNFT_TEXT = {"liste": "zur Teilnehmerliste", "teilnehmer": "zur Seite des Teilnehmers"}
+
+
+def _bogen_ruecksprung(von: str | None, teilnehmer_id: int, filter_: dict,
+                       geschrieben: bool | None = None) -> str:
+    """Ziel von „Speichern und zurück …“ (mit `geschrieben` für die Bestätigung dort) bzw. von
+    „Abbrechen / Zurück“ (geschrieben None): Teilnehmerliste, Seite des Teilnehmers oder die Zeile
+    in der Tabelle (nur dort mit den Tabellenfiltern)."""
+    if von == "liste":
+        if geschrieben is None:
+            return url_for("teilnehmerliste")
+        return url_for("teilnehmerliste", gespeichert=teilnehmer_id, aenderung=int(geschrieben))
+    bestaetigung = {} if geschrieben is None else {"gespeichert": int(geschrieben)}
+    if von == "teilnehmer":
+        return url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id, **bestaetigung)
+    return url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **bestaetigung, **filter_)
+
+
 @app.route("/bewertungsbogen/<int:teilnehmer_id>/<disziplin>", methods=["GET", "POST"])
 @_termin_erforderlich
 def bewertungsbogen(conn, teilnehmer_id, disziplin):
@@ -2002,14 +2023,7 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
                     konflikt_texte.append(notiz_konflikt)
             if not konflikt_texte:
                 if form.get("weiter") == "tabelle":  # „Speichern und zurück …“
-                    if von == "liste":
-                        return redirect(url_for("teilnehmerliste", gespeichert=teilnehmer_id,
-                                                aenderung=int(geschrieben)))
-                    if von == "teilnehmer":
-                        return redirect(url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id,
-                                                gespeichert=int(geschrieben)))
-                    return redirect(url_for("ergebnistabelle", gespeichert=int(geschrieben),
-                                            _anchor=f"zeile-{teilnehmer_id}", **filter_))
+                    return redirect(_bogen_ruecksprung(von, teilnehmer_id, filter_, geschrieben))
                 return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin,
                                         gespeichert=int(geschrieben), **filter_))
             konflikt = konflikt_texte
@@ -2047,10 +2061,8 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
         anzeige_max=db.ANZEIGE_MAX,
         meldung=meldung,
         speichern_url=url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin, **filter_),
-        tabelle_url=(url_for("teilnehmerliste") if von == "liste"
-                     else url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id) if von == "teilnehmer"
-                     else url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **filter_)),
-        zurueck_ziel={"liste": "zur Teilnehmerliste", "teilnehmer": "zur Seite des Teilnehmers"}.get(von, "zur Tabelle"),
+        tabelle_url=_bogen_ruecksprung(von, teilnehmer_id, filter_),
+        zurueck_ziel=_BOGEN_HERKUNFT_TEXT.get(von, "zur Tabelle"),
     )
 
 

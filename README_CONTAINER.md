@@ -327,7 +327,7 @@ Kommandozeile veröffentlichen, über die Web-Oberfläche zurückholen).
    über die Web-Oberfläche Ergebnisse ein (wie oben).
 4. **Nach der Prüfung zurückholen:** auf der Seite „Termine verwalten“ bei dem betreffenden Termin
    dieselbe Termin-Datei erneut hochladen und auf „Ergebnisse zurückholen“ klicken. Die
-   Seite zeigt eine Zusammenfassung (Anzahl aktualisierter Teilnehmer, übersprungene/nicht
+   Seite zeigt eine Zusammenfassung (Teilnehmer geändert/unverändert, übersprungene/nicht
    zugeordnete Startnummern) und bietet die aktualisierte Termin-Datei zum Download an –
    dieser Link funktioniert nur einmal, danach die heruntergeladene Datei die
    ursprüngliche Termin-Datei in der Desktop-Version ersetzen. Danach laufen

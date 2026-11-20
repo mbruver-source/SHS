@@ -55,7 +55,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
 | U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
 | U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
-| U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | läuft (20.11.) | | unbekannt | |
+| U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | erledigt (20.11.) | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | offen | | unbekannt | |
 | U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
 | U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
@@ -387,6 +387,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   Zählwort-Hilfe `_anzahl`; Docstrings `_einzelseite_status_*`, Abschnittskommentar des Bogens; danach
   `verifikation` (Schwerpunkt „Verhalten unverändert“, Diff ab dem Commit vor Teil 1), `Fortschritt.md`, Commit.
   U16 steht weiter auf „läuft“. Weiter mit demselben `/loop`-Befehl.
+- 20.11.2026: U16 Teil 2 erledigt, verifiziert und committet. Nächste: U17 (Templates/CSS-Makros, CSS-gekoppelte
+  Tests; Sichtprüfung mit `scratchpad\web_live.py <repo>`).
 
 ## Abschlussbericht
 

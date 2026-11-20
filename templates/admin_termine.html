@@ -32,7 +32,7 @@
   <div class="karte karte-erfolg">
     <h2 style="margin-top: 0;">Ergebnisse zurückgeholt</h2>
     <p>
-      {{ zurueckgeholt_bericht.aktualisiert }} Teilnehmer mit Ergebnissen aktualisiert.
+      {{ zurueckgeholt_bericht.aktualisiert }} Teilnehmer geändert, {{ zurueckgeholt_bericht.unveraendert }} unverändert.
       {% if zurueckgeholt_bericht.ohne_startnummer_uebersprungen %}
         <br>Übersprungen (keine Startnummer in der Termin-Datei):
         {{ zurueckgeholt_bericht.ohne_startnummer_uebersprungen | join(", ") }}

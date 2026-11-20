@@ -111,7 +111,9 @@ def _import(postgres_dsn: str | None, schema_name: str, sqlite_pfad: str) -> Non
         postgres_conn.close()
         sqlite_conn.close()
 
-    print(f"{bericht.aktualisiert} Teilnehmer mit Ergebnissen aktualisiert.")
+    # „aktualisiert“ zählt nur Teilnehmer mit einer Änderung in der Datei (UX-Test Web U9); Text wie im
+    # Desktop-Bericht und in der Web-Verwaltung.
+    print(f"{bericht.aktualisiert} Teilnehmer geändert, {bericht.unveraendert} unverändert.")
     if bericht.ohne_startnummer_uebersprungen:
         print(
             "Übersprungen (keine Startnummer in der Termin-Datei, nicht zuordenbar): "
