@@ -51,7 +51,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U9 | Desktop-Texte: Rückhol-Bericht und Fragen (E1, E2, E3, A5) | S | erledigt (20.11.) | siehe git log | unbekannt | dabei Folgefehler der neuen Zählung beim zweiten Zurückholen behoben |
 | U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | erledigt (20.11.) | siehe git log | unbekannt | Einzelblätter nur für teilweise bewerteten DK ohne Status; Status/GESAMT bleiben |
 | U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | erledigt (20.11.) | siehe git log | unbekannt | Skript jetzt UTF-8 mit BOM; Browser-Texte vor dem Build einmal live ansehen; Startfehlermeldungen nennen nur Python → U13 |
-| U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | offen | | unbekannt | Daten + Web, SQLite und PostgreSQL |
+| U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | erledigt (20.11.) | siehe git log | unbekannt | eigene Tabelle `web_aenderungen` nur im Web-Schema; PostgreSQL-Test nur in der CI |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | offen | | unbekannt | |
 
 ## Entscheidungen (Marco, 19.11.2026)
@@ -201,6 +201,8 @@ abweichen, nicht im Umfang.
   der Ausschnitt noch passt).
 - U6: `handbuch_web_ergebnistabelle.png` (neue Hinweistexte unter dem Filter und in der Speicherleiste, Knopf
   „Bogen“ als Absendeknopf).
+- U12: `handbuch_web_ergebnistabelle.png` (Admin-Ansicht: „zuletzt …“ unter dem Status; die Demo-Daten in
+  `tools/web_screenshots.py` sollten dafür eine Eintragung über das Web enthalten).
 - U10: `handbuch_web_ergebnistabelle.png` (längerer Hinweistext am PDF-Knopf).
 - U9: `handbuch_web_bericht.png` (neue Zusammenfassung), `handbuch_ergebniserfassung.png` (Hinweis über der
   Tabelle).
@@ -254,6 +256,10 @@ abweichen, nicht im Umfang.
   in `C:\Users\mbruv\Documents\Claude\UX-Test-Web\stack-notizen.md`).
 - 20.11.2026: U11 erledigt und committet. Nächste: U12 (Admin sieht je Teilnehmer/Disziplin Konto und Zeitpunkt der
   letzten Änderung, nur Web-Datenbank; Daten + Web, PostgreSQL-tauglich, Altversionen beachten).
+- 20.11.2026: U12 erledigt und committet. Nächste: U13 Abschluss (QS in drei Rollen über `git diff cfe6a8a..HEAD`,
+  Gesamtlauf SHS Test Suite, Doku-Abgleich inkl. Mermaid-Prüfung, OFFEN.md/B16, Abschlussbericht, Test-Stack
+  `shsux` abbauen). Vorgemerkte Punkte für U13: Startfehlermeldungen der Web-Version nennen nur Python (U11);
+  Vollständigkeitsregel doppelt (U3); Kopfleiste bei 768 px als Admin ansehen (U7); Browser-Texte live (U11).
 
 ## Abschlussbericht
 

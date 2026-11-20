@@ -1063,7 +1063,11 @@ antippen) meist bequemer.
    Meldung, z. B. **„Gespeichert: 3 Teilnehmer.“**
 
 Der **Status** zeigt den gespeicherten Stand: „noch kein Ergebnis“, „gespeichert“,
-„disqualifiziert“ oder „Abbruch: <Grund>“.
+„disqualifiziert“ oder „Abbruch: <Grund>“. **Als Administrator** steht darunter klein, wer zuletzt
+etwas eingetragen hat und wann, z. B. „zuletzt richterin.a, vor 5 Min. (Trümmerfeld)“; zeigt man mit
+der Maus darauf, erscheinen die Einzelheiten je Disziplin und für Disqualifiziert/Abbruch. Gemerkt
+werden Eintragungen im Web (Tabelle, Seite je Teilnehmer, Bewertungsbogen); Richter sehen diese
+Angabe nicht, und sie kommt beim Zurückholen nicht in die Termin-Datei.
 
 **Was die Tabelle für dich entscheidet:**
 

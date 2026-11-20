@@ -163,6 +163,9 @@ class _AppWebTestBasis(unittest.TestCase):
         # Nebenläufigkeits-Absicherung gegen unterschiedlich geschriebene Benutzernamen in
         # dieser SQLite-Testdatei gar nicht mitgeprüft.
         self.conn.execute(db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
+        # Wer hat wann eingetragen (UX-Test Web 19.11.2026, B6): im Web legt oeffne_termin_postgres die
+        # Tabelle an, das hier ersetzt wird - deshalb wie web_benutzer von Hand.
+        self.conn.execute(db._WEB_AENDERUNGEN_SCHEMA)
 
         # Von den Tests steuerbare "aktuell veröffentlichte Termine" für termin_waehlen()
         # - Standard: genau ein Termin (passend zu _TEST_SCHEMA), damit die Auswahl wie
@@ -1929,6 +1932,90 @@ class TestErgebnistabelle(_AppWebTestBasis):
         # unbekannte Art/LK wird wie „Alle“ behandelt
         daten = self._seite("/ergebnisse?lk=gibt-es-nicht")
         self.assertEqual(len([k for k in daten if k.startswith("geladen_")]), 3)
+
+    # --- Wer hat wann eingetragen (UX-Test Web 19.11.2026, B6) -------------------------------------
+
+    def _als_helfer(self):
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")  # Rolle „eintragen“
+        self.client.post("/logout")
+        self.client.post("/", data={"benutzername": "helfer", "passwort": "helferpasswort"}, follow_redirects=True)
+
+    def test_tabelle_merkt_konto_je_disziplin_und_status(self):
+        self._anmelden()
+        self._als_helfer()
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        daten[f"dq_{self.dk}"] = "1"
+        self.assertEqual(self._speichern(daten).status_code, 302)
+        aenderungen = db.aenderungen_lesen(self.conn)
+        self.assertEqual(set(aenderungen), {self.ed, self.dk})
+        self.assertEqual(aenderungen[self.ed][self.F][0], "helfer")
+        self.assertEqual(aenderungen[self.dk][db._BEREICH_STATUS][0], "helfer")
+        self.assertNotIn(self.ed2, aenderungen)  # nichts geändert, nichts gemerkt
+        # Richter sehen es nicht ...
+        self.assertNotIn("zuletzt helfer", self.client.get("/ergebnisse").data.decode())
+        # ... der Admin schon, mit Einzelheiten im Tooltip
+        self.client.post("/logout")
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertIn(f"zuletzt helfer, gerade eben ({self.F})", html)
+        self.assertIn(f'title="{db._BEREICH_STATUS}: helfer, gerade eben"', html)
+
+    def test_unveraendertes_speichern_merkt_nichts_und_letzter_gewinnt(self):
+        self._anmelden()
+        self._speichern(self._seite())
+        self.assertEqual(db.aenderungen_lesen(self.conn), {})
+        db.aenderung_merken(self.conn, self.ed, self.F, "alt")
+        daten = self._seite()
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "45", "25"
+        self._speichern(daten)
+        self.assertEqual(db.aenderungen_lesen(self.conn)[self.ed][self.F][0], _ADMIN_NAME)
+
+    def test_einzelseite_und_bogen_merken_das_konto(self):
+        self._anmelden()
+        self._als_helfer()
+        self.client.post(f"/teilnehmer/{self.ed}", data={
+            f"suche_{self.F}": "40", f"anzeige_{self.F}": "30", "geladen_status": "0|", "abbruch": "krankheit"})
+        aenderungen = db.aenderungen_lesen(self.conn)[self.ed]
+        self.assertEqual(set(aenderungen), {self.F, db._BEREICH_STATUS})
+        pfad = f"/bewertungsbogen/{self.ed2}/{quote(self.T)}"
+        leser = _FormularLeser()
+        leser.feed(self.client.get(pfad).data.decode())
+        daten = leser.daten
+        daten[f"notiz_{self.ed2}"] = "nur eine Notiz"
+        self.client.post(pfad, data=daten)
+        self.assertEqual(set(db.aenderungen_lesen(self.conn)[self.ed2]), {self.T})
+
+    def test_status_allein_von_der_einzelseite_wird_gemerkt(self):
+        self._anmelden()
+        self.client.post(f"/teilnehmer/{self.ed}", data={
+            f"suche_{self.F}": "", f"anzeige_{self.F}": "",
+            f"geladen_suche_{self.F}": "", f"geladen_anzeige_{self.F}": "",
+            "geladen_status": "0|", "dq": "1"})
+        self.assertEqual(set(db.aenderungen_lesen(self.conn)[self.ed]), {db._BEREICH_STATUS})
+
+    def test_vor_wann(self):
+        from datetime import datetime, timezone
+        jetzt = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(app_web._vor_wann("2026-11-20T11:59:30+00:00", jetzt), "gerade eben")
+        self.assertEqual(app_web._vor_wann("2026-11-20T11:55:00+00:00", jetzt), "vor 5 Min.")
+        self.assertEqual(app_web._vor_wann("2026-11-20T09:00:00+00:00", jetzt), "vor 3 Std.")
+        self.assertEqual(app_web._vor_wann("2026-11-18T09:00:00+00:00", jetzt), "am 18.11.")
+        self.assertEqual(app_web._vor_wann("kaputt", jetzt), "?")
+
+    def test_web_aenderungen_nie_in_der_termin_datei(self):
+        # Die Tabelle gehört nur ins Web-Schema: nicht in SCHEMA, also nie in eine Termin-Datei.
+        self.assertNotIn("web_aenderungen", db.SCHEMA)
+        fd, pfad = tempfile.mkstemp(suffix=".sqlite")
+        os.close(fd)
+        os.remove(pfad)
+        conn = db.init_db(pfad)
+        try:
+            namen = {z[0] for z in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        finally:
+            conn.close()
+            os.remove(pfad)
+        self.assertNotIn("web_aenderungen", namen)
 
     def test_sortierung_nach_startnummer(self):
         # UX-Test Web 19.11.2026 (C2, Marco): nach Start-Nr. statt nach Prüfung (vorher DK, Trümmerfeld,
@@ -3900,6 +3987,22 @@ class TestAppWebPostgres(unittest.TestCase):
         self.pg.commit()
         self.assertEqual(ergebnis["suche_truemmerfeld"], 45)
         self.assertEqual(ergebnis["anzeige_truemmerfeld"], 25)
+
+    def test_wer_hat_eingetragen_steht_nur_im_web_schema(self):
+        # UX-Test Web 19.11.2026 (B6): web_aenderungen entsteht im Termin-Schema (auch für ältere
+        # Termine beim Öffnen nachgerüstet), wird beim Speichern gefüllt und vom Admin gesehen.
+        termin = self._veroeffentlichen(self._termin_datei("VereinA"))
+        teilnehmer_id = self._pg_teilnehmer(termin.schema_name)["id"]
+        db.oeffne_termin_postgres(self.pg, termin.schema_name)
+        self.pg.execute("DROP TABLE web_aenderungen")  # Stand eines älteren Web-Termins
+        self.pg.commit()
+        self._anmelden()  # öffnet den Termin: Tabelle wird nachgerüstet
+        self.client.post(f"/teilnehmer/{teilnehmer_id}", data={"suche_Trümmerfeld": "45", "anzeige_Trümmerfeld": "25"})
+        db.oeffne_termin_postgres(self.pg, termin.schema_name)
+        aenderungen = db.aenderungen_lesen(self.pg)
+        self.pg.commit()
+        self.assertEqual(aenderungen[teilnehmer_id]["Trümmerfeld"][0], _ADMIN_NAME)
+        self.assertIn(f"zuletzt {_ADMIN_NAME}", self.client.get("/ergebnisse").data.decode())
 
     def test_rueckimport_ueber_admin_termine_mit_download(self):
         pfad = self._termin_datei("VereinA")

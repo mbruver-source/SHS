@@ -724,8 +724,8 @@ sequenceDiagram
     participant P as pdf_export (reportlab)
 
     R->>W: GET /ergebnisse (Filter Art/LK, Startnummer, Name)
-    W->>D: Teilnehmer und Ergebnisse lesen
-    W-->>R: Tabelle, je Zeile versteckter Stand beim Laden
+    W->>D: Teilnehmer und Ergebnisse lesen (Admin: zusätzlich aenderungen_lesen)
+    W-->>R: Tabelle, je Zeile versteckter Stand beim Laden (Admin: „zuletzt Konto, vor n Min.“)
 
     R->>W: POST /ergebnisse (Alle speichern)
     W->>W: Phase 1: alle Zeilen prüfen
@@ -736,8 +736,8 @@ sequenceDiagram
         alt andere Person war schneller
             W-->>R: Konfliktzeile gelb, nichts überschrieben
         else
-            W->>D: eintragen_ergebnis, setze_ergebnis_status
-            Note over W,D: ab 200 Zeilen eine Transaktion
+            W->>D: eintragen_ergebnis, setze_ergebnis_status, aenderung_merken (Konto, Zeit; nur Web)
+            Note over W,D: ab 200 Zeilen eine Transaktion (Merkzeilen eingeschlossen)
             W-->>R: Redirect, „Gespeichert: N Teilnehmer“ (mit Knopf Bogen: weiter zum Bogen)
         end
     end
@@ -747,7 +747,7 @@ sequenceDiagram
     W-->>R: Bogen mit Punkten, Status, Notiz
     R->>W: POST Bogen (Speichern)
     W->>D: gleiche Prüf- und Schreibwege wie die Tabelle
-    W->>D: setze_notiz (höchstens 500 Zeichen)
+    W->>D: setze_notiz (höchstens 500 Zeichen), aenderung_merken
     W-->>R: Bogen mit Gesamtpunktzahl und Wertnote, oder zurück zur Tabelle, Teilnehmerliste bzw. Seite des Teilnehmers (je nach Herkunft)
 
     R->>W: GET /ergebnisse/boegen.pdf (gleiche Filter)

@@ -64,6 +64,7 @@ def _vorbereiten(tmp: Path):
     conn, _pfad, ids = s._Termine(tmp).neu(ergebnisse="vorhanden")
     conn.execute(db._WEB_BENUTZER_SCHEMA.replace("public.web_benutzer", "web_benutzer"))
     conn.execute(db._WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER)
+    conn.execute(db._WEB_AENDERUNGEN_SCHEMA)  # „wer hat wann eingetragen“ (nur Web, UX-Test Web B6)
     termine = [
         _termin_info("termin_demo", verein="Musterverein", ort="Musterstadt", datum="2026-11-14", anzahl_teilnehmer=8),
         _termin_info("termin_demo2", verein="Beispielverein", ort="Beispielstadt", datum="2026-10-10", anzahl_teilnehmer=12),

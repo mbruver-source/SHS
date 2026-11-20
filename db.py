@@ -296,6 +296,8 @@ from db_termine import (  # noqa: F401
     _UNBEKANNTE_WERTE_TEXT,
 )
 from db_web import (  # noqa: F401
+    aenderung_merken,
+    aenderungen_lesen,
     admin_einrichten,
     benutzer_anlegen,
     benutzer_loeschen,
@@ -315,8 +317,11 @@ from db_web import (  # noqa: F401
     _pruefe_schema_name,
     _SCHEMA_NAME_MUSTER,
     _setze_termin_suchpfad,
+    _BEREICH_STATUS,
+    _WEB_AENDERUNGEN_SCHEMA,
     _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER,
     _WEB_BENUTZER_SCHEMA,
+    _web_aenderungen_sicherstellen,
 )
 from db_sync import (  # noqa: F401
     exportiere_termin_nach_postgres,

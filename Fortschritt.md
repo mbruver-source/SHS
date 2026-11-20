@@ -2,6 +2,23 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U12 – Admin sieht, wer wann eingetragen hat
+
+Fund B6 (Marco: je Teilnehmer und Disziplin, nur Web-Datenbank, nur Admins). Neue Tabelle `web_aenderungen`
+(Teilnehmer, Bereich = Disziplin bzw. „Status“, Konto, Zeitpunkt UTC) nur im PostgreSQL-Termin-Schema: angelegt in
+`db_web.erstelle_termin_postgres`, für ältere Web-Termine beim Öffnen nachgerüstet (`_web_aenderungen_sicherstellen`,
+erst Katalogprüfung), nie in `SCHEMA` und damit nie in einer Termin-Datei; Veröffentlichen, Zurückholen und die
+API lesen sie nicht, beim Löschen eines Termins verschwindet sie mit dem Schema. `app_web` merkt das angemeldete
+Konto an allen Schreibstellen (Punkte in Tabelle und Einzelseite, Disqualifiziert/Abbruch, Notiz im Bogen; beim
+Sammelspeichern in derselben Transaktion). In der Ergebnistabelle zeigen Admins unter dem Status „zuletzt <Konto>,
+vor n Min. (<Bereich>)“ mit Einzelheiten als Tooltip (relative Zeit, weil der Container in UTC läuft). Tests: SQLite
+(Schreibstellen, nur Admins, unverändert = nichts gemerkt, nie in der Termin-Datei, relative Zeit), ein
+PostgreSQL-Test für die CI (Nachrüsten bei älterem Termin); Gegenprobe ok. Verifikation ohne Fehler (PostgreSQL nur
+im Code geprüft, der PG-Test läuft in der CI); `UML.md` (10b) nachgezogen, ein Test ergänzt. Bewusst so belassen:
+Öffnen zwei Anfragen gleichzeitig zum ersten Mal einen älteren Web-Termin, kann das Nachrüsten der Tabelle bei
+einer scheitern – sie landet dann einmal auf „Termin wählen“ (gleiches Muster wie die bestehenden Migrationen).
+Handbuch und `Architektur.md` angepasst.
+
 ## 20.11.2026: UX-Test Web U11 – README_CONTAINER und Zertifikat-Skript
 
 Funde F1, F2, F4. `README_CONTAINER.md`: Geheimnisse unter Windows jetzt ohne Python (kleine PowerShell-Funktion

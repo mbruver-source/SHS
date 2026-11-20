@@ -149,6 +149,55 @@ _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER = (
     "ON web_benutzer (LOWER(benutzername))"
 )
 
+# --- Wer hat wann im Web eingetragen (UX-Test Web 19.11.2026, B6, Marco) --------------------------
+#
+# Je Teilnehmer und „Bereich“ (Disziplin für Punkte/Notiz, _BEREICH_STATUS für Disqualifiziert/Abbruch)
+# das Web-Konto und der Zeitpunkt der letzten Änderung. Die Tabelle liegt NUR im Termin-Schema der
+# Web-Version (angelegt in erstelle_termin_postgres/oeffne_termin_postgres), nie in SCHEMA und damit nie in
+# einer Termin-Datei; Veröffentlichen und Zurückholen lesen sie nicht. Kein Fremdschlüssel: Teilnehmer
+# werden im Web nicht gelöscht, und ein Termin geht samt Schema (DROP SCHEMA … CASCADE). Gleiches SQL für
+# SQLite (Tests) und PostgreSQL.
+_WEB_AENDERUNGEN_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS web_aenderungen ("
+    "teilnehmer_id INTEGER NOT NULL, "
+    "bereich TEXT NOT NULL, "
+    "benutzername TEXT NOT NULL, "
+    "zeitpunkt TEXT NOT NULL, "
+    "PRIMARY KEY (teilnehmer_id, bereich))"
+)
+_BEREICH_STATUS = "Status"
+
+
+def aenderung_merken(conn, teilnehmer_id: int, bereich: str, benutzername: str, commit: bool = True) -> None:
+    """Merkt Konto und Zeitpunkt (UTC) der letzten Web-Änderung eines Teilnehmers in einem Bereich."""
+    conn.execute(
+        "INSERT INTO web_aenderungen (teilnehmer_id, bereich, benutzername, zeitpunkt) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (teilnehmer_id, bereich) DO UPDATE SET "
+        "benutzername = excluded.benutzername, zeitpunkt = excluded.zeitpunkt",
+        (teilnehmer_id, bereich, benutzername, _jetzt_iso()),
+    )
+    if commit:
+        conn.commit()
+
+
+def aenderungen_lesen(conn) -> dict[int, dict[str, tuple[str, str]]]:
+    """{teilnehmer_id: {bereich: (benutzername, zeitpunkt_iso)}} für den geöffneten Termin."""
+    ergebnis: dict[int, dict[str, tuple[str, str]]] = {}
+    for zeile in conn.execute(
+            "SELECT teilnehmer_id, bereich, benutzername, zeitpunkt FROM web_aenderungen").fetchall():
+        ergebnis.setdefault(zeile["teilnehmer_id"], {})[zeile["bereich"]] = (zeile["benutzername"], zeile["zeitpunkt"])
+    return ergebnis
+
+
+def _web_aenderungen_sicherstellen(conn) -> None:
+    """Legt web_aenderungen im aktuellen Termin-Schema an, falls sie fehlt (ältere Web-Termine). Erst
+    nachsehen (to_regclass), dann anlegen und committen - wie bei web_benutzer keine DDL bei jeder
+    Anfrage."""
+    if conn.execute("SELECT to_regclass('web_aenderungen') AS t").fetchone()["t"] is None:
+        conn.execute(_WEB_AENDERUNGEN_SCHEMA)
+        conn.commit()
+
+
 def _jetzt_iso() -> str:
     """ISO-8601-Zeitstempel (UTC) für web_benutzer.erstellt_am - bewusst als TEXT von
     Python aus gesetzt statt per DEFAULT now()/CURRENT_TIMESTAMP in der Tabellendefinition
@@ -440,6 +489,7 @@ def erstelle_termin_postgres(conn) -> TerminInfoPostgres:
     conn.execute(f"CREATE SCHEMA {schema_name}")
     _setze_termin_suchpfad(conn, schema_name)
     _richte_schema_im_aktuellen_suchpfad_ein(conn)
+    conn.execute(_WEB_AENDERUNGEN_SCHEMA)  # nur im Web (B6), nicht Teil von SCHEMA
     zeile = conn.execute(
         "SELECT erstellt_am FROM public.termin_registry WHERE id = ?", (neue_id,)
     ).fetchone()
@@ -462,6 +512,7 @@ def oeffne_termin_postgres(conn, schema_name: str) -> None:
     _migriere_teilnehmer_spalten(conn)
     _migriere_ergebnisse_spalten(conn)
     _migriere_zeitplan_spalten(conn)
+    _web_aenderungen_sicherstellen(conn)
 
 def liste_termine_postgres(conn) -> list[TerminInfoPostgres]:
     """Postgres-Pendant zu liste_termine() (SQLite) - ein Registry-Eintrag entspricht

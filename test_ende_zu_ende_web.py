@@ -117,6 +117,8 @@ def _sim_erstelle_termin(conn):
     sim._zaehler += 1
     schema_name = f"termin_{sim._zaehler}"
     termin_conn = db.init_db(str(sim.ordner / f"{schema_name}.sqlite"))
+    termin_conn.execute(db._WEB_AENDERUNGEN_SCHEMA)  # wie erstelle_termin_postgres (UX-Test Web B6)
+    termin_conn.commit()
     sim.termine[schema_name] = (sim._zaehler, termin_conn)
     conn.aktuell = sim.public
     return db.TerminInfoPostgres(

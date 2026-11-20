@@ -57,7 +57,7 @@ import sqlite3
 import tempfile
 import time
 import threading
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, Flask, abort, g, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -1190,6 +1190,7 @@ def ergebnis_erfassen(conn, teilnehmer_id):
                             _punkte_konflikt_text(disziplin, suche, anzeige, aktuell["punkte"][disziplin]))
                     continue
                 db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
+                _aenderung_merken(conn, teilnehmer_id, disziplin)
                 geschrieben = True
             if not konflikt_texte:
                 # UX-Test Web 19.11.2026 (A1): „Bewertungsbogen … öffnen“ speichert zuerst die
@@ -1291,6 +1292,13 @@ def _abbruch_fehler(abbruch: str, geladen_abbruch: str | None) -> str | None:
     return None
 
 
+def _aenderung_merken(conn, teilnehmer_id: int, bereich: str, commit: bool = True) -> None:
+    """Merkt das angemeldete Web-Konto und den Zeitpunkt einer Änderung (UX-Test Web 19.11.2026, B6;
+    Anzeige nur für Admins in der Ergebnistabelle). Nach dem eigentlichen Schreiben aufrufen, mit
+    demselben `commit` (beim Sammelspeichern ganz oder gar nicht)."""
+    db.aenderung_merken(conn, teilnehmer_id, bereich, session.get("benutzername") or "?", commit=commit)
+
+
 def _status_einheit_schreiben(conn, teilnehmer_id: int, neu: tuple, geladen: tuple | None, ergebnis: dict,
                               commit: bool = True) -> tuple[bool, str | None]:
     """Schreibt den Status als eigene Einheit mit Lost-Update-Schutz (_einheit_entscheiden).
@@ -1306,6 +1314,7 @@ def _status_einheit_schreiben(conn, teilnehmer_id: int, neu: tuple, geladen: tup
         dq, abbruch = neu
         db.setze_ergebnis_status(conn, teilnehmer_id, dq, bool(abbruch),
                                  abbruch_grund=abbruch if abbruch in db.ABBRUCH_GRUENDE else None, commit=commit)
+        _aenderung_merken(conn, teilnehmer_id, db._BEREICH_STATUS, commit=commit)
         return True, None
     if entscheidung == "konflikt":
         return False, ("Disqualifiziert/Abbruch wurde inzwischen von jemand anderem geändert "
@@ -1556,6 +1565,7 @@ def _tabelle_schreiben(conn, plaene: dict, teilnehmer_je_id: dict, ergebnis_je_i
                 entscheidung = "konflikt"
             if entscheidung == "schreiben":
                 db.eintragen_ergebnis(conn, tid, disziplin, suche, anzeige, commit=not gesammelt)
+                _aenderung_merken(conn, tid, disziplin, commit=not gesammelt)
                 gespeichert.add(tid)
             elif entscheidung == "konflikt":
                 meldungen.append(_punkte_konflikt_text(disziplin, suche, anzeige, aktuelle_texte))
@@ -1601,6 +1611,38 @@ def _tabellenzeile(t: dict, ergebnis: dict, formular=None, fehler: str | None = 
         "fehler": fehler,
         "konflikt": konflikt,
     }
+
+
+def _vor_wann(zeitpunkt_iso: str, jetzt: datetime | None = None) -> str:
+    """„gerade eben“, „vor 5 Min.“, „vor 2 Std.“ oder „am 20.11.“ - relativ statt Uhrzeit, weil der
+    Server (Container) in UTC läuft und die Ortszeit der Richter nicht kennt."""
+    try:
+        zeitpunkt = datetime.fromisoformat(zeitpunkt_iso)
+    except (TypeError, ValueError):
+        return "?"
+    if zeitpunkt.tzinfo is None:
+        zeitpunkt = zeitpunkt.replace(tzinfo=timezone.utc)
+    jetzt = jetzt or datetime.now(timezone.utc)
+    sekunden = (jetzt - zeitpunkt).total_seconds()
+    if sekunden < 60:
+        return "gerade eben"
+    if sekunden < 3600:
+        return f"vor {int(sekunden // 60)} Min."
+    if sekunden < 24 * 3600:
+        return f"vor {int(sekunden // 3600)} Std."
+    return f"am {zeitpunkt.day:02d}.{zeitpunkt.month:02d}."
+
+
+def _zuletzt_texte(aenderungen: dict[str, tuple[str, str]] | None) -> tuple[str | None, str | None]:
+    """(Kurztext der letzten Änderung, Einzelheiten je Bereich) für eine Tabellenzeile (nur Admins, B6)."""
+    if not aenderungen:
+        return None, None
+    reihenfolge = list(db.ALLE_DISZIPLINEN) + [db._BEREICH_STATUS]
+    eintraege = sorted(aenderungen.items(), key=lambda e: reihenfolge.index(e[0]) if e[0] in reihenfolge else 99)
+    bereich, (name, zeit) = max(aenderungen.items(), key=lambda e: e[1][1])
+    kurz = f"zuletzt {name}, {_vor_wann(zeit)} ({bereich})"
+    einzeln = "; ".join(f"{b}: {n}, {_vor_wann(z)}" for b, (n, z) in eintraege)
+    return kurz, einzeln
 
 
 def _anzahl_zeilen(anzahl: int) -> str:
@@ -1691,6 +1733,8 @@ def ergebnistabelle(conn):
                 fehlermeldung = boegen_hinweis
 
     ergebnis_je_id = db.ergebnisse_je_teilnehmer(conn)
+    # UX-Test Web 19.11.2026 (B6): nur Admins sehen, welches Konto wann zuletzt eingetragen hat.
+    aenderungen = db.aenderungen_lesen(conn) if session.get("ist_admin") else {}
     sichtbare = _tabellen_teilnehmer(conn, filter_)
     zeilen = []
     for t in sichtbare:
@@ -1699,6 +1743,7 @@ def ergebnistabelle(conn):
             t, ergebnis_je_id.get(t["id"]) or {}, eigenes_formular,
             fehler=fehler_je_id.get(t["id"]), konflikt=konflikte.get(t["id"]),
         ))
+        zeilen[-1]["zuletzt"], zeilen[-1]["zuletzt_einzeln"] = _zuletzt_texte(aenderungen.get(t["id"]))
         # Der Knopf „Bogen“ je aktiver Disziplin ist seit UX-Test Web 19.11.2026 (C3) ein Absendeknopf
         # (siehe _bogen_ziel); der Filter hängt an der Adresse des Speicher-Formulars.
 
@@ -1860,6 +1905,7 @@ def _bogen_notiz_schreiben(conn, teilnehmer_id: int, disziplin: str, neu: str, g
             db.setze_notiz(conn, teilnehmer_id, disziplin, neu)
         except ValueError as fehler:
             return False, f"Die Notiz wurde nicht gespeichert: {fehler}"
+        _aenderung_merken(conn, teilnehmer_id, disziplin)
         return True, None
     if entscheidung == "konflikt":
         return False, ("Die Notiz wurde inzwischen von jemand anderem geändert - Ihre Änderung wurde nicht "

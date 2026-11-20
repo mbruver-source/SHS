@@ -143,7 +143,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `db_ergebnisse.py` | Schicht 2: Ergebnisse, Bewertung und Auswertung je Teilnehmer | `test_db.py` |
 | `db_zeitplan.py` | Schicht 2: Zeitplan, Überschneidungen, automatische Verteilung | `test_db.py`, `test_gui_zeitplan.py` |
 | `db_termine.py` | Schicht 2: Terminübersicht, sicheres Öffnen und Lesen von Termin-Dateien | `test_db.py` |
-| `db_web.py` | Schicht 3: PostgreSQL-Termine und Benutzerkonten der Web-Version | `test_db.py`, `test_app_web.py` |
+| `db_web.py` | Schicht 3: PostgreSQL-Termine und Benutzerkonten der Web-Version; seit 20.11.2026 die Web-eigene Tabelle `web_aenderungen` im Termin-Schema (wer hat wann eingetragen, nur Admin-Anzeige, nie in der Termin-Datei) | `test_db.py`, `test_app_web.py` |
 | `db_sync.py` | Schicht 4: Austausch SQLite-Termin-Datei ↔ PostgreSQL | `test_db.py` |
 | `db_testhilfen.py` | nur Tests: `patch_db` ersetzt einen Namen in der Fassade und allen Schichtmodulen | – |
 | `db_import.py` | Teilnehmer-Import (CSV, OMA, Formular-PDF) und CSV-Export | `test_db.py` |

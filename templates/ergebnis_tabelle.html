@@ -178,7 +178,9 @@
                 {% if z.abbruch_ohne_grund %}<option value="ohne_grund"{% if z.abbruch == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
               </select>
             </td>
-            <td><span class="status {% if z.status == 'gespeichert' %}status-fertig{% else %}status-offen{% endif %}">{{ z.status }}</span></td>
+            <td><span class="status {% if z.status == 'gespeichert' %}status-fertig{% else %}status-offen{% endif %}">{{ z.status }}</span>
+              {# UX-Test Web 19.11.2026 (B6): nur für Admins - letzte Änderung, Einzelheiten je Bereich als Tooltip. #}
+              {% if z.zuletzt %}<br><small class="zuletzt" title="{{ z.zuletzt_einzeln }}">{{ z.zuletzt }}</small>{% endif %}</td>
           </tr>
           {% if z.fehler %}
             <tr class="meldung fehler-zeile"><td colspan="14"><div role="alert">{{ t.nachname }}: {{ z.fehler }}</div></td></tr>
