@@ -50,7 +50,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U8 | [S] Desktop Web-Verbindung: Passwort bis Programmende im Speicher, Hinweise im Dialog, E5 nachstellen (E4, E5, E6, Heinz F5) | L | erledigt (20.11.) | siehe git log | unbekannt | `qs-sicherheit`: nichts hoch/mittel, Hinweise umgesetzt, ein älterer Punkt als Rückfrage; E5 nicht nachstellbar (Werkzeug) |
 | U9 | Desktop-Texte: Rückhol-Bericht und Fragen (E1, E2, E3, A5) | S | erledigt (20.11.) | siehe git log | unbekannt | dabei Folgefehler der neuen Zählung beim zweiten Zurückholen behoben |
 | U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | erledigt (20.11.) | siehe git log | unbekannt | Einzelblätter nur für teilweise bewerteten DK ohne Status; Status/GESAMT bleiben |
-| U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | offen | | unbekannt | nur Doku/Skripte |
+| U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | erledigt (20.11.) | siehe git log | unbekannt | Skript jetzt UTF-8 mit BOM; Browser-Texte vor dem Build einmal live ansehen; Startfehlermeldungen nennen nur Python → U13 |
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | offen | | unbekannt | Daten + Web, SQLite und PostgreSQL |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | offen | | unbekannt | |
 
@@ -252,6 +252,8 @@ abweichen, nicht im Umfang.
   ohne Skript nur als Text am Knopf bzw. darunter).
 - 20.11.2026: U10 erledigt und committet. Nächste: U11 (README_CONTAINER und Container-Skripte, F1, F2, F4; Details
   in `C:\Users\mbruv\Documents\Claude\UX-Test-Web\stack-notizen.md`).
+- 20.11.2026: U11 erledigt und committet. Nächste: U12 (Admin sieht je Teilnehmer/Disziplin Konto und Zeitpunkt der
+  letzten Änderung, nur Web-Datenbank; Daten + Web, PostgreSQL-tauglich, Altversionen beachten).
 
 ## Abschlussbericht
 

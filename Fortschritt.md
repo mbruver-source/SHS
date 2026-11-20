@@ -2,6 +2,22 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U11 – README_CONTAINER und Zertifikat-Skript
+
+Funde F1, F2, F4. `README_CONTAINER.md`: Geheimnisse unter Windows jetzt ohne Python (kleine PowerShell-Funktion
+`New-ShsGeheimnis` mit dem Zufallsgenerator von Windows; Python-Weg bleibt als Alternative), wie man einen anderen
+Port als 5443 wählt (Zeile im Dienst `proxy`, Zertifikat bleibt gültig, Datenbank-Port ebenso), wie die
+Zertifikatswarnung in Edge/Chrome, Firefox und Safari aussieht und bestätigt wird (mit Fingerabdruck-Vergleich), und
+Hinweise beim Start (Proxy erst nach ca. 30 s bereit, rote, aber harmlose Zeilen von `podman-compose` in PowerShell
+5.1). `tools/zertifikat_erzeugen.ps1`: Meldungen mit echten Umlauten (Datei dafür UTF-8 mit BOM für Windows
+PowerShell 5.1) und über `Write-Output`, damit Fingerabdruck und Hinweise auch bei umgeleiteter Ausgabe erscheinen;
+lokal in einen Scratch-Ordner ausgeführt (Umlaute korrekt, Ausgabe in der Umleitung, Exitcode 0). Verifikation:
+Satz zum Datenbank-Port korrigiert (mittlere Zahl in `"127.0.0.1:5432:5432"`, dann auch `SHS_POSTGRES_DSN` für
+`sync_termin.py` anpassen), Hinweise ergänzt (Port nach einem Update erneut eintragen, Chrome-Wortlaut,
+Fingerabdruck im Browser mit Leerzeichen); Handbuch Kap. 11 nennt die einmalige Zertifikatswarnung auf den
+Geräten der Richter. Offen als Kleinigkeit für die Abschlussprüfung: Die Startfehlermeldungen der Web-Version nennen
+weiter nur den Python-Befehl (Codeänderung, außerhalb von U11).
+
 ## 20.11.2026: UX-Test Web U10 – Sammel-PDF ohne leere Dreikampf-Seiten, Hinweis zum Download
 
 Funde G1, B5. Im Web-Sammel-PDF „Benutzte Bögen als PDF“ bekommt ein teilweise bewerteter Dreikampf ohne Status nur

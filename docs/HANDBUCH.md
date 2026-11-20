@@ -978,6 +978,12 @@ Bei größeren Prüfungen kann die Prüfungsleitung eine Web-Version bereitstell
 die Ergebnisse auf Tablet, Handy oder Laptop im Browser ein. Adresse, Benutzername und Passwort
 bekommst du von der Prüfungsleitung.
 
+Beim ersten Aufruf auf jedem Gerät **warnt der Browser** („Ihre Verbindung ist nicht privat“ o. ä.),
+weil der Server des Vereins ein selbst ausgestelltes Zertifikat nutzt. Über **„Erweitert“** bzw.
+**„Details einblenden“** und **„Weiter zu …“** bestätigst du die Seite einmal; danach fragt der
+Browser nicht mehr. Die genauen Schritte je Browser stehen in
+[README_CONTAINER.md](../README_CONTAINER.md), Abschnitt „HTTPS und Zertifikat“.
+
 <table>
 <tr>
 <td width="50%"><img src="bilder/handbuch_web_login.png" alt="Anmeldeseite der Web-Version"></td>

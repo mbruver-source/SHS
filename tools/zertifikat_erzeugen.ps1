@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Erzeugt EINMALIG das selbst signierte TLS-Zertifikat fuer den HTTPS-Proxy der Web-Version
     und gibt den SHA-256-Fingerabdruck aus.
@@ -69,19 +69,22 @@ function Find-Openssl {
     return $null
 }
 
+# Meldungen mit Write-Output statt Write-Host (UX-Test Web 19.11.2026, F4): so erscheinen sie auch, wenn
+# die Ausgabe umgeleitet wird (z. B. "> protokoll.txt"). Die Datei ist UTF-8 MIT BOM gespeichert, damit
+# Windows PowerShell 5.1 die Umlaute der Meldungen richtig liest.
 function Zeige-Fingerabdruck([string]$pemPfad) {
     $fp = Get-Fingerabdruck $pemPfad
     Set-Content -LiteralPath (Join-Path $Ausgabe 'fingerabdruck.txt') -Value $fp -Encoding ascii
-    Write-Host ''
-    Write-Host 'SHA-256-Fingerabdruck des Zertifikats (notieren, im Desktop-Programm abgleichen):'
-    Write-Host "  $fp"
-    Write-Host ''
-    Write-Host "Zertifikat: $pemPfad"
-    Write-Host "Auch gespeichert in: $(Join-Path $Ausgabe 'fingerabdruck.txt')"
+    Write-Output ''
+    Write-Output 'SHA-256-Fingerabdruck des Zertifikats (notieren, im Desktop-Programm abgleichen):'
+    Write-Output "  $fp"
+    Write-Output ''
+    Write-Output "Zertifikat: $pemPfad"
+    Write-Output "Auch gespeichert in: $(Join-Path $Ausgabe 'fingerabdruck.txt')"
 }
 
 if ((Test-Path -LiteralPath $zertifikat) -and -not $Erneuern) {
-    Write-Host 'Es gibt bereits ein Zertifikat - es wird NICHT ueberschrieben (mit -Erneuern ersetzen).'
+    Write-Output 'Es gibt bereits ein Zertifikat – es wird NICHT überschrieben (mit -Erneuern ersetzen).'
     Zeige-Fingerabdruck $zertifikat
     exit 0
 }
@@ -109,7 +112,7 @@ $gemeinsam = @(
 
 $openssl = Find-Openssl
 if ($openssl) {
-    Write-Host "Verwende openssl: $openssl"
+    Write-Output "Verwende openssl: $openssl"
     & $openssl @gemeinsam '-keyout' $schluessel '-out' $zertifikat
     if ($LASTEXITCODE -ne 0) { throw "openssl ist mit Fehlercode $LASTEXITCODE beendet worden." }
 } else {
@@ -118,23 +121,23 @@ if ($openssl) {
         if (Get-Command $name -ErrorAction SilentlyContinue) { $cli = $name; break }
     }
     if (-not $cli) {
-        throw 'Weder openssl noch podman/docker gefunden. openssl installieren (z. B. Git fuer Windows) und erneut starten.'
+        throw 'Weder openssl noch podman/docker gefunden. openssl installieren (z. B. Git für Windows) und erneut starten.'
     }
-    Write-Host "openssl nicht gefunden - verwende einen kurzlebigen Container ($cli, Image alpine/openssl)."
+    Write-Output "openssl nicht gefunden – verwende einen kurzlebigen Container ($cli, Image alpine/openssl)."
     $ordner = (Resolve-Path -LiteralPath $Ausgabe).Path
     & $cli run --rm -v "${ordner}:/out" docker.io/alpine/openssl:3.5.9@sha256:c92fcbb1da06f6e22bf842833e4713df02a382116d8a40312546b599ec19ca30 @gemeinsam '-keyout' '/out/schluessel.pem' '-out' '/out/zertifikat.pem'
     if ($LASTEXITCODE -ne 0) { throw "Der Container ist mit Fehlercode $LASTEXITCODE beendet worden." }
 }
 
 if (-not (Test-Path -LiteralPath $zertifikat) -or -not (Test-Path -LiteralPath $schluessel)) {
-    throw 'Zertifikat oder Schluessel wurde nicht erzeugt.'
+    throw 'Zertifikat oder Schlüssel wurde nicht erzeugt.'
 }
 
 $ablauf = (Get-Date).AddDays($Tage).ToString('dd.MM.yyyy')
-Write-Host "Zertifikat erzeugt (gueltig $Tage Tage, bis etwa $ablauf, Namen: $sanText)."
-Write-Host "Hinweis: Nach Ablauf warnt der Browser; das Desktop-Programm prueft nur den Fingerabdruck. Vor $ablauf mit -Erneuern ein neues erzeugen (danach Fingerabdruck im Desktop neu bestaetigen)."
-Write-Host "Privater Schluessel: $schluessel - nicht weitergeben, nicht ins Repo."
+Write-Output "Zertifikat erzeugt (gültig $Tage Tage, bis etwa $ablauf, Namen: $sanText)."
+Write-Output "Hinweis: Nach Ablauf warnt der Browser; das Desktop-Programm prüft nur den Fingerabdruck. Vor $ablauf mit -Erneuern ein neues erzeugen (danach Fingerabdruck im Desktop neu bestätigen)."
+Write-Output "Privater Schlüssel: $schluessel – nicht weitergeben, nicht ins Repo."
 Zeige-Fingerabdruck $zertifikat
-Write-Host ''
-Write-Host 'Naechste Schritte: podman-compose up -d, dann https://localhost:5443 im Browser oeffnen'
-Write-Host '(einmalige Warnung wegen des selbst signierten Zertifikats bestaetigen).'
+Write-Output ''
+Write-Output 'Nächste Schritte: podman-compose up -d, dann https://localhost:5443 (bzw. der in compose.yaml eingestellte Port)'
+Write-Output 'im Browser öffnen und die einmalige Warnung wegen des selbst signierten Zertifikats bestätigen (siehe README_CONTAINER.md).'

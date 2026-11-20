@@ -53,14 +53,21 @@ Passwort sind kein Problem mehr.
 | `secrets/web_secret_key.txt` | Session-Schlüssel (mind. 32 Zeichen) | `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `secrets/admin_setup_code.txt` | Einrichtungs-Code für den ersten Administrator (mind. 12 Zeichen) | `python -c "import secrets; print(secrets.token_urlsafe(16))"` |
 
-Anlegen unter Windows (PowerShell):
+Anlegen unter Windows (PowerShell, ohne Python – die Zufallswerte kommen aus Windows selbst):
 
 ```
 mkdir secrets
-python -c "import secrets; print(secrets.token_hex(16))" | Out-File -Encoding ascii secrets\db_passwort.txt
-python -c "import secrets; print(secrets.token_hex(32))" | Out-File -Encoding ascii secrets\web_secret_key.txt
-python -c "import secrets; print(secrets.token_urlsafe(16))" | Out-File -Encoding ascii secrets\admin_setup_code.txt
+function New-ShsGeheimnis([int]$Bytes) { $b = New-Object byte[] $Bytes; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | ForEach-Object { $_.ToString('x2') }) }
+New-ShsGeheimnis 16 | Out-File -Encoding ascii secrets\db_passwort.txt
+New-ShsGeheimnis 32 | Out-File -Encoding ascii secrets\web_secret_key.txt
+New-ShsGeheimnis 12 | Out-File -Encoding ascii secrets\admin_setup_code.txt
 ```
+
+Wer Python im PATH hat, kann stattdessen die Befehle aus der Tabelle oben nehmen
+(`python -c "…" | Out-File -Encoding ascii secrets\…`). Unter Windows ist `python` oft nicht
+eingerichtet oder öffnet nur den Microsoft Store – dann die Variante oben nehmen. Den
+Einrichtungs-Code (`Get-Content secrets\admin_setup_code.txt`) braucht man einmal bei der
+Ersteinrichtung im Browser.
 
 Unter Linux:
 
@@ -102,6 +109,24 @@ Web-Dienstes ist von außen **nicht** mehr erreichbar (nur im internen Compose-N
 Web-Version läuft weiterhin nur im lokalen Vereins-Netzwerk am Prüfungstag, nicht öffentlich
 aus dem Internet.
 
+- **Etwas Geduld beim Start:** `podman-compose up -d` kehrt zurück, bevor alles bereit ist.
+  Der Proxy wartet, bis die Web-Version läuft, und ist erst nach etwa 30 Sekunden (beim ersten
+  Bau des Images länger) bereit. Antwortet die Seite noch nicht, kurz warten und neu laden;
+  `podman ps` zeigt „healthy“, sobald alles läuft.
+- **Rote Zeilen in Windows PowerShell 5.1:** `podman-compose` und `podman` schreiben auch normale
+  Fortschrittsmeldungen in den Fehlerkanal. Leitet man ihn um (z. B. `podman logs … 2>&1`), zeigt
+  PowerShell 5.1 diese Zeilen rot als „NativeCommandError“, obwohl nichts schiefgegangen ist. Entscheidend ist, ob die Container
+  danach laufen (`podman ps`).
+- **Anderer Port als 5443:** In `compose.yaml` beim Dienst `proxy` die Zeile `"5443:8443"`
+  ändern, z. B. in `"6443:8443"` (nur die Zahl vor dem Doppelpunkt), dann `podman-compose up -d`.
+  Das Zertifikat bleibt gültig (es gilt für den Rechnernamen, nicht für den Port); im Browser und
+  im Desktop-Programm dann `https://localhost:6443` bzw. `https://<IP-des-Rechners>:6443`
+  verwenden. Läuft auf dem Rechner schon ein PostgreSQL, beim Dienst `db` in der Zeile
+  `"127.0.0.1:5432:5432"` die **mittlere** Zahl ändern (z. B. `"127.0.0.1:6432:5432"`) und dann auch
+  in `SHS_POSTGRES_DSN` für `sync_termin.py` (siehe „Termin veröffentlichen“) `localhost:6432`
+  statt `localhost:5432` verwenden. Wer die Dateien einer neuen Version übernimmt, muss eine
+  solche Änderung in `compose.yaml` danach erneut eintragen.
+
 ## HTTPS und Zertifikat
 
 Seit der Desktop-Anbindung (das Desktop-Programm veröffentlicht Termine und holt Ergebnisse
@@ -129,7 +154,21 @@ würde dann ständig ungültig.
    `chmod 644 secrets/tls/*.pem` (der Proxy läuft ohne Capabilities).
 3. `podman-compose up -d`, dann im Browser `https://localhost:5443` öffnen. Der Browser
    warnt **einmalig**, weil das Zertifikat selbst signiert ist; die Ausnahme für diese Seite
-   bestätigen. Es ist kein HSTS gesetzt, die Ausnahme bleibt jederzeit möglich.
+   bestätigen. Es ist kein HSTS gesetzt, die Ausnahme bleibt jederzeit möglich. So sieht die
+   Warnung aus und so bestätigt man sie:
+   - **Microsoft Edge / Google Chrome:** „Ihre Verbindung ist nicht privat“ bzw. „Dies ist keine
+     sichere Verbindung“ (`NET::ERR_CERT_AUTHORITY_INVALID`) → **„Erweitert“** →
+     **„Weiter zu localhost (unsicher)“**.
+   - **Firefox:** „Warnung: Mögliches Sicherheitsrisiko erkannt“ → **„Erweitert…“** →
+     **„Risiko akzeptieren und fortfahren“**.
+   - **Safari (iPad/iPhone/Mac):** „Diese Verbindung ist nicht privat“ → **„Details einblenden“**
+     → **„diese Website besuchen“** und noch einmal bestätigen.
+
+   Wer sichergehen will, vergleicht vorher den Fingerabdruck: In Edge/Chrome über
+   **„Nicht sicher“** links in der Adressleiste → Zertifikat → **SHA-256-Fingerabdruck**; er muss
+   mit dem notierten übereinstimmen (der Browser trennt die Zweierblöcke mit Leerzeichen statt
+   Doppelpunkten). Auf jedem Gerät (Tablets der Richter) erscheint die Warnung
+   einmal; „http://“ statt „https://“ funktioniert nicht (der Server antwortet dann mit einem Fehler).
 4. Im Desktop-Programm beim ersten Verbinden den angezeigten Fingerabdruck mit dem notierten
    vergleichen und bestätigen. Er ändert sich nur, wenn ein neues Zertifikat erzeugt wird.
 
