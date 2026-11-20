@@ -49,7 +49,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U7 | Bogen: nachstellen B4 und D3, Bogenkopf-Text, Kopfleiste (B4, D3, D4, A4) | M | erledigt (19.11.) | siehe git log | unbekannt | B4 nachgestellt und behoben (CSS-Hinweis am Feld); D3 nicht nachstellbar (Popup der Auswahlliste, Werkzeug) → geschlossen; Kopfleiste fest ab 701 × 560 px; Rückweg per ?von |
 | U8 | [S] Desktop Web-Verbindung: Passwort bis Programmende im Speicher, Hinweise im Dialog, E5 nachstellen (E4, E5, E6, Heinz F5) | L | erledigt (20.11.) | siehe git log | unbekannt | `qs-sicherheit`: nichts hoch/mittel, Hinweise umgesetzt, ein älterer Punkt als Rückfrage; E5 nicht nachstellbar (Werkzeug) |
 | U9 | Desktop-Texte: Rückhol-Bericht und Fragen (E1, E2, E3, A5) | S | erledigt (20.11.) | siehe git log | unbekannt | dabei Folgefehler der neuen Zählung beim zweiten Zurückholen behoben |
-| U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | offen | | unbekannt | |
+| U10 | Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick (G1, B5) | S | erledigt (20.11.) | siehe git log | unbekannt | Einzelblätter nur für teilweise bewerteten DK ohne Status; Status/GESAMT bleiben |
 | U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | offen | | unbekannt | nur Doku/Skripte |
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | offen | | unbekannt | Daten + Web, SQLite und PostgreSQL |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | offen | | unbekannt | |
@@ -201,6 +201,7 @@ abweichen, nicht im Umfang.
   der Ausschnitt noch passt).
 - U6: `handbuch_web_ergebnistabelle.png` (neue Hinweistexte unter dem Filter und in der Speicherleiste, Knopf
   „Bogen“ als Absendeknopf).
+- U10: `handbuch_web_ergebnistabelle.png` (längerer Hinweistext am PDF-Knopf).
 - U9: `handbuch_web_bericht.png` (neue Zusammenfassung), `handbuch_ergebniserfassung.png` (Hinweis über der
   Tabelle).
 - U8: `handbuch_web_verbindung.png` (Hinweis bei leerem Passwort; ohne Tresor zusätzliche Erklärung unter dem
@@ -249,6 +250,8 @@ abweichen, nicht im Umfang.
   Bericht mit Notizen, Zählung, Termin-Name, A5-Hinweis; B20-Dokument ergänzen).
 - 20.11.2026: U9 erledigt und committet. Nächste: U10 (Sammel-PDF: leere Bögen weglassen, Hinweis beim Klick –
   ohne Skript nur als Text am Knopf bzw. darunter).
+- 20.11.2026: U10 erledigt und committet. Nächste: U11 (README_CONTAINER und Container-Skripte, F1, F2, F4; Details
+  in `C:\Users\mbruv\Documents\Claude\UX-Test-Web\stack-notizen.md`).
 
 ## Abschlussbericht
 

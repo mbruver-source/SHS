@@ -1082,7 +1082,12 @@ Eintragungen** als eine PDF herunter, zum Speichern oder Ausdrucken. Aufbau wie 
 Desktop-Programm, mit den eingetragenen **Punkten**, dem **Status** (disqualifiziert, Abbruch) und den
 **Notizen**. Ein Bogen zählt als benutzt, sobald für den Teilnehmer ein Punktwert, „Disqualifiziert“,
 ein Abbruch oder eine Notiz gespeichert ist; Teilnehmer ohne Eintragung fehlen. Die Reihenfolge ist
-die der Startnummern, ein Dreikampf-Bogen hat zwei Seiten, ein Einzelstarter-Bogen eine.
+die der Startnummern. Ein Einzelstarter-Bogen hat eine Seite, ein Dreikampf-Bogen zwei. Ist ein
+Dreikampf erst teilweise bewertet (und weder disqualifiziert noch abgebrochen), kommt nur je Disziplin
+mit Eintragung (Punkte oder Notiz) ein Blatt, Disziplinen ohne Eintragung fehlen. Die PDF hat dadurch
+nicht immer eine gerade Seitenzahl je Teilnehmer: zum Ausdrucken deshalb einseitig drucken. Nach dem Tippen
+erstellt der Server die PDF; das kann bei vielen Teilnehmern einige Sekunden dauern, die Seite bleibt
+dabei stehen, und der Browser legt die Datei meist im Download-Ordner ab.
 
 - **Filter:** Ist ein Filter (Art/LK, Start-Nr., Name oder Hund) gesetzt, enthält die PDF nur die
   gefilterten Teilnehmer.

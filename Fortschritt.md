@@ -2,6 +2,20 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U10 – Sammel-PDF ohne leere Dreikampf-Seiten, Hinweis zum Download
+
+Funde G1, B5. Im Web-Sammel-PDF „Benutzte Bögen als PDF“ bekommt ein teilweise bewerteter Dreikampf ohne Status nur
+noch die Blätter der Disziplinen mit Eintragung (Punkte oder Notiz) statt des ganzen zweiseitigen Bogens mit leeren
+Disziplinen. Mit Disqualifiziert/Abbruch, vollständig bewertet oder ganz ohne Eintragung bleibt es beim ganzen Bogen:
+nur dort stehen Status, Teilsumme, GESAMT und Wertnote (die erste Fassung druckte immer Einzelblätter und verlor
+diese Angaben – von der Verifikation gefunden und korrigiert). `pdf_export.erstelle_alle_bewertungsboegen_pdf`,
+neuer Parameter `nur_benutzte_disziplinen`, nur von der Web-Route genutzt; der Desktop-Sammeldruck ist unverändert.
+Handbuch: wegen ungerader Seitenzahlen einseitig drucken.
+B5: Der `.tmp`-Dateiname gilt als Eigenheit des Test-Browsers (Marco); der Text am Knopf sagt jetzt, dass die PDF
+erstellt wird, einige Sekunden dauern kann und meist im Download-Ordner landet (ohne Skript keine Fortschrittsanzeige).
+Tests: 2 neu in `test_pdf_export` (u. a. Status und GESAMT bleiben), 1 angepasst und 3 neu in `test_app_web`;
+Gegenprobe ok. Handbuch, `Architektur.md`, `UML.md` angepasst.
+
 ## 20.11.2026: UX-Test Web U9 – Desktop-Texte beim Zurückholen, Hinweis auf die Web-Version
 
 Funde E1, E2, E3, A5. Der Rückhol-Bericht nennt jetzt „n Teilnehmer geändert, m unverändert“ (neue Felder

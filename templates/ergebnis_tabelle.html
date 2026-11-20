@@ -108,7 +108,8 @@
    der Filter der Tabelle hängt an der Adresse. Es zählt der gespeicherte Stand. #}
 <div class="karte" style="display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: center;">
   <a class="knopf" href="{{ boegen_pdf_url }}" aria-describedby="boegen-pdf-hinweis">Benutzte Bögen als PDF</a>
-  <small id="boegen-pdf-hinweis" style="flex: 1 1 18em;">Lädt alle Bewertungsbögen mit Eintragungen (Punkte, Disqualifikation, Abbruch oder Notiz){% if filter.lk or filter.nr or filter.q %} für die gefilterten Teilnehmer{% endif %} zum Speichern oder Ausdrucken herunter. Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten: erst „Alle speichern“.</small>
+  {# UX-Test Web 19.11.2026 (B5): ohne Skript keine Fortschrittsanzeige - der Text sagt vorher, was passiert. #}
+  <small id="boegen-pdf-hinweis" style="flex: 1 1 18em;">Lädt alle Bewertungsbögen mit Eintragungen (Punkte, Disqualifikation, Abbruch oder Notiz){% if filter.lk or filter.nr or filter.q %} für die gefilterten Teilnehmer{% endif %} zum Speichern oder Ausdrucken herunter, beim Dreikampf nur die Blätter der Disziplinen mit Eintragung. Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten: erst „Alle speichern“. Nach dem Tippen wird die PDF erstellt – das kann bei vielen Teilnehmern einige Sekunden dauern; die Seite bleibt dabei stehen, der Browser legt die Datei meist im Download-Ordner ab.</small>
 </div>
 
 <form id="ergebnisform" method="post" action="{{ speichern_url }}#meldung">

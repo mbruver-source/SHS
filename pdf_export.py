@@ -825,9 +825,19 @@ def erstelle_bewertungsbogen_pdf(conn: sqlite3.Connection, teilnehmer_id: int, p
         dokument.build(_bewertungsbogen_story(t, ergebnis, veranstaltung))
 
 
+def _disziplin_benutzt(ergebnis: dict | None, disziplin: str) -> bool:
+    """Hat die Disziplin eine Eintragung (Suche, Anzeige oder Notiz mit Inhalt)?"""
+    if not ergebnis:
+        return False
+    if any(ergebnis.get(spalte) is not None for spalte in DISZIPLIN_SPALTEN[disziplin]):
+        return True
+    return bool((ergebnis.get(NOTIZ_SPALTEN[disziplin]) or "").strip())
+
+
 def erstelle_alle_bewertungsboegen_pdf(
     conn: sqlite3.Connection, pfad, erlaubte_labels: set[str] | None = None,
     je_disziplin: bool = False, teilnehmer_ids: set[int] | None = None,
+    nur_benutzte_disziplinen: bool = False,
 ) -> int:
     """Erzeugt EINE Sammel-PDF mit dem Bewertungsbogen jedes Teilnehmers (sortiert nach
     Startnummer, wie die Teilnehmerliste) - praktisch zum Ausdrucken für alle Richter auf
@@ -852,6 +862,13 @@ def erstelle_alle_bewertungsboegen_pdf(
     Teilnehmer-IDs ein; die Reihenfolge bleibt die der Teilnehmerliste. None = alle, ein leeres
     Set = keiner (dann steht nur der Hinweis „Keine Teilnehmer erfasst.“ im PDF).
 
+    `nur_benutzte_disziplinen` (Web, UX-Test 19.11.2026, G1: „leere Seiten“ im Sammel-PDF): Ein TEILWEISE
+    bewerteter Dreikampf ohne Status bekommt nur die Blätter der Disziplinen mit Eintragung (Suche,
+    Anzeige oder Notiz), je Teilnehmer in Disziplin-Reihenfolge. Den ganzen 2-Seiten-Bogen bekommt er,
+    wenn Disqualifiziert oder Abbruch gesetzt ist oder alle Disziplinen eingetragen sind (nur dort
+    stehen Status, Teilsumme, GESAMT und Wertnote) und wenn gar keine Disziplin benutzt ist.
+    Einzeldisziplinen unverändert. Hat Vorrang vor `je_disziplin`.
+
     `pfad` darf auch ein Datei-Objekt (z. B. io.BytesIO) sein, wie bei reportlab üblich."""
     teilnehmer = list_teilnehmer(conn, nur_teilnehmende=True)
     if erlaubte_labels is not None:
@@ -864,7 +881,22 @@ def erstelle_alle_bewertungsboegen_pdf(
     dokument = SimpleDocTemplate(pfad, pagesize=A4, topMargin=14 * mm, bottomMargin=14 * mm, leftMargin=20 * mm, rightMargin=20 * mm)
     # Blätter als (Teilnehmer, Disziplin oder None) in Druckreihenfolge.
     blaetter: list[tuple[dict, str | None]] = []
-    if je_disziplin:
+    if nur_benutzte_disziplinen:
+        for t in teilnehmer:
+            if t["art"] != "DK":
+                blaetter.append((t, None))
+                continue
+            ergebnis = ergebnis_rows.get(t["id"]) or {}
+            benutzt = [d for d in ALLE_DISZIPLINEN if _disziplin_benutzt(ergebnis, d)]
+            # Der ganze Bogen, wenn er mehr zeigt als die Einzelblätter: Status (Disqualifiziert/
+            # Abbruch mit Grund und Teilsumme) und GESAMT/Wertnote stehen nur dort.
+            ganzer_bogen = (not benutzt or len(benutzt) == len(ALLE_DISZIPLINEN)
+                            or ergebnis.get("disqualifiziert") or ergebnis.get("abbruch"))
+            if ganzer_bogen:
+                blaetter.append((t, None))
+            else:
+                blaetter.extend((t, d) for d in benutzt)
+    elif je_disziplin:
         blaetter = [(t, None) for t in teilnehmer if t["art"] != "DK"]
         for disziplin in ALLE_DISZIPLINEN:
             blaetter.extend((t, disziplin) for t in teilnehmer if t["art"] == "DK")

@@ -40,6 +40,7 @@ from db import (
     setze_ergebnis_status,
     setze_stechen_sieger,
     setze_keine_teilnahme,
+    setze_notiz,
 )
 import pdf_export
 
@@ -328,6 +329,62 @@ class TestPdfExport(unittest.TestCase):
         for seite in seiten:
             self.assertIn("Start-Nr.", seite)
             self.assertIn("47", seite)
+
+    def test_sammel_bewertungsboegen_nur_benutzte_disziplinen(self):
+        """UX-Test Web 19.11.2026 (G1): im Web-Sammel-PDF beim teilweise bewerteten Dreikampf ohne
+        Status nur Blätter benutzter Disziplinen (Punkte oder Notiz), je Teilnehmer in Disziplin-
+        Reihenfolge; ohne benutzte Disziplin (nur Disqualifiziert) der ganze Bogen; ED unverändert."""
+        a = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Zwei", vorname="A", rufname_hund="R",
+                                                      art="DK", stufe=1, startnummer=2))
+        b = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Eins", vorname="B", rufname_hund="S",
+                                                      art="DK", stufe=1, startnummer=1))
+        c = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Ed", vorname="C", rufname_hund="T", art="ED",
+                                                      stufe=1, disziplin="Trümmerfeld", startnummer=3))
+        d = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Dq", vorname="D", rufname_hund="U",
+                                                      art="DK", stufe=1, startnummer=4))
+        eintragen_ergebnis(self.conn, a, "Behältnisstrecke", 40, 30)
+        eintragen_ergebnis(self.conn, b, "Trümmerfeld", 50, 30)
+        setze_notiz(self.conn, b, "Flächensuche", "nur eine Notiz")
+        setze_ergebnis_status(self.conn, d, True, False)
+        ziel = self._pfad("benutzt.pdf")
+        self.assertEqual(pdf_export.erstelle_alle_bewertungsboegen_pdf(
+            self.conn, ziel, teilnehmer_ids={a, b, c, d}, nur_benutzte_disziplinen=True), 4)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        # Eins: Trümmerfeld + Flächensuche (Notiz), Zwei: Behältnis, Ed: 1, Dq: ganzer Bogen (2 Seiten)
+        self.assertEqual(len(seiten), 1 + 1 + 1 + 1 + 2, [s[:60] for s in seiten])
+        self.assertIn("Bewertung Trümmerfeld", seiten[0])
+        self.assertIn("Eins", seiten[0])
+        self.assertIn("Bewertung Flächensuche", seiten[1])
+        self.assertIn("Bewertung Behältnisstrecke", seiten[2])
+        self.assertIn("Zwei", seiten[2])
+        self.assertIn("Ed", seiten[3])
+        self.assertIn("Dq", seiten[4])
+
+    def test_sammel_bewertungsboegen_nur_benutzte_behaelt_status_und_gesamt(self):
+        """Verifikation U10: Status (Abbruch mit Grund, Disqualifiziert) und GESAMT/Wertnote stehen nur auf
+        dem ganzen Bogen - mit Status oder vollständig bewertet bleibt es deshalb beim 2-Seiten-Bogen."""
+        abbruch = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Abbruch", vorname="A", rufname_hund="R",
+                                                            art="DK", stufe=1, startnummer=1))
+        dq = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Dq", vorname="B", rufname_hund="S",
+                                                       art="DK", stufe=1, startnummer=2))
+        voll = add_teilnehmer(self.conn, NeuerTeilnehmer(nachname="Voll", vorname="C", rufname_hund="T",
+                                                         art="DK", stufe=1, startnummer=3))
+        eintragen_ergebnis(self.conn, abbruch, "Trümmerfeld", 40, 30)
+        setze_ergebnis_status(self.conn, abbruch, False, True, abbruch_grund="krankheit")
+        eintragen_ergebnis(self.conn, dq, "Flächensuche", 40, 30)
+        setze_ergebnis_status(self.conn, dq, True, False)
+        for d in ("Trümmerfeld", "Flächensuche", "Behältnisstrecke"):
+            eintragen_ergebnis(self.conn, voll, d, 50, 40)
+        ziel = self._pfad("status.pdf")
+        pdf_export.erstelle_alle_bewertungsboegen_pdf(
+            self.conn, ziel, teilnehmer_ids={abbruch, dq, voll}, nur_benutzte_disziplinen=True)
+        seiten = [s.extract_text() for s in PdfReader(ziel).pages]
+        self.assertEqual(len(seiten), 6)  # je ganzer Bogen (2 Seiten)
+        text = "\n".join(seiten)
+        self.assertIn("Krankheit", text)
+        self.assertIn("Disqualifiziert", text)
+        self.assertIn("GESAMT", text)
+        self.assertIn("270", text)
 
     def test_sammel_bewertungsboegen_je_disziplin(self):
         """Wunsch 10.11.2026: DK je Disziplin ein Blatt, nach Disziplin sortiert, ohne GESAMT;

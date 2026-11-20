@@ -1726,8 +1726,9 @@ def ergebnistabelle(conn):
 # wie am Desktop, mit eingetragenen Punkten, Status und Notizen) als eine PDF. Benutzt heißt: der
 # Teilnehmer hat mindestens einen Punktwert, Disqualifiziert/Abbruch oder eine Notiz. Der Filter der
 # Tabelle (lk, nr, q) gilt unverändert; gedruckt wird der GESPEICHERTE Stand (nicht gespeicherte
-# Eingaben der Tabelle fehlen). Reihenfolge und Seitenaufteilung wie der Desktop-Sammelausdruck
-# (pdf_export.erstelle_alle_bewertungsboegen_pdf: nach Startnummer, Dreikampf 2 Seiten, ED 1 Blatt).
+# Eingaben der Tabelle fehlen). Reihenfolge nach Startnummer, ED 1 Blatt, Dreikampf 2 Seiten - außer ein
+# teilweise bewerteter Dreikampf ohne Status: dann nur die Blätter der benutzten Disziplinen (UX-Test Web
+# 19.11.2026, G1; pdf_export.erstelle_alle_bewertungsboegen_pdf, nur_benutzte_disziplinen).
 # pdf_export (reportlab) wird erst beim Aufruf importiert, damit die Web-App auch ohne reportlab startet.
 
 _BOEGEN_PDF_HINWEISE = {
@@ -1767,7 +1768,8 @@ def ergebnis_boegen_pdf(conn):
     try:
         import pdf_export  # erst hier: braucht reportlab (siehe oben)
         puffer = io.BytesIO()
-        pdf_export.erstelle_alle_bewertungsboegen_pdf(conn, puffer, teilnehmer_ids=ids)
+        # UX-Test Web 19.11.2026 (G1): beim Dreikampf nur die Blätter benutzter Disziplinen
+        pdf_export.erstelle_alle_bewertungsboegen_pdf(conn, puffer, teilnehmer_ids=ids, nur_benutzte_disziplinen=True)
         daten = puffer.getvalue()
         veranstaltung = db.get_veranstaltung(conn) or {}
     except Exception:  # noqa: BLE001 - jeder Fehler (auch fehlendes reportlab) -> feste Meldung

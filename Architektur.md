@@ -244,8 +244,9 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
   wie die Tabelle, unbekannte Art/LK zählt wie „Alle“) und mindestens einen Punktwert, Disqualifiziert,
   Abbruch oder eine Notiz hat (nur Leerraum zählt nicht). Gedruckt wird der gespeicherte Stand, nicht
   die ungespeicherten Eingaben der Tabelle. Die PDF entsteht mit `pdf_export.erstelle_alle_bewertungsboegen_pdf(
-  conn, BytesIO, teilnehmer_ids=...)` - dieselbe Seitenlogik wie am Desktop (Reihenfolge nach Teilnehmerliste/
-  Startnummer, Dreikampf immer 2 Seiten, ED 1 Blatt), im Speicher, ohne Temp-Datei. Antwort: `application/pdf`
+  conn, BytesIO, teilnehmer_ids=..., nur_benutzte_disziplinen=True)` (Reihenfolge nach Teilnehmerliste/
+  Startnummer, ED 1 Blatt, Dreikampf 2 Seiten; seit 20.11.2026 ein teilweise bewerteter Dreikampf ohne
+  Status nur mit den Blättern benutzter Disziplinen), im Speicher, ohne Temp-Datei. Antwort: `application/pdf`
   als Anhang `Bewertungsboegen_<Verein>_<Datum>.pdf` (`secure_filename`), `Cache-Control: no-store` (nach
   `send_file` ausdrücklich gesetzt, da dessen Standard sonst den globalen Header verdrängt). Ohne benutzte
   Bögen oder bei jedem Fehler beim Erzeugen (auch fehlendes reportlab; nur ins Protokoll, nichts Internes

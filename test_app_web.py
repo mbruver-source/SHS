@@ -3069,7 +3069,7 @@ class TestBoegenPdf(_AppWebTestBasis):
         self.assertRegex(disposition, r'filename="?Bewertungsboegen[A-Za-z0-9_.-]*\.pdf"?')
 
     @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
-    def test_nur_benutzte_boegen_dk_zwei_seiten_ed_eine_in_startnummernfolge(self):
+    def test_nur_benutzte_boegen_dk_nur_benutzte_disziplin_ed_eine_in_startnummernfolge(self):
         if reportlab is None:
             self.skipTest("reportlab nicht installiert")
         db.eintragen_ergebnis(self.conn, self.ed, self.F, 40, 30)
@@ -3079,7 +3079,9 @@ class TestBoegenPdf(_AppWebTestBasis):
         self._anmelden()
         antwort = self.client.get(self.URL)
         seiten = self._seiten(antwort)
-        self.assertEqual(len(seiten), 4)  # ED 1 + DK 2 + ED 1
+        # ED 1 + DK nur das Trümmerfeld-Blatt (UX-Test Web 19.11.2026, G1: keine leeren Seiten) + ED 1
+        self.assertEqual(len(seiten), 3)
+        self.assertIn(f"Bewertung {self.T}", seiten[1])
         text = "\n".join(seiten)
         for name in ("Muster, Anna", "Beispiel, Bernd", "Probe, Cora"):
             self.assertIn(name, text)
@@ -3133,7 +3135,7 @@ class TestBoegenPdf(_AppWebTestBasis):
         antwort = self.client.get(self.URL)
         self.assertEqual(antwort.status_code, 200)
         seiten = self._seiten(antwort)
-        self.assertEqual(len(seiten), 3)  # ED 1 + DK genau 2: auch mit langen Notizen
+        self.assertEqual(len(seiten), 3)  # ED 1 + DK (alle Disziplinen benutzt: ganzer Bogen) genau 2: auch mit langen Notizen
         for stueck in ("<b>fett</b> & <i>x</unknown>", "&amp;", "<para>"):  # wörtlich, nicht als Markup gedeutet
             self.assertIn(stueck, seiten[0])
         text = "\n".join(seiten)
@@ -3149,7 +3151,35 @@ class TestBoegenPdf(_AppWebTestBasis):
             db.setze_notiz(self.conn, self.dk, d, "Hund zeigte spät an, Wind von links. " * 12)
         db.setze_ergebnis_status(self.conn, self.dk, False, True, abbruch_grund="krankheit")
         self._anmelden()
+        seiten = self._seiten(self.client.get(self.URL + "?nr=2"))
+        self.assertEqual(len(seiten), 2)  # mit Status ganzer Bogen; lange Notizen sprengen nichts
+        self.assertIn("Krankheit", "\n".join(seiten))  # Status bleibt sichtbar (Verifikation U10)
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_dreikampf_teilweise_ohne_status_mit_punkten_im_statusfall_ganzer_bogen(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.eintragen_ergebnis(self.conn, self.dk, self.F, 40, 30)
+        db.setze_ergebnis_status(self.conn, self.dk, False, True, abbruch_grund="krankheit")
+        self._anmelden()
+        seiten = self._seiten(self.client.get(self.URL + "?nr=2"))
+        self.assertEqual(len(seiten), 2)
+        self.assertIn("Krankheit", "\n".join(seiten))
+
+    @unittest.skipIf(PdfReader is None, "pypdf nicht installiert")
+    def test_dreikampf_nur_disqualifiziert_bekommt_den_ganzen_bogen(self):
+        if reportlab is None:
+            self.skipTest("reportlab nicht installiert")
+        db.setze_ergebnis_status(self.conn, self.dk, True, False)
+        self._anmelden()
         self.assertEqual(len(self._seiten(self.client.get(self.URL + "?nr=2"))), 2)
+
+    def test_pdf_hinweis_nennt_was_nach_dem_klick_passiert(self):
+        # UX-Test Web 19.11.2026 (B5): ohne Skript keine Fortschrittsanzeige, deshalb vorher erklärt
+        self._anmelden()
+        html = self.client.get("/ergebnisse").data.decode()
+        self.assertIn("das kann bei vielen Teilnehmern einige Sekunden dauern", html)
+        self.assertIn("beim Dreikampf nur die Blätter der Disziplinen mit Eintragung", html)
 
     # --- Knopf in der Tabelle -----------------------------------------------------------------
 

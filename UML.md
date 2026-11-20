@@ -755,8 +755,8 @@ sequenceDiagram
     alt keine benutzten Bögen oder Fehler
         W-->>R: Redirect zur Tabelle mit festem Hinweis
     else
-        W->>P: erstelle_alle_bewertungsboegen_pdf (teilnehmer_ids, im Speicher)
-        P-->>W: PDF (Dreikampf 2 Seiten, Einzeldisziplin 1 Blatt)
+        W->>P: erstelle_alle_bewertungsboegen_pdf (teilnehmer_ids, nur_benutzte_disziplinen, im Speicher)
+        P-->>W: PDF (Einzeldisziplin 1 Blatt, Dreikampf 2 Seiten; teilweise ohne Status: je benutzte Disziplin 1 Blatt)
         W-->>R: Download Bewertungsboegen_Verein_Datum.pdf
     end
 ```
