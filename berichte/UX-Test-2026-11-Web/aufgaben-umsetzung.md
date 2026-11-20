@@ -374,6 +374,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
 - 20.11.2026: Rückfragen mit Marco geklärt, Folgeaufgaben U14–U19 angelegt (gleicher Ablauf, gleicher Start-Befehl).
   Der Test-Stack `shsux` ist abgebaut; für Sichtprüfungen nur noch `scratchpad\web_live.py` (Aufruf
   `python web_live.py <repo>`, 127.0.0.1:5097, admin/demo-passwort-1). Nächste: U14 [S].
+- 20.11.2026: U14 erledigt und committet (`0919a83`, zusammen mit der Klärung; der vorherige Klärungs-Commit enthielt
+  Sicherheitsdetails und wurde vor jedem Push neu erstellt). Nächste: U15 (drei Web-Kleinigkeiten).
 
 ## Abschlussbericht
 
