@@ -995,8 +995,9 @@ Browser nicht mehr. Die genauen Schritte je Browser stehen in
 2. **Termin wählen:** Gibt es mehrere veröffentlichte Termine, den richtigen antippen. Bei nur
    einem Termin entfällt dieser Schritt.
 3. **Teilnehmerliste:** Rechts steht der Stand jedes Teilnehmers: **„offen“** (gelb, noch nichts
-   eingetragen), **„teilweise (1 von 3)“** (blau, beim Dreikampf erst ein Teil der Disziplinen),
-   **„bewertet“** (grün, alle Disziplinen eingetragen), **„disqualifiziert“** (rot) oder
+   eingetragen), **„teilweise“** (blau, schon etwas eingetragen, aber noch nicht alles; beim
+   Dreikampf mit Zähler wie „teilweise (1 von 3)“ für die vollständigen Disziplinen),
+   **„bewertet“** (grün, alle Disziplinen mit Suche und Anzeige), **„disqualifiziert“** (rot) oder
    **„Abbruch“** (lila). Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
    **„Bewertungsbogen:“** direkt zum Online-Bewertungsbogen der jeweiligen Disziplin (siehe unten).
 4. **Ergebnis eintragen:** Je Disziplin **„Suchleistung (0–60)“** und
@@ -1064,7 +1065,8 @@ antippen) meist bequemer.
 
 Der **Status** zeigt den gespeicherten Stand: „noch kein Ergebnis“, „gespeichert“,
 „disqualifiziert“ oder „Abbruch: <Grund>“. **Als Administrator** steht darunter klein, wer zuletzt
-etwas eingetragen hat und wann, z. B. „zuletzt richterin.a, vor 5 Min. (Trümmerfeld)“; zeigt man mit
+etwas eingetragen hat und wann, z. B. „zuletzt richterin.a, vor 5 Min. (Trümmerfeld)“ (nach einem
+Tag als Datum in deutscher Zeit, „am 19.11.“); zeigt man mit
 der Maus darauf, erscheinen die Einzelheiten je Disziplin und für Disqualifiziert/Abbruch. Gemerkt
 werden Eintragungen im Web (Tabelle, Seite je Teilnehmer, Bewertungsbogen); Richter sehen diese
 Angabe nicht, und sie kommt beim Zurückholen nicht in die Termin-Datei.
@@ -1141,7 +1143,7 @@ Gegenstand** dieser Disziplin (die Zeile fehlt, wenn im Termin kein Gegenstand e
    Einzelstarter die der Disziplin, beim Dreikampf erst, wenn alle drei Disziplinen vollständig
    eingetragen sind. **„Speichern und zurück …“** führt dorthin zurück, wo du den Bogen geöffnet
    hast: zur Zeile in der Tabelle, zur Teilnehmerliste (mit „Gespeichert: <Name>.“) oder zur Seite
-   des Teilnehmers. **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern auf demselben Weg.
+   des Teilnehmers (mit „Bewertungsbogen gespeichert.“). **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern auf demselben Weg.
 
 Bei einem Fehler (z. B. nur die Suche ausgefüllt, ein Wert über dem Höchstwert, eine zu lange Notiz)
 wird nichts gespeichert, deine Eingaben bleiben stehen. Hat in der Zwischenzeit ein anderer Richter

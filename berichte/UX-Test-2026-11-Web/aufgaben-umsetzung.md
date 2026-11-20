@@ -54,7 +54,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | erledigt (20.11.) | siehe git log | unbekannt | eigene Tabelle `web_aenderungen` nur im Web-Schema; PostgreSQL-Test nur in der CI |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
 | U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
-| U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | offen | | unbekannt | |
+| U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
 | U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | offen | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | offen | | unbekannt | |
 | U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
@@ -376,6 +376,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   `python web_live.py <repo>`, 127.0.0.1:5097, admin/demo-passwort-1). Nächste: U14 [S].
 - 20.11.2026: U14 erledigt und committet (`0919a83`, zusammen mit der Klärung; der vorherige Klärungs-Commit enthielt
   Sicherheitsdetails und wurde vor jedem Push neu erstellt). Nächste: U15 (drei Web-Kleinigkeiten).
+- 20.11.2026: U15 erledigt und committet. Nächste: U16 (Aufräumen Web-Logik, Verhalten unverändert; die neue
+  „teilweise“-Regel in `_listen_status` – angefangen = irgendein Wert – beim Zusammenführen erhalten).
 
 ## Abschlussbericht
 

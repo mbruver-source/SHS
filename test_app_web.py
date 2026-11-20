@@ -889,7 +889,18 @@ class TestAppWeb(_AppWebTestBasis):
         self.assertEqual(app_web._listen_status(dk, {**teilpunkte, "abbruch": 1, "disqualifiziert": 1})["art"], "dq")
         self.assertEqual(app_web._listen_status(dk, teilpunkte)["art"], "teilweise")
 
-    def test_teilnehmerliste_ed_kennt_kein_teilweise(self):
+    def test_listen_status_angefangene_disziplin_ist_teilweise(self):
+        # Marco nach der QS in U13: auch nur Suche (oder nur Anzeige) zählt als angefangen.
+        such, anz = db.DISZIPLIN_SPALTEN["Flächensuche"]
+        ed = {"art": "ED", "disziplin": "Flächensuche"}
+        self.assertEqual(app_web._listen_status(ed, {such: 40}), {"text": "teilweise", "art": "teilweise"})
+        self.assertEqual(app_web._listen_status(ed, {anz: 0})["art"], "teilweise")  # 0 ist ein Wert
+        self.assertEqual(app_web._listen_status(ed, {such: None, anz: None})["art"], "offen")
+        dk = {"art": "DK", "disziplin": None}
+        halb = {db.DISZIPLIN_SPALTEN[d][0]: 10 for d in db.ALLE_DISZIPLINEN}
+        self.assertEqual(app_web._listen_status(dk, halb)["text"], f"teilweise (0 von {len(db.ALLE_DISZIPLINEN)})")
+
+    def test_teilnehmerliste_ed_vollstaendig_ist_bewertet(self):
         tid = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
             nachname="Muster", vorname="A", rufname_hund="Rex", art="ED", stufe=1,
             disziplin="Flächensuche", startnummer=1))
@@ -2015,6 +2026,46 @@ class TestErgebnistabelle(_AppWebTestBasis):
         self.assertEqual(app_web._vor_wann("2026-11-18T09:00:00+00:00", jetzt), "am 18.11.")
         self.assertEqual(app_web._vor_wann("kaputt", jetzt), "?")
 
+    def test_vor_wann_datum_in_deutscher_zeit(self):
+        # Marco nach der QS in U13: 23:30 UTC ist in Deutschland schon der nächste Tag.
+        from datetime import datetime, timezone
+        jetzt = datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(app_web._vor_wann("2026-11-18T23:30:00+00:00", jetzt), "am 19.11.")  # Winterzeit +1
+        self.assertEqual(app_web._vor_wann("2026-11-18T22:30:00+00:00", jetzt), "am 18.11.")
+        sommer = datetime(2026, 7, 25, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(app_web._vor_wann("2026-07-18T22:30:00+00:00", sommer), "am 19.07.")  # Sommerzeit +2
+
+    def test_vor_wann_ohne_zonendaten_faellt_auf_die_eu_regel_zurueck(self):
+        import zoneinfo
+        from datetime import datetime, timezone
+        from unittest import mock
+
+        def fehlt(_name):
+            raise zoneinfo.ZoneInfoNotFoundError("Europe/Berlin")
+
+        jetzt = datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc)
+        with mock.patch.object(zoneinfo, "ZoneInfo", fehlt):
+            self.assertEqual(app_web._vor_wann("2026-11-18T23:30:00+00:00", jetzt), "am 19.11.")
+
+    def test_deutsche_zeit_ohne_zonendaten_nach_eu_regel(self):
+        from datetime import datetime, timezone
+        regel = app_web._deutsche_zeit_nach_eu_regel
+        # 2026: Sommerzeit vom 29.03. 01:00 UTC bis 25.10. 01:00 UTC
+        self.assertEqual(regel(datetime(2026, 3, 29, 0, 59, tzinfo=timezone.utc)).utcoffset().total_seconds(), 3600)
+        self.assertEqual(regel(datetime(2026, 3, 29, 1, 0, tzinfo=timezone.utc)).utcoffset().total_seconds(), 7200)
+        self.assertEqual(regel(datetime(2026, 10, 25, 0, 59, tzinfo=timezone.utc)).utcoffset().total_seconds(), 7200)
+        self.assertEqual(regel(datetime(2026, 10, 25, 1, 0, tzinfo=timezone.utc)).utcoffset().total_seconds(), 3600)
+        try:
+            from zoneinfo import ZoneInfo
+            berlin = ZoneInfo("Europe/Berlin")
+        except Exception:  # noqa: BLE001 - ohne Zonendaten nur die Regel prüfen
+            return
+        for monat in range(1, 13):
+            for tag in (1, 15, 28):
+                for stunde in (0, 1, 2, 23):
+                    t = datetime(2027, monat, tag, stunde, tzinfo=timezone.utc)
+                    self.assertEqual(regel(t).utcoffset(), t.astimezone(berlin).utcoffset(), t)
+
     def test_web_aenderungen_nie_in_der_termin_datei(self):
         # Die Tabelle gehört nur ins Web-Schema: nicht in SCHEMA, also nie in eine Termin-Datei.
         self.assertNotIn("web_aenderungen", db.SCHEMA)
@@ -2524,7 +2575,17 @@ class TestBewertungsbogen(_AppWebTestBasis):
         daten = self._bogen(self.ed, self.F)
         daten["weiter"] = "tabelle"
         antwort = self.client.post(pfad, data=daten)
-        self.assertEqual(antwort.headers["Location"], f"/teilnehmer/{self.ed}")
+        self.assertEqual(antwort.headers["Location"], f"/teilnehmer/{self.ed}?gespeichert=0")
+        self.assertIn("Keine Änderungen im Bewertungsbogen zu speichern.",
+                      self.client.get(antwort.headers["Location"]).data.decode())
+        daten[f"suche_{self.F}_{self.ed}"], daten[f"anzeige_{self.F}_{self.ed}"] = "40", "30"
+        antwort = self.client.post(pfad, data=daten)
+        self.assertEqual(antwort.headers["Location"], f"/teilnehmer/{self.ed}?gespeichert=1")
+        self.assertIn("Bewertungsbogen gespeichert.", self.client.get(antwort.headers["Location"]).data.decode())
+        for unsinn in ("2", "<b>", "1x"):  # andere Werte zeigen nichts
+            html = self.client.get(f"/teilnehmer/{self.ed}?gespeichert={unsinn}").data.decode()
+            self.assertNotIn("Bewertungsbogen gespeichert", html)
+            self.assertNotIn("Keine Änderungen im Bewertungsbogen", html)
 
     def test_bogen_speichern_behaelt_die_herkunft_und_verwirft_tabellenfilter(self):
         self._anmelden()

@@ -2,6 +2,17 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U15 – „teilweise“, Bestätigung auf der Einzelseite, deutsche Zeit
+
+Drei Punkte aus der QS in U13 (Marco). Teilnehmerliste: Sobald irgendein Wert eingetragen ist (auch nur Suche oder
+eine 0), steht „teilweise“ statt „offen“; beim Dreikampf mit Zähler der vollständigen Disziplinen, beim Einzelstart
+ohne; die Auswertung bleibt unverändert. Rückweg vom Bogen zur Seite des Teilnehmers mit `?gespeichert=0|1` und
+Bestätigung „Bewertungsbogen gespeichert.“ bzw. „Keine Änderungen im Bewertungsbogen zu speichern.“ (nur diese zwei
+Werte, feste Texte). Admin-Zeile „zuletzt … am TT.MM.“ in deutscher Zeit: `zoneinfo` (Europe/Berlin), ohne
+Zonendaten Rückfall auf die EU-Regel (letzter Sonntag März/Oktober, 01:00 UTC) statt einer neuen Abhängigkeit;
+die Verifikation hat die Regel für 1997–2039 gegen `zoneinfo` verglichen. Tests (Gegenprobe ok), Handbuch an drei
+Stellen. Verifikation in Ordnung; danach den Rückfall-Fänger enger gefasst und einen Test für den Rückfallweg ergänzt.
+
 ## 20.11.2026: UX-Test Web U14 – Sicherheitskorrektur Web-Verbindung
 
 Sicherheitskorrektur H-3 an der Web-Verbindung des Desktops (Dialog „Web-Verbindung“), Details folgen nach dem

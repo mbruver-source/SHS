@@ -944,21 +944,23 @@ def _listen_status(teilnehmer: dict, ergebnis: dict) -> dict:
     und Art (Name der CSS-Klasse status-<art>):
       - „disqualifiziert“ (dq) bzw. „Abbruch“ (abbruch) haben Vorrang,
       - „bewertet“ (fertig): alle Disziplinen mit Suche UND Anzeige,
-      - „teilweise (n von m)“ (teilweise): ein Teil der Disziplinen (nur Dreikampf),
-      - „offen“ (offen): noch keine Disziplin vollständig."""
+      - „teilweise“ (teilweise): etwas eingetragen, aber nicht alles vollständig; beim Dreikampf mit
+        Zähler „(n von 3)“ = vollständige Disziplinen (seit 20.11.2026 zählt auch eine angefangene
+        Disziplin, z. B. nur die Suche, Marco nach der QS in U13),
+      - „offen“ (offen): noch nichts eingetragen."""
     if ergebnis.get("disqualifiziert"):
         return {"text": "disqualifiziert", "art": "dq"}
     if ergebnis.get("abbruch"):
         return {"text": "Abbruch", "art": "abbruch"}
     disziplinen = _disziplinen_von(teilnehmer)
-    fertig = sum(
-        1 for d in disziplinen
-        if all(ergebnis.get(spalte) is not None for spalte in db.DISZIPLIN_SPALTEN[d])
-    )
+    spalten = [db.DISZIPLIN_SPALTEN[d] for d in disziplinen]
+    fertig = sum(1 for paar in spalten if all(ergebnis.get(spalte) is not None for spalte in paar))
+    angefangen = any(ergebnis.get(spalte) is not None for paar in spalten for spalte in paar)
     if fertig == len(disziplinen):
         return {"text": "bewertet", "art": "fertig"}
-    if fertig:
-        return {"text": f"teilweise ({fertig} von {len(disziplinen)})", "art": "teilweise"}
+    if angefangen:
+        text = f"teilweise ({fertig} von {len(disziplinen)})" if len(disziplinen) > 1 else "teilweise"
+        return {"text": text, "art": "teilweise"}
     return {"text": "offen", "art": "offen"}
 
 
@@ -1218,6 +1220,10 @@ def ergebnis_erfassen(conn, teilnehmer_id):
             status_formular = status
     else:
         zeilen = _zeilen_aus_ergebnis(db.get_ergebnis(conn, teilnehmer_id) or {}, disziplinen)
+        # Rückweg aus dem Bewertungsbogen („Speichern und zurück zur Seite des Teilnehmers“, Marco nach
+        # der QS in U13): Bestätigung wie in Liste und Tabelle; andere Werte zeigen nichts.
+        meldung = {"1": "Bewertungsbogen gespeichert.",
+                   "0": "Keine Änderungen im Bewertungsbogen zu speichern."}.get(request.args.get("gespeichert", ""))
 
     ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
     gespeicherter_abbruch = _abbruch_code(ergebnis)
@@ -1619,9 +1625,34 @@ def _tabellenzeile(t: dict, ergebnis: dict, formular=None, fehler: str | None = 
     }
 
 
+def _letzter_sonntag(jahr: int, monat: int) -> int:
+    """Tag des letzten Sonntags im Monat (für März und Oktober, je 31 Tage)."""
+    return 31 - (datetime(jahr, monat, 31).weekday() + 1) % 7
+
+
+def _deutsche_zeit(zeitpunkt: datetime) -> datetime:
+    """Zeitpunkt (mit Zeitzone) in deutscher Zeit. Der Container läuft in UTC (Marco nach der QS in U13:
+    sonst zeigte „am TT.MM.“ kurz nach Mitternacht den Vortag). Mit Zonendaten über zoneinfo; fehlen sie
+    (schlankes Image, Windows ohne tzdata), nach der EU-Regel: Sommerzeit vom letzten Sonntag im März
+    bis zum letzten Sonntag im Oktober, jeweils 01:00 UTC."""
+    try:
+        from zoneinfo import ZoneInfo
+        return zeitpunkt.astimezone(ZoneInfo("Europe/Berlin"))
+    except (ImportError, KeyError, OSError, ValueError):  # ZoneInfoNotFoundError ist ein KeyError
+        return _deutsche_zeit_nach_eu_regel(zeitpunkt)
+
+
+def _deutsche_zeit_nach_eu_regel(zeitpunkt: datetime) -> datetime:
+    utc = zeitpunkt.astimezone(timezone.utc)
+    beginn = datetime(utc.year, 3, _letzter_sonntag(utc.year, 3), 1, tzinfo=timezone.utc)
+    ende = datetime(utc.year, 10, _letzter_sonntag(utc.year, 10), 1, tzinfo=timezone.utc)
+    stunden = 2 if beginn <= utc < ende else 1
+    return utc.astimezone(timezone(timedelta(hours=stunden)))
+
+
 def _vor_wann(zeitpunkt_iso: str, jetzt: datetime | None = None) -> str:
-    """„gerade eben“, „vor 5 Min.“, „vor 2 Std.“ oder „am 20.11.“ - relativ statt Uhrzeit, weil der
-    Server (Container) in UTC läuft und die Ortszeit der Richter nicht kennt."""
+    """„gerade eben“, „vor 5 Min.“, „vor 2 Std.“ oder „am 20.11.“ (Datum in deutscher Zeit) - relativ
+    statt Uhrzeit, damit der Text auch ohne Zeitzonen-Kenntnis des Lesers stimmt."""
     try:
         zeitpunkt = datetime.fromisoformat(zeitpunkt_iso)
     except (TypeError, ValueError):
@@ -1636,7 +1667,8 @@ def _vor_wann(zeitpunkt_iso: str, jetzt: datetime | None = None) -> str:
         return f"vor {int(sekunden // 60)} Min."
     if sekunden < 24 * 3600:
         return f"vor {int(sekunden // 3600)} Std."
-    return f"am {zeitpunkt.day:02d}.{zeitpunkt.month:02d}."
+    ortszeit = _deutsche_zeit(zeitpunkt)
+    return f"am {ortszeit.day:02d}.{ortszeit.month:02d}."
 
 
 def _zuletzt_texte(aenderungen: dict[str, tuple[str, str]] | None) -> tuple[str | None, str | None]:
@@ -1973,7 +2005,8 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
                         return redirect(url_for("teilnehmerliste", gespeichert=teilnehmer_id,
                                                 aenderung=int(geschrieben)))
                     if von == "teilnehmer":
-                        return redirect(url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id))
+                        return redirect(url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id,
+                                                gespeichert=int(geschrieben)))
                     return redirect(url_for("ergebnistabelle", gespeichert=int(geschrieben),
                                             _anchor=f"zeile-{teilnehmer_id}", **filter_))
                 return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin,
