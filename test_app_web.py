@@ -44,6 +44,11 @@ from flask.testing import FlaskClient
 import app_web
 import db
 
+
+def _ohne_leerraum(text: str) -> str:
+    """CSS-Regeln unabhängig von Zeilenumbrüchen und Einrückung vergleichen (U17)."""
+    return re.sub(r"\s+", "", text)
+
 _TEST_SCHEMA = "termin_test"  # Platzhalter - die SQLite-Ersatzfunktion unten ignoriert
                                # den Schema-Namen ohnehin (eine einzelne Datei kennt
                                # keine Schemas/search_path)
@@ -2096,11 +2101,11 @@ class TestErgebnistabelle(_AppWebTestBasis):
         # UX-Test Web 19.11.2026 (C1, C4)
         self._anmelden()
         html = self.client.get("/ergebnisse").data.decode()
-        self.assertIn("table.ergebnisse thead { position: sticky; top: 0;", html)
+        self.assertIn(_ohne_leerraum("table.ergebnisse thead { position: sticky; top: 0;"), _ohne_leerraum(html))
         self.assertIn('<div class="tabellenrahmen" id="tabelle">', html)
         self.assertIn('action="/ergebnisse#tabelle" role="search"', html)
         self.assertIn('class="nur-handy"', html)
-        self.assertIn("min-height: 44px", html)
+        self.assertIn("min-height:44px", _ohne_leerraum(html))
 
     def test_speichern_behaelt_den_filter(self):
         self._anmelden()
@@ -2411,8 +2416,8 @@ class TestErgebnistabelle(_AppWebTestBasis):
         antwort = self.client.get("/ergebnisse")
         html = antwort.data.decode()
         self.assertNotIn("<script", html)
-        self.assertIn("position: sticky", html)
-        self.assertIn(".tabellenrahmen { overflow: auto;", html)  # seit U5 in beide Richtungen
+        self.assertIn("position:sticky", _ohne_leerraum(html))
+        self.assertRegex(html, r"\.tabellenrahmen\s*\{[^}]*overflow:\s*auto;")  # seit U5 in beide Richtungen
         self.assertIn("script-src 'none'", antwort.headers["Content-Security-Policy"])
 
     def test_navigation_und_links_zwischen_liste_und_tabelle(self):
@@ -2548,10 +2553,27 @@ class TestBewertungsbogen(_AppWebTestBasis):
         self.assertIn('<p class="feld-hinweis" id="hinweis-suche">Bitte eine ganze Zahl von 0 bis 60 eintragen.</p>', html)
         self.assertIn('<p class="feld-hinweis" id="hinweis-anzeige">Bitte eine ganze Zahl von 0 bis 40 eintragen.</p>', html)
         self.assertIn('aria-describedby="hinweis-suche"', html)
-        self.assertIn("input:invalid + .feld-hinweis { display: block; }", html)
+        self.assertIn(_ohne_leerraum("input:invalid + .feld-hinweis { display: block; }"), _ohne_leerraum(html))
         self.assertIn("Verletzung des Hundeführers", html)
         # A4: feste Kopfleiste ab Tablet-Breite
-        self.assertIn("header { position: sticky; top: 0; z-index: 20; }", html)
+        self.assertIn(_ohne_leerraum("header { position: sticky; top: 0; z-index: 20; }"), _ohne_leerraum(html))
+
+    def test_gemeinsame_bausteine_auf_einzelseite_bogen_und_tabelle(self):
+        # U17: Abbruch-Auswahl, Erklärtext und Zahlenfeld kommen aus templates/_bausteine.html.
+        self._anmelden()
+        einzel = self.client.get(f"/teilnehmer/{self.ed}").data.decode()
+        bogen = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        tabelle = self.client.get("/ergebnisse").data.decode()
+        for html in (einzel, bogen, tabelle):
+            self.assertIn('<option value="">kein Abbruch</option>', html)
+            self.assertNotIn('style="background: #fbf0d9', html)
+        for html in (einzel, bogen):
+            self.assertIn('class="status-erklaerung"', html)
+            self.assertIn("Verletzung des Hundeführers", html)
+            self.assertIn('class="feld-hinweis"', html)
+        self.assertIn("nicht nur für diese Disziplin", bogen)
+        self.assertNotIn("nicht nur für diese Disziplin", einzel)
+        self.assertIn('aria-describedby="hinweis-suche-1"', einzel)
 
     def test_bogen_aus_der_liste_fuehrt_zur_liste_zurueck(self):
         self._anmelden()
@@ -2799,6 +2821,7 @@ class TestBewertungsbogen(_AppWebTestBasis):
         html = antwort.data.decode()
         self.assertEqual(antwort.status_code, 200)
         self.assertIn("Die Notiz wurde inzwischen von jemand anderem geändert", html)
+        self.assertIn('<div class="fehler warnung" role="alert">', html)  # gelbe Konfliktbox (U17)
         self.assertEqual(db.get_ergebnis(self.conn, self.ed)[db.NOTIZ_SPALTEN[self.F]], "Notiz von A")
         neu = _FormularLeser()
         neu.feed(html)

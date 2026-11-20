@@ -2,6 +2,19 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U17 – Templates und CSS aufgeräumt
+
+Aufräumpaket aus der Wartbarkeitsprüfung, Teil Templates. Neue Datei `templates/_bausteine.html` mit Jinja-Makros
+für Abbruch-Auswahl, Erklärtext zu Disqualifiziert/Abbruch (ein Wortlaut) und Zahlenfeld mit Hinweis; Einzelseite,
+Bogen und Ergebnistabelle nutzen sie. In `base.html`: Konfliktbox als Klasse `.fehler.warnung` statt Inline-Farben,
+Farbvariablen `--warnung`/`--warnung-hg`, eine allgemeine `select`-Regel, `--kopf-hoehe` (bzw. in der Tabelle
+`--tabellenkopf-hoehe`) statt verstreuter Schätzwerte, `.status-auswahl`/`.status-erklaerung` für Einzelseite und
+Bogen. Sichtbar: Der Erklärtext der Einzelseite hat jetzt Größe und Wortlaut wie im Bogen; die Checkbox
+„Disqualifiziert“ im Bogen sitzt bündig wie auf der Einzelseite; der Bogen-Kopf ragt am Handy nicht mehr über die
+Karte (lange Werte wie „Trümmerfeld“, bestand schon vorher). Tests vergleichen CSS ohne Leerraum, ein Test prüft die
+Bausteine auf allen drei Seiten. Verifikation: gerendertes HTML alt/neu gleichwertig (bis auf die beabsichtigten
+Texte), Escaping in den Makros wirkt; danach kleine Doppelungen entfernt. Zwei Web-Screenshots vor dem Build neu.
+
 ## 20.11.2026: UX-Test Web U16 – Web-Logik aufgeräumt (Verhalten unverändert)
 
 Aufräumpaket aus der Wartbarkeitsprüfung (Marco: jetzt, ohne eigenes Modul `web_regeln.py`), in zwei Teilen wegen

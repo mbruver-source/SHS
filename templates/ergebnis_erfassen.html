@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_bausteine.html" as b %}
 {% block titel %}Ergebnis erfassen – SHS Prüfung{% endblock %}
 {% block inhalt %}
 <p><a class="knopf knopf-sekundaer" href="{{ url_for('teilnehmerliste') }}">&larr; Zur Teilnehmerliste</a></p>
@@ -12,7 +13,7 @@
 
   {% if meldung %}<div class="karte karte-erfolg" role="status">{{ meldung }}</div>{% endif %}
   {% if fehler %}<div class="fehler" role="alert">{{ fehler }}</div>{% endif %}
-  {% if konflikt %}<div class="fehler" role="alert" style="background: #fbf0d9; border-color: #6d4c00; color: #6d4c00;">{{ konflikt | join(' ') }}</div>{% endif %}
+  {% if konflikt %}<div class="fehler warnung" role="alert">{{ konflikt | join(' ') }}</div>{% endif %}
 
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -20,7 +21,7 @@
        app_web._status_einheit_schreiben). #}
     <input type="hidden" name="geladen_status" value="{{ geladen_status }}">
     {% for zeile in zeilen %}
-      <h2 style="margin-top: 1.2em;">{{ zeile.disziplin }}</h2>
+      <h2 class="abschnitt">{{ zeile.disziplin }}</h2>
       {# Versteckte Felder mit dem beim Laden der Seite sichtbaren Stand - Grundlage für
          den Lost-Update-Schutz beim Speichern (siehe app_web._geladene_werte_aus_formular/
          ergebnis_erfassen): unverändert lassende Disziplinen werden dadurch beim
@@ -29,42 +30,30 @@
       <input type="hidden" name="geladen_suche_{{ zeile.disziplin }}" value="{{ zeile.geladen_suche }}">
       <input type="hidden" name="geladen_anzeige_{{ zeile.disziplin }}" value="{{ zeile.geladen_anzeige }}">
       <label for="suche_{{ zeile.disziplin }}">Suchleistung (0–{{ suche_max }})</label>
-      <input type="number" id="suche_{{ zeile.disziplin }}" name="suche_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="{{ suche_max }}" aria-describedby="hinweis-suche-{{ loop.index }}"
-             value="{{ zeile.suche }}">
-      <p class="feld-hinweis" id="hinweis-suche-{{ loop.index }}">Bitte eine ganze Zahl von 0 bis {{ suche_max }} eintragen.</p>
+      {{ b.zahlenfeld("suche_" ~ zeile.disziplin, "suche_" ~ zeile.disziplin, suche_max, zeile.suche,
+                      "hinweis-suche-" ~ loop.index) }}
       <label for="anzeige_{{ zeile.disziplin }}">Anzeigeleistung (0–{{ anzeige_max }})</label>
-      <input type="number" id="anzeige_{{ zeile.disziplin }}" name="anzeige_{{ zeile.disziplin }}"
-             inputmode="numeric" min="0" max="{{ anzeige_max }}" aria-describedby="hinweis-anzeige-{{ loop.index }}"
-             value="{{ zeile.anzeige }}">
-      <p class="feld-hinweis" id="hinweis-anzeige-{{ loop.index }}">Bitte eine ganze Zahl von 0 bis {{ anzeige_max }} eintragen.</p>
+      {{ b.zahlenfeld("anzeige_" ~ zeile.disziplin, "anzeige_" ~ zeile.disziplin, anzeige_max, zeile.anzeige,
+                      "hinweis-anzeige-" ~ loop.index) }}
     {% endfor %}
 
     {# UX-Test Web 19.11.2026 (D1): Disqualifikation und Abbruch auch hier, nicht nur in der Tabelle. #}
-    <h2 style="margin-top: 1.2em;">Disqualifikation oder Abbruch</h2>
+    <h2 class="abschnitt">Disqualifikation oder Abbruch</h2>
     <p><small>Aktuell gespeichert: {{ status_text }}</small></p>
-    <div class="einzelseite-status">
+    <div class="status-auswahl">
       <label class="dq"><input type="checkbox" name="dq" value="1"{% if dq %} checked{% endif %}> Disqualifiziert</label>
       <div>
-        <label for="abbruch" style="margin-top: 0;">Abbruch</label>
-        <select id="abbruch" name="abbruch">
-          <option value="">kein Abbruch</option>
-          {% for code, text in abbruch_gruende %}
-            <option value="{{ code }}"{% if abbruch == code %} selected{% endif %}>{{ text }}</option>
-          {% endfor %}
-          {% if abbruch_ohne_grund %}<option value="ohne_grund"{% if abbruch == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
-        </select>
+        <label for="abbruch">Abbruch</label>
+        <select id="abbruch" name="abbruch">{{ b.abbruch_optionen(abbruch_gruende, abbruch, abbruch_ohne_grund) }}</select>
       </div>
     </div>
-    <p><small>Ein Abbruch braucht einen Grund („Verletzung HF“ = Verletzung des Hundeführers bzw. der Hundeführerin); mit Grund ist eine Teilbewertung möglich. Bei „Disqualifiziert“
-      werden eingetragene Punkte nicht gewertet und nicht verändert. Beides gilt für die ganze Prüfung des
-      Teilnehmers.</small></p>
+    {{ b.status_erklaerung() }}
     {% if gesperrt %}<p><small>Die Punkte oben werden zurzeit nicht gewertet und beim Speichern nicht verändert.</small></p>{% endif %}
 
     <p><button type="submit">Speichern</button></p>
     {# UX-Test Web 19.11.2026 (A1): Weg zum vollständigen Online-Bewertungsbogen. Die Knöpfe stehen
        bewusst NACH „Speichern“: die Eingabetaste löst den ersten Absendeknopf aus. #}
-    <h2 style="margin-top: 1.2em;">Bewertungsbogen</h2>
+    <h2 class="abschnitt">Bewertungsbogen</h2>
     <p><small>Notizen trägt man im Bewertungsbogen ein. Der Knopf speichert vorher die Eingaben dieser
       Seite.</small></p>
     <p class="einzelseite-bogen">

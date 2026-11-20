@@ -22,6 +22,10 @@
     --kopf-text2: #CDBFA9;
     --fertig-hg: #E8F1E8;
     --fertig: #24592A;
+    --warnung-hg: #fbf0d9;  /* gelb: „offen“ und Konflikte („inzwischen von jemand anderem geändert“) */
+    --warnung: #6d4c00;
+    /* Schätzwert für die feste Kopfleiste ab Tablet-Breite (zweizeilig bei 701-768 px ≈ 66 px). */
+    --kopf-hoehe: 4.5em;
   }
   * { box-sizing: border-box; }
   body {
@@ -47,7 +51,7 @@
      schließt Handys im Querformat aus (breit, aber niedrig). */
   @media (min-width: 701px) and (min-height: 560px) {
     header { position: sticky; top: 0; z-index: 20; }
-    html { scroll-padding-top: 4.5em; }
+    html { scroll-padding-top: var(--kopf-hoehe); }
   }
   header .marke { display: flex; align-items: center; gap: 0.6em; min-width: 0; }
   header .marke img { width: 42px; height: 42px; border-radius: 50%; flex: none; }
@@ -89,6 +93,11 @@
     padding: 0.8em 1em;
     margin-bottom: 1em;
   }
+  /* Konflikt statt Fehler: nichts überschrieben, die Seite zeigt den aktuellen Stand (gelb). */
+  .fehler.warnung { background: var(--warnung-hg); border-color: var(--warnung); color: var(--warnung); }
+  /* Abschnittsüberschriften in Formularen (Einzelseite) bzw. ohne Abstand oben (Bogen). */
+  h2.abschnitt { margin-top: 1.2em; }
+  h2.ohne-abstand { margin-top: 0; }
   label {
     display: block;
     font-weight: 600;
@@ -103,6 +112,8 @@
     background: #fff;
     color: var(--text);
   }
+  select { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand); border-radius: 6px;
+           background: #fff; color: var(--text); max-width: 100%; }
   /* UX-Test Web 19.11.2026 (B4): Ein Wert über dem Höchstwert (z. B. 84 bei höchstens 60) hält der Browser
      schon vor dem Absenden auf und zeigt nur kurz eine Blase am Feld. Ohne Skript (CSP) deshalb mit
      CSS: das Feld wird rot, ein Hinweis direkt dahinter (.feld-hinweis) bleibt stehen. */
@@ -140,18 +151,19 @@
   .bogen-links { margin: -0.3em 0.4em 0.5em; }
   .bogen-links a { display: inline-block; padding: 0.35em 0.2em; }
   .einzelseite-bogen button { margin: 0 0.4em 0.5em 0; }
-  /* Disqualifiziert/Abbruch auf der Seite je Teilnehmer (UX-Test Web 19.11.2026, D1). */
-  .einzelseite-status { display: flex; flex-wrap: wrap; gap: 0.8em 1.5em; align-items: flex-end; margin: 0.8em 0; }
-  .einzelseite-status label.dq { display: flex; align-items: center; gap: 0.4em; margin: 0; }
-  .einzelseite-status label.dq input { width: 1.5em; height: 1.5em; }
-  .einzelseite-status select { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
-                               border-radius: 6px; background: #fff; color: var(--text); max-width: 100%; }
+  /* Disqualifiziert/Abbruch auf der Seite je Teilnehmer (UX-Test Web 19.11.2026, D1) und im Bogen. */
+  .status-auswahl { display: flex; flex-wrap: wrap; gap: 0.8em 1.5em; align-items: flex-end; margin: 0.8em 0; }
+  .status-auswahl label { margin-top: 0; }
+  .status-auswahl label.dq { display: flex; align-items: center; gap: 0.4em; margin: 0; }
+  .status-auswahl label.dq input { width: 1.5em; height: 1.5em; }
+  /* Erklärtext dazu in normaler Größe (UX-Test Web D3), siehe _bausteine.status_erklaerung. */
+  .status-erklaerung { font-size: 0.95em; color: var(--gedaempft); margin: 0.4em 0 1em; }
   .status {
     display: inline-flex; align-items: center; gap: 0.25em;
     padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; white-space: nowrap;
   }
   .status svg { width: 14px; height: 14px; flex: none; }
-  .status-offen { background: #fbf0d9; color: #6d4c00; }
+  .status-offen { background: var(--warnung-hg); color: var(--warnung); }
   .status-fertig { background: var(--fertig-hg); color: var(--fertig); }
   /* Weitere Stufen der Teilnehmerliste (UX-Test Web 19.11.2026, B2), Kontrast mindestens 4,5:1. */
   .status-teilweise { background: #E6EEF6; color: #1F4A73; }

@@ -56,7 +56,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
 | U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
 | U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | erledigt (20.11.) | | unbekannt | |
-| U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | offen | | unbekannt | |
+| U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | erledigt (20.11.) | | unbekannt | |
 | U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
 | U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
 
@@ -286,6 +286,9 @@ abweichen, nicht im Umfang.
   Haken).
 - U7: `handbuch_web_bewertungsbogen.png` (Erklärtext, Gegenstand-Zeile, Knopf „Speichern und zurück …“; der
   Screenshot-Bogen hat einen Gegenstand), alle Admin-Bilder ≥ 701 px Breite (feste Kopfleiste, optisch gleich).
+- U15: keine (Demo-Daten tragen nur vollständige Paare ein, die Teilnehmerliste ändert sich nicht).
+- U17: `handbuch_web_ergebnis_dk.png` (Erklärtext zu Disqualifiziert/Abbruch jetzt größer, neuer Wortlaut),
+  `handbuch_web_bewertungsbogen.png` (Erklärtext ergänzt, Checkbox „Disqualifiziert“ bündig).
 
 ## Rückfragen an Marco
 
@@ -389,6 +392,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   U16 steht weiter auf „läuft“. Weiter mit demselben `/loop`-Befehl.
 - 20.11.2026: U16 Teil 2 erledigt, verifiziert und committet. Nächste: U17 (Templates/CSS-Makros, CSS-gekoppelte
   Tests; Sichtprüfung mit `scratchpad\web_live.py <repo>`).
+- 20.11.2026: U17 erledigt und committet (Hinweis: `web_live.py` cacht Templates – nach Template-Änderungen den
+  Server neu starten). Nächste: U18 (Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe).
 
 ## Abschlussbericht
 

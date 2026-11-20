@@ -1,0 +1,30 @@
+{# Gemeinsame Bausteine der Formularseiten (Einzelseite ergebnis_erfassen.html, Online-Bogen
+   bewertungsbogen.html, Ergebnistabelle ergebnis_tabelle.html), UX-Test Web U17 (20.11.2026): vorher
+   standen Abbruch-Auswahl, Erklärtext und Zahlenfeld mit Hinweis in mehreren Kopien. Einbinden mit
+   {% import "_bausteine.html" as b %}. #}
+
+{# Optionen der Abbruch-Auswahl: „kein Abbruch“, die Gründe und „ohne Grund“ nur als Altdatum. #}
+{% macro abbruch_optionen(gruende, gewaehlt, ohne_grund_anbieten) -%}
+  <option value="">kein Abbruch</option>
+  {% for code, text in gruende %}
+    <option value="{{ code }}"{% if gewaehlt == code %} selected{% endif %}>{{ text }}</option>
+  {% endfor %}
+  {% if ohne_grund_anbieten %}<option value="ohne_grund"{% if gewaehlt == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
+{%- endmacro %}
+
+{# Erklärung zu Disqualifiziert/Abbruch in einem Wortlaut (UX-Test Web D3: normale Größe, „HF“ erklärt).
+   je_disziplin: auf einer Seite nur einer Disziplin (Bogen) den Zusatz nennen. #}
+{% macro status_erklaerung(je_disziplin=false) -%}
+  <p class="status-erklaerung">Ein Abbruch braucht einen Grund („Verletzung HF“ = Verletzung des Hundeführers bzw.
+    der Hundeführerin); mit Grund ist eine Teilbewertung möglich. Bei „Disqualifiziert“ werden eingetragene Punkte
+    nicht gewertet und nicht verändert. Disqualifiziert und Abbruch gelten für die ganze Prüfung des
+    Teilnehmers{% if je_disziplin %}, nicht nur für diese Disziplin{% endif %}.</p>
+{%- endmacro %}
+
+{# Zahlenfeld mit Hinweis direkt dahinter (sichtbar per CSS bei :invalid, UX-Test Web B4) und
+   aria-describedby auf den Hinweis. #}
+{% macro zahlenfeld(id, name, hoechstwert, wert, hinweis_id, gesperrt=false) -%}
+  <input type="number" id="{{ id }}" name="{{ name }}" inputmode="numeric" min="0" max="{{ hoechstwert }}"
+         aria-describedby="{{ hinweis_id }}" value="{{ wert }}"{% if gesperrt %} readonly{% endif %}>
+  <p class="feld-hinweis" id="{{ hinweis_id }}">Bitte eine ganze Zahl von 0 bis {{ hoechstwert }} eintragen.</p>
+{%- endmacro %}

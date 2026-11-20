@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_bausteine.html" as b %}
 {% block titel %}Ergebnistabelle – SHS Prüfung{% endblock %}
 {% block main_attr %} class="breit"{% endblock %}
 {% block stil %}
@@ -8,15 +9,16 @@
      stehen und seit UX-Test Web 19.11.2026 (C1) auch die Kopfzeile (Disziplin, Suche/Anzeige) beim
      Blättern nach unten - eine Kopfzeile mit position: sticky klebt nur am Rand ihres eigenen
      Scrollbereichs, deshalb die Höhengrenze (dvh: sichtbare Höhe am Handy, vh als Rückfall). */
-  .tabellenrahmen { overflow: auto; max-height: 80vh; max-height: 80dvh; background: var(--karte);
+  /* --tabellenkopf-hoehe: Schätzwert für die zweizeilige Kopfzeile der Tabelle (Sprungziele darunter). */
+  .tabellenrahmen { --tabellenkopf-hoehe: 5.5em;
+                    overflow: auto; max-height: 80vh; max-height: 80dvh; background: var(--karte);
                     border: 1px solid var(--grau-rand); border-radius: 10px; -webkit-overflow-scrolling: touch;
-                    scroll-margin-top: 0.5em; scroll-padding-top: 5.5em; }
+                    scroll-margin-top: 0.5em; scroll-padding-top: var(--tabellenkopf-hoehe); }
   table.ergebnisse { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
   table.ergebnisse thead { position: sticky; top: 0; z-index: 4; }
   /* Sprung zu einer Zeile (#zeile-<id>, z. B. nach „Speichern und zurück zur Tabelle“) und Tab-Fokus
-     nach oben: nicht unter der festen Kopfzeile verstecken (scroll-padding-top am Rahmen, Schätzwert
-     für die zweizeilige Kopfzeile). */
-  table.ergebnisse tbody tr { scroll-margin-top: 5.5em; }
+     nach oben: nicht unter der festen Kopfzeile verstecken (scroll-padding-top am Rahmen). */
+  table.ergebnisse tbody tr { scroll-margin-top: var(--tabellenkopf-hoehe); }
   table.ergebnisse th, table.ergebnisse td { padding: 0.45em 0.5em; border-bottom: 1px solid var(--grau-rand);
                                              vertical-align: middle; background: var(--karte); }
   table.ergebnisse thead th { background: var(--grau-hell); text-align: center; font-size: 0.85em; white-space: nowrap; }
@@ -25,22 +27,20 @@
   table.ergebnisse thead th.erste { z-index: 3; background: var(--grau-hell); font-weight: 700; }
   table.ergebnisse input.punkt { width: 4.6em; padding: 0.5em 0.3em; font-size: 1.15em; text-align: center; }
   table.ergebnisse input[readonly] { background: var(--grau-hell); color: var(--gedaempft); }
-  table.ergebnisse select { font: inherit; padding: 0.5em 0.3em; max-width: 11em; border: 1px solid var(--grau-rand);
-                            border-radius: 6px; background: #fff; color: var(--text); }
+  table.ergebnisse select { padding: 0.5em 0.3em; max-width: 11em; }
   table.ergebnisse .leer { text-align: center; color: var(--gedaempft); }
   table.ergebnisse label.dq { display: flex; align-items: center; gap: 0.35em; margin: 0; font-weight: 400; white-space: nowrap; }
   table.ergebnisse label.dq input { width: 1.4em; height: 1.4em; }
   tr.zeile-fehler th.erste, tr.zeile-fehler td { background: #fbeceb; }
-  tr.zeile-konflikt th.erste, tr.zeile-konflikt td { background: #fbf0d9; }
+  tr.zeile-konflikt th.erste, tr.zeile-konflikt td { background: var(--warnung-hg); }
   tr.meldung td { padding: 0; }
   tr.meldung div { position: sticky; left: 0; box-sizing: border-box; width: min(100vw - 3em, 40em);
                    padding: 0.4em 0.6em; font-size: 0.9em; }
   tr.meldung.fehler-zeile td { background: #fbeceb; color: var(--rot); }
-  tr.meldung.konflikt-zeile td { background: #fbf0d9; color: #6d4c00; }
+  tr.meldung.konflikt-zeile td { background: var(--warnung-hg); color: var(--warnung); }
   .filter { display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: flex-end; }
   .filter > div { min-width: 0; }
-  .filter select, .filter input[type=text] { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand);
-                                             border-radius: 6px; background: #fff; color: var(--text); }
+  .filter input[type=text] { font: inherit; padding: 0.55em; }
   /* Bogen-Knopf groß genug zum Antippen (UX-Test Web 19.11.2026, C1: mindestens 44 px hoch). */
   table.ergebnisse .knopf-klein { font-size: 0.95em; padding: 0.7em 0.9em; min-height: 44px; white-space: nowrap; }
   .lk-klein { display: none; }
@@ -171,11 +171,7 @@
             </td>
             <td>
               <select name="abbruch_{{ z.id }}" aria-label="Abbruch: {{ t.nachname }}, {{ t.rufname_hund }}">
-                <option value="">kein Abbruch</option>
-                {% for code, text in abbruch_gruende %}
-                  <option value="{{ code }}"{% if z.abbruch == code %} selected{% endif %}>{{ text }}</option>
-                {% endfor %}
-                {% if z.abbruch_ohne_grund %}<option value="ohne_grund"{% if z.abbruch == 'ohne_grund' %} selected{% endif %}>Abbruch (ohne Grund, Altdaten)</option>{% endif %}
+                {{- b.abbruch_optionen(abbruch_gruende, z.abbruch, z.abbruch_ohne_grund) -}}
               </select>
             </td>
             <td><span class="status {% if z.status == 'gespeichert' %}status-fertig{% else %}status-offen{% endif %}">{{ z.status }}</span>
