@@ -415,6 +415,8 @@ class WebVerbindungsDialog(QDialog):
 
     # -- Aktionen
     def _fingerabdruck_holen(self) -> None:
+        """Holt den Fingerabdruck vom Server, lässt ihn bestätigen (mit Warnung, wenn er abweicht) und
+        verwirft dann ein Tresor-Passwort, das zu einem anderen Fingerabdruck gehört."""
         adresse = self._adresse_normal(melden=True)
         if adresse is None:
             return
@@ -431,7 +433,7 @@ class WebVerbindungsDialog(QDialog):
         anders = bool(bisher) and web_sync.fingerabdruck_normalisieren(hexwert) not in bisher
         # Ein Tresor-Eintrag ohne bekannten Fingerabdruck (z. B. Rest eines früheren Adresswechsels) wird
         # wie bei einem neuen Fingerabdruck behandelt: entfernen, einmal neu fragen.
-        ohne_fingerabdruck = not bisher and self._im_tresor(adresse)
+        tresor_rest = not bisher and self._im_tresor(adresse)
         if anders:
             text = (
                 "ACHTUNG: Der Server meldet einen ANDEREN Fingerabdruck als bisher gespeichert. Das "
@@ -447,39 +449,45 @@ class WebVerbindungsDialog(QDialog):
                 "beide übereinstimmen, dem Server vertrauen.\n\nDiesem Server vertrauen?")
         if not _ja_nein(self, "Fingerabdruck bestätigen", text):
             return
-        tresor_verworfen = False
-        if (anders or ohne_fingerabdruck) and web_tresor.verfuegbar():
-            # Ein Tresor-Passwort gehört zum Fingerabdruck, mit dem es gespeichert wurde: bei einem neuen
-            # wird es entfernt und einmal neu gefragt (U14). Klappt das Entfernen nicht, wird der neue
-            # Fingerabdruck nicht übernommen.
-            tresor_verworfen = self._tresor_stand.get(adresse, False)
-            if not web_tresor.passwort_loeschen(adresse):
-                QMessageBox.warning(
-                    self, "Passwort nicht entfernt",
-                    "Das gespeicherte Passwort dieses Servers ließ sich nicht aus dem Windows-Tresor entfernen. "
-                    "Der neue Fingerabdruck wurde deshalb nicht übernommen. Bitte zuerst „Gespeichertes "
-                    "Passwort vergessen“ versuchen.")
+        war_im_tresor = False
+        if anders or tresor_rest:
+            war_im_tresor = self._im_tresor(adresse)
+            if not self._tresor_passwort_verwerfen(adresse):
                 return
-            self._tresor_stand[adresse] = False
         self._fingerabdruck = hexwert
         self._fp_adresse = adresse
         self._fingerabdruck_anzeigen()
         self._passwort_stand_aktualisieren()
         self.status_label.setText(
             "Fingerabdruck bestätigt. Das gespeicherte Passwort gehörte zum bisherigen Fingerabdruck und wurde "
-            "entfernt - bitte neu eingeben. Mit „OK“ speichern." if tresor_verworfen
+            "entfernt - bitte neu eingeben. Mit „OK“ speichern." if war_im_tresor
             else "Fingerabdruck bestätigt. Mit „OK“ speichern.")
+
+    def _tresor_passwort_verwerfen(self, adresse: str) -> bool:
+        """Ein Tresor-Passwort gehört zum Fingerabdruck, mit dem es gespeichert wurde: bei einem neuen wird
+        es entfernt und einmal neu gefragt (U14). False (mit Meldung), wenn das Entfernen scheitert - dann
+        wird der neue Fingerabdruck nicht übernommen."""
+        if not web_tresor.verfuegbar():
+            return True
+        if not web_tresor.passwort_loeschen(adresse):
+            QMessageBox.warning(
+                self, "Passwort nicht entfernt",
+                "Das gespeicherte Passwort dieses Servers ließ sich nicht aus dem Windows-Tresor entfernen. "
+                "Der neue Fingerabdruck wurde deshalb nicht übernommen. Bitte zuerst „Gespeichertes "
+                "Passwort vergessen“ versuchen.")
+            return False
+        self._tresor_stand[adresse] = False
+        return True
 
     def _bisherige_fingerabdruecke(self, adresse: str) -> set[str]:
         """Für diese Adresse bisher bestätigte Fingerabdrücke (gespeichert und im Dialog), normalisiert."""
-        bisher = set()
+        kandidaten = []
         gespeichert = einstellungen_lesen()
         if gespeichert.adresse == adresse:
-            bisher.add(web_sync.fingerabdruck_normalisieren(gespeichert.fingerabdruck))
+            kandidaten.append(gespeichert.fingerabdruck)
         if self._fp_adresse == adresse and self._fingerabdruck:
-            bisher.add(web_sync.fingerabdruck_normalisieren(self._fingerabdruck))
-        bisher.discard(None)
-        return bisher
+            kandidaten.append(self._fingerabdruck)
+        return {fp for fp in map(web_sync.fingerabdruck_normalisieren, kandidaten) if fp}
 
     def _testen(self) -> None:
         adresse = self._adresse_normal(melden=True)
@@ -533,7 +541,13 @@ class WebVerbindungsDialog(QDialog):
             self.status_label.setText("Das gemerkte Passwort wurde vergessen." if im_speicher
                                       else "Es ist kein Passwort gespeichert.")
             return
-        web_tresor.passwort_loeschen(adresse)
+        if not web_tresor.passwort_loeschen(adresse):
+            # QS U19: ehrlich melden statt „entfernt“ (sonst Kreislauf mit dem Hinweis aus _fingerabdruck_holen).
+            self.status_label.setText(
+                "Das gespeicherte Passwort ließ sich nicht aus dem Windows-Tresor entfernen. Bitte in der "
+                "Windows-Anmeldeinformationsverwaltung (Windows-Anmeldeinformationen) den Eintrag dieses "
+                "Servers löschen.")
+            return
         self.status_label.setText("Das gespeicherte Passwort wurde aus dem Windows-Tresor entfernt"
                                   + (" und das bis zum Beenden gemerkte vergessen." if im_speicher else "."))
 

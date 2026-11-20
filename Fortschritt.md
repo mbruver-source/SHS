@@ -2,6 +2,17 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U19 – Abschluss Runde 2
+
+`OFFEN.md` und Entscheidungsdokumente: C41 (Web ohne Skripte: kein „Passwort anzeigen“, keine Rückfrage beim
+Verlassen der Tabelle), C42 (Kontoname bleibt nach Kontolöschung in „zuletzt …“), B23 (Regel-Funktionen nicht in
+eigenes Modul). QS über `f758046..HEAD` in drei Rollen: Sicherheit ohne Befund im Code; Korrektheit: „Gespeichertes
+Passwort vergessen“ meldet ein gescheitertes Entfernen aus dem Windows-Tresor jetzt ehrlich (vorher „entfernt“),
+Tests für den Rückhol-Text der Web-Verwaltung und eindeutige IDs auf der Dreikampf-Seite; Wartbarkeit: Kleinigkeiten
+umgesetzt (Farbvariable `--fehler-hg`, Hilfe `_tresor_passwort_verwerfen`, Herkunftswerte des Bogens aus einer
+Quelle, Zeitzonen-Test). SHS Test Suite gesamt grün (1648 bestanden). Offene Entscheidungen für Marco vor Push und
+Build im Abschlussbericht der Aufgabenliste.
+
 ## 20.11.2026: UX-Test Web U18 – Desktop: Passwortspeicher gekapselt
 
 Aufräumpaket aus der Wartbarkeitsprüfung, Teil Desktop (`desktop_web.py`), ohne Verhaltensänderung: öffentliche
@@ -51,11 +62,9 @@ Stellen. Verifikation in Ordnung; danach den Rückfall-Fänger enger gefasst und
 
 ## 20.11.2026: UX-Test Web U14 – Sicherheitskorrektur Web-Verbindung
 
-Sicherheitskorrektur H-3 an der Web-Verbindung des Desktops (Dialog „Web-Verbindung“), Details folgen nach dem
-Release. Sichtbar: Bestätigt man für einen Server einen neuen Fingerabdruck, entfernt das Programm dessen
-gespeichertes Passwort und fragt einmal neu (Hinweis im Dialog, Handbuch Kap. Web-Verbindung); die Warnung „anderer
-Fingerabdruck“ vergleicht jetzt unabhängig von der Schreibweise. GUI-Tests ergänzt (Gegenprobe ok). Verifikation
-und `qs-sicherheit` lieferten Nachbesserungen, alle umgesetzt.
+Sicherheitskorrektur H-3 an der Web-Verbindung des Desktops, Details folgen nach dem Release. Handbuch Kap.
+Web-Verbindung um einen Satz ergänzt. GUI-Tests ergänzt (Gegenprobe ok). Verifikation und `qs-sicherheit` lieferten
+Nachbesserungen, alle umgesetzt.
 
 ## 20.11.2026: Rückfragen aus dem UX-Test Web geklärt (Marco)
 

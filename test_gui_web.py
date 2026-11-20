@@ -312,6 +312,10 @@ def test_neuer_fingerabdruck_nicht_uebernommen_wenn_tresor_nicht_loescht(qtbot, 
     dialog.fingerabdruck_btn.click()
     assert meldungen.warning and "nicht übernommen" in meldungen.warning[-1][1]
     assert dialog.fingerabdruck_label.text().startswith("AB:AB")
+    # QS U19: auch „Gespeichertes Passwort vergessen“ meldet das Scheitern ehrlich statt „entfernt“
+    dialog.vergessen_btn.click()
+    assert "ließ sich nicht" in dialog.status_label.text()
+    assert "entfernt." not in dialog.status_label.text()
 
 
 def test_tresor_eintrag_ohne_bekannten_fingerabdruck_wird_entfernt(qtbot, monkeypatch, meldungen, tresor):

@@ -22,6 +22,7 @@
     --kopf-text2: #CDBFA9;
     --fertig-hg: #E8F1E8;
     --fertig: #24592A;
+    --fehler-hg: #fbeceb;   /* rot hinterlegt: Eingabefehler, disqualifiziert */
     --warnung-hg: #fbf0d9;  /* gelb: „offen“ und Konflikte („inzwischen von jemand anderem geändert“) */
     --warnung: #6d4c00;
     /* Schätzwert für die feste Kopfleiste ab Tablet-Breite (zweizeilig bei 701-768 px ≈ 66 px). */
@@ -86,7 +87,7 @@
   /* Erfolgsmeldung (templates/admin_termine.html), grün wie die Status-Pille „bewertet“. */
   .karte-erfolg { background: var(--fertig-hg); border-color: var(--fertig); }
   .fehler {
-    background: #fbeceb;
+    background: var(--fehler-hg);
     border: 1px solid var(--rot);
     color: var(--rot);
     border-radius: 8px;
@@ -117,7 +118,7 @@
   /* UX-Test Web 19.11.2026 (B4): Ein Wert über dem Höchstwert (z. B. 84 bei höchstens 60) hält der Browser
      schon vor dem Absenden auf und zeigt nur kurz eine Blase am Feld. Ohne Skript (CSP) deshalb mit
      CSS: das Feld wird rot, ein Hinweis direkt dahinter (.feld-hinweis) bleibt stehen. */
-  input[type=number]:invalid { border-color: var(--rot); background: #fbeceb; }
+  input[type=number]:invalid { border-color: var(--rot); background: var(--fehler-hg); }
   .feld-hinweis { display: none; color: var(--rot); font-size: 0.95em; margin: 0.3em 0 0; }
   input:invalid + .feld-hinweis { display: block; }
   input:focus-visible, button:focus-visible, .knopf:focus-visible, main a:focus-visible {
@@ -167,7 +168,7 @@
   .status-fertig { background: var(--fertig-hg); color: var(--fertig); }
   /* Weitere Stufen der Teilnehmerliste (UX-Test Web 19.11.2026, B2), Kontrast mindestens 4,5:1. */
   .status-teilweise { background: #E6EEF6; color: #1F4A73; }
-  .status-dq { background: #fbeceb; color: var(--rot); }
+  .status-dq { background: var(--fehler-hg); color: var(--rot); }
   .status-abbruch { background: #EDE7F3; color: #4F3A6B; }
   .startnummer { font-weight: 700; color: var(--gedaempft); margin-right: 0.4em; }
   small { color: var(--gedaempft); }

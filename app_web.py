@@ -1660,6 +1660,7 @@ def _deutsche_zeit(zeitpunkt: datetime) -> datetime:
 
 
 def _deutsche_zeit_nach_eu_regel(zeitpunkt: datetime) -> datetime:
+    """Rückfall von _deutsche_zeit ohne Zonendaten: MEZ bzw. MESZ nach der EU-Regel (siehe dort)."""
     utc = zeitpunkt.astimezone(timezone.utc)
     beginn = datetime(utc.year, 3, _letzter_sonntag(utc.year, 3), 1, tzinfo=timezone.utc)
     ende = datetime(utc.year, 10, _letzter_sonntag(utc.year, 10), 1, tzinfo=timezone.utc)
@@ -1990,7 +1991,7 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
     filter_ = {k: v for k, v in _tabellen_filter().items() if v}
     # UX-Test Web 19.11.2026 (aus U1): Herkunft des Bogens (?von=liste bzw. ?von=teilnehmer), damit
     # „zurück“ dorthin führt statt immer in die Tabelle. Nur feste Werte, sonst die Tabelle.
-    von = request.args.get("von") if request.args.get("von") in ("liste", "teilnehmer") else None
+    von = request.args.get("von") if request.args.get("von") in _BOGEN_HERKUNFT_TEXT else None
     if von:
         filter_ = {"von": von}  # die Tabellenfilter gelten auf diesen Wegen nicht
     notiz_feld = _BOGEN_NOTIZ_FELD.format(teilnehmer_id)

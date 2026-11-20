@@ -31,12 +31,12 @@
   table.ergebnisse .leer { text-align: center; color: var(--gedaempft); }
   table.ergebnisse label.dq { display: flex; align-items: center; gap: 0.35em; margin: 0; font-weight: 400; white-space: nowrap; }
   table.ergebnisse label.dq input { width: 1.4em; height: 1.4em; }
-  tr.zeile-fehler th.erste, tr.zeile-fehler td { background: #fbeceb; }
+  tr.zeile-fehler th.erste, tr.zeile-fehler td { background: var(--fehler-hg); }
   tr.zeile-konflikt th.erste, tr.zeile-konflikt td { background: var(--warnung-hg); }
   tr.meldung td { padding: 0; }
   tr.meldung div { position: sticky; left: 0; box-sizing: border-box; width: min(100vw - 3em, 40em);
                    padding: 0.4em 0.6em; font-size: 0.9em; }
-  tr.meldung.fehler-zeile td { background: #fbeceb; color: var(--rot); }
+  tr.meldung.fehler-zeile td { background: var(--fehler-hg); color: var(--rot); }
   tr.meldung.konflikt-zeile td { background: var(--warnung-hg); color: var(--warnung); }
   .filter { display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: flex-end; }
   .filter > div { min-width: 0; }

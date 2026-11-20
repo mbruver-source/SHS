@@ -1668,7 +1668,7 @@ class TestAppWeb(_AppWebTestBasis):
 
     def test_termin_zurueckholen_zeigt_bericht_und_download_funktioniert(self):
         self.import_bericht = db.ImportBericht(
-            aktualisiert=2, ohne_startnummer_uebersprungen=["Muster, A"], nicht_gefunden=["7"]
+            aktualisiert=2, ohne_startnummer_uebersprungen=["Muster, A"], nicht_gefunden=["7"], unveraendert=5
         )
         self._anmelden()
         antwort = self.client.post(
@@ -1679,7 +1679,7 @@ class TestAppWeb(_AppWebTestBasis):
         )
         self.assertEqual(antwort.status_code, 200)
         text = antwort.data.decode()
-        self.assertIn("2 Teilnehmer", text)
+        self.assertIn("2 Teilnehmer geändert, 5 unverändert.", text)  # wie im Desktop (U16)
         self.assertIn("Muster, A", text)
         self.assertIn("7", text)
         self.assertEqual(self.import_aufrufe, [_TEST_SCHEMA])
@@ -2060,16 +2060,21 @@ class TestErgebnistabelle(_AppWebTestBasis):
         self.assertEqual(regel(datetime(2026, 3, 29, 1, 0, tzinfo=timezone.utc)).utcoffset().total_seconds(), 7200)
         self.assertEqual(regel(datetime(2026, 10, 25, 0, 59, tzinfo=timezone.utc)).utcoffset().total_seconds(), 7200)
         self.assertEqual(regel(datetime(2026, 10, 25, 1, 0, tzinfo=timezone.utc)).utcoffset().total_seconds(), 3600)
+
+    def test_eu_regel_stimmt_mit_zoneinfo_ueberein(self):
+        from datetime import datetime, timedelta, timezone
         try:
             from zoneinfo import ZoneInfo
             berlin = ZoneInfo("Europe/Berlin")
-        except Exception:  # noqa: BLE001 - ohne Zonendaten nur die Regel prüfen
-            return
-        for monat in range(1, 13):
-            for tag in (1, 15, 28):
-                for stunde in (0, 1, 2, 23):
-                    t = datetime(2027, monat, tag, stunde, tzinfo=timezone.utc)
-                    self.assertEqual(regel(t).utcoffset(), t.astimezone(berlin).utcoffset(), t)
+        except (ImportError, KeyError, OSError):
+            self.skipTest("keine Zonendaten für Europe/Berlin")
+        # stündlich rund um beide Wechsel 2027 (28.03. und 31.10.) und je ein Tag mitten im Jahr
+        for start in (datetime(2027, 3, 27, tzinfo=timezone.utc), datetime(2027, 10, 30, tzinfo=timezone.utc),
+                      datetime(2027, 1, 15, tzinfo=timezone.utc), datetime(2027, 7, 15, tzinfo=timezone.utc)):
+            for stunde in range(72):
+                t = start + timedelta(hours=stunde)
+                self.assertEqual(app_web._deutsche_zeit_nach_eu_regel(t).utcoffset(),
+                                 t.astimezone(berlin).utcoffset(), t)
 
     def test_web_aenderungen_nie_in_der_termin_datei(self):
         # Die Tabelle gehört nur ins Web-Schema: nicht in SCHEMA, also nie in eine Termin-Datei.
@@ -2566,7 +2571,6 @@ class TestBewertungsbogen(_AppWebTestBasis):
         tabelle = self.client.get("/ergebnisse").data.decode()
         for html in (einzel, bogen, tabelle):
             self.assertIn('<option value="">kein Abbruch</option>', html)
-            self.assertNotIn('style="background: #fbf0d9', html)
         for html in (einzel, bogen):
             self.assertIn('class="status-erklaerung"', html)
             self.assertIn("Verletzung des Hundeführers", html)
@@ -2574,6 +2578,12 @@ class TestBewertungsbogen(_AppWebTestBasis):
         self.assertIn("nicht nur für diese Disziplin", bogen)
         self.assertNotIn("nicht nur für diese Disziplin", einzel)
         self.assertIn('aria-describedby="hinweis-suche-1"', einzel)
+        # Dreikampf: drei Disziplinen auf einer Seite - jede ID nur einmal, jeder Verweis hat ein Ziel.
+        dk_seite = self.client.get(f"/teilnehmer/{self.dk}").data.decode()
+        ids = re.findall(r'\bid="([^"]+)"', dk_seite)
+        self.assertEqual(len(ids), len(set(ids)), ids)
+        for verweis in re.findall(r'(?:for|aria-describedby)="([^"]+)"', dk_seite):
+            self.assertIn(verweis, ids)
 
     def test_bogen_aus_der_liste_fuehrt_zur_liste_zurueck(self):
         self._anmelden()

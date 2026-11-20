@@ -58,7 +58,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | erledigt (20.11.) | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | erledigt (20.11.) | | unbekannt | |
 | U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | erledigt (20.11.) | | unbekannt | |
-| U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
+| U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | erledigt (20.11.) | | unbekannt | |
 
 ## Entscheidungen (Marco, 19.11.2026)
 
@@ -396,6 +396,8 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   Server neu starten). Nächste: U18 (Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe).
 - 20.11.2026: U18 erledigt und committet. Nächste: U19 Abschluss 2 (OFFEN.md/Entscheidungen für F3, C3, Kontoname,
   `web_regeln.py`; QS in drei Rollen über `git diff f758046..HEAD`; Gesamtlauf; Doku-Abgleich; Bericht; Loop beenden).
+- 20.11.2026: U19 erledigt und committet, Loop beendet. Alle Aufgaben U1–U19 erledigt; offen nur „Vor dem Push /
+  Build von Marco zu entscheiden“ im Abschlussbericht (Nachtrag Runde 2).
 
 ## Abschlussbericht
 
@@ -442,3 +444,35 @@ Tabellenkopfzeile ungeprüft; die Rückfragen klären.
 
 **Aufgeräumt:** Test-Stack `shsux` samt Volume, Netz, Image `localhost/shsux-web:ux` und Ordner entfernt; Marcos
 Stacks unverändert (gestoppt wie vorher, Volumes vorhanden).
+
+### Nachtrag: Runde 2 (U14–U19, 20.11.2026)
+
+Nach der Klärung aller Rückfragen mit Marco (Tabelle „Rückfragen geklärt“) sechs weitere Aufgaben, je lokal
+committet, nicht gepusht:
+
+| Aufgabe | Commit | Inhalt |
+|---|---|---|
+| Klärung + U14 | `0919a83` | Rückfragen geklärt; Sicherheitskorrektur Web-Verbindung (Details nur lokal) |
+| – | `ddc4141` | Fortsetzungsnotiz |
+| U15 | `bb07eb3` | „teilweise“ schon bei angefangener Disziplin, Bestätigung nach dem Bogen, deutsche Zeit |
+| U16 | `751e1dd`, `7801b50` | Web-Logik aufgeräumt (zwei Teile wegen gezieltem Stopp vor dem Nutzungslimit) |
+| U17 | `5ec3d18` | Templates/CSS aufgeräumt, gemeinsame Bausteine `templates/_bausteine.html` |
+| U18 | `63dff2c` | Desktop: Passwortspeicher gekapselt |
+| U19 | (dieser Commit) | OFFEN.md (C41, C42, B23), QS in drei Rollen, Nachbesserungen, Bericht |
+
+**QS über `f758046..HEAD`:** Sicherheit ohne Befund im Code (Hinweis zur Offenlegung, siehe unten); Korrektheit
+ein Fehler (niedrig: „Gespeichertes Passwort vergessen“ meldete bei gescheitertem Löschen aus dem Tresor trotzdem
+„entfernt“) behoben, zwei Testlücken geschlossen; Wartbarkeit ohne mittleren Befund, Kleinigkeiten umgesetzt
+(`--fehler-hg`, `_tresor_passwort_verwerfen`, Herkunftswerte des Bogens aus einer Quelle, Zeitzonen-Test ohne
+stilles Auslassen und mit beiden Umstellungstagen).
+
+**Tests:** SHS Test Suite gesamt grün (1648 bestanden, 0 fehlgeschlagen, 213 übersprungen); nach den
+QS-Nachbesserungen die betroffenen Testdateien erneut grün. PostgreSQL-Tests nur in der CI.
+
+**Vor dem Push / Build von Marco zu entscheiden:**
+- Der Commit-Text von `0919a83` und der Handbuch-Satz in Kap. Web-Verbindung beschreiben das neue Verhalten der
+  Sicherheitskorrektur U14 so, dass man die alte Lücke erschließen kann (`Fortschritt.md` ist schon allgemein
+  gefasst). Die Desktop-Web-Verbindung war noch in keinem Release; Commit-Texte lassen sich nur vor dem Push ändern.
+- Nicht umgesetzte Kleinigkeiten der Wartbarkeitsprüfung: `textarea`/`select` in die gemeinsame Eingabefeld-Regel
+  aufnehmen; Inline-Styles in `admin_benutzer.html`/`admin_termine.html`; CSS-Tests teils nur über Teilzeichenketten.
+- Screenshots laut Liste neu aufnehmen; Zertifikatswarnungs-Texte live ansehen; Safari/iOS ungeprüft.
