@@ -298,11 +298,12 @@ def setze_stechen_sieger(conn: sqlite3.Connection, sieger_id: int | None, gruppe
         )
     conn.commit()
 
-def _disziplin_punkte(ergebnis: dict, disziplin: str) -> int | None:
+def disziplin_punkte(ergebnis: dict, disziplin: str) -> int | None:
     """Summe aus Such- und Anzeigeleistung einer einzelnen Disziplin, oder None,
-    wenn eine der beiden noch nicht erfasst ist."""
+    wenn eine der beiden noch nicht erfasst ist (auch bei fehlender Ergebniszeile `{}`).
+    Die eine Vollständigkeitsregel für Auswertung, Web-Teilnehmerliste und Bogen."""
     s_spalte, a_spalte = DISZIPLIN_SPALTEN[disziplin]
-    suche, anzeige = ergebnis[s_spalte], ergebnis[a_spalte]
+    suche, anzeige = ergebnis.get(s_spalte), ergebnis.get(a_spalte)
     if suche is None or anzeige is None:
         return None
     return suche + anzeige
@@ -313,18 +314,18 @@ def _teilpunkte(teilnehmer: dict, ergebnis: dict) -> int:
     disziplinen = [teilnehmer["disziplin"]] if teilnehmer["art"] == "ED" else ALLE_DISZIPLINEN
     return sum(ergebnis.get(spalte) or 0 for d in disziplinen for spalte in DISZIPLIN_SPALTEN[d])
 
-def _wertnote(teilnehmer: dict, ergebnis: dict):
+def wertnote_aus_punkten(teilnehmer: dict, ergebnis: dict):
     """Berechnet die Wertnote (inkl. Mindestpunktzahl-je-Disziplin-Prüfung, siehe
     shs_core.berechne_wertnote_ed/_dk) - oder None, wenn noch nicht alle nötigen
     Disziplin-Ergebnisse erfasst sind."""
     if teilnehmer["art"] == "ED":
-        punkte = _disziplin_punkte(ergebnis, teilnehmer["disziplin"])
+        punkte = disziplin_punkte(ergebnis, teilnehmer["disziplin"])
         if punkte is None:
             return None
         return berechne_wertnote_ed(punkte)
 
     # DK: alle drei Disziplinen müssen vollständig erfasst sein
-    einzelpunkte = [_disziplin_punkte(ergebnis, d) for d in ALLE_DISZIPLINEN]
+    einzelpunkte = [disziplin_punkte(ergebnis, d) for d in ALLE_DISZIPLINEN]
     if any(p is None for p in einzelpunkte):
         return None
     truemmerfeld, flaechensuche, behaeltnisstrecke = einzelpunkte
@@ -743,7 +744,7 @@ def berechne_auswertung(conn: sqlite3.Connection) -> tuple[list[Teilnehmerergebn
             else:
                 wertnote = Wertnote(punkte=0, notentext=ABBRUCH_TEXT, abkuerzung=ABBRUCH_ABK, bestanden=False)
         else:
-            wertnote = _wertnote(t, ergebnis)
+            wertnote = wertnote_aus_punkten(t, ergebnis)
             if wertnote is None:
                 ausstehend.append(t)
                 continue

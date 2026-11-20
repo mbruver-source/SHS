@@ -953,9 +953,8 @@ def _listen_status(teilnehmer: dict, ergebnis: dict) -> dict:
     if ergebnis.get("abbruch"):
         return {"text": "Abbruch", "art": "abbruch"}
     disziplinen = _disziplinen_von(teilnehmer)
-    spalten = [db.DISZIPLIN_SPALTEN[d] for d in disziplinen]
-    fertig = sum(1 for paar in spalten if all(ergebnis.get(spalte) is not None for spalte in paar))
-    angefangen = any(ergebnis.get(spalte) is not None for paar in spalten for spalte in paar)
+    fertig = sum(1 for d in disziplinen if db.disziplin_punkte(ergebnis, d) is not None)
+    angefangen = any(ergebnis.get(spalte) is not None for d in disziplinen for spalte in db.DISZIPLIN_SPALTEN[d])
     if fertig == len(disziplinen):
         return {"text": "bewertet", "art": "fertig"}
     if angefangen:
@@ -1121,29 +1120,58 @@ def _zeilen_aus_formular(formular, disziplinen: list[str]) -> list[dict]:
     return zeilen
 
 
+def _einzelseite_speichern(conn, teilnehmer_id: int, form, status: dict | None, werte: dict,
+                           geladene_werte: dict) -> tuple[bool, list[str]]:
+    """Schreibt die geprüften Eingaben der Einzelseite; liefert (etwas geschrieben, Konflikttexte).
+
+    Punkte je Disziplin (QS-Fund 21.09.): Bei einem Dreikampf wurden früher IMMER alle drei
+    Disziplinen aus dem beim Laden sichtbaren Stand gespeichert - bearbeiteten zwei Richter
+    gleichzeitig verschiedene Disziplinen desselben Hundes, überschrieb der später speichernde die
+    Eintragung des anderen still. Deshalb je Disziplin: abgeschickter Wert == geladener (versteckter
+    geladen_*-)Wert → diese Disziplin wurde nicht bearbeitet, nichts schreiben. Steht der Wert schon
+    so da, ebenfalls nichts (wie `schon_gleich` der Tabelle, QS U13). Eine abweichende fremde Änderung
+    einer bearbeiteten Disziplin überschreibt die Einzelseite weiter (C7, bekannt).
+
+    Status (seit 19.11.2026, UX-Test Web D1): mit denselben Hilfen wie die Tabelle
+    (_status_einheit_schreiben, _extern_gesperrt); hat jemand anderes die Zeile inzwischen gesperrt,
+    werden Punkte aus dem alten Stand nicht geschrieben, sondern als Konflikt gemeldet."""
+    geschrieben = False
+    konflikt_texte: list[str] = []
+    extern_gesperrt = False
+    if status is not None:
+        aktuell_ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
+        status_geschrieben, status_konflikt = _status_einheit_schreiben(
+            conn, teilnehmer_id, (status["dq"], status["abbruch"]), status["geladen"], aktuell_ergebnis)
+        geschrieben = status_geschrieben
+        if status_konflikt:
+            konflikt_texte.append(status_konflikt)
+        extern_gesperrt = _extern_gesperrt(status["geladen"], _status_paar(aktuell_ergebnis))
+    for disziplin, (suche, anzeige) in werte.items():
+        if _disziplin_unveraendert(form, disziplin, geladene_werte):
+            continue
+        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
+        vorher = db.get_ergebnis(conn, teilnehmer_id) or {}
+        vorher_werte = (vorher.get(spalte_suche), vorher.get(spalte_anzeige))
+        if (suche, anzeige) == vorher_werte:
+            continue
+        if extern_gesperrt:
+            konflikt_texte.append(_punkte_konflikt_text(
+                disziplin, suche, anzeige, tuple(_wert_zu_text(w) for w in vorher_werte)))
+            continue
+        db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
+        _aenderung_merken(conn, teilnehmer_id, disziplin)
+        geschrieben = True
+    return geschrieben, konflikt_texte
+
+
 @app.route("/teilnehmer/<int:teilnehmer_id>", methods=["GET", "POST"])
 @_termin_erforderlich
 def ergebnis_erfassen(conn, teilnehmer_id):
-    """GET zeigt die Erfassungsseite (vorbelegt mit dem aktuellen DB-Stand), POST
-    speichert. Die Seite trägt je Disziplin zusätzlich versteckte "geladen_*"-Felder mit
-    dem beim GET sichtbaren Stand (siehe _zeilen_aus_ergebnis/
-    templates/ergebnis_erfassen.html) - Grundlage für den Lost-Update-Schutz unten.
-
-    QS-Fund 21.09.: bei einem Dreikampf-Teilnehmer wurden bisher IMMER alle drei
-    Disziplinen gemeinsam gespeichert, basierend auf dem beim Laden der Seite sichtbaren
-    Stand. Bearbeiteten zwei Richter gleichzeitig verschiedene Disziplinen desselben
-    Hundes (am Prüfungstag normal), überschrieb der später speichernde Richter die
-    zwischenzeitliche Eintragung des anderen mit dem bei ihm noch alten Wert -
-    stillschweigend, ohne Warnung. Deshalb wird beim Speichern jetzt je Disziplin
-    verglichen: submitted Wert == geladener (versteckter Feld-)Wert? Wenn ja, wurde diese
-    Disziplin vom aktuellen Richter gar nicht bearbeitet - dann wird NICHTS geschrieben,
-    damit eine zwischenzeitliche fremde Änderung nicht überschrieben wird. Wenn nein
-    (Richter hat diese Disziplin tatsächlich bearbeitet), wird wie bisher gespeichert.
-
-    Seit 19.11.2026 (UX-Test Web, D1) auch Disqualifiziert und Abbruch mit Grund, mit denselben
-    Hilfen wie die Ergebnistabelle (_abbruch_fehler, _punkte_gesperrt, _status_einheit_schreiben,
-    _extern_gesperrt): Konflikte beim Status oder Punkte in einer inzwischen fremd gesperrten Zeile
-    werden nicht geschrieben, die Seite zeigt dann Hinweis und aktuellen Stand."""
+    """GET zeigt die Erfassungsseite (vorbelegt mit dem aktuellen DB-Stand), POST prüft und
+    speichert (_einzelseite_speichern). Die Seite trägt je Disziplin versteckte "geladen_*"-Felder
+    und geladen_status mit dem beim GET sichtbaren Stand (siehe _zeilen_aus_ergebnis/
+    templates/ergebnis_erfassen.html) - Grundlage für den Lost-Update-Schutz. Bei Eingabefehlern
+    zeigt die Seite die abgeschickten Werte, bei Konflikten Hinweis und aktuellen Stand."""
     teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
     if teilnehmer is None or teilnehmer.get("keine_teilnahme"):
         abort(404)
@@ -1167,39 +1195,8 @@ def ergebnis_erfassen(conn, teilnehmer_id):
         if fehler is None and not gesperrt:  # gesperrt: Punkte ignoriert (wie in der Tabelle)
             werte, fehler = _pruefe_und_parse_formular(form, disziplinen, geladene_werte)
         if fehler is None:
-            geschrieben = False
-            konflikt_texte = []
-            extern_gesperrt = False
-            if status is not None:
-                aktuell_ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
-                status_geschrieben, status_konflikt = _status_einheit_schreiben(
-                    conn, teilnehmer_id, (status["dq"], status["abbruch"]), status["geladen"], aktuell_ergebnis)
-                geschrieben = geschrieben or status_geschrieben
-                if status_konflikt:
-                    konflikt_texte.append(status_konflikt)
-                extern_gesperrt = _extern_gesperrt(
-                    status["geladen"], (bool(aktuell_ergebnis.get("disqualifiziert")), _abbruch_code(aktuell_ergebnis)))
-            for disziplin, (suche, anzeige) in werte.items():
-                if _disziplin_unveraendert(form, disziplin, geladene_werte):
-                    # Diese Disziplin wurde vom aktuellen Richter nicht verändert - siehe
-                    # Funktionsdocstring (Lost-Update-Schutz).
-                    continue
-                spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
-                vorher = db.get_ergebnis(conn, teilnehmer_id) or {}
-                vorher_werte = (vorher.get(spalte_suche), vorher.get(spalte_anzeige))
-                if (suche, anzeige) == vorher_werte:
-                    # Steht schon so da (z. B. von jemand anderem eingetragen): nichts schreiben, nicht
-                    # diesem Konto zuschreiben, keine Meldung (wie `schon_gleich` der Tabelle, QS U13).
-                    continue
-                if extern_gesperrt:
-                    # Wie in der Tabelle: jemand anderes hat inzwischen gesperrt, die Punkte aus dem
-                    # alten Stand werden nicht geschrieben.
-                    konflikt_texte.append(_punkte_konflikt_text(
-                        disziplin, suche, anzeige, tuple(_wert_zu_text(w) for w in vorher_werte)))
-                    continue
-                db.eintragen_ergebnis(conn, teilnehmer_id, disziplin, suche, anzeige)
-                _aenderung_merken(conn, teilnehmer_id, disziplin)
-                geschrieben = True
+            geschrieben, konflikt_texte = _einzelseite_speichern(
+                conn, teilnehmer_id, form, status, werte, geladene_werte)
             if not konflikt_texte:
                 # UX-Test Web 19.11.2026 (A1): „Bewertungsbogen … öffnen“ speichert zuerst die
                 # Eingaben dieser Seite (sonst gingen sie verloren) und öffnet dann den Bogen.
@@ -1230,7 +1227,7 @@ def ergebnis_erfassen(conn, teilnehmer_id):
     if status_formular is not None:
         dq, abbruch, geladen_status = status_formular["dq"], status_formular["abbruch"], status_formular["geladen_roh"]
     else:
-        dq, abbruch = bool(ergebnis.get("disqualifiziert")), gespeicherter_abbruch
+        dq, abbruch = _status_paar(ergebnis)
         geladen_status = _einzelseite_status_text(dq, abbruch)
 
     return render_template(
@@ -1285,9 +1282,40 @@ def _einzelseite_status_lesen(formular) -> dict | None:
             "geladen": geladen, "geladen_roh": roh}
 
 
-# Gemeinsame Regeln für Disqualifiziert/Abbruch: Ergebnistabelle (_tabelle_pruefen/
-# _tabelle_schreiben, auch für den Online-Bogen) und Einzelseite (ergebnis_erfassen) nutzen
-# dieselben Hilfen. Ein Status ist ein Paar (Disqualifiziert, Abbruchcode).
+# Gemeinsame Regeln für Punkte, Disqualifiziert/Abbruch und Notiz: Ergebnistabelle (_tabelle_pruefen/
+# _tabelle_schreiben), Online-Bogen (nutzt die Tabellen-Hilfen, dazu die Notiz) und Einzelseite
+# (ergebnis_erfassen) nutzen dieselben Hilfen. Ein Status ist ein Paar (Disqualifiziert, Abbruchcode),
+# siehe _status_paar. Jede Einheit (Punkte einer Disziplin, Status, Notiz) hat Lost-Update-Schutz über
+# _einheit_entscheiden: unverändert oder schon so gespeichert → nichts tun; seit dem Laden von jemand
+# anderem geändert → Konflikt (nichts überschreiben); sonst schreiben.
+
+_UEBERSPRINGEN, _SCHREIBEN, _KONFLIKT = "überspringen", "schreiben", "konflikt"
+
+
+def _einheit_entscheiden(unveraendert: bool, schon_gleich: bool, geladen_bekannt: bool, aktuell_wie_geladen: bool) -> str:
+    """_UEBERSPRINGEN, _SCHREIBEN oder _KONFLIKT für eine Einheit (Punkte einer Disziplin, Status, Notiz)."""
+    if unveraendert or schon_gleich:
+        return _UEBERSPRINGEN
+    if geladen_bekannt and not aktuell_wie_geladen:
+        return _KONFLIKT
+    return _SCHREIBEN
+
+
+def _wert_entscheiden(neu, geladen, aktuell) -> str:
+    """_einheit_entscheiden für eine Einheit, deren Wert direkt vergleichbar ist (Status-Paar, Notiz);
+    `geladen` None heißt: beim Laden sichtbarer Stand unbekannt (dann zählt jede Eingabe als Änderung)."""
+    return _einheit_entscheiden(
+        unveraendert=geladen is not None and neu == geladen,
+        schon_gleich=neu == aktuell,
+        geladen_bekannt=geladen is not None,
+        aktuell_wie_geladen=geladen is not None and aktuell == geladen,
+    )
+
+
+def _status_paar(ergebnis: dict) -> tuple[bool, str]:
+    """Gespeicherter Status als Paar (Disqualifiziert, Abbruchcode, siehe _abbruch_code)."""
+    return bool(ergebnis.get("disqualifiziert")), _abbruch_code(ergebnis)
+
 
 def _punkte_gesperrt(dq: bool, abbruch: str) -> bool:
     """Disqualifiziert oder Abbruch ohne Grund sperren die Punkte (der Server ignoriert sie)."""
@@ -1315,20 +1343,14 @@ def _status_einheit_schreiben(conn, teilnehmer_id: int, neu: tuple, geladen: tup
                               commit: bool = True) -> tuple[bool, str | None]:
     """Schreibt den Status als eigene Einheit mit Lost-Update-Schutz (_einheit_entscheiden).
     `ergebnis` ist der aktuelle DB-Stand. Liefert (geschrieben, Konflikttext)."""
-    aktuell = (bool(ergebnis.get("disqualifiziert")), _abbruch_code(ergebnis))
-    entscheidung = _einheit_entscheiden(
-        unveraendert=geladen is not None and neu == geladen,
-        schon_gleich=neu == aktuell,
-        geladen_bekannt=geladen is not None,
-        aktuell_wie_geladen=geladen is not None and aktuell == geladen,
-    )
-    if entscheidung == "schreiben":
+    entscheidung = _wert_entscheiden(neu, geladen, _status_paar(ergebnis))
+    if entscheidung == _SCHREIBEN:
         dq, abbruch = neu
         db.setze_ergebnis_status(conn, teilnehmer_id, dq, bool(abbruch),
                                  abbruch_grund=abbruch if abbruch in db.ABBRUCH_GRUENDE else None, commit=commit)
-        _aenderung_merken(conn, teilnehmer_id, db._BEREICH_STATUS, commit=commit)
+        _aenderung_merken(conn, teilnehmer_id, db.BEREICH_STATUS, commit=commit)
         return True, None
-    if entscheidung == "konflikt":
+    if entscheidung == _KONFLIKT:
         return False, ("Disqualifiziert/Abbruch wurde inzwischen von jemand anderem geändert "
                        f"(aktuell: {_tabellen_status_text(ergebnis)}) - Ihre Änderung wurde nicht gespeichert.")
     return False, None
@@ -1341,6 +1363,8 @@ def _extern_gesperrt(geladen: tuple | None, aktuell: tuple) -> bool:
 
 
 def _punkte_konflikt_text(disziplin: str, suche, anzeige, aktuelle_texte: tuple) -> str:
+    """Hinweis, wenn die Punkte einer Disziplin nicht gespeichert wurden, weil sie inzwischen jemand
+    anderes geändert hat; `aktuelle_texte` ist der aktuelle Stand als Texte (Suche, Anzeige)."""
     ihre = f"{_wert_zu_text(suche) or '–'}/{_wert_zu_text(anzeige) or '–'}"
     jetzt = f"{aktuelle_texte[0] or '–'}/{aktuelle_texte[1] or '–'}"
     return (f"{disziplin} wurde inzwischen von jemand anderem geändert (aktuell Suche/Anzeige: {jetzt}) - "
@@ -1410,7 +1434,8 @@ def _ergebnis_zustand(teilnehmer: dict, ergebnis: dict) -> dict:
     for disziplin in _disziplinen_von(teilnehmer):
         spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[disziplin]
         punkte[disziplin] = (_wert_zu_text(ergebnis.get(spalte_suche)), _wert_zu_text(ergebnis.get(spalte_anzeige)))
-    return {"punkte": punkte, "dq": bool(ergebnis.get("disqualifiziert")), "abbruch": _abbruch_code(ergebnis)}
+    dq, abbruch = _status_paar(ergebnis)
+    return {"punkte": punkte, "dq": dq, "abbruch": abbruch}
 
 
 def _geladen_text(teilnehmer: dict, zustand: dict) -> str:
@@ -1530,15 +1555,6 @@ def _tabelle_pruefen(formular, ids: list[int], teilnehmer_je_id: dict) -> tuple[
     return plaene, fehler
 
 
-def _einheit_entscheiden(unveraendert: bool, schon_gleich: bool, geladen_bekannt: bool, aktuell_wie_geladen: bool) -> str:
-    """"skip", "schreiben" oder "konflikt" für eine Einheit (Punkte einer Disziplin bzw. Status)."""
-    if unveraendert or schon_gleich:
-        return "skip"
-    if geladen_bekannt and not aktuell_wie_geladen:
-        return "konflikt"
-    return "schreiben"
-
-
 def _tabelle_schreiben(conn, plaene: dict, teilnehmer_je_id: dict, ergebnis_je_id: dict) -> tuple[set, dict]:
     """Phase 2: Konfliktprüfung gegen den aktuellen DB-Stand und Schreiben. Liefert (IDs der
     Zeilen mit geschriebenen Werten, {id: [Konflikttexte]}). Ab _TABELLE_SAMMELSPEICHERN_UEBER
@@ -1573,13 +1589,13 @@ def _tabelle_schreiben(conn, plaene: dict, teilnehmer_je_id: dict, ergebnis_je_i
                 geladen_bekannt=geladen is not None,
                 aktuell_wie_geladen=geladen is not None and aktuelle_texte == geladen["punkte"].get(disziplin),
             )
-            if entscheidung == "schreiben" and extern_gesperrt:
-                entscheidung = "konflikt"
-            if entscheidung == "schreiben":
+            if entscheidung == _SCHREIBEN and extern_gesperrt:
+                entscheidung = _KONFLIKT
+            if entscheidung == _SCHREIBEN:
                 db.eintragen_ergebnis(conn, tid, disziplin, suche, anzeige, commit=not gesammelt)
                 _aenderung_merken(conn, tid, disziplin, commit=not gesammelt)
                 gespeichert.add(tid)
-            elif entscheidung == "konflikt":
+            elif entscheidung == _KONFLIKT:
                 meldungen.append(_punkte_konflikt_text(disziplin, suche, anzeige, aktuelle_texte))
     if gesammelt:
         conn.commit()
@@ -1675,7 +1691,7 @@ def _zuletzt_texte(aenderungen: dict[str, tuple[str, str]] | None) -> tuple[str 
     """(Kurztext der letzten Änderung, Einzelheiten je Bereich) für eine Tabellenzeile (nur Admins, B6)."""
     if not aenderungen:
         return None, None
-    reihenfolge = list(db.ALLE_DISZIPLINEN) + [db._BEREICH_STATUS]
+    reihenfolge = list(db.ALLE_DISZIPLINEN) + [db.BEREICH_STATUS]
     eintraege = sorted(aenderungen.items(), key=lambda e: reihenfolge.index(e[0]) if e[0] in reihenfolge else 99)
     bereich, (name, zeit) = max(aenderungen.items(), key=lambda e: e[1][1])
     kurz = f"zuletzt {name}, {_vor_wann(zeit)} ({bereich})"
@@ -1902,26 +1918,16 @@ def _bogen_zusammenfassung(teilnehmer: dict, ergebnis: dict, disziplin: str) -> 
     """Gespeicherter Stand für die Anzeige unter dem Bogen: Gesamtpunktzahl der Disziplin (nur,
     wenn Suche UND Anzeige da sind), Status und die Wertnote nach shs_core. Bei ED ist das die
     Wertnote der Prüfung, bei DK braucht sie alle drei Disziplinen. Bei Disqualifiziert/Abbruch
-    gibt es keine Wertnote aus den Punkten (wie in db.berechne_auswertung)."""
-    def punkte(d: str) -> int | None:
-        spalte_suche, spalte_anzeige = db.DISZIPLIN_SPALTEN[d]
-        suche, anzeige = ergebnis.get(spalte_suche), ergebnis.get(spalte_anzeige)
-        return None if suche is None or anzeige is None else suche + anzeige
-
-    gesamt = punkte(disziplin)
+    gibt es keine Wertnote aus den Punkten (wie in db.berechne_auswertung). Vollständigkeit und
+    Wertnote kommen aus db (disziplin_punkte, wertnote_aus_punkten) - eine Regel für alle."""
+    gesamt = db.disziplin_punkte(ergebnis, disziplin)
     wertnote = None
     hinweis = None
     if not (ergebnis.get("disqualifiziert") or ergebnis.get("abbruch")):
-        if teilnehmer["art"] == "ED":
-            if gesamt is not None:
-                wertnote = db.berechne_wertnote_ed(gesamt)
-        else:
-            je_disziplin = [punkte(d) for d in db.ALLE_DISZIPLINEN]
-            if None in je_disziplin:
-                hinweis = ("Die Wertnote des Dreikampfs steht fest, sobald für alle drei Disziplinen "
-                           "Suche und Anzeige eingetragen sind.")
-            else:
-                wertnote = db.berechne_wertnote_dk(*je_disziplin)
+        wertnote = db.wertnote_aus_punkten(teilnehmer, ergebnis)
+        if wertnote is None and teilnehmer["art"] != "ED":
+            hinweis = ("Die Wertnote des Dreikampfs steht fest, sobald für alle drei Disziplinen "
+                       "Suche und Anzeige eingetragen sind.")
     return {"gesamt": gesamt, "status": _tabellen_status_text(ergebnis), "wertnote": wertnote,
             "wertnote_hinweis": hinweis}
 
@@ -1932,20 +1938,15 @@ def _bogen_notiz_schreiben(conn, teilnehmer_id: int, disziplin: str, neu: str, g
     hat (gleiche Regel wie _einheit_entscheiden). Liefert (geschrieben, Konflikttext)."""
     aktuell = _notiz_text(ergebnis.get(db.NOTIZ_SPALTEN[disziplin]))
     geladen = None if geladen_roh is None else _notiz_text(geladen_roh)
-    entscheidung = _einheit_entscheiden(
-        unveraendert=geladen is not None and neu == geladen,
-        schon_gleich=neu == aktuell,
-        geladen_bekannt=geladen is not None,
-        aktuell_wie_geladen=geladen is not None and aktuell == geladen,
-    )
-    if entscheidung == "schreiben":
+    entscheidung = _wert_entscheiden(neu, geladen, aktuell)
+    if entscheidung == _SCHREIBEN:
         try:
             db.setze_notiz(conn, teilnehmer_id, disziplin, neu)
         except ValueError as fehler:
             return False, f"Die Notiz wurde nicht gespeichert: {fehler}"
         _aenderung_merken(conn, teilnehmer_id, disziplin)
         return True, None
-    if entscheidung == "konflikt":
+    if entscheidung == _KONFLIKT:
         return False, ("Die Notiz wurde inzwischen von jemand anderem geändert - Ihre Änderung wurde nicht "
                        "gespeichert (die Seite zeigt die aktuelle Notiz).")
     return False, None

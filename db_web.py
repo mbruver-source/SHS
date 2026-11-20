@@ -151,7 +151,7 @@ _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER = (
 
 # --- Wer hat wann im Web eingetragen (UX-Test Web 19.11.2026, B6, Marco) --------------------------
 #
-# Je Teilnehmer und „Bereich“ (Disziplin für Punkte/Notiz, _BEREICH_STATUS für Disqualifiziert/Abbruch)
+# Je Teilnehmer und „Bereich“ (Disziplin für Punkte/Notiz, BEREICH_STATUS für Disqualifiziert/Abbruch)
 # das Web-Konto und der Zeitpunkt der letzten Änderung. Die Tabelle liegt NUR im Termin-Schema der
 # Web-Version (angelegt in erstelle_termin_postgres/oeffne_termin_postgres), nie in SCHEMA und damit nie in
 # einer Termin-Datei; Veröffentlichen und Zurückholen lesen sie nicht. Kein Fremdschlüssel: Teilnehmer
@@ -165,7 +165,7 @@ _WEB_AENDERUNGEN_SCHEMA = (
     "zeitpunkt TEXT NOT NULL, "
     "PRIMARY KEY (teilnehmer_id, bereich))"
 )
-_BEREICH_STATUS = "Status"
+BEREICH_STATUS = "Status"
 
 
 def aenderung_merken(conn, teilnehmer_id: int, bereich: str, benutzername: str, commit: bool = True) -> None:

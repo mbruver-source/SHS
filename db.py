@@ -217,13 +217,13 @@ from db_ergebnisse import (  # noqa: F401
     teilnehmer_fehlende_pflichtangaben,
     teilnehmer_gegenstand_hinweis,
     zeitplan_bezeichnung,
-    _disziplin_punkte,
+    disziplin_punkte,  # öffentlich seit 20.11.2026: eine Vollständigkeitsregel auch für app_web
     _dk_gegenstand_status,
     _ed_gegenstand_status,
     _GEGENSTAND_FELDER,
     _teilnehmer_schluessel,
     _teilpunkte,
-    _wertnote,
+    wertnote_aus_punkten,  # öffentlich seit 20.11.2026 (Bewertungsbogen im Web)
 )
 from db_zeitplan import (  # noqa: F401
     add_zeitplan_pause,
@@ -317,7 +317,7 @@ from db_web import (  # noqa: F401
     _pruefe_schema_name,
     _SCHEMA_NAME_MUSTER,
     _setze_termin_suchpfad,
-    _BEREICH_STATUS,
+    BEREICH_STATUS,
     _WEB_AENDERUNGEN_SCHEMA,
     _WEB_BENUTZER_INDEX_BENUTZERNAME_LOWER,
     _WEB_BENUTZER_SCHEMA,

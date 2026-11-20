@@ -1961,7 +1961,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
         aenderungen = db.aenderungen_lesen(self.conn)
         self.assertEqual(set(aenderungen), {self.ed, self.dk})
         self.assertEqual(aenderungen[self.ed][self.F][0], "helfer")
-        self.assertEqual(aenderungen[self.dk][db._BEREICH_STATUS][0], "helfer")
+        self.assertEqual(aenderungen[self.dk][db.BEREICH_STATUS][0], "helfer")
         self.assertNotIn(self.ed2, aenderungen)  # nichts geändert, nichts gemerkt
         # Richter sehen es nicht ...
         self.assertNotIn("zuletzt helfer", self.client.get("/ergebnisse").data.decode())
@@ -1970,7 +1970,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
         self._anmelden()
         html = self.client.get("/ergebnisse").data.decode()
         self.assertIn(f"zuletzt helfer, gerade eben ({self.F})", html)
-        self.assertIn(f'title="{db._BEREICH_STATUS}: helfer, gerade eben"', html)
+        self.assertIn(f'title="{db.BEREICH_STATUS}: helfer, gerade eben"', html)
 
     def test_unveraendertes_speichern_merkt_nichts_und_letzter_gewinnt(self):
         self._anmelden()
@@ -1988,7 +1988,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
         self.client.post(f"/teilnehmer/{self.ed}", data={
             f"suche_{self.F}": "40", f"anzeige_{self.F}": "30", "geladen_status": "0|", "abbruch": "krankheit"})
         aenderungen = db.aenderungen_lesen(self.conn)[self.ed]
-        self.assertEqual(set(aenderungen), {self.F, db._BEREICH_STATUS})
+        self.assertEqual(set(aenderungen), {self.F, db.BEREICH_STATUS})
         pfad = f"/bewertungsbogen/{self.ed2}/{quote(self.T)}"
         leser = _FormularLeser()
         leser.feed(self.client.get(pfad).data.decode())
@@ -2003,7 +2003,7 @@ class TestErgebnistabelle(_AppWebTestBasis):
             f"suche_{self.F}": "", f"anzeige_{self.F}": "",
             f"geladen_suche_{self.F}": "", f"geladen_anzeige_{self.F}": "",
             "geladen_status": "0|", "dq": "1"})
-        self.assertEqual(set(db.aenderungen_lesen(self.conn)[self.ed]), {db._BEREICH_STATUS})
+        self.assertEqual(set(db.aenderungen_lesen(self.conn)[self.ed]), {db.BEREICH_STATUS})
 
     def test_einzelseite_schreibt_gleichen_fremden_wert_nicht_dem_konto_zu(self):
         # QS U13: wie `schon_gleich` der Tabelle - steht der Wert schon so da, wird nichts geschrieben.

@@ -55,7 +55,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
 | U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
 | U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
-| U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | offen | | unbekannt | |
+| U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | läuft (20.11.) | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | offen | | unbekannt | |
 | U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
 | U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
@@ -378,6 +378,15 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   Sicherheitsdetails und wurde vor jedem Push neu erstellt). Nächste: U15 (drei Web-Kleinigkeiten).
 - 20.11.2026: U15 erledigt und committet. Nächste: U16 (Aufräumen Web-Logik, Verhalten unverändert; die neue
   „teilweise“-Regel in `_listen_status` – angefangen = irgendein Wert – beim Zusammenführen erhalten).
+- 20.11.2026: **Gezielter Stopp (Marco, Nutzungslimit) mitten in U16.** Teil 1 lokal committet, Tests grün
+  (test_app_web, test_ende_zu_ende_web, test_db, test_db_fassade): `db.disziplin_punkte` und
+  `db.wertnote_aus_punkten` öffentlich und von `_listen_status`/`_bogen_zusammenfassung` genutzt;
+  `db.BEREICH_STATUS` öffentlich; `_einheit_entscheiden` mit Konstanten im Block „Gemeinsame Regeln“, dazu
+  `_wert_entscheiden` und `_status_paar`; `ergebnis_erfassen` in View und `_einzelseite_speichern` geteilt.
+  **Offen in U16:** `sync_termin.py` gibt „unverändert“ mit aus; `_bogen_ruecksprung` für den Rückweg-Code im Bogen;
+  Zählwort-Hilfe `_anzahl`; Docstrings `_einzelseite_status_*`, Abschnittskommentar des Bogens; danach
+  `verifikation` (Schwerpunkt „Verhalten unverändert“, Diff ab dem Commit vor Teil 1), `Fortschritt.md`, Commit.
+  U16 steht weiter auf „läuft“. Weiter mit demselben `/loop`-Befehl.
 
 ## Abschlussbericht
 
