@@ -1167,8 +1167,15 @@ Sie gelten nur für Termine als Datei und sind in der Demoprüfung gesperrt.
 **Passwort im Windows-Tresor:** Mit dem Haken **„Passwort merken“** (Standard) legt das Programm
 das Passwort im Windows-Tresor (Anmeldeinformationsverwaltung) deines Benutzerkontos ab, nicht in
 den Einstellungen. **„Gespeichertes Passwort vergessen“** entfernt es wieder. Wird ein
-gespeichertes Passwort vom Server abgelehnt, vergisst das Programm es und fragt neu. Auf Systemen
-ohne Windows-Tresor wird das Passwort jedes Mal abgefragt.
+gespeichertes Passwort vom Server abgelehnt, vergisst das Programm es und fragt neu.
+
+**Ohne „Passwort merken“** (oder auf Rechnern ohne Windows-Tresor, dann steht das unter dem Haken)
+behält das Programm das Passwort nur im Arbeitsspeicher, bis du es beendest: Ein Passwort, das du
+im Dialog „Web-Verbindung“ oder bei der ersten Abfrage eingibst, wird beim nächsten Veröffentlichen
+oder Zurückholen nicht erneut abgefragt. Es wird nie auf die Festplatte geschrieben und verworfen,
+wenn du den Termin wechselst, die Verbindungsdaten änderst, „Gespeichertes Passwort vergessen“
+drückst oder der Server es ablehnt. Lässt du das Passwortfeld im Dialog leer, steht dort ein Hinweis:
+Das Programm fragt dann beim ersten Veröffentlichen oder Zurückholen danach.
 
 **Vor der Prüfung: „Ins Web veröffentlichen…“**
 

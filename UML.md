@@ -674,7 +674,8 @@ sequenceDiagram
     DW->>DW: ungespeicherte Eingaben klären, Bestätigung
     DW->>DB: konsistente Kopie (sqlite backup) in Temp-Datei
     DW->>TR: passwort_lesen
-    TR-->>DW: Passwort oder nichts (dann Abfrage)
+    TR-->>DW: Passwort oder nichts
+    Note over DW: sonst das bis Programmende gemerkte Passwort (nur Arbeitsspeicher, gleiche Verbindung), sonst Abfrage
     DW->>WS: WebClient.anmelden (im Hintergrund-Thread)
     WS->>S: TLS verbinden, Fingerabdruck prüfen
     alt Fingerabdruck weicht ab

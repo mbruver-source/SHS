@@ -36,7 +36,9 @@ def tresor(monkeypatch):
     monkeypatch.setattr(web_tresor, "passwort_speichern",
                         lambda adresse, benutzer, passwort: speicher.__setitem__(adresse, passwort) or True)
     monkeypatch.setattr(web_tresor, "passwort_loeschen", lambda adresse: speicher.pop(adresse, None) is None or True)
-    return speicher
+    desktop_web.passwort_vergessen()  # Passwort im Arbeitsspeicher (E4) nicht von Test zu Test mitnehmen
+    yield speicher
+    desktop_web.passwort_vergessen()
 
 
 @pytest.fixture
@@ -303,8 +305,11 @@ def test_dialog_bei_schriftstufen_nichts_abgeschnitten(qtbot, darstellung_speich
     _dialog_passt(dialog, qapp)
 
 
+@pytest.mark.parametrize("ohne_tresor", [False, True])
 @pytest.mark.parametrize("faktor", [1.0, 1.3, 1.6, 2.0])
-def test_dialog_bei_grosser_schrift_nichts_abgeschnitten(qtbot, faktor):
+def test_dialog_bei_grosser_schrift_nichts_abgeschnitten(qtbot, monkeypatch, faktor, ohne_tresor):
+    if ohne_tresor:  # zusätzliche Erklärung unter dem Haken (UX-Test Web 19.11.2026, E6)
+        monkeypatch.setattr(web_tresor, "_ist_windows", lambda: False)
     qapp = QApplication.instance()
     vorher = qapp.font()
     schrift = qapp.font()
@@ -314,6 +319,27 @@ def test_dialog_bei_grosser_schrift_nichts_abgeschnitten(qtbot, faktor):
         dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
         qtbot.addWidget(dialog)
         _dialog_passt(dialog, qapp)
+    finally:
+        qapp.setFont(vorher)
+
+
+@pytest.mark.parametrize("faktor", [1.0, 2.0])
+def test_passwortabfrage_ohne_tresor_bricht_den_hinweis_um(qtbot, monkeypatch, faktor):
+    monkeypatch.setattr(web_tresor, "_ist_windows", lambda: False)
+    qapp = QApplication.instance()
+    vorher = qapp.font()
+    schrift = qapp.font()
+    schrift.setPointSizeF(vorher.pointSizeF() * faktor)
+    qapp.setFont(schrift)
+    try:
+        dialog = desktop_web._PasswortDialog(None, "admin", ADRESSE)
+        qtbot.addWidget(dialog)
+        dialog.show()
+        qapp.processEvents()
+        hinweis = dialog.behalten_hinweis
+        assert hinweis.wordWrap() and hinweis.height() >= hinweis.heightForWidth(hinweis.width()) - 2
+        frei = qapp.primaryScreen().availableGeometry()
+        assert dialog.width() <= frei.width()
     finally:
         qapp.setFont(vorher)
 
@@ -369,6 +395,224 @@ def test_veroeffentlichen_fragt_passwort_und_merkt_es(qtbot, termin, web, meldun
     desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
     assert web.anmeldungen == [("admin", "neu-eingegeben")]
     assert tresor == {ADRESSE: "neu-eingegeben"}
+
+
+# --- Passwort im Arbeitsspeicher bis Programmende (UX-Test Web 19.11.2026, E4) -------------------
+
+def _passwort_abfrage_zaehlen(monkeypatch, passwort="nur-im-speicher", merken=False):
+    abfragen = []
+
+    def exec_(dialog):
+        abfragen.append(dialog)
+        dialog.passwort_feld.setText(passwort)
+        dialog.merken_check.setChecked(merken)
+        return QDialog.Accepted
+
+    monkeypatch.setattr(desktop_web._PasswortDialog, "exec", exec_)
+    return abfragen
+
+
+def test_passwort_ohne_merken_wird_bis_programmende_behalten(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    abfragen = _passwort_abfrage_zaehlen(monkeypatch)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert len(abfragen) == 1  # beim zweiten Mal nicht erneut gefragt
+    assert [a[1] for a in web.anmeldungen] == ["nur-im-speicher", "nur-im-speicher"]
+    assert tresor == {}  # nie im Tresor
+
+
+def test_passwort_im_speicher_gilt_nur_fuer_dieselbe_verbindung(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    abfragen = _passwort_abfrage_zaehlen(monkeypatch)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    # anderer Fingerabdruck (z. B. neues Zertifikat bestätigt): das gemerkte Passwort gilt nicht mehr
+    desktop_web.einstellungen_speichern(WebEinstellungen(ADRESSE, "admin", "cd" * 32))
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    desktop_web.einstellungen_speichern(WebEinstellungen(ADRESSE, "anderer", FINGERABDRUCK))
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert len(abfragen) == 3
+
+
+def test_passwort_im_speicher_wird_bei_401_und_terminwechsel_vergessen(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    abfragen = _passwort_abfrage_zaehlen(monkeypatch)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    web.anmelde_fehler.append(web_sync.AnmeldeFehler("Anmeldung abgelehnt", 401))  # z. B. Passwort geändert
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert len(abfragen) == 2
+    assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) == "nur-im-speicher"
+    # Terminwechsel im Hauptfenster (app._termin_setzen) verwirft es
+    conn, pfad = termin
+    fenster = HauptFenster(conn, pfad)
+    qtbot.addWidget(fenster)
+    assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) is None
+
+
+def test_im_dialog_eingetipptes_passwort_wird_nicht_erneut_abgefragt(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: FINGERABDRUCK)
+    dialog = WebVerbindungsDialog(None, WebEinstellungen())
+    qtbot.addWidget(dialog)
+    dialog.adresse_feld.setText(ADRESSE)
+    dialog.benutzer_feld.setText("admin")
+    dialog.passwort_feld.setText("aus-dem-dialog")
+    dialog.merken_check.setChecked(False)
+    dialog.fingerabdruck_btn.click()
+    dialog._uebernehmen()
+    assert tresor == {}
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    abfragen = _passwort_abfrage_zaehlen(monkeypatch)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert abfragen == [] and web.anmeldungen == [("admin", "aus-dem-dialog")]
+    # Der Dialog zeigt es als gemerkt an; „vergessen“ verwirft es auch im Arbeitsspeicher.
+    dialog2 = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog2)
+    assert "bis zum Beenden gemerkt" in dialog2.passwort_feld.placeholderText()
+    dialog2.vergessen_btn.click()
+    assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) is None
+
+
+def test_passwort_im_speicher_steht_nicht_in_meldungen_und_einstellungen(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    _passwort_abfrage_zaehlen(monkeypatch, passwort="Geheim-xyz")
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))  # gemerkt (nur Arbeitsspeicher)
+    web.anmelde_fehler.append(RuntimeError("Serverfehler"))
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    alle = [t for art in (meldungen.information, meldungen.warning, meldungen.critical) for _, t in art]
+    assert alle and all("Geheim-xyz" not in t for t in alle)
+    from PySide6.QtCore import QSettings
+    import desktop_darstellung
+    einstellungen = QSettings(desktop_darstellung._SETTINGS_ORG, desktop_darstellung._SETTINGS_APP)
+    assert all("Geheim-xyz" not in str(einstellungen.value(k)) for k in einstellungen.allKeys())
+    assert tresor == {}
+
+
+def test_abgelehntes_passwort_bleibt_nach_abbruch_vergessen(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    _passwort_abfrage_zaehlen(monkeypatch)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    web.anmelde_fehler.append(web_sync.AnmeldeFehler("Anmeldung abgelehnt", 401))
+    monkeypatch.setattr(desktop_web._PasswortDialog, "exec", lambda dialog: QDialog.Rejected)  # Abbrechen
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) is None
+
+
+def _dialog_mit_gemerktem_passwort(qtbot, monkeypatch, passwort="gemerkt-1"):
+    monkeypatch.setattr(web_tresor, "_ist_windows", lambda: False)  # ohne Tresor: nur Arbeitsspeicher
+    e = WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK)
+    desktop_web.einstellungen_speichern(e)
+    desktop_web._passwort_merken(e, passwort)
+    dialog = WebVerbindungsDialog(None, e)
+    qtbot.addWidget(dialog)
+    return dialog
+
+
+def test_uebernehmen_behaelt_gemerktes_bei_gleicher_verbindung(qtbot, monkeypatch):
+    dialog = _dialog_mit_gemerktem_passwort(qtbot, monkeypatch)
+    assert "bis zum Beenden gemerkt" in dialog.passwort_feld.placeholderText()
+    dialog._uebernehmen()
+    assert desktop_web._passwort_aus_speicher(desktop_web.einstellungen_lesen()) == "gemerkt-1"
+
+
+def test_uebernehmen_verwirft_gemerktes_bei_anderem_benutzer(qtbot, monkeypatch):
+    dialog = _dialog_mit_gemerktem_passwort(qtbot, monkeypatch)
+    dialog.benutzer_feld.setText("jemand-anders")
+    assert dialog.passwort_feld.placeholderText() == ""  # Platzhalter folgt der Eingabe
+    assert not dialog.passwort_hinweis.isHidden()
+    dialog._uebernehmen()
+    e = desktop_web.einstellungen_lesen()
+    assert e.benutzer == "jemand-anders"
+    assert desktop_web._passwort_aus_speicher(e) is None
+    assert desktop_web._passwort_speicher is None
+
+
+def test_verbindungstest_mit_abgelehntem_gemerkten_passwort_vergisst_es(qtbot, monkeypatch, meldungen, web):
+    dialog = _dialog_mit_gemerktem_passwort(qtbot, monkeypatch)
+    web.anmelde_fehler.append(web_sync.AnmeldeFehler("Benutzername oder Passwort falsch", 401))
+    dialog.test_btn.click()
+    assert web.anmeldungen == [("admin", "gemerkt-1")]
+    assert desktop_web._passwort_speicher is None
+    assert dialog.passwort_feld.placeholderText() == ""
+
+
+def test_dialog_hinweis_bei_leerem_passwort_und_ohne_tresor(qtbot, monkeypatch):
+    # Heinz F5: Hinweis, wenn kein Passwort eingetragen und keines bekannt ist; E6: sichtbare Erklärung
+    dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
+    qtbot.addWidget(dialog)
+    assert not dialog.passwort_hinweis.isHidden()
+    dialog.passwort_feld.setText("x")
+    assert dialog.passwort_hinweis.isHidden()
+    # Mit Tresor und gesetztem Haken kein Hinweis; wird der Haken abgewählt, steht da, dass das Passwort
+    # bis zum Beenden behalten wird (Sicherheitsprüfung U8, G-1).
+    assert dialog.behalten_hinweis.isHidden()
+    dialog.merken_check.setChecked(False)
+    assert not dialog.behalten_hinweis.isHidden() and "bis zum Beenden" in dialog.behalten_hinweis.text()
+    monkeypatch.setattr(web_tresor, "_ist_windows", lambda: False)
+    ohne = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
+    qtbot.addWidget(ohne)
+    assert "nicht möglich" in ohne.merken_check.text()
+    assert "keinen Windows-Tresor" in ohne.behalten_hinweis.text() and not ohne.behalten_hinweis.isHidden()
+    abfrage = desktop_web._PasswortDialog(None, "admin", ADRESSE)
+    qtbot.addWidget(abfrage)
+    assert not abfrage.behalten_hinweis.isHidden()
+
+
+def test_tresor_passwort_wird_nicht_zusaetzlich_im_speicher_gehalten(qtbot, termin, web, meldungen, tresor, monkeypatch):
+    # Sicherheitsprüfung U8, G-2: keine zweite, langlebige Kopie eines Tresor-Passworts.
+    _teilnehmer_anlegen(termin[0], startnummer=1)
+    _eingerichtet()
+    tresor[ADRESSE] = "aus-dem-tresor"
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert web.anmeldungen == [("admin", "aus-dem-tresor")]
+    assert desktop_web._passwort_speicher is None
+    del tresor[ADRESSE]
+    _passwort_abfrage_zaehlen(monkeypatch, passwort="neu-im-tresor", merken=True)
+    desktop_web.termin_veroeffentlichen(_tab(qtbot, termin))
+    assert tresor == {ADRESSE: "neu-im-tresor"} and desktop_web._passwort_speicher is None
+
+
+def test_verbindungstest_401_verwirft_das_tresor_passwort(qtbot, meldungen, web, tresor):
+    # Sicherheitsprüfung U8, H-1: das abgelehnte Passwort wird dort verworfen, woher es kam.
+    tresor[ADRESSE] = "falsch-im-tresor"
+    dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
+    qtbot.addWidget(dialog)
+    web.anmelde_fehler.append(web_sync.AnmeldeFehler("Benutzername oder Passwort falsch", 401))
+    dialog.test_btn.click()
+    assert ADRESSE not in tresor
+    assert dialog.passwort_feld.placeholderText() == ""
+
+
+def test_verbindungstest_401_nach_anmeldung_verwirft_nichts(qtbot, meldungen, web, tresor, monkeypatch):
+    tresor[ADRESSE] = "richtig"
+    dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
+    qtbot.addWidget(dialog)
+    monkeypatch.setattr(web_sync.WebClient, "termine",
+                        lambda self: (_ for _ in ()).throw(web_sync.AnmeldeFehler("Sitzung abgelaufen", 401)))
+    dialog.test_btn.click()
+    assert tresor == {ADRESSE: "richtig"}
+
+
+def test_dialog_nimmt_nach_fehlgriff_weiter_eingaben_an(qtbot):
+    # E5 nachgestellt: Passwort versehentlich ins Feld Benutzername, dann korrigiert (Tastatur).
+    from PySide6.QtCore import Qt
+    dialog = WebVerbindungsDialog(None, WebEinstellungen())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.keyClicks(dialog.benutzer_feld, "Geheim-123")
+    dialog.benutzer_feld.selectAll()
+    qtbot.keyClick(dialog.benutzer_feld, Qt.Key_Backspace)
+    qtbot.keyClicks(dialog.benutzer_feld, "admin")
+    qtbot.keyClicks(dialog.passwort_feld, "Geheim-123")
+    qtbot.keyClicks(dialog.adresse_feld, "https://shs.example.org")
+    assert dialog.benutzer_feld.text() == "admin"
+    assert dialog.passwort_feld.text() == "Geheim-123"
+    assert dialog.adresse_feld.text() == "https://shs.example.org"
+    assert dialog.benutzer_feld.isEnabled() and dialog.passwort_feld.isEnabled()
 
 
 def test_falsches_gespeichertes_passwort_wird_vergessen_und_neu_erfragt(qtbot, termin, web, meldungen, tresor, monkeypatch):

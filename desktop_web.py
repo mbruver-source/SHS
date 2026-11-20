@@ -183,6 +183,31 @@ def _fehler_melden(parent, fehler: BaseException, titel: str = "Web-Verbindung")
 
 # --- Dialoge -------------------------------------------------------------------------------------
 
+def _merken_text() -> str:
+    """Beschriftung des Hakens „Passwort merken“ (siehe _behalten_hinweis)."""
+    if web_tresor.verfuegbar():
+        return "Passwort merken (im Windows-Tresor)"
+    return "Passwort merken (auf diesem Rechner nicht möglich)"
+
+
+def _behalten_hinweis(merken_check: QCheckBox) -> QLabel:
+    """Sichtbare Erklärung unter dem Haken „Passwort merken“. UX-Test Web 19.11.2026 (E6): Ohne Windows-
+    Tresor war der Haken nur ausgegraut, die Erklärung stand bloß im Tooltip. Sicherheitsprüfung U8: auch
+    bei bewusst abgewähltem Haken steht da, dass das Programm das Passwort bis zum Beenden behält (E4) -
+    sichtbar, solange der Haken nicht gesetzt ist."""
+    if web_tresor.verfuegbar():
+        text = ("Ohne Haken behält das Programm das Passwort nur bis zum Beenden (oder bis zum Wechsel des "
+                "Termins) und fragt danach wieder.")
+    else:
+        text = ("Auf diesem Rechner gibt es keinen Windows-Tresor. Das Programm behält das Passwort deshalb nur "
+                "bis zum Beenden (oder bis zum Wechsel des Termins) und fragt danach wieder.")
+    hinweis = QLabel(text)
+    hinweis.setWordWrap(True)
+    hinweis.setVisible(not merken_check.isChecked())
+    merken_check.toggled.connect(lambda gesetzt: hinweis.setVisible(not gesetzt))
+    return hinweis
+
+
 class _PasswortDialog(QDialog):
     """Fragt das Passwort ab, wenn keines im Tresor liegt (oder es nicht mehr stimmt)."""
 
@@ -197,11 +222,9 @@ class _PasswortDialog(QDialog):
         beschriftung.setTextFormat(Qt.PlainText)
         self.passwort_feld = QLineEdit()
         self.passwort_feld.setEchoMode(QLineEdit.Password)
-        self.merken_check = QCheckBox("Passwort merken (im Windows-Tresor)")
+        self.merken_check = QCheckBox(_merken_text())
         self.merken_check.setChecked(web_tresor.verfuegbar())
         self.merken_check.setEnabled(web_tresor.verfuegbar())
-        if not web_tresor.verfuegbar():
-            self.merken_check.setToolTip("Auf diesem System gibt es keinen Windows-Tresor - das Passwort wird jedes Mal abgefragt.")
         knoepfe = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         knoepfe.accepted.connect(self._pruefen)
         knoepfe.rejected.connect(self.reject)
@@ -209,6 +232,8 @@ class _PasswortDialog(QDialog):
         layout.addWidget(beschriftung)
         layout.addWidget(self.passwort_feld)
         layout.addWidget(self.merken_check)
+        self.behalten_hinweis = _behalten_hinweis(self.merken_check)
+        layout.addWidget(self.behalten_hinweis)
         layout.addWidget(knoepfe)
         self.setMinimumWidth(380)
 
@@ -249,14 +274,16 @@ class WebVerbindungsDialog(QDialog):
         self.benutzer_feld = QLineEdit(e.benutzer)
         self.passwort_feld = QLineEdit()
         self.passwort_feld.setEchoMode(QLineEdit.Password)
-        gespeichert = bool(e.adresse) and web_tresor.verfuegbar() and web_tresor.passwort_lesen(e.adresse) is not None
-        self.passwort_feld.setPlaceholderText("gespeichert – leer lassen, um es zu behalten" if gespeichert else "")
-        self.merken_check = QCheckBox("Passwort merken (im Windows-Tresor)")
+        self._passwort_bekannt = False  # siehe _passwort_stand_aktualisieren
+        self._tresor_stand: dict[str, bool] = {}  # siehe _im_tresor
+        self.merken_check = QCheckBox(_merken_text())
         self.merken_check.setChecked(web_tresor.verfuegbar())
         self.merken_check.setEnabled(web_tresor.verfuegbar())
-        if not web_tresor.verfuegbar():
-            self.merken_check.setToolTip(
-                "Auf diesem System gibt es keinen Windows-Tresor - das Passwort wird jedes Mal abgefragt.")
+        # UX-Test Web 19.11.2026 (Heinz F5): Hinweis direkt im Dialog statt eines weiteren Meldungsfensters.
+        self.passwort_hinweis = QLabel(
+            "Ohne Passwort hier fragt das Programm beim ersten Veröffentlichen oder Zurückholen danach.")
+        self.passwort_hinweis.setWordWrap(True)
+        self.passwort_feld.textChanged.connect(self._passwort_hinweis_anzeigen)
 
         self.fingerabdruck_label = QLabel()
         self.fingerabdruck_label.setTextFormat(Qt.PlainText)
@@ -279,7 +306,10 @@ class WebVerbindungsDialog(QDialog):
         formular.addRow("Adresse:", self.adresse_feld)
         formular.addRow("Benutzername:", self.benutzer_feld)
         formular.addRow("Passwort:", self.passwort_feld)
+        formular.addRow("", self.passwort_hinweis)
         formular.addRow("", self.merken_check)
+        self.behalten_hinweis = _behalten_hinweis(self.merken_check)
+        formular.addRow("", self.behalten_hinweis)
         formular.addRow("Fingerabdruck des Serverzertifikats (SHA-256):", self.fingerabdruck_label)
 
         knoepfe = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -305,9 +335,43 @@ class WebVerbindungsDialog(QDialog):
         layout.addWidget(knoepfe)
         _groesse_auf_bildschirm_begrenzen(self, 520, 420, inhalt=inhalt, hoehe_nach_inhalt=True)
         self._fingerabdruck_anzeigen()
+        self._passwort_stand_aktualisieren()
         self.adresse_feld.textChanged.connect(self._adresse_geaendert)
+        # Die Adresse erst nach abgeschlossener Eingabe neu bewerten (liest den Tresor), den Benutzer
+        # sofort (nur Arbeitsspeicher, der Tresor-Stand je Adresse ist zwischengespeichert).
+        self.adresse_feld.editingFinished.connect(self._passwort_stand_aktualisieren)
+        self.benutzer_feld.textChanged.connect(self._passwort_stand_aktualisieren)
 
     # -- Hilfen
+    def _im_tresor(self, adresse: str) -> bool:
+        """Liegt für die Adresse ein Passwort im Tresor? Je Adresse nur einmal gelesen (Sicherheitsprüfung
+        U8: keine Klartextkopie bei jedem Tastendruck); das gelesene Passwort wird sofort verworfen."""
+        if not web_tresor.verfuegbar():
+            return False
+        if adresse not in self._tresor_stand:
+            self._tresor_stand[adresse] = web_tresor.passwort_lesen(adresse) is not None
+        return self._tresor_stand[adresse]
+
+    def _passwort_hinweis_anzeigen(self, _text: str = "") -> None:
+        self.passwort_hinweis.setVisible(not self.passwort_feld.text() and not self._passwort_bekannt)
+
+    def _passwort_stand_aktualisieren(self, _text: str = "") -> None:
+        """Platzhalter und Hinweis nach dem, was für die GERADE eingetragene Verbindung bekannt ist
+        (Tresor oder Arbeitsspeicher); ändern sich Adresse, Benutzer oder Fingerabdruck im Dialog,
+        gilt ein gemerktes Passwort nicht mehr (siehe _uebernehmen)."""
+        adresse = self._adresse_normal()
+        gespeichert = bool(adresse) and self._im_tresor(adresse)
+        im_speicher = bool(adresse) and _passwort_aus_speicher(
+            WebEinstellungen(adresse, self.benutzer_feld.text().strip(), self._fingerabdruck or "")) is not None
+        if gespeichert:
+            self.passwort_feld.setPlaceholderText("gespeichert – leer lassen, um es zu behalten")
+        elif im_speicher:
+            self.passwort_feld.setPlaceholderText("bis zum Beenden gemerkt – leer lassen, um es zu behalten")
+        else:
+            self.passwort_feld.setPlaceholderText("")
+        self._passwort_bekannt = gespeichert or im_speicher
+        self._passwort_hinweis_anzeigen()
+
     def _fingerabdruck_anzeigen(self) -> None:
         if self._fingerabdruck:
             self.fingerabdruck_label.setText(_fingerabdruck_text(self._fingerabdruck))
@@ -328,12 +392,19 @@ class WebVerbindungsDialog(QDialog):
             self._fingerabdruck = None
             self._fingerabdruck_anzeigen()
             self.status_label.setText("Die Adresse wurde geändert: der Fingerabdruck muss neu geholt und bestätigt werden.")
+        # Platzhalter/Hinweis erst nach abgeschlossener Eingabe (editingFinished), siehe __init__.
 
-    def _passwort_fuer_test(self, adresse: str) -> str | None:
+    def _passwort_fuer_test(self, adresse: str) -> tuple[str | None, str]:
+        """(Passwort, Quelle) mit Quelle „eingabe“, „tresor“ oder „speicher“ - damit ein abgelehntes
+        Passwort genau dort verworfen wird, woher es kam (Sicherheitsprüfung U8)."""
         eingabe = self.passwort_feld.text()
         if eingabe:
-            return eingabe
-        return web_tresor.passwort_lesen(adresse)
+            return eingabe, "eingabe"
+        gespeichert = web_tresor.passwort_lesen(adresse) if web_tresor.verfuegbar() else None
+        if gespeichert is not None:
+            return gespeichert, "tresor"
+        e = WebEinstellungen(adresse, self.benutzer_feld.text().strip(), self._fingerabdruck or "")
+        return _passwort_aus_speicher(e), "speicher"
 
     # -- Aktionen
     def _fingerabdruck_holen(self) -> None:
@@ -366,6 +437,7 @@ class WebVerbindungsDialog(QDialog):
         self._fingerabdruck = hexwert
         self._fp_adresse = adresse
         self._fingerabdruck_anzeigen()
+        self._passwort_stand_aktualisieren()
         self.status_label.setText("Fingerabdruck bestätigt. Mit „OK“ speichern.")
 
     def _testen(self) -> None:
@@ -376,15 +448,17 @@ class WebVerbindungsDialog(QDialog):
             QMessageBox.warning(self, "Fingerabdruck fehlt", "Bitte zuerst den Fingerabdruck holen und bestätigen.")
             return
         benutzer = self.benutzer_feld.text().strip()
-        passwort = self._passwort_fuer_test(adresse)
+        passwort, quelle = self._passwort_fuer_test(adresse)
         if not benutzer or not passwort:
             QMessageBox.warning(self, "Zugangsdaten fehlen", "Bitte Benutzername und Passwort eingeben.")
             return
         fingerabdruck = self._fingerabdruck
+        angemeldet = []
 
         def pruefen():
             client = web_sync.WebClient(adresse, fingerabdruck)
             client.anmelden(benutzer, passwort)
+            angemeldet.append(True)
             return len(client.termine())
 
         anzahl, fehler = im_hintergrund(self, "Verbindung wird getestet…", pruefen)
@@ -392,19 +466,35 @@ class WebVerbindungsDialog(QDialog):
             return
         if fehler is not None:
             self.status_label.setText("Verbindungstest fehlgeschlagen.")
+            # Nur ein 401 der ANMELDUNG heißt „Passwort falsch“ (wie in mit_web_anmeldung). Ein abgelehntes
+            # gemerktes Passwort wird dort verworfen, woher es kam (E4, Sicherheitsprüfung U8).
+            if isinstance(fehler, web_sync.AnmeldeFehler) and fehler.status == 401 and not angemeldet:
+                if quelle == "speicher":
+                    passwort_vergessen()
+                elif quelle == "tresor":
+                    web_tresor.passwort_loeschen(adresse)
+                    self._tresor_stand.pop(adresse, None)
+                self._passwort_stand_aktualisieren()
             _fehler_melden(self, fehler)
             return
         self.status_label.setText(f"Verbindung in Ordnung. Auf dem Server liegen {anzahl} Termin(e).")
 
     def _vergessen(self) -> None:
         adresse = self._adresse_normal() or self._alte_adresse
-        if not adresse or not web_tresor.verfuegbar():
-            self.status_label.setText("Es ist kein Passwort gespeichert.")
-            return
-        web_tresor.passwort_loeschen(adresse)
+        im_speicher = _passwort_speicher is not None
+        passwort_vergessen()  # E4: auch das im Arbeitsspeicher gehaltene Passwort
+        self._tresor_stand.clear()
+        self._passwort_bekannt = False
         self.passwort_feld.clear()
         self.passwort_feld.setPlaceholderText("")
-        self.status_label.setText("Das gespeicherte Passwort wurde aus dem Windows-Tresor entfernt.")
+        self._passwort_hinweis_anzeigen()
+        if not adresse or not web_tresor.verfuegbar():
+            self.status_label.setText("Das gemerkte Passwort wurde vergessen." if im_speicher
+                                      else "Es ist kein Passwort gespeichert.")
+            return
+        web_tresor.passwort_loeschen(adresse)
+        self.status_label.setText("Das gespeicherte Passwort wurde aus dem Windows-Tresor entfernt"
+                                  + (" und das bis zum Beenden gemerkte vergessen." if im_speicher else "."))
 
     def _uebernehmen(self) -> None:
         adresse = self._adresse_normal(melden=True)
@@ -422,17 +512,25 @@ class WebVerbindungsDialog(QDialog):
             return
         if self._alte_adresse and self._alte_adresse != adresse and web_tresor.verfuegbar():
             web_tresor.passwort_loeschen(self._alte_adresse)  # nicht beim alten Server liegen lassen
-        einstellungen_speichern(WebEinstellungen(adresse, benutzer, self._fingerabdruck))
+        neu = WebEinstellungen(adresse, benutzer, self._fingerabdruck)
+        alt_passwort = _passwort_aus_speicher(neu)  # None, wenn sich die Verbindung geändert hat
+        einstellungen_speichern(neu)
         passwort = self.passwort_feld.text()
+        im_tresor = False
         if web_tresor.verfuegbar():
             if not self.merken_check.isChecked():
                 web_tresor.passwort_loeschen(adresse)
             elif passwort:
-                if not web_tresor.passwort_speichern(adresse, benutzer, passwort):
+                im_tresor = web_tresor.passwort_speichern(adresse, benutzer, passwort)
+                if not im_tresor:
                     QMessageBox.information(
                         self, "Passwort nicht gespeichert",
-                        "Das Passwort ließ sich nicht im Windows-Tresor speichern und wird bei der "
-                        "nächsten Nutzung abgefragt.")
+                        "Das Passwort ließ sich nicht im Windows-Tresor speichern. Das Programm behält es "
+                        "bis zum Beenden und fragt danach wieder.")
+        # E4: ein hier eingetipptes Passwort gilt bis zum Programmende (nur im Arbeitsspeicher), außer es
+        # liegt jetzt im Tresor (keine zweite Kopie, Sicherheitsprüfung U8); bei geänderten
+        # Verbindungsdaten wird ein früher gemerktes verworfen.
+        _passwort_merken(neu, "" if im_tresor else (passwort or alt_passwort or ""))
         self.accept()
 
 
@@ -443,6 +541,40 @@ class _Sitzung:
 
     def __init__(self):
         self.passwort: str | None = None
+
+
+# --- Passwort im Arbeitsspeicher (UX-Test Web 19.11.2026, E4, Marco) -----------------------------
+#
+# Ohne „Passwort merken“ (oder ohne Windows-Tresor) fragte das Programm bei JEDEM Veröffentlichen und
+# Zurückholen erneut nach dem Passwort, auch wenn es eben im Dialog „Web-Verbindung“ stand. Jetzt hält
+# es das Passwort bis zum Programmende im Arbeitsspeicher - nie auf der Platte, nie in Einstellungen,
+# Protokollen oder Meldungen. Es gilt nur für genau die Verbindung (Adresse, Benutzer, Fingerabdruck),
+# mit der es eingegeben wurde, und wird verworfen bei: Terminwechsel (passwort_vergessen() aus
+# app._termin_setzen), geänderten Verbindungsdaten, „Gespeichertes Passwort vergessen“ und wenn der
+# Server die Anmeldung ablehnt (401).
+
+_passwort_speicher: tuple[tuple[str, str, str], str] | None = None
+
+
+def _verbindungs_schluessel(e: WebEinstellungen) -> tuple[str, str, str]:
+    return (e.adresse, e.benutzer, web_sync.fingerabdruck_normalisieren(e.fingerabdruck) or "")
+
+
+def _passwort_aus_speicher(e: WebEinstellungen) -> str | None:
+    if _passwort_speicher is None or _passwort_speicher[0] != _verbindungs_schluessel(e):
+        return None
+    return _passwort_speicher[1]
+
+
+def _passwort_merken(e: WebEinstellungen, passwort: str) -> None:
+    global _passwort_speicher
+    _passwort_speicher = (_verbindungs_schluessel(e), passwort) if passwort else None
+
+
+def passwort_vergessen() -> None:
+    """Verwirft das im Arbeitsspeicher gehaltene Passwort (z. B. beim Terminwechsel)."""
+    global _passwort_speicher
+    _passwort_speicher = None
 
 
 def verbindung_einrichten(parent) -> WebEinstellungen | None:
@@ -468,7 +600,8 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
                       abbrechbar: bool = True):
     """Meldet sich am Server an und führt `aufgabe(client)` im Hintergrund aus. Liefert (True, Ergebnis)
     oder (False, None) nach Abbruch bzw. gemeldetem Fehler (die Meldung ist dann schon gezeigt).
-    Das Passwort kommt aus dem Windows-Tresor, sonst aus einer Abfrage; ein abgelehntes gespeichertes
+    Das Passwort kommt aus dem Windows-Tresor, sonst aus dem Arbeitsspeicher (bis Programmende gemerkt,
+    siehe _passwort_speicher), sonst aus einer Abfrage; ein abgelehntes gespeichertes
     Passwort wird vergessen und neu abgefragt (höchstens dreimal)."""
     e = einstellungen_sicherstellen(parent)
     if e is None:
@@ -479,6 +612,8 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
     if passwort is None:
         passwort = web_tresor.passwort_lesen(e.adresse)
         aus_tresor = passwort is not None
+    if passwort is None:
+        passwort = _passwort_aus_speicher(e)  # E4: bis Programmende im Arbeitsspeicher
     merken_neu = False
     hinweis = ""
     for _versuch in range(3):
@@ -503,8 +638,10 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
         ergebnis, fehler = im_hintergrund(parent, wartetext, arbeit, abbrechbar)
         if fehler is None:
             sitzung.passwort = passwort
-            if merken_neu:
-                web_tresor.passwort_speichern(e.adresse, e.benutzer, passwort)
+            im_tresor = aus_tresor or (merken_neu and web_tresor.passwort_speichern(e.adresse, e.benutzer, passwort))
+            # E4: nur behalten, was NICHT im Tresor liegt - keine zweite, langlebige Kopie eines
+            # Tresor-Passworts im Arbeitsspeicher (Sicherheitsprüfung U8).
+            _passwort_merken(e, "" if im_tresor else passwort)
             return True, ergebnis
         if isinstance(fehler, _Abgebrochen):
             return False, None
@@ -517,6 +654,7 @@ def mit_web_anmeldung(parent, aufgabe, wartetext: str, sitzung: _Sitzung | None 
                 hinweis = "Das Passwort wurde nicht angenommen."
             passwort = None
             sitzung.passwort = None
+            passwort_vergessen()
             continue
         _fehler_melden(parent, fehler)
         return False, None

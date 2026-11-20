@@ -2,6 +2,26 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 19.11.2026: UX-Test Web U8 – Desktop: Web-Passwort bis Programmende im Arbeitsspeicher, Hinweise im Dialog
+
+Funde E4 (Marco: umsetzen, sicherheitsrelevant), E5, E6 und Heinz F5. Ohne „Passwort merken“ bzw. ohne Windows-Tresor
+fragte der Desktop bei jedem Veröffentlichen und Zurückholen erneut nach dem Passwort, auch direkt nach der Eingabe im
+Dialog „Web-Verbindung“. Jetzt hält `desktop_web` das Passwort nur im Arbeitsspeicher bis Programmende, gebunden an
+Adresse, Benutzer und Fingerabdruck; verworfen bei Terminwechsel (`app._termin_setzen`), geänderten
+Verbindungsdaten, „Gespeichertes Passwort vergessen“ und abgelehnter Anmeldung (401). Nie in Einstellungen, Datei
+oder Meldungen (Tests). Der Dialog zeigt ohne Tresor eine sichtbare Erklärung statt nur eines Tooltips (E6) und bei
+leerem Passwort einen Hinweis, dass es später abgefragt wird (F5, kein zusätzliches Meldungsfenster). **E5 nicht
+nachstellbar:** Eingabe des Passworts ins Feld Benutzername, Löschen und Neueingabe per Tastatur im GUI-Test –
+alle Felder nehmen Eingaben an; vermutlich Eigenheit des Steuerwerkzeugs, geschlossen. Verifikation ohne
+Funktionsfehler; Nacharbeit umgesetzt: auch ein 401 beim „Verbindung testen“ verwirft das gemerkte Passwort,
+Platzhalter und Hinweis folgen Änderungen von Adresse/Benutzer/Fingerabdruck im Dialog, Meldung „ließ sich nicht im
+Tresor speichern“ und Docstring passen zu E4. Sicherheitsprüfung (`qs-sicherheit`): kein Befund hoch/mittel;
+zwei geringe Punkte und zwei Hinweise innerhalb von E4 umgesetzt (u. a. sichtbarer Hinweis auch bei abgewähltem
+„Passwort merken“, ein Tresor-Passwort wird nicht zusätzlich im Arbeitsspeicher gehalten, der Verbindungstest
+verwirft ein abgelehntes Passwort an seiner Quelle), ein Hinweis zu älterem Code als Rückfrage an Marco (Details
+lokal, folgen nach dem Release). 20 neue GUI-Tests (inkl. Dialoggröße ohne Tresor), Gegenprobe ok; Handbuch,
+`Architektur.md`, `Modulreferenz.md`, `UML.md` (Ablauf 10a) nachgezogen.
+
 ## 19.11.2026: UX-Test Web U7 – Bogen: Hinweis bei zu hohen Punkten, Gegenstand, feste Kopfleiste, Rückweg
 
 Funde B4, D3, D4, A4 und der Rückweg aus U1. **B4 nachgestellt** (eingebauter Browser, 768 px, lokaler

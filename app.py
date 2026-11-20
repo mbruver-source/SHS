@@ -136,6 +136,7 @@ from desktop_auswertung import AuswertungTab, ExportTab, TeilnehmerUebersichtTab
 from desktop_abrechnung import AbrechnungTab
 from desktop_zeitplan import ZeitplanTab
 from desktop_verwaltung import DatensicherungTab, VerwaltungTab
+import desktop_web
 from desktop_programm import VERSION, VersionDialog, laufkennung_setzen, sitzungsende_einrichten, zweitstart_pruefen
 from desktop_teilnehmer import TeilnehmerTab
 from desktop_formular import FormularImportTab
@@ -670,6 +671,9 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
             raise
 
         # Ab hier nur noch Austausch.
+        # UX-Test Web 19.11.2026 (E4): ein im Arbeitsspeicher gehaltenes Web-Passwort gilt nur bis zum
+        # Terminwechsel (desktop_web.passwort_vergessen).
+        desktop_web.passwort_vergessen()
         self.conn = conn
         self.pfad = pfad
         self._demo_termin = demo
