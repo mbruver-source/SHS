@@ -1181,7 +1181,9 @@ Sie gelten nur für Termine als Datei und sind in der Demoprüfung gesperrt.
    übereinstimmen. Ab dann prüft das Programm bei jeder Verbindung, ob es noch derselbe Server
    ist, bevor es etwas sendet. Weicht der Fingerabdruck später ab, bricht es mit einer deutlichen
    Warnung ab: Dann wurde das Zertifikat erneuert, oder jemand hört mit. Frage in dem Fall beim
-   Betreiber nach, bevor du den neuen Fingerabdruck bestätigst.
+   Betreiber nach, bevor du den neuen Fingerabdruck bestätigst. Bestätigst du einen neuen
+   Fingerabdruck, entfernt das Programm das gespeicherte Passwort dieses Servers und fragt einmal
+   neu danach.
 4. Mit **„Verbindung testen“** prüfst du die Zugangsdaten, mit **„OK“** speicherst du.
 
 **Passwort im Windows-Tresor:** Mit dem Haken **„Passwort merken“** (Standard) legt das Programm

@@ -420,13 +420,19 @@ class WebVerbindungsDialog(QDialog):
             _fehler_melden(self, fehler)
             return
         hexwert = ergebnis
-        if self._fingerabdruck and self._fp_adresse == adresse and self._fingerabdruck != hexwert:
+        bisher = self._bisherige_fingerabdruecke(adresse)
+        anders = bool(bisher) and web_sync.fingerabdruck_normalisieren(hexwert) not in bisher
+        # Ein Tresor-Eintrag ohne bekannten Fingerabdruck (z. B. Rest eines früheren Adresswechsels) wird
+        # wie bei einem neuen Fingerabdruck behandelt: entfernen, einmal neu fragen.
+        ohne_fingerabdruck = not bisher and self._im_tresor(adresse)
+        if anders:
             text = (
                 "ACHTUNG: Der Server meldet einen ANDEREN Fingerabdruck als bisher gespeichert. Das "
                 "passiert, wenn sein Zertifikat erneuert wurde - oder wenn jemand die Verbindung "
                 "abhört. Bitte beim Betreiber des Servers nachfragen, ob der neue Fingerabdruck stimmt.\n\n"
-                f"Neu:\n{_fingerabdruck_text(hexwert)}\n\nBisher:\n{_fingerabdruck_text(self._fingerabdruck)}\n\n"
-                "Den neuen Fingerabdruck übernehmen?")
+                f"Neu:\n{_fingerabdruck_text(hexwert)}\n\nBisher:\n"
+                + "\n".join(_fingerabdruck_text(fp) for fp in sorted(bisher))
+                + "\n\nDen neuen Fingerabdruck übernehmen?")
         else:
             text = (
                 f"Der Server {adresse} hat dieses Zertifikat:\n\n{_fingerabdruck_text(hexwert)}\n\n"
@@ -434,11 +440,39 @@ class WebVerbindungsDialog(QDialog):
                 "beide übereinstimmen, dem Server vertrauen.\n\nDiesem Server vertrauen?")
         if not _ja_nein(self, "Fingerabdruck bestätigen", text):
             return
+        tresor_verworfen = False
+        if (anders or ohne_fingerabdruck) and web_tresor.verfuegbar():
+            # Ein Tresor-Passwort gehört zum Fingerabdruck, mit dem es gespeichert wurde: bei einem neuen
+            # wird es entfernt und einmal neu gefragt (U14). Klappt das Entfernen nicht, wird der neue
+            # Fingerabdruck nicht übernommen.
+            tresor_verworfen = self._tresor_stand.get(adresse, False)
+            if not web_tresor.passwort_loeschen(adresse):
+                QMessageBox.warning(
+                    self, "Passwort nicht entfernt",
+                    "Das gespeicherte Passwort dieses Servers ließ sich nicht aus dem Windows-Tresor entfernen. "
+                    "Der neue Fingerabdruck wurde deshalb nicht übernommen. Bitte zuerst „Gespeichertes "
+                    "Passwort vergessen“ versuchen.")
+                return
+            self._tresor_stand[adresse] = False
         self._fingerabdruck = hexwert
         self._fp_adresse = adresse
         self._fingerabdruck_anzeigen()
         self._passwort_stand_aktualisieren()
-        self.status_label.setText("Fingerabdruck bestätigt. Mit „OK“ speichern.")
+        self.status_label.setText(
+            "Fingerabdruck bestätigt. Das gespeicherte Passwort gehörte zum bisherigen Fingerabdruck und wurde "
+            "entfernt - bitte neu eingeben. Mit „OK“ speichern." if tresor_verworfen
+            else "Fingerabdruck bestätigt. Mit „OK“ speichern.")
+
+    def _bisherige_fingerabdruecke(self, adresse: str) -> set[str]:
+        """Für diese Adresse bisher bestätigte Fingerabdrücke (gespeichert und im Dialog), normalisiert."""
+        bisher = set()
+        gespeichert = einstellungen_lesen()
+        if gespeichert.adresse == adresse:
+            bisher.add(web_sync.fingerabdruck_normalisieren(gespeichert.fingerabdruck))
+        if self._fp_adresse == adresse and self._fingerabdruck:
+            bisher.add(web_sync.fingerabdruck_normalisieren(self._fingerabdruck))
+        bisher.discard(None)
+        return bisher
 
     def _testen(self) -> None:
         adresse = self._adresse_normal(melden=True)

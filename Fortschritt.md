@@ -2,6 +2,24 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 20.11.2026: UX-Test Web U14 – Sicherheitskorrektur Web-Verbindung
+
+Sicherheitskorrektur H-3 an der Web-Verbindung des Desktops (Dialog „Web-Verbindung“), Details folgen nach dem
+Release. Sichtbar: Bestätigt man für einen Server einen neuen Fingerabdruck, entfernt das Programm dessen
+gespeichertes Passwort und fragt einmal neu (Hinweis im Dialog, Handbuch Kap. Web-Verbindung); die Warnung „anderer
+Fingerabdruck“ vergleicht jetzt unabhängig von der Schreibweise. GUI-Tests ergänzt (Gegenprobe ok). Verifikation
+und `qs-sicherheit` lieferten Nachbesserungen, alle umgesetzt.
+
+## 20.11.2026: Rückfragen aus dem UX-Test Web geklärt (Marco)
+
+Passwort-Anzeigeschalter (F3) und Nachfrage vor dem Verlassen der Tabelle (C3) bleiben ohne Skript (die Web-Version
+lässt keine Skripte zu); der Kontoname nach Löschen eines Web-Kontos bleibt in der Admin-Zeile „zuletzt …“ – alle
+drei werden als akzeptiert in `OFFEN.md` eingetragen. Umsetzen: ein älterer Sicherheitshinweis zur Web-Verbindung
+des Desktops (Details folgen nach dem Release), „teilweise“ für eine angefangene Disziplin in der Teilnehmerliste,
+Zeit der Admin-Zeile in deutscher Zeit, Bestätigung beim Rückweg vom Bogen zur Seite des Teilnehmers, Aufräumpaket
+aus der Wartbarkeitsprüfung ohne die Auslagerung in ein eigenes Modul (zurückgestellt). Aufgaben U14–U19 in
+`berichte/UX-Test-2026-11-Web/aufgaben-umsetzung.md`.
+
 ## 20.11.2026: UX-Test Web U13 – Abschluss: QS in drei Rollen, Doku-Abgleich
 
 QS über alle Loop-Commits (`git diff c2e90f7..HEAD`) nacheinander mit `qs-sicherheit`, `qs-korrektheit`,

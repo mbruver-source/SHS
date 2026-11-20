@@ -259,6 +259,94 @@ def test_dialog_geaenderter_fingerabdruck_wird_deutlich_gewarnt(qtbot, monkeypat
     assert dialog.fingerabdruck_label.text().startswith("AB:AB")  # abgelehnt: der alte bleibt
 
 
+def test_neuer_fingerabdruck_verwirft_das_tresor_passwort(qtbot, monkeypatch, meldungen, web, tresor):
+    # U14 (Sicherheitskorrektur, Details folgen): das Tresor-Passwort gehört zum bisherigen Fingerabdruck.
+    _eingerichtet()
+    tresor[ADRESSE] = "fuer-den-alten-server"
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog)
+    assert "gespeichert" in dialog.passwort_feld.placeholderText()
+    dialog.fingerabdruck_btn.click()  # Warnung mit Ja beantwortet
+    assert ADRESSE not in tresor
+    assert "neu eingeben" in dialog.status_label.text()
+    assert dialog.passwort_feld.placeholderText() == ""
+    dialog.test_btn.click()  # ohne Eingabe keine Anmeldung
+    assert web.anmeldungen == []
+
+
+def test_gleicher_fingerabdruck_behaelt_das_tresor_passwort(qtbot, monkeypatch, meldungen, tresor):
+    _eingerichtet()
+    tresor[ADRESSE] = "bleibt"
+    # gleicher Fingerabdruck, nur anders geschrieben
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: FINGERABDRUCK)
+    dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", ":".join(["AB"] * 32)))
+    qtbot.addWidget(dialog)
+    dialog.fingerabdruck_btn.click()
+    assert tresor == {ADRESSE: "bleibt"}
+    assert "neu eingeben" not in dialog.status_label.text()
+
+
+def test_neuer_fingerabdruck_nach_adresse_hin_und_zurueck(qtbot, monkeypatch, meldungen, tresor):
+    _eingerichtet()
+    tresor[ADRESSE] = "fuer-den-alten-server"
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog)
+    dialog.adresse_feld.setText("https://anderer-server.example.org")
+    dialog.adresse_feld.setText(ADRESSE)
+    dialog.fingerabdruck_btn.click()
+    assert "ANDEREN" in meldungen.fragen[-1][1]  # gegen den gespeicherten verglichen
+    assert ADRESSE not in tresor
+    dialog.reject()  # Abbrechen: Tresor bleibt leer, Einstellungen behalten den alten Fingerabdruck
+    assert desktop_web.einstellungen_lesen().fingerabdruck == FINGERABDRUCK
+
+
+def test_neuer_fingerabdruck_nicht_uebernommen_wenn_tresor_nicht_loescht(qtbot, monkeypatch, meldungen, tresor):
+    _eingerichtet()
+    tresor[ADRESSE] = "fuer-den-alten-server"
+    monkeypatch.setattr(web_tresor, "passwort_loeschen", lambda adresse: False)
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog)
+    dialog.fingerabdruck_btn.click()
+    assert meldungen.warning and "nicht übernommen" in meldungen.warning[-1][1]
+    assert dialog.fingerabdruck_label.text().startswith("AB:AB")
+
+
+def test_tresor_eintrag_ohne_bekannten_fingerabdruck_wird_entfernt(qtbot, monkeypatch, meldungen, tresor):
+    desktop_web.einstellungen_speichern(WebEinstellungen("https://anderer-server.example.org", "admin", FINGERABDRUCK))
+    tresor[ADRESSE] = "rest-von-frueher"
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", ""))
+    qtbot.addWidget(dialog)
+    dialog.fingerabdruck_btn.click()
+    assert ADRESSE not in tresor
+    assert "neu eingeben" in dialog.status_label.text()
+
+
+def test_neuer_fingerabdruck_ohne_tresor(qtbot, monkeypatch, meldungen):
+    monkeypatch.setattr(web_tresor, "_ist_windows", lambda: False)
+    _eingerichtet()
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog)
+    dialog.fingerabdruck_btn.click()
+    assert dialog.fingerabdruck_label.text().startswith("CD:CD")
+    assert dialog.status_label.text() == "Fingerabdruck bestätigt. Mit „OK“ speichern."
+
+
+def test_neuer_fingerabdruck_abgelehnt_behaelt_das_tresor_passwort(qtbot, monkeypatch, meldungen, tresor):
+    _eingerichtet()
+    tresor[ADRESSE] = "bleibt"
+    monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)
+    dialog = WebVerbindungsDialog(None, desktop_web.einstellungen_lesen())
+    qtbot.addWidget(dialog)
+    meldungen.antworten.append(False)
+    dialog.fingerabdruck_btn.click()
+    assert tresor == {ADRESSE: "bleibt"}
+
+
 def test_dialog_testen_vergessen_und_fehler(qtbot, monkeypatch, meldungen, web, tresor):
     dialog = WebVerbindungsDialog(None, WebEinstellungen(ADRESSE, "admin", FINGERABDRUCK))
     qtbot.addWidget(dialog)

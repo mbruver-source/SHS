@@ -53,6 +53,12 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | erledigt (20.11.) | siehe git log | unbekannt | Skript jetzt UTF-8 mit BOM; Browser-Texte vor dem Build einmal live ansehen; Startfehlermeldungen nennen nur Python → U13 |
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | erledigt (20.11.) | siehe git log | unbekannt | eigene Tabelle `web_aenderungen` nur im Web-Schema; PostgreSQL-Test nur in der CI |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
+| U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
+| U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | offen | | unbekannt | |
+| U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | offen | | unbekannt | |
+| U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | offen | | unbekannt | |
+| U18 | Aufräumen Desktop: Passwortspeicher kapseln, Verbindungs-Hilfe | S | offen | | unbekannt | |
+| U19 | Abschluss 2: OFFEN.md/Entscheidungen, QS über U14–U18, Gesamtlauf, Bericht | M | offen | | unbekannt | |
 
 ## Entscheidungen (Marco, 19.11.2026)
 
@@ -185,6 +191,76 @@ abweichen, nicht im Umfang.
 - Test-Stack `shsux` mit den Befehlen aus `stack-notizen.md` abbauen; Marcos Stack unverändert prüfen.
 - Loop mit `ScheduleWakeup(stop: true)` beenden, PushNotification an Marco.
 
+### Rückfragen geklärt (Marco, 20.11.2026) – Grundlage für U14–U19
+
+| Rückfrage | Entscheidung |
+|---|---|
+| F3 Passwort anzeigen | So lassen (kein Skript, CSP bleibt `script-src 'none'`) → in U19 als akzeptiert in `OFFEN.md` |
+| C3 Nachfrage vor dem Verlassen | Reicht so (Bogen speichert vorher, Hinweistext) → in U19 als akzeptiert in `OFFEN.md` |
+| H-3 Sicherheitshinweis Web-Verbindung (Details lokal) | Umsetzen → U14 |
+| Kontoname nach Kontolöschung | So lassen → in U19 als akzeptiert in `OFFEN.md` |
+| Halb gefüllte Disziplin | „teilweise“ anzeigen → U15 |
+| UTC-Datum in „zuletzt …“ | Europe/Berlin → U15 |
+| Rückweg Bogen → Einzelseite | Bestätigung nachrüsten → U15 |
+| Aufräumpaket | jetzt, ohne `web_regeln.py` → U16–U18; `web_regeln.py` in U19 als zurückgestellt in `OFFEN.md` |
+
+### U14 [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3) – S
+- Auftrag und Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (H-3). Commit-Text,
+  diese Liste und `Fortschritt.md` nur allgemein („Sicherheitskorrektur Web-Verbindung, Details folgen“).
+- GUI-Tests in `test_gui_web.py`, danach `verifikation` und `qs-sicherheit`; Ergebnis im lokalen Bericht nachtragen.
+- Handbuch Kap. Web-Verbindung: ein Satz zum geänderten Verhalten.
+
+### U15 Web: drei Kleinigkeiten aus der QS – M
+- **Teilnehmerliste „teilweise“:** `_listen_status` – steht in irgendeiner Disziplin ein Wert (Suche oder Anzeige),
+  ist aber nicht alles vollständig: „teilweise“. Beim Dreikampf bleibt der Zähler „(n von 3)“ = vollständige
+  Disziplinen; beim Einzelstart ohne Zähler. Auswertung (`_wertnote`) unverändert. Handbuch (Status-Stufen) und
+  Tests anpassen.
+- **Bestätigung auf der Einzelseite:** Rückweg aus dem Bogen mit `von=teilnehmer` leitet mit
+  `?gespeichert=<id>&aenderung=0|1` (bzw. eigenem Parameter) auf `/teilnehmer/<id>`; die Einzelseite zeigt die
+  gleiche Meldung wie Liste/Tabelle („Gespeichert …“ bzw. „Keine Änderung …“). Parameter streng prüfen wie bei
+  `_meldung_nach_einzelseite` (nur Ziffern, nur eigener Teilnehmer).
+- **Zeitzone:** `_vor_wann` rechnet das Datum („am TT.MM.“) und ggf. Uhrzeit in `Europe/Berlin` (`zoneinfo`).
+  Prüfen, ob das Web-Image (`python:3.11-slim`) die Zonendaten hat; sonst `tzdata` in `requirements-web.txt`
+  (Lizenz in `tools/drittlizenzen.py`/Drittlizenzen-Test beachten). Unter Windows lokal fehlt `tzdata` evtl.:
+  Rückfall auf UTC mit Test für beide Fälle. Tests mit festem `jetzt` (23:30 UTC → nächster Tag in Berlin).
+- Danach `verifikation`.
+
+### U16 Aufräumen Web-Logik (ohne Verhaltensänderung) – M
+- `db_ergebnisse._disziplin_punkte` → öffentliche `disziplin_punkte(ergebnis, disziplin)` mit `.get(...)`, Re-Export
+  in `db.py` (`test_db_fassade` beachten); `_listen_status` und `_bogen_zusammenfassung` nutzen sie bzw. `_wertnote`
+  statt eigener Kopien (U15 vorher erledigt: „teilweise“-Regel erhalten).
+- `_einheit_entscheiden`: Rückgabewerte als Modulkonstanten; kurze Variante `_wert_entscheiden(neu, geladen,
+  aktuell)` für Status und Notiz; in den Block „Gemeinsame Regeln“ verschieben. `_status_paar(ergebnis)` statt
+  dreifacher Konstruktion.
+- `ergebnis_erfassen` in View und `_einzelseite_speichern(...) -> (geschrieben, konflikt_texte)` teilen; Ergebniszeile
+  nicht mehrfach lesen, wo nicht nötig (Lost-Update-Prüfung muss den aktuellen Stand behalten!).
+- `db._BEREICH_STATUS` → `BEREICH_STATUS` (öffentlich, Tests anpassen); `sync_termin.py` gibt „unverändert“ mit aus;
+  fehlende Docstrings (`_punkte_konflikt_text`, `_aenderung_merken`, `_einzelseite_status_*`), Abschnittskommentare
+  nachziehen; `_bogen_ruecksprung` für den Rückweg-Code im Bogen; Zählwort-Hilfe `_anzahl(n, einzahl, mehrzahl)`.
+- Volle Web-Tests vorher/nachher gleich grün; `verifikation` mit Schwerpunkt „Verhalten unverändert“.
+
+### U17 Aufräumen Templates/CSS und Tests – M
+- Jinja-Makros (eigene Datei, z. B. `templates/_bausteine.html`): Abbruch-Auswahl, Status-Erklärtext (ein
+  Wortlaut), Zahlenfeld mit `.feld-hinweis` und `aria-describedby`. In Einzelseite, Tabelle und Bogen nutzen.
+- Konfliktbox: CSS-Klasse statt Inline-Farben; weitere Inline-Styles der Einzelseite in Klassen; allgemeine
+  `select`-Regel in `base.html`; CSS-Variable für die Kopfleistenhöhe (`--kopf-hoehe`, statt 4.5em/5.5em verstreut).
+- Tests in `test_app_web.py` nicht mehr an exakte CSS-Zeichenketten koppeln (Leerraum normalisieren oder auf
+  Klassen/IDs prüfen). Sichtprüfung mit `scratchpad\web_live.py` (Tabelle, Einzelseite, Bogen, 375/768/1280 px).
+- `tools/web_screenshots.py` muss weiter laufen. Danach `verifikation`.
+
+### U18 Aufräumen Desktop – S
+- `desktop_web.py`: Passwortspeicher kapseln (`passwort_im_speicher() -> bool`; Dialog und Tests nutzen sie statt
+  `_passwort_speicher`), `_eingegebene_verbindung()` im Dialog statt drei gleicher `WebEinstellungen(...)`,
+  Quellen von `_passwort_fuer_test` als Konstanten. Nach U14, damit nichts doppelt angefasst wird.
+- GUI-Tests grün; `verifikation`.
+
+### U19 Abschluss 2 – M
+- `OFFEN.md` + Entscheidungsdokumente (Vorlage `entscheidungen/VORLAGE.md`): F3 und C3 akzeptiert (keine Skripte),
+  Kontoname nach Kontolöschung akzeptiert, `web_regeln.py` zurückgestellt.
+- QS über `git diff f758046..HEAD` (drei Rollen nacheinander), Gesamtlauf SHS Test Suite, Doku-Abgleich (Handbuch,
+  Architektur, UML mit mmdc, Modulreferenz), Abschlussbericht ergänzen, lokal committen, Loop beenden +
+  PushNotification.
+
 ## Screenshots vor dem Build
 
 (Jede Aufgabe trägt hier ein, welche Bilder in `docs/bilder/` neu aufgenommen werden müssen.)
@@ -212,6 +288,9 @@ abweichen, nicht im Umfang.
   Screenshot-Bogen hat einen Gegenstand), alle Admin-Bilder ≥ 701 px Breite (feste Kopfleiste, optisch gleich).
 
 ## Rückfragen an Marco
+
+**Alle unten stehenden Rückfragen am 20.11.2026 mit Marco geklärt** – Entscheidungen in der Tabelle „Rückfragen
+geklärt“ (vor U14), Umsetzung in U14–U19.
 
 - **F3 Anzeigen-Schalter an Passwortfeldern (aus U4):** Ein Schalter „Passwort anzeigen“ braucht JavaScript; die
   Web-Version erlaubt per Sicherheitsrichtlinie gar keine Skripte (`script-src 'none'`). Umgesetzt ist nur der
@@ -292,6 +371,9 @@ abweichen, nicht im Umfang.
   Vollständigkeitsregel doppelt (U3); Kopfleiste bei 768 px als Admin ansehen (U7); Browser-Texte live (U11).
 - 20.11.2026: U13 erledigt und committet. Loop beendet. Offen ist nur, was unter „Rückfragen an Marco“ und
   „Vor dem Build noch offen“ (Abschlussbericht) steht.
+- 20.11.2026: Rückfragen mit Marco geklärt, Folgeaufgaben U14–U19 angelegt (gleicher Ablauf, gleicher Start-Befehl).
+  Der Test-Stack `shsux` ist abgebaut; für Sichtprüfungen nur noch `scratchpad\web_live.py` (Aufruf
+  `python web_live.py <repo>`, 127.0.0.1:5097, admin/demo-passwort-1). Nächste: U14 [S].
 
 ## Abschlussbericht
 
