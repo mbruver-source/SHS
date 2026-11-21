@@ -68,6 +68,8 @@ Test-Suite lokal grün (1664 bestanden).
 2. `test_passwortabfrage_ohne_tresor_bricht_den_hinweis_um[2.0]`: Bei doppelter Schriftgröße war der Hinweis unter „Passwort merken“ unten abgeschnitten. `_PasswortDialog.showEvent` zieht die Höhe jetzt für die tatsächliche Breite nach (`desktop_web.py`).
 Beides ließ sich lokal nachstellen, sobald die Programmschrift erzwungen wird. Damit liefen alle GUI-Tests lokal: 723 bestanden, keine weiteren Fehler. Test-Suite grün (1664 bestanden).
 
+**Ausgeliefert (21.11.2026):** Nach den zwei CI-Korrekturen (8eae0f7, de9a170) waren alle Läufe grün, Marco hat getaggt. Das Release 1.0.63 ist veröffentlicht (Setup, zwei DMGs, AppImage, DEB), die Tag-Läufe „Tests“, „Container bauen“ und „Installer bauen“ sind grün. Der Selbsttest der installierten EXE (`--nur-installation --version-pruefen`) ist grün (20 bestanden). Wie bei 1.0.62 steht der Uninstall-Eintrag (HKCU) danach noch auf der Vorversion (1.0.62); das Programm selbst ist 1.0.63. Die Ursache ist weiter ungeklärt und hat keine Folgen für das Programm; offen als Beobachtung.
+
 **Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
 
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)
