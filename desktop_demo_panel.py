@@ -101,6 +101,28 @@ class DemoPanel(QWidget):
     die Knöpfe „Weiter“/„Beenden“ (optional ein Zusatzknopf, z. B. „PDF öffnen“). Alle
     Texte als reiner Text (S-1: nie als HTML deuten)."""
 
+    _STARTBREITE = 480
+    # Längste Beschriftung des Zusatzknopfs in der Demo (desktop_demo_schritte.py, extra()).
+    _LAENGSTER_ZUSATZKNOPF = "PDF öffnen"
+
+    def _startbreite(self) -> int:
+        """So breit, dass die Knopfzeile auch mit „Vorheriger Text“ und dem Zusatzknopf
+        hineinpasst: Dann muss das Fenster mitten in der Demo nicht breiter werden (seit der
+        Programmschrift in 1.0.63 reichten 480 px dafür nicht mehr, CI 21.11.2026). Höchstens
+        so breit wie der Bildschirm abzüglich der Ränder von _ecke."""
+        vorher = (self.extra_btn.text(), self.extra_btn.isHidden(), self.zurueck_btn.isHidden())
+        self.extra_btn.setText(self._LAENGSTER_ZUSATZKNOPF)
+        self.extra_btn.setHidden(False)
+        self.zurueck_btn.setHidden(False)
+        self.layout().activate()
+        breite = self.minimumSizeHint().width()
+        self.extra_btn.setText(vorher[0])
+        self.extra_btn.setHidden(vorher[1])
+        self.zurueck_btn.setHidden(vorher[2])
+        self.layout().activate()
+        hoechstens = (self.parentWidget() or self).screen().availableGeometry().width() - 48
+        return max(self._STARTBREITE, min(breite, hoechstens))
+
     weiter_geklickt = Signal()
     beenden_geklickt = Signal()  # Fenster geschlossen: ohne Rückfrage beenden
     beenden_angefragt = Signal()  # Knopf „Beenden“: erst nachfragen (Nachtest 2, N9)
@@ -198,14 +220,18 @@ class DemoPanel(QWidget):
         layout.addWidget(self.pause_label)
         layout.addLayout(knopf_zeile)
         self.setMinimumWidth(440)
-        self.resize(480, 320)
         self._positioniert = False
         # Unterkante (Bildschirmkoordinate), an der das Fenster mit seinen Knöpfen stehen
         # bleibt, solange es nicht verschoben wird - siehe _im_bildschirm_halten.
         self._unten: int | None = None
-        # True, solange das Programm selbst die Höhe anpasst (_groesse_anpassen) - nur dann
-        # wird die Unterkante festgehalten, nicht wenn der Anwender am Rand zieht.
+        # True, solange das Programm selbst Größe und Lage anpasst (_groesse_anpassen) - nur
+        # dann wird die Unterkante festgehalten, nicht wenn der Anwender am Rand zieht.
         self._eigene_groessenaenderung = False
+        # True, während anzeigen() die Zeilen zurücksetzt - die Größe passt es danach einmal an.
+        self._anpassung_aufgeschoben = False
+        # True, während eine Zeile ein-/ausgeblendet wird (_sichtbarkeit_setzen).
+        self._anpassung_folgt = False
+        self.resize(self._startbreite(), 320)
 
     def anzeigen(self, nummer: int, anzahl: int, schritt: DemoSchritt, letzter: bool) -> None:
         # Nummer 0 = Begrüßung; die übrigen Schritte tragen ihre Nummer auch im Titel.
@@ -215,13 +241,19 @@ class DemoPanel(QWidget):
         self._verlauf.append((self.schritt_label.text(), schritt.titel, schritt.text))
         self._rueckblick = None
         self._sichtbar_vor_rueckblick = None  # hinweis()/extra() unten setzen die Zeilen neu
-        self.zurueck_btn.setVisible(len(self._verlauf) > 1)
+        self._sichtbarkeit_setzen(self.zurueck_btn, len(self._verlauf) > 1)
         self.zurueck_btn.setEnabled(True)
-        self.hinweis(None)
-        self.extra(None)
-        self._letzter = letzter
-        self.countdown_anzeigen(None)
-        self.angehalten_anzeigen(False)
+        # Die Zeilen unten einzeln zurücksetzen, die Größe aber nur einmal am Ende anpassen:
+        # sonst rückte das Fenster je Zeile neu (Verifikation 21.11.2026).
+        self._anpassung_aufgeschoben = True
+        try:
+            self.hinweis(None)
+            self.extra(None)
+            self._letzter = letzter
+            self.countdown_anzeigen(None)
+            self.angehalten_anzeigen(False)
+        finally:
+            self._anpassung_aufgeschoben = False
         self.weiter_btn.setEnabled(True)
         self._groesse_anpassen()
         if not self._positioniert:
@@ -256,11 +288,11 @@ class DemoPanel(QWidget):
                 self._sichtbar_vor_rueckblick = (self.hinweis_label.isVisible(), self.extra_btn.isVisible(),
                                                  self.pause_label.isVisible())
             for widget in (self.hinweis_label, self.extra_btn, self.pause_label):
-                widget.setVisible(False)
+                self._sichtbarkeit_setzen(widget, False)
         elif self._sichtbar_vor_rueckblick is not None:
             for widget, sichtbar in zip((self.hinweis_label, self.extra_btn, self.pause_label),
                                         self._sichtbar_vor_rueckblick):
-                widget.setVisible(sichtbar)
+                self._sichtbarkeit_setzen(widget, sichtbar)
             self._sichtbar_vor_rueckblick = None
         self._groesse_anpassen()
 
@@ -339,7 +371,18 @@ class DemoPanel(QWidget):
             werte[nummer] = sichtbar
             self._sichtbar_vor_rueckblick = tuple(werte)
             return
-        widget.setVisible(sichtbar)
+        self._sichtbarkeit_setzen(widget, sichtbar)
+
+    def _sichtbarkeit_setzen(self, widget: QWidget, sichtbar: bool) -> None:
+        """Zeile ein-/ausblenden. Qt vergrößert das Fenster dabei sofort selbst nach unten;
+        das ist kein Ziehen des Anwenders und wird nicht verankert, denn jeder Aufrufer ruft
+        gleich danach _groesse_anpassen, das Größe und Lage in einem Schritt setzt (sonst
+        sprang das Fenster zweimal, 21.11.2026)."""
+        self._anpassung_folgt = True
+        try:
+            widget.setVisible(sichtbar)
+        finally:
+            self._anpassung_folgt = False
 
     def angehalten_anzeigen(self, angehalten: bool) -> None:
         self._zeile_zeigen(2, self.pause_label, angehalten)
@@ -366,24 +409,36 @@ class DemoPanel(QWidget):
         echten Windows, Marco 01.11.2026). Bewusst nicht adjustSize(): das änderte je Schritt
         auch die Breite (und damit die Lage von „Weiter“) und machte das Fenster für einen
         langen Speicherpfad so breit, dass es rechts aus dem Bildschirm ragte. Die Unterkante
-        hält danach resizeEvent/_im_bildschirm_halten fest.
+        bleibt dabei fest (wie in _im_bildschirm_halten).
 
-        Braucht die Knopfzeile mehr Breite (z. B. mit „PDF öffnen“ und der breiteren
-        Programmschrift seit 1.0.63), wächst das Fenster nach links: Sonst verbreiterte Qt es
-        nach rechts und „Weiter“ rückte weg (CI unter Linux, 21.11.2026)."""
-        breite = self.width()
-        noetig = self.minimumSizeHint().width()
+        Braucht die Knopfzeile mehr Breite (z. B. mit „PDF öffnen“ bei großer Schrift), wächst
+        das Fenster nach links: Sonst verbreiterte Qt es nach rechts und „Weiter“ rückte weg
+        (CI unter Linux, 21.11.2026). Größe und Lage ändern sich in einem Schritt
+        (setGeometry statt resize + move), damit das Fenster nicht mehrmals springt."""
+        if self._anpassung_aufgeschoben:
+            return  # anzeigen() passt am Ende einmal an
+        # Layout jetzt aktualisieren, nicht erst im nächsten Ereignisdurchlauf: sonst rechnete
+        # das mit veralteten Mindestmaßen, und Qt vergrößerte das Fenster danach selbst noch
+        # einmal (ein zweiter Sprung).
+        self.layout().activate()
+        geo = self.geometry()
+        breite = max(geo.width(), self.minimumSizeHint().width())
+        hoehe = self.layout().totalHeightForWidth(breite)
+        hoehe = max(hoehe, self.minimumSizeHint().height()) if hoehe > 0 else geo.height()
+        x, y = geo.x(), geo.y()
+        if self._positioniert:
+            rahmen = self.frameGeometry()
+            links = self.screen().availableGeometry().left()
+            x -= max(0, min(breite - geo.width(), rahmen.left() - links))  # nie über den linken Rand
+            oben = self._oben_fuer(hoehe + rahmen.height() - geo.height())
+            y += oben - rahmen.top()
+        # Auch die Lage vergleichen: Hat Qt die Höhe beim Einblenden einer Zeile schon selbst
+        # gesetzt (siehe _sichtbarkeit_setzen), fehlt noch das Verankern.
+        if (x, y, breite, hoehe) == (geo.x(), geo.y(), geo.width(), geo.height()):
+            return
         self._eigene_groessenaenderung = True
         try:
-            if noetig > breite:
-                if self._positioniert:
-                    links = self.screen().availableGeometry().left()
-                    self.move(max(links, self.x() - (noetig - breite)), self.y())
-                breite = noetig
-                self.resize(breite, self.height())
-            hoehe = self.layout().totalHeightForWidth(breite)
-            if hoehe > 0 and hoehe != self.height():
-                self.resize(breite, max(hoehe, self.minimumSizeHint().height()))
+            self.setGeometry(x, y, breite, hoehe)
         finally:
             self._eigene_groessenaenderung = False
 
@@ -429,18 +484,25 @@ class DemoPanel(QWidget):
         Unterkante (moveEvent)."""
         if not self._positioniert:
             return
+        oben = self._oben_fuer(self.frameGeometry().height())
+        if oben != self.frameGeometry().top():
+            self.move(self.x(), oben)
+
+    def _oben_fuer(self, rahmen_hoehe: int) -> int:
+        """Oberkante (mit Rahmen), bei der ein Fenster dieser Höhe auf der verankerten
+        Unterkante steht - nie unter den Bildschirmrand bzw. die Taskleiste, nie über den
+        oberen Rand."""
         # Bildschirm, auf dem das Erklärfenster gerade steht (ggf. vom Anwender auf einen
         # zweiten Monitor gezogen).
         bildschirm = self.screen().availableGeometry()
-        rahmen = self.frameGeometry()
         unten_max = bildschirm.bottom() - 48
-        unten = min(self._unten if self._unten is not None else rahmen.bottom(), unten_max)
-        oben = max(bildschirm.top(), unten - rahmen.height() + 1)
-        if oben != rahmen.top():
-            self.move(self.x(), oben)
+        unten = min(self._unten if self._unten is not None else self.frameGeometry().bottom(), unten_max)
+        return max(bildschirm.top(), unten - rahmen_hoehe + 1)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        if self._anpassung_folgt:
+            return  # siehe _sichtbarkeit_setzen
         if not self._eigene_groessenaenderung and self._positioniert:
             # Der Anwender zieht selbst am Rand: dort bleiben, die neue Unterkante gilt.
             self._unten = self.frameGeometry().bottom()

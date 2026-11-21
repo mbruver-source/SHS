@@ -58,6 +58,16 @@ Die Einzelschritte stehen in den Abschnitten unten. Die „Noch offen“-Listen 
 2. `test_laufwerksart_erkennt_usb_stick_und_netzlaufwerk` setzte `os.name` für den ganzen Prozess auf „nt“. Scheiterte in dieser Zeit etwas, brach pytest unter Linux mit einem INTERNALERROR ab (`WindowsPath`), der den eigentlichen Fehler verdeckte. Jetzt bekommt nur `desktop_gemeinsam` eine `os`-Attrappe.
 Test-Suite lokal grün (1664 bestanden).
 
+**CI danach (zweiter Lauf):** Ohne den Absturz von pytest kamen zwei weitere, vorher verdeckte Fehler zum Vorschein. Beide hängen an der neuen Schrift, die im Gesamtlauf aktiv ist:
+1. `test_demo_erklaerfenster_bleibt_im_bildschirm_und_springt_nicht_doppelt`: Durch das Verbreitern kamen in Schritt 13 vier Verschiebungen zusammen (erlaubt sind zwei). Umbau des Erklärfensters (`desktop_demo_panel.py`):
+   - `_groesse_anpassen` setzt Breite, Höhe und die Lage auf der verankerten Unterkante in einem einzigen `setGeometry`. Der neue Helfer `_oben_fuer` wird auch von `_im_bildschirm_halten` genutzt.
+   - `anzeigen` passt die Größe nur einmal am Ende an statt je zurückgesetzter Zeile.
+   - Beim Einblenden einer Zeile vergrößert Qt das Fenster sofort selbst nach unten. `resizeEvent` hielt das bisher für ein Ziehen des Anwenders, und es gab einen zweiten Sprung. Jetzt übergeht `resizeEvent` diese Vergrößerung (`_sichtbarkeit_setzen`), das Verankern übernimmt das gleich folgende `_groesse_anpassen`. Ein erster Versuch ohne Mindestgröße des Layouts (`SetNoConstraint`) wurde nach der Verifikation verworfen, weil er neue Randfälle brachte.
+   - Die Startbreite ergibt sich aus der Knopfzeile mit „Vorheriger Text“ und „PDF öffnen“. Sie beträgt mindestens 480 px und höchstens die Bildschirmbreite.
+   - Der Test zählt jetzt auch Ortswechsel über `setGeometry` (Hinweis der Verifikation); er hat damit diese Mehrfachsprünge erst sichtbar gemacht.
+2. `test_passwortabfrage_ohne_tresor_bricht_den_hinweis_um[2.0]`: Bei doppelter Schriftgröße war der Hinweis unter „Passwort merken“ unten abgeschnitten. `_PasswortDialog.showEvent` zieht die Höhe jetzt für die tatsächliche Breite nach (`desktop_web.py`).
+Beides ließ sich lokal nachstellen, sobald die Programmschrift erzwungen wird. Damit liefen alle GUI-Tests lokal: 723 bestanden, keine weiteren Fehler. Test-Suite grün (1664 bestanden).
+
 **Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
 
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)

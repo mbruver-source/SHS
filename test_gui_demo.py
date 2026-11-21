@@ -538,7 +538,16 @@ def test_demo_erklaerfenster_bleibt_im_bildschirm_und_springt_nicht_doppelt(
         verschiebungen.append(args)
         QWidget.move(panel, *args)
 
+    def geometrie_zaehlen(panel, *args):
+        # Seit 21.11.2026 ändert _groesse_anpassen Größe und Lage in einem setGeometry - auch
+        # das ist ein Ortswechsel, wenn sich die Lage dabei ändert.
+        vorher = panel.pos()
+        QWidget.setGeometry(panel, *args)
+        if panel.pos() != vorher:
+            verschiebungen.append(("setGeometry", panel.x(), panel.y()))
+
     monkeypatch.setattr(desktop_demo.DemoPanel, "move", zaehlen)
+    monkeypatch.setattr(desktop_demo.DemoPanel, "setGeometry", geometrie_zaehlen)
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)

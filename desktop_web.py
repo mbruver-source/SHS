@@ -237,6 +237,15 @@ class _PasswortDialog(QDialog):
         layout.addWidget(knoepfe)
         self.setMinimumWidth(380)
 
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        """Qt bemisst die Höhe umbrechender Zeilen vorab für eine geschätzte Breite; bei großer
+        Schrift war der Hinweis unter dem Haken dann unten abgeschnitten (CI unter Linux,
+        21.11.2026). Nach dem Anzeigen kennt der Dialog seine Breite: Höhe dafür nachziehen."""
+        super().showEvent(event)
+        hoehe = self.layout().totalHeightForWidth(self.width())
+        if hoehe > self.height():
+            self.resize(self.width(), hoehe)
+
     def _pruefen(self) -> None:
         if not self.passwort_feld.text():
             QMessageBox.warning(self, "Passwort fehlt", "Bitte das Passwort eingeben.")
