@@ -51,6 +51,8 @@ Die Einzelschritte stehen in den Abschnitten unten. Die „Noch offen“-Listen 
 
 **Altdaten:** `testdaten/altversionen/v1.0.63` erzeugt, `test_altversionen` grün, eigener Commit.
 
+**CI nach dem Push (Container bauen):** Alle Prüfungen grün, auch die neue Schriftprüfung; nur „Alle Container gesund?“ scheiterte, weil der Proxy (startet erst nach dem gesunden Web-Container) noch auf „starting“ stand. Die Prüfungen davor liefen dank Zwischenspeicher in einer Sekunde durch. Behoben in `.github/workflows/build-container.yml`: Der Schritt wartet bis zu 90 s, solange nur „starting“ übrig ist; „unhealthy“ bricht sofort ab. Kein Fehler im Programm.
+
 **Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
 
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)

@@ -125,7 +125,16 @@ jobs:
           echo "Schrift der Web-Oberfläche vorhanden."
 
       - name: Alle Container gesund?
+        # Der Proxy startet erst, wenn der Web-Container gesund ist; laufen die Prüfungen davor in
+        # einer Sekunde durch, steht er hier noch auf „starting“ (21.11.2026, Lauf zu 1.0.63). Deshalb bis
+        # zu 90 s warten, solange nur „starting“ übrig ist; „unhealthy“ bricht sofort ab.
         run: |
+          for i in $(seq 1 45); do
+            offen=$(docker compose -f compose.yaml ps --format '{{.Name}} {{.Health}}' | grep -v -E ' (healthy)?$' || true)
+            [ -z "$offen" ] && break
+            if echo "$offen" | grep -q -v ' starting$'; then break; fi
+            sleep 2
+          done
           docker compose -f compose.yaml ps
           unhealthy=$(docker compose -f compose.yaml ps --format '{{.Name}} {{.Health}}' | grep -v -E ' (healthy)?$' || true)
           if [ -n "$unhealthy" ]; then echo "::error::Nicht gesund: $unhealthy"; docker compose -f compose.yaml logs; exit 1; fi
