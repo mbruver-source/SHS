@@ -377,7 +377,7 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
 - 20.11.2026: Rückfragen mit Marco geklärt, Folgeaufgaben U14–U19 angelegt (gleicher Ablauf, gleicher Start-Befehl).
   Der Test-Stack `shsux` ist abgebaut; für Sichtprüfungen nur noch `scratchpad\web_live.py` (Aufruf
   `python web_live.py <repo>`, 127.0.0.1:5097, admin/demo-passwort-1). Nächste: U14 [S].
-- 20.11.2026: U14 erledigt und committet (`0919a83`, zusammen mit der Klärung; der vorherige Klärungs-Commit enthielt
+- 20.11.2026: U14 erledigt und committet (`0919a83`, seit 21.11.2026 `e2c3362`, zusammen mit der Klärung; der vorherige Klärungs-Commit enthielt
   Sicherheitsdetails und wurde vor jedem Push neu erstellt). Nächste: U15 (drei Web-Kleinigkeiten).
 - 20.11.2026: U15 erledigt und committet. Nächste: U16 (Aufräumen Web-Logik, Verhalten unverändert; die neue
   „teilweise“-Regel in `_listen_status` – angefangen = irgendein Wert – beim Zusammenführen erhalten).
@@ -452,13 +452,16 @@ committet, nicht gepusht:
 
 | Aufgabe | Commit | Inhalt |
 |---|---|---|
-| Klärung + U14 | `0919a83` | Rückfragen geklärt; Sicherheitskorrektur Web-Verbindung (Details nur lokal) |
-| – | `ddc4141` | Fortsetzungsnotiz |
-| U15 | `bb07eb3` | „teilweise“ schon bei angefangener Disziplin, Bestätigung nach dem Bogen, deutsche Zeit |
-| U16 | `751e1dd`, `7801b50` | Web-Logik aufgeräumt (zwei Teile wegen gezieltem Stopp vor dem Nutzungslimit) |
-| U17 | `5ec3d18` | Templates/CSS aufgeräumt, gemeinsame Bausteine `templates/_bausteine.html` |
-| U18 | `63dff2c` | Desktop: Passwortspeicher gekapselt |
-| U19 | (dieser Commit) | OFFEN.md (C41, C42, B23), QS in drei Rollen, Nachbesserungen, Bericht |
+| Klärung + U14 | `e2c3362` | Rückfragen geklärt; Sicherheitskorrektur Web-Verbindung (Details nur lokal) |
+| – | `84612c8` | Fortsetzungsnotiz |
+| U15 | `776bb38` | „teilweise“ schon bei angefangener Disziplin, Bestätigung nach dem Bogen, deutsche Zeit |
+| U16 | `9a71f38`, `57a8a88` | Web-Logik aufgeräumt (zwei Teile wegen gezieltem Stopp vor dem Nutzungslimit) |
+| U17 | `cf0d423` | Templates/CSS aufgeräumt, gemeinsame Bausteine `templates/_bausteine.html` |
+| U18 | `22719d7` | Desktop: Passwortspeicher gekapselt |
+| U19 | `afb57fb` | OFFEN.md (C41, C42, B23), QS in drei Rollen, Nachbesserungen, Bericht |
+
+(Commit-Kennungen nach dem Neuschreiben des Commit-Texts von `e2c3362` am 21.11.2026, siehe unten; Inhalt
+unverändert.)
 
 **QS über `f758046..HEAD`:** Sicherheit ohne Befund im Code (Hinweis zur Offenlegung, siehe unten); Korrektheit
 ein Fehler (niedrig: „Gespeichertes Passwort vergessen“ meldete bei gescheitertem Löschen aus dem Tresor trotzdem
@@ -470,9 +473,10 @@ stilles Auslassen und mit beiden Umstellungstagen).
 QS-Nachbesserungen die betroffenen Testdateien erneut grün. PostgreSQL-Tests nur in der CI.
 
 **Vor dem Push / Build von Marco zu entscheiden:**
-- Der Commit-Text von `0919a83` und der Handbuch-Satz in Kap. Web-Verbindung beschreiben das neue Verhalten der
-  Sicherheitskorrektur U14 so, dass man die alte Lücke erschließen kann (`Fortschritt.md` ist schon allgemein
-  gefasst). Die Desktop-Web-Verbindung war noch in keinem Release; Commit-Texte lassen sich nur vor dem Push ändern.
+- ~~Commit-Text der Sicherheitskorrektur U14 zu genau~~ **Erledigt 21.11.2026 (Marco: „allgemeiner“):** Der Text
+  des Commits (jetzt `e2c3362`) wurde vor jedem Push allgemein gefasst; die Inhalte aller Commits sind unverändert
+  (gleicher Dateibaum), nur die Kennungen ab diesem Commit sind neu. Der Handbuch-Satz in Kap. Web-Verbindung bleibt
+  als nötiger Hinweis für die Anwender.
 - Nicht umgesetzte Kleinigkeiten der Wartbarkeitsprüfung: `textarea`/`select` in die gemeinsame Eingabefeld-Regel
   aufnehmen; Inline-Styles in `admin_benutzer.html`/`admin_termine.html`; CSS-Tests teils nur über Teilzeichenketten.
 - Screenshots laut Liste neu aufnehmen; Zertifikatswarnungs-Texte live ansehen; Safari/iOS ungeprüft.

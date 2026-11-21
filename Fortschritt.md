@@ -2,6 +2,13 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 21.11.2026: Commit-Text der Sicherheitskorrektur allgemeiner gefasst (Marco)
+
+Vor dem ersten Push den Text des Commits „Rückfragen aus dem UX-Test Web geklärt; Sicherheitskorrektur
+Web-Verbindung“ allgemein gefasst (Regel „Sicherheitsfunde erst nach dem Release veröffentlichen“). Nur die
+Commit-Texte wurden neu geschrieben, die Inhalte sind unverändert (gleicher Dateibaum); die Kennungen der
+Commits ab dort sind neu und in der Aufgabenliste nachgetragen.
+
 ## 20.11.2026: UX-Test Web U19 – Abschluss Runde 2
 
 `OFFEN.md` und Entscheidungsdokumente: C41 (Web ohne Skripte: kein „Passwort anzeigen“, keine Rückfrage beim
