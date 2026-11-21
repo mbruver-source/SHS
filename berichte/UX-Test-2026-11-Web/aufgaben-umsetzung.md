@@ -205,8 +205,9 @@ abweichen, nicht im Umfang.
 | Aufräumpaket | jetzt, ohne `web_regeln.py` → U16–U18; `web_regeln.py` in U19 als zurückgestellt in `OFFEN.md` |
 
 ### U14 [S] Desktop: Sicherheitskorrektur Web-Verbindung (S-U14) – S
-- Auftrag und Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (dort „H-3“, jetzt S-U14). Commit-Text,
-  diese Liste und `Fortschritt.md` nur allgemein („Sicherheitskorrektur Web-Verbindung, Details folgen“).
+- Auftrag und Details bis zum Release nur lokal (dort „H-3“, jetzt S-U14). Commit-Text, diese Liste und `Fortschritt.md`
+  nur allgemein („Sicherheitskorrektur Web-Verbindung, Details folgen“). Seit dem Release 1.0.63 veröffentlicht:
+  [Sicherheitspruefung-Web-Verbindung-2026-11.md](../Sicherheitspruefung-Web-Verbindung-2026-11.md).
 - GUI-Tests in `test_gui_web.py`, danach `verifikation` und `qs-sicherheit`; Ergebnis im lokalen Bericht nachtragen.
 - Handbuch Kap. Web-Verbindung: ein Satz zum geänderten Verhalten.
 

@@ -70,6 +70,8 @@ Beides ließ sich lokal nachstellen, sobald die Programmschrift erzwungen wird. 
 
 **Ausgeliefert (21.11.2026):** Nach den zwei CI-Korrekturen (8eae0f7, de9a170) waren alle Läufe grün, Marco hat getaggt. Das Release 1.0.63 ist veröffentlicht (Setup, zwei DMGs, AppImage, DEB), die Tag-Läufe „Tests“, „Container bauen“ und „Installer bauen“ sind grün. Der Selbsttest der installierten EXE (`--nur-installation --version-pruefen`) ist grün (20 bestanden). Wie bei 1.0.62 steht der Uninstall-Eintrag (HKCU) danach noch auf der Vorversion (1.0.62); das Programm selbst ist 1.0.63. Die Ursache ist weiter ungeklärt und hat keine Folgen für das Programm; offen als Beobachtung.
 
+**Sicherheitsprüfung der Web-Verbindung veröffentlicht (21.11.2026, Marco):** `berichte/Sicherheitspruefung-Web-Verbindung-2026-11.md` mit den in 1.0.63 behobenen Punkten G-1, G-2, G-2a, H-1, H-2 und S-U14 (die „Details folgen“ der Einträge vom 20.11.). Ein nicht umgesetzter Rest bleibt nach Marcos Vorgabe unveröffentlicht.
+
 **Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
 
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)
