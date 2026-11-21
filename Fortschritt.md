@@ -49,6 +49,10 @@ Die Einzelschritte stehen in den Abschnitten unten. Die „Noch offen“-Listen 
 
 **Hinweis:** Marcos lokaler Web-Stack läuft noch mit dem Test-Image `localhost/shs-web:vor-build`; nach dem Release `podman-compose up -d` ohne `SHS_WEB_IMAGE`.
 
+**Altdaten:** `testdaten/altversionen/v1.0.63` erzeugt, `test_altversionen` grün, eigener Commit.
+
+**Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
+
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)
 
 **`docs/assets/site.css`:**
