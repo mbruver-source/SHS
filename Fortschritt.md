@@ -2,6 +2,26 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 21.11.2026: Design-Richtung „Schiefer und Signal“ abgestimmt (Marco, noch keine Umsetzung)
+
+Design-Gespräch zu Desktop- und Web-Version. Die Kritik an „Beagle“ betraf vier Punkte:
+- Creme und Braun sind selbst ein Standard-Look.
+- Ränder und Felder haben 1,1–1,3 : 1 und sind draußen nicht sichtbar.
+- Akzent und Warn-Orange liegen bei 1,12 : 1.
+- Die Punktzahlen sind zu klein.
+
+Marco wählte Richtung B „Schiefer und Signal“ mit Absperrband-Gelb für „ungespeichert“:
+- Beton #EEF0EC, Tinte #1B2220, Schiefer #2A3035, Signal #D9480F, Absperrband #FFD43B.
+- Schrift Atkinson Hyperlegible Next.
+- Ein Hauptknopf je Ansicht; am Handy „Speichern, nächster Start“.
+- Akzent- und Hintergrundwahl entfallen; Dunkel und Hoher Kontrast werden abgeleitet.
+- „Nächster Start“ ist die nächste Startnummer mit dieser Disziplin.
+- Der Beagle bleibt rund im Kopf.
+- Kein Layout-Umbau von Bogen- und Seitenkopf.
+
+Details, Kontrastwerte und nächste Schritte stehen in `berichte/Design-Richtung-2026-11.md`. Die
+Website folgt in einem eigenen Gespräch. Code ist nicht geändert.
+
 ## 21.11.2026: Commit-Text der Sicherheitskorrektur allgemeiner gefasst (Marco)
 
 Vor dem ersten Push den Text des Commits „Rückfragen aus dem UX-Test Web geklärt; Sicherheitskorrektur

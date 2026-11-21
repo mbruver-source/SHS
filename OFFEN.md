@@ -23,6 +23,7 @@ akzeptiert, hier eintragen bzw. streichen (mit Datum); bei B*/C* zusätzlich ein
 | A2 | Update-Prüfung am echten Mac: klappt HTTPS (CA-Zertifikate im Bundle)? Der Selbsttest zeigt die Anzahl | 15.10.2026 | historie/2026-10.md „Briefing (14.10.2026): Automatische …“ |
 | A6 | PDF-Ausdrucke auf Papier ansehen, vor allem Etiketten auf Klebepapier (Bildschirmprüfung am 01.11.2026 erledigt) | 15.10.2026 | historie/2026-10.md „Briefing (14.10.2026): Automatische …“; Fortschritt.md „01.11.2026: Durchgang aller offenen …“ |
 | A7 | Hinweisfenster „Termin liegt auf USB-Stick/Netzlaufwerk“ und automatische Kopie am echten Stick/Netzlaufwerk ansehen | 10.11.2026 | Fortschritt.md „10.11.2026: Automatische Kopie des Termins …“ |
+| A8 | Design-Richtung „Schiefer und Signal“ (löst „Beagle“ ab) ist abgestimmt; die Umsetzung wartet auf Marcos Go. Dazu kommen die neue Funktion „Speichern, nächster Start“ im Web-Bogen und danach die Website | 21.11.2026 | `berichte/Design-Richtung-2026-11.md`; Fortschritt.md „21.11.2026: Design-Richtung …“ |
 
 ## PO. Neue Prüfungsordnung ab 01.01.2027
 
