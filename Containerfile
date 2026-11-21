@@ -30,6 +30,9 @@ COPY symbole/LICENSE-Tabler.txt ./symbole/
 # fonts/ (DejaVu-Schriften der PDF-Ausgabe, siehe unten) bleibt im Image; die Lizenz muss hier
 # schon liegen, weil drittlizenzen.py sie in THIRD_PARTY_LICENSES.txt aufnimmt.
 COPY fonts/ ./fonts/
+# Schrift der Web-Oberfläche (Atkinson Hyperlegible Next, Marco 21.11.2026): die Lizenz muss für
+# drittlizenzen.py schon hier liegen; die Schriftdateien kommen unten mit static/.
+COPY static/schrift/LICENSE-Atkinson-Hyperlegible-Next.txt ./static/schrift/
 RUN python tools/drittlizenzen.py web THIRD_PARTY_LICENSES.txt && rm -r tools symbole
 
 # version.py (nicht version.txt/version_info.txt - die dienen nur dem PyInstaller-Build
@@ -44,8 +47,8 @@ COPY shs_core.py app_web.py version.py ./
 # liegen in fonts/ (oben kopiert, gefunden über den Ordner neben pdf_export.py).
 COPY pdf_export.py lr_abrechnung.py ./
 COPY templates/ ./templates/
-# Bilder der Web-Oberfläche (Beagle im Kopf, templates/base.html), ausgeliefert von Flask
-# unter /static (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+# Bilder und Schrift der Web-Oberfläche (Beagle im Kopf, seit 21.11.2026 static/schrift/ mit
+# Atkinson Hyperlegible Next, beides in templates/base.html), ausgeliefert von Flask unter /static.
 COPY static/ ./static/
 # MIT-Lizenz des Programms; die Seite /lizenzen (app_web.py) zeigt sie zusammen mit
 # THIRD_PARTY_LICENSES.txt an (Marco 01.11.2026).

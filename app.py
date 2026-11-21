@@ -92,11 +92,8 @@ from desktop_darstellung import (
     _DESIGNS,
     _gespeichertes_design_lesen,
     _gespeicherte_schriftstufe_lesen,
-    _gespeichertes_theme_lesen,
     _schriftstufe_speichern,
     _SCHRIFTSTUFEN,
-    _theme_speichern,
-    _THEMES,
 )
 from desktop_gemeinsam import zugaengliche_namen_setzen
 from desktop_gemeinsam import (
@@ -195,7 +192,7 @@ def _fremdobjekte_melden(parent) -> None:
 
 
 def _auswahl_menue_aufbauen(besitzer, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
-    """Menü mit genau einer wählbaren Möglichkeit (Hintergrund, Akzentfarbe, Schriftgröße) -
+    """Menü mit genau einer wählbaren Möglichkeit (Design, Schriftgröße) -
     gemeinsam für das Hauptfenster und den Startbildschirm (Marco 10.11.2026)."""
     actions: dict[str, QAction] = {}
     gruppe = QActionGroup(besitzer)
@@ -223,7 +220,7 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         # hat - das folgende closeEvent prüft dann nicht erneut. Ein abgebrochenes Abmelden
         # setzt es über SitzungsendeFilter zurück.
         self._beenden_freigegeben = False
-        self._theme_menue_aufbauen()
+        self._ansicht_menue_aufbauen()
 
         # Hilfe-Button ganz rechts in der Kopfzeile (davor "Anderen Termin öffnen…",
         # "Version" und "Demoprüfung") -
@@ -291,25 +288,23 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         self._termin_setzen(conn, pfad, demo=demo)
         self._schriftgroesse_anwenden()
 
-    def _theme_menue_aufbauen(self) -> None:
+    def _ansicht_menue_aufbauen(self) -> None:
         # Eine einzige Verbindung auf QActionGroup.triggered (statt einer eigenen
         # lambda-Verbindung pro Action in der Schleife) - eine pro-Action-lambda, die
         # `self` einfängt, hat beim Schließen/Zerstören des Fensters in Tests
         # (qtbot-Teardown) zu einem Hänger geführt (vermutlich ein PySide6-Problem mit
         # der Verbindungs-Buchhaltung bei lambda-Slots + Objektzerstörung). Das hier
-        # verwendete Muster (ein einziger, echter gebundener Methodenaufruf, das Theme
-        # über QAction.data() statt über eine eingefangene Schleifenvariable
+        # verwendete Muster (ein einziger, echter gebundener Methodenaufruf, Design bzw.
+        # Schriftstufe über QAction.data() statt über eine eingefangene Schleifenvariable
         # identifiziert) ist der Qt-übliche Weg für QActionGroups und tritt in den
         # GUI-Tests (test_gui_*.py) nicht mehr auf.
-        # Dasselbe Muster gilt für beide Untermenüs (Hintergrund + Akzentfarbe).
+        # Dasselbe Muster gilt für die Untermenüs Design und Schriftgröße. Die frühere
+        # Akzentfarb-Wahl ist mit dem Erscheinungsbild „Schiefer und Signal“ entfallen
+        # (Marco 21.11.2026), „Hintergrund“ heißt seitdem „Design“.
         ansicht_menue = self.menuBar().addMenu("&Ansicht")
         self._design_actions = self._auswahl_menue_aufbauen(
-            ansicht_menue.addMenu("Hintergrund"), _DESIGNS, _gespeichertes_design_lesen(),
+            ansicht_menue.addMenu("Design"), _DESIGNS, _gespeichertes_design_lesen(),
             self._design_aktion_ausgeloest,
-        )
-        self._theme_actions = self._auswahl_menue_aufbauen(
-            ansicht_menue.addMenu("Akzentfarbe"), _THEMES, _gespeichertes_theme_lesen(),
-            self._theme_aktion_ausgeloest,
         )
         # UX-Test 03.11.2026, X2: Schrift vergrößern (vorher nur „Hoher Kontrast“, der die
         # Größe nicht ändert - die Hilfe versprach es trotzdem).
@@ -386,9 +381,6 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
     def _auswahl_menue_aufbauen(self, menue, eintraege: dict, aktiv: str, slot) -> dict[str, QAction]:
         return _auswahl_menue_aufbauen(self, menue, eintraege, aktiv, slot)
 
-    def _theme_aktion_ausgeloest(self, action: QAction) -> None:
-        self._theme_wechseln(action.data())
-
     def _design_aktion_ausgeloest(self, action: QAction) -> None:
         self._design_wechseln(action.data())
 
@@ -428,10 +420,6 @@ class HauptFenster(ResponsiveSchriftMixin, QMainWindow):
         rahmen = self.frameGeometry()
         self.move(min(max(rahmen.x(), frei.x()), frei.right() - rahmen.width() + 1),
                   min(max(rahmen.y(), frei.y()), frei.bottom() - rahmen.height() + 1))
-
-    def _theme_wechseln(self, theme_name: str) -> None:
-        _theme_speichern(theme_name)
-        self._darstellung_neu_anwenden()
 
     def _design_wechseln(self, design_name: str) -> None:
         _design_speichern(design_name)
@@ -1013,7 +1001,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
 
         neu_btn = QPushButton("Neuen Termin anlegen…")
         neu_btn.setObjectName("primaerButton")  # Haupt-Aktion des Startdialogs, siehe _QSS_TEMPLATE
-        symbol_setzen(neu_btn, "plus", "#FFFFFF")  # weiß auf der Akzentfarbe
+        symbol_setzen(neu_btn, "plus", "AKZENT_TEXT")  # Schriftfarbe auf dem Akzent
         neu_btn.clicked.connect(self._neuer_termin)
         self.oeffnen_btn = QPushButton("Öffnen")
         symbol_setzen(self.oeffnen_btn, "folder-open")
@@ -1039,7 +1027,7 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         hinweis = QLabel(
             f"Neue Termine werden standardmäßig unter {termine_ordner()} gespeichert.\n"
             "Tipp: Schrift zu klein oder zu blass? Oben im Menü "
-            "„Ansicht“ → „Schriftgröße“ bzw. „Hintergrund“ → „Hoher Kontrast“ wählen."
+            "„Ansicht“ → „Schriftgröße“ bzw. „Design“ → „Hoher Kontrast“ wählen."
         )
         hinweis.setWordWrap(True)
 
@@ -1084,11 +1072,8 @@ class StartDialog(ResponsiveSchriftMixin, QDialog):
         leiste = QMenuBar(self)
         ansicht_menue = leiste.addMenu("&Ansicht")
         self._design_actions = _auswahl_menue_aufbauen(
-            self, ansicht_menue.addMenu("Hintergrund"), _DESIGNS, _gespeichertes_design_lesen(),
+            self, ansicht_menue.addMenu("Design"), _DESIGNS, _gespeichertes_design_lesen(),
             lambda action: self._darstellung_wechseln(_design_speichern, action.data()))
-        self._theme_actions = _auswahl_menue_aufbauen(
-            self, ansicht_menue.addMenu("Akzentfarbe"), _THEMES, _gespeichertes_theme_lesen(),
-            lambda action: self._darstellung_wechseln(_theme_speichern, action.data()))
         self._schrift_actions = _auswahl_menue_aufbauen(
             self, ansicht_menue.addMenu("Schriftgröße"), _SCHRIFTSTUFEN, _gespeicherte_schriftstufe_lesen(),
             lambda action: self._darstellung_wechseln(_schriftstufe_speichern, action.data()))

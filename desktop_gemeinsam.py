@@ -861,8 +861,8 @@ class _PruefungSortierbaresItem(QTableWidgetItem):
         return super().__lt__(other)
 
 
-# Zeilenfarben der Ergebniserfassung (ungespeichert: dezentes Gelb bzw. im dunklen Design
-# ein gedecktes Bernstein) kommen aus dem aktiven Hintergrund-Design, siehe _farbe().
+# Zeilenfarben der Ergebniserfassung (ungespeichert: Absperrband-Gelb bzw. im dunklen Design
+# ein dunkles Ocker) kommen aus dem aktiven Design, siehe _farbe().
 
 
 # Spaltenreihenfolge in der Ergebniserfassung: je Disziplin ein Such-/Anzeigeleistungs-Paar,

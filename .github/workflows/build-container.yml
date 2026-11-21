@@ -114,6 +114,16 @@ jobs:
           docker compose -f compose.yaml exec -T web python -c "import pdf_export, reportlab; print('pdf_export und reportlab vorhanden')"
           docker compose -f compose.yaml exec -T web test -f /app/fonts/DejaVuSansCondensed.ttf
 
+      - name: Prüfen, dass die Schrift der Web-Oberfläche ausgeliefert wird
+        # Atkinson Hyperlegible Next aus static/schrift/ (templates/base.html, @font-face) samt Lizenz
+        # (Marco 21.11.2026, Erscheinungsbild „Schiefer und Signal“).
+        run: |
+          docker compose -f compose.yaml exec -T web test -f /app/static/schrift/LICENSE-Atkinson-Hyperlegible-Next.txt
+          code=$(curl -sk -o /tmp/schrift.ttf -w '%{http_code}' https://localhost:5443/static/schrift/AtkinsonHyperlegibleNext-Regular.ttf)
+          [ "$code" = "200" ] || { echo "::error::Schrift der Web-Oberfläche antwortet mit $code statt 200"; exit 1; }
+          [ "$(head -c 4 /tmp/schrift.ttf | od -An -tx1 | tr -d ' ')" = "00010000" ] || { echo "::error::Schriftdatei ist keine TrueType-Datei"; exit 1; }
+          echo "Schrift der Web-Oberfläche vorhanden."
+
       - name: Alle Container gesund?
         run: |
           docker compose -f compose.yaml ps

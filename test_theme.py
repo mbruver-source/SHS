@@ -1,52 +1,19 @@
-"""Reine String-Logik-Tests fuer die Theme-Erzeugung in desktop_darstellung.py - kein
+"""Reine String-Logik-Tests fuer die Design-Erzeugung in desktop_darstellung.py - kein
 Qt-Import noetig ausser dem, den desktop_darstellung.py selbst am Kopf schon mitbringt
 (PySide6). Laeuft daher nur lokal, wenn PySide6 installiert ist - genau wie
-die test_gui_*.py."""
+die test_gui_*.py.
+
+Erscheinungsbild „Schiefer und Signal“ (Marco 21.11.2026, berichte/Design-Richtung-2026-11.md):
+drei Designs (Schiefer als Standard, Dunkel, Hoher Kontrast), der Akzent gehört zum Design;
+die frühere Akzentfarb-Wahl und das Design „Hell“ sind entfallen."""
 
 import unittest
 from unittest import mock
 
 import desktop_darstellung
 
-
-class TestThemes(unittest.TestCase):
-    def _ohne_kopfkommentar(self, qss: str) -> str:
-        ende = qss.index("*/") + len("*/")
-        return qss[ende:].lstrip("\n")
-
-    def test_standard_lohbraun_beagle_referenz(self):
-        # Erscheinungsbild „Beagle“ (Marco 01.11.2026): Standard ist Lohbraun auf Beagle. Die
-        # Bildpfade (Häkchen, Pfeile) zeigen hier auf einen festen Ordner.
-        erwartet = 'QMainWindow, QDialog {\n    background: #FBF8F3;\n}\nQWidget {\n    color: #2B2620;\n}\nQLabel {\n    color: #2B2620;\n}\n\n/* Reiter (Teilnehmer/Zeitplan/.../Datensicherung) */\nQTabWidget::pane {\n    border: 1px solid #E2D9CB;\n    background: #FBF8F3;\n    top: -1px;\n}\n/* Reiter durchsichtig: sonst übermalen sie die obere Rahmenlinie des Inhaltsbereichs\n(top: -1px), und die Linie erscheint nur in den Lücken (Marco, 16.10.2026). */\nQTabBar::tab {\n    background: transparent;\n    color: #5E5549;\n    padding: 8px 16px;\n    border: none;\n    border-bottom: 3px solid transparent;\n    margin-right: 2px;\n    font-weight: 600;\n}\nQTabBar::tab:selected {\n    color: #1F1A15;\n    font-weight: 600;\n    border-bottom: 3px solid #8C5A32;\n}\nQTabBar::tab:hover:!selected {\n    color: #1F1A15;\n}\n\n/* Schaltflächen: neutral/sekundär als Standard; die jeweilige Haupt-Aktion eines\nReiters/Dialogs trägt objectName "primaerButton" (siehe z.B. TeilnehmerTab) und wird\nin der Akzentfarbe hervorgehoben - ebenso automatisch jeder Dialog-Default-Button (die "OK"-Schaltfläche\neiner QDialogButtonBox, über die Qt-eigene :default-Pseudoklasse, ohne dass jeder\nDialog einzeln angepasst werden muss). */\nQPushButton {\n    background: #F2ECE2;\n    color: #3A3229;\n    border: 1px solid #E2D9CB;\n    border-radius: 6px;\n    padding: 6px 14px;\n}\nQPushButton:hover {\n    background: #EAE2D5;\n}\nQPushButton:pressed {\n    background: #E1D7C7;\n}\nQPushButton:disabled {\n    color: #B3A898;\n    background: #F6F2EB;\n    border-color: #ECE6DB;\n}\nQPushButton#primaerButton, QPushButton:default:enabled {\n    background: #8C5A32;\n    color: #FFFFFF;\n    border: 1px solid #8C5A32;\n    font-weight: 600;\n}\nQPushButton#primaerButton:hover, QPushButton:default:enabled:hover {\n    background: #7A4E2B;\n    border-color: #7A4E2B;\n}\nQPushButton#primaerButton:pressed, QPushButton:default:enabled:pressed {\n    background: #6A4325;\n    border-color: #6A4325;\n}\n\n/* Eingabefelder */\nQLineEdit, QComboBox, QSpinBox, QDateEdit {\n    background: #F2ECE2;\n    border: 1px solid #E2D9CB;\n    border-radius: 6px;\n    padding: 4px 8px;\n    color: #2B2620;\n}\nQLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {\n    border: 1px solid #8C5A32;\n    background: #FBF8F3;\n}\nQLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {\n    color: #B3A898;\n    background: #F6F2EB;\n}\nQComboBox::drop-down {\n    border: none;\n    width: 20px;\n}\n/* Ohne eigenes Bild zeichnet Qt bei gestaltetem Rahmen keinen Pfeil: Auswahlfelder sahen aus\nwie Textfelder und niemand erkannte, dass sie sich aufklappen lassen (Marco 12.11.2026). */\nQComboBox::down-arrow {\n    image: url("/SHS/pfeil_runter_3A3229.png");\n    width: 10px;\n    height: 10px;\n}\nQComboBox::down-arrow:disabled {\n    image: url("/SHS/pfeil_runter_B3A898.png");\n}\n/* Pfeilknöpfe der Zahlenfelder (Marco 01.11.2026, Erscheinungsbild „Beagle“): Sobald das\nFeld selbst einen Rahmen aus dem Stylesheet hat, zeichnet Qt die Knöpfe nur noch als flache\nKästchen ohne Pfeil. Deshalb eigene Knöpfe und Pfeile als Bild (_pfeile_bereitstellen()). */\nQSpinBox, QDateEdit {\n    padding-right: 22px;\n}\nQSpinBox::up-button, QDateEdit::up-button {\n    subcontrol-origin: border;\n    subcontrol-position: top right;\n    width: 20px;\n    border: none;\n    border-left: 1px solid #E2D9CB;\n    border-top-right-radius: 6px;\n    background: #F2ECE2;\n}\nQSpinBox::down-button, QDateEdit::down-button {\n    subcontrol-origin: border;\n    subcontrol-position: bottom right;\n    width: 20px;\n    border: none;\n    border-left: 1px solid #E2D9CB;\n    border-bottom-right-radius: 6px;\n    background: #F2ECE2;\n}\nQSpinBox::up-button:hover, QSpinBox::down-button:hover,\nQDateEdit::up-button:hover, QDateEdit::down-button:hover {\n    background: #EAE2D5;\n}\nQSpinBox::up-button:pressed, QSpinBox::down-button:pressed,\nQDateEdit::up-button:pressed, QDateEdit::down-button:pressed {\n    background: #E1D7C7;\n}\nQSpinBox::up-arrow, QDateEdit::up-arrow {\n    image: url("/SHS/pfeil_hoch_3A3229.png");\n    width: 10px;\n    height: 10px;\n}\nQSpinBox::down-arrow, QDateEdit::down-arrow {\n    image: url("/SHS/pfeil_runter_3A3229.png");\n    width: 10px;\n    height: 10px;\n}\nQSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off,\nQDateEdit::up-arrow:disabled, QDateEdit::up-arrow:off {\n    image: url("/SHS/pfeil_hoch_B3A898.png");\n}\nQSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off,\nQDateEdit::down-arrow:disabled, QDateEdit::down-arrow:off {\n    image: url("/SHS/pfeil_runter_B3A898.png");\n}\nQCheckBox {\n    color: #2B2620;\n    spacing: 6px;\n}\n\n/* Tabellen (Teilnehmer, Ergebniserfassung, Auswertung, Zeitplan, Terminübersicht) */\nQTableWidget {\n    background: #FBF8F3;\n    alternate-background-color: #FCFAF6;\n    gridline-color: #E2D9CB;\n    border: 1px solid #E2D9CB;\n    border-radius: 6px;\n    selection-background-color: #F3E7D9;\n    selection-color: #2B2620;\n}\nQTableWidget::item {\n    padding: 4px 6px;\n}\nQTableWidget::item:selected {\n    background: #F3E7D9;\n    color: #2B2620;\n}\nQHeaderView::section {\n    background: #FCFAF6;\n    color: #5E5549;\n    padding: 6px;\n    border: none;\n    border-bottom: 1px solid #E2D9CB;\n    font-weight: 600;\n}\nQTableCornerButton::section {\n    background: #FCFAF6;\n    border: none;\n    border-bottom: 1px solid #E2D9CB;\n}\n\nQScrollBar:vertical, QScrollBar:horizontal {\n    background: #FBF8F3;\n    border: none;\n}\nQScrollBar::handle {\n    background: #DCD2C3;\n    border-radius: 5px;\n}\nQScrollBar::handle:hover {\n    background: #C9BCA8;\n}\n\n/* Kopfbalken mit Beagle und Termin-Angaben (desktop_gemeinsam.KopfBalken), Menüleiste im\nselben Ton, Gruppen als helle Karten und der kurze Hinweis mit Hilfe-Symbol\n(desktop_gemeinsam.kurzer_hinweis) - Marco 01.11.2026, Erscheinungsbild „Beagle“. Rand und\nHover im Kopf sind feste Farben statt durchscheinender, damit „Hoher Kontrast“ einen\nklaren weißen Rand bekommt. */\nQMenuBar {\n    background: #2F2B27;\n    color: #F4EEE4;\n}\nQMenuBar::item {\n    background: transparent;\n    color: #F4EEE4;\n    padding: 4px 10px;\n}\nQMenuBar::item:selected {\n    background: #4B4641;\n}\n#kopfBalken {\n    background: #2F2B27;\n}\n#kopfBalken QLabel {\n    color: #F4EEE4;\n    background: transparent;\n}\n#kopfBalken QLabel#kopfUnterzeile {\n    color: #CDBFA9;\n}\n#kopfBalken QPushButton {\n    background: transparent;\n    color: #F4EEE4;\n    border: 1px solid #6A6560;\n    border-radius: 6px;\n    padding: 6px 12px;\n}\n#kopfBalken QPushButton:hover {\n    background: #4B4641;\n}\n#kopfBalken QPushButton:pressed {\n    background: #4B4641;\n    border-color: #CDBFA9;\n}\n/* Gesperrt (z. B. „Anderen Termin öffnen…“ während der Demo): gestrichelter Rand, damit es\nauch in „Hoher Kontrast“ (Unterzeile ebenfalls weiß) erkennbar bleibt. */\n#kopfBalken QPushButton:disabled {\n    color: #CDBFA9;\n    border: 1px dashed #6A6560;\n}\nQGroupBox {\n    background: #FFFDF9;\n    border: 1px solid #E2D9CB;\n    border-radius: 8px;\n    margin-top: 18px;\n    padding: 12px 8px 8px 8px;\n}\nQGroupBox::title {\n    subcontrol-origin: margin;\n    subcontrol-position: top left;\n    left: 12px;\n    padding: 0 4px;\n    color: #6A4325;\n}\nQLabel#kurzHinweis {\n    color: #5E5549;\n}\n\nQCheckBox::indicator, QAbstractItemView::indicator {\n    width: 14px;\n    height: 14px;\n    border: 1px solid #5E5549;\n    border-radius: 3px;\n    background: #F2ECE2;\n}\nQCheckBox::indicator:hover, QAbstractItemView::indicator:hover {\n    border-color: #8C5A32;\n}\nQCheckBox::indicator:checked, QAbstractItemView::indicator:checked {\n    background: #8C5A32;\n    border-color: #8C5A32;\n    image: url("/SHS/haken.png");\n}\nQCheckBox::indicator:disabled, QAbstractItemView::indicator:disabled {\n    background: #F6F2EB;\n    border-color: #ECE6DB;\n}\nQCheckBox::indicator:checked:disabled, QAbstractItemView::indicator:checked:disabled {\n    background: #B3A898;\n    border-color: #B3A898;\n}\n'
-        with mock.patch.object(desktop_darstellung, "_haken_pfad", lambda: "/SHS/haken.png"):
-            qss = desktop_darstellung._erzeuge_qss(desktop_darstellung._THEME_DEFAULT)
-        self.assertEqual(self._ohne_kopfkommentar(qss), erwartet)
-
-    def test_blau_behaelt_seine_farben(self):
-        qss = desktop_darstellung._erzeuge_qss("blau", "hell")
-        for farbe in ("#2F6FED", "#2A63D6", "#2558BF", "#EAF1FF", "#FFFFFF", "#1B2430"):
-            self.assertIn(farbe, qss)
-
-    def test_keine_marker_uebrig(self):
-        for schluessel in desktop_darstellung._THEMES:
-            qss = desktop_darstellung._erzeuge_qss(schluessel)
-            self.assertNotIn("@@", qss)
-
-    def test_unbekanntes_theme_faellt_auf_default_zurueck(self):
-        self.assertEqual(desktop_darstellung._erzeuge_qss("nicht-vorhanden"), desktop_darstellung._erzeuge_qss(desktop_darstellung._THEME_DEFAULT))
-
-    def test_vier_themes_lohbraun_ist_standard(self):
-        self.assertEqual(set(desktop_darstellung._THEMES.keys()), {"lohbraun", "blau", "gruen", "violett"})
-        self.assertEqual(desktop_darstellung._THEME_DEFAULT, "lohbraun")
-        self.assertEqual(desktop_darstellung._THEMES["lohbraun"]["anzeigename"], "Lohbraun (Standard)")
-        self.assertEqual(desktop_darstellung._THEMES["blau"]["anzeigename"], "Blau")
-
-    def test_weisse_schrift_auf_lohbraun_lesbar(self):
-        # Nur das neue Theme - die älteren Akzente (z. B. Grün) bleiben unverändert.
-        theme = desktop_darstellung._THEMES["lohbraun"]
-        for schluessel in ("akzent", "akzent_hover", "akzent_pressed"):
-            with self.subTest(farbe=schluessel):
-                self.assertGreaterEqual(_kontrast("#FFFFFF", theme[schluessel]), 4.5)
+# Referenz-Stylesheet des Standards (ohne den Kopfkommentar), Bildpfade auf /SHS/.
+_REFERENZ_SCHIEFER = 'QMainWindow, QDialog {\n    background: #EEF0EC;\n}\nQWidget {\n    color: #1B2220;\n}\nQLabel {\n    color: #1B2220;\n}\n\n/* Reiter (Teilnehmer/Zeitplan/.../Datensicherung) */\nQTabWidget::pane {\n    border: 1px solid #C9CFCB;\n    background: #EEF0EC;\n    top: -1px;\n}\n/* Reiter durchsichtig: sonst übermalen sie die obere Rahmenlinie des Inhaltsbereichs\n(top: -1px), und die Linie erscheint nur in den Lücken (Marco, 16.10.2026). */\nQTabBar::tab {\n    background: transparent;\n    color: #4F5853;\n    padding: 8px 16px;\n    border: none;\n    border-bottom: 3px solid transparent;\n    margin-right: 2px;\n    font-weight: 600;\n}\nQTabBar::tab:selected {\n    color: #0F1513;\n    font-weight: 600;\n    border-bottom: 3px solid #2A3035;\n}\nQTabBar::tab:hover:!selected {\n    color: #0F1513;\n}\n\n/* Schaltflächen: neutral/sekundär als Standard; die jeweilige Haupt-Aktion eines\nReiters/Dialogs trägt objectName "primaerButton" (siehe z.B. TeilnehmerTab) und wird\nin der Akzentfarbe hervorgehoben - ebenso automatisch jeder Dialog-Default-Button (die "OK"-Schaltfläche\neiner QDialogButtonBox, über die Qt-eigene :default-Pseudoklasse, ohne dass jeder\nDialog einzeln angepasst werden muss). */\nQPushButton {\n    background: #FFFFFF;\n    color: #1B2220;\n    border: 1px solid #7A837E;\n    border-radius: 4px;\n    padding: 6px 14px;\n}\nQPushButton:hover {\n    background: #E4E8E5;\n}\nQPushButton:pressed {\n    background: #D6DCD8;\n}\nQPushButton:disabled {\n    color: #A3AAA6;\n    background: #F4F5F3;\n    border-color: #C9CFCB;\n}\nQPushButton#primaerButton, QPushButton:default:enabled {\n    background: #2A3035;\n    color: #FFFFFF;\n    border: 1px solid #2A3035;\n    font-weight: 600;\n}\nQPushButton#primaerButton:hover, QPushButton:default:enabled:hover {\n    background: #3B434A;\n    border-color: #3B434A;\n}\nQPushButton#primaerButton:pressed, QPushButton:default:enabled:pressed {\n    background: #1B2024;\n    border-color: #1B2024;\n}\n\n/* Eingabefelder */\nQLineEdit, QComboBox, QSpinBox, QDateEdit {\n    background: #FFFFFF;\n    border: 1px solid #7A837E;\n    border-radius: 4px;\n    padding: 4px 8px;\n    color: #1B2220;\n}\nQLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {\n    border: 1px solid #2A3035;\n    background: #EEF0EC;\n}\nQLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {\n    color: #A3AAA6;\n    background: #F4F5F3;\n}\nQComboBox::drop-down {\n    border: none;\n    width: 20px;\n}\n/* Ohne eigenes Bild zeichnet Qt bei gestaltetem Rahmen keinen Pfeil: Auswahlfelder sahen aus\nwie Textfelder und niemand erkannte, dass sie sich aufklappen lassen (Marco 12.11.2026). */\nQComboBox::down-arrow {\n    image: url("/SHS/pfeil_runter_1B2220.png");\n    width: 10px;\n    height: 10px;\n}\nQComboBox::down-arrow:disabled {\n    image: url("/SHS/pfeil_runter_A3AAA6.png");\n}\n/* Pfeilknöpfe der Zahlenfelder (Marco 01.11.2026, Erscheinungsbild „Beagle“): Sobald das\nFeld selbst einen Rahmen aus dem Stylesheet hat, zeichnet Qt die Knöpfe nur noch als flache\nKästchen ohne Pfeil. Deshalb eigene Knöpfe und Pfeile als Bild (_pfeile_bereitstellen()). */\nQSpinBox, QDateEdit {\n    padding-right: 22px;\n}\nQSpinBox::up-button, QDateEdit::up-button {\n    subcontrol-origin: border;\n    subcontrol-position: top right;\n    width: 20px;\n    border: none;\n    border-left: 1px solid #7A837E;\n    border-top-right-radius: 4px;\n    background: #FFFFFF;\n}\nQSpinBox::down-button, QDateEdit::down-button {\n    subcontrol-origin: border;\n    subcontrol-position: bottom right;\n    width: 20px;\n    border: none;\n    border-left: 1px solid #7A837E;\n    border-bottom-right-radius: 4px;\n    background: #FFFFFF;\n}\nQSpinBox::up-button:hover, QSpinBox::down-button:hover,\nQDateEdit::up-button:hover, QDateEdit::down-button:hover {\n    background: #E4E8E5;\n}\nQSpinBox::up-button:pressed, QSpinBox::down-button:pressed,\nQDateEdit::up-button:pressed, QDateEdit::down-button:pressed {\n    background: #D6DCD8;\n}\nQSpinBox::up-arrow, QDateEdit::up-arrow {\n    image: url("/SHS/pfeil_hoch_1B2220.png");\n    width: 10px;\n    height: 10px;\n}\nQSpinBox::down-arrow, QDateEdit::down-arrow {\n    image: url("/SHS/pfeil_runter_1B2220.png");\n    width: 10px;\n    height: 10px;\n}\nQSpinBox::up-arrow:disabled, QSpinBox::up-arrow:off,\nQDateEdit::up-arrow:disabled, QDateEdit::up-arrow:off {\n    image: url("/SHS/pfeil_hoch_A3AAA6.png");\n}\nQSpinBox::down-arrow:disabled, QSpinBox::down-arrow:off,\nQDateEdit::down-arrow:disabled, QDateEdit::down-arrow:off {\n    image: url("/SHS/pfeil_runter_A3AAA6.png");\n}\nQCheckBox {\n    color: #1B2220;\n    spacing: 6px;\n}\n\n/* Tabellen (Teilnehmer, Ergebniserfassung, Auswertung, Zeitplan, Terminübersicht) */\nQTableWidget {\n    background: #FFFFFF;\n    alternate-background-color: #F6F7F5;\n    gridline-color: #C9CFCB;\n    border: 1px solid #7A837E;\n    border-radius: 4px;\n    selection-background-color: #DCE2E5;\n    selection-color: #1B2220;\n}\nQTableWidget::item {\n    padding: 4px 6px;\n}\nQTableWidget::item:selected {\n    background: #DCE2E5;\n    color: #1B2220;\n}\nQHeaderView::section {\n    background: #F6F7F5;\n    color: #4F5853;\n    padding: 6px;\n    border: none;\n    border-bottom: 1px solid #7A837E;\n    font-weight: 600;\n}\nQTableCornerButton::section {\n    background: #F6F7F5;\n    border: none;\n    border-bottom: 1px solid #7A837E;\n}\n\nQScrollBar:vertical, QScrollBar:horizontal {\n    background: #EEF0EC;\n    border: none;\n}\nQScrollBar::handle {\n    background: #B9C1BC;\n    border-radius: 5px;\n}\nQScrollBar::handle:hover {\n    background: #98A19C;\n}\n\n/* Kopfbalken mit Beagle und Termin-Angaben (desktop_gemeinsam.KopfBalken), Menüleiste im\nselben Ton, Gruppen als helle Karten und der kurze Hinweis mit Hilfe-Symbol\n(desktop_gemeinsam.kurzer_hinweis) - Marco 01.11.2026, seit 21.11.2026 in Schiefer. Rand und\nHover im Kopf sind feste Farben statt durchscheinender, damit „Hoher Kontrast“ einen\nklaren weißen Rand bekommt. */\nQMenuBar {\n    background: #2A3035;\n    color: #F1F3F2;\n}\nQMenuBar::item {\n    background: transparent;\n    color: #F1F3F2;\n    padding: 4px 10px;\n}\nQMenuBar::item:selected {\n    background: #3B434A;\n}\n#kopfBalken {\n    background: #2A3035;\n}\n#kopfBalken QLabel {\n    color: #F1F3F2;\n    background: transparent;\n}\n#kopfBalken QLabel#kopfUnterzeile {\n    color: #B9C1BC;\n}\n#kopfBalken QPushButton {\n    background: transparent;\n    color: #F1F3F2;\n    border: 1px solid #6E777C;\n    border-radius: 4px;\n    padding: 6px 12px;\n}\n#kopfBalken QPushButton:hover {\n    background: #3B434A;\n}\n#kopfBalken QPushButton:pressed {\n    background: #3B434A;\n    border-color: #B9C1BC;\n}\n/* Gesperrt (z. B. „Anderen Termin öffnen…“ während der Demo): gestrichelter Rand, damit es\nauch in „Hoher Kontrast“ (Unterzeile ebenfalls weiß) erkennbar bleibt. */\n#kopfBalken QPushButton:disabled {\n    color: #B9C1BC;\n    border: 1px dashed #6E777C;\n}\nQGroupBox {\n    background: #FFFFFF;\n    border: 1px solid #C9CFCB;\n    border-radius: 6px;\n    margin-top: 18px;\n    padding: 12px 8px 8px 8px;\n}\nQGroupBox::title {\n    subcontrol-origin: margin;\n    subcontrol-position: top left;\n    left: 12px;\n    padding: 0 4px;\n    color: #2A3035;\n}\nQLabel#kurzHinweis {\n    color: #4F5853;\n}\n\nQCheckBox::indicator, QAbstractItemView::indicator {\n    width: 14px;\n    height: 14px;\n    border: 1px solid #4F5853;\n    border-radius: 3px;\n    background: #FFFFFF;\n}\nQCheckBox::indicator:hover, QAbstractItemView::indicator:hover {\n    border-color: #2A3035;\n}\nQCheckBox::indicator:checked, QAbstractItemView::indicator:checked {\n    background: #2A3035;\n    border-color: #2A3035;\n    image: url("/SHS/haken.png");\n}\nQCheckBox::indicator:disabled, QAbstractItemView::indicator:disabled {\n    background: #F4F5F3;\n    border-color: #C9CFCB;\n}\nQCheckBox::indicator:checked:disabled, QAbstractItemView::indicator:checked:disabled {\n    background: #A3AAA6;\n    border-color: #A3AAA6;\n    image: url("/SHS/haken_1B2220.png");\n}\n'
 
 
 def _relative_leuchtdichte(hexfarbe: str) -> float:
@@ -63,93 +30,93 @@ def _kontrast(farbe1: str, farbe2: str) -> float:
     return (hell + 0.05) / (dunkel + 0.05)
 
 
+class _Einstellungen:
+    """QSettings-Ersatz: liefert einen festen gespeicherten Wert (None = nichts gespeichert)."""
+    wert = None
+
+    def __init__(self, *_args):
+        pass
+
+    def value(self, _schluessel, vorgabe=None):
+        return vorgabe if _Einstellungen.wert is None else _Einstellungen.wert
+
+
 class TestDesigns(unittest.TestCase):
-    def test_vier_designs_vorhanden(self):
-        # Marco 01.11.2026: „Beagle“ ersetzt „Warm / Sand“.
-        self.assertEqual(set(desktop_darstellung._DESIGNS.keys()), {"beagle", "hell", "dunkel", "kontrast"})
+    def _ohne_kopfkommentar(self, qss: str) -> str:
+        ende = qss.index("*/") + len("*/")
+        return qss[ende:].lstrip("\n")
 
-    def test_beagle_ist_standard(self):
-        self.assertEqual(desktop_darstellung._DESIGN_DEFAULT, "beagle")
-        self.assertEqual(desktop_darstellung._DESIGNS["beagle"]["anzeigename"], "Beagle (Standard)")
-        self.assertEqual(desktop_darstellung._DESIGNS["hell"]["anzeigename"], "Hell")
-        for theme in desktop_darstellung._THEMES:
-            self.assertEqual(desktop_darstellung._erzeuge_qss(theme, "beagle"), desktop_darstellung._erzeuge_qss(theme))
+    def test_standard_schiefer_referenz(self):
+        # Die Bildpfade (Häkchen, Pfeile) zeigen hier auf einen festen Ordner.
+        with mock.patch.object(desktop_darstellung, "_haken_pfad", lambda: "/SHS/haken.png"):
+            qss = desktop_darstellung._erzeuge_qss()
+        self.assertEqual(self._ohne_kopfkommentar(qss), _REFERENZ_SCHIEFER)
 
-    def test_gespeichertes_sand_wird_beagle(self):
-        class _Einstellungen:
-            wert = None
+    def test_drei_designs_schiefer_ist_standard(self):
+        self.assertEqual(set(desktop_darstellung._DESIGNS.keys()), {"schiefer", "dunkel", "kontrast"})
+        self.assertEqual(desktop_darstellung._DESIGN_DEFAULT, "schiefer")
+        self.assertEqual(desktop_darstellung._DESIGNS["schiefer"]["anzeigename"], "Schiefer (Standard)")
+        self.assertEqual(desktop_darstellung._erzeuge_qss("schiefer"), desktop_darstellung._erzeuge_qss())
+        # Die Akzentfarb-Wahl gibt es nicht mehr.
+        self.assertFalse(hasattr(desktop_darstellung, "_THEMES"))
+        self.assertFalse(hasattr(desktop_darstellung, "_gespeichertes_theme_lesen"))
 
-            def __init__(self, *_args):
-                pass
+    def test_kernfarben_der_richtung(self):
+        d = desktop_darstellung._DESIGNS["schiefer"]
+        self.assertEqual((d["HINTERGRUND"], d["TEXT"], d["KOPF"], d["AKZENT"], d["ungespeichert_bg"]),
+                         ("#EEF0EC", "#1B2220", "#2A3035", "#2A3035", "#FFD43B"))
 
-            def value(self, _schluessel, vorgabe=None):
-                return vorgabe if _Einstellungen.wert is None else _Einstellungen.wert
-
+    def test_fruehere_designs_werden_schiefer(self):
         with mock.patch.object(desktop_darstellung, "QSettings", _Einstellungen):
-            for gespeichert, erwartet in (("sand", "beagle"), ("hell", "hell"), ("dunkel", "dunkel"),
-                                          (None, "beagle"), ("gibt-es-nicht", "beagle"), (["x"], "beagle")):
+            for gespeichert, erwartet in (("sand", "schiefer"), ("beagle", "schiefer"), ("hell", "schiefer"),
+                                          ("dunkel", "dunkel"), ("kontrast", "kontrast"), (None, "schiefer"),
+                                          ("gibt-es-nicht", "schiefer"), (["x"], "schiefer")):
                 with self.subTest(gespeichert=gespeichert):
                     _Einstellungen.wert = gespeichert
                     self.assertEqual(desktop_darstellung._gespeichertes_design_lesen(), erwartet)
-            # Akzentfarben: eine frühere Wahl bleibt, ohne Wahl gilt Lohbraun.
-            for gespeichert, erwartet in (("blau", "blau"), (None, "lohbraun"), ("rot", "lohbraun"), (["x"], "lohbraun")):
-                with self.subTest(theme=gespeichert):
-                    _Einstellungen.wert = gespeichert
-                    self.assertEqual(desktop_darstellung._gespeichertes_theme_lesen(), erwartet)
 
-    def test_keine_marker_uebrig_in_allen_kombinationen(self):
-        for theme in desktop_darstellung._THEMES:
-            for design in desktop_darstellung._DESIGNS:
-                with self.subTest(theme=theme, design=design):
-                    self.assertNotIn("@@", desktop_darstellung._erzeuge_qss(theme, design))
+    def test_keine_marker_uebrig(self):
+        for design in desktop_darstellung._DESIGNS:
+            with self.subTest(design=design):
+                self.assertNotIn("@@", desktop_darstellung._erzeuge_qss(design))
+
+    def test_unbekanntes_design_faellt_auf_standard_zurueck(self):
+        self.assertEqual(desktop_darstellung._erzeuge_qss("gibt-es-nicht"), desktop_darstellung._erzeuge_qss("schiefer"))
+
+    def test_alle_designs_haben_dieselben_schluessel(self):
+        erwartet = set(desktop_darstellung._DESIGNS["schiefer"].keys())
+        for name, design in desktop_darstellung._DESIGNS.items():
+            with self.subTest(design=name):
+                self.assertEqual(set(design.keys()), erwartet)
 
     def test_haken_url_in_anfuehrungszeichen_und_listen_kaestchen(self):
         # Desktop-Prüfung 14.10.2026, Teil 9 Nr. 2 und 9.
-        for design in ("beagle", "dunkel", "kontrast"):
-            with self.subTest(design=design):
-                self.assertTrue(desktop_darstellung._DESIGNS[design]["eigene_haken"])
-                qss = desktop_darstellung._erzeuge_qss("blau", design)
-                self.assertIn('image: url("', qss)
-                self.assertIn("QAbstractItemView::indicator", qss)
-        # "hell" behält den nativen Haken (Marco 01.11.2026: Schalter eigene_haken).
-        self.assertFalse(desktop_darstellung._DESIGNS["hell"]["eigene_haken"])
-        self.assertNotIn("QAbstractItemView::indicator", desktop_darstellung._erzeuge_qss("blau", "hell"))
+        with mock.patch.object(desktop_darstellung, "_haken_pfad", lambda: "/SHS/haken.png"):
+            for design, bild in (("schiefer", "/SHS/haken.png"), ("kontrast", "/SHS/haken.png"),
+                                 ("dunkel", "/SHS/haken_1A1F22.png")):
+                with self.subTest(design=design):
+                    self.assertTrue(desktop_darstellung._DESIGNS[design]["eigene_haken"])
+                    qss = desktop_darstellung._erzeuge_qss(design)
+                    # Häkchen in der Schriftfarbe auf dem Akzent (im dunklen Design dunkel).
+                    self.assertIn(f'image: url("{bild}")', qss)
+                    self.assertIn("QAbstractItemView::indicator", qss)
         self.assertEqual(desktop_darstellung._qss_url('a\\b"c'), 'a\\\\b\\"c')
 
     def test_pfeile_der_zahlenfelder_je_design(self):
         with mock.patch.object(desktop_darstellung, "_haken_pfad", lambda: "/SHS/haken.png"):
             for name, d in desktop_darstellung._DESIGNS.items():
                 with self.subTest(design=name):
-                    qss = desktop_darstellung._erzeuge_qss("lohbraun", name)
+                    qss = desktop_darstellung._erzeuge_qss(name)
                     self.assertIn(f'url("/SHS/pfeil_hoch_{d["TEXT_BUTTON"][1:]}.png")', qss)
                     self.assertIn(f'url("/SHS/pfeil_runter_{d["TEXT_DISABLED"][1:]}.png")', qss)
                     self.assertIn("QSpinBox::up-arrow", qss)
                     # Auswahlfelder brauchen einen eigenen Pfeil, sonst sieht man nicht, dass sie aufklappen.
                     self.assertIn("QComboBox::down-arrow {\n    image: url(", qss)
 
-    def test_alle_designs_haben_dieselben_schluessel(self):
-        erwartet = set(desktop_darstellung._DESIGNS["hell"].keys())
-        for name, design in desktop_darstellung._DESIGNS.items():
-            with self.subTest(design=name):
-                self.assertEqual(set(design.keys()), erwartet)
-
-    def test_unbekanntes_design_faellt_auf_standard_zurueck(self):
-        self.assertEqual(desktop_darstellung._erzeuge_qss("blau", "gibt-es-nicht"), desktop_darstellung._erzeuge_qss("blau", "beagle"))
-
     def test_designs_unterscheiden_sich_im_hintergrund(self):
-        self.assertIn("#1E2228", desktop_darstellung._erzeuge_qss("blau", "dunkel"))
-        self.assertIn("#FBF8F3", desktop_darstellung._erzeuge_qss("blau", "beagle"))
-        self.assertIn("#FFFFFF", desktop_darstellung._erzeuge_qss("blau", "hell"))
-
-    def test_dunkles_design_mischt_auswahlfarbe(self):
-        qss = desktop_darstellung._erzeuge_qss("blau", "dunkel")
-        self.assertNotIn(desktop_darstellung._THEMES["blau"]["akzent_hell"], qss)
-        self.assertIn(desktop_darstellung._mische("#2F6FED", "#1E2228", desktop_darstellung._AUSWAHL_MISCHANTEIL_DUNKEL), qss)
-
-    def test_mische(self):
-        self.assertEqual(desktop_darstellung._mische("#FFFFFF", "#000000", 1.0), "#FFFFFF")
-        self.assertEqual(desktop_darstellung._mische("#FFFFFF", "#000000", 0.0), "#000000")
-        self.assertEqual(desktop_darstellung._mische("#FF0000", "#0000FF", 0.5), "#800080")
+        self.assertIn("#1A1F22", desktop_darstellung._erzeuge_qss("dunkel"))
+        self.assertIn("#EEF0EC", desktop_darstellung._erzeuge_qss("schiefer"))
+        self.assertIn("background: #FFFFFF;", desktop_darstellung._erzeuge_qss("kontrast"))
 
     def test_reiter_und_spaltenkoepfe_gut_lesbar(self):
         # UX-Test 02.10.2026, U14: Laien fanden Reiternamen und Spaltenköpfe zu blass.
@@ -163,8 +130,49 @@ class TestDesigns(unittest.TestCase):
             mindestens = 7.0 if name == "kontrast" else 4.5
             with self.subTest(design=name):
                 self.assertGreaterEqual(_kontrast(d["TEXT"], d["HINTERGRUND"]), mindestens)
+                self.assertGreaterEqual(_kontrast(d["TEXT"], d["KARTE"]), mindestens)
                 self.assertGreaterEqual(_kontrast(d["TEXT_BUTTON"], d["FLAECHE"]), 4.5)
                 self.assertGreaterEqual(_kontrast(d["TEXT"], d["ungespeichert_bg"]), 4.5)
+
+    def test_raender_der_bedienelemente_sichtbar(self):
+        # Richtung „Schiefer und Signal“: Felder und Knöpfe müssen sich auch draußen bzw. bei
+        # hellem Licht abheben - mindestens 3:1 (WCAG 1.4.11) zu Fläche, Grund und Karte.
+        for name, d in desktop_darstellung._DESIGNS.items():
+            for flaeche in ("FLAECHE", "HINTERGRUND", "KARTE", "FLAECHE_HOVER"):
+                with self.subTest(design=name, flaeche=flaeche):
+                    self.assertGreaterEqual(_kontrast(d["RAND"], d[flaeche]), 3.0)
+
+    def test_akzent_fuellung_und_schrift_darauf(self):
+        for name, d in desktop_darstellung._DESIGNS.items():
+            for fuellung in ("AKZENT", "AKZENT_HOVER", "AKZENT_PRESSED"):
+                with self.subTest(design=name, fuellung=fuellung):
+                    self.assertGreaterEqual(_kontrast(d["AKZENT_TEXT"], d[fuellung]), 4.5)
+            with self.subTest(design=name, farbe="Akzent zum Grund"):
+                # Hauptknopf, angehakte Box und Reiter-Linie heben sich vom Grund ab.
+                self.assertGreaterEqual(_kontrast(d["AKZENT"], d["HINTERGRUND"]), 3.0)
+
+    def test_gesperrter_haken_erkennbar(self):
+        # Marco 21.11.2026 (Verifikation): eine gesperrte, angehakte Box zeigt ihr Häkchen in
+        # HAKEN_AUS auf TEXT_DISABLED - vorher im dunklen Design nur 2,9:1.
+        with mock.patch.object(desktop_darstellung, "_haken_pfad", lambda: "/SHS/haken.png"):
+            for name, d in desktop_darstellung._DESIGNS.items():
+                with self.subTest(design=name):
+                    self.assertGreaterEqual(_kontrast(d["HAKEN_AUS"], d["TEXT_DISABLED"]), 4.5)
+                    qss = desktop_darstellung._erzeuge_qss(name)
+                    block = qss.split("QAbstractItemView::indicator:checked:disabled {", 1)[1].split("}", 1)[0]
+                    self.assertIn(f'image: url("{desktop_darstellung._haken_pfad_fuer(d["HAKEN_AUS"])}")', block)
+
+    def test_link_und_fokus_sichtbar(self):
+        # LINK ist auch der Fokusrahmen von Eingabefeldern und Punktezellen.
+        for name, d in desktop_darstellung._DESIGNS.items():
+            for flaeche in ("HINTERGRUND", "KARTE", "FLAECHE", "ungespeichert_bg"):
+                with self.subTest(design=name, flaeche=flaeche):
+                    self.assertGreaterEqual(_kontrast(d["LINK"], d[flaeche]), 3.0)
+
+    def test_auswahl_lesbar(self):
+        for name, d in desktop_darstellung._DESIGNS.items():
+            with self.subTest(design=name):
+                self.assertGreaterEqual(_kontrast(d["TEXT"], d["AUSWAHL"]), 4.5)
 
     def test_semantische_farben_lesbar(self):
         for name, d in desktop_darstellung._DESIGNS.items():
@@ -175,35 +183,29 @@ class TestDesigns(unittest.TestCase):
                 self.assertGreaterEqual(_kontrast(d["warnung"], d["ungespeichert_bg"]), 3.0)
 
     def test_kopf_und_gruppentitel_lesbar(self):
-        # Erscheinungsbild „Beagle“ (Marco 01.11.2026): Kopfbalken, Unterzeile, Gruppentitel.
         for name, d in desktop_darstellung._DESIGNS.items():
             with self.subTest(design=name):
                 self.assertGreaterEqual(_kontrast(d["KOPF_TEXT"], d["KOPF"]), 4.5)
                 self.assertGreaterEqual(_kontrast(d["KOPF_TEXT2"], d["KOPF"]), 4.5)
                 self.assertGreaterEqual(_kontrast(d["KOPF_TEXT"], d["KOPF_HOVER"]), 4.5)
                 self.assertGreaterEqual(_kontrast(d["GRUPPE_TITEL"], d["HINTERGRUND"]), 4.5)
-                self.assertGreaterEqual(_kontrast(d["TEXT"], d["KARTE"]), 4.5)
+                self.assertGreaterEqual(_kontrast(d["GRUPPE_TITEL"], d["KARTE"]), 4.5)
 
     def test_hoher_kontrast_ohne_zwischentoene_im_kopf(self):
         d = desktop_darstellung._DESIGNS["kontrast"]
         self.assertEqual((d["KOPF"], d["KOPF_TEXT"], d["KOPF_RAND"]), ("#000000", "#FFFFFF", "#FFFFFF"))
         for name in desktop_darstellung._DESIGNS:
             with self.subTest(design=name):
-                self.assertNotIn("rgba(", desktop_darstellung._erzeuge_qss("lohbraun", name))
+                self.assertNotIn("rgba(", desktop_darstellung._erzeuge_qss(name))
 
     def test_kopf_regeln_im_stylesheet(self):
-        qss = desktop_darstellung._erzeuge_qss("lohbraun")
+        qss = desktop_darstellung._erzeuge_qss()
         for selektor in ("QMenuBar {", "#kopfBalken {", "#kopfBalken QLabel#kopfUnterzeile",
                          "QGroupBox::title", "QLabel#kurzHinweis"):
             self.assertIn(selektor, qss)
-        self.assertIn("background: #2F2B27;", qss)  # Kopf in Anthrazit
-        self.assertIn("color: #6A4325;", qss)  # Gruppentitel lohbraun
-
-    def test_auswahl_lesbar_in_allen_kombinationen(self):
-        for theme_name, theme in desktop_darstellung._THEMES.items():
-            for name, d in desktop_darstellung._DESIGNS.items():
-                with self.subTest(theme=theme_name, design=name):
-                    self.assertGreaterEqual(_kontrast(d["TEXT"], desktop_darstellung._auswahlfarbe(theme, d)), 4.5)
+        self.assertIn("background: #2A3035;", qss)  # Kopf in Schiefer
+        # Trennlinien in Tabellen ruhiger als die Ränder der Bedienelemente.
+        self.assertIn("gridline-color: #C9CFCB;", qss)
 
 
 if __name__ == "__main__":

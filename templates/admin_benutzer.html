@@ -34,7 +34,7 @@
       <td style="text-align: right; border-bottom: {% if not loop.last %}1px solid var(--grau-rand){% else %}none{% endif %};">
         <form method="post" action="{{ url_for('admin_benutzer_loeschen', benutzername=b.benutzername) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="knopf-sekundaer">Löschen</button>
+          <button type="submit" class="knopf-gefahr">Löschen</button>
         </form>
       </td>
     </tr></table>

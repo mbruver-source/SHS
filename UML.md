@@ -351,7 +351,7 @@ stateDiagram-v2
     Argumente --> Einrichten : normaler Start
     note right of Einrichten
         Absturzprotokoll, Laufkennung (Mutex für das Setup),
-        Fehlerfenster, deutsche Qt-Texte, Design/Akzentfarbe
+        Fehlerfenster, deutsche Qt-Texte, Design und Schrift
     end note
     Einrichten --> Zweitstart
     Zweitstart --> [*] : läuft schon, Nutzer bricht ab
@@ -745,10 +745,16 @@ sequenceDiagram
     R->>W: Knopf Bogen: POST /ergebnisse (speichert die Tabelle, bei Fehler/Konflikt bleibt die Tabelle), dann GET /bewertungsbogen/id/disziplin
     W->>D: Teilnehmer, Gegenstand, Ergebnis, Notiz lesen
     W-->>R: Bogen mit Punkten, Status, Notiz
-    R->>W: POST Bogen (Speichern)
+    R->>W: POST Bogen (Speichern, nächster Start / Nur speichern / Speichern und zurück)
     W->>D: gleiche Prüf- und Schreibwege wie die Tabelle
     W->>D: setze_notiz (höchstens 500 Zeichen), aenderung_merken
-    W-->>R: Bogen mit Gesamtpunktzahl und Wertnote, oder zurück zur Tabelle, Teilnehmerliste bzw. Seite des Teilnehmers (je nach Herkunft)
+    alt Speichern, nächster Start
+        W-->>R: Bogen der nächsten Startnummer derselben Disziplin (?vorher=id), nach dem letzten zurück zur Herkunft mit ?letzter=1
+    else Nur speichern
+        W-->>R: Bogen mit Gesamtpunktzahl und Wertnote
+    else Speichern und zurück
+        W-->>R: zurück zur Tabelle, Teilnehmerliste bzw. Seite des Teilnehmers (je nach Herkunft)
+    end
 
     R->>W: GET /ergebnisse/boegen.pdf (gleiche Filter)
     W->>D: benutzte Teilnehmer wählen (Punkte, Status oder Notiz)

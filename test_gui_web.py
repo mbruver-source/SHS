@@ -259,8 +259,8 @@ def test_dialog_geaenderter_fingerabdruck_wird_deutlich_gewarnt(qtbot, monkeypat
     assert dialog.fingerabdruck_label.text().startswith("AB:AB")  # abgelehnt: der alte bleibt
 
 
-def test_neuer_fingerabdruck_verwirft_das_tresor_passwort(qtbot, monkeypatch, meldungen, web, tresor):
-    # U14 (Sicherheitskorrektur, Details folgen): das Tresor-Passwort gehört zum bisherigen Fingerabdruck.
+def test_sicherheitskorrektur_s_u14(qtbot, monkeypatch, meldungen, web, tresor):
+    # Sicherheitskorrektur S-U14 (Details nach dem Release).
     _eingerichtet()
     tresor[ADRESSE] = "fuer-den-alten-server"
     monkeypatch.setattr(web_sync, "hole_fingerabdruck", lambda adresse: "cd" * 32)

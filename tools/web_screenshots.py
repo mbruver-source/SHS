@@ -176,11 +176,21 @@ def main(argv: list[str] | None = None) -> list[Path]:
             for name in auswahl:
                 _pfad, breite, hoehe, _rolle = BILDER[name]
                 ziel = args.ziel / f"{name}.png"
-                profil = Path(tmp) / f"edge-{name}"
-                subprocess.run(
-                    [edge, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--user-data-dir={profil}",
-                     f"--screenshot={ziel}", f"--window-size={breite},{hoehe}", f"http://127.0.0.1:{PORT}/_seite/{name}"],
-                    check=True, capture_output=True, timeout=120)
+                # Build-Vorbereitung 1.0.63: Edge endete gelegentlich ohne Fehler, aber ohne die Datei zu
+                # schreiben (vor allem bei großen Fenstern) - das alte Bild blieb dann unbemerkt liegen.
+                # Deshalb vorher löschen, danach prüfen und bis zu drei Versuche, sonst Abbruch mit Fehler.
+                for versuch in range(1, 4):
+                    ziel.unlink(missing_ok=True)
+                    profil = Path(tmp) / f"edge-{name}-{versuch}"
+                    subprocess.run(
+                        [edge, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--user-data-dir={profil}",
+                         f"--screenshot={ziel}", f"--window-size={breite},{hoehe}",
+                         f"http://127.0.0.1:{PORT}/_seite/{name}"],
+                        check=True, capture_output=True, timeout=120)
+                    if ziel.is_file() and ziel.stat().st_size > 0:
+                        break
+                else:
+                    raise SystemExit(f"{ziel.name}: Edge hat nach drei Versuchen kein Bild geschrieben.")
                 erzeugt.append(ziel)
                 print(f"{ziel.name}: {breite} x {hoehe}")
         finally:

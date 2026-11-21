@@ -604,7 +604,7 @@ def _startdialog_mit_terminen(qtbot, tmp_path, monkeypatch):
     return start
 
 
-# --- Darstellung: Hintergrund-Design + Akzentfarbe (23.09.) ------------------------------
+# --- Darstellung: Design und Schriftgröße (23.09., Akzentfarbe entfallen 21.11.2026) -------
 
 
 @pytest.fixture
@@ -625,21 +625,20 @@ def darstellung_speicher(monkeypatch, tmp_path_factory):
     qapp.setStyleSheet(vorher_stylesheet)
     vorher_palette = QPalette(qapp.palette())
     hinweise = qapp.styleHints()
-    for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil", "_haken_geschrieben",
+    for name in ("_aktives_design", "_ursprung_stil", "_aktueller_stil",
                  "_schrift_faktor", "_basis_schrift_pt"):
         monkeypatch.setattr(darstellung, name, getattr(darstellung, name))
     vorher_schrift = QFont(qapp.font())
     monkeypatch.setattr(darstellung, "_pfeile_geschrieben", set())
+    monkeypatch.setattr(darstellung, "_haken_geschrieben", set())
     # Häkchen-Bild nicht ins echte Benutzerprofil schreiben.
     haken = tmp_path_factory.mktemp("haken") / "haken.png"
     monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(haken).replace("\\", "/"))
 
-    speicher = {"theme": "blau", "design": "hell", "schrift": "normal"}
+    speicher = {"design": "schiefer", "schrift": "normal"}
     for modul in (app_modul, darstellung):
-        monkeypatch.setattr(modul, "_gespeichertes_theme_lesen", lambda: speicher["theme"])
         monkeypatch.setattr(modul, "_gespeichertes_design_lesen", lambda: speicher["design"])
         monkeypatch.setattr(modul, "_gespeicherte_schriftstufe_lesen", lambda: speicher["schrift"])
-        monkeypatch.setattr(modul, "_theme_speichern", lambda name: speicher.__setitem__("theme", name))
         monkeypatch.setattr(modul, "_design_speichern", lambda name: speicher.__setitem__("design", name))
         monkeypatch.setattr(modul, "_schriftstufe_speichern", lambda name: speicher.__setitem__("schrift", name))
     yield speicher

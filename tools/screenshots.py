@@ -7,7 +7,8 @@
 Marcos Wunsch (09.10.2026): bisher entstand bei jedem Build ein neues Ad-hoc-Skript, die
 Bilder waren dadurch uneinheitlich (Version, Testdaten, Pfade). Dieses Skript legt alles
 fest:
-- offscreen, Schrift Segoe UI, Standard-Design (die gespeicherte Auswahl des Rechners wird
+- offscreen, Grundschrift Segoe UI in 9 pt (das Programm ersetzt die Familie beim Anwenden der
+  Darstellung durch die mitgelieferte Schrift aus schrift/), Standard-Design (die gespeicherte Auswahl des Rechners wird
   nur übergangen, nicht verändert), deutsche Qt-Texte, aktuelle Version aus version.py;
 - feste, erfundene Testdaten (Testuser1-9, für das Teilnehmer-Bild zusätzlich 10-12 ohne
   Startnummer), alle Termine nur in einem temporären Ordner;
@@ -139,8 +140,6 @@ def _umgebung_einrichten() -> QApplication:
     from desktop_gemeinsam import deutsche_qt_texte_laden, meldungsfenster_als_klartext
 
     for modul in (app_modul, desktop_darstellung):
-        if hasattr(modul, "_gespeichertes_theme_lesen"):
-            modul._gespeichertes_theme_lesen = lambda: desktop_darstellung._THEME_DEFAULT
         if hasattr(modul, "_gespeichertes_design_lesen"):
             modul._gespeichertes_design_lesen = lambda: desktop_darstellung._DESIGN_DEFAULT
         if hasattr(modul, "_gespeicherte_schriftstufe_lesen"):  # X2: Bilder immer in „Normal“

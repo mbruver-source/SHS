@@ -1240,12 +1240,16 @@ class ErgebnisTab(_ErgebnisSpeichernMixin, QWidget):
 
         status_item = self.tabelle.item(row, _STATUS_SPALTE)
         if status_item is not None:
-            # Symbol statt „●“/„✓“ vor dem Text (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+            # Symbol statt „●“/„✓“ vor dem Text (Marco 01.11.2026). Seit „Schiefer und
+            # Signal“ (Marco 21.11.2026) trägt die Absperrband-Fläche der Zeile den Zustand
+            # „ungespeichert“; Schrift und Warnsymbol darauf in Tinte, weil Signal-Orange auf
+            # Gelb zu schwach ist. Disqualifiziert und Abbruch mit dem Haken in Tinte statt in
+            # Grün - grün heißt nur „normal gespeichert“ (Einzelheiten unten).
             tooltip = ""
             if ungespeichert:
                 status_item.setText("nicht gespeichert")
-                status_item.setIcon(symbol("device-floppy", "warnung"))
-                status_item.setForeground(_farbe("warnung"))
+                status_item.setIcon(symbol("alert-triangle", "TEXT"))
+                status_item.setForeground(_farbe("TEXT"))
             elif self._zeile_ist_leer(row):
                 # UX-Test 02.10.2026, K1: vorher stand auch bei noch leeren Zeilen
                 # "gespeichert" - das wirkte, als seien schon Ergebnisse eingetragen.
@@ -1254,9 +1258,20 @@ class ErgebnisTab(_ErgebnisSpeichernMixin, QWidget):
                 status_item.setForeground(_farbe("gedaempft"))
             else:
                 text = self._gespeicherter_status_text(row)
-                status_item.setText(text)
-                status_item.setIcon(symbol("check", "ok"))
-                status_item.setForeground(_farbe("ok"))
+                if text == "gespeichert":
+                    status_item.setText(text)
+                    status_item.setIcon(symbol("check", "ok"))
+                    status_item.setForeground(_farbe("ok"))
+                else:
+                    # Rückmeldung der Persona Heinz (21.11.2026): ein × las sich wie „nicht
+                    # gespeichert“, und der Grund wurde abgeschnitten. Jetzt der Haken (= gespeichert)
+                    # in Tinte statt Grün (kein normales Ergebnis) und nur das kurze Wort, das auch in
+                    # der schmalen Spalte ganz passt; der Grund steht in der Abbruch-Spalte daneben,
+                    # alles zusammen im Tooltip („gespeichert: Abbruch: …“).
+                    kurz = "disqualifiziert" if text == "disqualifiziert" else "Abbruch"
+                    status_item.setText(kurz)
+                    status_item.setIcon(symbol("check", "TEXT"))
+                    status_item.setForeground(_farbe("TEXT"))
                 if text != "gespeichert":
                     tooltip = f"gespeichert: {text}"  # die Spalte kann schmal sein
             if status_item.toolTip() != tooltip:
@@ -1286,7 +1301,7 @@ class ErgebnisTab(_ErgebnisSpeichernMixin, QWidget):
         )
 
     def farben_auffrischen(self) -> None:
-        """Färbt alle Zeilen nach einem Wechsel des Hintergrund-Designs neu - bewusst
+        """Färbt alle Zeilen nach einem Wechsel des Designs neu - bewusst
         OHNE aktualisieren(), das die Tabelle aus der DB neu aufbauen und damit
         ungespeicherte Eingaben verwerfen würde."""
         for row in range(self.tabelle.rowCount()):

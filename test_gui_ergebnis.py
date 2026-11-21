@@ -30,6 +30,7 @@ from db import (
 )
 from db import ALLE_DISZIPLINEN
 from desktop_gemeinsam import _ABBRUCH_SPALTE, _DQ_SPALTE, _STATUS_SPALTE, symbol
+from desktop_darstellung import _farbe
 from gui_hilfen import *  # noqa: F401,F403
 
 
@@ -1479,9 +1480,18 @@ def test_ergebnis_status_nennt_dq_und_abbruch(qtbot, conn):
     tab.alle_speichern(meldungen=False)
 
     texte = [tab.tabelle.item(z, _STATUS_SPALTE).text() for z in range(3)]
-    assert texte == ["disqualifiziert", "Abbruch: Verletzung Hund", "gespeichert"]
+    # Persona Heinz (21.11.2026): kurzes Wort statt eines abgeschnittenen Grundes; der Grund steht
+    # in der Abbruch-Spalte, alles zusammen im Tooltip.
+    assert texte == ["disqualifiziert", "Abbruch", "gespeichert"]
+    assert tab.tabelle.item(0, _STATUS_SPALTE).toolTip() == "gespeichert: disqualifiziert"
     assert tab.tabelle.item(1, _STATUS_SPALTE).toolTip() == "gespeichert: Abbruch: Verletzung Hund"
     assert tab.tabelle.item(2, _STATUS_SPALTE).toolTip() == ""
+    # Schiefer und Signal (Marco 21.11.2026): kein grüner Haken bei Disqualifiziert/Abbruch, sondern
+    # ein Haken in Tinte (gespeichert, aber kein normales Ergebnis).
+    for zeile in (0, 1):
+        assert tab.tabelle.item(zeile, _STATUS_SPALTE).icon().cacheKey() == symbol("check", "TEXT").cacheKey()
+        assert tab.tabelle.item(zeile, _STATUS_SPALTE).foreground().color() == _farbe("TEXT")
+    assert tab.tabelle.item(2, _STATUS_SPALTE).icon().cacheKey() == symbol("check", "ok").cacheKey()
     tab.aktualisieren()  # neu geladen
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "disqualifiziert"
 
@@ -1718,7 +1728,7 @@ def test_ergebnis_abbruch_spalte_zeigt_den_ganzen_grund(qtbot, termin):
     tab = ErgebnisTab(conn)
     qtbot.addWidget(tab)
     tab.status_setzen(0, abbruch=laengster_code)
-    tab.alle_speichern()  # Status „Abbruch: <längster Grund>“
+    tab.alle_speichern()  # Status „Abbruch“, der Grund steht in der Abbruch-Spalte
     laengster = ABBRUCH_GRUENDE[laengster_code][0]
     for faktor in (1.0, 1.15):  # Normal, Groß
         desktop_darstellung._schrift_faktor = faktor
@@ -1871,10 +1881,13 @@ def test_ergebniserfassung_leere_zeile_zeigt_noch_kein_ergebnis(qtbot, termin):
     assert tab.tabelle.item(0, _STATUS_SPALTE).icon().isNull()
     tab.punkte_eintragen(0, "Flächensuche", "50", "30")
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "nicht gespeichert"
-    assert tab.tabelle.item(0, _STATUS_SPALTE).icon().cacheKey() == symbol("device-floppy", "warnung").cacheKey()
+    # Schiefer und Signal (Marco 21.11.2026): Warnsymbol und Schrift in Tinte auf der gelben Zeile.
+    assert tab.tabelle.item(0, _STATUS_SPALTE).icon().cacheKey() == symbol("alert-triangle", "TEXT").cacheKey()
+    assert tab.tabelle.item(0, _STATUS_SPALTE).foreground().color() == _farbe("TEXT")
     tab.alle_speichern()
     assert tab.tabelle.item(0, _STATUS_SPALTE).text() == "gespeichert"
     assert tab.tabelle.item(0, _STATUS_SPALTE).icon().cacheKey() == symbol("check", "ok").cacheKey()
+    assert tab.tabelle.item(0, _STATUS_SPALTE).foreground().color() == _farbe("ok")
 
 
 def test_alle_symbole_ergeben_ein_bild():

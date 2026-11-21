@@ -161,3 +161,15 @@ UX-Test 2026-11: Demo-Erklärfenster verdeckt auf 1366 px unten rechts einen Tei
 Fundstellen:
 
 - Fortschritt.md (B19)
+
+## C44: Zeitplan bei „Sehr groß“ mit drei oder mehr Richtern
+
+Seit 21.11.2026 (Marco, Build-Vorbereitung 1.0.63).
+
+Bei Schrift „Sehr groß“ auf 1366 px Breite bleiben die Richter-Spalten ab drei Richtern bei der
+Mindestbreite von 300 px; die Knöpfe darin werden gequetscht. Abhilfe ohne Datenrisiko: „Groß
+anzeigen“ zeigt eine Spalte über die ganze Breite.
+
+Fundstellen:
+
+- Fortschritt.md „21.11.2026: Wünsche 3 und 5, Großansicht im Zeitplan …“

@@ -2598,6 +2598,156 @@ class TestBewertungsbogen(_AppWebTestBasis):
         self.assertEqual(antwort.status_code, 302)
         self.assertEqual(antwort.headers["Location"], f"/teilnehmer?gespeichert={self.ed}&aenderung=1")
 
+    # --- „Speichern, nächster Start“ (Marco 21.11.2026, „Schiefer und Signal“) -----------------
+
+    @staticmethod
+    def _parameter(ziel: str) -> dict:
+        from urllib.parse import parse_qs, urlsplit
+        return {k: v[0] for k, v in parse_qs(urlsplit(ziel).query).items()}
+
+    def test_naechster_start_ist_hauptknopf_und_steht_zuerst(self):
+        self._anmelden()
+        html = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertIn('<button type="submit" name="weiter" value="naechster" aria-describedby="naechster-hinweis">'
+                      'Speichern, nächster Start</button>', html)
+        self.assertIn(">Nur speichern</button>", html)
+        # Die Eingabetaste löst den ersten Knopf des Formulars aus.
+        self.assertLess(html.index('value="naechster"'), html.index('value="tabelle"'))
+        self.assertIn('value="tabelle" class="knopf-sekundaer"', html)
+        # Persona Heinz (21.11.2026): wer als Nächstes kommt; „Abbrechen“ als Textlink, nicht als Knopf.
+        self.assertIn('id="naechster-hinweis">Danach: Start-Nr. 2, Beispiel, Bernd (Bello)</p>', html)
+        self.assertIn('<p class="abbrechen"><a href="', html)
+        self.assertNotIn('class="knopf knopf-sekundaer" href="/ergebnisse', html)
+        # Der Hinweis folgt dem Tabellenfilter wie der Knopf selbst (Nr. 1 ist bei q=Rex der einzige).
+        gefiltert = self.client.get(self._pfad(self.ed, self.F, "?q=Rex")).data.decode()
+        self.assertIn("Das ist der letzte Start in dieser Disziplin", gefiltert)
+        # Namen werden maskiert.
+        self.conn.execute("UPDATE teilnehmer SET nachname = ? WHERE id = ?", ("<b>Bei</b>", self.dk))
+        self.conn.commit()
+        maskiert = self.client.get(self._pfad(self.ed, self.F)).data.decode()
+        self.assertIn("Danach: Start-Nr. 2, &lt;b&gt;Bei&lt;/b&gt;, Bernd (Bello)", maskiert)
+        self.assertNotIn("<b>Bei</b>", maskiert)
+        letzter = self.client.get(self._pfad(self.dk, self.F, "?von=liste")).data.decode()
+        self.assertIn("Das ist der letzte Start in dieser Disziplin - danach geht es zurück zur Teilnehmerliste.",
+                      letzter)
+
+    def test_naechster_start_geht_zur_naechsten_startnummer_derselben_disziplin(self):
+        self._anmelden()
+        pfad = self._pfad(self.ed, self.F, "?von=liste")
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "40", "30")
+        daten["weiter"] = "naechster"
+        antwort = self.client.post(pfad, data=daten)
+        self.assertEqual(antwort.status_code, 302)
+        ziel = antwort.headers["Location"]
+        self.assertTrue(ziel.startswith(self._pfad(self.dk, self.F, "?")), ziel)
+        self.assertEqual(self._parameter(ziel), {"vorher": str(self.ed), "gespeichert": "1", "von": "liste"})
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 40)
+        html = self.client.get(ziel).data.decode()
+        self.assertIn("Gespeichert: Start-Nr. 1, Muster, Anna. Weiter mit dem nächsten Start.", html)
+        self.assertIn("Beispiel, Bernd", html)  # der Bogen zeigt schon den nächsten Start
+
+    def test_naechster_start_ueberspringt_teilnehmer_ohne_diese_disziplin(self):
+        self._anmelden()
+        daten = self._bogen(self.dk, self.T)
+        daten["weiter"] = "naechster"
+        ziel = self._senden(daten, self.dk, self.T).headers["Location"]
+        # Nr. 1 (ED Flächensuche) hat kein Trümmerfeld; nach Nr. 2 (DK) kommt Nr. 3 (ED Trümmerfeld).
+        self.assertTrue(ziel.startswith(self._pfad(self.ed2, self.T, "?")), ziel)
+        self.assertEqual(self._parameter(ziel)["gespeichert"], "0")
+        self.assertIn("Keine Änderungen zu speichern (Start-Nr. 2, Beispiel, Bernd). Weiter mit dem nächsten Start.",
+                      self.client.get(ziel).data.decode())
+
+    def test_naechster_start_nach_dem_letzten_zurueck_mit_hinweis(self):
+        self._anmelden()
+        hinweis = "Das war der letzte Start in dieser Disziplin."
+        # aus der Liste
+        daten = self._bogen(self.dk, self.F)
+        daten["weiter"] = "naechster"
+        ziel = self._senden(daten, self.dk, self.F, query_string={"von": "liste"}).headers["Location"]
+        self.assertTrue(ziel.startswith("/teilnehmer?"), ziel)
+        self.assertEqual(self._parameter(ziel), {"gespeichert": str(self.dk), "aenderung": "0", "letzter": "1"})
+        self.assertIn(hinweis, self.client.get(ziel).data.decode())
+        # von der Seite des Teilnehmers
+        ziel = self._senden(daten, self.dk, self.F, query_string={"von": "teilnehmer"}).headers["Location"]
+        self.assertTrue(ziel.startswith(f"/teilnehmer/{self.dk}?"), ziel)
+        self.assertIn(hinweis, self.client.get(ziel).data.decode())
+        # aus der Tabelle: zur Zeile, Hinweis in der Meldung
+        ziel = self._senden(daten, self.dk, self.F).headers["Location"]
+        self.assertTrue(ziel.startswith("/ergebnisse?") and ziel.endswith(f"#zeile-{self.dk}"), ziel)
+        self.assertEqual(self._parameter(ziel.split("#")[0])["letzter"], "1")
+        self.assertIn(hinweis, self.client.get(ziel).data.decode())
+        # ohne ?letzter=1 kein Hinweis
+        self.assertNotIn(hinweis, self.client.get(f"/teilnehmer?gespeichert={self.dk}&aenderung=0").data.decode())
+
+    def test_naechster_start_blaettert_innerhalb_des_tabellenfilters(self):
+        """Marco 21.11.2026: aus einer gefilterten Tabelle nur unter den gefilterten Teilnehmern."""
+        self._anmelden()
+        neu = self._teilnehmer("Weiter", "Wanda", "Wega", "ED", 1, 4, "Trümmerfeld")
+        daten = self._bogen(self.ed2, self.T)
+        daten["weiter"] = "naechster"
+        # Ohne Filter folgt auf Nr. 3 (Luna) die Nr. 4 (Wega).
+        ohne = self.client.post(self._pfad(self.ed2, self.T), data=daten).headers["Location"]
+        self.assertTrue(ohne.startswith(self._pfad(neu, self.T, "?")), ohne)
+        # Mit Filter q=Luna steht nur Nr. 3 in der Tabelle: sie ist der letzte Start, zurück zur
+        # gefilterten Tabelle mit Hinweis.
+        mit = self.client.post(self._pfad(self.ed2, self.T, "?q=Luna"), data=daten).headers["Location"]
+        self.assertTrue(mit.startswith("/ergebnisse?") and mit.endswith(f"#zeile-{self.ed2}"), mit)
+        self.assertEqual(self._parameter(mit.split("#")[0]), {"gespeichert": "0", "letzter": "1", "q": "Luna"})
+        # Der Filter bleibt beim Weiterblättern erhalten (Rückweg des nächsten Bogens).
+        daten_dk = self._bogen(self.dk, self.T)
+        daten_dk["weiter"] = "naechster"
+        weiter = self.client.post(self._pfad(self.dk, self.T, "?lk=DK%20LK%202"), data=daten_dk).headers["Location"]
+        self.assertEqual(self._parameter(weiter.split("#")[0])["letzter"], "1")  # nur Nr. 2 ist DK LK 2
+
+    def test_naechster_start_ueberspringt_abgemeldete_und_ohne_nummer_am_ende(self):
+        self._anmelden()
+        ohne_nr = db.add_teilnehmer(self.conn, db.NeuerTeilnehmer(
+            nachname="Ohne", vorname="Nummer", rufname_hund="Nix", art="ED", stufe=1,
+            disziplin="Trümmerfeld", startnummer=None))
+        abgemeldet = self._teilnehmer("Fort", "Fritz", "Fips", "ED", 1, 4, "Trümmerfeld")
+        self.conn.execute("UPDATE teilnehmer SET keine_teilnahme = 1 WHERE id = ?", (abgemeldet,))
+        self.conn.commit()
+        daten = self._bogen(self.ed2, self.T)
+        daten["weiter"] = "naechster"
+        # Nr. 3 -> (Nr. 4 abgemeldet, übersprungen) -> Teilnehmer ohne Startnummer am Ende
+        ziel = self._senden(daten, self.ed2, self.T).headers["Location"]
+        self.assertTrue(ziel.startswith(self._pfad(ohne_nr, self.T, "?")), ziel)
+        daten = self._bogen(ohne_nr, self.T)
+        daten["weiter"] = "naechster"
+        ziel = self._senden(daten, ohne_nr, self.T).headers["Location"]
+        self.assertEqual(self._parameter(ziel.split("#")[0])["letzter"], "1")
+        # Bestätigung ohne „Start-Nr.“, wenn der gerade gespeicherte Teilnehmer keine hat
+        html = self.client.get(self._pfad(self.dk, self.T, f"?vorher={ohne_nr}&gespeichert=1")).data.decode()
+        self.assertIn("Gespeichert: Ohne, Nummer. Weiter mit dem nächsten Start.", html)
+
+    def test_naechster_start_bei_konflikt_bleibt_der_bogen(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        db.eintragen_ergebnis(self.conn, self.ed, self.F, 50, 30)  # ein anderer war schneller
+        self._punkte(daten, self.ed, self.F, "40", "20")
+        daten["weiter"] = "naechster"
+        antwort = self._senden(daten, self.ed, self.F)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('class="fehler warnung"', antwort.data.decode())
+        self.assertEqual(db.get_ergebnis(self.conn, self.ed)["suche_flaechensuche"], 50)
+
+    def test_naechster_start_bei_fehler_bleibt_der_bogen(self):
+        self._anmelden()
+        daten = self._bogen(self.ed, self.F)
+        self._punkte(daten, self.ed, self.F, "84", "30")
+        daten["weiter"] = "naechster"
+        antwort = self._senden(daten, self.ed, self.F)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Es wurde nichts gespeichert", antwort.data.decode())
+
+    def test_vorheriger_start_ungueltige_werte_zeigen_die_normale_meldung(self):
+        self._anmelden()
+        for unsinn in ("x", "<b>", "9999999999", "999999"):
+            html = self.client.get(self._pfad(self.dk, self.F, f"?vorher={quote(unsinn)}&gespeichert=1")).data.decode()
+            self.assertIn("Gespeichert.", html)
+            self.assertNotIn("Weiter mit dem nächsten Start", html)
+
     def test_bogen_von_der_einzelseite_fuehrt_dorthin_zurueck(self):
         self._anmelden()
         pfad = self._pfad(self.ed, self.F, "?von=teilnehmer")
@@ -3458,6 +3608,46 @@ class TestErscheinungsbild(_AppWebTestBasis):
         self.assertEqual(antwort.mimetype, "image/png")
         self.assertTrue(antwort.data.startswith(b"\x89PNG"))
         antwort.close()
+
+    def test_schrift_ohne_anmeldung_vom_eigenen_server(self):
+        """„Schiefer und Signal“ (Marco 21.11.2026): Atkinson Hyperlegible Next aus /static/schrift,
+        nie von Drittanbietern; CSP erlaubt Schriften nur von 'self' (default-src)."""
+        for datei in ("AtkinsonHyperlegibleNext-Regular.ttf", "AtkinsonHyperlegibleNext-SemiBold.ttf"):
+            with self.subTest(datei=datei):
+                antwort = self.client.get(f"/static/schrift/{datei}")
+                self.assertEqual(antwort.status_code, 200)
+                self.assertEqual(antwort.data[:4], b"\x00\x01\x00\x00")  # TrueType
+                antwort.close()
+        html = self.client.get("/").data.decode()
+        self.assertIn('url("/static/schrift/AtkinsonHyperlegibleNext-Regular.ttf")', html)
+        self.assertNotIn("fonts.googleapis", html)
+        self.assertIn("default-src 'self'", self.client.get("/").headers["Content-Security-Policy"])
+
+    def test_loeschen_auffaellig_und_fehler_mit_warnzeichen(self):
+        """Persona Heinz, Wunsch 5 (Marco 21.11.2026): Löschknöpfe rot umrandet, Fehlermeldungen mit
+        Warnzeichen (data:-Bild, CSP img-src erlaubt data:)."""
+        self._anmelden()
+        db.benutzer_anlegen(self.conn, "helfer", "helferpasswort")
+        html = self.client.get("/admin/benutzer").data.decode()
+        self.assertIn('<button type="submit" class="knopf-gefahr">Löschen</button>', html)
+        css = _ohne_leerraum(html)
+        self.assertIn(".knopf-gefahr{background:var(--karte);color:var(--rot);border:2pxsolidvar(--rot);", css)
+        self.assertIn(".fehler::before{", css)
+        self.assertIn(".fehler.warnung::before{background-image:url(\"data:image/svg+xml,", css)
+        self.assertIn("stroke='%231B2220'", html)  # Warnzeichen bei Konflikten in Tinte
+        self.assertIn("url(\"data:image/svg+xml,", html)
+        self.assertIn("img-src 'self' data:", self.client.get("/").headers["Content-Security-Policy"])
+        termine = os.path.join(os.path.dirname(os.path.abspath(app_web.__file__)), "templates", "admin_termine.html")
+        with open(termine, encoding="utf-8") as datei:
+            self.assertIn('<button type="submit" class="knopf-gefahr">Termin löschen</button>', datei.read())
+
+    def test_farben_schiefer_und_signal(self):
+        css = _ohne_leerraum(self.client.get("/").data.decode())
+        for wert in ("--akzent:#2A3035;", "--grau-hell:#EEF0EC;", "--text:#1B2220;", "--rand:#7A837E;",
+                     "--warnung-hg:#FFD43B;", "--signal:#D9480F;"):
+            self.assertIn(wert, css)
+        for alt in ("#8C5A32", "#FBF8F3", "--gruen"):  # Lohbraun und Creme sind weg
+            self.assertNotIn(alt, css)
 
     def test_anmeldeseite_zeigt_beagle_und_programmnamen(self):
         self._anmelden()

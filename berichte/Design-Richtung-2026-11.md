@@ -65,8 +65,9 @@ In einer zweiten Runde entschieden:
 - „Nächster Start“ ist die nächste Startnummer mit dieser Disziplin, ob bewertet oder nicht.
   „Speichern, nächster Start“ ist damit eine neue Funktion, keine reine Gestaltung.
 
-Noch offen, bei der Umsetzung kurz bestätigen: Was geschieht nach der letzten Startnummer?
-Vorschlag: zurück zur Liste mit der Meldung „Gespeichert“.
+Bei der Umsetzung entschieden (Marco 21.11.2026): Nach der letzten Startnummer geht es zurück
+dorthin, woher der Bogen kam, mit dem Hinweis „Das war der letzte Start in dieser Disziplin.“
+Kam der Bogen aus einer gefilterten Tabelle, wird innerhalb des Filters geblättert.
 
 ## Abgestimmte Richtung: B „Schiefer und Signal“ mit Absperrband-Gelb
 
@@ -158,6 +159,62 @@ Zusätzlich zu prüfen:
 Die Website übernimmt Farben, Schrift und Prinzipien, sobald die Anwendung umgestellt ist. Die
 dunkle Variante wird aus „Dunkel“ abgeleitet. Ein eigenes Gespräch dazu folgt. Website-Änderungen
 gehen erst mit dem Release online, das das neue Erscheinungsbild enthält.
+
+## Umsetzung Desktop (21.11.2026, mit Version 1.0.63)
+
+Marco hat die Umsetzung der Desktop-Version freigegeben; Web und Website folgten am selben Tag.
+
+- **Designs:** `schiefer` (Standard), `dunkel` und `kontrast` in `desktop_darstellung._DESIGNS`.
+  - Die Akzentfarb-Wahl und das Design „Hell“ sind entfallen.
+  - Das Menü heißt „Ansicht → Design“.
+  - Gespeichertes `sand`, `beagle` oder `hell` wird zu `schiefer`.
+- **Der Akzent ist in Aufgaben geteilt**, weil eine Farbe im dunklen Design nicht alles leisten kann:
+  - `AKZENT` für die Füllung von Hauptknopf, angehakter Box und Reiter-Linie,
+  - `AKZENT_TEXT` für Schrift, Häkchen und Symbol darauf,
+  - `LINK` für Links und den Fokusrahmen,
+  - `AUSWAHL` für markierte Zeilen.
+- **Dunkel:**
+  - Grund #1A1F22.
+  - Akzent ist ein heller Schiefer #D7DDDA mit dunkler Schrift. Häkchen und Symbole darauf sind deshalb dunkel.
+  - Absperrband ist ein dunkles Ocker #5C4A0E, Signal-Schrift #FF9A5C.
+- **Hoher Kontrast:** Akzent Schwarz, Absperrband #FFD43B.
+- **Ränder:** `RAND` (Bedienelemente, mindestens 3:1, neuer Test) ist getrennt von `TRENNER` (ruhigere Linien in Tabellen, um Reiter-Inhalt und Gruppen).
+- **Radien:** 4 px bei Knöpfen und Feldern, 6 px bei Gruppen.
+- **Ergebniserfassung:**
+  - „nicht gespeichert“ steht in Tinte mit Warnsymbol auf der gelben Zeile.
+  - „disqualifiziert“ und „Abbruch“ stehen mit einem Haken in Tinte statt in Grün (nach der Bewertung durch die Persona Heinz; zuerst war es ein ×, das als „nicht gespeichert“ missverstanden wurde).
+  - Punkte sind halbfett, mit gleich breiten Ziffern.
+  - Den „Rahmen“ um das Absperrband bilden am Desktop die Tabellenlinien. Ein eigener Signal-Balken je Zeile wurde nicht gebaut.
+- **Schrift:**
+  - Atkinson Hyperlegible Next (Regular, Italic, SemiBold, Bold; OFL 1.1 geprüft) liegt im neuen Ordner `schrift/`, nicht in `fonts/`, weil `fonts/` ins Web-Image kopiert wird.
+  - Gebündelt über `build.spec`, geprüft im Selbsttest, aufgeführt in der Lizenzübersicht; Web und Website haben eigene Kopien (`static/schrift/`, `docs/assets/schrift/`).
+  - Die Familie hat proportionale Ziffern, gleich breite Ziffern gibt es über OpenType `tnum`. Sie gelten nur in den Punktezellen: Für die ganze Anwendung wirkten Datum und Versionsnummer damit gesperrt.
+  - Die Null ist in dieser Schrift durchgestrichen. Das ist gewollt, damit man 0 und O unterscheiden kann.
+
+## Umsetzung Web (21.11.2026, mit Version 1.0.63)
+
+Marco hat die Umsetzung der Web-Version freigegeben.
+
+- **Farben (`templates/base.html`):** dieselben Werte wie am Desktop.
+  - `--grau-hell` ist Beton, `--grau-rand` die Trennlinie.
+  - Neu sind `--rand` (Felder und Knöpfe, mindestens 3:1), `--akzent` (vorher `--gruen`) und `--signal`.
+  - „offen“ und Konflikte stehen auf Absperrband mit Signal-Rand, die Schrift in Tinte.
+  - „disqualifiziert“ und „Abbruch“ stehen in Tinte auf Grau.
+  - Alle Status-Pillen haben einen dünnen Rand in der Farbe des Zustands, weil sich die Flächen allein kaum abheben.
+  - Der Fokus auf dem Schiefer-Kopf ist Absperrband-Gelb.
+- **Ein Hauptknopf je Ansicht:**
+  - In der Ergebnistabelle sind „Filtern“ und „Benutzte Bögen als PDF“ sekundär.
+  - In der Teilnehmerliste ist „Alle anzeigen“ sekundär.
+  - In der Terminverwaltung ist „Veröffentlichen“ nach dem Zurückholen sekundär; dann ist der Download der Hauptknopf.
+- **Schrift:**
+  - Regular und SemiBold samt Lizenz liegen in `static/schrift/` und werden per `@font-face` nur vom eigenen Server geladen (die CSP erlaubt das über `default-src 'self'`).
+  - Halbfett und fett nutzen SemiBold.
+  - Das `Containerfile` kopiert die Lizenz vor `tools/drittlizenzen.py`.
+- **Bewertungsbogen:**
+  - Die Punktefelder sind groß, halbfett, mit Rahmen in Tinte und Ziffern gleicher Breite.
+  - Hauptknopf ist „Speichern, nächster Start“. Er steht zuerst, damit die Eingabetaste ihn auslöst.
+  - „Nur speichern“ und „Speichern und zurück …“ sind **Sekundärknöpfe statt Links**: Ohne JavaScript braucht ein Speichern einen Formular-Knopf.
+  - Der Bogen-Kopf bleibt unverändert.
 
 ## Nächste Schritte (erst nach Marcos Go)
 

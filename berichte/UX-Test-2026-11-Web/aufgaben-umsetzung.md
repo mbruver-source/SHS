@@ -53,7 +53,7 @@ Ablauf nach dem Skill `aufgaben-abarbeitung`; die Regeln aus `CLAUDE.md` gehen v
 | U11 | README_CONTAINER und Container-Skripte (F1, F2, F4) | S | erledigt (20.11.) | siehe git log | unbekannt | Skript jetzt UTF-8 mit BOM; Browser-Texte vor dem Build einmal live ansehen; Startfehlermeldungen nennen nur Python → U13 |
 | U12 | Admin sieht je Ergebnis, wer wann eingetragen hat (B6) | L | erledigt (20.11.) | siehe git log | unbekannt | eigene Tabelle `web_aenderungen` nur im Web-Schema; PostgreSQL-Test nur in der CI |
 | U13 | Abschluss: QS in drei Rollen, Doku-Abgleich, OFFEN.md/Entscheidungen, Abschlussbericht, Test-Stack aufräumen | L | erledigt (20.11.) | siehe git log | unbekannt | QS: K1–K3 behoben, Rückfragen ergänzt; `shsux` abgebaut |
-| U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
+| U14 | [S] Desktop: Sicherheitskorrektur Web-Verbindung (S-U14, Details lokal) | S | erledigt (20.11.) | siehe git log | unbekannt | Verifikation + `qs-sicherheit`: Nachbesserungen umgesetzt |
 | U15 | Web: angefangene Disziplin = „teilweise“, Bestätigung nach Rückweg Bogen → Einzelseite, Zeit in Europe/Berlin | M | erledigt (20.11.) | siehe git log | unbekannt | `?gespeichert=0\|1` (ID steht im Pfad); ohne Zonendaten EU-Regel statt UTC |
 | U16 | Aufräumen Web-Logik: Vollständigkeitsregel einmal, Entscheidungs-/Status-Hilfen, `ergebnis_erfassen` teilen | M | erledigt (20.11.) | | unbekannt | |
 | U17 | Aufräumen Templates/CSS und CSS-gekoppelte Tests | M | erledigt (20.11.) | | unbekannt | |
@@ -197,15 +197,15 @@ abweichen, nicht im Umfang.
 |---|---|
 | F3 Passwort anzeigen | So lassen (kein Skript, CSP bleibt `script-src 'none'`) → in U19 als akzeptiert in `OFFEN.md` |
 | C3 Nachfrage vor dem Verlassen | Reicht so (Bogen speichert vorher, Hinweistext) → in U19 als akzeptiert in `OFFEN.md` |
-| H-3 Sicherheitshinweis Web-Verbindung (Details lokal) | Umsetzen → U14 |
+| S-U14 Sicherheitshinweis Web-Verbindung (Details lokal; lokal zuerst „H-3“ genannt) | Umsetzen → U14 |
 | Kontoname nach Kontolöschung | So lassen → in U19 als akzeptiert in `OFFEN.md` |
 | Halb gefüllte Disziplin | „teilweise“ anzeigen → U15 |
 | UTC-Datum in „zuletzt …“ | Europe/Berlin → U15 |
 | Rückweg Bogen → Einzelseite | Bestätigung nachrüsten → U15 |
 | Aufräumpaket | jetzt, ohne `web_regeln.py` → U16–U18; `web_regeln.py` in U19 als zurückgestellt in `OFFEN.md` |
 
-### U14 [S] Desktop: Sicherheitskorrektur Web-Verbindung (H-3) – S
-- Auftrag und Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (H-3). Commit-Text,
+### U14 [S] Desktop: Sicherheitskorrektur Web-Verbindung (S-U14) – S
+- Auftrag und Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (dort „H-3“, jetzt S-U14). Commit-Text,
   diese Liste und `Fortschritt.md` nur allgemein („Sicherheitskorrektur Web-Verbindung, Details folgen“).
 - GUI-Tests in `test_gui_web.py`, danach `verifikation` und `qs-sicherheit`; Ergebnis im lokalen Bericht nachtragen.
 - Handbuch Kap. Web-Verbindung: ein Satz zum geänderten Verhalten.
@@ -307,7 +307,7 @@ geklärt“ (vor U14), Umsetzung in U14–U19.
   Hinweis unter dem Filter nennt das). Passt das so, oder soll die Rückfrage mit einem freigegebenen Skript kommen
   (siehe F3, gleiche Frage)?
 - **Sicherheitshinweis aus der Prüfung von U8:** ein Punkt im älteren Code der Web-Verbindung (nicht durch U8
-  entstanden), Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (H-3). Bitte
+  entstanden), Details nur lokal in `_unveroeffentlicht/Sicherheitspruefung-U8-2026-11-20.md` (dort „H-3“, jetzt S-U14). Bitte
   entscheiden: umsetzen oder zurückstellen.
 - **Kontoname nach dem Löschen eines Web-Kontos (Hinweis aus der QS-Sicherheitsprüfung in U13, kein Fehler):** Die
   Zeile „zuletzt <Konto>, …“ (U12) bleibt in `web_aenderungen` stehen, wenn das Konto gelöscht wird; sie
@@ -429,7 +429,7 @@ Testwerkzeuge, geschlossen.
 
 **QS in drei Rollen (U13):** Sicherheit ohne Befund; Korrektheit drei Fehler (niedrig, alle im Loop-Code) behoben;
 Wartbarkeit zwei Kleinigkeiten behoben, Aufräumpaket als Rückfrage. Alle Rückfragen stehen oben unter „Rückfragen an
-Marco“: F3 (Passwort anzeigen), C3 (Rückfrage vor dem Verlassen), Sicherheitshinweis H-3 (lokal), Kontoname nach
+Marco“: F3 (Passwort anzeigen), C3 (Rückfrage vor dem Verlassen), Sicherheitshinweis S-U14 (lokal), Kontoname nach
 Kontolöschung, drei Hinweise aus der Korrektheitsprüfung, Aufräumpaket.
 
 **Tests:** SHS Test Suite gesamt grün (1633 bestanden, 0 fehlgeschlagen, 212 übersprungen; Basis vorher 1555);

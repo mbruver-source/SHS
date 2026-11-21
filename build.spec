@@ -71,6 +71,10 @@ a = Analysis(
         ("fonts/DejaVuSansCondensed-Bold.ttf", "fonts"),
         ("fonts/DejaVuSansCondensed-Oblique.ttf", "fonts"),
         ("fonts/LICENSE-DejaVu.txt", "fonts"),
+        # Schrift der Oberfläche (Marco 21.11.2026, „Schiefer und Signal“, schrift/README.md);
+        # der Selbsttest prüft sie.
+        ("schrift/AtkinsonHyperlegibleNext-*.ttf", "schrift"),
+        ("schrift/LICENSE-Atkinson-Hyperlegible-Next.txt", "schrift"),
         (str(DRITTLIZENZEN), "."),
         # OFFEN B14 (Marco 01.11.2026): eigene MIT-Lizenz für das Lizenzfenster
         # (desktop_programm.LizenzDialog); der Selbsttest prüft beide Lizenzdateien.

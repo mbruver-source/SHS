@@ -32,7 +32,7 @@ flowchart TB
         DeskProgramm["desktop_programm.py<br/>Versionsfenster/Update,<br/>Sitzungsende, Zweitstart"]
         DeskDialoge["desktop_dialoge.py (Fassade) über<br/>desktop_dialoge_basis/_teilnehmer/_termin/_planung<br/>und desktop_hilfe: Dialoge (Teilnehmer, Termin-Import,<br/>Zeitplan, Sicherung, Hilfe, Veranstaltung)"]
         DeskGemeinsam["desktop_gemeinsam.py<br/>gemeinsame GUI-Hilfen<br/>(Ablageorte, PDF-Speichern, Fehlermeldungen)"]
-        DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Akzentfarben"]
+        DeskDarstellung["desktop_darstellung.py<br/>Stylesheet, Designs, Schrift"]
         DeskDemo["desktop_demo.py + demo_daten.py<br/>geführte Demoprüfung<br/>(Temp-Termin, Erklärfenster)"]
         DbImport["db_import.py<br/>CSV-/OMA-/Stammdaten-Import,<br/>ausgefüllte Anmeldeformulare (PDF, pypdf)"]
         DbSicherung["db_sicherung.py<br/>Datensicherung (ZIP/pyzipper)"]
@@ -128,7 +128,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `desktop_dialoge_planung.py` | Prüfungsblock, Pause, automatisch verteilen, Bewertungsbogen- und Etiketten-Auswahl | `test_gui_zeitplan.py`, `test_gui_auswertung.py` |
 | `desktop_hilfe.py` | `HilfeDialog` mit Suchfeld, Inhaltsverzeichnis und dem Hilfetext | `test_gui_darstellung.py` |
 | `desktop_gemeinsam.py` | Gemeinsame GUI-Hilfen (Speichern, Meldungen, Klartext-Tooltips, Absturzprotokoll, Kopfbalken) | `test_gui_*.py` |
-| `desktop_darstellung.py` | Designs, Akzentfarben, Stylesheet | `test_theme.py`, `test_gui_darstellung.py` |
+| `desktop_darstellung.py` | Designs, Schrift der Oberfläche, Stylesheet | `test_theme.py`, `test_gui_darstellung.py` |
 | `desktop_demo.py` | Geführte Demoprüfung: `DemoTour` (Steuerung, Countdown, Beenden) | `test_gui_demo.py` |
 | `desktop_demo_panel.py` | Erklärfenster `DemoPanel`, Markierung `DemoMarkierung`, `DemoSchritt` | `test_gui_demo.py` |
 | `desktop_demo_schritte.py` | Schrittliste und Aktionen der Demo (Mixin von `DemoTour`) | `test_gui_demo.py` |
@@ -157,7 +157,7 @@ Ein Satz je Modul; Einzelheiten (Funktionen, Sonderfälle, Historie) stehen in `
 | `tools/` | Screenshots, Handbuch-PDF, Altdaten, Lizenzliste, Programmsymbol, Linux-Pakete | `test_gui_darstellung.py`, `test_altversionen.py`, `test_drittlizenzen.py` |
 | `Containerfile`, `compose.yaml`, `Caddyfile`, `tools/zertifikat_erzeugen.ps1` | Container und Compose-Setup der Web-Version samt HTTPS-Proxy und Zertifikat-Skript | `build-container.yml` |
 | `installer.iss`, `build.spec` | Windows-Installer und PyInstaller-Bündelung | `build-installer.yml` |
-| `symbole/`, `symbol/`, `fonts/`, `static/`, `lizenzen/` | Icons, Programmsymbol, Schrift, Web-Dateien, Lizenztexte | Selbsttest |
+| `symbole/`, `symbol/`, `fonts/`, `schrift/`, `static/`, `lizenzen/` | Icons, Programmsymbol, PDF-Schrift, Schrift der Desktop-Oberfläche, Web-Dateien, Lizenztexte | Selbsttest |
 
 ## 3. Wichtige Architekturentscheidungen (Kurzfassung - Details in `Fortschritt.md`, `historie/` und `entscheidungen/`)
 

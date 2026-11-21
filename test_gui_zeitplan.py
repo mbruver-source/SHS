@@ -843,3 +843,94 @@ def test_zeitplan_bloecke_lassen_sich_ziehen(qtbot, conn):
     assert [e["id"] for e in list_zeitplan_eintraege(conn, richter)] == [ids[0], ids[1], ids[2]]
     tab._eintrag_ziehen(richter, ids[1], ids[1])  # auf sich selbst: nichts
     assert [e["id"] for e in list_zeitplan_eintraege(conn, richter)] == ids
+
+
+def test_richterspalten_nutzen_den_freien_platz(qtbot, conn):
+    """Persona Heinz (21.11.2026): Mit der breiteren Schrift brachen die Blockköpfe in 300 px
+    breiten Spalten um, obwohl daneben Platz frei war. Bei zwei Richtern wachsen die Spalten jetzt
+    (höchstens _RICHTER_SPALTE_MAX), bei vielen Richtern bleibt die Mindestbreite."""
+    from PySide6.QtWidgets import QGroupBox
+
+    from desktop_zeitplan import _RICHTER_SPALTE_MAX
+
+    add_zeitplan_richter(conn, "Anna")
+    add_zeitplan_richter(conn, "Bernd")
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.resize(1400, 700)
+    tab.show()
+    qtbot.waitExposed(tab)
+    spalten = [b for b in tab._scroll.widget().findChildren(QGroupBox) if b.title() in ("Anna", "Bernd")]
+    assert len(spalten) == 2
+    for spalte in spalten:
+        assert 300 < spalte.width() <= _RICHTER_SPALTE_MAX
+
+    # Viele Richter: Mindestbreite 300 px, seitlich blättern.
+    for name in ("Carla", "Dora", "Emil", "Fritz"):
+        add_zeitplan_richter(conn, name)
+    tab.aktualisieren()
+    qtbot.wait(50)
+    spalten = [b for b in tab._scroll.widget().findChildren(QGroupBox) if b.isVisible()]
+    assert len(spalten) == 6
+    assert all(spalte.width() == 300 for spalte in spalten)
+    assert tab._scroll.horizontalScrollBar().maximum() > 0
+
+
+def test_richterspalte_gross_anzeigen_und_zurueck(qtbot, conn, monkeypatch):
+    """Marco 21.11.2026: „Groß anzeigen“ zeigt nur die gewählte Richter-Spalte über die ganze
+    Breite (zum Ansehen und Einrichten, gerade bei großer Schrift oder vielen Richtern);
+    „Alle Richter zeigen“ führt zurück. Wird der Richter gelöscht, sind wieder alle Spalten da."""
+    from PySide6.QtWidgets import QApplication, QGroupBox, QPushButton
+
+    from db import loesche_zeitplan_richter
+    from desktop_zeitplan import _RICHTER_SPALTE_MAX
+
+    anna = add_zeitplan_richter(conn, "Anna")
+    add_zeitplan_richter(conn, "Bernd")
+    tab = ZeitplanTab(conn)
+    qtbot.addWidget(tab)
+    tab.resize(1400, 700)
+    tab.show()
+    qtbot.waitExposed(tab)
+
+    def spalten():
+        return [b for b in tab._scroll.widget().findChildren(QGroupBox) if b.isVisible()]
+
+    def gross_knoepfe():
+        return [k for k in tab._scroll.widget().findChildren(QPushButton, "grossAnzeigenButton") if k.isVisible()]
+
+    assert [k.text() for k in gross_knoepfe()] == ["Groß anzeigen", "Groß anzeigen"]
+    gross_knoepfe()[0].click()
+    qtbot.wait(50)
+    assert [s.title() for s in spalten()] == ["Anna"]
+    assert spalten()[0].width() > _RICHTER_SPALTE_MAX  # ganze Breite
+    assert [k.text() for k in gross_knoepfe()] == ["Alle Richter zeigen"]
+    # Spalten-Pfeile sind in der Großansicht ausgeblendet; der Fokus bleibt auf dem Umschaltknopf.
+    pfeile = [k for k in spalten()[0].findChildren(QPushButton)
+              if k.accessibleName().startswith("Spalte nach") and k.isVisible()]
+    assert pfeile == []
+    assert QApplication.focusWidget() is gross_knoepfe()[0]
+
+    gross_knoepfe()[0].click()
+    qtbot.wait(50)
+    assert sorted(s.title() for s in spalten()) == ["Anna", "Bernd"]
+    assert QApplication.focusWidget() is gross_knoepfe()[0]  # wieder auf Annas Knopf
+
+    # Kein Knopf erscheint beim Neuaufbau als eigenes Fenster (Verifikation 21.11.2026).
+    tab.aktualisieren()
+    qtbot.wait(50)
+    assert [w for w in QApplication.topLevelWidgets() if isinstance(w, QPushButton) and w.isVisible()] == []
+
+    # „Richter hinzufügen“ in der Großansicht zeigt wieder alle Spalten (sonst bliebe der neue unsichtbar).
+    tab._gross_anzeigen(anna)
+    monkeypatch.setattr("desktop_zeitplan.QInputDialog.getText", lambda *a, **k: ("Clara", True))
+    tab._richter_hinzufuegen()
+    qtbot.wait(50)
+    assert sorted(s.title() for s in spalten()) == ["Anna", "Bernd", "Clara"]
+
+    tab._gross_anzeigen(anna)
+    loesche_zeitplan_richter(conn, anna)
+    tab.aktualisieren()
+    qtbot.wait(50)
+    assert sorted(s.title() for s in spalten()) == ["Bernd", "Clara"]
+    assert tab._fokus_richter_id is None

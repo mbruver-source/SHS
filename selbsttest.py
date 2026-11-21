@@ -280,6 +280,22 @@ def _schritte(schritt, ordner, pfad, conn, db, db_import, db_sicherung, pdf_expo
 
     schritt("Symbole", symbole)
 
+    def programmschrift():
+        # Erscheinungsbild „Schiefer und Signal“ (Marco 21.11.2026): fehlt schrift/ im Bundle
+        # (build.spec, datas), zeigt das Programm still die Systemschrift - das soll beim Build
+        # auffallen.
+        import desktop_darstellung
+
+        fehlend = [datei for datei in desktop_darstellung._PROGRAMMSCHRIFT_DATEIEN
+                   if not os.path.isfile(desktop_darstellung.programmschrift_pfad(datei))]
+        if fehlend:
+            raise AssertionError("Schriftdateien fehlen: " + ", ".join(fehlend))
+        if not desktop_darstellung._programmschrift_laden():
+            raise AssertionError(f"Schrift {desktop_darstellung.PROGRAMMSCHRIFT} lässt sich nicht laden")
+        return desktop_darstellung.PROGRAMMSCHRIFT
+
+    schritt("Schrift der Oberfläche", programmschrift)
+
     def lizenztexte():
         # OFFEN B14 (Marco 01.11.2026): das Lizenzfenster zeigt LICENSE und
         # THIRD_PARTY_LICENSES.txt - fehlen sie im Bundle (build.spec, datas), soll das beim

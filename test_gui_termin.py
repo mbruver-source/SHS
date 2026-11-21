@@ -159,6 +159,23 @@ def test_selbsttest_schritt_symbole(qtbot, tmp_path, monkeypatch):
     assert "FEHLER  Symbole" in text and "check.svg" in text
 
 
+def test_selbsttest_schritt_programmschrift(qtbot, tmp_path, monkeypatch):
+    """„Schiefer und Signal“ (Marco 21.11.2026): fehlt schrift/ im Bundle, meldet der
+    Selbsttest das als Fehler statt still die Systemschrift zu zeigen."""
+    import desktop_darstellung
+    import selbsttest
+
+    protokoll = tmp_path / "ok.log"
+    selbsttest.fuehre_selbsttest_aus(str(protokoll))
+    assert "OK      Schrift der Oberfläche (Atkinson Hyperlegible Next)" in protokoll.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(desktop_darstellung, "programmschrift_pfad", lambda datei: str(tmp_path / datei))
+    protokoll = tmp_path / "fehler.log"
+    assert selbsttest.fuehre_selbsttest_aus(str(protokoll)) == 1
+    text = protokoll.read_text(encoding="utf-8")
+    assert "FEHLER  Schrift der Oberfläche" in text and "AtkinsonHyperlegibleNext-Regular.ttf" in text
+
+
 def test_selbsttest_schritt_lizenztexte(qtbot, tmp_path, monkeypatch):
     """OFFEN B14 (Marco 01.11.2026): im Quellcode-Ordner fehlt THIRD_PARTY_LICENSES.txt nur
     als Hinweis; in der gebauten Fassung (sys.frozen) ist das ein Fehler, ebenso eine leere
@@ -2346,7 +2363,8 @@ def test_startdialog_hat_menues_ansicht_und_hilfe(qtbot):
     qtbot.addWidget(dialog)
     menues = [a.text().replace("&", "") for a in dialog.findChildren(QMenuBar)[0].actions()]
     assert menues == ["Ansicht", "Hilfe"]
-    assert set(dialog._schrift_actions) and set(dialog._design_actions) and set(dialog._theme_actions)
+    assert set(dialog._schrift_actions) and set(dialog._design_actions)
+    assert not hasattr(dialog, "_theme_actions")  # Akzentfarbe entfallen (Marco 21.11.2026)
 
 
 def test_hauptfenster_kuerzel_und_startdialog_suche_sortierung(qtbot, termin, monkeypatch):

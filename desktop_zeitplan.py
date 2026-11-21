@@ -112,6 +112,11 @@ def _anzahl_pruefungen(gruppen: list[dict]) -> int:
     return len({(g["art"], g["stufe"], g["disziplin"] if g["art"] == "ED" else None) for g in gruppen})
 
 
+#: Höchstbreite einer Richter-Spalte im Zeitplan (Pixel): breit genug, dass Blockköpfe wie
+#: „DK LK 1 – Behältnisstrecke (2 Teilnehmer, 09:00–09:20)“ in einer Zeile stehen.
+_RICHTER_SPALTE_MAX = 460
+
+
 class _BlockListe(QListWidget):
     """Liste einer Richter-Spalte, in der sich Prüfungsblöcke und Pausen mit der Maus an eine
     andere Stelle ziehen lassen (Marco 10.11.2026, UI-Abgleich: bisher nur „Hoch“/„Runter“).
@@ -169,6 +174,9 @@ class ZeitplanTab(QWidget):
         # jedes Mal erneut in der Liste auswählen zu müssen.
         self._markierter_eintrag_id: int | None = None
         self._richter_uebernahme_erfolgt = False  # siehe aktualisieren() (U8)
+        # Großansicht (Marco 21.11.2026): ID des Richters, dessen Spalte allein und über die ganze
+        # Breite gezeigt wird (siehe _gross_anzeigen); None zeigt alle Spalten.
+        self._fokus_richter_id: int | None = None
 
         veranstaltung = get_veranstaltung(conn) or {}
 
@@ -398,9 +406,20 @@ class ZeitplanTab(QWidget):
             self._spalten_layout.addWidget(hinweis)
         else:
             zeilen_je_richter_id = {plan["richter_id"]: plan["zeilen"] for plan in berechne_zeitplan(self.conn)}
+            # Großansicht (Marco 21.11.2026): nur die gewählte Spalte, über die ganze Breite. Gibt es
+            # den Richter nicht mehr (gelöscht), zurück zu allen Spalten.
+            if self._fokus_richter_id not in {r["id"] for r in richter_liste}:
+                self._fokus_richter_id = None
+            if self._fokus_richter_id is not None:
+                richter_liste = [r for r in richter_liste if r["id"] == self._fokus_richter_id]
+            # Persona Heinz (21.11.2026): Mit der breiteren Schrift der Oberfläche brachen die
+            # Blockköpfe in 300 px breiten Spalten öfter um, obwohl daneben Platz frei war. Die
+            # Spalten wachsen deshalb in den freien Platz (Streckfaktor 1, höchstens
+            # _RICHTER_SPALTE_MAX); bei vielen Richtern bleibt es bei der Mindestbreite mit
+            # seitlichem Rollen wie bisher.
             for richter in richter_liste:
                 self._spalten_layout.addWidget(
-                    self._richter_spalte(richter, zeilen_je_richter_id.get(richter["id"], []))
+                    self._richter_spalte(richter, zeilen_je_richter_id.get(richter["id"], [])), 1
                 )
         self._spalten_layout.addStretch()
         self._offene_starts_aktualisieren(konflikte, namen_je_richter)
@@ -473,6 +492,8 @@ class ZeitplanTab(QWidget):
         richter_id = richter["id"]
         box = QGroupBox(richter["name"])
         box.setMinimumWidth(300)
+        if self._fokus_richter_id != richter_id:
+            box.setMaximumWidth(_RICHTER_SPALTE_MAX)  # in der Großansicht ohne Höchstbreite
 
         kopf_zeile = self._richter_kopf(richter_id)
         liste = self._block_liste(richter_id, zeilen)
@@ -527,13 +548,53 @@ class ZeitplanTab(QWidget):
         rechts_btn.clicked.connect(lambda: self._richter_verschieben(richter_id, 1))
         umbenennen_btn = QPushButton("Umbenennen…")
         umbenennen_btn.clicked.connect(lambda: self._richter_umbenennen(richter_id))
+        # Großansicht (Marco 21.11.2026): die Spalte allein über die ganze Breite zeigen, um sie
+        # besser zu sehen und einzurichten - vor allem bei großer Schrift oder vielen Richtern.
+        gross = self._fokus_richter_id == richter_id
+        gross_btn = QPushButton("Alle Richter zeigen" if gross else "Groß anzeigen")
+        gross_btn.setObjectName("grossAnzeigenButton")
+        gross_btn.setProperty("richterId", richter_id)
+        gross_btn.setToolTip("Zurück zur Ansicht mit allen Richter-Spalten." if gross
+                             else "Nur diese Spalte über die ganze Breite zeigen.")
+        gross_btn.clicked.connect(lambda: self._gross_anzeigen(None if gross else richter_id))
+        # In der Großansicht ergibt das Verschieben der Spalte keinen Sinn. Nur ausblenden, nie
+        # setVisible(True): die Knöpfe haben hier noch kein Elternfenster und erschienen sonst kurz
+        # als eigenes Fenster (Verifikation 21.11.2026).
+        if gross:
+            links_btn.hide()
+            rechts_btn.hide()
 
         kopf_zeile = QHBoxLayout()
         kopf_zeile.addWidget(links_btn)
         kopf_zeile.addWidget(rechts_btn)
         kopf_zeile.addWidget(umbenennen_btn)
         kopf_zeile.addStretch()
+        kopf_zeile.addWidget(gross_btn)
         return kopf_zeile
+
+    def _gross_anzeigen(self, richter_id: int | None) -> None:
+        """Zeigt nur die Spalte `richter_id` über die ganze Breite (None: wieder alle Spalten).
+        Der Tastaturfokus landet danach auf dem Umschaltknopf der betroffenen Spalte."""
+        vorher = self._fokus_richter_id
+        self._fokus_richter_id = richter_id
+        # Den Fokus vorher vom alten Knopf nehmen: wird ein fokussierter Knopf gelöscht, reicht Qt
+        # den Fokus an das nächste Feld weiter (z. B. „Zeitplan-Start“).
+        self._scroll.setFocus()
+        self.aktualisieren()
+        ziel = richter_id if richter_id is not None else vorher
+        # Rückwärts: die alten Knöpfe sind erst zum Löschen vorgemerkt (deleteLater) und stehen
+        # noch vor den eben erzeugten in der Liste.
+        for knopf in reversed(self._scroll.widget().findChildren(QPushButton, "grossAnzeigenButton")):
+            if knopf.property("richterId") == ziel:
+                # Erst nach dem Anzeigen der neu aufgebauten Spalten - ein noch unsichtbarer Knopf
+                # nimmt den Fokus nicht an.
+                QTimer.singleShot(0, knopf, knopf.setFocus)
+                break
+
+    def _alle_richter_zeigen(self) -> None:
+        """Verlässt die Großansicht still (vor Aktionen, die alle Richter betreffen oder einen
+        neuen anlegen - sonst bliebe das Ergebnis unsichtbar)."""
+        self._fokus_richter_id = None
 
     def _block_liste(self, richter_id: int, zeilen: list) -> "_BlockListe":
         """Liste der Blöcke und Pausen einer Richter-Spalte (Kopfzeile je Block, Teilnehmer darunter)."""
@@ -694,6 +755,7 @@ class ZeitplanTab(QWidget):
         except sqlite3.Error as exc:
             _db_fehler_anzeigen(self, exc)
             return
+        self._alle_richter_zeigen()  # sonst bliebe der neue Richter in der Großansicht unsichtbar
         self.aktualisieren()
 
     def _richter_umbenennen(self, richter_id: int) -> None:
@@ -743,6 +805,7 @@ class ZeitplanTab(QWidget):
             _db_fehler_anzeigen(self, exc)
             return False
         self.status_label.setText("Automatischer Zeitplan-Vorschlag erstellt.")
+        self._alle_richter_zeigen()  # der Vorschlag betrifft alle Richter
         self.aktualisieren()
         return True
 
@@ -879,6 +942,7 @@ class ZeitplanTab(QWidget):
                         self, "Pause eingefügt" if anzahl else "Keine Pause eingefügt", hinweis,
                     )
                 self.status_label.setText(f"Pause bei {anzahl} Richter(n) eingefügt.")
+                self._alle_richter_zeigen()  # betrifft alle Richter
             else:
                 # UX-Test 02.10.2026, U9: nach der markierten Zeile statt immer am Ende.
                 nach = nach_id

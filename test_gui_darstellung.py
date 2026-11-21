@@ -38,15 +38,15 @@ from gui_hilfen import *  # noqa: F401,F403
 # Screenshot-Vergleich leisten) - hier nur, dass er tatsächlich gesetzt wird (main(),
 # nicht separat testbar ohne den echten Startdialog durchzuklicken) und dass die als
 # Haupt-Aktion vorgesehenen Buttons den dafür vorgesehenen objectName tragen, über den
-# _erzeuge_qss() (siehe app.py, mehrere Themes über _THEMES) sie hervorhebt.
+# _erzeuge_qss() sie hervorhebt.
 
 
-def test_qss_modern_minimal_enthaelt_kernselektoren():
-    qss_blau = _erzeuge_qss("blau")
-    assert "QTabBar::tab:selected" in qss_blau
-    assert "QPushButton#primaerButton" in qss_blau
-    assert "#2F6FED" in qss_blau  # Akzentfarbe des Themes "blau"
-    assert "#8C5A32" in _erzeuge_qss("lohbraun")  # Standard seit Marco 01.11.2026
+def test_qss_enthaelt_kernselektoren():
+    qss = _erzeuge_qss()
+    assert "QTabBar::tab:selected" in qss
+    assert "QPushButton#primaerButton" in qss
+    assert "#2A3035" in qss  # Schiefer, Standard seit Marco 21.11.2026
+    assert "#D7DDDA" in _erzeuge_qss("dunkel")  # heller Schiefer als Akzent im dunklen Design
 
 
 def test_programmsymbol_und_selbsttest_schritt(qtbot, tmp_path, monkeypatch):
@@ -73,7 +73,6 @@ def test_programmsymbol_und_selbsttest_schritt(qtbot, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("wechsel, speichern, auswahl", [
     ("_design_wechseln", "app._design_speichern", "kontrast"),
-    ("_theme_wechseln", "app._theme_speichern", "gruen"),
 ])
 def test_ansicht_wechseln_zeigt_wartecursor(qtbot, termin, monkeypatch, wechsel, speichern, auswahl):
     # Lasttest 16.10.2026: bei 1000 Teilnehmern dauert der Wechsel rund 3 s.
@@ -820,15 +819,20 @@ def test_ansicht_menue_schriftgroesse_vergroessert_und_bleibt_gespeichert(qtbot,
     assert fenster._schrift_pt == pytest.approx(label_pt, abs=0.1)
 
 
-def test_ansicht_menue_hat_hintergrund_und_akzentfarbe(qtbot, termin, darstellung_speicher):
+def test_ansicht_menue_hat_design_ohne_akzentfarbe(qtbot, termin, darstellung_speicher):
+    """Marco 21.11.2026 („Schiefer und Signal“): ein Untermenü „Design“ mit drei Einträgen,
+    die frühere Akzentfarb-Wahl ist entfallen."""
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
 
-    assert set(fenster._design_actions) == {"beagle", "hell", "dunkel", "kontrast"}
-    assert set(fenster._theme_actions) == {"lohbraun", "blau", "gruen", "violett"}
-    assert fenster._design_actions["hell"].isChecked()
-    assert fenster._theme_actions["blau"].isChecked()
+    assert set(fenster._design_actions) == {"schiefer", "dunkel", "kontrast"}
+    assert not hasattr(fenster, "_theme_actions")
+    assert fenster._design_actions["schiefer"].isChecked()
+    from PySide6.QtWidgets import QMenu
+    untermenues = [m.title() for m in fenster.menuBar().findChildren(QMenu)]
+    assert "Design" in untermenues
+    assert "Akzentfarbe" not in untermenues and "Hintergrund" not in untermenues
 
 
 def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung_speicher):
@@ -841,17 +845,13 @@ def test_designwechsel_setzt_stylesheet_und_speichert(qtbot, termin, darstellung
 
     fenster._design_actions["dunkel"].trigger()
     assert darstellung_speicher["design"] == "dunkel"
-    assert qapp.styleSheet() == _erzeuge_qss("blau", "dunkel")
+    assert qapp.styleSheet() == _erzeuge_qss("dunkel")
     assert darstellung._aktueller_stil.lower() == "fusion"
     assert darstellung._aktives_design == "dunkel"
 
-    fenster._theme_actions["gruen"].trigger()
-    assert darstellung_speicher["theme"] == "gruen"
-    assert qapp.styleSheet() == _erzeuge_qss("gruen", "dunkel")
-
-    fenster._design_actions["hell"].trigger()
-    assert qapp.styleSheet() == _erzeuge_qss("gruen", "hell")
-    assert darstellung._aktives_design == "hell"
+    fenster._design_actions["schiefer"].trigger()
+    assert qapp.styleSheet() == _erzeuge_qss("schiefer")
+    assert darstellung._aktives_design == "schiefer"
     assert darstellung._aktueller_stil == darstellung._ursprung_stil
 
 
@@ -877,9 +877,9 @@ def test_designwechsel_behaelt_ungespeicherte_ergebnisse(qtbot, termin, darstell
     assert tab.zellzustand(0, "Flächensuche", "suche")["hintergrund"] == dunkel_gelb
 
 
-def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_speicher, monkeypatch):
+def test_rueckweg_zu_schiefer_stellt_ursprungsstil_her(qtbot, termin, darstellung_speicher, monkeypatch):
     """Unter offscreen ist der Ursprungsstil ohnehin "fusion" - damit der Rückweg
-    Dunkel -> Hell wirklich einen Stilwechsel prüft, wird hier "windows" als
+    Dunkel -> Schiefer wirklich einen Stilwechsel prüft, wird hier "windows" als
     Ursprungsstil vorgegeben (auf allen Plattformen verfügbar)."""
     import desktop_darstellung as darstellung
 
@@ -892,7 +892,7 @@ def test_rueckweg_zu_hell_stellt_ursprungsstil_her(qtbot, termin, darstellung_sp
 
     fenster._design_actions["dunkel"].trigger()
     assert darstellung._aktueller_stil == "fusion"
-    fenster._design_actions["hell"].trigger()
+    fenster._design_actions["schiefer"].trigger()
     assert darstellung._aktueller_stil == "windows"
     qapp.setStyleSheet("")
     assert qapp.style().name().lower() == "windows"
@@ -911,13 +911,14 @@ def test_design_ohne_beschreibbaren_hakenordner_startet_trotzdem(darstellung_spe
     darstellung._darstellung_anwenden(QApplication.instance())
 
     assert darstellung._aktives_design == "dunkel"
-    assert QApplication.instance().styleSheet() == _erzeuge_qss("blau", "dunkel")
+    assert QApplication.instance().styleSheet() == _erzeuge_qss("dunkel")
 
 
-def test_hell_bleibt_hell_bei_dunklem_systemschema(darstellung_speicher):
+def test_helles_design_bleibt_hell_bei_dunklem_systemschema(darstellung_speicher):
     """Desktop-Prüfung 14.10.2026, Teil 9 Nr. 1: Bei dunklem System-Farbschema ("Apps:
-    dunkel") lieferte "hell" dunkle Scrollbereiche/Listen mit fast schwarzer Schrift. "hell"
-    setzt jetzt eine feste helle Palette, egal welche Palette vorher galt."""
+    dunkel") lieferte das damalige "hell" dunkle Scrollbereiche/Listen mit fast schwarzer
+    Schrift. Helle Designs (heute "schiefer") setzen eine feste helle Palette, egal welche
+    Palette vorher galt."""
     import desktop_darstellung as darstellung
     from PySide6.QtGui import QColor
 
@@ -927,7 +928,7 @@ def test_hell_bleibt_hell_bei_dunklem_systemschema(darstellung_speicher):
                          (QPalette.WindowText, "#ffffff"), (QPalette.Text, "#ffffff")):
         dunkel.setColor(rolle, QColor(farbe))
     qapp.setPalette(dunkel)
-    darstellung_speicher["design"] = "hell"
+    darstellung_speicher["design"] = "schiefer"
 
     darstellung._darstellung_anwenden(qapp)
 
@@ -946,7 +947,7 @@ def test_hell_bleibt_hell_bei_dunklem_systemschema(darstellung_speicher):
 def test_stylesheet_parst_mit_sonderzeichen_im_hakenpfad(qtbot, darstellung_speicher, monkeypatch):
     """Desktop-Prüfung 14.10.2026, Teil 9 Nr. 2: Ein Umlaut oder Apostroph im Pfad des
     Häkchen-Bildes ließ Qt ohne Anführungszeichen das ganze Stylesheet verwerfen ("Could not
-    parse application stylesheet") - für alle 12 Kombinationen prüfen."""
+    parse application stylesheet") - für alle Designs prüfen."""
     import desktop_darstellung as darstellung
     from PySide6.QtCore import qInstallMessageHandler
     from PySide6.QtWidgets import QCheckBox, QListWidget, QListWidgetItem
@@ -956,18 +957,17 @@ def test_stylesheet_parst_mit_sonderzeichen_im_hakenpfad(qtbot, darstellung_spei
     alter_handler = qInstallMessageHandler(lambda _art, _kontext, text: meldungen.append(text))
     qapp = QApplication.instance()
     try:
-        for theme in darstellung._THEMES:
-            for design in darstellung._DESIGNS:
-                qapp.setStyleSheet(darstellung._erzeuge_qss(theme, design))
-                box = QCheckBox("x")
-                liste = QListWidget()
-                eintrag = QListWidgetItem("y", liste)
-                eintrag.setCheckState(Qt.Checked)
-                qtbot.addWidget(box)
-                qtbot.addWidget(liste)
-                box.ensurePolished()
-                liste.ensurePolished()
-                assert not [m for m in meldungen if "Could not parse" in m], (theme, design, meldungen)
+        for design in darstellung._DESIGNS:
+            qapp.setStyleSheet(darstellung._erzeuge_qss(design))
+            box = QCheckBox("x")
+            liste = QListWidget()
+            eintrag = QListWidgetItem("y", liste)
+            eintrag.setCheckState(Qt.Checked)
+            qtbot.addWidget(box)
+            qtbot.addWidget(liste)
+            box.ensurePolished()
+            liste.ensurePolished()
+            assert not [m for m in meldungen if "Could not parse" in m], (design, meldungen)
     finally:
         qInstallMessageHandler(alter_handler)
 
@@ -982,7 +982,7 @@ def test_haken_bild_wird_je_lauf_neu_geschrieben(darstellung_speicher, monkeypat
     ziel.parent.mkdir()
     ziel.write_bytes(b"fremd")
     monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(ziel).replace("\\", "/"))
-    monkeypatch.setattr(darstellung, "_haken_geschrieben", False)
+    monkeypatch.setattr(darstellung, "_haken_geschrieben", set())
 
     darstellung._haken_bild_bereitstellen()
 
@@ -990,6 +990,10 @@ def test_haken_bild_wird_je_lauf_neu_geschrieben(darstellung_speicher, monkeypat
     assert not bild.isNull() and bild.width() == 32
     assert list(ziel.parent.iterdir()) == [ziel]
     assert darstellung._haken_geschrieben
+    # Dunkles Design: dunkles Häkchen auf hellem Akzent, eigene Datei daneben.
+    darstellung._haken_bild_bereitstellen("#1A1F22")
+    dunkel = ziel.parent / "haken_1A1F22.png"
+    assert QImage(str(dunkel)).pixelColor(13, 23).name() == "#1a1f22"
 
 
 def test_haken_bild_fehlschlag_hinterlaesst_keine_zwischendatei(darstellung_speicher, monkeypatch, tmp_path):
@@ -999,7 +1003,7 @@ def test_haken_bild_fehlschlag_hinterlaesst_keine_zwischendatei(darstellung_spei
 
     ziel = tmp_path / "haken.png"
     monkeypatch.setattr(darstellung, "_haken_pfad", lambda: str(ziel).replace("\\", "/"))
-    monkeypatch.setattr(darstellung, "_haken_geschrieben", False)
+    monkeypatch.setattr(darstellung, "_haken_geschrieben", set())
 
     def ersetzen_scheitert(_quelle, _ziel):
         raise OSError("gesperrt")
@@ -1860,12 +1864,12 @@ def test_designwechsel_faerbt_kopf_und_knopfsymbole_um(qtbot, termin, darstellun
     import desktop_darstellung as darstellung
 
     conn, pfad = termin
-    darstellung._darstellung_anwenden(QApplication.instance())  # gespeichert: "hell"
+    darstellung._darstellung_anwenden(QApplication.instance())  # gespeichert: "schiefer"
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
     wechseln = fenster.wechseln_btn
-    hell_kopf = darstellung._DESIGNS["hell"]["KOPF_TEXT"]
-    assert wechseln.icon().cacheKey() == symbol("folder-open", hell_kopf).cacheKey()
+    schiefer_kopf = darstellung._DESIGNS["schiefer"]["KOPF_TEXT"]
+    assert wechseln.icon().cacheKey() == symbol("folder-open", schiefer_kopf).cacheKey()
 
     fenster._design_actions["kontrast"].trigger()
     assert wechseln.icon().cacheKey() == symbol("folder-open", "#FFFFFF").cacheKey()
@@ -2024,8 +2028,60 @@ def test_beagle_langer_takt_groessenaenderung_neustart_und_ohne_bild(qtbot, term
 
 
 def test_reiterbezeichnungen_sind_fett():
-    from desktop_darstellung import _erzeuge_qss, _DESIGN_DEFAULT, _THEME_DEFAULT
+    from desktop_darstellung import _erzeuge_qss, _DESIGN_DEFAULT
 
-    qss = _erzeuge_qss(_THEME_DEFAULT, _DESIGN_DEFAULT)
+    qss = _erzeuge_qss(_DESIGN_DEFAULT)
     block = qss.split("QTabBar::tab {", 1)[1].split("}", 1)[0]
     assert "font-weight: 600" in block
+
+
+def test_programmschrift_wird_angewendet_und_schriftstufen_wirken(qapp, darstellung_speicher, monkeypatch):
+    """„Schiefer und Signal“ (Marco 21.11.2026): Atkinson Hyperlegible Next wird beim ersten
+    Anwenden zur Anwendungsschrift; die Schriftgrößen-Stufen wirken weiter auf ihre Größe."""
+    import desktop_darstellung as darstellung
+    from PySide6.QtGui import QFontInfo
+
+    qapp = QApplication.instance()
+    monkeypatch.setattr(darstellung, "_basis_schrift_pt", None)
+    darstellung._darstellung_anwenden(qapp)
+    assert QFontInfo(qapp.font()).family() == darstellung.PROGRAMMSCHRIFT
+    basis = qapp.font().pointSizeF()
+
+    darstellung_speicher["schrift"] = "gross"
+    darstellung._darstellung_anwenden(qapp)
+    assert QFontInfo(qapp.font()).family() == darstellung.PROGRAMMSCHRIFT
+    assert qapp.font().pointSizeF() == pytest.approx(basis * 1.15, abs=0.1)
+
+
+def test_programmschrift_fehlt_systemschrift_bleibt(qapp, darstellung_speicher, monkeypatch, tmp_path):
+    """Fehlen die Schriftdateien, bleibt die bisherige Anwendungsschrift - kein Abbruch."""
+    import desktop_darstellung as darstellung
+
+    qapp = QApplication.instance()
+    monkeypatch.setattr(darstellung, "programmschrift_pfad", lambda datei: str(tmp_path / datei))
+    monkeypatch.setattr(darstellung, "_programmschrift_geladen", None)
+    monkeypatch.setattr(darstellung, "_basis_schrift_pt", None)
+    vorher = qapp.font().families()
+
+    darstellung._darstellung_anwenden(qapp)
+
+    assert darstellung._programmschrift_geladen is False
+    assert qapp.font().families() == vorher
+    assert darstellung._aktives_design == "schiefer"
+
+
+def test_ziffern_gleich_breit(qapp, monkeypatch):
+    """Punktezellen nutzen Ziffern gleicher Breite; ohne die Qt-Funktion bleibt die Schrift
+    unverändert."""
+    import desktop_darstellung as darstellung
+    from PySide6.QtGui import QFont, QFontMetricsF
+
+    assert darstellung._programmschrift_laden()
+    schrift = QFont(darstellung.PROGRAMMSCHRIFT, 10)
+    proportional = QFontMetricsF(schrift)
+    assert proportional.horizontalAdvance("1") < proportional.horizontalAdvance("8")
+    tabellarisch = QFontMetricsF(darstellung.ziffern_gleich_breit(schrift))
+    assert tabellarisch.horizontalAdvance("1111") == pytest.approx(tabellarisch.horizontalAdvance("8888"))
+
+    monkeypatch.delattr(QFont, "setFeature")
+    assert darstellung.ziffern_gleich_breit(schrift) == schrift

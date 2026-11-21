@@ -11,7 +11,7 @@
   <label for="q">Suche nach Name oder Hund</label>
   <input type="text" id="q" name="q" value="{{ suche }}" maxlength="80" autocomplete="off">
   <button type="submit" style="margin-top: 0.6em;">Suchen</button>
-  {% if suche %}<a class="knopf" href="{{ url_for('teilnehmerliste') }}" style="margin-top: 0.6em;">Alle anzeigen</a>
+  {% if suche %}<a class="knopf knopf-sekundaer" href="{{ url_for('teilnehmerliste') }}" style="margin-top: 0.6em;">Alle anzeigen</a>
   <p><small>{{ zeilen | length }} von {{ gesamt }} Teilnehmern</small></p>{% endif %}
 </form>
 

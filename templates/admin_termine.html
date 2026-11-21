@@ -24,7 +24,9 @@
     <p class="termine-ordner-hinweis"><small>Die Termine der Desktop-Version liegen im Ordner
       <code>%USERPROFILE%\SHS-Pruefungsprogramm\Termine</code>. Den Pfad im Dateidialog in die
       Adressleiste einfügen, dann öffnet sich der Ordner.</small></p>
-    <p><button type="submit">Veröffentlichen</button></p>
+    {# Ein Hauptknopf je Ansicht (Marco 21.11.2026): nach dem Zurückholen ist der Download der
+       nächste Schritt, „Veröffentlichen“ dann sekundär. #}
+    <p><button type="submit"{% if zurueckgeholt_token %} class="knopf-sekundaer"{% endif %}>Veröffentlichen</button></p>
   </form>
 </div>
 
@@ -82,7 +84,7 @@
         </form>
         <form method="post" action="{{ url_for('admin_termin_loeschen', schema_name=termin.schema_name) }}" style="margin: 0;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="knopf-sekundaer">Löschen</button>
+          <button type="submit" class="knopf-gefahr">Termin löschen</button>
         </form>
       </div>
     </div>

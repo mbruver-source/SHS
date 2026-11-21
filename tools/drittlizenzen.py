@@ -45,12 +45,20 @@ EIGENE_DATEIEN = {
     "desktop": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt",
                  "Bitstream Vera / Arev Fonts License"),
                 # Marco 01.11.2026, Erscheinungsbild „Beagle“ (symbole/README.md).
-                ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
-    # Haken-Symbol in templates/teilnehmerliste.html (Marco 01.11.2026, Erscheinungsbild „Beagle“).
+                ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT"),
+                # Marco 21.11.2026, „Schiefer und Signal“ (schrift/README.md); das Web führt
+                # dieselbe Schrift aus static/schrift/ auf.
+                ("Atkinson Hyperlegible Next (Schrift der Oberfläche)",
+                 "schrift/LICENSE-Atkinson-Hyperlegible-Next.txt", "SIL Open Font License 1.1")],
+    # Haken-Symbol in templates/teilnehmerliste.html (Marco 01.11.2026, Erscheinungsbild „Beagle“),
+    # seit 21.11.2026 auch das Warnzeichen der Fehlermeldungen in templates/base.html.
     # Seit 18.11.2026 liegen auch die DejaVu-Schriften im Web-Image (Sammel-PDF der Bewertungsbögen).
     "web": [("DejaVu-Schriften (PDF-Ausgabe)", "fonts/LICENSE-DejaVu.txt",
              "Bitstream Vera / Arev Fonts License"),
-            ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT")],
+            ("Tabler Icons (Symbole der Oberfläche)", "symbole/LICENSE-Tabler.txt", "MIT"),
+            # Marco 21.11.2026, „Schiefer und Signal“: Schrift der Web-Oberfläche aus static/schrift/.
+            ("Atkinson Hyperlegible Next (Schrift der Oberfläche)",
+             "static/schrift/LICENSE-Atkinson-Hyperlegible-Next.txt", "SIL Open Font License 1.1")],
 }
 # Alle Teilpakete von PySide6 (Essentials, Addons, Pdf, WebEngine ...) und Shiboken6. Ihre Wheels
 # enthalten nur den Text der kommerziellen Qt-Lizenz, die hier nicht gilt; der wird weggelassen.

@@ -5,32 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block titel %}SHS Prüfung{% endblock %}</title>
 <style>
-  /* Erscheinungsbild „Beagle“ (Marco 01.11.2026): Kopf in Anthrazit mit dem Beagle, lohbrauner
-     Akzent, Creme-Flächen - wie die Desktop-Version. Die Variablennamen (--gruen ...) bleiben,
-     weil die übrigen Templates sie in style-Attributen nutzen; --gruen ist jetzt der Akzent. */
+  /* Erscheinungsbild „Schiefer und Signal“ (Marco 21.11.2026, berichte/Design-Richtung-2026-11.md),
+     wie die Desktop-Version: Beton als Grund, Tinte als Schrift, Schiefer für Kopf und den einen
+     Hauptknopf je Ansicht; Signalfarben nur, wo etwas fehlt oder nicht gespeichert ist. Ränder von
+     Bedienelementen (--rand) heben sich mit mindestens 3:1 ab, Trennlinien (--grau-rand) ruhiger.
+     --grau-hell ist der Grund, --grau-rand die Trennlinie (Namen aus der Zeit vor 01.11.2026, weil
+     die übrigen Templates sie nutzen). */
+  @font-face {
+    font-family: "Atkinson Hyperlegible Next";
+    src: url("/static/schrift/AtkinsonHyperlegibleNext-Regular.ttf") format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Atkinson Hyperlegible Next";
+    src: url("/static/schrift/AtkinsonHyperlegibleNext-SemiBold.ttf") format("truetype");
+    font-weight: 600 700; font-style: normal; font-display: swap;
+  }
   :root {
-    --gruen: #8C5A32;
-    --gruen-dunkel: #6A4325;
-    --rot: #b3261e;
-    --grau-hell: #FBF8F3;
-    --grau-rand: #E2D9CB;
-    --text: #2B2620;
-    --gedaempft: #5E5549;
-    --karte: #FFFDF9;
-    --kopf: #2F2B27;
-    --kopf-text: #F4EEE4;
-    --kopf-text2: #CDBFA9;
-    --fertig-hg: #E8F1E8;
-    --fertig: #24592A;
-    --fehler-hg: #fbeceb;   /* rot hinterlegt: Eingabefehler, disqualifiziert */
-    --warnung-hg: #fbf0d9;  /* gelb: „offen“ und Konflikte („inzwischen von jemand anderem geändert“) */
-    --warnung: #6d4c00;
+    --akzent: #2A3035;        /* Schiefer */
+    --akzent-dunkel: #1B2024;
+    --akzent-text: #FFFFFF;
+    --rot: #B3261E;
+    --grau-hell: #EEF0EC;     /* Beton */
+    --grau-rand: #C9CFCB;     /* Trennlinie */
+    --rand: #7A837E;          /* Rand von Feldern und Knöpfen, mindestens 3:1 */
+    --text: #1B2220;          /* Tinte */
+    --gedaempft: #4F5853;
+    --karte: #FFFFFF;
+    --kopf: #2A3035;
+    --kopf-text: #F1F3F2;
+    --kopf-text2: #B9C1BC;
+    --fertig-hg: #E3F1E8;
+    --fertig: #1F5E36;
+    --fehler-hg: #FBECEB;     /* rot hinterlegt: Eingabefehler */
+    --warnung-hg: #FFD43B;    /* Absperrband: „offen“ und Konflikte („inzwischen von jemand anderem geändert“) */
+    --warnung: #1B2220;       /* Schrift darauf in Tinte */
+    --signal: #D9480F;        /* Rand/Balken zum Absperrband */
+    --fokus-dunkel: #FFD43B;  /* Fokusrahmen auf dem Schiefer-Kopf */
     /* Schätzwert für die feste Kopfleiste ab Tablet-Breite (zweizeilig bei 701-768 px ≈ 66 px). */
     --kopf-hoehe: 4.5em;
   }
   * { box-sizing: border-box; }
   body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     margin: 0;
     background: var(--grau-hell);
     color: var(--text);
@@ -69,33 +86,53 @@
     color: var(--kopf-text); font: inherit; cursor: pointer;
   }
   header form.abmelden button:hover, header form.abmelden button:focus { text-decoration: underline; }
+  /* Fokus auf dem dunklen Kopf in Absperrband-Gelb (Schiefer wäre dort unsichtbar). */
+  header a:focus-visible, header form.abmelden button:focus-visible { outline: 2px solid var(--fokus-dunkel); outline-offset: 2px; }
   main {
     max-width: 640px;
     margin: 0 auto;
     padding: 1em;
   }
-  main a:not(.knopf):not(.teilnehmer-zeile) { color: var(--gruen-dunkel); }
+  main a:not(.knopf):not(.teilnehmer-zeile) { color: var(--akzent); }
   h1 { margin: 0.2em 0 0.3em; font-size: 1.5em; }
   .karte {
     background: var(--karte);
     border: 1px solid var(--grau-rand);
-    border-radius: 10px;
+    border-radius: 6px;
     padding: 1em;
     margin-bottom: 1em;
-    box-shadow: 0 1px 2px rgba(60, 40, 20, 0.05);
   }
   /* Erfolgsmeldung (templates/admin_termine.html), grün wie die Status-Pille „bewertet“. */
   .karte-erfolg { background: var(--fertig-hg); border-color: var(--fertig); }
+  /* Fehlermeldungen mit Warnzeichen und kräftigem Rand (Persona Heinz, 21.11.2026: „bei Sonne
+     blass, ohne Zeichen“). Das Zeichen ist ein Tabler-Symbol (alert-triangle, MIT) als data:-Bild -
+     die CSP erlaubt img-src data:, Skripte braucht es nicht. */
   .fehler {
+    position: relative;
     background: var(--fehler-hg);
-    border: 1px solid var(--rot);
+    border: 2px solid var(--rot);
+    border-left-width: 6px;
     color: var(--rot);
-    border-radius: 8px;
-    padding: 0.8em 1em;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 0.8em 1em 0.8em 2.6em;
     margin-bottom: 1em;
   }
-  /* Konflikt statt Fehler: nichts überschrieben, die Seite zeigt den aktuellen Stand (gelb). */
-  .fehler.warnung { background: var(--warnung-hg); border-color: var(--warnung); color: var(--warnung); }
+  .fehler::before {
+    content: ""; position: absolute; left: 0.7em; top: 0.8em; width: 1.3em; height: 1.3em;
+    background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23B3261E' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E");
+  }
+  .fehler.warnung::before {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231B2220' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E");
+  }
+  /* Löschen und andere Aktionen ohne Rückweg: weiß mit rotem Rand und roter Schrift, damit sie sich
+     von harmlosen Nebenknöpfen abheben (Persona Heinz, Wunsch 5). */
+  .knopf-gefahr { background: var(--karte); color: var(--rot); border: 2px solid var(--rot); font-weight: 600; }
+  .knopf-gefahr:active { background: var(--fehler-hg); }
+  /* Konflikt statt Fehler: nichts überschrieben, die Seite zeigt den aktuellen Stand (Absperrband
+     mit Signal-Balken, Schrift in Tinte). */
+  .fehler.warnung { background: var(--warnung-hg); border-color: var(--signal); border-left-width: 6px;
+                    color: var(--warnung); }
   /* Abschnittsüberschriften in Formularen (Einzelseite) bzw. ohne Abstand oben (Bogen). */
   h2.abschnitt { margin-top: 1.2em; }
   h2.ohne-abstand { margin-top: 0; }
@@ -108,13 +145,15 @@
     width: 100%;
     padding: 0.6em;
     font-size: 1.1em;
-    border: 1px solid var(--grau-rand);
-    border-radius: 6px;
-    background: #fff;
+    border: 1px solid var(--rand);
+    border-radius: 4px;
+    background: var(--karte);
     color: var(--text);
+    font-family: inherit;
   }
-  select { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand); border-radius: 6px;
-           background: #fff; color: var(--text); max-width: 100%; }
+  input[type=number] { font-variant-numeric: tabular-nums; }
+  select { font: inherit; padding: 0.55em; border: 1px solid var(--rand); border-radius: 4px;
+           background: var(--karte); color: var(--text); max-width: 100%; }
   /* UX-Test Web 19.11.2026 (B4): Ein Wert über dem Höchstwert (z. B. 84 bei höchstens 60) hält der Browser
      schon vor dem Absenden auf und zeigt nur kurz eine Blase am Feld. Ohne Skript (CSP) deshalb mit
      CSS: das Feld wird rot, ein Hinweis direkt dahinter (.feld-hinweis) bleibt stehen. */
@@ -122,14 +161,14 @@
   .feld-hinweis { display: none; color: var(--rot); font-size: 0.95em; margin: 0.3em 0 0; }
   input:invalid + .feld-hinweis { display: block; }
   input:focus-visible, button:focus-visible, .knopf:focus-visible, main a:focus-visible {
-    outline: 2px solid var(--gruen); outline-offset: 1px;
+    outline: 2px solid var(--akzent); outline-offset: 2px;
   }
   button, .knopf {
     display: inline-block;
-    background: var(--gruen);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
+    background: var(--akzent);
+    color: var(--akzent-text);
+    border: 1px solid var(--akzent);
+    border-radius: 4px;
     padding: 0.8em 1.2em;
     font-family: inherit;
     font-size: 1.1em;
@@ -137,11 +176,11 @@
     text-decoration: none;
     text-align: center;
   }
-  button:active, .knopf:active { background: var(--gruen-dunkel); }
+  button:active, .knopf:active { background: var(--akzent-dunkel); }
   .knopf-sekundaer {
     background: var(--karte);
     color: var(--text);
-    border: 1px solid var(--grau-rand);
+    border: 1px solid var(--rand);
   }
   .knopf-sekundaer:active { background: var(--grau-hell); }
   table { width: 100%; border-collapse: collapse; }
@@ -164,12 +203,17 @@
     padding: 0.2em 0.6em; border-radius: 12px; font-size: 0.85em; white-space: nowrap;
   }
   .status svg { width: 14px; height: 14px; flex: none; }
-  .status-offen { background: var(--warnung-hg); color: var(--warnung); }
+  /* Dünner Rand in der Farbe des Zustands (Marco 21.11.2026): die Flächen allein heben sich vom
+     Grund kaum ab (1,0-1,2:1), so bleibt die Pille auch draußen als Form erkennbar. */
+  .status { border: 1px solid currentColor; }
+  .status-offen { background: var(--warnung-hg); color: var(--warnung); border-color: var(--signal); }
   .status-fertig { background: var(--fertig-hg); color: var(--fertig); }
-  /* Weitere Stufen der Teilnehmerliste (UX-Test Web 19.11.2026, B2), Kontrast mindestens 4,5:1. */
+  /* Weitere Stufen der Teilnehmerliste (UX-Test Web 19.11.2026, B2), Kontrast mindestens 4,5:1.
+     Disqualifiziert und Abbruch in Tinte auf hellem Grau (Marco 21.11.2026: kein Rot neben dem
+     Signal-Orange; das Wort sagt, was gilt). */
   .status-teilweise { background: #E6EEF6; color: #1F4A73; }
-  .status-dq { background: var(--fehler-hg); color: var(--rot); }
-  .status-abbruch { background: #EDE7F3; color: #4F3A6B; }
+  .status-dq { background: #E4E8E5; color: var(--text); }
+  .status-abbruch { background: #E4E8E5; color: var(--text); }
   .startnummer { font-weight: 700; color: var(--gedaempft); margin-right: 0.4em; }
   small { color: var(--gedaempft); }
   footer {

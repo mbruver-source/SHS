@@ -928,6 +928,8 @@ def teilnehmerliste(conn):
         for t in alle_teilnehmer
     ]
     meldung = _meldung_nach_einzelseite(conn)
+    if meldung:
+        meldung += _letzter_start_hinweis()
     # Marco 10.11.2026 (UI-Abgleich, wie im Desktop-Programm): Suche nach Name oder Hund. Ohne
     # JavaScript (die Sicherheitsrichtlinie erlaubt keine Skripte), deshalb als GET-Formular:
     # jedes Wort muss in Nachname, Vorname oder Hund vorkommen (Groß-/Kleinschreibung egal).
@@ -1221,6 +1223,8 @@ def ergebnis_erfassen(conn, teilnehmer_id):
         # der QS in U13): Bestätigung wie in Liste und Tabelle; andere Werte zeigen nichts.
         meldung = {"1": "Bewertungsbogen gespeichert.",
                    "0": "Keine Änderungen im Bewertungsbogen zu speichern."}.get(request.args.get("gespeichert", ""))
+        if meldung:
+            meldung += _letzter_start_hinweis()
 
     ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
     gespeicherter_abbruch = _abbruch_code(ergebnis)
@@ -1779,7 +1783,8 @@ def ergebnistabelle(conn):
         except ValueError:
             anzahl = None
         if anzahl is not None and 0 <= anzahl <= 100000:
-            meldung = _gespeichert_text(anzahl) if anzahl else "Keine Änderungen zu speichern."
+            meldung = (_gespeichert_text(anzahl) if anzahl else "Keine Änderungen zu speichern.") \
+                + _letzter_start_hinweis()
         # Rückmeldung von /ergebnisse/boegen.pdf: nur feste Texte zu festen Codes, nie Text aus der Adresse.
         boegen_hinweis = _BOEGEN_PDF_HINWEISE.get(request.args.get("boegen", ""))
         if boegen_hinweis is not None:
@@ -1900,7 +1905,9 @@ def ergebnis_boegen_pdf(conn):
 # prüfen und schreiben _tabelle_pruefen/_tabelle_schreiben ausschließlich diese Disziplin, die
 # anderen Disziplinen eines Dreikampf-Teilnehmers bleiben unangetastet. Dazu kommen die Notiz
 # (Lost-Update-Schutz über geladen_notiz_<id>, bei Konflikt wird nichts überschrieben) und seit
-# 19.11.2026 die Herkunft (?von=liste|teilnehmer, Rückweg über _bogen_ruecksprung).
+# 19.11.2026 die Herkunft (?von=liste|teilnehmer, Rückweg über _bogen_ruecksprung). Seit 21.11.2026
+# blättert „Speichern, nächster Start“ zur nächsten Startnummer derselben Disziplin
+# (_naechster_start, _vorheriger_start_text, _letzter_start_hinweis).
 
 _BOGEN_NOTIZ_FELD = "notiz_{}"
 _BOGEN_NOTIZ_GELADEN = "geladen_notiz_{}"
@@ -1960,18 +1967,63 @@ _BOGEN_HERKUNFT_TEXT = {"liste": "zur Teilnehmerliste", "teilnehmer": "zur Seite
 
 
 def _bogen_ruecksprung(von: str | None, teilnehmer_id: int, filter_: dict,
-                       geschrieben: bool | None = None) -> str:
+                       geschrieben: bool | None = None, letzter: bool = False) -> str:
     """Ziel von „Speichern und zurück …“ (mit `geschrieben` für die Bestätigung dort) bzw. von
     „Abbrechen / Zurück“ (geschrieben None): Teilnehmerliste, Seite des Teilnehmers oder die Zeile
-    in der Tabelle (nur dort mit den Tabellenfiltern)."""
+    in der Tabelle (nur dort mit den Tabellenfiltern). `letzter` hängt ?letzter=1 an: „Speichern,
+    nächster Start“ beim letzten Start der Disziplin (Hinweis dort, _letzter_start_hinweis)."""
+    zusatz = {"letzter": 1} if letzter else {}
     if von == "liste":
         if geschrieben is None:
             return url_for("teilnehmerliste")
-        return url_for("teilnehmerliste", gespeichert=teilnehmer_id, aenderung=int(geschrieben))
-    bestaetigung = {} if geschrieben is None else {"gespeichert": int(geschrieben)}
+        return url_for("teilnehmerliste", gespeichert=teilnehmer_id, aenderung=int(geschrieben), **zusatz)
+    bestaetigung = {} if geschrieben is None else {"gespeichert": int(geschrieben), **zusatz}
     if von == "teilnehmer":
         return url_for("ergebnis_erfassen", teilnehmer_id=teilnehmer_id, **bestaetigung)
     return url_for("ergebnistabelle", _anchor=f"zeile-{teilnehmer_id}", **bestaetigung, **filter_)
+
+
+def _naechster_start(conn, teilnehmer_id: int, disziplin: str, filter_: dict) -> int | None:
+    """ID des nächsten Starts derselben Disziplin für „Speichern, nächster Start“ (Marco
+    21.11.2026): der nächste teilnehmende Teilnehmer in der Reihenfolge der Tabelle (nach
+    Startnummer, ohne Startnummer am Ende), der diese Disziplin hat - bewertet oder nicht. Kam der
+    Bogen aus einer gefilterten Tabelle (lk, nr, q in `filter_`), wird innerhalb dieses Filters
+    geblättert (Marco 21.11.2026: „was der Richter gerade sieht“). None nach dem letzten."""
+    tabellen_filter = {schluessel: filter_.get(schluessel, "") for schluessel in ("lk", "nr", "q")}
+    reihe = [t["id"] for t in _tabellen_teilnehmer(conn, tabellen_filter) if disziplin in _disziplinen_von(t)]
+    if teilnehmer_id not in reihe:
+        return None
+    position = reihe.index(teilnehmer_id)
+    return reihe[position + 1] if position + 1 < len(reihe) else None
+
+
+def _naechster_teilnehmer(conn, teilnehmer_id: int, disziplin: str, filter_: dict) -> dict | None:
+    """Teilnehmer des nächsten Starts (für den Hinweis unter dem Hauptknopf), None beim letzten."""
+    naechster = _naechster_start(conn, teilnehmer_id, disziplin, filter_)
+    return db.get_teilnehmer(conn, naechster) if naechster is not None else None
+
+
+def _letzter_start_hinweis() -> str:
+    """Zusatz zur Bestätigung, wenn „Speichern, nächster Start“ beim letzten Start der Disziplin
+    zurückgeführt hat (?letzter=1); sonst leer."""
+    return " Das war der letzte Start in dieser Disziplin." if request.args.get("letzter") == "1" else ""
+
+
+def _vorheriger_start_text(conn) -> str | None:
+    """Bestätigung auf dem Bogen nach „Speichern, nächster Start“ (?vorher=<id>&gespeichert=0|1):
+    nennt, wer gerade gespeichert wurde - der Bogen zeigt ja schon den nächsten Start. Ungültige
+    Werte zeigen nichts Eigenes."""
+    wert = request.args.get("vorher", "")
+    if not (wert.isascii() and wert.isdigit()) or len(wert) > 9:
+        return None
+    vorher = db.get_teilnehmer(conn, int(wert))
+    if vorher is None or vorher.get("keine_teilnahme"):
+        return None
+    nummer = f"Start-Nr. {vorher['startnummer']}, " if vorher.get("startnummer") else ""
+    name = f"{nummer}{vorher['nachname']}, {vorher['vorname']}"
+    if request.args.get("gespeichert") == "0":
+        return f"Keine Änderungen zu speichern ({name}). Weiter mit dem nächsten Start."
+    return f"Gespeichert: {name}. Weiter mit dem nächsten Start."
 
 
 @app.route("/bewertungsbogen/<int:teilnehmer_id>/<disziplin>", methods=["GET", "POST"])
@@ -1979,11 +2031,16 @@ def _bogen_ruecksprung(von: str | None, teilnehmer_id: int, filter_: dict,
 def bewertungsbogen(conn, teilnehmer_id, disziplin):
     """GET zeigt den Bogen einer Disziplin (vorbelegt mit dem gespeicherten Stand), POST speichert
     (siehe Abschnittskommentar oben). 404 für unbekannte oder nicht teilnehmende Teilnehmer und
-    für eine Disziplin, die nicht zur Prüfung des Teilnehmers gehört. „Speichern“ bleibt auf dem
-    Bogen (und zeigt Gesamtpunktzahl und Wertnote), „Speichern und zurück …“ geht dorthin, woher der
-    Bogen geöffnet wurde: mit ?von=liste zur Teilnehmerliste, mit ?von=teilnehmer zur Seite je
-    Teilnehmer, sonst zur Zeile in der Tabelle; dann hängt der Filter der Tabelle (lk, nr, q) an der
-    Adresse (auf den beiden anderen Wegen nicht)."""
+    für eine Disziplin, die nicht zur Prüfung des Teilnehmers gehört. Knöpfe (Feld `weiter`):
+    - „Speichern, nächster Start“ (naechster, Hauptknopf seit 21.11.2026) öffnet den Bogen derselben
+      Disziplin für die nächste Startnummer (_naechster_start, bei gefilterter Tabelle innerhalb des
+      Filters) mit ?vorher=<id>; nach dem letzten wie „Speichern und zurück …“, mit ?letzter=1;
+    - „Nur speichern“ (bogen) bleibt auf dem Bogen (und zeigt Gesamtpunktzahl und Wertnote);
+    - „Speichern und zurück …“ (tabelle) geht dorthin, woher der Bogen geöffnet wurde: mit
+      ?von=liste zur Teilnehmerliste, mit ?von=teilnehmer zur Seite je Teilnehmer, sonst zur Zeile in
+      der Tabelle; dann hängt der Filter der Tabelle (lk, nr, q) an der Adresse (auf den beiden
+      anderen Wegen nicht).
+    Bei Fehler oder Konflikt bleibt der Bogen stehen, egal welcher Knopf."""
     teilnehmer = db.get_teilnehmer(conn, teilnehmer_id)
     if teilnehmer is None or teilnehmer.get("keine_teilnahme") or disziplin not in _disziplinen_von(teilnehmer):
         abort(404)
@@ -2025,6 +2082,12 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
             if not konflikt_texte:
                 if form.get("weiter") == "tabelle":  # „Speichern und zurück …“
                     return redirect(_bogen_ruecksprung(von, teilnehmer_id, filter_, geschrieben))
+                if form.get("weiter") == "naechster":  # „Speichern, nächster Start“ (Marco 21.11.2026)
+                    naechster = _naechster_start(conn, teilnehmer_id, disziplin, filter_)
+                    if naechster is None:  # letzter Start: zurück, woher der Bogen kam
+                        return redirect(_bogen_ruecksprung(von, teilnehmer_id, filter_, geschrieben, letzter=True))
+                    return redirect(url_for("bewertungsbogen", teilnehmer_id=naechster, disziplin=disziplin,
+                                            vorher=teilnehmer_id, gespeichert=int(geschrieben), **filter_))
                 return redirect(url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin,
                                         gespeichert=int(geschrieben), **filter_))
             konflikt = konflikt_texte
@@ -2033,7 +2096,8 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
     else:
         gespeichert_arg = request.args.get("gespeichert")
         if gespeichert_arg in ("0", "1"):
-            meldung = "Gespeichert." if gespeichert_arg == "1" else "Keine Änderungen zu speichern."
+            meldung = _vorheriger_start_text(conn) or (
+                "Gespeichert." if gespeichert_arg == "1" else "Keine Änderungen zu speichern.")
 
     ergebnis = db.get_ergebnis(conn, teilnehmer_id) or {}
     zeile = _tabellenzeile(sicht, ergebnis, formular, fehler=fehler, konflikt=konflikt)
@@ -2062,6 +2126,8 @@ def bewertungsbogen(conn, teilnehmer_id, disziplin):
         anzeige_max=db.ANZEIGE_MAX,
         meldung=meldung,
         speichern_url=url_for("bewertungsbogen", teilnehmer_id=teilnehmer_id, disziplin=disziplin, **filter_),
+        # Wer nach „Speichern, nächster Start“ kommt (Persona Heinz, 21.11.2026); None beim letzten.
+        naechster=_naechster_teilnehmer(conn, teilnehmer_id, disziplin, filter_),
         tabelle_url=_bogen_ruecksprung(von, teilnehmer_id, filter_),
         zurueck_ziel=_BOGEN_HERKUNFT_TEXT.get(von, "zur Tabelle"),
     )

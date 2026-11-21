@@ -332,7 +332,7 @@ Kommandozeile veröffentlichen, über die Web-Oberfläche zurückholen).
    dieser Link funktioniert nur einmal, danach die heruntergeladene Datei die
    ursprüngliche Termin-Datei in der Desktop-Version ersetzen. Danach laufen
    PDF-Export/Auswertung/Zeitplan dort wie gewohnt weiter.
-5. **Löschen:** ein veröffentlichter Termin kann auf derselben Seite über „Löschen“
+5. **Löschen:** ein veröffentlichter Termin kann auf derselben Seite über „Termin löschen“ (rot umrandet)
    entfernt werden (z. B. nach einem Versehen beim Veröffentlichen) – endgültig, die
    Web-Daten dieses Termins sind danach weg (die lokale Termin-Datei ist davon nicht
    betroffen).

@@ -2,6 +2,234 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## Version 1.0.63 (21.11.2026, Build auf Marcos Anforderung)
+
+Gebündelt seit 1.0.62:
+- **Web-Ausbau:**
+  - Veröffentlichen und Zurückholen direkt aus dem Desktop per HTTPS mit Fingerabdruck;
+  - Ergebnistabelle, Online-Bewertungsbogen mit Notiz, HTTPS-Proxy;
+  - UX-Test Web U1–U19.
+- **Erscheinungsbild „Schiefer und Signal“** für Desktop, Web und Website, mit neuer Schrift.
+- **Neu im Web-Bogen:** „Speichern, nächster Start“.
+- **Neu im Zeitplan:** Großansicht je Richter.
+- **Wünsche der Persona Heinz** umgesetzt bzw. entschieden.
+
+Die Einzelschritte stehen in den Abschnitten unten. Die „Noch offen“-Listen der Einträge vom 21.11.2026 sind mit diesem Build erledigt; noch offen ist nur, was `OFFEN.md` nennt.
+
+**Build-Vorbereitung:**
+- Verifikation über `v1.0.62..HEAD` plus Arbeitsstand: keine Funktionsfehler.
+- Marcos Entscheidungen zu den Befunden:
+  1. Doku-Korrekturen umgesetzt:
+     - Handbuch: Farben für „disqualifiziert/Abbruch“ im Web, Reihenfolge der Bogen-Knöpfe, „ocker“ im dunklen Design;
+     - F1-Hilfe: Großansicht;
+     - Design-Bericht, Kommentar in `app.py`, `schrift/README.md`.
+  2. Sicherheitskorrektur der Web-Verbindung:
+     - Kommentare und Testname allgemein gefasst;
+     - die neue Kennung S-U14 ersetzt „H-3“, das schon an einen veröffentlichten Hinweis vergeben war.
+
+     Da die Web-Verbindung erst mit 1.0.63 erscheint, betrifft sie nie veröffentlichten Code; die Release Notes nennen sie deshalb nicht.
+  3. `tools/web_screenshots.py` löscht das Zielbild vorher, prüft es danach und versucht es bis zu dreimal (Edge schrieb gelegentlich kein Bild, ohne Fehler zu melden).
+  4. Restpunkte des UX-Tests Web:
+     - A9 (Safari/iOS, Zertifikatstexte live) und B24 (CSS-Aufräumpunkte) in `OFFEN.md`;
+     - C44 (Zeitplan bei „Sehr groß“) in K01;
+     - A8 abgeschlossen.
+  5. Die Container-CI prüft zusätzlich die Web-Schrift im Image (`.github/workflows/build-container.yml`).
+
+**Release Notes:** neu geschrieben.
+
+**Version:** `bump_version.py` auf 1.0.63.
+
+**Erzeugt:**
+- Screenshots (Desktop und Web) mit der neuen Version;
+- `docs/HANDBUCH.pdf` und `docs/INSTALLATION_KURZ.pdf`.
+
+**Tests:**
+- Unittests 1088 OK (210 übersprungen, PostgreSQL nur in der CI);
+- SHS Test Suite gesamt grün: 1663 bestanden, 0 fehlgeschlagen.
+
+**Hinweis:** Marcos lokaler Web-Stack läuft noch mit dem Test-Image `localhost/shs-web:vor-build`; nach dem Release `podman-compose up -d` ohne `SHS_WEB_IMAGE`.
+
+## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)
+
+**`docs/assets/site.css`:**
+- Farben wie Programm und Web: Beton, Tinte, Schiefer; Dunkelmodus aus dem Desktop-Design „Dunkel“.
+- Das Absperrband-Gelb erscheint als einziges Signal in der 4-px-Linie unter dem Kopf; auch der Fokus im Kopf ist gelb.
+- Radien 4–6 px, keine weichen Schatten, Nebenknöpfe mit Rand (3:1).
+
+**Schrift:** Atkinson Hyperlegible Next (Regular, SemiBold, Bold) samt OFL-Lizenz liegt in `docs/assets/schrift/`, nur vom eigenen Server.
+
+**Schablonen-Merkmale entfernt:**
+- Versalien in Schreibmaschinenschrift für Stichwort und Kapitel-Titel.
+- Die Kürzel über den Funktionskarten in `docs/index.html` („TERMINE“ über „Termine“), die nur die Überschrift wiederholten.
+- Die Seite `behaeltnisse/` (eigenes 3D-Werkzeug mit eigenem Stil) bleibt unverändert.
+
+**Screenshots:** alle Bilder in `docs/bilder/` mit `tools/screenshots.py` und `tools/web_screenshots.py` neu aufgenommen (29 Dateien, Desktop und Web im neuen Aussehen, Version noch 1.0.62). Nach dem Versionsbump werden sie beim Build noch einmal aufgenommen.
+
+**Geprüft:**
+- lokal über `python -m http.server`;
+- mit Edge hell und dunkel bei 1280 px;
+- im Browser-Fenster bei 375 px: keine seitliche Überbreite, alle Schriftschnitte geladen.
+
+Nach Marcos Regel geht die Website erst mit dem Release online.
+
+## 21.11.2026: Wünsche 3 und 5, Großansicht im Zeitplan (Marco, Arbeitsstand, nichts committet)
+
+**Wunsch 3 (Null mit Strich):** bleibt so, Marco gefällt es. Als akzeptierter Punkt C43 in `OFFEN.md` und `entscheidungen/` festgehalten.
+
+**Wunsch 5 (Web):**
+- Löschknöpfe haben die neue Klasse `.knopf-gefahr`: weiß, roter Rand, rote halbfette Schrift. Das gilt für „Termin löschen“ (vorher nur „Löschen“) und „Löschen“ bei den Benutzern.
+- Fehlermeldungen (`.fehler`) haben ein Warnzeichen (Tabler alert-triangle als data:-Bild im CSS, die CSP erlaubt `img-src data:`) und einen kräftigeren Rand. Konflikte (gelb) haben dasselbe Zeichen in Tinte.
+
+**Zeitplan (Marco: Knopf, um einen Richter in den Vordergrund zu holen):**
+- Jede Richterspalte hat oben rechts „Groß anzeigen“. Dann ist nur diese Spalte über die ganze Breite zu sehen, voll bedienbar (`_fokus_richter_id`, `_gross_anzeigen`); „Alle Richter zeigen“ führt zurück.
+- Wird der Richter gelöscht, erscheinen wieder alle Spalten.
+- Geprüft bei „Sehr groß“ mit 3 Richtern auf 1366 px.
+
+**Tests:** neu `test_richterspalte_gross_anzeigen_und_zurueck` und `test_loeschen_auffaellig_und_fehler_mit_warnzeichen`. Handbuch und `OFFEN.md` A8 sind nachgezogen.
+
+**Verifikation (Agent `verifikation`):**
+- Befund behoben: Die Spaltenpfeile wurden mit `setVisible(True)` geschaltet, bevor sie ein Elternfenster hatten, und erschienen dadurch kurz als eigenes Fenster. Jetzt werden sie nur in der Großansicht ausgeblendet.
+- Nachgezogen:
+  - Der Tastaturfokus bleibt nach dem Umschalten auf dem Knopf.
+  - „Richter hinzufügen“, „Automatisch verteilen“ und „Pause bei allen“ verlassen die Großansicht (`_alle_richter_zeigen`).
+  - Tests: Pfeile ausgeblendet, Fokus, kein Knopf als eigenes Fenster, Hinzufügen; Warnzeichen in Tinte.
+  - Doku: README_CONTAINER („Termin löschen“), Heinz-Bericht, Fundstellen von C43, Kommentar in `tools/drittlizenzen.py`, Modulreferenz.
+
+## 21.11.2026: Bewertung durch die Persona Heinz, Wünsche 1, 2 und 4 umgesetzt (Marco, Arbeitsstand, nichts committet)
+
+Marco wollte wissen, wie der Experte aus dem UX-Test die grafischen Änderungen bewertet.
+
+**Bewertung:**
+- Die Persona Heinz (E-A) hat zwölf Bildpaare verglichen. „vorher“ stammt aus dem Commit `bdbef92` in einem vorübergehenden Arbeitsordner, „nachher“ aus dem Arbeitsstand.
+- Ergebnis: Er würde mit dem neuen Aussehen arbeiten. „Zustand auf einen Blick“ und „draußen am Handy“ verbessern sich je von 3 auf 2.
+- Kritik: Zeitplan enger, Null mit Strich, × bei Disqualifiziert/Abbruch, Bogen-Knöpfe.
+- Bericht und Einordnung: `berichte/Design-Bewertung-2026-11-Heinz.md`.
+
+Umgesetzt hat Marco die Wünsche 1, 2 und 4:
+1. **Ergebniserfassung (`desktop_ergebnis.py`):**
+   - Disqualifiziert und Abbruch zeigen einen Haken in Tinte mit dem kurzen Wort statt eines ×.
+   - Der Grund steht in der Abbruch-Spalte und im Tooltip und wird nicht mehr abgeschnitten.
+2. **Zeitplan (`desktop_zeitplan.py`):** Die Richterspalten wachsen in den freien Platz (Streckfaktor 1, höchstens `_RICHTER_SPALTE_MAX` = 460 px).
+4. **Web-Bogen:**
+   - Hinweis „Danach: Start-Nr. …“ bzw. „Das ist der letzte Start …“ unter dem Hauptknopf (`_naechster_teilnehmer`).
+   - „Abbrechen“ ist ein Textlink.
+
+**Tests:** angepasst in `test_gui_ergebnis.py`, neu in `test_gui_zeitplan.py` (Spaltenbreite) und `test_app_web.py` (Hinweis, Link). Das Handbuch ist nachgezogen.
+
+**Verifikation (Agent `verifikation`):** in Ordnung, gemessen bei 1366 px mit 1, 2 und 5 Richtern. Kleinigkeiten nachgezogen:
+- veralteter Kommentar;
+- Modulreferenz;
+- `OFFEN.md` A8 nennt jetzt die offenen Wünsche;
+- Tests für viele Richter, den Hinweis bei gefilterter Tabelle und maskierte Namen.
+
+Bekannt seit vorher: Bei „Sehr groß“ und drei Richtern auf 1366 px werden die Zeitplan-Knöpfe gequetscht.
+
+Der Test-Container (`localhost/shs-web:vor-build`) ist mit diesem Stand neu erzeugt.
+
+**Offen:**
+- Wünsche 3 (Null mit Strich: die Schrift hat keine Null ohne Strich) und 5 (Termin „Löschen“, Fehlermeldung im Web ohne Zeichen).
+- `berichte/Design-Bewertung-2026-11-Heinz.md` ist noch nicht versioniert.
+
+## 21.11.2026: Klick-Test-Demo und Web-Container für den Test vor dem Build (Marco)
+
+**Demo-Version (`SHS-Demo-vor-Build`, außerhalb des Repos):**
+- `demo_erzeugen.py` hat beide Demo-Termine neu erzeugt.
+- `Checkliste.md` ist neu, mit den Abschnitten J (Desktop „Schiefer und Signal“) und K (Web samt „Speichern, nächster Start“).
+- Die vorige Liste liegt als `Checkliste_2026-11-12.md` daneben.
+
+**Web-Container:** Marcos Stack im Repo-Ordner wurde mit `SHS_WEB_IMAGE=localhost/shs-web:vor-build` und `podman-compose up -d --build` aus dem Arbeitsstand gebaut. Das Image 1.0.62 bleibt unangetastet, die Daten des Stacks bleiben erhalten. Alle drei Container sind gesund; unter https://localhost:5443 sind die neuen Farben, die Schrift und die Lizenzzeile ausgeliefert.
+
+Zurück auf das Release-Image: `podman-compose up -d` ohne die Variable. Marco testet; kein Build, kein Commit.
+
+## 21.11.2026: Web im Erscheinungsbild „Schiefer und Signal“, „Speichern, nächster Start“ (Marco, Arbeitsstand, nichts committet)
+
+Marco hat die Umsetzung der Web-Version freigegeben. Er hat entschieden:
+- nach dem letzten Start zurück mit Hinweis;
+- die Schrift wird mitgeliefert;
+- nach der Verifikation: aus einer gefilterten Tabelle wird innerhalb des Filters geblättert;
+- Status-Pillen bekommen einen dünnen Rand;
+- in der Terminverwaltung ist nach dem Zurückholen der Download der Hauptknopf.
+
+**Farben (`templates/base.html`):**
+- Die Werte entsprechen der Desktop-Version: Beton, Tinte, Schiefer, Absperrband für „offen“ und Konflikte (mit Signal-Balken), `--rand` mit mindestens 3:1 für Felder und Knöpfe.
+- Fokus im dunklen Kopf ist gelb.
+- „disqualifiziert“ und „Abbruch“ stehen in Tinte auf Grau statt rot bzw. violett.
+- `--gruen` heißt jetzt `--akzent`. Radien 4–6 px, kein Schatten.
+- Ein Hauptknopf je Ansicht: In der Ergebnistabelle sind „Filtern“ und „Benutzte Bögen als PDF“ jetzt sekundär, in der Teilnehmerliste „Alle anzeigen“.
+
+**Schrift:**
+- Atkinson Hyperlegible Next, Regular und SemiBold, mit Lizenz in `static/schrift/`, per `@font-face` nur vom eigenen Server (die CSP erlaubt 'self').
+- Eingetragen in der Web-Lizenzliste in `tools/drittlizenzen.py`; das `Containerfile` kopiert die Lizenz vor dem Lauf.
+
+**Bewertungsbogen:**
+- Punktefelder sind groß und halbfett, mit Rahmen in Tinte und Ziffern gleicher Breite.
+- Neuer Hauptknopf „Speichern, nächster Start“ (`weiter=naechster`, steht zuerst, die Eingabetaste löst ihn aus). Er führt zur nächsten Startnummer mit derselben Disziplin, in der Reihenfolge der Tabelle (`_naechster_start`); die Bestätigung nennt den gerade gespeicherten Start (`?vorher=`).
+- Nach dem letzten Start geht es zurück zur Herkunft mit `?letzter=1` und dem Hinweis „Das war der letzte Start in dieser Disziplin.“ in Liste, Einzelseite und Tabelle.
+- „Speichern“ heißt jetzt „Nur speichern“; „Speichern und zurück …“ ist sekundär.
+
+**Tests (`test_app_web.py`):**
+- neun neue Bogen-Tests: Hauptknopf zuerst, Reihenfolge, Überspringen fremder Disziplinen, letzter Start auf allen drei Wegen, Filter, abgemeldete und Teilnehmer ohne Startnummer, Konflikt, Fehler, ungültiges `vorher`;
+- zwei zum Erscheinungsbild: Schrift ausgeliefert, Farbwerte.
+
+**Verifikation (Agent `verifikation`):** Befund „Filter geht beim Weiterblättern verloren“ nach Marcos Entscheidung behoben. Doku und Kommentare nachgezogen: UML 10b, Docstring der Bogen-Route, Modulreferenz, Bericht, Kommentare zu den Lizenzen.
+
+**Dokumentation:** Handbuch, Modulreferenz und `UML.md` sind nachgezogen.
+
+**Noch offen:**
+- `static/schrift/` ist noch nicht versioniert und muss mit in den Commit (Tests, Lizenzliste und das `COPY` im `Containerfile` erwarten den Ordner).
+- Web-Screenshots in `docs/bilder/` (beim Build) und die Website.
+
+## 21.11.2026: Desktop im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet)
+
+Marco hat die Umsetzung der Desktop-Version freigegeben. Einzelheiten stehen in
+`berichte/Design-Richtung-2026-11.md`, Abschnitt „Umsetzung Desktop“.
+
+**Designs (`desktop_darstellung.py`):**
+- Es gibt `schiefer` (Standard), `dunkel` und `kontrast`.
+- Der Akzent gehört zum Design und ist geteilt (`AKZENT`, `AKZENT_TEXT`, `LINK`, `AUSWAHL`).
+- `RAND` (mindestens 3:1) ist getrennt von `TRENNER`.
+- Die Akzentfarb-Wahl (`_THEMES`) und das Design „Hell“ sind entfallen. Gespeichertes `sand`, `beagle` oder `hell` wird zu `schiefer`.
+- Das Menü heißt „Ansicht → Design“ (Hauptfenster und Startbildschirm).
+- Symbole auf Akzent-Knöpfen sind jetzt `AKZENT_TEXT` statt fest weiß; das Häkchen hat je Farbe eine eigene Datei.
+
+**Ergebniserfassung (`desktop_ergebnis.py`, `desktop_ergebnis_zellen.py`):**
+- „nicht gespeichert“ steht in Tinte mit Warnsymbol.
+- „disqualifiziert“ und „Abbruch“ stehen in Tinte mit × statt mit grünem Haken.
+- Punkte sind halbfett, mit gleich breiten Ziffern.
+
+**Schrift:**
+- Atkinson Hyperlegible Next (OFL 1.1, offizielles Repo, Commit in `schrift/README.md`) liegt im neuen Ordner `schrift/`.
+- Eingebunden in `build.spec`, den Selbsttest-Schritt „Schrift der Oberfläche“ und `tools/drittlizenzen.py` (nur Desktop).
+- Rückfall auf die Systemschrift, wenn die Dateien fehlen.
+
+**Tests:**
+- `test_theme.py` ist neu geschrieben. Er hat eine Referenz für Schiefer und prüft zusätzlich:
+  - Ränder mit mindestens 3:1,
+  - Schrift auf dem Akzent mit mindestens 4,5:1,
+  - Link/Fokus mit mindestens 3:1,
+  - die Umstellung alter Einstellungen.
+- `test_gui_darstellung.py`, `test_gui_termin.py`, `test_gui_ergebnis.py`, `test_drittlizenzen.py` und `gui_hilfen.py` sind angepasst.
+
+**Dokumentation und Werkzeuge:**
+- Hilfe, Handbuch, Architektur und Modulreferenz sind nachgezogen.
+- `tools/screenshots.py` und `tools/lasttest_ergebniserfassung.py` sind angepasst.
+
+**Verifikation (Agent `verifikation`):** kein funktionaler Fehler. Nachgezogen:
+- veraltete Kommentare und Texte in `UML.md`, `desktop_gemeinsam.py`, `desktop_ergebnis.py`, `desktop_darstellung.py`, `schrift/README.md` und im Handbuch (Statuszeichen);
+- Tests für Programmschrift, Rückfall auf die Systemschrift und gleich breite Ziffern.
+
+SHS Test Suite gesamt grün (1648 bestanden).
+
+**Gesperrter Haken (Marco: „heller machen“):** Eine gesperrte, angehakte Box hat jetzt ein eigenes Häkchen (`HAKEN_AUS`), mit neuem Test:
+- im dunklen Design weiß, 5,8:1 (vorher dunkel mit 2,9:1);
+- bei Schiefer dunkel, 6,8:1 (vorher weiß mit 2,4:1);
+- bei Hohem Kontrast weiß, 5,1:1.
+
+**Noch offen:**
+- `schrift/` muss beim Commit mit hinein (`build.spec` und Selbsttest erwarten den Ordner).
+- Screenshots in `docs/bilder/` sind nicht neu aufgenommen (beim Build).
+- Web und Website zeigen weiter „Beagle“ (OFFEN A8).
+
 ## 21.11.2026: Design-Richtung „Schiefer und Signal“ abgestimmt (Marco, noch keine Umsetzung)
 
 Design-Gespräch zu Desktop- und Web-Version. Die Kritik an „Beagle“ betraf vier Punkte:
@@ -89,7 +317,7 @@ Stellen. Verifikation in Ordnung; danach den Rückfall-Fänger enger gefasst und
 
 ## 20.11.2026: UX-Test Web U14 – Sicherheitskorrektur Web-Verbindung
 
-Sicherheitskorrektur H-3 an der Web-Verbindung des Desktops, Details folgen nach dem Release. Handbuch Kap.
+Sicherheitskorrektur S-U14 an der Web-Verbindung des Desktops, Details folgen nach dem Release. Handbuch Kap.
 Web-Verbindung um einen Satz ergänzt. GUI-Tests ergänzt (Gegenprobe ok). Verifikation und `qs-sicherheit` lieferten
 Nachbesserungen, alle umgesetzt.
 

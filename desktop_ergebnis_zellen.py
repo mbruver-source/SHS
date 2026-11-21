@@ -22,6 +22,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QBrush,
+    QFont,
     QPainter,
     QPalette,
     QPen,
@@ -47,6 +48,7 @@ from shs_core import (
 )
 from desktop_darstellung import (
     _farbe,
+    ziffern_gleich_breit,
 )
 from desktop_gemeinsam import (
     _ERGEBNIS_SPALTEN_JE_DISZIPLIN,
@@ -456,7 +458,12 @@ class _PunkteDelegate(QStyledItemDelegate):
         painter.setBrush(fuellung)
         painter.drawRoundedRect(feld, 4, 4)
         if aktiv and text:
-            painter.setFont(opt.font)  # Schrift der Tabelle wie in den Info-Spalten
+            # Schrift der Tabelle wie in den Info-Spalten, die Punkte halbfett: Die Zahlen sind
+            # der eigentliche Inhalt („Schiefer und Signal“, Marco 21.11.2026), mit gleich
+            # breiten Ziffern, damit sie untereinander stehen.
+            schrift = ziffern_gleich_breit(opt.font)
+            schrift.setWeight(QFont.DemiBold)
+            painter.setFont(schrift)
             painter.setPen(opt.palette.color(QPalette.Text))
             painter.drawText(feld, Qt.AlignCenter, text)
         painter.restore()

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 _HILFE_HTML = """
 <h2>Hilfe – SHS Prüfungsprogramm</h2>
 <p><b>Schrift zu klein?</b> Menü „Ansicht“ → „Schriftgröße“ → „Groß“ oder „Sehr groß“.
-<b>Schrift zu blass?</b> Menü „Ansicht“ → „Hintergrund“ → „Hoher Kontrast“ (schwarz auf weiß,
+<b>Schrift zu blass?</b> Menü „Ansicht“ → „Design“ → „Hoher Kontrast“ (schwarz auf weiß,
 größere Kontraste). Die Wahl bleibt gespeichert. Alles noch größer (unter Windows):
 Einstellungen → System → Anzeige → „Skalierung“, z. B. 125 % wählen.</p>
 
@@ -126,6 +126,9 @@ viele Richter-Spalten sichtbar. Dreikampf-Teams setzt der Vorschlag nie gleichze
 hält den "Mindestabstand Team" ein; steht ein Team doch doppelt (z. B. nach dem Verschieben),
 sind die Zeilen rot mit einem Warndreieck markiert und oben in der Seitenleiste aufgeführt.
 "Zeitplan (PDF)…" exportiert eine Seite je Richter.</p>
+<p>Bei wenigen Richtern werden die Spalten breiter. "Groß anzeigen" oben rechts in einer Spalte
+zeigt nur diesen Richter über die ganze Breite, zum Ansehen und Einrichten (praktisch bei großer
+Schrift oder vielen Richtern); "Alle Richter zeigen" führt zurück.</p>
 <p><b>Wichtig zu "Entfernen":</b> Ein Prüfungsblock speichert nur Art/Leistungsklasse/
 Disziplin und die Dauer je Teilnehmer – WER genau darin geprüft wird, wird bei jeder
 Anzeige automatisch aus den aktuellen Teilnehmerdaten ermittelt, nicht einzeln gespeichert.
@@ -281,11 +284,10 @@ Ergebnisse.</p>
 Esc bricht ab.</p>
 
 <h3>Aussehen (Menü "Ansicht")</h3>
-<p>Unter "Hintergrund" wählst du das Design: Beagle (Standard, warme Creme-Töne), Hell,
-Dunkel oder Hoher Kontrast. Unter "Akzentfarbe" legst du die Farbe der Haupt-Schaltflächen und
-Markierungen fest (Lohbraun als Standard, Blau, Grün, Violett). Beides lässt sich frei
-kombinieren, wirkt sofort und wird gespeichert; noch nicht gespeicherte Ergebnisse bleiben dabei
-erhalten. Im Design Dunkel bleibt das Fenster des Systems zum Öffnen/Speichern von Dateien unter
+<p>Unter "Design" wählst du Schiefer (Standard: ruhiges Grau-Grün, gut lesbar auch bei
+hellem Licht), Dunkel oder Hoher Kontrast. Die Wahl wirkt sofort und wird gespeichert; noch nicht
+gespeicherte Ergebnisse bleiben dabei erhalten. Noch nicht gespeicherte Zeilen sind gelb
+hinterlegt (im Design Dunkel ocker). Im Design Dunkel bleibt das Fenster des Systems zum Öffnen/Speichern von Dateien unter
 Windows hell.</p>
 <p>Der dunkle Balken oben zeigt Verein, Datum, Ort und die Zahl der Teilnehmer des geöffneten
 Termins. Steht hinter einer kurzen grauen Erklärung ein Fragezeichen-Symbol, erscheint der

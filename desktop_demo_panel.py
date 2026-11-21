@@ -173,7 +173,7 @@ class DemoPanel(QWidget):
         # Leserichtung ans Ende; der Text selbst bleibt links nach rechts (Marco 01.11.2026,
         # Symbole statt „▶“/„✔“).
         self.weiter_btn.setLayoutDirection(Qt.RightToLeft)
-        symbol_setzen(self.weiter_btn, "chevron-right", "#FFFFFF")
+        symbol_setzen(self.weiter_btn, "chevron-right", "AKZENT_TEXT")
         self.weiter_btn.setDefault(True)
         self.weiter_btn.clicked.connect(self._weiter_gedrueckt)
         # setDefault wirkt nur in QDialog - das Erklärfenster ist ein QWidget (UX-Test
@@ -235,8 +235,8 @@ class DemoPanel(QWidget):
     def countdown_anzeigen(self, sekunden: int | None) -> None:
         """Knopftext „Weiter (n)“ während des Countdowns, sonst „Weiter“ bzw. im letzten
         Schritt „Fertig“ (dort gibt es keinen Countdown) - mit Pfeil bzw. Haken als Symbol."""
-        # Weiß auf der Akzentfarbe (primaerButton).
-        symbol_setzen(self.weiter_btn, "check" if self._letzter else "chevron-right", "#FFFFFF")
+        # Schriftfarbe auf dem Akzent (primaerButton), im dunklen Design dunkel.
+        symbol_setzen(self.weiter_btn, "check" if self._letzter else "chevron-right", "AKZENT_TEXT")
         if self._letzter:
             self.weiter_btn.setText("Fertig")
         elif sekunden is None:

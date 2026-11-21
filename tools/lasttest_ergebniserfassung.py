@@ -11,7 +11,7 @@ misst offscreen mit dem echten Hauptfenster (Median aus mehreren Läufen):
 - erster Wechsel in die Ergebniserfassung, Reiterwechsel ohne und mit Neuaufbau,
 - Sortieren per Spaltenklick,
 - 50 Ergebnisse eintragen und „Alle speichern“,
-- Ansichtswechsel (Hintergrund-Design, ohne die Auswahl zu speichern),
+- Ansichtswechsel (Design, ohne die Auswahl zu speichern),
 - zusätzlichen Arbeitsspeicher (RSS, falls psutil installiert ist).
 
 Mit --repo lässt sich ein anderer Programmstand messen (z. B. ein per `git worktree add`
@@ -70,9 +70,8 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
         return time.perf_counter() - start
 
     # Design-Auswahl nicht in die Einstellungen des Rechners schreiben bzw. von dort lesen.
-    design = {"name": "hell"}
+    design = {"name": "schiefer"}
     desktop_darstellung._gespeichertes_design_lesen = lambda: design["name"]
-    desktop_darstellung._gespeichertes_theme_lesen = lambda: desktop_darstellung._THEME_DEFAULT
     if hasattr(app, "_gespeichertes_design_lesen"):
         app._gespeichertes_design_lesen = desktop_darstellung._gespeichertes_design_lesen
 
@@ -127,10 +126,10 @@ def main(argv: list[str] | None = None) -> dict[str, float]:
         merken("50 Ergebnisse eintragen + Alle speichern", zeit(eintragen_und_speichern))
 
         def ansicht_wechseln():
-            design["name"] = "dunkel" if design["name"] == "hell" else "hell"
+            design["name"] = "dunkel" if design["name"] == "schiefer" else "schiefer"
             fenster._darstellung_neu_anwenden()
 
-        merken("Ansichtswechsel (Hintergrund)", zeit(ansicht_wechseln))
+        merken("Ansichtswechsel (Design)", zeit(ansicht_wechseln))
         if prozess and lauf == 0:
             werte["Zusätzlicher Arbeitsspeicher (MB)"] = [(prozess.memory_info().rss - speicher_vorher) / 1e6]
         fenster.close()

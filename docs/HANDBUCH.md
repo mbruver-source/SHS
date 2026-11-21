@@ -5,7 +5,7 @@ Prüfungstag bis zur Datensicherung. Es richtet sich an die **Prüfungsleitung**
 und in [Kapitel 11](#11-für-richter-ergebnisse-im-browser-eintragen) an **Richter**, die Ergebnisse
 über die optionale Web-Version eintragen.
 
-Stand: Version 1.0.62. Alle Screenshots zeigen erfundene Testdaten.
+Stand: Version 1.0.63. Alle Screenshots zeigen erfundene Testdaten.
 
 - **Zum ersten Mal dabei?** Dann fang mit
   [Kapitel 14: Die erste Prüfung Schritt für Schritt](#14-die-erste-prüfung-schritt-für-schritt)
@@ -162,13 +162,12 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 - **Aussehen:** Oben im Fenster zeigt der dunkle Kopfbalken den Beagle, den Verein und
   darunter Datum, Ort und die Zahl der Teilnehmer des geöffneten Termins. Kurze Hinweise in den
   Reitern haben ein kleines **„?“**; bleibt die Maus darauf, erscheint die ausführliche
-  Erklärung. Im Menü **„Ansicht“** gibt es drei Einstellungen, die sich frei kombinieren lassen
-  und gespeichert werden:
-  - **„Hintergrund“:** Beagle (Standard, warmes Creme), Hell (Weiß), Dunkel oder Hoher
-    Kontrast. Hoher Kontrast eignet sich z. B. für einen Laptop draußen am Prüfungstag. Wer
-    früher „Warm / Sand“ gewählt hatte, bekommt automatisch „Beagle“.
-  - **„Akzentfarbe“:** Lohbraun (Standard), Blau, Grün oder Violett, die Farbe der
-    Haupt-Schaltflächen und der Markierungen.
+  Erklärung. Im Menü **„Ansicht“** gibt es zwei Einstellungen, die gespeichert werden:
+  - **„Design“:** Schiefer (Standard: ruhiges Grau-Grün mit klar umrandeten Feldern, gut
+    lesbar auch bei hellem Licht), Dunkel oder Hoher Kontrast. Hoher Kontrast eignet sich
+    z. B. für einen Laptop draußen in der Sonne. Noch nicht gespeicherte Zeilen sind gelb
+    hinterlegt (im Design Dunkel ocker). Wer früher „Beagle“, „Hell“ oder „Warm / Sand“ gewählt hatte,
+    bekommt automatisch „Schiefer“; die frühere Wahl der Akzentfarbe gibt es nicht mehr.
   - **„Schriftgröße“:** Normal (Standard), Groß oder Sehr groß. Bei „Sehr groß“ das Fenster
     am besten maximieren, damit die Spalten Platz haben. Noch größer wird alles über Windows:
     Einstellungen → System → Anzeige → „Skalierung“, z. B. 125 %.
@@ -208,7 +207,7 @@ Im Hauptfenster wechselst du jederzeit über **„Anderen Termin öffnen…“**
 
 Über der Liste filtert das Suchfeld (Verein, Ort oder Datum, **Strg+F**); ein Klick auf eine Spaltenüberschrift sortiert die Liste (erneuter Klick kehrt die Richtung um), ohne Klick steht der neueste Termin oben.
 
-Die Menüs **„Ansicht“** (Hintergrund, Akzentfarbe, Schriftgröße) und **„Hilfe“** (Hilfe, Updates, Version und Lizenzen) stehen schon im Startbildschirm oben, nicht erst nach dem Öffnen eines Termins.
+Die Menüs **„Ansicht“** (Design, Schriftgröße) und **„Hilfe“** (Hilfe, Updates, Version und Lizenzen) stehen schon im Startbildschirm oben, nicht erst nach dem Öffnen eines Termins.
 
 ### Demoprüfung
 
@@ -633,7 +632,10 @@ liest du ohne KI direkt mit **„OMA-Export importieren…“** ein. Jede Zeile 
 
 ![Reiter „Zeitplan“ mit zwei Richtern](bilder/handbuch_zeitplan.png)
 
-Der Zeitplan hat eine Spalte je Richter.
+Der Zeitplan hat eine Spalte je Richter. Bei wenigen Richtern werden die Spalten breiter und nutzen
+den freien Platz; bei vielen Richtern lässt sich seitlich blättern. **„Groß anzeigen“** oben rechts
+in einer Spalte zeigt nur diesen Richter über die ganze Breite, zum Ansehen und Einrichten (praktisch
+bei großer Schrift oder vielen Richtern); **„Alle Richter zeigen“** führt zurück.
 
 1. **„Zeitplan-Start (HH:MM)“** eintragen und **„Startzeit speichern“**.
 2. Die beim Termin eingetragenen Richter 1–5 erscheinen beim ersten Öffnen automatisch als
@@ -699,11 +701,13 @@ Eine Zeile je Teilnehmer, bei DK alle drei Disziplinen nebeneinander. Die Filter
 **Suche (0-60)** und **Anzeige (0-40)** ein. Bei ED sind die anderen Disziplinen mit „–“
 gesperrt.
 
-- **Gelbe Zeilen** mit „● nicht gespeichert“ enthalten Änderungen, die noch nicht gesichert sind.
+- **Gelbe Zeilen** mit Warnzeichen und „nicht gespeichert“ enthalten Änderungen, die noch nicht gesichert sind.
 - **„Alle Ergebnisse speichern“** sichert alle Änderungen auf einmal und meldet, wie viele
   Teilnehmer gespeichert wurden. Speichere am Prüfungstag regelmäßig.
-- Nach dem Speichern zeigt die Spalte **Status** „gespeichert“, bei Disqualifikation
-  „disqualifiziert“ und bei einem Abbruch den Grund, z. B. „Abbruch: Verletzung Hund“.
+- Nach dem Speichern zeigt die Spalte **Status** einen Haken: grün mit „gespeichert“ bei einem
+  normalen Ergebnis, dunkel mit „disqualifiziert“ bzw. „Abbruch“ bei Disqualifikation oder Abbruch.
+  Den Abbruchgrund zeigt die Spalte „Abbruch“ daneben; mit der Maus auf dem Status steht alles
+  zusammen, z. B. „gespeichert: Abbruch: Verletzung Hund“.
 - Ein Wert über dem Höchstwert (z. B. 65 bei der Suche) bekommt schon beim Tippen einen **roten
   Rahmen** mit dem Hinweis „Höchstens 60 Punkte“; nach dem Übernehmen steht unter den
   Knöpfen in Rot, bei wem was zu korrigieren ist. So wird die Zeile nicht gespeichert.
@@ -997,8 +1001,8 @@ Browser nicht mehr. Die genauen Schritte je Browser stehen in
 3. **Teilnehmerliste:** Rechts steht der Stand jedes Teilnehmers: **„offen“** (gelb, noch nichts
    eingetragen), **„teilweise“** (blau, schon etwas eingetragen, aber noch nicht alles; beim
    Dreikampf mit Zähler wie „teilweise (1 von 3)“ für die vollständigen Disziplinen),
-   **„bewertet“** (grün, alle Disziplinen mit Suche und Anzeige), **„disqualifiziert“** (rot) oder
-   **„Abbruch“** (lila). Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
+   **„bewertet“** (grün, alle Disziplinen mit Suche und Anzeige), **„disqualifiziert“** oder
+   **„Abbruch“** (beide dunkel auf Grau). Teilnehmer antippen. Unter jedem Teilnehmer führen die Links hinter
    **„Bewertungsbogen:“** direkt zum Online-Bewertungsbogen der jeweiligen Disziplin (siehe unten).
 4. **Ergebnis eintragen:** Je Disziplin **„Suchleistung (0–60)“** und
    **„Anzeigeleistung (0–40)“** eingeben und **„Speichern“** tippen. Danach geht es zurück zur
@@ -1138,12 +1142,22 @@ Gegenstand** dieser Disziplin (die Zeile fehlt, wenn im Termin kein Gegenstand e
    Prüfung des Teilnehmers, nicht nur für diese Disziplin.
 3. Im Feld **„Notiz zum Bogen (Position Gegenstand, Besonderheiten)“** kannst du bis zu 500 Zeichen
    festhalten.
-4. **„Speichern“** bleibt auf dem Bogen. Darunter erscheinen die **Gesamtpunktzahl** der Disziplin
+4. **„Speichern, nächster Start“** (der dunkle Hauptknopf, auch mit der Eingabetaste) speichert und
+   öffnet gleich den Bogen derselben Disziplin für die **nächste Startnummer**, ob schon bewertet oder
+   nicht. Wer das ist, steht direkt unter dem Knopf („Danach: Start-Nr. 2, …“). Kam der Bogen aus
+   einer gefilterten Tabelle, geht es nur innerhalb des Filters weiter. Oben steht dann z. B. „Gespeichert: Start-Nr. 1, Muster, Anna. Weiter mit dem nächsten
+   Start.“ Nach der letzten Startnummer der Disziplin geht es zurück dorthin, wo du den Bogen
+   geöffnet hast, mit dem Hinweis „Das war der letzte Start in dieser Disziplin.“
+5. **„Speichern und zurück …“** führt dorthin zurück, wo du den Bogen geöffnet
+   hast: zur Zeile in der Tabelle, zur Teilnehmerliste (mit „Gespeichert: <Name>.“) oder zur Seite
+   des Teilnehmers (mit „Bewertungsbogen gespeichert.“).
+6. **„Nur speichern“** bleibt auf dem Bogen. Darunter erscheinen die **Gesamtpunktzahl** der Disziplin
    (Suche plus Anzeige, sobald beides gespeichert ist), der **Status** und die **Wertnote**: beim
    Einzelstarter die der Disziplin, beim Dreikampf erst, wenn alle drei Disziplinen vollständig
-   eingetragen sind. **„Speichern und zurück …“** führt dorthin zurück, wo du den Bogen geöffnet
-   hast: zur Zeile in der Tabelle, zur Teilnehmerliste (mit „Gespeichert: <Name>.“) oder zur Seite
-   des Teilnehmers (mit „Bewertungsbogen gespeichert.“). **„Abbrechen / Zurück“** verlässt den Bogen ohne Speichern auf demselben Weg.
+   eingetragen sind.
+
+Der Link **„Abbrechen / Zurück (ohne Speichern)“** unter den Knöpfen verlässt den Bogen ohne
+Speichern auf demselben Weg wie „Speichern und zurück …“.
 
 Bei einem Fehler (z. B. nur die Suche ausgefüllt, ein Wert über dem Höchstwert, eine zu lange Notiz)
 wird nichts gespeichert, deine Eingaben bleiben stehen. Hat in der Zwischenzeit ein anderer Richter
@@ -1243,7 +1257,9 @@ nicht erreicht.
 Als Administrator erreichst du oben die Seiten **„Termine verwalten“** (Termine veröffentlichen,
 zurückholen, löschen) und **„Benutzer“**. **„Termin wechseln“** wählt dagegen nur aus, mit welchem
 veröffentlichten Termin du gerade arbeitest. Bist du schon angemeldet, führt die Startadresse direkt
-zur Teilnehmerliste (bzw. zur Terminauswahl).
+zur Teilnehmerliste (bzw. zur Terminauswahl). Knöpfe, die etwas endgültig entfernen (**„Termin
+löschen“**, **„Löschen“** bei den Benutzern), sind rot umrandet; Fehlermeldungen stehen in einem
+roten Kasten mit Warnzeichen.
 
 **Benutzer anlegen:** Unter „Benutzer“ je Richter ein Konto mit der Rolle
 **„Nur Eintragen (Ergebnisse erfassen)“** anlegen (Passwort mindestens 8 Zeichen). Danach bestätigt
@@ -1381,7 +1397,7 @@ Im Hauptfenster gibt es neben „Ansicht“ und „Hilfe“ das Menü **Einstell
 | **Vor dem Löschen von Teilnehmern eine Sicherung anlegen** | an | Vor jedem Löschen entsteht eine Kopie des Termins im Ordner „Auto-Sicherung“ (getrennt von den normalen Kopien, die letzten 5 je Termin; normales Starten und Beenden verdrängt sie nicht). Mit **„Aus Sicherung holen…“** im Reiter Teilnehmer lassen sich gelöschte Teilnehmer daraus zurückholen, auch nach dem Beenden (Kapitel 4). |
 | **Dateien ohne Nachfrage im Ablageort speichern** | an | PDFs und Dateien landen mit dem vorgeschlagenen Namen im Ablageort, ohne Frage nach dem Speicherort; eine vorhandene Datei wird nie überschrieben. Dieselbe Einstellung steht als Haken im Reiter „Ausdrucke/Export“ (Kapitel 9). |
 
-Das Menü „Ansicht“ stellt Hintergrund, Akzentfarbe und Schriftgröße ein. Unabhängig von den Schaltern fragt das Programm beim **Beenden** nach, wenn gerade Teilnehmer gelöscht wurden und „Rückgängig“ das noch zurücknehmen könnte.
+Das Menü „Ansicht“ stellt Design und Schriftgröße ein. Unabhängig von den Schaltern fragt das Programm beim **Beenden** nach, wenn gerade Teilnehmer gelöscht wurden und „Rückgängig“ das noch zurücknehmen könnte.
 
 ### Bedienung ohne Maus und mit Bildschirmleser
 

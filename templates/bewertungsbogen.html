@@ -11,16 +11,24 @@
   .bogen-kopf dt { font-weight: 600; }
   .bogen-kopf dd { margin: 0; overflow-wrap: break-word; }
   .bogen-punkte { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em; margin: 0.8em 0; }
-  .bogen-punkte > div { border: 1px solid var(--grau-rand); border-radius: 8px; padding: 0 0.8em 0.8em; }
-  .bogen-punkte input[type=number] { font-size: 1.4em; text-align: center; }
-  .bogen-punkte input[readonly] { background: var(--grau-hell); color: var(--gedaempft); }
-  textarea.notiz { font: inherit; padding: 0.55em; border: 1px solid var(--grau-rand); border-radius: 6px;
-                   background: #fff; color: var(--text); width: 100%; box-sizing: border-box; min-height: 6em; }
-  .bogen-gesamt { border: 2px solid var(--grau-rand); border-radius: 8px; padding: 0.8em 1em; margin: 1em 0; }
+  .bogen-punkte > div { border: 1px solid var(--grau-rand); border-radius: 6px; padding: 0 0.8em 0.8em; }
+  /* „Schiefer und Signal“ (Marco 21.11.2026): die Punkte sind der eigentliche Inhalt - groß, mit
+     kräftigem Rahmen in Tinte und Ziffern gleicher Breite, auch draußen in der Sonne gut lesbar. */
+  .bogen-punkte input[type=number] { font-size: 1.9em; font-weight: 600; text-align: center;
+                                     border: 2px solid var(--text); font-variant-numeric: tabular-nums; }
+  .bogen-punkte input[readonly] { background: var(--grau-hell); color: var(--gedaempft); border-color: var(--rand); }
+  textarea.notiz { font: inherit; padding: 0.55em; border: 1px solid var(--rand); border-radius: 4px;
+                   background: var(--karte); color: var(--text); width: 100%; box-sizing: border-box; min-height: 6em; }
+  .bogen-gesamt { border: 2px solid var(--grau-rand); border-radius: 6px; padding: 0.8em 1em; margin: 1em 0; }
   .bogen-gesamt strong { font-size: 1.3em; }
   .bogen-gesamt p { margin: 0.4em 0 0; }
   .bogen-gesamt p:first-child { margin-top: 0; }
-  .bogen-knoepfe { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 1em 0 0; }
+  .bogen-knoepfe { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 1em 0 0; align-items: flex-start; }
+  .bogen-knoepfe .naechster { flex: 1 1 100%; }
+  .naechster-hinweis { margin: 0.35em 0 0.2em; color: var(--gedaempft); font-size: 0.95em; }
+  /* Abbrechen als Textlink, groß genug zum Antippen (mindestens 44 px hoch). */
+  p.abbrechen { margin: 0.8em 0 0; }
+  p.abbrechen a { display: inline-block; padding: 0.7em 0.2em; min-height: 44px; box-sizing: border-box; }
   @media (max-width: 480px) { .bogen-punkte { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
@@ -83,11 +91,20 @@
   <textarea class="notiz" id="notiz" name="notiz_{{ zeile.id }}" maxlength="{{ notiz_max }}" rows="4">{{ notiz }}</textarea>
   <small>Höchstens {{ notiz_max }} Zeichen.</small>
 
+  {# „Schiefer und Signal“ (Marco 21.11.2026): ein Hauptknopf „Speichern, nächster Start“ (nächste
+     Startnummer mit dieser Disziplin; nach der letzten zurück, woher der Bogen kam). Er steht zuerst,
+     damit auch die Eingabetaste ihn auslöst. Die übrigen Wege sind sekundär. #}
+  {# Persona Heinz (21.11.2026): unter dem Hauptknopf steht, wer als Nächstes kommt; „Abbrechen“ ist
+     ein Textlink statt eines Knopfs, damit es sich von den Speicherknöpfen absetzt. #}
   <div class="bogen-knoepfe">
-    <button type="submit" name="weiter" value="tabelle">Speichern und zurück {{ zurueck_ziel }}</button>
-    <button type="submit" name="weiter" value="bogen">Speichern</button>
-    <a class="knopf knopf-sekundaer" href="{{ tabelle_url }}">Abbrechen / Zurück (ohne Speichern)</a>
+    <div class="naechster">
+      <button type="submit" name="weiter" value="naechster" aria-describedby="naechster-hinweis">Speichern, nächster Start</button>
+      <p class="naechster-hinweis" id="naechster-hinweis">{% if naechster %}Danach: {% if naechster.startnummer %}Start-Nr. {{ naechster.startnummer }}, {% endif %}{{ naechster.nachname }}, {{ naechster.vorname }} ({{ naechster.rufname_hund }}){% else %}Das ist der letzte Start in dieser Disziplin - danach geht es zurück {{ zurueck_ziel }}.{% endif %}</p>
+    </div>
+    <button type="submit" name="weiter" value="tabelle" class="knopf-sekundaer">Speichern und zurück {{ zurueck_ziel }}</button>
+    <button type="submit" name="weiter" value="bogen" class="knopf-sekundaer">Nur speichern</button>
   </div>
+  <p class="abbrechen"><a href="{{ tabelle_url }}">Abbrechen / Zurück (ohne Speichern)</a></p>
 </form>
 
 <div class="karte bogen-gesamt" aria-live="polite">

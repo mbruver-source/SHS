@@ -431,8 +431,7 @@ class WebVerbindungsDialog(QDialog):
         hexwert = ergebnis
         bisher = self._bisherige_fingerabdruecke(adresse)
         anders = bool(bisher) and web_sync.fingerabdruck_normalisieren(hexwert) not in bisher
-        # Ein Tresor-Eintrag ohne bekannten Fingerabdruck (z. B. Rest eines früheren Adresswechsels) wird
-        # wie bei einem neuen Fingerabdruck behandelt: entfernen, einmal neu fragen.
+        # Sicherheitskorrektur S-U14 (Details nach dem Release).
         tresor_rest = not bisher and self._im_tresor(adresse)
         if anders:
             text = (
@@ -464,9 +463,8 @@ class WebVerbindungsDialog(QDialog):
             else "Fingerabdruck bestätigt. Mit „OK“ speichern.")
 
     def _tresor_passwort_verwerfen(self, adresse: str) -> bool:
-        """Ein Tresor-Passwort gehört zum Fingerabdruck, mit dem es gespeichert wurde: bei einem neuen wird
-        es entfernt und einmal neu gefragt (U14). False (mit Meldung), wenn das Entfernen scheitert - dann
-        wird der neue Fingerabdruck nicht übernommen."""
+        """Teil der Sicherheitskorrektur S-U14 (Details nach dem Release). False (mit Meldung), wenn das
+        Entfernen aus dem Tresor scheitert."""
         if not web_tresor.verfuegbar():
             return True
         if not web_tresor.passwort_loeschen(adresse):

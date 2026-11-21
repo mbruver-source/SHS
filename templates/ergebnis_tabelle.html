@@ -12,7 +12,7 @@
   /* --tabellenkopf-hoehe: Schätzwert für die zweizeilige Kopfzeile der Tabelle (Sprungziele darunter). */
   .tabellenrahmen { --tabellenkopf-hoehe: 5.5em;
                     overflow: auto; max-height: 80vh; max-height: 80dvh; background: var(--karte);
-                    border: 1px solid var(--grau-rand); border-radius: 10px; -webkit-overflow-scrolling: touch;
+                    border: 1px solid var(--rand); border-radius: 6px; -webkit-overflow-scrolling: touch;
                     scroll-margin-top: 0.5em; scroll-padding-top: var(--tabellenkopf-hoehe); }
   table.ergebnisse { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
   table.ergebnisse thead { position: sticky; top: 0; z-index: 4; }
@@ -25,7 +25,8 @@
   table.ergebnisse th.erste { position: sticky; left: 0; z-index: 2; min-width: 11em; max-width: 11em;
                               text-align: left; border-right: 2px solid var(--grau-rand); font-weight: 400; }
   table.ergebnisse thead th.erste { z-index: 3; background: var(--grau-hell); font-weight: 700; }
-  table.ergebnisse input.punkt { width: 4.6em; padding: 0.5em 0.3em; font-size: 1.15em; text-align: center; }
+  table.ergebnisse input.punkt { width: 4.6em; padding: 0.5em 0.3em; font-size: 1.15em; text-align: center;
+                                 font-weight: 600; }
   table.ergebnisse input[readonly] { background: var(--grau-hell); color: var(--gedaempft); }
   table.ergebnisse select { padding: 0.5em 0.3em; max-width: 11em; }
   table.ergebnisse .leer { text-align: center; color: var(--gedaempft); }
@@ -90,7 +91,8 @@
     <input type="text" id="q" name="q" value="{{ filter.q }}" maxlength="80" size="14" autocomplete="off">
   </div>
   <div>
-    <button type="submit">Filtern</button>
+    {# „Schiefer und Signal“ (Marco 21.11.2026): ein Hauptknopf je Ansicht - hier „Alle speichern“. #}
+    <button type="submit" class="knopf-sekundaer">Filtern</button>
     {% if filter.lk or filter.nr or filter.q %}<a class="knopf knopf-sekundaer" href="{{ url_for('ergebnistabelle') }}">Alle anzeigen</a>{% endif %}
   </div>
   <p style="flex-basis: 100%; margin: 0;"><small>Vor dem Filtern „Alle speichern“ tippen: Filtern lädt die Tabelle neu, nicht gespeicherte Eingaben werden dabei nicht übernommen.</small></p>
@@ -107,7 +109,7 @@
 {# Sammel-PDF der benutzten Bewertungsbögen: ein normaler Link (GET) im Knopf-Stil, ohne JavaScript;
    der Filter der Tabelle hängt an der Adresse. Es zählt der gespeicherte Stand. #}
 <div class="karte" style="display: flex; flex-wrap: wrap; gap: 0.6em 1em; align-items: center;">
-  <a class="knopf" href="{{ boegen_pdf_url }}" aria-describedby="boegen-pdf-hinweis">Benutzte Bögen als PDF</a>
+  <a class="knopf knopf-sekundaer" href="{{ boegen_pdf_url }}" aria-describedby="boegen-pdf-hinweis">Benutzte Bögen als PDF</a>
   {# UX-Test Web 19.11.2026 (B5): ohne Skript keine Fortschrittsanzeige - der Text sagt vorher, was passiert. #}
   <small id="boegen-pdf-hinweis" style="flex: 1 1 18em;">Lädt alle Bewertungsbögen mit Eintragungen (Punkte, Disqualifikation, Abbruch oder Notiz){% if filter.lk or filter.nr or filter.q %} für die gefilterten Teilnehmer{% endif %} zum Speichern oder Ausdrucken herunter, beim Dreikampf nur die Blätter der Disziplinen mit Eintragung. Nicht gespeicherte Eingaben der Tabelle sind nicht enthalten: erst „Alle speichern“. Nach dem Tippen wird die PDF erstellt – das kann bei vielen Teilnehmern einige Sekunden dauern; die Seite bleibt dabei stehen, der Browser legt die Datei meist im Download-Ordner ab.</small>
 </div>

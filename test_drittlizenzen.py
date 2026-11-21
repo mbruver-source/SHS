@@ -129,10 +129,15 @@ class TestDrittlizenzen(unittest.TestCase):
         self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", desktop)
         # Marco 01.11.2026: Symbole der Oberfläche (Tabler Icons) samt Lizenztext.
         self.assertIn("  Tabler Icons (Symbole der Oberfläche) - MIT", desktop)
+        # Marco 21.11.2026: Schrift der Oberfläche (Desktop aus schrift/, Web siehe unten).
+        self.assertIn("  Atkinson Hyperlegible Next (Schrift der Oberfläche) - SIL Open Font License 1.1",
+                      desktop)
         # Seit 18.11.2026 liegen die Schriften auch im Web-Image (Sammel-PDF der Bewertungsbögen).
         with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
             web = drittlizenzen.erzeugen("web").split(drittlizenzen.TRENNER, 1)[0]
         self.assertIn("  DejaVu-Schriften (PDF-Ausgabe) - Bitstream Vera", web)
+        # Seit 21.11.2026 liefert auch die Web-Oberfläche die Schrift aus static/schrift/ aus.
+        self.assertIn("  Atkinson Hyperlegible Next (Schrift der Oberfläche) - SIL Open Font License 1.1", web)
         with mock.patch.object(drittlizenzen, "_wurzeln", return_value=[Requirement("aaa")]):
             self.assertIn("Copyright (c) 2020-2026 Paweł Kuna", drittlizenzen.erzeugen("desktop"))
 
