@@ -53,6 +53,11 @@ Die Einzelschritte stehen in den Abschnitten unten. Die „Noch offen“-Listen 
 
 **CI nach dem Push (Container bauen):** Alle Prüfungen grün, auch die neue Schriftprüfung; nur „Alle Container gesund?“ scheiterte, weil der Proxy (startet erst nach dem gesunden Web-Container) noch auf „starting“ stand. Die Prüfungen davor liefen dank Zwischenspeicher in einer Sekunde durch. Behoben in `.github/workflows/build-container.yml`: Der Schritt wartet bis zu 90 s, solange nur „starting“ übrig ist; „unhealthy“ bricht sofort ab. Kein Fehler im Programm.
 
+**CI nach dem Push (Tests unter Linux):** Zwei Fehler, unter Windows lokal nicht sichtbar, deshalb vor dem Tag behoben:
+1. Demo, Erklärfenster: Mit der neuen Programmschrift braucht die Knopfzeile in dem Schritt mit „PDF öffnen“ etwa 498 px, das Fenster ist 480 px breit. Unter Linux verbreiterte Qt es nach rechts, „Weiter“ rückte weg (`test_demo_weiter_knopf_bleibt_an_derselben_stelle`). Jetzt wächst das Fenster in diesem Fall nach links, „Weiter“ bleibt stehen (`desktop_demo_panel.py`, `_groesse_anpassen`). Der Test setzt die Programmschrift selbst und prüft je Schritt, dass die Knopfzeile hineinpasst; die alte Fassung fällt damit auch unter Windows durch.
+2. `test_laufwerksart_erkennt_usb_stick_und_netzlaufwerk` setzte `os.name` für den ganzen Prozess auf „nt“. Scheiterte in dieser Zeit etwas, brach pytest unter Linux mit einem INTERNALERROR ab (`WindowsPath`), der den eigentlichen Fehler verdeckte. Jetzt bekommt nur `desktop_gemeinsam` eine `os`-Attrappe.
+Test-Suite lokal grün (1664 bestanden).
+
 **Quellcode-Spiegel:** `SHS-Pruefungsprogramm-Quellcode` auf den Stand des Build-Commits gebracht (496 Dateien, 53 neu, 96 aktualisiert, Byte-Abgleich ohne Abweichung). Nur im Spiegel liegen `.env` und `secrets/` (bleiben).
 
 ## 21.11.2026: Website im Erscheinungsbild „Schiefer und Signal“ (Marco, Arbeitsstand, nichts committet, nicht online)

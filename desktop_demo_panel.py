@@ -360,20 +360,32 @@ class DemoPanel(QWidget):
         self._groesse_anpassen()
 
     def _groesse_anpassen(self) -> None:
-        """Höhe passend zum Inhalt, Breite bleibt. Kommt während eines Schritts eine Zeile
+        """Höhe passend zum Inhalt, Breite bleibt (außer die Knopfzeile braucht mehr, s. u.). Kommt während eines Schritts eine Zeile
         dazu (z. B. „Gespeichert unter …“), wächst das Fenster mit - sonst quetschte Qt den
         umbrechenden Erklärtext, er war mitten in der Zeile abgeschnitten (A4-Prüfung am
         echten Windows, Marco 01.11.2026). Bewusst nicht adjustSize(): das änderte je Schritt
         auch die Breite (und damit die Lage von „Weiter“) und machte das Fenster für einen
         langen Speicherpfad so breit, dass es rechts aus dem Bildschirm ragte. Die Unterkante
-        hält danach resizeEvent/_im_bildschirm_halten fest."""
-        hoehe = self.layout().totalHeightForWidth(self.width())
-        if hoehe > 0 and hoehe != self.height():
-            self._eigene_groessenaenderung = True
-            try:
-                self.resize(self.width(), max(hoehe, self.minimumSizeHint().height()))
-            finally:
-                self._eigene_groessenaenderung = False
+        hält danach resizeEvent/_im_bildschirm_halten fest.
+
+        Braucht die Knopfzeile mehr Breite (z. B. mit „PDF öffnen“ und der breiteren
+        Programmschrift seit 1.0.63), wächst das Fenster nach links: Sonst verbreiterte Qt es
+        nach rechts und „Weiter“ rückte weg (CI unter Linux, 21.11.2026)."""
+        breite = self.width()
+        noetig = self.minimumSizeHint().width()
+        self._eigene_groessenaenderung = True
+        try:
+            if noetig > breite:
+                if self._positioniert:
+                    links = self.screen().availableGeometry().left()
+                    self.move(max(links, self.x() - (noetig - breite)), self.y())
+                breite = noetig
+                self.resize(breite, self.height())
+            hoehe = self.layout().totalHeightForWidth(breite)
+            if hoehe > 0 and hoehe != self.height():
+                self.resize(breite, max(hoehe, self.minimumSizeHint().height()))
+        finally:
+            self._eigene_groessenaenderung = False
 
     def fehler(self, text: str) -> None:
         # Verifikation A6, Befund 1: erst zurück zum fehlerhaften Schritt - sonst stand der

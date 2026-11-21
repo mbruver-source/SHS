@@ -2428,9 +2428,12 @@ def test_laufwerksart_erkennt_usb_stick_und_netzlaufwerk(monkeypatch):
     arten = {"C:\\": 3, "E:\\": 2, "Z:\\": 4}
     attrappe = types.SimpleNamespace(
         kernel32=types.SimpleNamespace(GetDriveTypeW=lambda wurzel: arten.get(wurzel, 0)))
-    monkeypatch.setattr(desktop_gemeinsam.os, "name", "nt")
-    monkeypatch.setattr(desktop_gemeinsam.os.path, "abspath", lambda p: p)
-    monkeypatch.setattr(desktop_gemeinsam.os.path, "splitdrive", lambda p: (p[:2], p[2:]))
+    # Nur das os des Moduls ersetzen, nicht das echte: Mit os.name = "nt" für alle konnte
+    # pytest unter Linux keinen Pfad mehr bilden und brach bei jedem Fehler in dieser Zeit
+    # mit einem INTERNALERROR ab (CI 21.11.2026).
+    os_attrappe = types.SimpleNamespace(
+        name="nt", path=types.SimpleNamespace(abspath=lambda p: p, splitdrive=lambda p: (p[:2], p[2:])))
+    monkeypatch.setattr(desktop_gemeinsam, "os", os_attrappe)
     monkeypatch.setattr("ctypes.windll", attrappe, raising=False)
     assert desktop_gemeinsam.laufwerksart(r"C:\Termine\a.sqlite") is None
     assert "USB-Stick" in desktop_gemeinsam.laufwerksart(r"E:\Termine\a.sqlite")

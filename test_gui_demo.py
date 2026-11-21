@@ -585,9 +585,16 @@ def test_demo_erklaerfenster_waechst_mit_dem_hinweis(qtbot):
 def test_demo_weiter_knopf_bleibt_an_derselben_stelle(qtbot, termin, demo_umgebung):
     """Marco 01.11.2026 (in 1.0.52 beobachtet): Erklärfenster änderten je Schritt Größe und
     Lage, man musste „Weiter“ jedes Mal mit der Maus suchen. Jetzt bleiben Unterkante und
-    Breite fest, das Fenster wächst nach oben - solange es nicht ausweichen muss."""
+    rechte Kante fest, das Fenster wächst nach oben (und bei Bedarf nach links) - solange es
+    nicht ausweichen muss."""
     from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication
 
+    import desktop_darstellung
+
+    # Mit der Programmschrift wie im echten Programm (im Gesamtlauf setzt sie ohnehin ein
+    # früherer Test; einzeln lief der Test sonst mit der schmaleren Systemschrift).
+    desktop_darstellung._programmschrift_anwenden(QApplication.instance())
     conn, pfad = termin
     fenster = HauptFenster(conn, pfad)
     qtbot.addWidget(fenster)
@@ -602,6 +609,9 @@ def test_demo_weiter_knopf_bleibt_an_derselben_stelle(qtbot, termin, demo_umgebu
         rechts_unten = panel.weiter_btn.mapToGlobal(QPoint(panel.weiter_btn.width(), panel.weiter_btn.height()))
         lagen.add((rechts_unten.x(), rechts_unten.y()))
         hoehen.add(panel.height())
+        # Die Knopfzeile passt hinein (sonst verbreitert Qt das Fenster je nach System selbst
+        # nach rechts und „Weiter“ rückt weg - CI unter Linux, 21.11.2026)
+        assert panel.width() >= panel.minimumSizeHint().width(), tour._index
     tour.beenden()
     assert len(hoehen) > 1  # die Schritte sind unterschiedlich lang ...
     assert len(lagen) == 1, lagen  # ... „Weiter“ steht trotzdem immer an derselben Stelle
