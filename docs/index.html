@@ -173,7 +173,15 @@
       </ol>
       <p>Zum Ausdrucken: <a href="INSTALLATION_KURZ.pdf">Kurzanleitung Installation (PDF)</a> – alle Schritte mit Bildern und großer Schrift.</p>
       <p><strong>Keine Sorge wegen der Warnungen:</strong> Browser und Windows warnen bei neuen, selten geladenen Programmen ohne digitale Signatur immer. Das ist bei diesem Programm normal und kommt nur beim ersten Mal. Kaputt machen kannst du dabei nichts.</p>
-      <p><strong>macOS und Linux (Vorschau):</strong> Auf derselben Seite gibt es eine <code>.dmg</code>-Datei für Macs mit Apple-Chip bzw. Intel-Prozessor sowie für Linux ein AppImage und ein <code>.deb</code>-Paket. Diese Versionen werden automatisch geprüft, sind aber noch nicht auf echten Geräten erprobt – Rückmeldungen sind willkommen. Wie du sie installierst und den ersten Start unter macOS erlaubst, steht im <a href="handbuch.html#2-installation-und-updates">Handbuch</a>.</p>
+      <p><strong>macOS und Linux (Vorschau):</strong> Auf derselben Seite gibt es eine <code>.dmg</code>-Datei für Macs mit Apple-Chip bzw. Intel-Prozessor sowie für Linux ein AppImage und ein <code>.deb</code>-Paket. Diese Versionen werden automatisch geprüft, sind aber noch nicht auf echten Geräten erprobt – Rückmeldungen sind willkommen. Wie du sie installierst, steht im <a href="handbuch.html#2-installation-und-updates">Handbuch</a>.</p>
+      <p><strong>Erster Start unter macOS:</strong> Das Programm ist nicht bei Apple registriert. macOS meldet deshalb „SHS-Pruefungsprogramm nicht geöffnet“. Das ist kein Fehler und nur einmal nötig:</p>
+      <ol class="install">
+        <li><span>In der Meldung auf <span class="taste">Fertig</span> klicken.
+          <img src="bilder/handbuch_macos_gatekeeper.jpg" alt="macOS-Meldung: „SHS-Pruefungsprogramm“ nicht geöffnet, Knopf „Fertig“" loading="lazy" style="display:block;max-width:360px;width:100%;margin-top:.5rem"></span></li>
+        <li><span><strong>Systemeinstellungen</strong> → <strong>Datenschutz &amp; Sicherheit</strong> öffnen, ganz nach unten scrollen und bei SHS-Pruefungsprogramm auf <span class="taste">Dennoch öffnen</span> klicken. Mit dem Passwort bestätigen.</span></li>
+        <li><span>Das Programm erneut starten und <span class="taste">Öffnen</span> wählen. Ab jetzt startet es normal.</span></li>
+      </ol>
+      <p>Alternative für Geübte im Terminal: <code>xattr -dr com.apple.quarantine /Applications/SHS-Pruefungsprogramm.app</code></p>
     </div>
     <div class="block">
       <h2>Updates</h2>

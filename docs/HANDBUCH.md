@@ -120,12 +120,23 @@ erprobt. Rückmeldungen dazu sind willkommen (siehe
 
     1. Die `.dmg`-Datei öffnen, die Lizenz (MIT) mit **„Akzeptieren“** bestätigen und
        **SHS-Pruefungsprogramm** auf den Ordner **„Programme“** ziehen.
-    2. Das Programm ist nicht bei Apple registriert. Beim ersten Start meldet macOS deshalb,
-       dass es nicht überprüft werden kann. Auf **„Fertig“** klicken.
+    2. Das Programm ist nicht bei Apple registriert. Beim ersten Start meldet macOS deshalb
+       „SHS-Pruefungsprogramm nicht geöffnet“. Das ist kein Fehler und kein Virus. Auf
+       **„Fertig“** klicken.
+
+        ![macOS-Meldung: „SHS-Pruefungsprogramm“ nicht geöffnet, Knopf „Fertig“](bilder/handbuch_macos_gatekeeper.jpg)
+
     3. **Systemeinstellungen** → **„Datenschutz & Sicherheit“** öffnen, ganz nach unten
        scrollen und bei SHS-Pruefungsprogramm auf **„Dennoch öffnen“** klicken, dann mit dem
        Passwort bestätigen. Ab jetzt startet das Programm normal. (Bis macOS 14 genügt
        stattdessen: Rechtsklick auf das Programm → **„Öffnen“** → **„Öffnen“**.)
+    4. Fragt macOS beim nächsten Start noch einmal nach, auf **„Öffnen“** klicken.
+
+    Alternative für Geübte: im Terminal eingeben
+
+        xattr -dr com.apple.quarantine /Applications/SHS-Pruefungsprogramm.app
+
+    Danach startet das Programm ohne Rückfrage.
 
 - **Linux (Vorschau):** für alle gängigen Distributionen ab etwa 2022 (z. B. Ubuntu 22.04,
   Linux Mint 21, Debian 12), nur für 64-Bit-PCs (x86_64).

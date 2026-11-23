@@ -2,6 +2,15 @@
 
 **Laufende Historie (ab 11.2026).** Ältere Monate stehen unverändert in `historie/` (Übersicht: `historie/README.md`). Zum Nachlesen eines früheren Beschlusses dort suchen (`git grep -i "Stichwort" -- historie`); den aktuellen Stand liefern `OFFEN.md`, `Architektur.md` und `entscheidungen/`.
 
+## 23.11.2026: macOS-Erststart mit Bild in Handbuch und Website (Marco, committet ohne Build)
+
+Marco hat auf einem echten Mac die Gatekeeper-Meldung „SHS-Pruefungsprogramm nicht geöffnet“ erhalten (Programm nicht notarisiert, kein Fehler).
+- Neues Bild `docs/bilder/handbuch_macos_gatekeeper.jpg` (Ausschnitt aus Marcos Foto).
+- `docs/HANDBUCH.md`, Abschnitt Installation macOS: Meldung im Wortlaut, Bild, Schritt 4 („Öffnen“ beim nächsten Start), Terminal-Alternative `xattr -dr com.apple.quarantine …`.
+- `docs/index.html`: eigener Block „Erster Start unter macOS“ mit Bild, drei Schritten und Terminal-Alternative.
+- `docs/HANDBUCH.pdf` auf Marcos Wunsch sofort und unabhängig vom Build neu erzeugt (`tools/handbuch_pdf.py`, Chrome unter Linux in der Cloud; dort fehlt Segoe UI, daher Ersatzschrift und 62 statt 59 Seiten). Beim nächsten Build auf Windows erneut erzeugen, dann wieder mit Segoe UI.
+- Dauerhafte Lösung wäre Developer-ID-Signatur und Notarisierung (99 USD/Jahr), nicht beschlossen.
+
 ## Version 1.0.63 (21.11.2026, Build auf Marcos Anforderung)
 
 Gebündelt seit 1.0.62:
